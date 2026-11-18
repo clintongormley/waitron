@@ -3,16 +3,29 @@ import { fileURLToPath } from "node:url";
 import type { OpenResult } from "./certificate-file.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 
-const unreadable: OpenResult = { ok: false, reason: "unreadable" };
+const unreadable = { ok: false, reason: "unreadable" } as const;
 const unavailable = { ok: false, reason: "unavailable" } as const;
+
+export function certificateSizeRefusal(
+  pfx: Buffer,
+  passphrase: string,
+): { ok: false; reason: "too_large" | "unreadable" } | undefined {
+  if (pfx.length > CERTIFICATE_MAX_BYTES) return { ok: false, reason: "too_large" };
+  if (Buffer.byteLength(openerInput(pfx, passphrase)) > 256 * 1024) return unreadable;
+  return undefined;
+}
+
+function openerInput(pfx: Buffer, passphrase: string): string {
+  return JSON.stringify({ pfx: pfx.toString("base64"), passphrase });
+}
 
 export async function openCertificate(
   pfx: Buffer,
   passphrase: string,
 ): Promise<OpenResult | { ok: false; reason: "too_large" | "unavailable" }> {
-  if (pfx.length > CERTIFICATE_MAX_BYTES) return { ok: false, reason: "too_large" };
-  const input = JSON.stringify({ pfx: pfx.toString("base64"), passphrase });
-  if (Buffer.byteLength(input) > 256 * 1024) return unreadable;
+  const refused = certificateSizeRefusal(pfx, passphrase);
+  if (refused !== undefined) return refused;
+  const input = openerInput(pfx, passphrase);
   const source = import.meta.url.endsWith(".ts");
   const entry = new URL(
     source ? "./certificate-open-entry.ts" : "./certificate-open.js",

@@ -53,6 +53,7 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
     import { readFile, readdir, mkdir } from "node:fs/promises";
     import { join } from "node:path";
     import { Worker } from "node:worker_threads";
+    import { spawnSync } from "node:child_process";
     import { BACKUP_VERIFICATION_MODULES, currentBackupVerificationTarget, verifyBackupArtifact } from ${JSON.stringify(verifier)};
     import { openVenueDatabase, runningWatchdog } from ${JSON.stringify(ordinaryBundle)};
     import { DatabaseSync } from "node:sqlite";
@@ -86,6 +87,8 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
         let workerDenied;
         try { new Worker("", {eval: true}); } catch (e) { workerDenied = {code:e.code, permission:e.permission}; }
         assert.deepEqual(workerDenied, {code:"ERR_ACCESS_DENIED",permission:"WorkerThreads"});
+        let childDenied;
+        try { spawnSync(process.execPath, ["--version"]); } catch (e) { childDenied = {code:e.code, permission:e.permission}; }
         let compared = false;
         const modules = BACKUP_VERIFICATION_MODULES.map(m => m.name !== "core" ? m : ({...m, backup:{...m.backup, verification:{...m.backup.verification, verifyRestoredData:async context => {
           assert.deepEqual(await snapshot(context.before), f.logical);
@@ -98,7 +101,7 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
         try { const ordinary = await openVenueDatabase(f.ordinary); await ordinary.close(); } catch(e) { ordinaryRefusal={code:e.code,permission:e.permission}; }
         const lock = new DatabaseSync(join(f.ordinary,"venue.lock"));
         try { lock.exec("begin immediate"); } finally { lock.close(); }
-        console.log(JSON.stringify({result, compared, workerDenied, ordinaryRefusal, ordinaryFiles:await readdir(f.ordinary), scratch:await readdir(f.deps.scratchRoot)}));
+        console.log(JSON.stringify({result, compared, workerDenied, childDenied, ordinaryRefusal, ordinaryFiles:await readdir(f.ordinary), scratch:await readdir(f.deps.scratchRoot)}));
       }
     }
   `,
@@ -108,7 +111,6 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
     [
       resolve("../../scripts/bundle-node.mjs"),
       `src/backup-verification-entry.ts=${verifier}`,
-      `../../packages/fiscal-verifactu/src/certificate-open-entry.ts=${join(root, "certificate-open.js")}`,
       `${ordinarySource}=${ordinaryBundle}`,
     ],
     {
@@ -146,7 +148,6 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
     process.execPath,
     [
       "--permission",
-      "--allow-child-process",
       `--allow-fs-read=${resolve("../..")}`,
       `--allow-fs-read=${root}`,
       `--allow-fs-write=${f.deps.scratchRoot}`,
@@ -160,6 +161,7 @@ it("real bundled verifier passes with workers denied while ordinary opens still 
   expect(child.status, child.stderr).toBe(0);
   const answer = JSON.parse(child.stdout);
   expect(answer.workerDenied).toEqual({ code: "ERR_ACCESS_DENIED", permission: "WorkerThreads" });
+  expect(answer.childDenied).toEqual({ code: "ERR_ACCESS_DENIED", permission: "ChildProcess" });
   expect(answer.ordinaryRefusal).toEqual({
     code: "ERR_ACCESS_DENIED",
     permission: "WorkerThreads",

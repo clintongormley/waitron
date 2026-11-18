@@ -17,6 +17,7 @@ import { KEY_ONLY_CANDIDATE, RC2_CANDIDATE } from "../test/openssl-certificates.
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
+import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 import { verifyBackupFiscalSecrets } from "./backup-verification-secrets.js";
 
 const authority = makeAuthority();
@@ -501,13 +502,19 @@ it("cannot bind material when the captured taxpayer is absent", async () => {
   expect(await verify()).toEqual(result("invalid"));
 });
 
-it("leaves a genuine backup check unavailable when the child cannot start", async () => {
+it("refuses a certificate one byte over the size limit", async () => {
   await capture();
-  const node = process.execPath;
-  try {
-    process.execPath = "/nonexistent/waitron-node";
-    await expect(verify()).rejects.toEqual(new BackupCheckUnavailable("secret_unavailable"));
-  } finally {
-    process.execPath = node;
-  }
+  await replace({
+    ...payload(),
+    pfxBase64: Buffer.concat([
+      candidate.pfx,
+      Buffer.alloc(CERTIFICATE_MAX_BYTES + 1 - candidate.pfx.length),
+    ]).toString("base64"),
+  });
+  expect(await verify()).toEqual(result("invalid"));
+});
+it("refuses a certificate whose password takes the opener's input over 256 KiB", async () => {
+  await capture();
+  await replace({ ...payload(), passphrase: "x".repeat(256 * 1024) });
+  expect(await verify()).toEqual(result("invalid"));
 });
