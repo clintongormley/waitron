@@ -79,6 +79,7 @@ describe("loadConfig", () => {
     expect(config).toEqual({
       // Production numbering can never be reused, so production must be typed out.
       environment: "preproduction",
+      staff: { host: "127.0.0.1", port: 8443 },
       // `true` only for the literal WAITRON_ENV=dev.
       devMode: false,
       onboardingIntent: undefined,
@@ -791,28 +792,23 @@ describe("WAITRON_PAYMENT_TEST_PROVIDERS", () => {
   });
 });
 
-it("starts no remote staff entrance until an HTTPS origin is explicitly configured", () => {
-  expect(loadConfig({}, ROOT, STATE_ROOT)).not.toHaveProperty("staff");
-  expect(loadConfig({ WAITRON_STAFF_ORIGIN: "" }, ROOT, STATE_ROOT)).not.toHaveProperty("staff");
+it("configures a test staff listener without a local hostname and excludes production", () => {
+  expect(loadConfig({}, ROOT, STATE_ROOT).staff).toEqual({ host: "127.0.0.1", port: 8443 });
   expect(
-    loadConfig({ WAITRON_STAFF_ORIGIN: "https://staff.example.test" }, ROOT, STATE_ROOT).staff,
-  ).toEqual({
-    origin: "https://staff.example.test",
-    host: "127.0.0.1",
-    port: 8443,
-  });
-});
-it.each([
-  "http://staff.example.test",
-  "https://staff.example.test/path",
-  "https://staff.example.test/",
-])("refuses a non-bare HTTPS staff origin %s", (origin) => {
-  expect(() => loadConfig({ WAITRON_STAFF_ORIGIN: origin }, ROOT, STATE_ROOT)).toThrow();
+    loadConfig(
+      {
+        WAITRON_ENV: "production",
+        WAITRON_MANAGEMENT_RP_ID: "box.example.test",
+        WAITRON_MANAGEMENT_ORIGIN: "https://box.example.test",
+      },
+      ROOT,
+      STATE_ROOT,
+    ),
+  ).not.toHaveProperty("staff");
 });
 it("takes the explicit tunnel bind and port without changing the LAN listener", () => {
   const config = loadConfig(
     {
-      WAITRON_STAFF_ORIGIN: "https://staff.example.test",
       WAITRON_STAFF_HOST: "10.77.0.2",
       WAITRON_STAFF_PORT: "9443",
     },
@@ -820,31 +816,11 @@ it("takes the explicit tunnel bind and port without changing the LAN listener", 
     STATE_ROOT,
   );
   expect(config.staff).toEqual({
-    origin: "https://staff.example.test",
     host: "10.77.0.2",
     port: 9443,
   });
   expect([config.httpHost, config.httpPort]).toEqual(["127.0.0.1", 8080]);
 });
-it.each(["8080", "80"])(
-  "refuses staff port %s when the local or landing listener uses it",
-  (port) => {
-    try {
-      loadConfig(
-        { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: port },
-        ROOT,
-        STATE_ROOT,
-      );
-      expect.unreachable("colliding listener port accepted");
-    } catch (error) {
-      expect(error).toMatchObject({
-        code: "server.config_invalid",
-        params: { variable: "WAITRON_STAFF_PORT", reason: "listener_port_conflict" },
-      });
-    }
-  },
-);
-
 it.each([
   ["8080", {}],
   ["80", {}],
@@ -877,48 +853,12 @@ it.each([
   );
 });
 
-it("refuses a staff port the store's loopback listener uses", () => {
-  expect(() =>
-    loadConfig(
-      { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: "7444" },
-      ROOT,
-      STATE_ROOT,
-    ),
-  ).toThrow(
-    expect.objectContaining({
-      code: "server.config_invalid",
-      params: { variable: "WAITRON_STAFF_PORT", reason: "listener_port_conflict" },
-    }),
-  );
-});
-
-it("refuses a staff port the spare's store uses", () => {
-  expect(() =>
-    loadConfig(
-      { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: "7443" },
-      ROOT,
-      STATE_ROOT,
-    ),
-  ).toThrow(
-    expect.objectContaining({
-      code: "server.config_invalid",
-      params: { variable: "WAITRON_STAFF_PORT", reason: "listener_port_conflict" },
-    }),
-  );
-});
-
 it.each([
   ["staff", "not_a_positive_integer"],
   ["0", "not_a_positive_integer"],
   ["65536", "port_out_of_range"],
 ])("refuses staff port %s as %s", (port, reason) => {
-  expect(() =>
-    loadConfig(
-      { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: port },
-      ROOT,
-      STATE_ROOT,
-    ),
-  ).toThrow(
+  expect(() => loadConfig({ WAITRON_STAFF_PORT: port }, ROOT, STATE_ROOT)).toThrow(
     expect.objectContaining({
       code: "server.config_invalid",
       params: { variable: "WAITRON_STAFF_PORT", reason },

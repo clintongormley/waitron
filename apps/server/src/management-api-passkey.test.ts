@@ -691,7 +691,7 @@ describe("what the browser's password manager is told", () => {
 it("offers staff-host passkey registration and authentication separately from the LAN hostname", async () => {
   await setupVenue();
   const local = mountAppWithMe(),
-    staff = createStaffApp(local, "https://staff.example.test");
+    staff = createStaffApp(local, async () => "https://staff.example.test");
   const signed = await staff.request("https://staff.example.test/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },

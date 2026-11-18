@@ -4456,15 +4456,15 @@ async function bootServer(
   );
 
   // A mirror's ambient administrator session must stay off the staff entrance.
-  const waitingForStaffCertificate =
+  const staffAdmitted = () => cloudConnection?.staffAdmitted() ?? Promise.resolve(false);
+  let staffListener =
+    !isMirror &&
     cloudConnection &&
     config.staff &&
     config.environment !== "production" &&
-    !existsSync(join(config.stateDir, CLOUD_STAFF_CERT_FILE));
-  let staffListener =
-    isMirror || waitingForStaffCertificate
-      ? undefined
-      : startStaffListener(config, app, log, staffPageGates);
+    existsSync(join(config.stateDir, CLOUD_STAFF_CERT_FILE))
+      ? startStaffListener(config, app, log, staffAdmitted, staffPageGates)
+      : undefined;
   undoOnFailure.push(async () => {
     await staffListener?.close();
   });
@@ -4710,12 +4710,21 @@ async function bootServer(
           log("error", "cloud.guest_menu_failed", { errorCode: codeOf(error) }),
         ...(config.staff && config.environment !== "production"
           ? {
-              staffHostname: new URL(config.staff.origin).hostname,
               onStaffCertificate: async (signal) => {
-                if (signal.aborted || !cloudPrimary() || staffListener?.isListening()) return;
+                if (signal.aborted || !cloudPrimary()) return;
+                if (staffListener?.isListening()) {
+                  staffListener.checkNow();
+                  return;
+                }
                 await staffListener?.close();
                 if (!signal.aborted && cloudPrimary())
-                  staffListener = startStaffListener(config, app, log, staffPageGates);
+                  staffListener = startStaffListener(
+                    config,
+                    app,
+                    log,
+                    () => cloudConnection!.staffAdmitted(),
+                    staffPageGates,
+                  );
               },
             }
           : {}),

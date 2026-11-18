@@ -1494,7 +1494,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/replication-cloud.md#loose-ends-left-by-the-cloud-connection-integration)
 
 
-- **A951-S provider trials.** Translate all returned one editable menu suggestion on the test box;
+- **A951-S provider trials.** Public staff-name changes and automatic certificates still need joint
+  qualification. Translate all returned one editable menu suggestion on the test box;
   address completion still needs its trial. Keep the approved consent and request limits.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 

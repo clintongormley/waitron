@@ -1,3 +1,4 @@
+import { validStaffHostname } from "./cloud-tunnel.js";
 import { createHash, X509Certificate } from "node:crypto";
 import { createSecureContext } from "node:tls";
 import { isIP } from "node:net";
@@ -44,17 +45,25 @@ export function validateTlsIdentity(
   return expiresAt;
 }
 
+export function certificateHostname(cert: Buffer): string {
+  const names = new X509Certificate(cert).subjectAltName?.split(", ");
+  const name = names?.length === 1 && names[0]!.startsWith("DNS:") ? names[0]!.slice(4) : undefined;
+  if (!validStaffHostname(name)) throw new Error("Invalid staff certificate hostname");
+  return name;
+}
+
 /** Refresh only future handshakes. A failed renewal leaves the last valid TLS context serving. */
 export function watchTlsFiles(
   server: HttpsServer,
   files: TlsFiles,
-  hostname: string,
+  hostname: string | undefined,
   onError: () => void,
   intervalMs = 10000,
-): void {
+): { hostname(): string | undefined; checkNow(): void } {
+  let acceptedName = hostname;
   let accepted = "",
     lastFailure: number | undefined;
-  const timer = setInterval(() => {
+  const checkNow = () => {
     try {
       if (statSync(files.keyFile).size > 16384 || statSync(files.certFile).size > 16384)
         throw new Error("TLS file too large");
@@ -62,8 +71,10 @@ export function watchTlsFiles(
         cert = readFileSync(files.certFile);
       const fingerprint = createHash("sha256").update(key).update(cert).digest("hex");
       if (fingerprint === accepted) return;
-      validateTlsIdentity(key, cert, hostname);
+      const name = hostname ?? certificateHostname(cert);
+      validateTlsIdentity(key, cert, name);
       server.setSecureContext({ key, cert });
+      acceptedName = name;
       accepted = fingerprint;
       lastFailure = undefined;
     } catch {
@@ -72,7 +83,10 @@ export function watchTlsFiles(
         lastFailure = Date.now();
       }
     }
-  }, intervalMs);
+  };
+  checkNow();
+  const timer = setInterval(checkNow, intervalMs);
   timer.unref();
   server.once("close", () => clearInterval(timer));
+  return { hostname: () => acceptedName, checkNow };
 }

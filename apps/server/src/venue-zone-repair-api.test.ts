@@ -597,7 +597,7 @@ it.each([
 );
 
 it("uses the staff origin for remote time-zone repair and refuses another origin", async () => {
-  const staff = createStaffApp(app, "https://staff.example.test");
+  const staff = createStaffApp(app, async () => "https://staff.example.test");
   const requestRemote = (method: string, origin?: string) =>
     staff.request(
       "https://staff.example.test" + PATH,

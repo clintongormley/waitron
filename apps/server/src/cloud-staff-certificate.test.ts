@@ -1,5 +1,5 @@
 import { expect, it, vi, afterEach, onTestFinished } from "vitest";
-import { readFile, stat, unlink } from "node:fs/promises";
+import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash, X509Certificate } from "node:crypto";
 import { createServer } from "node:https";
@@ -36,6 +36,7 @@ afterEach(() => {
 });
 
 async function fixture() {
+  let assignedHostname = hostname;
   let patch: Record<string, unknown> = {},
     discoveryPatch: Record<string, unknown> = {};
   let lose = false,
@@ -49,6 +50,7 @@ async function fixture() {
   let response: { status: number; body: string | Buffer } | undefined;
   let waiting = async () => {};
   const f = await installationFixture(undefined, {
+    remoteAccess: () => ({ state: "ready", configuration: { staffHostname: assignedHostname } }),
     staffCertificate: async (v, saved, req, res) => {
       expect(req.url).toBe(`/api/installations/${v[2]}`);
       expect(v[6]).toBe(JSON.stringify((saved.lifecycle as { lease: unknown }).lease));
@@ -68,7 +70,7 @@ async function fixture() {
           JSON.stringify({
             version: 1,
             installationId: v[3],
-            hostname,
+            hostname: assignedHostname,
             revision,
             request: original
               ? {
@@ -126,9 +128,11 @@ async function fixture() {
         cert.serialNumber = String(calls.length).padStart(2, "0");
         cert.validity.notBefore = new Date(Date.now() - 1000);
         cert.validity.notAfter = new Date(Date.now() + days * 86400000);
-        cert.setSubject([{ name: "commonName", value: hostname }]);
+        cert.setSubject([{ name: "commonName", value: assignedHostname }]);
         cert.setIssuer(cert.subject.attributes);
-        cert.setExtensions([{ name: "subjectAltName", altNames: [{ type: 2, value: hostname }] }]);
+        cert.setExtensions([
+          { name: "subjectAltName", altNames: [{ type: 2, value: assignedHostname }] },
+        ]);
         cert.sign(key, forge.md.sha256.create());
         certificate = forge.pki.certificateToPem(cert);
       }
@@ -137,7 +141,7 @@ async function fixture() {
           version: 1,
           installationId: v[3],
           requestId: original!.id,
-          hostname,
+          hostname: assignedHostname,
           revision: original!.body.revision,
           csrDigest: digest(),
           state: ready ? "ready" : "pending",
@@ -147,13 +151,17 @@ async function fixture() {
       );
     },
   });
+  await f.client.refresh();
   let closing: Promise<void> | undefined;
   const close = () => (closing ??= f.close());
   onTestFinished(close);
   return {
     ...f,
     close,
-    pass: (signal?: AbortSignal) => f.client.staffCertificate(hostname, signal),
+    pass: (signal?: AbortSignal) => f.client.staffCertificate(signal),
+    rename: (name: string) => {
+      assignedHostname = name;
+    },
     readKey: () => readFile(join(f.stateDir, "cloud/staff.key"), "utf8"),
     readChain: () => readFile(join(f.stateDir, "cloud/staff.crt"), "utf8"),
     submits: () => calls.filter((call) => call.action === "staff-certificate-submit"),
@@ -200,7 +208,7 @@ it("resumes a pending request with status after a restart, then installs it", as
   await f.pass();
   const { createCloudConnection } = await import("./cloud-client.js");
   const restarted = createCloudConnection(f.options);
-  await restarted.staffCertificate(hostname);
+  await restarted.staffCertificate();
   expect(f.calls.map((c) => c.action)).toEqual([
     "staff-certificate-status",
     "staff-certificate-submit",
@@ -213,7 +221,7 @@ it("resumes a pending request with status after a restart, then installs it", as
   )!;
   expect(polled.body).toEqual({ version: 1, requestId: submitted.operationId });
   f.ready();
-  await restarted.staffCertificate(hostname);
+  await restarted.staffCertificate();
   expect(await f.readChain()).toContain("BEGIN CERTIFICATE");
   expect((await stat(join(f.stateDir, "cloud/staff.key"))).mode & 0o077).toBe(0);
 });
@@ -336,7 +344,6 @@ it("the scheduled Cloud worker waits for a ready chain before opening the entran
       connection: f.client,
       signal: controller.signal,
       isPrimary: () => primary,
-      staffHostname: hostname,
       onStaffCertificate: async () => {
         opened.push(await f.readChain());
       },
@@ -424,9 +431,11 @@ it.each(["production", "revoked", "no-lease", "no-view", "no-registration"])(
     if (gate === "no-view") delete state.lifecycle.view;
     if (gate === "no-registration") delete state.view.registration;
     const { refreshStaffCertificate } = await import("./cloud-staff-certificate.js");
-    await expect(refreshStaffCertificate(state, f.stateDir, hostname)).rejects.toMatchObject({
-      code: "cloud.not_configured",
-    });
+    if (gate === "no-lease")
+      await expect(refreshStaffCertificate(state, f.stateDir)).rejects.toMatchObject({
+        code: "cloud.not_configured",
+      });
+    else expect(await refreshStaffCertificate(state, f.stateDir)).toBe(false);
     expect(f.calls).toHaveLength(0);
   },
 );
@@ -469,36 +478,45 @@ it("keeps Cloud refresh available while a certificate reply waits", async () => 
   }
 }, 15000);
 
-it("does not install a certificate if Stop Cloud access completes while its reply waits", async () => {
-  const f = await fixture();
-  let release = () => {},
-    arrived = () => {};
-  const reached = new Promise<void>((resolve) => {
-    arrived = resolve;
-  });
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  f.ready();
-  f.hold(async () => {
-    arrived();
-    await held;
-  });
-  const certificate = f.pass().catch((error) => error);
-  try {
-    await reached;
-    await f.client.revoke(async () => {});
-    release();
-    expect(await certificate).toMatchObject({ code: "cloud.not_configured" });
-    await expect(f.readChain()).rejects.toMatchObject({
-      code: "ENOENT",
+it.each(["Stop Cloud access", "rename", "remote switch"])(
+  "does not install a certificate if %s completes while its reply waits",
+  async (change) => {
+    const f = await fixture();
+    let release = () => {},
+      arrived = () => {};
+    const reached = new Promise<void>((resolve) => {
+      arrived = resolve;
     });
-  } finally {
-    release();
-    await certificate;
-    await f.close();
-  }
-}, 15000);
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.ready();
+    f.hold(async () => {
+      arrived();
+      await held;
+    });
+    const certificate = f.pass().catch((error) => error);
+    try {
+      await reached;
+      if (change === "Stop Cloud access") await f.client.revoke(async () => {});
+      else if (change === "remote switch") await f.client.setRemoteAccess(false, async () => {});
+      else {
+        f.rename("staff.changed.example.test");
+        await f.client.refresh();
+      }
+      release();
+      expect(await certificate).toMatchObject({ code: "cloud.not_configured" });
+      await expect(f.readChain()).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      release();
+      await certificate;
+      await f.close();
+    }
+  },
+  15000,
+);
 
 it.each(["before demotion", "after demotion", "after abort"])(
   "does not open the staff entrance on %s",
@@ -527,7 +545,6 @@ it.each(["before demotion", "after demotion", "after abort"])(
         connection: f.client,
         signal: controller.signal,
         isPrimary: () => primary,
-        staffHostname: hostname,
         onStaffCertificate: () => {
           opened++;
         },
@@ -557,7 +574,6 @@ it("a revoked installation does not attempt certificate work or log a spurious f
       connection: f.client,
       signal: controller.signal,
       isPrimary: () => true,
-      staffHostname: hostname,
       onError: (error) => {
         errors.push(error);
       },
@@ -669,3 +685,74 @@ it.each([{ state: ["pending"] }, { state: ["ready"] }])(
     await expect(f.pass()).rejects.toMatchObject({ code: "cloud.unavailable" });
   },
 );
+
+it("uses Cloud's changed staff name and retains the accepted chain until its replacement is ready", async () => {
+  const f = await fixture();
+  f.ready();
+  await f.pass();
+  const key = await f.readKey(),
+    chain = await f.readChain();
+  f.rename("staff.renamed.example.test");
+  f.revision(1);
+  await f.client.refresh();
+  f.pause();
+  await f.pass();
+  expect(f.submits().at(-1)!.body.hostname).toBe("staff.renamed.example.test");
+  expect(await f.readChain()).toBe(chain);
+  f.ready();
+  await f.pass();
+  expect(new X509Certificate(await f.readChain()).checkHost("staff.renamed.example.test")).toBe(
+    "staff.renamed.example.test",
+  );
+  expect(await f.readKey()).toBe(key);
+});
+
+it.each(["switch off", "pending revoke", "unconfigured", "failed", "missing name", "invalid name"])(
+  "quietly skips certificate work for %s",
+  async (gate) => {
+    const f = await fixture();
+    await f.client.refresh();
+    const path = join(f.stateDir, "cloud/connection.json");
+    const state = JSON.parse(await readFile(path, "utf8"));
+    if (gate === "switch off") state.remoteAccessEnabled = false;
+    if (gate === "pending revoke")
+      state.lifecycle.pending = {
+        action: "revoke",
+        operationId: "17171717-1717-4717-8717-171717171717",
+        body: "{}",
+      };
+    const service = state.lifecycle.view.services.find(
+      (s: { service: string }) => s.service === "remote_access",
+    );
+    if (["unconfigured", "failed"].includes(gate)) service.state = gate;
+    if (gate === "missing name") delete service.configuration.staffHostname;
+    if (gate === "invalid name")
+      service.configuration.staffHostname = "https://bad.example.test/path";
+    const { refreshStaffCertificate } = await import("./cloud-staff-certificate.js");
+    expect(await refreshStaffCertificate(state, f.stateDir)).toBe(false);
+    expect(f.calls).toEqual([]);
+    await expect(f.readKey()).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
+
+it("replaces an installed chain with extra names instead of counting it as a fresh staff identity", async () => {
+  const f = await fixture();
+  f.ready();
+  await f.pass();
+  const accepted = await f.readChain();
+  const certificate = forge.pki.certificateFromPem(accepted);
+  certificate.setExtensions([
+    {
+      name: "subjectAltName",
+      altNames: [
+        { type: 2, value: hostname },
+        { type: 2, value: "other.example.test" },
+      ],
+    },
+  ]);
+  certificate.sign(forge.pki.privateKeyFromPem(await f.readKey()), forge.md.sha256.create());
+  await writeFile(join(f.stateDir, "cloud/staff.crt"), forge.pki.certificateToPem(certificate));
+  await f.pass();
+  expect(f.calls).toHaveLength(4);
+  expect(await f.readChain()).toBe(accepted);
+});

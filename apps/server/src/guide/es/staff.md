@@ -106,7 +106,7 @@ Sigue las instrucciones de tu gestor de contraseñas para añadirla. Para elimin
 
 Si tu local tiene una dirección web para el personal desde fuera, inicia sesión allí con tu
 correo y contraseña habituales. Para usar una passkey en esa dirección, abre allí
-**Configuración de la cuenta** y añade una, aunque ya uses una en la dirección de la red local.
+**Configuración de la cuenta** y añade una, aunque ya uses una en la dirección de la red local. Si esa dirección cambia, entra con tu contraseña en la nueva dirección y añade allí una nueva passkey.
 
 ## Descargar tus datos {#own-data}
 

@@ -552,10 +552,15 @@ describe("a start that fails after the venue folder is opened gives the folder b
         const actual =
           await vi.importActual<typeof import("./cloud-remote.js")>("./cloud-remote.js");
         vi.mocked(startStaffListener).mockImplementationOnce((config, app, log) =>
-          actual.startStaffListener(config, app, (...args) => {
-            if (args[1] === "server.listen_failed") refused();
-            log(...args);
-          }),
+          actual.startStaffListener(
+            config,
+            app,
+            (...args) => {
+              if (args[1] === "server.listen_failed") refused();
+              log(...args);
+            },
+            async () => true,
+          ),
         );
       }
       let server: StartedServer | undefined;
@@ -572,7 +577,6 @@ describe("a start that fails after the venue folder is opened gives the folder b
             WAITRON_HTTP_PORT: String(localPort),
             WAITRON_HTTP_LANDING_PORT: "0",
             WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
-            WAITRON_STAFF_ORIGIN: "https://staff.example.test",
             WAITRON_STAFF_PORT: String(staffPort),
           });
         });
@@ -584,7 +588,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
           ).toEqual([]);
           await bindAndRelease(staffPort);
           await install();
-          expect(workerOptions?.staffHostname).toBe("staff.example.test");
+          expect(workerOptions?.onStaffCertificate).toBeTypeOf("function");
           await workerOptions?.onStaffCertificate?.(workerSignal);
           await vi.waitFor(async () => {
             await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
@@ -649,7 +653,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
           ...TILL_ENV,
           WAITRON_HTTP_PORT: String(localPort),
           WAITRON_HTTP_LANDING_PORT: String(landingPort),
-          WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+          WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
           WAITRON_STAFF_PORT: String(staffPort),
         }),
       ).rejects.toBe(failure);
@@ -1807,6 +1811,14 @@ it("boot gives remote dashboard files the main handover stop and request metadat
   const venueDir = await seededVenueDir();
   const state = await stateDir();
   const dashboard = await tempDir("waitron-staff-dashboard-");
+  const material = mintSelfSignedServerCert({
+    now: new Date(),
+    hostnames: ["staff.example.test"],
+    ipAddresses: [],
+  });
+  await mkdir(join(state, "cloud"), { recursive: true });
+  await writeFile(join(state, "cloud/staff.key"), material.serverKeyPem);
+  await writeFile(join(state, "cloud/staff.crt"), material.serverCertPem);
   await writeFile(join(dashboard, "index.html"), "<html>dashboard</html>");
   await mkdir(join(dashboard, "assets"));
   await writeFile(join(dashboard, "assets/app.js"), "dashboard asset");
@@ -1819,22 +1831,24 @@ it("boot gives remote dashboard files the main handover stop and request metadat
     return gate;
   });
   const { createStaffApp } = await import("./cloud-remote.js");
-  vi.mocked(startStaffListener).mockImplementationOnce((config, app, log, gates = []) => {
-    staff = createStaffApp(
-      app,
-      config.staff!.origin,
-      { root: config.dashboardAppDir!, gates },
-      log,
-    );
-    return { close: async () => {}, isListening: () => true };
-  });
+  vi.mocked(startStaffListener).mockImplementationOnce(
+    (config, app, log, _admitted, gates = []) => {
+      staff = createStaffApp(
+        app,
+        async () => "https://staff.example.test",
+        { root: config.dashboardAppDir!, gates },
+        log,
+      );
+      return { close: async () => {}, isListening: () => true, checkNow: () => {} };
+    },
+  );
   let server: StartedServer | undefined;
   try {
     server = await startServer(
       {
         ...(await tradingEnv(venueDir, state)),
         WAITRON_DASHBOARD_APP_DIR: dashboard,
-        WAITRON_STAFF_ORIGIN: "https://staff.example.test",
+        WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
       },
       {},
       {

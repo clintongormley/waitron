@@ -218,7 +218,12 @@ describe("a passkey sign-in through the Cloud remote-staff address", () => {
   it("is checked against the request's own address", async () => {
     const passkey = await seedPasskey(await seedPerson(suite.db, "manager"), "staff.example.test");
 
-    const res = await signInAt(STAFF, createStaffApp(mountApp(), STAFF), STAFF, passkey);
+    const res = await signInAt(
+      STAFF,
+      createStaffApp(mountApp(), async () => STAFF),
+      STAFF,
+      passkey,
+    );
 
     expect(res.status).toBe(200);
   });
@@ -227,7 +232,12 @@ describe("a passkey sign-in through the Cloud remote-staff address", () => {
     await chartListing([{ nodeId: ABCD, contactUrl: ABCD_ORIGIN }]);
     const passkey = await seedPasskey(await seedPerson(suite.db, "manager"), "staff.example.test");
 
-    const res = await signInAt(ABCD_ORIGIN, createStaffApp(mountApp(), STAFF), STAFF, passkey);
+    const res = await signInAt(
+      ABCD_ORIGIN,
+      createStaffApp(mountApp(), async () => STAFF),
+      STAFF,
+      passkey,
+    );
 
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual(VERIFICATION_FAILED);

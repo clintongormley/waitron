@@ -3297,7 +3297,7 @@ it("keeps password backoff and ordinary password login through the remote entran
     undefined,
     createPasswordThrottle(() => now),
   );
-  const staff = createStaffApp(local, "https://staff.example.test");
+  const staff = createStaffApp(local, async () => "https://staff.example.test");
   const attempt = (password: string) =>
     staff.request("https://staff.example.test/management-api/session", {
       method: "POST",
@@ -3320,7 +3320,7 @@ it("keeps password backoff and ordinary password login through the remote entran
 it("requires a real session for the staff roster through the remote entrance", async () => {
   await setupVenue();
   const local = mountApp(),
-    staff = createStaffApp(local, "https://staff.example.test");
+    staff = createStaffApp(local, async () => "https://staff.example.test");
   const url = "https://staff.example.test/management-api/staff-roster";
   expect((await local.request("/management-api/staff-roster")).status).toBe(200);
   const anonymous = await staff.request(url);
@@ -3349,7 +3349,7 @@ it("keeps the remote Google ceremony and its return on the staff origin", async 
   });
   const staff = createStaffApp(
     mountApp(undefined, undefined, { exchange }),
-    "https://staff.example.test",
+    async () => "https://staff.example.test",
   );
   const started = await staff.request("https://staff.example.test/management-api/google/login", {
     method: "POST",
@@ -3377,7 +3377,7 @@ it("sends password-reset links back to the requesting staff origin", async () =>
     sent.push(message);
     return "sent";
   });
-  const staff = createStaffApp(local, "https://staff.example.test");
+  const staff = createStaffApp(local, async () => "https://staff.example.test");
   expect(
     (
       await staff.request("https://staff.example.test/management-api/password-reset", {

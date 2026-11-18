@@ -501,7 +501,7 @@ it.each([
 
 it("uses the staff origin for a remote suggestion run and refuses another origin", async () => {
   await bread();
-  const staff = createStaffApp(mount(), "https://staff.example.test");
+  const staff = createStaffApp(mount(), async () => "https://staff.example.test");
   const sendRemote = (origin: string) =>
     send(staff, "POST", "https://staff.example.test" + JOBS, { origin, body: "{}" });
   expect((await sendRemote("https://attacker.test")).status).toBe(403);

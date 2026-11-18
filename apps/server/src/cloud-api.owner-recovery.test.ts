@@ -49,7 +49,9 @@ async function fixture(role: "admin" | "manager" = "admin") {
   ) => {
     const origin =
       options.origin ?? (options.remote ? "https://staff.example.test" : "https://venue.test");
-    const appToUse = options.remote ? createStaffApp(app, "https://staff.example.test") : app;
+    const appToUse = options.remote
+      ? createStaffApp(app, async () => "https://staff.example.test")
+      : app;
     return appToUse.request(`${origin}/management-api/cloud/owner-recovery/${action}`, {
       method: "POST",
       headers: {

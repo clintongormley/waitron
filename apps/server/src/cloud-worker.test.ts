@@ -91,7 +91,6 @@ it.each(["guest", "certificate"] as const)(
       },
       signal: controller.signal,
       isPrimary: () => true,
-      staffHostname: "staff.example.test",
       onGuestMenu: async () => {
         seen.push("guest");
         if (failed === "guest") throw failure;
@@ -163,7 +162,6 @@ it.each([true, false])(
     await runCloudConnectionForTest({
       connection: { ...f.client, staffCertificate: async () => true },
       managementOrigin: "https://staff.test",
-      staffHostname: "staff.test",
       signal: controller.signal,
       isPrimary: () => true,
       onGuestMenu: () => seen.push("guest"),

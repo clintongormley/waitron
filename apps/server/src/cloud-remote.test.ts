@@ -75,6 +75,24 @@ it("certificate installation verifies the venue key and hostname before replacin
     cert.sign(key, forge.md.sha256.create());
     const pem = forge.pki.certificateToPem(cert);
     await installStaffCertificate(root, "staff.sol.example.test", pem);
+    cert.setExtensions([
+      {
+        name: "subjectAltName",
+        altNames: [
+          { type: 2, value: "staff.sol.example.test" },
+          { type: 2, value: "staff.other.example.test" },
+        ],
+      },
+    ]);
+    cert.sign(key, forge.md.sha256.create());
+    await expect(
+      installStaffCertificate(root, "staff.sol.example.test", forge.pki.certificateToPem(cert)),
+    ).rejects.toThrow("Invalid staff certificate");
+    expect(await readFile(join(root, "cloud/staff.crt"), "utf8")).toBe(pem);
+    cert.setExtensions([
+      { name: "subjectAltName", altNames: [{ type: 2, value: "staff.sol.example.test" }] },
+    ]);
+    cert.sign(key, forge.md.sha256.create());
     await chmod(join(root, "cloud/staff.key"), 0o666);
     await expect(installStaffCertificate(root, "staff.sol.example.test", pem)).rejects.toThrow(
       "Invalid staff key file",
@@ -134,7 +152,7 @@ it("the staff entrance forwards only dashboard requests and marks their source r
       onBox: requestFromBox(c),
     }),
   );
-  const staff = createStaffApp(app, "https://staff.example.test");
+  const staff = createStaffApp(app, async () => "https://staff.example.test");
   const response = await staff.request(
     "https://staff.example.test/management-api/session",
     { method: "POST", body: "credentials" },
@@ -202,7 +220,7 @@ it("the staff entrance forwards only dashboard requests and marks their source r
 it("the staff entrance lets the tax office's invoice list, PDF, month and its download through", async () => {
   const app = new Hono();
   app.all("*", (c) => c.json({ path: c.req.path, method: c.req.method }));
-  const staff = createStaffApp(app, "https://staff.example.test");
+  const staff = createStaffApp(app, async () => "https://staff.example.test");
   for (const [method, path] of [
     ["GET", "/management-api/tax-office/invoices?from=2026-11-01&to=2026-11-30"],
     ["POST", "/management-api/tax-office/invoices/0b0e6d0c-56a4-4c3e-9b0e-1b2b3c4d5e6f/pdf"],
@@ -220,7 +238,7 @@ it("refuses another venue hostname and does not accept a remote marker from HTTP
   const { requestFromBox } = await import("./request-from-box.js");
   const app = new Hono();
   app.get("/", (c) => c.json({ onBox: requestFromBox(c) }));
-  const staff = createStaffApp(app, "https://staff.example.test");
+  const staff = createStaffApp(app, async () => "https://staff.example.test");
   expect((await staff.request("https://other.example.test/")).status).toBe(404);
   expect((await staff.request("http://staff.example.test/")).status).toBe(404);
   expect(
@@ -252,12 +270,13 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
   let stopped = false;
   const server = startStaffListener(
     {
-      staff: { origin: "https://staff.example.test", host: "127.0.0.1", port: 0 },
+      staff: { host: "127.0.0.1", port: 0 },
       stateDir: root,
       dashboardAppDir: root,
     },
     app,
     (...args) => lines.push(args),
+    async () => true,
     [async (c, next) => (stopped ? c.text("stopped", 503) : next())],
   );
   const ask = (path: string) =>
@@ -301,6 +320,47 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
     expect((await ask("/setup")).status).toBe(404);
     stopped = true;
     expect(await ask("/")).toEqual({ status: 503, text: "stopped" });
+    for (const ownPort of [
+      "httpPort",
+      "landingPort",
+      "spareStorePort",
+      "spareStoreLoopbackPort",
+    ] as const) {
+      const ownLines: Parameters<Logger>[] = [];
+      const conflict = startStaffListener(
+        { staff: { host: "127.0.0.1", port }, stateDir: root, [ownPort]: port },
+        app,
+        (...args) => ownLines.push(args),
+        async () => true,
+      );
+      try {
+        expect(conflict).toBeUndefined();
+        expect(ownLines).toEqual([
+          ["warn", "server.listen_failed", { listener: "staff", port, code: "EADDRINUSE" }],
+        ]);
+      } finally {
+        await conflict?.close();
+      }
+    }
+    const collision = startStaffListener(
+      { staff: { host: "127.0.0.1", port }, stateDir: root },
+      app,
+      (...args) => lines.push(args),
+      async () => true,
+    );
+    try {
+      await vi.waitFor(() =>
+        expect(lines).toContainEqual([
+          "warn",
+          "server.listen_failed",
+          { listener: "staff", port, code: "EADDRINUSE" },
+        ]),
+      );
+      expect(collision?.isListening()).toBe(false);
+      expect((await ask("/")).status).toBe(503);
+    } finally {
+      await collision?.close();
+    }
     await server!.close();
     await expect(ask("/")).rejects.toThrow();
   } finally {
@@ -313,23 +373,31 @@ it("leaves a missing staff certificate offline without throwing into local sales
   expect(() =>
     startStaffListener(
       {
-        staff: { origin: "https://staff.example.test", host: "127.0.0.1", port: 8443 },
+        staff: { host: "127.0.0.1", port: 8443 },
         stateDir: "/absent-staff-fixture",
       },
       new Hono(),
       (...args) => lines.push(args),
+      async () => true,
     ),
   ).not.toThrow();
   expect(lines).toEqual([
     ["warn", "server.listen_failed", { listener: "staff", port: 8443, code: "ENOENT" }],
   ]);
-  expect(startStaffListener({ stateDir: "/unused" }, new Hono(), () => {})).toBeUndefined();
+  expect(
+    startStaffListener(
+      { stateDir: "/unused" },
+      new Hono(),
+      () => {},
+      async () => true,
+    ),
+  ).toBeUndefined();
 });
 
 it("bounds remote sign-in bodies before forwarding either declared or streamed input", async () => {
   const app = new Hono();
   app.post("*", async (c) => c.text(await c.req.text()));
-  const staff = createStaffApp(app, "https://staff.example.test");
+  const staff = createStaffApp(app, async () => "https://staff.example.test");
   for (const headers of [new Headers(), new Headers({ "content-length": "65537" })]) {
     const response = await staff.request("https://staff.example.test/management-api/session", {
       method: "POST",
@@ -351,7 +419,7 @@ it("bounds remote sign-in bodies before forwarding either declared or streamed i
 it("limits remote anonymous passkey challenges and allows a later minute", async () => {
   const app = new Hono();
   app.post("/management-api/passkey/auth/options", (c) => c.text("challenge created", 201));
-  const staff = createStaffApp(app, "https://staff.example.test");
+  const staff = createStaffApp(app, async () => "https://staff.example.test");
   const clock = vi.spyOn(Date, "now").mockReturnValue(100000);
   const ask = () =>
     staff.request("https://staff.example.test/management-api/passkey/auth/options", {
@@ -375,7 +443,7 @@ it("serves dashboard pages and assets directly, never arbitrary main-app root ha
     await writeFile(join(root, "assets/app-hash.js"), "dashboard asset");
     const local = new Hono();
     local.all("*", (c) => c.text("main handler must not run"));
-    const staff = createStaffApp(local, "https://staff.example.test", { root });
+    const staff = createStaffApp(local, async () => "https://staff.example.test", { root });
     for (const path of ["/", "/account?token=example", "/private-server-handler"]) {
       const response = await staff.request(`https://staff.example.test${path}`, {
         headers: { Accept: "text/html" },
@@ -420,7 +488,10 @@ it("applies the supplied main page gates in order before serving staff pages", a
     await writeFile(join(root, "index.html"), "dashboard");
     const handover = createHandoverGate();
     const gates = [handover.middleware, spareReadGate({ main: () => undefined })];
-    const mirror = createStaffApp(new Hono(), "https://staff.example.test", { root, gates });
+    const mirror = createStaffApp(new Hono(), async () => "https://staff.example.test", {
+      root,
+      gates,
+    });
     const response = await mirror.request("https://staff.example.test/account", {
       headers: { Accept: "text/html" },
     });
@@ -436,4 +507,32 @@ it("applies the supplied main page gates in order before serving staff pages", a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("checks current staff admission before parsing a body or forwarding a request", async () => {
+  const app = new Hono();
+  app.all("*", (c) => c.text("forwarded"));
+  let admitted = true,
+    unreadable = false;
+  const staff = createStaffApp(app, async () => {
+    if (unreadable) throw new Error("state unreadable");
+    return admitted ? "https://staff.example.test" : undefined;
+  });
+  expect((await staff.request("https://staff.example.test/management-api/session")).status).toBe(
+    200,
+  );
+  admitted = false;
+  expect(
+    (
+      await staff.request("https://staff.example.test/management-api/session", {
+        method: "POST",
+        headers: { "content-length": "65537" },
+        body: "x".repeat(65537),
+      })
+    ).status,
+  ).toBe(404);
+  unreadable = true;
+  expect((await staff.request("https://staff.example.test/management-api/session")).status).toBe(
+    404,
+  );
 });
