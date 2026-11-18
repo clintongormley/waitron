@@ -58,6 +58,7 @@ import { moveSettledBillToCounter } from "./move-bill.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
+import { moveLinesToGroup } from "./testing/group-composition-fixture.js";
 import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { setStationPrinting } from "./testing/station-printing.js";
@@ -2389,6 +2390,47 @@ describe("A803 waiting copy: kitchen paper", () => {
       const burger = (await printed(t.grill.printer)).slice(beforeBurger);
       expect(burger).toEqual([expect.arrayContaining(["1 x BURG"])]);
       expect(burger[0]![0]).not.toMatch(/\*\*\*/);
+    });
+
+    it("A1368: a whole dish moved to an unprinted group releases at the counter without FIRE", async () => {
+      const t = await paperTable(true);
+      const cake = await lineOf(t.bill2, "Tarta");
+      await inTx(v, async (tx) => {
+        await setStationPrinting(tx, { printHeldWork: false }, [t.grill.id]);
+        await setStationsWaitForPass(tx, true, [t.grill.id]);
+      });
+      const {
+        groups: [destination],
+      } = await inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, t.partyId, {
+          groups: [
+            {
+              release: "hold",
+              lines: [{ menuItemId: v.item("Burger"), quantity: "1", courseId: null }],
+            },
+          ],
+          operatorId: OPERATOR,
+          billId: t.bill2,
+        }),
+      );
+      const expectedPartyRevision = await revisionOf(v, t.partyId);
+      await inTx(v, (tx) =>
+        moveLinesToGroup(
+          tx,
+          v.cfg,
+          t.partyId,
+          [{ lineId: cake.id, quantity: "1" }],
+          { groupId: destination!.id },
+          { submissionId: randomUUID(), expectedPartyRevision, operatorId: OPERATOR },
+        ),
+      );
+      await fire(t.partyId, destination!.id);
+      await moveWholeBill(t.bill2, t.partyId, { counter: { zoneId: null } });
+
+      const slips = await releaseCake(t);
+
+      expect(slips).toEqual([expect.arrayContaining(["1 x TARTA"])]);
+      expect(slips[0]).not.toContain(`*** ${words.fire} ***`);
     });
 
     it("A1368: releasing a mixed counter bill marks FIRE only for the dish on HOLD paper", async () => {

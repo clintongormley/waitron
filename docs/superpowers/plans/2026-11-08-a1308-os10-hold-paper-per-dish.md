@@ -14,8 +14,7 @@
 > in the column order, and its comparison in the change-feed update trigger.
 >
 > This note supersedes the group-table re-key, migration differences, and counter rendering
-> described in the original plan below. The counter cancellation and reprint gaps are tracked
-> as separate work.
+> described in the original plan below.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

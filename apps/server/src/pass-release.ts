@@ -137,7 +137,7 @@ async function release(
   return { releasedTicketItemIds: offered.ticketItemIds };
 }
 
-/** Read after the release stamp so the allergy notice carries no HOLD label. */
+/** One ticket per bill at each output (D50). Read after the release stamp so allergy notices lose HOLD. */
 async function printRelease(
   tx: Transaction,
   cfg: TradingContext,
