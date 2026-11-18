@@ -2129,7 +2129,7 @@ When a split leaves tables joined, the suggestion adds the remaining tables' ind
 as listed in the split window. The dashboard adds the selected tables' saved seats. Suggestions
 stay within 1–999; if any contributing count is unknown, the field stays empty. Editing the
 suggestion keeps your value when the table selection changes. Accepting a suggestion leaves no
-unsaved draft. The existing server refusal before the till opens Seats remains A666's decision.
+unsaved draft.
 
 ### Touch gestures in the floor plan editor (owner, 2026-10-14; A673)
 
@@ -2787,22 +2787,6 @@ A1250's colour question.
   table was released as the counter, a known edge A650 Part 1 deferred and has not yet put to
   the owner, while `orderTableLabels` (`packages/db/src/party-table-labels.ts`, used by
   tickets and correction slips) names it by its kept `delivery_table_label`. Once the edge is decided, one reader in `packages/db`. Left open by A650 Part 1.
-
-## A666. A floor join that moves tables together is sent once without seats
-
-- **A666 — A floor join that moves tables together is sent once without seats and refused before
-  the Seats prompt opens (2026-10-14; owner decided 2026-10-17).** Found by A659's probe (#1699): a floor Join with…
-  where neither side is a fixed table (two free tables, or a join involving a party) first sends
-  `POST /api/tables/:id/today/merge` or `/api/parties/:id/join` with no seat count, gets
-  `400 merge.seats_required` (`writeMerge`, `apps/server/src/floor-today-merges.ts`), then opens
-  the Seats prompt and sends again (`#merge`/`#join`, `apps/till/src/screens/till-floor-screen.ts`).
-  Since #1598 removed saved joins this happens on every such join (a fixed table sends no merge;
-  `dropAction`, `apps/till/src/state/floor-today.ts`): one wasted round trip (for a party, a
-  join done and undone in one transaction) and a red 400 in the console; nothing the waiter sees goes
-  wrong. Owner, 2026-10-17: ask for the seat count first and send once; the other refusals (table
-  not free, already grouped, zone mismatch) then show only after the seats are typed. Done when a
-  floor join that needs seats asks for them before its first request and sends once.
-  The request log is in #1699.
 
 ## A550. Making a booked table part of a joined table is not refused
 

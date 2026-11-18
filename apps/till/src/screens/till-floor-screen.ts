@@ -271,8 +271,6 @@ interface Renaming {
 /** A server refusal: its code, and its params as the client spreads them beside it. */
 type Refused = { code?: string; field?: unknown } & Record<string, unknown>;
 
-const asksSeats = (refused: { code?: string }): boolean => refused.code === "merge.seats_required";
-
 function placedAt(table: TableState, pending: Map<string, TodayPlacement>): TableState {
   const placement = pending.get(table.id);
   return placement === undefined || table.today === null
@@ -1418,11 +1416,19 @@ export class TillFloorScreen extends LitElement {
         );
         return;
       }
-      case "merge":
-        if (this.api === undefined) return;
+      case "merge": {
+        const api = this.api;
+        if (api === undefined) return;
         this.#setPending(pendingPlaces(this.#zone.visible, action));
-        void this.#merge(this.api, action, this.#dropRoom(drop.tableId).revision);
+        const revision = this.#dropRoom(drop.tableId).revision;
+        this.askingSeats = {
+          heading: action.heading,
+          seats: this.#joinSeats(action.tableId, action.targetId),
+          action: "join",
+          resend: (chosen) => void this.#merge(api, action, revision, chosen),
+        };
         return;
+      }
       case "seat": {
         const table = this.#zone.visible.find((each) => each.id === action.tableId)!;
         const saved = dropAction(this.#zone.visible.map(withoutTodaysNames), drop);
@@ -1600,7 +1606,15 @@ export class TillFloorScreen extends LitElement {
         new Set(asked.expectedEdits.map((edit) => edit.billId)).size !== asked.expectedEdits.length
       )
         throw { code: "draft.out_of_date" };
-      await this.#join(asked);
+      const { merge } = action;
+      if (merge === null) await this.#join(asked);
+      else
+        this.askingSeats = {
+          heading: action.heading,
+          seats: this.#joinSeats(merge.moving, merge.target),
+          action: "join",
+          resend: (chosen) => void this.#join(asked, chosen),
+        };
     } catch (cause) {
       if (!this.#joinCurrent(asked)) return;
       const code = (cause as { code?: string } | undefined)?.code;
@@ -1639,55 +1653,24 @@ export class TillFloorScreen extends LitElement {
             const revision = answer.zoneRevisions?.[room.zoneId];
             return revision === undefined ? null : { zoneId: room.zoneId, revision };
           });
-    let askingSeats = false;
-    await this.#settle(call, {
-      asks: (refused) => {
-        if (merge === null || seats !== undefined || !asksSeats(refused)) return false;
-        askingSeats = true;
-        this.askingSeats = {
-          heading: action.heading,
-          seats: this.#joinSeats(merge.moving, merge.target),
-          action: "join",
-          resend: (chosen) => void this.#join(asked, chosen),
-        };
-        return true;
-      },
-      current: () => this.#joinCurrent(asked),
-    });
-    if (this.#joinCurrent(asked) && !askingSeats) this.#joinWork = null;
+    await this.#settle(call, { current: () => this.#joinCurrent(asked) });
+    if (this.#joinCurrent(asked)) this.#joinWork = null;
   }
 
-  /** The server refuses a merge without seats (`merge.seats_required`), which opens the seats prompt. */
   async #merge(
     api: TillApi,
     action: Extract<DropAction, { kind: "merge" }>,
     revision: number | null,
-    seats?: number,
+    seats: number,
   ): Promise<void> {
     await this.#settle(
       this.#send(revision, (sent) =>
         api.mergeToday(
           action.tableId,
-          {
-            targetId: action.targetId,
-            side: action.side,
-            ...(seats === undefined ? {} : { seats }),
-          },
+          { targetId: action.targetId, side: action.side, seats },
           sent,
         ),
       ),
-      {
-        asks: (refused) => {
-          if (seats !== undefined || !asksSeats(refused)) return false;
-          this.askingSeats = {
-            heading: action.heading,
-            seats: this.#joinSeats(action.tableId, action.targetId),
-            action: "join",
-            resend: (chosen) => void this.#merge(api, action, revision, chosen),
-          };
-          return true;
-        },
-      },
     );
   }
 
@@ -1703,11 +1686,9 @@ export class TillFloorScreen extends LitElement {
   async #settle(
     call: Promise<FloorAnswer | null>,
     {
-      asks = () => false,
       refresh,
       current = () => true,
     }: {
-      asks?: (refused: { code?: string; field?: unknown }) => boolean;
       refresh?: FloorRefreshDetail;
       current?: () => boolean;
     } = {},
@@ -1719,7 +1700,6 @@ export class TillFloorScreen extends LitElement {
     } catch (cause) {
       if (!current()) return;
       const refused = (cause ?? {}) as Refused;
-      if (asks(refused)) return;
       this.refusal = this.#refusalText(refused);
       this.#setPending(null);
     }

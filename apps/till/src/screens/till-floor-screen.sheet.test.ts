@@ -194,11 +194,17 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     await settle(el);
 
     expect(joinDialog(el)).toBeNull();
+    expect(api.mergeToday).not.toHaveBeenCalled();
+    send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
+      seats: 6,
+    });
+    await settle(el);
     expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
       "t1",
       {
         targetId: "t2",
         side: "left",
+        seats: 6,
       },
       0,
     );
@@ -211,11 +217,17 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     await press(el, "t1", "join-with");
     send(joinDialog(el)!, "join-with-pick", { tableId: "t1", targetId: "t2" });
     await settle(el);
+    expect(api.mergeToday).not.toHaveBeenCalled();
+    send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
+      seats: 6,
+    });
+    await settle(el);
     expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
       "t1",
       {
         targetId: "t2",
         side: "right",
+        seats: 6,
       },
       0,
     );
@@ -401,9 +413,14 @@ describe("till-floor-screen: the sheet's actions and the room's revision", () =>
     await press(el, "t1", "join-with");
     send(joinDialog(el)!, "join-with-pick", { tableId: "t1", targetId: "t2" });
     await settle(el);
+    expect(joining.mergeToday).not.toHaveBeenCalled();
+    send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
+      seats: 6,
+    });
+    await settle(el);
     expect(joining.mergeToday).toHaveBeenCalledExactlyOnceWith(
       "t1",
-      { targetId: "t2", side: "left" },
+      { targetId: "t2", side: "left", seats: 6 },
       7,
     );
   });
