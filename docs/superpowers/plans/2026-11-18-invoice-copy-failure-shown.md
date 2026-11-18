@@ -88,6 +88,15 @@ and "receipt instead" for a waiting one. All of them work out original versus du
   hand-made JSON (`apps/server/src/receipt-print.test.ts`, the two "names no staff member" cases).
 - Email: the write does not check the mail transport or the department contact at all. Those are
   checked only when the choice is saved.
+- A second route, found by the plan's review: `enqueueSaleReceipt` (`receipt-print.ts:263-283`)
+  queues a prepay order's collection-number slip before the chosen copy, inside the same optional
+  wrapper, so a slip failure skips the copy too (logged as operation `enqueueSaleReceipt`). The
+  reviewer forced it in a throwaway copy by switching the order's department off with hand-written
+  SQL: no delivery row, warning `service_zone.not_found`. It cannot happen at a venue: the only code
+  that switches a department off, `deleteDepartment`
+  (`packages/venue-service/src/service-delete.ts:310`), refuses while any open or placed order
+  belongs to it (`:139-152`), and an order being paid is still open or placed; the slip's printer
+  lookup returns only switched-on printers (`receipt-print.ts:148`).
 - No triggers exist on `invoice_deliveries` (a grep of the packages' `.sql` files found none), and its
   CHECKs (`packages/db/src/schema/invoice-deliveries.ts:113-125`) hold for every saved choice.
 
@@ -108,10 +117,20 @@ The control shows the probe can see a silent omission; the three real events do 
 Each of their rows is already shown by the till's status line ("Sending the invoice.", "Not
 delivered." with **Send by email** and **Print**).
 
-**Not established.** (a) Whether a full disk can refuse only this write and still let the sale
-commit. `optional-document.ts:15-18` lets an error escape when the engine ended the transaction, and
-CLAUDE.md §3 says a full disk sometimes ends the whole transaction; I did not run it on a small
-filesystem. (b) The connected-card and counter paths were not run. They call the same
+**A full disk, measured by the plan's review (2026-11-18).** A `node:sqlite` script (Node v26.13.1)
+on an 8 MiB HFS+ image filled with `hdiutil`, write-ahead log and foreign keys on, a delivery table
+with a change-feed-shaped trigger: a sale insert, then the delivery insert in a savepoint, rolled
+back to the savepoint on refusal as `optionalDocument` does. With the default cache the commit was
+refused whole (`errcode 13`, nothing kept). With the cache shrunk to two pages, so the delivery
+insert itself hit the full disk, the engine ended the whole transaction (`no such savepoint`), which
+`optional-document.ts:15-18` lets escape, so the sale fails. Control: an artificial page limit
+(`max_page_count`) did commit the sale with no delivery row, so the probe can see the silent case;
+only the artificial limit produces it. Limits: macOS HFS+, the engine alone, not the box's Linux
+filesystem or a real payment route. This agrees with "a commit on a real full disk is refused
+whole" (`apps/server/src/start-full-disk.e2e.test.ts:1239`).
+
+**Not established.** (a) The full disk on the box's own Linux filesystem (above, measured on macOS
+only). (b) The connected-card and counter paths were not run. They call the same
 `enqueueSaleReceipt`, so I believe the outcome is the same, but that is from reading. (c) What the
 email worker does with a queued row while mail is not set up. The row exists, so the till shows a
 line for it; that question belongs to a different item.
@@ -208,10 +227,10 @@ calls. Run each focused command with a bare `--` before any `-t` (CLAUDE.md §2'
 4. Strings in `apps/till/src/i18n/strings.ts`, English and Spanish twins. These drafts follow
    CLAUDE.md §3's refusal rule (say what happened, then what each choice does) and may be tightened
    in review:
-   - `invoice.chosen_email_not_sent`: "The invoice was not emailed to {recipient} as chosen. Nothing
-     was sent." / "La factura no se envió por correo a {recipient} como se eligió. No se envió nada."
-   - `invoice.chosen_a4_not_sent`: "The invoice was not sent to the office printer chosen for it.
-     Nothing was sent." / "La factura no se envió a la impresora de oficina elegida. No se envió nada."
+   - `invoice.chosen_email_not_sent`: "The invoice was not emailed to {recipient} as chosen." /
+     "La factura no se envió por correo a {recipient} como se eligió."
+   - `invoice.chosen_a4_not_sent`: "The invoice was not sent to the office printer chosen for it." /
+     "La factura no se envió a la impresora de oficina elegida."
    - `invoice.chosen_next_both`: "Send by email sends it to the address you enter; Print prints it on
      {printer}." / "Enviar por correo la envía a la dirección que escribas; Imprimir la imprime en
      {printer}."
@@ -242,5 +261,5 @@ calls. Run each focused command with a bare `--` before any `-t` (CLAUDE.md §2'
    `packages/fiscal*`, `packages/core`, `packages/db/src/schema` or any migration.
 
 Risk: none of CLAUDE.md's risk triggers apply (no fiscal invariant, migration, permission or
-cross-package contract; the field is server→till only and optional). This takes the light review
-path: the plan-against-spec read and the Codex run-it seat in `/finish-branch`.
+cross-package contract; the field is server→till only and optional). Lane L still runs
+`/finish-branch`'s full wave (two Codex run-it reviews and the convention seat) on every branch.
