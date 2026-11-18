@@ -1,4 +1,3 @@
-import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { dateA4Job, readDeliveryAndClaim } from "./testing/a4-print-job.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
@@ -17,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
-import { createPrinter, enqueuePrintJob } from "@waitron/printing";
+import { createPrinter, enqueuePrintJob, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -31,6 +30,7 @@ import {
   tokenHash,
   type InvoiceDeliveryClaim,
 } from "./invoice-delivery.js";
+import { resendInvoicePrintJob } from "./invoice-print.js";
 import { registerPagePrinter } from "./page-printers.js";
 import {
   claimInvoicePagePrint,
@@ -202,6 +202,7 @@ it("reserves a payload-free job and stores the office printer claim on it", asyn
       pagePrinterId: office,
     }),
   );
+  expect(delivery.nextAttemptAt).toBe(delivery.createdAt);
   const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.saleId, saleId));
   expect(job).toMatchObject({
     id: delivery.printJobId,
@@ -228,9 +229,25 @@ it("reserves a payload-free job and stores the office printer claim on it", asyn
     .where(eq(invoiceDeliveries.id, delivery.id));
   expect(stored).toMatchObject({
     status: "sending",
+    attempts: 0,
     claimedAt: null,
+    claimedBy: null,
+    claimedAgentId: null,
     claimTokenHash: null,
+    printerHold: null,
   });
+});
+
+it("leaves an office job in its queue when receipt resend refuses it", async () => {
+  const v = await venue();
+  const office = await printer(v.agentOne);
+  const id = await queueA4(await fullInvoice(v.nodeId), office);
+  const jobId = (await row(id)).printJobId!;
+
+  await expect(
+    withTransaction(suite.db, (tx) => resendInvoicePrintJob(tx, jobId, "staff-one", at(0))),
+  ).rejects.toMatchObject({ code: "print_job.not_found", params: { id: jobId } });
+  expect((await claim(v.agentOne, 0))?.claim.deliveryId).toBe(id);
 });
 
 describe("claiming an A4 delivery", () => {

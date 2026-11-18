@@ -169,7 +169,12 @@ export async function reserveInvoiceDelivery(
       ...(input.medium === "email"
         ? { recipient: input.recipient, madeByRetry: input.madeByRetry }
         : input.medium === "a4"
-          ? { printerId: input.pagePrinterId, printJobId: a4Job?.jobId, createdAt: a4CreatedAt }
+          ? {
+              printerId: input.pagePrinterId,
+              printJobId: a4Job?.jobId,
+              createdAt: a4CreatedAt,
+              nextAttemptAt: a4CreatedAt,
+            }
           : { printJobId: input.printJobId, printerChosen: input.printerChosen }),
     })
     .returning();

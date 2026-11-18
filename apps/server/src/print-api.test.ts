@@ -28,7 +28,7 @@ import {
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedCashSale, seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashSessionToken,
   persons,
@@ -3000,6 +3000,17 @@ describe("mountPrintApi — management: recent jobs", () => {
           }),
         )
         .returning({ id: printJobs.id, deliveredAt: printJobs.deliveredAt });
+      await withTransaction(suite.db, async (tx) => {
+        const office = await insertA4Printer(tx);
+        const { saleId } = await seedCashSale(tx);
+        await tx.insert(printJobs).values({
+          printerId: office,
+          saleId,
+          kind: "a4",
+          status: "done",
+          deliveredAt: "2100-01-01T00:00:00.000Z",
+        });
+      });
       const result = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,
       });

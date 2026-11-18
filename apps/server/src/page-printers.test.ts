@@ -9,6 +9,7 @@ import {
   invoiceDeliveries,
   invoiceSeries,
   printAgents,
+  printJobs,
   printers,
   taxpayer,
   withTransaction,
@@ -29,6 +30,7 @@ import type { OfficePrinterReport } from "@waitron/print-agent";
 import { jobOrigin, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
+import { dateA4Job } from "./testing/a4-print-job.js";
 import {
   claimInvoiceDelivery,
   reportInvoiceDelivery,
@@ -177,13 +179,9 @@ async function reserveA4(saleId: string, pagePrinterId: string) {
       pagePrinterId,
     }),
   );
-  const due = new Date(NOW - 10_000).toISOString();
-  const [dated] = await suite.db
-    .update(invoiceDeliveries)
-    .set({ createdAt: due, nextAttemptAt: due })
-    .where(eq(invoiceDeliveries.id, delivery.id))
-    .returning();
-  return dated!;
+  const due = new Date(NOW - 10_000);
+  await dateA4Job(suite.db, delivery.printJobId!, due);
+  return { ...delivery, createdAt: due.toISOString(), nextAttemptAt: due.toISOString() };
 }
 
 describe("registering a page printer from discovery", () => {
@@ -491,6 +489,11 @@ describe("deleting a page printer", () => {
     });
     expect(after.get(elsewhere.id)).toEqual(before.get(elsewhere.id));
     expect(after.get(emailed.id)).toEqual(before.get(emailed.id));
+    const jobs = await suite.db
+      .select({ status: printJobs.status, lastError: printJobs.lastError })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, office.id));
+    expect(jobs).toEqual(Array(2).fill({ status: "failed", lastError: "printer_disabled" }));
   });
 
   it("still accepts a late success from the claim it ended", async () => {
