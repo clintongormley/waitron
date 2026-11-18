@@ -5044,7 +5044,7 @@ export class TillApi {
   /** Set the party's guest count, or clear it with null → `PUT /api/parties/:id/guests`. A count
    * that is not a whole number from 1 to 999 is `management.request_invalid` naming the field
    * `guestCount`. */
-  setPartyGuests(
+  setPartyGuestCount(
     partyId: string,
     guestCount: number | null,
     expectedPartyRevision: number,

@@ -21,7 +21,7 @@ import {
 } from "@waitron/shared";
 import { completeBillPayment } from "./bill-payments.js";
 import { mergeBills, transferItems } from "./testing/bill-action-fixture.js";
-import { setPartyGuests } from "./parties.js";
+import { setPartyGuestCount } from "./parties.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import {
   readGuestCountChoice,
@@ -192,7 +192,9 @@ describe("the default guests (readReceiptGuests)", () => {
     const { partyId, tabId } = await seat(v, await v.table("Guests 8"), 4);
     await orderForParty(v, partyId, ["Burger"], tabId);
     const expectedPartyRevision = await revisionOf(v, partyId);
-    await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount: 6, expectedPartyRevision }));
+    await inTx(v, (tx) =>
+      setPartyGuestCount(tx, { partyId, guestCount: 6, expectedPartyRevision }),
+    );
 
     expect(await guestsOnPaying(tabId, "12.00")).toBe(6);
   });
@@ -477,7 +479,9 @@ describe("the guests a paper receipt of a sale prints", () => {
     const { partyId, saleId } = await paidPartyOfFour("Paper 4");
     await storeRow(saleId, 5);
     const expectedPartyRevision = await revisionOf(v, partyId);
-    await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount: 6, expectedPartyRevision }));
+    await inTx(v, (tx) =>
+      setPartyGuestCount(tx, { partyId, guestCount: 6, expectedPartyRevision }),
+    );
     expect((await partyRow(v, partyId)).guestCount).toBe(6);
     expect(await printed(saleId)).toBe(5);
   });

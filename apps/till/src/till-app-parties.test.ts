@@ -330,7 +330,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     joinTables: vi.fn().mockResolvedValue({ partyId: "v1", billIds: ["wo-4"] }),
     splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", billIds: ["wo-check"] }),
     setPartyName: vi.fn().mockResolvedValue({ revision: 4, name: "Ana" }),
-    setPartyGuests: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
+    setPartyGuestCount: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
     setBillName: vi.fn().mockResolvedValue({ revision: 4, billNumber: 1, billName: "Clint" }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
     moveDishes: vi.fn().mockResolvedValue({ billId: "wo-check" }),
@@ -1916,7 +1916,7 @@ describe("till-app: the party on a handheld", () => {
     },
     {
       window: "Guests",
-      method: "setPartyGuests",
+      method: "setPartyGuestCount",
       field: "guestCount",
       event: "guests-party",
       detail: { guestCount: 4 },
@@ -2442,7 +2442,7 @@ describe("till-app: table actions on the party", () => {
       "splitTable",
     ],
     ["party.not_open", "name-party", { name: "Ana" }, "setPartyName"],
-    ["party.not_open", "guests-party", { guestCount: 4 }, "setPartyGuests"],
+    ["party.not_open", "guests-party", { guestCount: 4 }, "setPartyGuestCount"],
   ] as const)("shows %s in its own words after %s", async (code, type, detail, method) => {
     const { el } = await mountApp({ [method]: vi.fn().mockRejectedValue({ code }) });
     const order = await openPartyTable(el);
@@ -3075,7 +3075,7 @@ describe("till-app: the party's guest count", () => {
     const reads = floorThat([table4, table7, table9], [counted, table7, table9]);
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
-      setPartyGuests: vi.fn(async () => {
+      setPartyGuestCount: vi.fn(async () => {
         reads.other.acted = true;
         return { revision: 4, guestCount: 5 };
       }),
@@ -3084,7 +3084,7 @@ describe("till-app: the party's guest count", () => {
 
     emit(order, "guests-party", { guestCount: 5 });
     await flush(el);
-    expect(api.setPartyGuests).toHaveBeenCalledWith("v1", 5, 3);
+    expect(api.setPartyGuestCount).toHaveBeenCalledWith("v1", 5, 3);
     expect(tableOrder(el)!.party).toEqual(counted.party);
 
     emit(tableOrder(el)!, "back-to-floor");
@@ -3111,12 +3111,12 @@ describe("till-app: the party's guest count", () => {
     emit(order, "guests-party", { guestCount: null });
     await flush(el);
 
-    expect(api.setPartyGuests).toHaveBeenCalledWith("v1", null, 3);
+    expect(api.setPartyGuestCount).toHaveBeenCalledWith("v1", null, 3);
   });
 
   it("hands a refusal of the count back to the screen, beside the field, without a banner", async () => {
     const { el } = await mountApp({
-      setPartyGuests: vi
+      setPartyGuestCount: vi
         .fn()
         .mockRejectedValue({ code: "management.request_invalid", field: "guestCount" }),
     });
@@ -3134,7 +3134,7 @@ describe("till-app: the party's guest count", () => {
 
   it("says another refusal on the banner, not beside the field", async () => {
     const { el } = await mountApp({
-      setPartyGuests: vi
+      setPartyGuestCount: vi
         .fn()
         .mockRejectedValue({ code: "management.request_invalid", field: "name" }),
     });
@@ -3149,7 +3149,7 @@ describe("till-app: the party's guest count", () => {
 
   it("does not hand a refused count to the next table opened", async () => {
     const { el } = await mountApp({
-      setPartyGuests: vi
+      setPartyGuestCount: vi
         .fn()
         .mockRejectedValue({ code: "management.request_invalid", field: "guestCount" }),
     });
@@ -3168,7 +3168,7 @@ describe("till-app: the party's guest count", () => {
   it("drops a refusal of the count that arrives after the waiter has opened another party's table", async () => {
     let refuse!: (reason: unknown) => void;
     const { el } = await mountApp({
-      setPartyGuests: vi.fn(
+      setPartyGuestCount: vi.fn(
         () =>
           new Promise<never>((_resolve, reject) => {
             refuse = reject;
@@ -3198,7 +3198,7 @@ describe("till-app: the party's guest count", () => {
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
-      setPartyGuests: vi
+      setPartyGuestCount: vi
         .fn()
         .mockRejectedValue({ code: "management.request_invalid", field: "guestCount" }),
     });
@@ -3214,7 +3214,7 @@ describe("till-app: the party's guest count", () => {
     emit(card(), "guests-party", { guestCount: 4 });
     await flush(el);
 
-    expect(api.setPartyGuests).toHaveBeenCalledWith("v1", 4, 3);
+    expect(api.setPartyGuestCount).toHaveBeenCalledWith("v1", 4, 3);
     expect(card().guestsRefusal).toEqual({ value: "4", message: t("seat.guest_count_invalid") });
     expect(card().shadowRoot!.querySelector("till-party-guests-dialog")).not.toBeNull();
   });

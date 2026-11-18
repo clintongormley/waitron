@@ -46,7 +46,7 @@ import {
   listStationQueue,
   markServed,
 } from "./working-order.js";
-import { partyFamily, readFamilyBills, setPartyGuests } from "./parties.js";
+import { partyFamily, readFamilyBills, setPartyGuestCount } from "./parties.js";
 import { fireGroup, recordHeldPaper } from "./order-groups.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { createZone } from "./testing/service-zone.js";
@@ -931,7 +931,7 @@ async function payAsFullInvoice(billId: string, cents: number) {
 
 async function seatGuests(partyId: string, guestCount: number) {
   const expectedPartyRevision = await partyRevision(partyId);
-  await inTx(venue, (tx) => setPartyGuests(tx, { partyId, guestCount, expectedPartyRevision }));
+  await inTx(venue, (tx) => setPartyGuestCount(tx, { partyId, guestCount, expectedPartyRevision }));
 }
 
 async function guestsOf(billId: string) {

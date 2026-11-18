@@ -490,7 +490,7 @@ import type {
   ConfirmPaymentDetail,
   ParkOrderDetail,
 } from "./widgets/tender-pay.js";
-import { defaultReceiptGuests } from "./state/receipt-guests.js";
+import { defaultReceiptGuestCount } from "./state/receipt-guests.js";
 
 import { setContentLanguages } from "@waitron/ui";
 
@@ -11836,7 +11836,7 @@ export class TillApp extends LitElement {
         .readers=${this.#payReaders()}
         .defaultReaderId=${this.#payDefaultReaderId()}
         .asksGuests=${this.#billPayingAsksGuests(open)}
-        .receiptGuests=${pending?.unconfirmed === true ? (pending.request.guestCount ?? null) : open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
+        .receiptGuests=${pending?.unconfirmed === true ? (pending.request.guestCount ?? null) : open.surface === "table" ? defaultReceiptGuestCount(this.orderParty) : null}
         .handheld=${this.handheldMode}
         .notice=${this.nfcNotice}
         .askNfc=${this.nfcPermission === "prompt"}
@@ -12398,7 +12398,7 @@ export class TillApp extends LitElement {
       .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
       .takesReaderCard=${this.capabilities.includes("integrated-card-payment")}
       .asksGuests=${bill.invoiceType !== "F1"}
-      .receiptGuests=${defaultReceiptGuests(this.orderParty)}
+      .receiptGuests=${defaultReceiptGuestCount(this.orderParty)}
       .equipment=${this.deviceEquipment}
       .canScan=${canScan()}
       .notice=${this.nfcNotice}
@@ -18715,7 +18715,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.guestsRefusal = null;
     try {
-      const counted = await this.api.setPartyGuests(party.id, guestCount, party.revision);
+      const counted = await this.api.setPartyGuestCount(party.id, guestCount, party.revision);
       this.#notePartyRevision(party.id, counted.revision);
     } catch (error) {
       const refused = error as { code?: string; field?: string } | undefined;

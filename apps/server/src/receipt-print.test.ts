@@ -139,7 +139,7 @@ import {
   setupPartyVenue,
   split,
 } from "./testing/party-venue.js";
-import { setPartyGuests } from "./parties.js";
+import { setPartyGuestCount } from "./parties.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { printingAlertSource } from "./alert-sources.js";
@@ -2428,7 +2428,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
     };
     const changeCountTo = async (guestCount: number) => {
       const expectedPartyRevision = await revisionOf(v, partyId);
-      await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount, expectedPartyRevision }));
+      await inTx(v, (tx) => setPartyGuestCount(tx, { partyId, guestCount, expectedPartyRevision }));
     };
     return {
       newReceipts,
@@ -2515,7 +2515,9 @@ describe("a party's receipt prints its guests and the amount per person", () => 
         guestCount: async () => (await partyRow(v, partyId)).guestCount,
         changeCountTo: async (guestCount: number) => {
           const expectedPartyRevision = await revisionOf(v, partyId);
-          await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount, expectedPartyRevision }));
+          await inTx(v, (tx) =>
+            setPartyGuestCount(tx, { partyId, guestCount, expectedPartyRevision }),
+          );
         },
         reprint: () => reprintSale(deps, v.cfg, tabId),
       };
