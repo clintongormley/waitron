@@ -552,7 +552,12 @@ export const en = {
   "folders.off_menus": "They come off the {count} menus they are on.",
   "folders.off_menus_one": "They come off the one menu they are on.",
   "folders.off_menus_unknown": "They come off every menu they are on.",
-  "folders.delete_off_menus": "Products archived by this deletion come off every menu they are on.",
+  "folders.delete_off_menus":
+    "Products archived by this deletion come off the {count} menus they are on.",
+  "folders.delete_off_menus_one":
+    "Products archived by this deletion come off the one menu they are on.",
+  "folders.delete_off_menus_unknown":
+    "Products archived by this deletion come off every menu they are on.",
   "folders.delete_heading": "Delete {count} items?",
   "folders.delete_heading_one": "Delete 1 item?",
   "folders.deleting": "Categories to delete:",
@@ -4996,6 +5001,10 @@ export const es: Record<StringKey, string> = {
   "folders.off_menus_one": "Salen de la carta en la que están.",
   "folders.off_menus_unknown": "Salen de todas las cartas en las que están.",
   "folders.delete_off_menus":
+    "Los productos archivados por esta eliminación salen de las {count} cartas en las que están.",
+  "folders.delete_off_menus_one":
+    "Los productos archivados por esta eliminación salen de la carta en la que están.",
+  "folders.delete_off_menus_unknown":
     "Los productos archivados por esta eliminación salen de todas las cartas en las que están.",
   "folders.delete_heading": "¿Eliminar {count} elementos?",
   "folders.delete_heading_one": "¿Eliminar 1 elemento?",

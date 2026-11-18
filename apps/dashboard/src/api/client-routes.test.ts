@@ -83,13 +83,31 @@ describe("DashboardApi routes", () => {
     expect(callsOf(fetchImpl)).toEqual([["/api/box/network", "GET", undefined]]);
   });
 
-  it("counts the menus the products are on, sending each id encoded", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ menus: 3 }));
-    const api = new DashboardApi("", fetchImpl);
+  it("counts the menus the products are on, sending the IDs in the request body", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(Response.json({ menus: 3 }));
+    const onSuccess = vi.fn();
+    const api = new DashboardApi("", fetchImpl, undefined, onSuccess);
     expect(await api.countProductMenus(["a&b", "c d"])).toBe(3);
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/products/menus?id=a%26b&id=c%20d", "GET", undefined],
+      ["/management-api/products/menus", "POST", { productIds: ["a&b", "c d"] }],
     ]);
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("ends an unanswered product menu count after 30 seconds", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = new DashboardApi("", () => new Promise(() => {}));
+      const refused = vi.fn();
+      void api.countProductMenus(["product"]).catch(refused);
+
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(refused).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(refused).toHaveBeenCalledExactlyOnceWith({ code: "connection.timed_out" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reads venue departments for the receipt preview without changing their active state", async () => {
