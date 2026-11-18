@@ -1615,7 +1615,9 @@ describe("the offers a zone lists at an instant", () => {
       "menus",
       "offers",
       "service",
+      "setMenus",
     ]);
+    expect(offers.setMenus).toEqual([]);
     expect(offers.defaultMenuId).toBe(v.menus.Desayunos);
     expect(offers.menus.filter((menu) => menu.isDefault).map((menu) => menu.id)).toEqual([
       v.menus.Desayunos,
@@ -2210,6 +2212,7 @@ describe("department service periods", () => {
       },
       menus: [],
       offers: [],
+      setMenus: [],
       liveFields: NO_LIVE_FIELDS,
     });
   });
