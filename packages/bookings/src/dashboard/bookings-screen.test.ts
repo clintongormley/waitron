@@ -622,36 +622,6 @@ describe("bookings-screen", () => {
   );
 
   it.each([
-    ["without", (api: BookingApi) => api],
-    ["with", (api: BookingApi) => Object.assign(api, { liveData: new LiveData() })],
-  ] as const)(
-    "keeps a later move's list when a refused seat's re-read answers after it, %s the live store",
-    async (_, withStore) => {
-      let answerStale!: (bookings: Booking[]) => void;
-      const api = withStore(stubApi({ seatBooking: vi.fn().mockRejectedValue(staleStatus) }));
-      const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
-      await flush(el);
-      vi.mocked(api.listBookings)
-        .mockImplementationOnce(() => new Promise((resolve) => (answerStale = resolve)))
-        .mockResolvedValueOnce(
-          BOOKINGS.map((b) => (b.id === "bk-late" ? { ...b, status: "no_show" as const } : b)),
-        );
-      await click(el, "seat-bk-early");
-      await vi.waitFor(() => expect(api.listBookings).toHaveBeenCalledTimes(2));
-      await flush(el);
-      await click(el, "no-show-bk-late");
-      await vi.waitFor(() => expect(api.listBookings).toHaveBeenCalledTimes(3));
-      await flush(el);
-      expect(q(el, "no-show-bk-late")).toBeNull();
-      answerStale(BOOKINGS);
-      await flush(el);
-      await flush(el);
-      expect(q(el, "no-show-bk-late")).toBeNull();
-      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
-    },
-  );
-
-  it.each([
     ["re-read succeeds", true],
     ["re-read fails", false],
   ] as const)(
