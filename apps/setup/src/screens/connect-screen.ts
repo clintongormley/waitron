@@ -115,8 +115,9 @@ export class SetupConnectScreen extends LitElement {
   @property({ type: Boolean }) errorAboutLogin = false;
 
   /**
-   * Set once the main server answered `totp.required`, which it does only after the right password.
-   * The code field is drawn, required, only then, and takes focus unless a refusal came with it.
+   * Set when the main server asked for the authenticator code for `request`, which it does only
+   * after the right password. The code field is drawn, required, only while the address and email
+   * are still `request`'s, and takes focus unless a refusal came with it.
    */
   @property({ type: Boolean }) askForCode = false;
 
@@ -224,7 +225,7 @@ export class SetupConnectScreen extends LitElement {
       void focusFirstInvalid(this.shadowRoot!);
     } else if (
       changed.has("askForCode") &&
-      this.askForCode &&
+      this.#codeAsked() &&
       this.errorMessage === undefined &&
       this.invalidField === undefined
     ) {
@@ -238,10 +239,20 @@ export class SetupConnectScreen extends LitElement {
     return this.fieldRefusalDismissed ? undefined : this.invalidField;
   }
 
+  /** Another address or account may not use an authenticator, so the ask lapses for them. */
+  #codeAsked(): boolean {
+    return (
+      this.askForCode &&
+      this.request !== undefined &&
+      this.values.primaryUrl.trim() === this.request.primaryUrl &&
+      this.values.email.trim() === this.request.credential.email
+    );
+  }
+
   #errors(): Set<ConnectField> {
     if (!this.attempted || (this.step !== "address" && this.step !== "login")) return new Set();
     const required: readonly ConnectField[] =
-      this.step === "login" && this.askForCode
+      this.step === "login" && this.#codeAsked()
         ? [...REQUIRED_FIELDS.login, "totp"]
         : REQUIRED_FIELDS[this.step];
     return new Set(required.filter((key) => this.values[key].trim() === ""));
@@ -333,7 +344,7 @@ export class SetupConnectScreen extends LitElement {
   #connect(): void {
     if (this.#blocked()) return;
 
-    const totp = this.values.totp.trim();
+    const totp = this.#codeAsked() ? this.values.totp.trim() : "";
     // `password` is not trimmed: whitespace can be intentional in a secret.
     const body: AdoptBody = {
       primaryUrl: this.values.primaryUrl.trim(),
@@ -443,7 +454,7 @@ export class SetupConnectScreen extends LitElement {
       case "login":
         return html`${field("email", "email")} ${field("password", "password")}
         ${
-          this.askForCode
+          this.#codeAsked()
             ? html`<p data-test="totp-notice" role="status">${t("connect.totp.notice")}</p>
                 ${field("totp")}`
             : nothing

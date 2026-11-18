@@ -95,6 +95,8 @@ export const shellEn = {
 
   "shell.adopt.bundle_fetch_failed":
     "The primary couldn't supply a mirror setup. Enter a new authenticator code if you use one, and press Connect to try again, or choose Back to restore a backup instead.",
+  "shell.adopt.bundle_fetch_failed_no_code":
+    "The primary couldn't supply a mirror setup. Press Connect to try again, or choose Back to restore a backup instead.",
   "shell.adopt.request_invalid":
     "The server rejected the details. Check the address and login, then try again.",
   "shell.adopt.vault_not_empty":
@@ -331,6 +333,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
 
   "shell.adopt.bundle_fetch_failed":
     "El servidor principal no ha podido proporcionar la configuración de una réplica. Introduce un nuevo código del autenticador si usas uno y pulsa Conectar para volver a intentarlo, o elige Volver para restaurar una copia de seguridad.",
+  "shell.adopt.bundle_fetch_failed_no_code":
+    "El servidor principal no ha podido proporcionar la configuración de una réplica. Pulsa Conectar para volver a intentarlo, o elige Volver para restaurar una copia de seguridad.",
   "shell.adopt.request_invalid":
     "El servidor ha rechazado los datos. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.vault_not_empty":

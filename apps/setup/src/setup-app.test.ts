@@ -2033,24 +2033,43 @@ describe("setup-app", () => {
   it.each([
     [
       "en-GB",
+      false,
+      "The primary couldn't supply a mirror setup. Press Connect to try again, or choose Back to restore a backup instead.",
+    ],
+    [
+      "es-ES",
+      false,
+      "El servidor principal no ha podido proporcionar la configuración de una réplica. Pulsa Conectar para volver a intentarlo, o elige Volver para restaurar una copia de seguridad.",
+    ],
+    [
+      "en-GB",
+      true,
       "The primary couldn't supply a mirror setup. Enter a new authenticator code if you use one, and press Connect to try again, or choose Back to restore a backup instead.",
     ],
     [
       "es-ES",
+      true,
       "El servidor principal no ha podido proporcionar la configuración de una réplica. Introduce un nuevo código del autenticador si usas uno y pulsa Conectar para volver a intentarlo, o elige Volver para restaurar una copia de seguridad.",
     ],
   ] as const)(
-    "says the primary could not supply a mirror setup and offers a new code with Connect, or Back to restore, naming no refused login (%s)",
-    async (locale, sentence) => {
+    "says the primary could not supply a mirror setup, offering Connect or Back to restore and naming the code only beside its field (%s, code sent: %s)",
+    async (locale, codeSent, sentence) => {
       try {
         const adopt = vi
           .fn()
           .mockRejectedValue({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 });
         const el = await mountSetupApp(stubApi({ adopt }));
         setLocale(locale);
-        adoptRequest(el);
+        adoptRequest(
+          el,
+          codeSent
+            ? { ...adoptBody, credential: { ...adoptBody.credential, totp: "123456" } }
+            : adoptBody,
+        );
         await flush(el);
-        expect(await bottomOf(await screenHost(el, "connect"))).toBe(sentence);
+        const connect = await screenHost(el, "connect");
+        expect(await bottomOf(connect)).toBe(sentence);
+        expect(connect.shadowRoot!.querySelector("[data-test=totp]") !== null).toBe(codeSent);
       } finally {
         setLocale("en-GB");
       }
@@ -2695,6 +2714,74 @@ describe("setup-app", () => {
       );
     });
 
+    it("drops the code request once the admin email changes, sending email and password alone", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValueOnce(TOTP_REQUIRED)
+        .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeLoginAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      await vi.waitFor(() =>
+        expect(connect.shadowRoot!.querySelector("[data-test=totp]")).not.toBeNull(),
+      );
+      await userEvent.fill(input(connect, "totp"), "123456");
+      await userEvent.fill(input(connect, "email"), "other@example.com");
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
+      expect(connect.shadowRoot!.querySelector("[data-test=totp-notice]")).toBeNull();
+
+      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
+      await flush(el);
+      expect(adopt).toHaveBeenCalledTimes(2);
+      expect(adopt).toHaveBeenLastCalledWith({
+        ...sentBody,
+        credential: { email: "other@example.com", password: TYPED.password },
+      });
+      const refused = await screenHost(el, "connect");
+      expect(await bottomOf(refused)).toBe(
+        "The login failed. Check the admin email and password, then try again.",
+      );
+      expect(refused.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
+    });
+
+    it("drops the code request once the person changes the address, before the new main server answers", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValueOnce(TOTP_REQUIRED)
+        .mockResolvedValue({ adopted: true, restarting: true });
+      const primaryCertificate = vi
+        .fn()
+        .mockResolvedValueOnce(PRIMARY_CERTIFICATE)
+        .mockResolvedValueOnce(OTHER_CERTIFICATE);
+      const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
+      await typeLoginAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      await vi.waitFor(() =>
+        expect(connect.shadowRoot!.querySelector("[data-test=totp]")).not.toBeNull(),
+      );
+      await userEvent.fill(input(connect, "totp"), "123456");
+
+      button(connect, "check-address")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      await userEvent.fill(input(connect, "primaryUrl"), "https://main.example");
+      button(connect, "continue")!.click();
+      await vi.waitFor(() => expect(button(connect, "matches")).not.toBeNull());
+      button(connect, "matches")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(input(connect, "email").value).toBe(TYPED.email);
+      expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
+      expect(connect.shadowRoot!.querySelector("[data-test=totp-notice]")).toBeNull();
+
+      button(connect, "connect")!.click();
+      await flush(el);
+      expect(adopt).toHaveBeenLastCalledWith({
+        primaryUrl: "https://main.example",
+        credential: { email: TYPED.email, password: TYPED.password },
+        confirmedCaPem: OTHER_CERTIFICATE.pem,
+      });
+    });
+
     const sentBody = {
       primaryUrl: "https://primary.example",
       credential: { email: "op7@example.com", password: "  kept secret ", totp: "123456" },
@@ -2824,12 +2911,12 @@ describe("setup-app", () => {
       button(connect, "matches")!.click();
       await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
       expect(input(connect, "email").value).toBe(TYPED.email);
-      await userEvent.fill(input(connect, "totp"), "654321");
+      expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
       button(connect, "connect")!.click();
       await flush(el);
       expect(adopt).toHaveBeenLastCalledWith({
         primaryUrl: "https://main.example",
-        credential: { ...sentBody.credential, totp: "654321" },
+        credential: { email: TYPED.email, password: TYPED.password },
         confirmedCaPem: OTHER_CERTIFICATE.pem,
       });
     });
@@ -2988,9 +3075,16 @@ describe("setup-app", () => {
       await el.updateComplete;
       const connect = await screenHost(el, "connect");
       expect(input(connect, "primaryUrl").value).toBe("");
-      for (const field of ["email", "password", "totp"]) {
-        expect(connect.shadowRoot!.querySelector(`[data-test=${field}]`)).toBeNull();
-      }
+      await userEvent.fill(input(connect, "primaryUrl"), TYPED.primaryUrl);
+      button(connect, "continue")!.click();
+      await vi.waitFor(() => expect(button(connect, "matches")).not.toBeNull());
+      button(connect, "matches")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      await userEvent.fill(input(connect, "email"), TYPED.email);
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(connect.shadowRoot!.querySelector("[data-test=email]")).not.toBeNull();
+      expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
+      expect(connect.shadowRoot!.querySelector("[data-test=totp-notice]")).toBeNull();
     });
   });
 

@@ -373,8 +373,22 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "backup.recovery_key_missing": "shell.adopt.recovery_key_missing",
 };
 
-/** A join's refusal in words; the clocks refusal shows both servers' times in the wizard's language. */
-function adoptErrorWords(code: string, params: Record<string, unknown> | undefined): Message {
+/** Refusals that can arrive before the main server asked for the code, worded without it. */
+const ADOPT_NO_CODE_MESSAGES: Record<string, StringKey> = {
+  "password.invalid": "shell.adopt.login_failed_no_code",
+  "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed_no_code",
+};
+
+/**
+ * A join's refusal in words; the clocks refusal shows both servers' times in the wizard's language.
+ * While the connect form shows no code field, a refusal in `ADOPT_NO_CODE_MESSAGES` does not ask
+ * for a code.
+ */
+function adoptErrorWords(
+  code: string,
+  params: Record<string, unknown> | undefined,
+  codeFieldShown: boolean,
+): Message {
   const manifestKey = manifestRefusalKey(code, params);
   if (manifestKey !== undefined) return say(manifestKey);
   const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
@@ -391,7 +405,11 @@ function adoptErrorWords(code: string, params: Record<string, unknown> | undefin
         primaryAt: localTime(primaryAt) ?? primaryAt,
         standbyAt: localTime(standbyAt) ?? standbyAt,
       });
-  return say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
+  return say(
+    (codeFieldShown ? undefined : ADOPT_NO_CODE_MESSAGES[code]) ??
+      ADOPT_ERROR_MESSAGES[code] ??
+      "shell.adopt.generic",
+  );
 }
 
 /** A full disk's words say a restart frees space only where the server says it does. */
@@ -899,8 +917,8 @@ export class SetupApp extends LitElement {
   /** Held only in this tab's memory, to hand back to the connect form with a refusal. */
   @state() private connectRequest?: AdoptBody;
   /**
-   * Set once the main server asked for the authenticator code, and kept across later refusals of
-   * this join: the connect screen is drawn anew after each one.
+   * Whether the main server asked for the authenticator code for `connectRequest`: it answered
+   * `totp.required`, or the request carried a code. Set anew from every refusal.
    */
   @state() private connectAskForCode = false;
   @state() private restoreError?: Message;
@@ -2289,7 +2307,7 @@ export class SetupApp extends LitElement {
       this.connectRequest = body;
       this.screen = "connect";
     } else {
-      if (body.credential.totp !== undefined) this.connectAskForCode = true;
+      this.connectAskForCode = body.credential.totp !== undefined;
       this.connectInvalidField = refusedField(
         code,
         error.params,
@@ -2297,10 +2315,7 @@ export class SetupApp extends LitElement {
         ADOPT_FIELD_PATHS,
       );
       if (this.connectInvalidField === undefined) {
-        this.connectError =
-          code === "password.invalid" && !this.connectAskForCode
-            ? say("shell.adopt.login_failed_no_code")
-            : adoptErrorWords(code, error.params);
+        this.connectError = adoptErrorWords(code, error.params, this.connectAskForCode);
         this.connectErrorAboutLogin = code === "password.invalid" || code === "password.throttled";
       }
       this.connectRequest = body;

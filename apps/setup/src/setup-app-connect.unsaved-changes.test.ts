@@ -26,9 +26,18 @@ const body: AdoptBody = {
   confirmedCaPem: PEM,
 };
 
+/** The login the form starts with; an ask for it leaves the form clean. */
+const EMPTY_LOGIN: AdoptBody = { primaryUrl: "", credential: { email: "", password: "" } };
+/** `body`'s login handed back with its address still to compare, so `fill` walks every step. */
+const BODY_LOGIN: AdoptBody = {
+  primaryUrl: body.primaryUrl,
+  credential: { email: body.credential.email, password: body.credential.password },
+};
+
 /**
  * `step: "login"` opens the login fields on a clean form, as a confirmed comparison would.
- * `askForCode` draws the code field, as if the main server had already asked for it.
+ * `askForCode` draws the code field, as if the main server had asked for it for `request`, or for
+ * `EMPTY_LOGIN` when there is none.
  */
 async function mount(
   request?: AdoptBody,
@@ -47,7 +56,11 @@ async function mount(
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });
   await vi.waitFor(() => expect(screen(el)).toBe("mode"));
-  Object.assign(el, { screen: "connect", connectRequest: request, connectAskForCode: askForCode });
+  Object.assign(el, {
+    screen: "connect",
+    connectRequest: request ?? (askForCode ? EMPTY_LOGIN : undefined),
+    connectAskForCode: askForCode,
+  });
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector<SetupConnectScreen>("setup-connect-screen")!;
   await form.updateComplete;
@@ -177,7 +190,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("Connect sends the existing exact body without asking and success clears unload", async () => {
-    const { el, form, api } = await mount(undefined, "address", { askForCode: true });
+    const { el, form, api } = await mount(BODY_LOGIN, "address", { askForCode: true });
     const requests: unknown[] = [];
     form.addEventListener("adopt-requested", (event) =>
       requests.push((event as CustomEvent).detail),
@@ -193,7 +206,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("a refused Connect protects the returned credentials while the one-time code stays empty", async () => {
-    const { el, form, api } = await mount(undefined, "address", { askForCode: true });
+    const { el, form, api } = await mount(BODY_LOGIN, "address", { askForCode: true });
     vi.mocked(api.adopt).mockRejectedValue({ code: "password.invalid" });
     await fill(form);
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
@@ -244,7 +257,8 @@ describe("setup Connect unsaved changes", () => {
     await edit(form, "password", "first");
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);
-    form.request = body;
+    Object.assign(el, { connectRequest: body });
+    await el.updateComplete;
     await form.updateComplete;
     await expect.poll(() => warning(el).open).toBe(false);
     await choose(el, "discard");

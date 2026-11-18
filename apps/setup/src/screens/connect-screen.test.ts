@@ -73,6 +73,15 @@ const REQUEST: AdoptBody = {
   confirmedCaPem: CERT.pem,
 };
 
+/** The main server's ask for `VALID`'s login, handed back with its address still to compare. */
+const ASKED: Partial<SetupConnectScreen> = {
+  request: {
+    primaryUrl: VALID.primaryUrl,
+    credential: { email: VALID.email, password: VALID.password },
+  },
+  askForCode: true,
+};
+
 function stubApi(answer: PrimaryCertificate | null = CERT) {
   return { primaryCertificate: vi.fn().mockResolvedValue(answer) };
 }
@@ -136,7 +145,7 @@ describe("setup-connect-screen", () => {
     "explains each field with a hint in the empty field and no ? (%s)",
     async (locale, hints) => {
       setLocale(locale);
-      const { el } = await mount({ askForCode: true });
+      const { el } = await mount(ASKED);
       const hintOf = (field: string) => q(el, `[data-test=${field}]`)!.getAttribute("hint");
       expect(hintOf("primaryUrl")).toBe(hints.primaryUrl);
       await toLogin(el);
@@ -188,7 +197,7 @@ describe("setup-connect-screen", () => {
   });
 
   it("turns off autocorrect, the capital first letter and spellcheck on the sign-in code", async () => {
-    const { el } = await mount({ askForCode: true });
+    const { el } = await mount(ASKED);
     await toLogin(el);
     const field = q(el, "[data-test=totp]") as SetupConnectScreen;
     await field.updateComplete;
@@ -199,7 +208,7 @@ describe("setup-connect-screen", () => {
   });
 
   it("carries a filled TOTP into the credential object", async () => {
-    const { el, host } = await mount({ askForCode: true });
+    const { el, host } = await mount(ASKED);
     const events = collect(host);
     await fillValid(el, { totp: "123456" });
     q(el, "[data-test=connect]")!.click();
@@ -212,7 +221,7 @@ describe("setup-connect-screen", () => {
   });
 
   it("trims whitespace on primaryUrl/email/totp but leaves the password verbatim", async () => {
-    const { el, host } = await mount({ askForCode: true });
+    const { el, host } = await mount(ASKED);
     const events = collect(host);
     await fillValid(el, {
       primaryUrl: "  https://waitron.local  ",
@@ -291,16 +300,6 @@ describe("setup-connect-screen", () => {
       expect(q(el, `[data-test=${field}]`)!.hasAttribute("invalid")).toBe(true);
     },
   );
-
-  it("allows a blank TOTP — it is optional and does not block Connect", async () => {
-    const { el, host } = await mount();
-    const events = collect(host);
-    await fillValid(el);
-    q(el, "[data-test=connect]")!.click();
-    await el.updateComplete;
-    expect(events).toHaveLength(1);
-    expect(await bottomOf(el)).toBe("");
-  });
 
   it("shows a routed-back server error above Connect as one alert, leaving Connect working", async () => {
     const { el } = await mount({
@@ -987,5 +986,51 @@ describe("setup-connect-screen: the authenticator code, drawn only once the main
         },
       },
     ]);
+  });
+
+  it("keeps the code field, required, when only the password changes", async () => {
+    const { el, host } = await mount({ request: REQUEST, askForCode: true });
+    const events = collect(host);
+    await type(el, "password", "another secret");
+    expect(q(el, "[data-test=totp-notice]")).not.toBeNull();
+    await pressed(el, "connect");
+    expect(events).toEqual([]);
+    expect(q(el, "[data-test=totp]")!.getAttribute("error")).toBe("Check the authenticator code.");
+  });
+
+  it("drops the code field while the email is another than the one asked about, sending no typed code", async () => {
+    const { el, host } = await mount({ request: REQUEST, askForCode: true });
+    const events = collect(host);
+    await type(el, "totp", "654321");
+    await type(el, "email", "other@example.com");
+    expect(q(el, "[data-test=totp]")).toBeNull();
+    expect(q(el, "[data-test=totp-notice]")).toBeNull();
+    await pressed(el, "connect");
+    expect(events).toEqual([
+      {
+        kind: "adopt",
+        detail: {
+          body: { ...REQUEST, credential: { email: "other@example.com", password: " secret " } },
+        },
+      },
+    ]);
+
+    await type(el, "email", "  op7@example.com ");
+    expect(q(el, "[data-test=totp]")!.hasAttribute("required")).toBe(true);
+  });
+
+  it("keeps the code field when the address is checked again and left as it was", async () => {
+    const { el } = await mount({ request: REQUEST, askForCode: true });
+    await pressed(el, "check-address");
+    await toLogin(el, REQUEST.primaryUrl);
+    expect(q(el, "[data-test=totp]")!.hasAttribute("required")).toBe(true);
+  });
+
+  it("drops the code field once the address is changed", async () => {
+    const { el } = await mount({ request: REQUEST, askForCode: true });
+    await pressed(el, "check-address");
+    await toLogin(el, "https://main.example");
+    expect(q(el, "[data-test=email]")).not.toBeNull();
+    expect(q(el, "[data-test=totp]")).toBeNull();
   });
 });
