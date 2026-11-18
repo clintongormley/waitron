@@ -284,6 +284,9 @@ export const workingOrderLines = table(
     offerUnitPrecision: count("offer_unit_precision"),
     offerVatClass: label("offer_vat_class"),
     offerCategoryName: label("offer_category_name"),
+    cohortId: id("cohort_id"),
+    cohortOrdinal: count("cohort_ordinal"),
+    wholePortion: flag("whole_portion"),
   },
   (t) => [
     foreignKey({
@@ -356,6 +359,14 @@ export const workingOrderLines = table(
       foreignColumns: [persons.id],
       name: "working_order_lines_credited_to_fk",
     }),
+    uniqueIndex("working_order_lines_cohort_ordinal_key").on(t.cohortId, t.cohortOrdinal),
+    check(
+      "working_order_lines_cohort_ck",
+      sql`(${t.cohortId} is null and ${t.cohortOrdinal} is null and ${t.wholePortion} is null)
+        or (${t.cohortId} is not null and ${t.cohortOrdinal} is not null
+          and ${t.cohortOrdinal} >= 1 and ${t.wholePortion} is not null
+          and ${t.parentLineId} is null)`,
+    ),
     check(
       "working_order_lines_hardware_unit_ck",
       sql`${t.hardwareUnit} is null or ${t.hardwareUnit} in ('kg','g','mg')`,

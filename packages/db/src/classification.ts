@@ -115,14 +115,9 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "which bills a party left without paying, against which invoice, by whose authority; never corrected",
   ),
   appendOnly(
-    "order_portions",
+    "sale_line_dishes",
     "ledger",
-    "each dish ordered at a table, kept for good; filed sale rows point at it, never corrected",
-  ),
-  appendOnly(
-    "sale_line_portions",
-    "ledger",
-    "which portions each filed sale row stands for; written with the sale, never corrected",
+    "which dish lines each filed sale row stands for; written with the sale, never corrected",
   ),
   appendOnly(
     "order_portion_events",
@@ -166,11 +161,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "working_order_lines",
     "state",
     "order lines in flight; copied to a standby, never drained back",
-  ),
-  classify(
-    "working_line_portions",
-    "state",
-    "which working dish line holds which portion now; copied to a standby, never drained back",
   ),
   classify(
     "line_service_cancellations",

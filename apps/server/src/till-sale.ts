@@ -9,7 +9,7 @@ import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { assertStillSignedIn } from "./till-session.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
-import { linkSalePortions } from "./order-portions.js";
+import { linkSaleDishes } from "./order-portions.js";
 import type { Dining, ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -1105,7 +1105,7 @@ async function fileImmediateSale(
             ],
     },
   });
-  await linkSalePortions(tx, saleId, order.identities);
+  await linkSaleDishes(tx, saleId, order.identities);
   await recordSaleReceiptFacts(
     tx,
     { saleId, workingOrderId, counterparty: selected.sale.counterparty },
@@ -1824,7 +1824,7 @@ async function finalizeCapture(
           ],
         },
       });
-      await linkSalePortions(tx, saleId, identities);
+      await linkSaleDishes(tx, saleId, identities);
       await recordSaleReceiptFacts(
         tx,
         { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
@@ -1974,7 +1974,7 @@ async function finalizeRecovery(
           tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
         },
       });
-      await linkSalePortions(tx, saleId, order.identities);
+      await linkSaleDishes(tx, saleId, order.identities);
       await recordSaleReceiptFacts(
         tx,
         { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },

@@ -589,10 +589,10 @@ function canonical(value: unknown): string {
 /** What a filed group shows, its quantity, cohort and position left out; a list price equal to the
  * price reads as none, as filing drops it. */
 function groupFields({ identity, locked }: StoredOrderLine): unknown {
-  const { id, lineIds, portionIds, listUnitGross, ...kept } = identity;
+  const { id, lineIds, dishLineIds, listUnitGross, ...kept } = identity;
   void id;
   void lineIds;
-  void portionIds;
+  void dishLineIds;
   return {
     ...kept,
     listUnitGross:

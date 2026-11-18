@@ -41,7 +41,6 @@ import type { AdjustmentArgs } from "./adjustments-apply.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { fireGroup } from "./order-groups.js";
-import { registerPortions } from "./order-portions.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -1546,16 +1545,16 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
   async function bindAsPortion(billId: string, lineNo: number): Promise<string> {
     const lineId = await lineIdOf(venue, billId, lineNo);
     const [bound] = venue.db.all<{ cohortId: string }>(
-      sql`select p.cohort_id as cohortId from working_line_portions b
-          join order_portions p on p.id = b.portion_id
-          where b.working_order_line_id = ${lineId}`,
+      sql`select cohort_id as cohortId from working_order_lines
+          where id = ${lineId} and cohort_id is not null`,
     );
     if (bound !== undefined) return bound.cohortId;
     const cohortId = randomUUID();
     await inTx(venue, (tx) =>
-      registerPortions(tx, [
-        { portionId: randomUUID(), lineId, ordinal: 1, pricingCohortId: cohortId, measured: false },
-      ]),
+      tx
+        .update(workingOrderLines)
+        .set({ cohortId, cohortOrdinal: 1, wholePortion: true })
+        .where(eq(workingOrderLines.id, lineId)),
     );
     return cohortId;
   }
@@ -1569,11 +1568,9 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
       unitPrice: number;
       served: number;
     }>(
-      sql`select l.line_no as lineNo, p.cohort_id as cohortId, p.ordinal,
+      sql`select l.line_no as lineNo, l.cohort_id as cohortId, l.cohort_ordinal as ordinal,
             l.unit_price_gross as unitPrice, l.served_quantity as served
           from working_order_lines l
-          left join working_line_portions b on b.working_order_line_id = l.id
-          left join order_portions p on p.id = b.portion_id
           where l.working_order_id = ${billId} and l.parent_line_id is null
           order by l.line_no`,
     );

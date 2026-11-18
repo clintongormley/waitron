@@ -961,6 +961,76 @@ describe("working_order_lines", () => {
 });
 
 /** `product_id` is NULLABLE, and no case here exercises a line naming no product. */
+describe("dish cohort on the order line", () => {
+  beforeEach(async () => seed(suite.db));
+
+  it("requires all three facts, a positive ordinal, and a dish rather than an extra", async () => {
+    const db = suite.db;
+    const workingOrderId = await openOrder(db);
+    const [dish] = await db
+      .insert(workingOrderLines)
+      .values({ ...LINE, workingOrderId })
+      .returning();
+    const [extra] = await db
+      .insert(workingOrderLines)
+      .values({
+        ...LINE,
+        workingOrderId,
+        lineNo: 2,
+        parentLineId: dish.id,
+      })
+      .returning();
+    for (const [id, cohort, ordinal, whole] of [
+      [dish.id, "cohort", null, 1],
+      [dish.id, "cohort", 1, null],
+      [dish.id, null, 1, 1],
+      [dish.id, "cohort", 0, 1],
+      [extra.id, "cohort", 1, 1],
+    ] as const) {
+      const error = await captureError(() =>
+        db.execute(sql`update working_order_lines
+        set cohort_id = ${cohort}, cohort_ordinal = ${ordinal}, whole_portion = ${whole}
+        where id = ${id}`),
+      );
+      expect(engineErrorMessage(error)).toContain("working_order_lines_cohort_ck");
+    }
+    await db.execute(sql`update working_order_lines set cohort_id = 'cohort',
+      cohort_ordinal = 1, whole_portion = 0 where id = ${dish.id}`);
+    expect(
+      await rows(
+        db,
+        sql`select cohort_id, cohort_ordinal, whole_portion
+      from working_order_lines where working_order_id = ${workingOrderId} order by line_no`,
+      ),
+    ).toEqual([
+      { cohort_id: "cohort", cohort_ordinal: 1, whole_portion: 0 },
+      { cohort_id: null, cohort_ordinal: null, whole_portion: null },
+    ]);
+  });
+
+  it("refuses two dishes numbered alike in the same cohort", async () => {
+    const db = suite.db;
+    const workingOrderId = await openOrder(db);
+    await db.insert(workingOrderLines).values([
+      { ...LINE, workingOrderId },
+      { ...LINE, workingOrderId, lineNo: 2 },
+    ]);
+    const giveNumber = (lineNo: number, cohort: string) =>
+      db.execute(sql`update working_order_lines
+      set cohort_id = ${cohort}, cohort_ordinal = 1, whole_portion = 1
+      where working_order_id = ${workingOrderId} and line_no = ${lineNo}`);
+    await giveNumber(1, "cohort");
+    const error = await captureError(() => giveNumber(2, "cohort"));
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "working_order_lines",
+        columns: ["cohort_id", "cohort_ordinal"],
+      }),
+    ).toBe(true);
+    await giveNumber(2, "another-cohort");
+  });
+});
+
 describe("working_order_lines — the draft line's links", () => {
   let db: Database;
 

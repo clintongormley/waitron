@@ -14,7 +14,7 @@ import { AppError } from "@waitron/shared";
 import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
 import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
@@ -23,9 +23,7 @@ import {
   orderDrafts,
   orderGroups,
   serviceCommands,
-  orderPortions,
   ticketItems,
-  workingLinePortions,
   parties,
   withTransaction,
   workingOrderLines,
@@ -5036,21 +5034,16 @@ describe("send-time fresh combining", () => {
       .select({
         quantity: workingOrderLines.quantity,
         groupId: workingOrderLines.groupId,
-        cohortId: orderPortions.cohortId,
+        cohortId: workingOrderLines.cohortId,
       })
       .from(workingOrderLines)
       .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-      .innerJoin(
-        workingLinePortions,
-        eq(workingLinePortions.workingOrderLineId, workingOrderLines.id),
-      )
-      .innerJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
-      .where(eq(workingOrders.partyId, partyId))
+      .where(and(eq(workingOrders.partyId, partyId), isNotNull(workingOrderLines.cohortId)))
       .orderBy(asc(workingOrderLines.lineNo));
     const names = new Map<string, string>();
     return rows.map(({ cohortId, ...row }) => {
-      if (!names.has(cohortId)) names.set(cohortId, "abcdefgh"[names.size]!);
-      return { ...row, cohort: names.get(cohortId)! };
+      if (!names.has(cohortId!)) names.set(cohortId!, "abcdefgh"[names.size]!);
+      return { ...row, cohort: names.get(cohortId!)! };
     });
   }
 
@@ -5278,18 +5271,15 @@ describe("A803 portions: a sent table order stores one line per portion", () => 
         id: workingOrderLines.id,
         productId: workingOrderLines.productId,
         quantity: workingOrderLines.quantity,
-        portionId: workingLinePortions.portionId,
-        cohortId: orderPortions.cohortId,
-        ordinal: orderPortions.ordinal,
-        measured: orderPortions.measured,
+        portionId: sql<
+          string | null
+        >`case when ${workingOrderLines.cohortId} is not null then ${workingOrderLines.id} end`,
+        cohortId: workingOrderLines.cohortId,
+        ordinal: workingOrderLines.cohortOrdinal,
+        measured: sql`not ${workingOrderLines.wholePortion}`.mapWith((value) => Boolean(value)),
       })
       .from(workingOrderLines)
       .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-      .leftJoin(
-        workingLinePortions,
-        eq(workingLinePortions.workingOrderLineId, workingOrderLines.id),
-      )
-      .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
       .where(and(eq(workingOrders.partyId, partyId), isNull(workingOrderLines.parentLineId)))
       .orderBy(asc(workingOrderLines.lineNo));
   }
@@ -5470,15 +5460,13 @@ describe("A803 portions: a sent table order stores one line per portion", () => 
       expectedEdit: await expectedDraftEditForTest(db, draft),
     };
     const first = await submit(v, partyId, draft, ALEX, groups, sameSend);
-    const portions = await db.select().from(orderPortions);
-    const bindings = await db.select().from(workingLinePortions);
+    const portions = await boundDishes(partyId);
 
     const replay = await submit(v, partyId, draft, ALEX, groups, sameSend);
 
     expect(replay).toEqual(first);
     expect(portions).toHaveLength(2);
-    expect(await db.select().from(orderPortions)).toEqual(portions);
-    expect(await db.select().from(workingLinePortions)).toEqual(bindings);
+    expect(await boundDishes(partyId)).toEqual(portions);
   });
 
   it("A803 portions: two racing submits of one draft write one set", async () => {
@@ -5505,8 +5493,7 @@ describe("A803 portions: a sent table order stores one line per portion", () => 
     expect(outcomes.find((o) => o.status === "rejected")).toMatchObject({
       reason: { code: "draft.out_of_date" },
     });
-    expect(await db.select().from(orderPortions)).toHaveLength(2);
-    expect(await db.select().from(workingLinePortions)).toHaveLength(2);
+    expect(await boundDishes(partyId)).toHaveLength(2);
     expect((await boundDishes(partyId)).map((d) => d.ordinal)).toEqual([1, 2]);
   });
 

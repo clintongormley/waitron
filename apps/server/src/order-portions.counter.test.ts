@@ -7,7 +7,7 @@ import { createExtraList, createProduct, writeProductModifiers } from "@waitron/
 import {
   billPaymentLines,
   orderPortionEvents,
-  saleLinePortions,
+  saleLineDishes,
   saleLines,
   sales,
   workingOrders,
@@ -117,11 +117,9 @@ function linesOf(orderId: string) {
     ordinal: number | null;
   }>(
     sql`select l.id, l.line_no as lineNo, l.name, l.quantity, l.line_total as lineTotal,
-               l.parent_line_id as parentLineId, b.portion_id as portionId,
-               p.cohort_id as cohortId, p.ordinal
+               l.parent_line_id as parentLineId, case when l.cohort_id is not null then l.id end as portionId,
+               l.cohort_id as cohortId, l.cohort_ordinal as ordinal
         from working_order_lines l
-        left join working_line_portions b on b.working_order_line_id = l.id
-        left join order_portions p on p.id = b.portion_id
         where l.working_order_id = ${orderId} order by l.line_no`,
   );
 }
@@ -142,11 +140,11 @@ async function filedRows(orderId: string) {
       .where(eq(sales.workingOrderId, orderId))
       .orderBy(saleLines.lineNo);
     const links = await tx
-      .select({ saleLineId: saleLinePortions.saleLineId, portionId: saleLinePortions.portionId })
-      .from(saleLinePortions)
+      .select({ saleLineId: saleLineDishes.saleLineId, portionId: saleLineDishes.dishLineId })
+      .from(saleLineDishes)
       .where(
         inArray(
-          saleLinePortions.saleLineId,
+          saleLineDishes.saleLineId,
           rows.map((row) => row.id),
         ),
       );
@@ -548,7 +546,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
 
     expect(linesOf(id).map((line) => line.id)).toEqual([kept!.id]);
     const cancelled = await venue.db
-      .select({ portionId: orderPortionEvents.portionId })
+      .select({ portionId: orderPortionEvents.lineId })
       .from(orderPortionEvents)
       .where(eq(orderPortionEvents.fromOrderId, id));
     expect(cancelled.map((event) => event.portionId).sort()).toEqual(

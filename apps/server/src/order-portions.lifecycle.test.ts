@@ -17,12 +17,12 @@ import { readCancellationContext } from "./line-cancel-context.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./move-bill.js";
 import { saveDraft, submitDraft, type BillEditExpected } from "./order-drafts.js";
-import { expandPortionRows, registerPortions, type PortionRef } from "./order-portions.js";
+import { expandPortionRows } from "./order-portions.js";
 import { partyRevision, seatTable } from "./parties.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { cancelLine, cancelReasonId } from "./testing/cancel-line.js";
 import { createTable } from "./testing/live-table.js";
-import { addPortionRound } from "./testing/portion-bill.js";
+import { addPortionRound, type PortionRef } from "./testing/portion-bill.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
   advanceTicketItem,
@@ -30,9 +30,11 @@ import {
   parkOrder,
   splitLinesWithinOrder,
   priceTabRound,
+  readOrderRevision,
   readTabLines,
   storedOrderTotal,
   updateHeldOrder,
+  updateOrderLine,
   type TabRoundLine,
 } from "./working-order.js";
 
@@ -110,7 +112,7 @@ const burgersWithCheese = (quantity: string): TabRoundLine[] =>
 
 /** A seated party whose first bill holds two sent burgers with cheese as portions, and an empty
  * second bill. */
-async function fixture(fire = true) {
+async function fixture(fire = true, quantity = "2") {
   return inTx(venue, async (tx) => {
     const table = await createTable(tx, venue.cfg, {
       label: `Life-${randomUUID().slice(0, 8)}`,
@@ -132,9 +134,15 @@ async function fixture(fire = true) {
       { answer: "none", guests: [] },
       venue.operatorId,
     );
-    const portions = await addPortionRound(tx, venue.cfg, seated.tabId, burgersWithCheese("2"), {
-      fire,
-    });
+    const portions = await addPortionRound(
+      tx,
+      venue.cfg,
+      seated.tabId,
+      burgersWithCheese(quantity),
+      {
+        fire,
+      },
+    );
     return { partyId: seated.partyId, billId: seated.tabId, otherId: other!.id, portions };
   });
 }
@@ -161,35 +169,39 @@ function ticketItemsOf(billId: string) {
     .orderBy(ticketItems.id);
 }
 
-function eventsOf(portions: readonly PortionRef[]) {
-  const wanted = new Set(portions.map((portion) => portion.portionId));
+function eventsOf(portions: readonly Pick<PortionRef, "lineId">[]) {
+  const wanted = new Set(portions.map((portion) => portion.lineId));
   return venue.db
     .all<{
-      portion_id: string;
+      line_id: string;
       kind: string;
       from_order_id: string;
       to_order_id: string | null;
       actor_id: string | null;
     }>(
-      sql`select portion_id, kind, from_order_id, to_order_id, actor_id from order_portion_events order by rowid`,
+      sql`select line_id, kind, from_order_id, to_order_id, actor_id from order_portion_events order by rowid`,
     )
-    .filter((event) => wanted.has(event.portion_id));
+    .filter((event) => wanted.has(event.line_id));
 }
 
 function bindingOf(lineId: string) {
-  return venue.db.all<{ portion_id: string }>(
-    sql`select portion_id from working_line_portions where working_order_line_id = ${lineId}`,
+  return venue.db.all<{ line_id: string }>(
+    sql`select id as line_id from working_order_lines where id = ${lineId} and cohort_id is not null`,
   );
 }
 
-function registryHas(portionId: string): boolean {
-  return venue.db.all(sql`select id from order_portions where id = ${portionId}`).length === 1;
+function cancelledCohortOf(lineId: string) {
+  return venue.db.all(
+    sql`select json_extract(detail, '$.cohortId') as cohortId,
+        json_extract(detail, '$.ordinal') as ordinal from order_portion_events
+        where line_id = ${lineId} and kind = 'cancelled'`,
+  );
 }
 
 /** Every row of the portion tables, in insertion order. */
 function portionTables() {
   return Object.fromEntries(
-    ["order_portions", "working_line_portions", "order_portion_events"].map((name) => [
+    ["working_order_lines", "order_portion_events"].map((name) => [
       name,
       venue.db.all(sql`select * from ${sql.identifier(name)} order by rowid`),
     ]),
@@ -241,10 +253,10 @@ describe("A803 portion lifecycle: moves", () => {
     expect(await ticketItemsOf(p.otherId)).toEqual(
       [...tickets].sort((a, b) => a.id.localeCompare(b.id)),
     );
-    expect(bindingOf(first!.lineId)).toEqual([{ portion_id: first!.portionId }]);
+    expect(bindingOf(first!.lineId)).toEqual([{ line_id: first!.lineId }]);
     expect(eventsOf(p.portions)).toEqual([
       {
-        portion_id: first!.portionId,
+        line_id: first!.lineId,
         kind: "moved",
         from_order_id: p.billId,
         to_order_id: p.otherId,
@@ -265,7 +277,7 @@ describe("A803 portion lifecycle: moves", () => {
     );
     expect(eventsOf(p.portions)).toEqual(
       p.portions.map((portion) => ({
-        portion_id: portion.portionId,
+        line_id: portion.lineId,
         kind: "moved",
         from_order_id: p.billId,
         to_order_id: p.otherId,
@@ -286,7 +298,7 @@ describe("A803 portion lifecycle: moves", () => {
     );
     expect(eventsOf(p.portions)).toEqual([
       {
-        portion_id: first!.portionId,
+        line_id: first!.lineId,
         kind: "moved",
         from_order_id: p.billId,
         to_order_id: result.billId,
@@ -295,7 +307,7 @@ describe("A803 portion lifecycle: moves", () => {
     ]);
   });
 
-  it("a transfer refused for a stale editor leaves registry, binding and event rows exactly as before", async () => {
+  it("a transfer refused for a stale editor leaves order lines and events exactly as before", async () => {
     const p = await fixture();
     const stale = await bothEdits(p);
     // A save after the request read the source bill makes its expectation stale.
@@ -316,17 +328,19 @@ describe("A803 portion lifecycle: moves", () => {
 });
 
 describe("A803 portion lifecycle: cancellations", () => {
-  it("removing a portion with its charge records a cancelled event, drops its binding and keeps its registry row", async () => {
+  it("removing a portion with its charge records its cohort in the cancellation and removes its line", async () => {
     const p = await fixture();
     const [first, second] = p.portions;
     await inTx(venue, (tx) => cancelLine(tx, venue.cfg, p.billId, 1, undefined, venue.adminId));
     expect((await linesOf(p.billId)).some((line) => line.id === first!.lineId)).toBe(false);
     expect(bindingOf(first!.lineId)).toEqual([]);
-    expect(registryHas(first!.portionId)).toBe(true);
-    expect(bindingOf(second!.lineId)).toEqual([{ portion_id: second!.portionId }]);
+    expect(cancelledCohortOf(first!.lineId)).toEqual([
+      { cohortId: first!.pricingCohortId, ordinal: first!.ordinal },
+    ]);
+    expect(bindingOf(second!.lineId)).toEqual([{ line_id: second!.lineId }]);
     expect(eventsOf(p.portions)).toEqual([
       {
-        portion_id: first!.portionId,
+        line_id: first!.lineId,
         kind: "cancelled",
         from_order_id: p.billId,
         to_order_id: null,
@@ -343,7 +357,7 @@ describe("A803 portion lifecycle: cancellations", () => {
       cancelLine(tx, venue.cfg, p.billId, cheese!.lineNo, undefined, venue.adminId),
     );
     expect((await linesOf(p.billId)).some((line) => line.id === cheese!.id)).toBe(false);
-    expect(bindingOf(first!.lineId)).toEqual([{ portion_id: first!.portionId }]);
+    expect(bindingOf(first!.lineId)).toEqual([{ line_id: first!.lineId }]);
     expect(eventsOf(p.portions)).toEqual([]);
   });
 
@@ -372,11 +386,13 @@ describe("A803 portion lifecycle: cancellations", () => {
       },
     );
     expect(bindingOf(first!.lineId)).toEqual([]);
-    expect(registryHas(first!.portionId)).toBe(true);
-    expect(bindingOf(second!.lineId)).toEqual([{ portion_id: second!.portionId }]);
+    expect(cancelledCohortOf(first!.lineId)).toEqual([
+      { cohortId: first!.pricingCohortId, ordinal: first!.ordinal },
+    ]);
+    expect(bindingOf(second!.lineId)).toEqual([{ line_id: second!.lineId }]);
     expect(eventsOf(p.portions)).toEqual([
       {
-        portion_id: first!.portionId,
+        line_id: first!.lineId,
         kind: "cancelled",
         from_order_id: p.billId,
         to_order_id: null,
@@ -396,11 +412,13 @@ describe("A803 portion lifecycle: cancellations", () => {
       await cancelItemForTest(tx, venue.cfg, p.billId, line!.lineNo, undefined, venue.adminId);
     });
     expect(bindingOf(first!.lineId)).toEqual([]);
-    expect(registryHas(first!.portionId)).toBe(true);
-    expect(bindingOf(second!.lineId)).toEqual([{ portion_id: second!.portionId }]);
+    expect(cancelledCohortOf(first!.lineId)).toEqual([
+      { cohortId: first!.pricingCohortId, ordinal: first!.ordinal },
+    ]);
+    expect(bindingOf(second!.lineId)).toEqual([{ line_id: second!.lineId }]);
     expect(eventsOf(p.portions)).toEqual([
       {
-        portion_id: first!.portionId,
+        line_id: first!.lineId,
         kind: "cancelled",
         from_order_id: p.billId,
         to_order_id: null,
@@ -441,7 +459,7 @@ describe("A803 portion lifecycle: cancellations", () => {
         venue.adminId,
       ),
     );
-    expect(bindingOf(first!.lineId)).toEqual([{ portion_id: first!.portionId }]);
+    expect(bindingOf(first!.lineId)).toEqual([{ line_id: first!.lineId }]);
     expect(eventsOf(p.portions)).toEqual([]);
   });
 });
@@ -467,7 +485,6 @@ describe("A803 portion grouping: the bill line read", () => {
         weighed.rows[0]!.lineNo,
       );
       await insertTabRound(tx, venue.cfg, { ...weighed, lineContexts: out.lineContexts }, out.rows);
-      await registerPortions(tx, out.portions);
       return { unbound: plain.rows[0]!.lineNo, measured: out.rows[0]!.lineNo };
     });
     const lines = await inTx(venue, (tx) => readTabLines(tx, p.billId));
@@ -538,12 +555,9 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
         groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
       }),
     );
-    const portions = venue.db.all<{ portionId: string; lineId: string; lineNo: number }>(
-      sql`select b.portion_id as portionId, l.id as lineId, l.line_no as lineNo
-          from working_order_lines l
-          join working_line_portions b on b.working_order_line_id = l.id
-          where l.working_order_id = ${p.billId} and l.parent_line_id is null
-          order by l.line_no`,
+    const portions = venue.db.all<{ lineId: string; lineNo: number }>(
+      sql`select id as lineId, line_no as lineNo from working_order_lines
+          where working_order_id = ${p.billId} and cohort_id is not null order by line_no`,
     );
     return { ...p, portions };
   }
@@ -599,13 +613,68 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     return rows.map(({ id, ...row }) => ({
       ...row,
       portions: venue.db
-        .all<{ portion_id: string }>(
-          sql`select portion_id from sale_line_portions where sale_line_id = ${id}
-              order by portion_id`,
+        .all<{ line_id: string }>(
+          sql`select dish_line_id as line_id from sale_line_dishes where sale_line_id = ${id}
+              order by line_id`,
         )
-        .map((link) => link.portion_id),
+        .map((link) => link.line_id),
     }));
   }
+
+  function dishCohorts(billId: string) {
+    return venue.db.all<{ id: string; cohortId: string; ordinal: number; whole: number }>(
+      sql`select id, cohort_id as cohortId, cohort_ordinal as ordinal, whole_portion as whole
+          from working_order_lines where working_order_id = ${billId} and parent_line_id is null
+          order by line_no`,
+    );
+  }
+
+  it("a dish ordered x3 is three lines numbered 1 to 3 in one cohort", async () => {
+    const p = await submitted("3");
+    const dishes = dishCohorts(p.billId);
+    expect(dishes.map(({ id, ordinal, whole }) => [id, ordinal, whole])).toEqual(
+      p.portions.map(({ lineId }, index) => [lineId, index + 1, 1]),
+    );
+    expect(dishes[0]!.cohortId).toEqual(expect.any(String));
+    expect(new Set(dishes.map(({ cohortId }) => cohortId))).toEqual(new Set([dishes[0]!.cohortId]));
+  });
+
+  it("reuses the cancelled last dish's ordinal on a new dish and links each surviving dish", async () => {
+    const p = await fixture(false, "3");
+    const lines = await linesOf(p.billId);
+    const [, , cancelled] = p.portions;
+    const cancelledLineNo = lines.find(({ id }) => id === cancelled!.lineId)!.lineNo;
+    await inTx(venue, (tx) =>
+      cancelLine(tx, venue.cfg, p.billId, cancelledLineNo, undefined, venue.adminId),
+    );
+    await inTx(venue, async (tx) => {
+      await updateOrderLine(
+        tx,
+        venue.cfg,
+        p.billId,
+        lines[0]!.lineNo,
+        { portionLineNos: [], quantity: "2" },
+        await readOrderRevision(tx, p.billId),
+        {
+          admission: testTradingAdmission(),
+          operatorId: venue.adminId,
+          expectedEdit: await readBillEditState(tx, p.billId),
+        },
+      );
+    });
+    const dishes = dishCohorts(p.billId);
+    expect(dishes.map(({ ordinal }) => ordinal)).toEqual([1, 2, 3]);
+    expect(new Set(dishes.map(({ cohortId }) => cohortId)).size).toBe(1);
+    expect(dishes.map(({ id }) => id)).not.toContain(cancelled!.lineId);
+    await payInCash(p.billId);
+    expect(filedRows(p.billId)).toEqual(
+      ["Burger", "Cheese"].map((name) => ({
+        name,
+        quantity: 3000,
+        portions: dishes.map(({ id }) => id).sort(),
+      })),
+    );
+  });
 
   const cents = (amount: string) => Math.round(Number(amount) * 100);
 
@@ -631,7 +700,7 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     expect((await linesOf(p.otherId)).map((line) => line.id).sort()).toEqual(
       family.map((line) => line.id).sort(),
     );
-    expect(bindingOf(first!.lineId)).toEqual([{ portion_id: first!.portionId }]);
+    expect(bindingOf(first!.lineId)).toEqual([{ line_id: first!.lineId }]);
     const [moved] = await venue.db
       .select({
         id: ticketItems.id,
@@ -667,8 +736,8 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     );
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     expect(filedRows(p.otherId)).toEqual([
-      { name: "Burger", quantity: 1000, portions: [first!.portionId] },
-      { name: "Cheese", quantity: 1000, portions: [first!.portionId] },
+      { name: "Burger", quantity: 1000, portions: [first!.lineId] },
+      { name: "Cheese", quantity: 1000, portions: [first!.lineId] },
     ]);
   });
 
@@ -683,9 +752,9 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     await payInCash(p.billId);
 
     expect(filedRows(p.billId)).toEqual([
-      { name: "Burger", quantity: 1000, portions: [first!.portionId] },
-      { name: "Burger", quantity: 1000, portions: [second!.portionId] },
-      { name: "Cheese", quantity: 1000, portions: [second!.portionId] },
+      { name: "Burger", quantity: 1000, portions: [first!.lineId] },
+      { name: "Burger", quantity: 1000, portions: [second!.lineId] },
+      { name: "Cheese", quantity: 1000, portions: [second!.lineId] },
     ]);
   });
 
@@ -707,13 +776,13 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     expect(issued.map((sale) => sale.number - issued[0]!.number)).toEqual([0, 1, 2]);
     expect([a, b, p.billId].map((billId) => filedRows(billId))).toEqual(
       [first, second, third].map((portion) => [
-        { name: "Burger", quantity: 1000, portions: [portion!.portionId] },
-        { name: "Cheese", quantity: 1000, portions: [portion!.portionId] },
+        { name: "Burger", quantity: 1000, portions: [portion!.lineId] },
+        { name: "Cheese", quantity: 1000, portions: [portion!.lineId] },
       ]),
     );
   });
 
-  it("A803 portion lifecycle: a move refused for a stale editor writes no registry, binding, link or event row", async () => {
+  it("A803 portion lifecycle: a move refused for a stale editor leaves order lines, sale links and events as they were", async () => {
     const p = await submitted("2");
     const [, second] = p.portions;
     await payInCash(await splitOff(p, second!.lineNo));
@@ -730,10 +799,10 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     );
     const tables = () => ({
       ...portionTables(),
-      sale_line_portions: venue.db.all(sql`select * from sale_line_portions order by rowid`),
+      sale_line_dishes: venue.db.all(sql`select * from sale_line_dishes order by rowid`),
     });
     const before = tables();
-    expect(before.sale_line_portions).not.toEqual([]);
+    expect(before.sale_line_dishes).not.toEqual([]);
 
     const command = { ...(await ask(p)), expectedEdit: stale };
     await expect(
@@ -861,10 +930,10 @@ describe("A803 A1195: a weighed portion leaves its bill whole", () => {
       ),
     );
     expect((await linesOf(p.otherId)).map((line) => line.id)).toEqual([p.weighed.lineId]);
-    expect(bindingOf(p.weighed.lineId)).toEqual([{ portion_id: p.weighed.portionId }]);
+    expect(bindingOf(p.weighed.lineId)).toEqual([{ line_id: p.weighed.lineId }]);
     expect(eventsOf([p.weighed])).toEqual([
       {
-        portion_id: p.weighed.portionId,
+        line_id: p.weighed.lineId,
         kind: "moved",
         from_order_id: p.billId,
         to_order_id: p.otherId,
@@ -885,7 +954,7 @@ describe("A803 A1195: a weighed portion leaves its bill whole", () => {
       .where(eq(workingOrderLines.workingOrderId, p.billId));
     expect(rows.find((row) => row.id === p.weighed.lineId)?.quantity).toBe(250);
     expect(rows.find((row) => row.id === part.id)?.quantity).toBe(100);
-    expect(bindingOf(p.weighed.lineId)).toEqual([{ portion_id: p.weighed.portionId }]);
+    expect(bindingOf(p.weighed.lineId)).toEqual([{ line_id: p.weighed.lineId }]);
     expect(bindingOf(part.id)).toEqual([]);
   });
 });

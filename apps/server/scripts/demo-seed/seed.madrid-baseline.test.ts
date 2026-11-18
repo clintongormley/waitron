@@ -313,11 +313,9 @@ const ADDED_TABLES = [
   "invoice_correction_refunds",
   "invoice_corrections",
   "order_portion_events",
-  "order_portions",
   "recovery_packs",
-  "sale_line_portions",
+  "sale_line_dishes",
   "deferred_closures",
-  "working_line_portions",
   "declaraciones_responsables",
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
@@ -1164,9 +1162,18 @@ for (const locale of ["en", "es"] as const) {
         "offer_unit_precision",
         "offer_vat_class",
         "offer_category_name",
+        "cohort_id",
+        "cohort_ordinal",
+        "whole_portion",
       ]) {
-        const type =
-          name === "sold_in_each" || name === "offer_unit_precision" ? "INTEGER" : "TEXT";
+        const type = [
+          "sold_in_each",
+          "offer_unit_precision",
+          "cohort_ordinal",
+          "whole_portion",
+        ].includes(name)
+          ? "INTEGER"
+          : "TEXT";
         orderLines.columns.push({ name, type, notnull: 0, dflt_value: null, pk: 0 });
         for (const row of Object.values(orderLines.rows)) row[name] = null;
       }

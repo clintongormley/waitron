@@ -26,6 +26,7 @@ import {
   FORM_FACTOR_REFUSAL,
   LOCALES_REFUSAL,
   OPEN_PARENT_REFUSAL,
+  DISH_IDENTITY_FIXED_REFUSAL,
   PARTY_ALLERGY_GUEST_ANSWER_REFUSAL,
   POST_SETTLEMENT_REFUSAL,
   PRODUCT_ID_FIXED_REFUSAL,
@@ -127,6 +128,7 @@ const EXPECTED_TRIGGERS = [
   "working_order_lines_require_open_parent_delete",
   "working_order_lines_require_open_parent_insert",
   "working_order_lines_require_open_parent_update",
+  "working_order_lines_cohort_fixed",
   "working_orders_dining_fixed",
   "working_orders_enforce_transition",
   "working_orders_invoice_type_insert",
@@ -1390,6 +1392,16 @@ describe("working_order_lines_require_open_parent_update moving a line between o
       ),
     ).toBeUndefined();
   });
+});
+
+it("a dish's cohort is fixed once set, including on an open order", () => {
+  connection.exec(line("line-fixed-cohort", "wo-served-open", '{"es":"Dish","ca":"Dish"}'));
+  const update = (set: string) =>
+    refusalFor(connection, `update working_order_lines set ${set} where id = 'line-fixed-cohort'`);
+  expect(update("cohort_id = 'first', cohort_ordinal = 1, whole_portion = 1")).toBeUndefined();
+  for (const set of ["cohort_id = 'other'", "cohort_ordinal = 2", "whole_portion = 0"])
+    expect(update(set)).toBe(DISH_IDENTITY_FIXED_REFUSAL);
+  expect(update("working_order_id = 'wo-open'")).toBeUndefined();
 });
 
 describe("working_order_lines_check_locales", () => {

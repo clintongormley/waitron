@@ -249,19 +249,22 @@ it("a workforce-disabled till opens its shared connection without clocking inter
   expect(stream.reads.at(-1)!.signal?.aborted).toBe(false);
 });
 
-it("live bill changes immediately reread the open draft and bills", async () => {
-  const stream = liveReadFixture();
-  const { el } = await mountApp({ readLiveEvents: stream.read });
-  await openTable(el);
-  stream.event("ready");
-  await flush(el);
-  const drafts = api.listDrafts!.mock.calls.length;
-  const bills = api.getPartyBills!.mock.calls.length;
-  stream.event("change", '[{"type":"working_orders"}]');
-  await flush(el);
-  expect(api.listDrafts).toHaveBeenCalledTimes(drafts + 1);
-  expect(api.getPartyBills).toHaveBeenCalledTimes(bills + 1);
-});
+it.each(["working_orders", "working_order_lines"])(
+  "live %s changes immediately reread the open draft and bills",
+  async (type) => {
+    const stream = liveReadFixture();
+    const { el } = await mountApp({ readLiveEvents: stream.read });
+    await openTable(el);
+    stream.event("ready");
+    await flush(el);
+    const drafts = api.listDrafts!.mock.calls.length;
+    const bills = api.getPartyBills!.mock.calls.length;
+    stream.event("change", JSON.stringify([{ type }]));
+    await flush(el);
+    expect(api.listDrafts).toHaveBeenCalledTimes(drafts + 1);
+    expect(api.getPartyBills).toHaveBeenCalledTimes(bills + 1);
+  },
+);
 
 it("the bill-draft timer quiets while connected and resumes after a connection ends", async () => {
   const stream = liveReadFixture();

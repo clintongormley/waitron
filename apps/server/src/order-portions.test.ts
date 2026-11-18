@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   assignProductUnit,
   createExtraList,
@@ -8,28 +8,15 @@ import {
   readContentLanguages,
   writeProductModifiers,
 } from "@waitron/menu";
-import {
-  orderPortions,
-  withTransaction,
-  workingLinePortions,
-  workingOrderLines,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { withTransaction, workingOrderLines, type Database, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  deletePortionBindings,
-  expandPortionRows,
-  portionIdentities,
-  readPortionBindings,
-  registerPortions,
-  type PortionRef,
-} from "./order-portions.js";
+import { expandPortionRows, portionIdentities, readPortionBindings } from "./order-portions.js";
 import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { setupVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
+import { portionRefsOf } from "./testing/portion-bill.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
@@ -118,6 +105,7 @@ describe("A803 portions: splitting a priced round", () => {
   it("A803 portions: 12 oysters sold by the unit become 12 dishes with distinct ids, ordinals 1–12 and one cohort", () => {
     const oysters = dish("oysters", { quantity: 12000, lineTotal: 1800 });
     const out = expandPortionRows([oysters], [context(oysters)], [true], 7);
+    const portions = portionRefsOf(out.rows);
 
     expect(out.rows).toHaveLength(12);
     expect(new Set(out.rows.map((row) => row.id)).size).toBe(12);
@@ -126,13 +114,12 @@ describe("A803 portions: splitting a priced round", () => {
       7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
     ]);
     expect(out.rows.every((row) => row.quantity === 1000 && row.lineTotal === 150)).toBe(true);
-    expect(out.portions.map((portion) => portion.ordinal)).toEqual([
+    expect(portions.map((portion) => portion.ordinal)).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
     ]);
-    expect(out.portions.map((portion) => portion.lineId)).toEqual(out.rows.map((row) => row.id));
-    expect(new Set(out.portions.map((portion) => portion.pricingCohortId)).size).toBe(1);
-    expect(new Set(out.portions.map((portion) => portion.portionId)).size).toBe(12);
-    expect(out.portions.every((portion) => !portion.measured)).toBe(true);
+    expect(portions.map((portion) => portion.lineId)).toEqual(out.rows.map((row) => row.id));
+    expect(new Set(portions.map((portion) => portion.pricingCohortId)).size).toBe(1);
+    expect(portions.every((portion) => !portion.measured)).toBe(true);
     expect(out.requestOfRow).toEqual(Array(12).fill(0));
   });
 
@@ -140,10 +127,11 @@ describe("A803 portions: splitting a priced round", () => {
     const dozen = dish("dozen", { quantity: 1000, unitName: { en: "dozen" }, lineTotal: 1800 });
     const out = expandPortionRows([dozen], [context(dozen)], [true], 1);
 
-    expect(out.rows).toEqual([dozen]);
-    expect(out.portions).toEqual([
+    expect(out.rows).toEqual([
+      { ...dozen, cohortId: expect.any(String), cohortOrdinal: 1, wholePortion: true },
+    ]);
+    expect(portionRefsOf(out.rows)).toEqual([
       {
-        portionId: expect.any(String),
         lineId: "dozen",
         ordinal: 1,
         pricingCohortId: expect.any(String),
@@ -161,18 +149,17 @@ describe("A803 portions: splitting a priced round", () => {
       lineTotal: 480,
     });
     const out = expandPortionRows([wine, ham], [context(wine), context(ham)], [false, false], 3);
+    const portions = portionRefsOf(out.rows);
 
     expect(out.rows).toEqual([
-      { ...wine, lineNo: 3 },
-      { ...ham, lineNo: 4 },
+      { ...wine, lineNo: 3, cohortId: expect.any(String), cohortOrdinal: 1, wholePortion: false },
+      { ...ham, lineNo: 4, cohortId: expect.any(String), cohortOrdinal: 1, wholePortion: false },
     ]);
-    expect(
-      out.portions.map((portion) => [portion.lineId, portion.ordinal, portion.measured]),
-    ).toEqual([
+    expect(portions.map((portion) => [portion.lineId, portion.ordinal, portion.measured])).toEqual([
       ["wine", 1, true],
       ["ham", 1, true],
     ]);
-    expect(out.portions[0]!.pricingCohortId).not.toBe(out.portions[1]!.pricingCohortId);
+    expect(portions[0]!.pricingCohortId).not.toBe(portions[1]!.pricingCohortId);
   });
 
   it("A803 portions: two burgers with cheese × 2 each carry their own cheese of 2, pointing at their own dish", () => {
@@ -197,7 +184,7 @@ describe("A803 portions: splitting a priced round", () => {
     ]);
     expect(out.rows[1]!.id).toBe("cheese");
     expect(out.rows[3]!.id).not.toBe("cheese");
-    expect(out.portions.map((portion) => portion.lineId)).toEqual([
+    expect(portionRefsOf(out.rows).map((portion) => portion.lineId)).toEqual([
       "burgers",
       out.rows[2]!.id,
       "water",
@@ -225,6 +212,9 @@ describe("A803 portions: splitting a priced round", () => {
       lineNo: null,
       quantity: null,
       lineTotal: null,
+      cohortId: null,
+      cohortOrdinal: null,
+      wholePortion: null,
     });
     expect(out.rows).toHaveLength(3);
     for (const row of out.rows) {
@@ -274,13 +264,13 @@ describe("A1208 portionIdentities: the portions each priced row stands for", () 
 
     const identities = portionIdentities(rows.map(identity), rows, out);
 
-    const [first, second, third] = out.portions;
-    const burgerPortions = [first!.portionId, second!.portionId];
+    const [first, second, third] = portionRefsOf(out.rows);
+    const burgerPortions = [first!.lineId, second!.lineId];
     expect(identities).toEqual([
-      { ...identity(burgers), lineIds: ["burgers", out.rows[3]!.id], portionIds: burgerPortions },
-      { ...identity(cheese), lineIds: ["cheese", out.rows[4]!.id], portionIds: burgerPortions },
-      { ...identity(bacon), lineIds: ["bacon", out.rows[5]!.id], portionIds: burgerPortions },
-      { ...identity(fries), lineIds: ["fries"], portionIds: [third!.portionId] },
+      { ...identity(burgers), lineIds: ["burgers", out.rows[3]!.id], dishLineIds: burgerPortions },
+      { ...identity(cheese), lineIds: ["cheese", out.rows[4]!.id], dishLineIds: burgerPortions },
+      { ...identity(bacon), lineIds: ["bacon", out.rows[5]!.id], dishLineIds: burgerPortions },
+      { ...identity(fries), lineIds: ["fries"], dishLineIds: [third!.lineId] },
     ]);
   });
 
@@ -289,7 +279,7 @@ describe("A1208 portionIdentities: the portions each priced row stands for", () 
     const out = expandPortionRows([wine], [context(wine)], [false], 1);
 
     expect(portionIdentities([identity(wine)], [wine], out)).toEqual([
-      { ...identity(wine), lineIds: ["wine"], portionIds: [out.portions[0]!.portionId] },
+      { ...identity(wine), lineIds: ["wine"], dishLineIds: [portionRefsOf(out.rows)[0]!.lineId] },
     ]);
   });
 });
@@ -373,8 +363,8 @@ describe("A803 portions: recording portions", () => {
 
   /** A round of `burgers` burgers (two unless named) with a cheese each and 200 ml of wine, split and
    * written. */
-  async function writeRound(tx: Transaction, billId: string, burgers = 2) {
-    const round = await priceTabRound(
+  function priceRound(tx: Transaction, billId: string, burgers: number) {
+    return priceTabRound(
       tx,
       cfg,
       billId,
@@ -387,21 +377,13 @@ describe("A803 portions: recording portions", () => {
         { productId: ids.wine, quantity: "200" },
       ]),
     );
+  }
+
+  async function writeRound(tx: Transaction, billId: string) {
+    const round = await priceRound(tx, billId, 2);
     const out = expandPortionRows(round.rows, round.lineContexts, round.portionable, 1);
     await insertTabRound(tx, cfg, { ...round, lineContexts: out.lineContexts }, out.rows);
     return { round, out };
-  }
-
-  async function registryRows(tx: Transaction, portions: readonly PortionRef[]) {
-    return tx
-      .select()
-      .from(orderPortions)
-      .where(
-        inArray(
-          orderPortions.id,
-          portions.map((portion) => portion.portionId),
-        ),
-      );
   }
 
   it("A803 portions: pricing marks whole-portion dishes, never extras or a measure in a unit with no decimals", async () => {
@@ -420,45 +402,34 @@ describe("A803 portions: recording portions", () => {
         ["Cheese", 1000],
         ["Wine", 200000],
       ]);
-      expect(out.portions.map((portion) => portion.measured)).toEqual([false, false, true]);
+      const measured = portionRefsOf(out.rows).map((portion) => portion.measured);
+      expect(measured).toEqual([false, false, true]);
     });
   });
 
-  it("A803 portions: registering writes one binding per dish line and none for extras", async () => {
+  it("A803 portions: writes a cohort for each dish and none for extras", async () => {
     await withTransaction(db, async (tx) => {
       const billId = await bill(tx);
       const { out } = await writeRound(tx, billId);
-      await registerPortions(tx, out.portions);
 
       const lines = await tx
         .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, billId));
-      const bound = await tx
-        .select()
-        .from(workingLinePortions)
-        .where(
-          inArray(
-            workingLinePortions.workingOrderLineId,
-            lines.map((line) => line.id),
-          ),
-        );
-      expect(bound.map((row) => row.workingOrderLineId).sort()).toEqual(
+      const read = await readPortionBindings(
+        tx,
+        lines.map((line) => line.id),
+      );
+      expect([...read.keys()].sort()).toEqual(
         lines
           .filter((line) => line.parentLineId === null)
           .map((line) => line.id)
           .sort(),
       );
-      expect(await registryRows(tx, out.portions)).toHaveLength(3);
-      const read = await readPortionBindings(
-        tx,
-        lines.map((line) => line.id),
-      );
       expect([...read.values()].sort((a, b) => a.lineId.localeCompare(b.lineId))).toEqual(
-        out.portions
+        portionRefsOf(out.rows)
           .map((portion) => ({
             lineId: portion.lineId,
-            portionId: portion.portionId,
             cohortId: portion.pricingCohortId,
             ordinal: portion.ordinal,
           }))
@@ -467,30 +438,24 @@ describe("A803 portions: recording portions", () => {
     });
   });
 
-  it("A1208 registerPortions: six portions cost the statements two do", async () => {
+  it("A1208: inserting six portions costs the statements two do", async () => {
     const statementsFor = (burgers: number) =>
       withTransaction(db, async (tx) => {
-        const { out } = await writeRound(tx, await bill(tx), burgers);
+        const billId = await bill(tx);
+        const round = await priceRound(tx, billId, burgers);
+        const out = expandPortionRows(round.rows, round.lineContexts, round.portionable, 1);
         const session = (
           tx as unknown as { session: { prepareQuery: (query: { sql: string }) => unknown } }
         ).session;
         const prepared = vi.spyOn(session, "prepareQuery");
-        await registerPortions(tx, out.portions);
+        await insertTabRound(tx, cfg, { ...round, lineContexts: out.lineContexts }, out.rows);
         const count = prepared.mock.calls.length;
         prepared.mockRestore();
-        expect(await registryRows(tx, out.portions)).toHaveLength(out.portions.length);
-        expect(
-          await tx
-            .select()
-            .from(workingLinePortions)
-            .where(
-              inArray(
-                workingLinePortions.portionId,
-                out.portions.map((portion) => portion.portionId),
-              ),
-            ),
-        ).toHaveLength(out.portions.length);
-        return { portions: out.portions.length, count };
+        const written = await readPortionBindings(
+          tx,
+          out.rows.map((row) => row.id!),
+        );
+        return { portions: written.size, count };
       });
 
     const few = await statementsFor(1);
@@ -555,54 +520,10 @@ describe("A803 portions: recording portions", () => {
       );
       const out = expandPortionRows(priced.lineRows, priced.lineContexts, priced.portionable, 1);
       await tx.insert(workingOrderLines).values(out.rows);
-      await registerPortions(tx, out.portions);
 
       const stored = (await readStoredOrder(tx, billId)).identities;
       expect(stored).toHaveLength(5);
       expect(portionIdentities(priced.identities, priced.lineRows, out)).toEqual(stored);
-    });
-  });
-
-  it("A803 portions: registering again writes nothing, not even a registry row", async () => {
-    await withTransaction(db, async (tx) => {
-      const { out } = await writeRound(tx, await bill(tx));
-      await registerPortions(tx, out.portions);
-      const before = await tx.select().from(orderPortions);
-      await registerPortions(tx, out.portions);
-      expect(await tx.select().from(orderPortions)).toEqual(before);
-      expect(await tx.select().from(workingLinePortions)).toHaveLength(3);
-    });
-  });
-
-  it("A803 portions: registering a line already bound to another portion is refused", async () => {
-    await withTransaction(db, async (tx) => {
-      const { out } = await writeRound(tx, await bill(tx));
-      await registerPortions(tx, out.portions);
-      const [first] = out.portions;
-      await expect(
-        registerPortions(tx, [{ ...first!, portionId: randomUUID(), ordinal: 9 }]),
-      ).rejects.toThrow(`registerPortions: line ${first!.lineId} already holds portion`);
-      expect(await registryRows(tx, out.portions)).toHaveLength(3);
-    });
-  });
-
-  it("A803 portions: deleting bindings lets their lines go, and keeps the registry", async () => {
-    await withTransaction(db, async (tx) => {
-      const { out } = await writeRound(tx, await bill(tx));
-      await registerPortions(tx, out.portions);
-      const [first, second] = out.portions;
-      await deletePortionBindings(tx, [first!.lineId]);
-
-      const left = await readPortionBindings(tx, [first!.lineId, second!.lineId]);
-      expect([...left.keys()]).toEqual([second!.lineId]);
-      expect(await registryRows(tx, out.portions)).toHaveLength(3);
-      await tx.delete(workingOrderLines).where(eq(workingOrderLines.parentLineId, first!.lineId));
-      await tx.delete(workingOrderLines).where(eq(workingOrderLines.id, first!.lineId));
-      // Still bound: the binding's key to its line refuses the delete.
-      await tx.delete(workingOrderLines).where(eq(workingOrderLines.parentLineId, second!.lineId));
-      await expect(
-        tx.delete(workingOrderLines).where(eq(workingOrderLines.id, second!.lineId)),
-      ).rejects.toThrow(/FOREIGN KEY/);
     });
   });
 });

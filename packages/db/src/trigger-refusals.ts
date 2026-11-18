@@ -28,6 +28,8 @@ export const TRANSITION_REFUSAL = "working order cannot make that transition";
 export const DINING_FIXED_REFUSAL =
   "an order's way of selling is fixed once the kitchen has it or money is taken";
 
+export const DISH_IDENTITY_FIXED_REFUSAL = "a dish's cohort is fixed once set";
+
 /**
  * `working_order_lines_require_open_parent_*`: the order is not open, or does not exist; an update
  * also refuses a line moved off an order that is not open. On an order that exists but is not open,

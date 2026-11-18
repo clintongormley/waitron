@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5a5a2e8f-a509-4421-b770-2c36f833212b",
+  "id": "de0debe4-e91a-4ae8-a169-5ce6faad1e65",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -813,6 +813,27 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "cohort_id": {
+          "name": "cohort_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cohort_ordinal": {
+          "name": "cohort_ordinal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "whole_portion": {
+          "name": "whole_portion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -843,6 +864,14 @@
             "course_id"
           ],
           "isUnique": false
+        },
+        "working_order_lines_cohort_ordinal_key": {
+          "name": "working_order_lines_cohort_ordinal_key",
+          "columns": [
+            "cohort_id",
+            "cohort_ordinal"
+          ],
+          "isUnique": true
         },
         "working_order_lines_line_no_key": {
           "name": "working_order_lines_line_no_key",
@@ -1011,6 +1040,10 @@
         "working_order_lines_line_no_ck": {
           "name": "working_order_lines_line_no_ck",
           "value": "\"working_order_lines\".\"line_no\" >= 1"
+        },
+        "working_order_lines_cohort_ck": {
+          "name": "working_order_lines_cohort_ck",
+          "value": "(\"working_order_lines\".\"cohort_id\" is null and \"working_order_lines\".\"cohort_ordinal\" is null and \"working_order_lines\".\"whole_portion\" is null)\n        or (\"working_order_lines\".\"cohort_id\" is not null and \"working_order_lines\".\"cohort_ordinal\" is not null\n          and \"working_order_lines\".\"cohort_ordinal\" >= 1 and \"working_order_lines\".\"whole_portion\" is not null\n          and \"working_order_lines\".\"parent_line_id\" is null)"
         },
         "working_order_lines_hardware_unit_ck": {
           "name": "working_order_lines_hardware_unit_ck",
@@ -1644,6 +1677,80 @@
         }
       }
     },
+    "sale_line_dishes": {
+      "name": "sale_line_dishes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sale_line_id": {
+          "name": "sale_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dish_line_id": {
+          "name": "dish_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "sale_line_dishes_dish_line_idx": {
+          "name": "sale_line_dishes_dish_line_idx",
+          "columns": [
+            "dish_line_id"
+          ],
+          "isUnique": false
+        },
+        "sale_line_dishes_sale_line_dish_key": {
+          "name": "sale_line_dishes_sale_line_dish_key",
+          "columns": [
+            "sale_line_id",
+            "dish_line_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "sale_line_dishes_sale_line_fk": {
+          "name": "sale_line_dishes_sale_line_fk",
+          "tableFrom": "sale_line_dishes",
+          "tableTo": "sale_lines",
+          "columnsFrom": [
+            "sale_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "sale_line_dishes_dish_line_fk": {
+          "name": "sale_line_dishes_dish_line_fk",
+          "tableFrom": "sale_line_dishes",
+          "tableTo": "working_order_lines",
+          "columnsFrom": [
+            "dish_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "order_portion_events": {
       "name": "order_portion_events",
       "columns": {
@@ -1654,12 +1761,20 @@
           "notNull": true,
           "autoincrement": false
         },
-        "portion_id": {
-          "name": "portion_id",
+        "line_id": {
+          "name": "line_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "detail": {
+          "name": "detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
         },
         "kind": {
           "name": "kind",
@@ -1698,21 +1813,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "order_portion_events_portion_fk": {
-          "name": "order_portion_events_portion_fk",
-          "tableFrom": "order_portion_events",
-          "tableTo": "order_portions",
-          "columnsFrom": [
-            "portion_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -1725,198 +1826,6 @@
           "value": "(\"order_portion_events\".\"kind\" = 'moved' and \"order_portion_events\".\"to_order_id\" is not null and \"order_portion_events\".\"to_order_id\" <> \"order_portion_events\".\"from_order_id\") or (\"order_portion_events\".\"kind\" = 'cancelled' and \"order_portion_events\".\"to_order_id\" is null)"
         }
       }
-    },
-    "order_portions": {
-      "name": "order_portions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "cohort_id": {
-          "name": "cohort_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "ordinal": {
-          "name": "ordinal",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "measured": {
-          "name": "measured",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "order_portions_cohort_ordinal_key": {
-          "name": "order_portions_cohort_ordinal_key",
-          "columns": [
-            "cohort_id",
-            "ordinal"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "order_portions_ordinal_ck": {
-          "name": "order_portions_ordinal_ck",
-          "value": "\"order_portions\".\"ordinal\" >= 1"
-        }
-      }
-    },
-    "sale_line_portions": {
-      "name": "sale_line_portions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sale_line_id": {
-          "name": "sale_line_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "portion_id": {
-          "name": "portion_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "sale_line_portions_portion_idx": {
-          "name": "sale_line_portions_portion_idx",
-          "columns": [
-            "portion_id"
-          ],
-          "isUnique": false
-        },
-        "sale_line_portions_sale_line_portion_key": {
-          "name": "sale_line_portions_sale_line_portion_key",
-          "columns": [
-            "sale_line_id",
-            "portion_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "sale_line_portions_sale_line_fk": {
-          "name": "sale_line_portions_sale_line_fk",
-          "tableFrom": "sale_line_portions",
-          "tableTo": "sale_lines",
-          "columnsFrom": [
-            "sale_line_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "sale_line_portions_portion_fk": {
-          "name": "sale_line_portions_portion_fk",
-          "tableFrom": "sale_line_portions",
-          "tableTo": "order_portions",
-          "columnsFrom": [
-            "portion_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "working_line_portions": {
-      "name": "working_line_portions",
-      "columns": {
-        "working_order_line_id": {
-          "name": "working_order_line_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "portion_id": {
-          "name": "portion_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "working_line_portions_portion_key": {
-          "name": "working_line_portions_portion_key",
-          "columns": [
-            "portion_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "working_line_portions_line_fk": {
-          "name": "working_line_portions_line_fk",
-          "tableFrom": "working_line_portions",
-          "tableTo": "working_order_lines",
-          "columnsFrom": [
-            "working_order_line_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "working_line_portions_portion_fk": {
-          "name": "working_line_portions_portion_fk",
-          "tableFrom": "working_line_portions",
-          "tableTo": "order_portions",
-          "columnsFrom": [
-            "portion_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "dining_tables": {
       "name": "dining_tables",

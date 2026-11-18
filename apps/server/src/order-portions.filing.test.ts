@@ -3,6 +3,7 @@ import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { StatementSync } from "node:sqlite";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { recordSale } from "@waitron/core";
 import { createAdjustmentReason } from "@waitron/adjustments";
 import {
   createExtraList,
@@ -12,13 +13,11 @@ import {
   writeProductModifiers,
 } from "@waitron/menu";
 import {
-  orderPortions,
   products,
-  saleLinePortions,
+  saleLineDishes,
   saleLines,
   sales,
   ticketItems,
-  workingLinePortions,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -26,19 +25,21 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertCapturedPayment, type PaymentProvider } from "@waitron/payments";
-import { cancelRefundShare, decimal } from "@waitron/shared";
+import { cancelRefundShare, decimal, workingOrderId } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { cancellationRefundValue } from "./cancellation-refund-value.js";
+import { selectOrderInvoice } from "./invoice-selection.js";
+import { saleLanguageFor } from "./venue-locale.js";
 import { createCourse } from "./kitchen.js";
 import { resolveKitchenAllergyBlocks } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./move-bill.js";
 import type { LineNutrition } from "./line-nutrition.js";
 import { readOrderDetail } from "./orders-list.js";
-import type { PortionRef } from "./order-portions.js";
+import type { PortionRef } from "./testing/portion-bill.js";
 import { partyRevision } from "./parties.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
@@ -55,6 +56,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
   insertTabRound,
   priceStoredOrder,
+  priceForIssuance,
   priceStoredOrderForIssuance,
   priceTabRound,
   fireableLineColumns,
@@ -174,8 +176,8 @@ const burgersWithCheese = (quantity: string): TabRoundLine[] =>
     },
   ]);
 
-function seed(lines: TabRoundLine[]) {
-  return inTx(venue, (tx) => portionBill(tx, venue.cfg, venue.zoneId, lines));
+function seed(lines: TabRoundLine[], measureDishes?: true) {
+  return inTx(venue, (tx) => portionBill(tx, venue.cfg, venue.zoneId, lines, { measureDishes }));
 }
 
 async function payInCash(billId: string): Promise<void> {
@@ -214,11 +216,11 @@ async function filedRows(billId: string) {
       .where(eq(sales.workingOrderId, billId))
       .orderBy(saleLines.lineNo);
     const links = await tx
-      .select({ saleLineId: saleLinePortions.saleLineId, portionId: saleLinePortions.portionId })
-      .from(saleLinePortions)
+      .select({ saleLineId: saleLineDishes.saleLineId, portionId: saleLineDishes.dishLineId })
+      .from(saleLineDishes)
       .where(
         inArray(
-          saleLinePortions.saleLineId,
+          saleLineDishes.saleLineId,
           rows.map((row) => row.id),
         ),
       );
@@ -235,7 +237,7 @@ async function filedRows(billId: string) {
 function portionIdsOf(portions: readonly PortionRef[], cohortOf: PortionRef): string[] {
   return portions
     .filter((portion) => portion.pricingCohortId === cohortOf.pricingCohortId)
-    .map((portion) => portion.portionId)
+    .map((portion) => portion.lineId)
     .sort();
 }
 
@@ -313,7 +315,7 @@ describe("A803 portions: filing a bill of portions", () => {
           expect.objectContaining({
             id: portions[0]!.lineId,
             lineIds: portions.map((portion) => portion.lineId),
-            portionIds: portions.map((portion) => portion.portionId),
+            dishLineIds: portions.map((portion) => portion.lineId),
           }),
         ]);
       }
@@ -606,7 +608,7 @@ describe("A803 portions: filing a bill of portions", () => {
 
   it("A803 portions: a refused issuance leaves no sale and no link row", async () => {
     const { billId } = await seed(sweets("2"));
-    const linksBefore = await inTx(venue, (tx) => tx.select().from(saleLinePortions));
+    const linksBefore = await inTx(venue, (tx) => tx.select().from(saleLineDishes));
     await inTx(venue, (tx) =>
       tx.update(products).set({ active: false }).where(eq(products.id, ids.sweet)),
     );
@@ -630,7 +632,7 @@ describe("A803 portions: filing a bill of portions", () => {
         tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
       ),
     ).toEqual([]);
-    expect(await inTx(venue, (tx) => tx.select().from(saleLinePortions))).toEqual(linksBefore);
+    expect(await inTx(venue, (tx) => tx.select().from(saleLineDishes))).toEqual(linksBefore);
   });
 });
 
@@ -682,22 +684,30 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
   });
 
   it("A803 portions: a bound line whose portion no filed row stands for has no refund value", async () => {
-    const { billId } = await seed(croquettes("1"));
-    const unbound = await inTx(venue, async (tx) => {
-      const priced = await priceTabRound(tx, venue.cfg, billId, sweets("1"), "checked");
-      await insertTabRound(tx, venue.cfg, priced, priced.rows);
-      return priced.rows[0]!.id!;
-    });
-    await payInCash(billId);
+    const { billId, portions } = await seed(croquettes("1"));
+    const { cfg, backend, clock } = venue;
     await inTx(venue, async (tx) => {
-      const portionId = randomUUID();
-      await tx
-        .insert(orderPortions)
-        .values({ id: portionId, cohortId: randomUUID(), ordinal: 1, measured: false });
-      await tx.insert(workingLinePortions).values({ workingOrderLineId: unbound, portionId });
+      const invoice = await priceForIssuance(tx, clock, backend, cfg, billId);
+      const selected = await selectOrderInvoice(tx, backend, cfg, billId, invoice.priced.total);
+      await recordSale(tx, backend, {
+        origin: cfg.origin,
+        nodeId: cfg.nodeId,
+        ...selected.sale,
+        operationDescription: "Test sale",
+        workingOrderId: workingOrderId(billId),
+        ...(await saleLanguageFor(tx, selected.receiptLocale, {
+          log: undefined,
+          workingOrderId: billId,
+        })),
+        total: invoice.priced.total,
+        lines: invoice.priced.lines,
+        vatBreakdown: invoice.priced.vatBreakdown,
+        clock: invoice.clock,
+        settlement: { kind: "deferred" },
+      });
     });
 
-    expect(await refundValueOf(billId, unbound)).toBeUndefined();
+    expect(await refundValueOf(billId, portions[0]!.lineId)).toBeUndefined();
   });
 
   it("A803 portions: a measured portion of 3 is worth its whole row, so a part cancel refunds its part", async () => {
@@ -708,14 +718,17 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
       });
       const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
       const priced = await priceTabRound(tx, venue.cfg, tabId, croquettes("3"), "checked");
-      await insertTabRound(tx, venue.cfg, priced, priced.rows);
-      const [measured] = await tx
-        .insert(orderPortions)
-        .values({ cohortId: randomUUID(), ordinal: 1, measured: true })
-        .returning({ id: orderPortions.id });
-      await tx
-        .insert(workingLinePortions)
-        .values({ workingOrderLineId: priced.rows[0]!.id!, portionId: measured!.id });
+      await insertTabRound(
+        tx,
+        venue.cfg,
+        priced,
+        priced.rows.map((row) => ({
+          ...row,
+          cohortId: randomUUID(),
+          cohortOrdinal: 1,
+          wholePortion: false,
+        })),
+      );
       return tabId;
     });
     const [line] = await inTx(venue, (tx) =>
@@ -820,14 +833,14 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
     const stray = await seed(sweets("2"));
     await inTx(venue, async (tx) => {
       const [row] = await tx
-        .select({ id: saleLinePortions.saleLineId })
-        .from(saleLinePortions)
-        .where(eq(saleLinePortions.portionId, portions[0]!.portionId));
+        .select({ id: saleLineDishes.saleLineId })
+        .from(saleLineDishes)
+        .where(eq(saleLineDishes.dishLineId, portions[0]!.lineId));
       // 2.000 between four portions is 0.500 each; 0.10 is not a whole number of cents.
       await tx
-        .insert(saleLinePortions)
+        .insert(saleLineDishes)
         .values(
-          stray.portions.map((portion) => ({ saleLineId: row!.id, portionId: portion.portionId })),
+          stray.portions.map((portion) => ({ saleLineId: row!.id, dishLineId: portion.lineId })),
         );
     });
 
@@ -869,12 +882,12 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
     const stray = await seed(sweets("1"));
     await inTx(venue, async (tx) => {
       const [row] = await tx
-        .select({ id: saleLinePortions.saleLineId })
-        .from(saleLinePortions)
-        .where(eq(saleLinePortions.portionId, portions[0]!.portionId));
+        .select({ id: saleLineDishes.saleLineId })
+        .from(saleLineDishes)
+        .where(eq(saleLineDishes.dishLineId, portions[0]!.lineId));
       await tx
-        .insert(saleLinePortions)
-        .values({ saleLineId: row!.id, portionId: stray.portions[0]!.portionId });
+        .insert(saleLineDishes)
+        .values({ saleLineId: row!.id, dishLineId: stray.portions[0]!.lineId });
     });
 
     expect(await refundValueOf(billId, portions[0]!.lineId)).toBeUndefined();
@@ -1229,20 +1242,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
   });
 
   it("A803 portion grouping: measured portions stay apart", async () => {
-    const { billId, portions } = await seed(croquettes("2"));
-    await inTx(venue, async (tx) => {
-      const cohortId = randomUUID();
-      for (const [at, portion] of portions.entries()) {
-        const [measured] = await tx
-          .insert(orderPortions)
-          .values({ cohortId, ordinal: at + 1, measured: true })
-          .returning({ id: orderPortions.id });
-        await tx
-          .update(workingLinePortions)
-          .set({ portionId: measured!.id })
-          .where(eq(workingLinePortions.workingOrderLineId, portion.lineId));
-      }
-    });
+    const { billId } = await seed(croquettes("2"), true);
 
     expect(await detailLines(billId)).toEqual([
       { name: "Croqueta", quantity: "1.000", total: "3.33" },
@@ -1342,12 +1342,10 @@ describe("A803 portions: raising a dish", () => {
       creditedTo: string | null;
     }>(
       sql`select l.line_no as lineNo, l.name, l.quantity, l.line_total as lineTotal,
-            d.line_no as dishNo, p.cohort_id as cohortId, p.ordinal, p.measured,
+            d.line_no as dishNo, l.cohort_id as cohortId, l.cohort_ordinal as ordinal, not l.whole_portion as measured,
             l.credited_to as creditedTo
           from working_order_lines l
           left join working_order_lines d on d.id = l.parent_line_id
-          left join working_line_portions b on b.working_order_line_id = l.id
-          left join order_portions p on p.id = b.portion_id
           where l.working_order_id = ${billId}
           order by l.line_no`,
     );
@@ -1637,17 +1635,7 @@ describe("A803 portions: raising a dish", () => {
   });
 
   it("A803 portions: a measured bound line rises in place and stays one portion", async () => {
-    const bound = await billOf(croquettes("1"), { bound: true });
-    await inTx(venue, async (tx) => {
-      const [measured] = await tx
-        .insert(orderPortions)
-        .values({ cohortId: randomUUID(), ordinal: 1, measured: true })
-        .returning({ id: orderPortions.id, cohortId: orderPortions.cohortId });
-      await tx
-        .update(workingLinePortions)
-        .set({ portionId: measured!.id })
-        .where(eq(workingLinePortions.workingOrderLineId, bound.portions[0]!.lineId));
-    });
+    const bound = await seed(croquettes("1"), true);
 
     await raise(bound.billId, 1, "3");
 
