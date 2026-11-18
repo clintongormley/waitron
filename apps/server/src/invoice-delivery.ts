@@ -4,6 +4,7 @@ import { and, desc, eq, inArray, lte, isNull, gt, or, sql, type SQL } from "driz
 import {
   invoiceDeliveries,
   printJobs,
+  isReceiptPrinter,
   printers,
   sales,
   pagePrinters,
@@ -56,7 +57,7 @@ export async function reserveInvoiceDelivery(
     const [target] = await tx
       .select({ id: printers.id, deletedAt: printers.deletedAt })
       .from(printJobs)
-      .innerJoin(printers, eq(printers.id, printJobs.printerId))
+      .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
       .where(eq(printJobs.id, input.printJobId));
     if (target !== undefined && target.deletedAt !== null) {
       throw new AppError("printer.not_found", { id: target.id });
@@ -226,7 +227,7 @@ export async function claimInvoiceDelivery(
     const [job] = await tx
       .select({ id: printJobs.id })
       .from(printJobs)
-      .innerJoin(printers, eq(printers.id, printJobs.printerId))
+      .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
       .where(
         and(
           eq(printJobs.id, delivery.printJobId!),
@@ -305,7 +306,7 @@ function notEndedByDelete() {
   return and(
     sql`${printJobs.lastError} is not ${PRINTER_DELETED}`,
     sql`not exists (select 1 from ${printers} where ${printers.id} = ${printJobs.printerId}
-      and ${printers.deletedAt} is not null)`,
+      and ${isReceiptPrinter()} and ${printers.deletedAt} is not null)`,
   );
 }
 

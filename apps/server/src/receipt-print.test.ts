@@ -53,6 +53,7 @@ import {
   floorZones,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, saleReceiptHeaders, createDepartment } from "@waitron/venue-service";
 import {
@@ -1435,6 +1436,28 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(result.total).toBe("1.50"); // the sale files cleanly
     expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await printJobsFor(cfg)).toEqual([]); // nothing enqueued to the inactive printer
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("files a cash sale without printing when the receipt choice points to an office printer", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await withTransaction(suite.db, insertA4Printer);
+    const orderId = randomUUID();
+    await configureReceipt(cfg, { printerId });
+    await recordTillSale(
+      { ...deps(), admission: testTradingAdmission() },
+      cfg,
+      {
+        workingOrderId: orderId,
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+    await printSaleReceipt(deps(), cfg, orderId, false);
+    expect(await fiscalRecordCount(cfg)).toBe(1);
+    expect(await printJobsFor(cfg)).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 

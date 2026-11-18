@@ -5,6 +5,7 @@ import { AppError } from "@waitron/shared";
 import { refuseDeletedPrinters } from "@waitron/printing";
 import {
   kitchenStations,
+  isReceiptPrinter,
   printers,
   readStationPrinterPairs,
   withPrinter,
@@ -32,7 +33,7 @@ export async function attachPrinterToStation(
   const [printer] = await tx
     .select({ id: printers.id })
     .from(printers)
-    .where(and(eq(printers.id, printerId), eq(printers.active, true)));
+    .where(and(isReceiptPrinter(), eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
 
   await tx
@@ -45,7 +46,7 @@ export async function putPrinterOnEveryStation(tx: Transaction, printerId: strin
   const [printer] = await tx
     .select({ id: printers.id })
     .from(printers)
-    .where(and(eq(printers.id, printerId), eq(printers.active, true)));
+    .where(and(isReceiptPrinter(), eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
 
   const stations = await tx

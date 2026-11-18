@@ -15,6 +15,7 @@ import {
   orderDraftLines,
   orderTableLabels,
   parties,
+  isReceiptPrinter,
   printers,
   removeIdFromJson,
   stationPrinterPairs,
@@ -97,7 +98,7 @@ async function stationDeleteRules(tx: Transaction, id: string) {
   const mappedPrinters = await tx
     .select({ id: printers.id, name: printers.name })
     .from(stationPrinterPairs)
-    .innerJoin(printers, eq(printers.id, stationPrinterPairs.printerId))
+    .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, stationPrinterPairs.printerId)))
     .where(eq(stationPrinterPairs.stationId, id));
   const madeHere = await tx
     .select({ id: devices.id, name: devices.label, active: devices.active })

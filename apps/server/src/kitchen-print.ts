@@ -12,6 +12,7 @@ import {
   orderGroups,
   orderTableLabels,
   printJobs,
+  isReceiptPrinter,
   printers,
   stationPrinterPairs,
   tableNames,
@@ -179,7 +180,7 @@ export async function printerMappings(
       resolution: printers.resolution,
     })
     .from(stationPrinterPairs)
-    .innerJoin(printers, eq(stationPrinterPairs.printerId, printers.id))
+    .innerJoin(printers, and(isReceiptPrinter(), eq(stationPrinterPairs.printerId, printers.id)))
     .where(
       and(
         inArray(stationPrinterPairs.stationId, stationIds),

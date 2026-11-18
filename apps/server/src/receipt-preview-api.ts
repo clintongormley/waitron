@@ -4,6 +4,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   devices,
   printPaperWidth,
+  isReceiptPrinter,
   printers,
   readTaxpayer,
   withTransaction,
@@ -134,7 +135,7 @@ async function activeReceiptSettings(tx: Transaction): Promise<EscSetting[]> {
   const rows = await tx
     .select({ id: printers.id, paperWidth: printers.paperWidth, resolution: printers.resolution })
     .from(printers)
-    .where(and(inArray(printers.id, resolved), eq(printers.active, true)));
+    .where(and(isReceiptPrinter(), inArray(printers.id, resolved), eq(printers.active, true)));
   const byId = new Map(rows.map(({ id, ...setting }) => [id, setting]));
   return resolved.flatMap((id) => {
     const setting = byId.get(id);

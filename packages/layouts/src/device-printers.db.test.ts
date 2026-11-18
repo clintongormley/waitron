@@ -10,6 +10,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   readPrinterHoldsForTest,
@@ -122,6 +123,15 @@ describe("a profile's printer lists and each device's current printers", () => {
         paymentSlipPrinterIds: [p3],
       }),
     );
+  });
+
+  it("refuses an office printer on the receipt list", async () => {
+    const { profileId } = await seedDevice(suite.db);
+    const office = await inTx(insertA4Printer);
+    await expect(
+      inTx((tx) => setProfilePrinterLists(tx, profileId, lists({ receiptPrinterIds: [office] }))),
+    ).rejects.toMatchObject({ code: "printer.not_found", params: { id: office } });
+    expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(lists({}));
   });
 
   it("kitchen profiles clear all lists, defaults, device choices and portable holds", async () => {

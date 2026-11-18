@@ -13,6 +13,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { createCategory, createProduct } from "@waitron/menu";
@@ -569,6 +570,18 @@ describe("POST /management-api/reports/categories/print", () => {
     expect((await errorOf(staff)).code).toBe("authorization.not_permitted");
     expect((await print(body, { cookie: supervisorCookie })).status).toBe(202);
   });
+});
+
+it("leaves office printers out of report offers and refuses report jobs on them", async () => {
+  const office = await withTransaction(suite.db, insertA4Printer);
+  const offered = await request("/management-api/reports/printers", { cookie: supervisorCookie });
+  expect(((await offered.json()) as { id: string }[]).map(({ id }) => id)).not.toContain(office);
+  const res = await request("/management-api/reports/categories/print", {
+    method: "POST",
+    body: { from: DAY1, to: DAY1, mode: "current", printerId: office },
+  });
+  expect(res.status).toBe(400);
+  expect(await errorOf(res)).toMatchObject({ code: "printer.not_found" });
 });
 
 describe("a deleted printer and report printing", () => {

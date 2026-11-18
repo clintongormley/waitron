@@ -1,4 +1,4 @@
-import { printers, printJobs, type Transaction } from "@waitron/db";
+import { isReceiptPrinter, printers, printJobs, type Transaction } from "@waitron/db";
 import { and, eq, sql } from "drizzle-orm";
 import { CLOCK_WITNESS_MARGIN_MS, type ClockWitness } from "@waitron/fiscal";
 import { readPrinterRoles } from "@waitron/layouts";
@@ -249,7 +249,7 @@ export function devicePrinterNoticeSources(deps: {
           const [latest] = await tx
             .select({ id: printJobs.id, status: printJobs.status, error: printJobs.lastError })
             .from(printJobs)
-            .innerJoin(printers, eq(printers.id, printJobs.printerId))
+            .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
             .where(
               and(
                 eq(printJobs.printerId, printerId),

@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   invoiceDeliveries,
@@ -548,6 +549,7 @@ describe("the order detail's delivery status", () => {
   });
 
   it("offers active receipt printers before venue A4 printers, by name, with the original's printer", async () => {
+    await inTx(venue, insertA4Printer);
     const { billId, saleId } = await fullInvoice();
     await withExtraOffices(async ({ upstairs }) => {
       expect(

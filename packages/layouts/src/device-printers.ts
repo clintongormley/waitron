@@ -1,7 +1,13 @@
 // The registry of `printer.not_found`, which this file throws.
 import "@waitron/printing";
 import "./errors.js";
-import { deviceProfilePrinters, deviceProfiles, pagePrinters, printers } from "@waitron/db";
+import {
+  deviceProfilePrinters,
+  deviceProfiles,
+  pagePrinters,
+  isReceiptPrinter,
+  printers,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
@@ -137,7 +143,9 @@ export async function setProfilePrinterLists(
     const withDrawer = await tx
       .select({ id: printers.id })
       .from(printers)
-      .where(and(inArray(printers.id, added), eq(printers.hasCashDrawer, true)));
+      .where(
+        and(isReceiptPrinter(), inArray(printers.id, added), eq(printers.hasCashDrawer, true)),
+      );
     if (withDrawer.length !== added.length) {
       throw new AppError("device_profile.invalid", {
         reason: "no_cash_drawer",
@@ -187,7 +195,7 @@ async function refuseUnknownPrinters(
       await tx
         .select({ id: printers.id, deletedAt: printers.deletedAt })
         .from(printers)
-        .where(inArray(printers.id, named))
+        .where(and(isReceiptPrinter(), inArray(printers.id, named)))
     ).map((row) => [row.id, row.deletedAt] as const),
   );
   const deleted = named.find((id) => (found.get(id) ?? null) !== null);

@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   drawerOpens,
@@ -303,6 +304,17 @@ describe("dashboard receipt reprint", () => {
     expect(await response.json()).toMatchObject({
       error: { code: "device.forbidden_action", params: { action: "reprint" } },
     });
+  });
+
+  it("refuses an office printer for a receipt copy", async () => {
+    const billId = await placedIssuedBill(venue, "Caña");
+    const printerId = await inTx(venue, insertA4Printer);
+    const before = await counts();
+    expect(await post(venue.adminDashboard, billId, printerId)).toMatchObject({
+      status: 400,
+      json: { code: "printer.not_found" },
+    });
+    expect(await counts()).toEqual(before);
   });
 
   it("refuses an uninvoiced bill and an inactive printer without writing", async () => {

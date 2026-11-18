@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, flag, id, label, newId, table, tsString } from "./columns.js";
 import { devices } from "./devices.js";
@@ -8,6 +8,8 @@ import { devices } from "./devices.js";
  * printer whose firmware dials out and polls for jobs.
  */
 export const printTransport = enumType(["usb", "network_tcp", "bluetooth", "cloud_poll"]);
+
+export const printerKind = enumType(["receipt", "a4"]);
 
 /** The paper roll's width: 30 columns of text on 58mm, 42 on 80mm. */
 export const printPaperWidth = enumType(["58mm", "80mm"]);
@@ -23,6 +25,7 @@ export const printers = table(
   "printers",
   {
     id: id("id").primaryKey().$defaultFn(newId),
+    kind: printerKind("kind").notNull().default("receipt"),
     name: label("name").notNull(),
     transport: printTransport("transport").notNull(),
     // The stable device id an agent matches at run time.
@@ -49,6 +52,7 @@ export const printers = table(
     uniqueIndex("printers_local_key_key")
       .on(t.localKey)
       .where(sql`${t.localKey} is not null and ${t.deletedAt} is null`),
+    check("printers_kind_ck", enumCheck(t.kind)),
     check("printers_transport_ck", enumCheck(t.transport)),
     check("printers_paper_width_ck", enumCheck(t.paperWidth)),
     check("printers_resolution_ck", enumCheck(t.resolution)),
@@ -64,3 +68,5 @@ export const printers = table(
     ),
   ],
 );
+
+export const isReceiptPrinter = (): SQL => eq(printers.kind, "receipt");

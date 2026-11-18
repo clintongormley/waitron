@@ -26,6 +26,7 @@ import {
   printers,
   withTransaction,
 } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -1618,6 +1619,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId, "Pass");
+    const office = await withTransaction(suite.db, insertA4Printer);
     const watcherId = randomUUID();
     for (const [path, body] of [
       [`/management-api/printers/${printerId}/watcher`, { watcherId }],
@@ -1633,6 +1635,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
     expect(rows.find((row) => row.id === printerId)).toBeDefined();
     for (const row of rows) expect(row).not.toHaveProperty("watcherId");
     expect(rows.find((row) => row.id === printerId)).not.toHaveProperty("ticketScope");
+    expect(rows.some((row) => row.id === office)).toBe(false);
   });
   it("stores a printer's pick-up roles and keeps them on unrelated edits", async () => {
     const app = mountApp();

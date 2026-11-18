@@ -11,6 +11,7 @@ import {
   billPayments,
   deviceNotDeleted,
   devices,
+  isReceiptPrinter,
   printers,
   workingOrders,
   type Transaction,
@@ -80,7 +81,7 @@ async function deviceDeleteRules(
   const heldPrinters = await tx
     .select({ id: printers.id, name: printers.name })
     .from(printers)
-    .where(eq(printers.heldByDeviceId, id));
+    .where(and(isReceiptPrinter(), eq(printers.heldByDeviceId, id)));
   const heldReaders = await tx
     .select({ id: cardReaders.id, name: cardReaders.name })
     .from(cardReaders)

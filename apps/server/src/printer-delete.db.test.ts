@@ -19,6 +19,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   readPrinterHoldsForTest,
@@ -834,6 +835,18 @@ describe("deleting a printer", () => {
     const later = new Date("2026-10-10T11:00:00.000Z");
     await withTransaction(suite.db, (tx) => deletePrinter(tx, v.D, later));
     expect(await snapshot()).toEqual(afterDelete(afterZ, v.D, [v.jobs.dJob], later));
+  });
+
+  it("refuses receipt-printer impact and deletion for an office printer", async () => {
+    const office = await withTransaction(suite.db, insertA4Printer);
+    const before = await snapshot();
+    await expect(
+      withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, office)),
+    ).rejects.toMatchObject({ code: "printer.not_found", params: { id: office } });
+    await expect(
+      withTransaction(suite.db, (tx) => deletePrinter(tx, office, NOW)),
+    ).rejects.toMatchObject({ code: "printer.not_found", params: { id: office } });
+    expect(await snapshot()).toEqual(before);
   });
 
   it("answers printer.not_found to a second delete and writes nothing", async () => {

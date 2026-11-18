@@ -150,7 +150,14 @@ export { deviceNotDeleted, devices } from "./schema/devices.js";
 export { deviceApprovedProfiles } from "./schema/device-approved-profiles.js";
 export { joinRequestKind, joinRequests } from "./schema/join-requests.js";
 export { printAgents } from "./schema/print-agents.js";
-export { printPaperWidth, printResolution, printTransport, printers } from "./schema/printers.js";
+export {
+  isReceiptPrinter,
+  printPaperWidth,
+  printResolution,
+  printTransport,
+  printerKind,
+  printers,
+} from "./schema/printers.js";
 export { printJobStatus, printJobs } from "./schema/print-jobs.js";
 export { receiptReprints } from "./schema/receipt-reprints.js";
 export { saleReceiptGuests } from "./schema/sale-receipt-guests.js";

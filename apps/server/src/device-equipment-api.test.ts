@@ -25,6 +25,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { startManagementSession } from "@waitron/identity";
@@ -336,6 +337,17 @@ describe("choosing a portable printer, by scan or by a confirmed list choice", (
     };
     expect(afterScan).toEqual(expected);
     expect(afterList).toEqual(expected);
+  });
+
+  it("refuses an office printer scanned for receipts", async () => {
+    const office = await withTransaction(suite.db, insertA4Printer);
+    const res = await send(deviceApp, venue.cookie, "PUT", "/api/device/equipment", {
+      kind: "printer",
+      selection: { id: office },
+      via: "scan",
+    });
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({ code: "printer.not_found", params: { id: office } });
   });
 
   it("a legitimate selection of a free item succeeds", async () => {

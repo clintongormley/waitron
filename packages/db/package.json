@@ -13,6 +13,7 @@
     "./schema/identity.js": "./src/schema/identity/index.ts",
     "./schema/media.js": "./src/schema/media/index.ts",
     "./schema/venue-service.js": "./src/schema/venue-service/index.ts",
+    "./testing/printers.js": "./src/testing/printers.ts",
     "./testing/schema-conformance.js": "./src/testing/schema-conformance.ts",
     "./testing/seed.js": "./src/testing/seed.ts",
     "./testing/venue-db.js": "./src/testing/venue-db.ts"

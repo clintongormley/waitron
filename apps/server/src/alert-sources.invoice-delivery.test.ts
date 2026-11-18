@@ -11,6 +11,7 @@ import {
   taxpayer,
   withTransaction,
 } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter, enqueuePrintJob, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
@@ -361,6 +362,18 @@ describe("invoiceDeliveryAlertSource", () => {
         code: "invoice_delivery.failed",
       }),
     ]);
+  });
+
+  it("does not report an old receipt attempt on an office printer", async () => {
+    const v = await venue();
+    const sale = await invoice(v);
+    const office = await withTransaction(suite.db, insertA4Printer);
+    await receiptJob(sale.saleId, {
+      printerId: office,
+      status: "failed",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+    });
+    expect(await alerts()).toEqual([]);
   });
 
   it("raises nothing for a simplified invoice whose receipt failed", async () => {

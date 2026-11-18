@@ -832,6 +832,7 @@ CREATE TABLE `print_agents` (
 CREATE UNIQUE INDEX `print_agents_tenant_node_key` ON `print_agents` (`node_id`);--> statement-breakpoint
 CREATE TABLE `printers` (
 	`id` text PRIMARY KEY NOT NULL,
+	`kind` text DEFAULT 'receipt' NOT NULL,
 	`name` text NOT NULL,
 	`transport` text NOT NULL,
 	`local_key` text,
@@ -850,6 +851,7 @@ CREATE TABLE `printers` (
 	`active` integer DEFAULT true NOT NULL,
 	`deleted_at` text,
 	FOREIGN KEY (`held_by_device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "printers_kind_ck" CHECK("printers"."kind" in ('receipt', 'a4')),
 	CONSTRAINT "printers_transport_ck" CHECK("printers"."transport" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll')),
 	CONSTRAINT "printers_paper_width_ck" CHECK("printers"."paper_width" in ('58mm', '80mm')),
 	CONSTRAINT "printers_resolution_ck" CHECK("printers"."resolution" in ('180dpi', '203dpi')),

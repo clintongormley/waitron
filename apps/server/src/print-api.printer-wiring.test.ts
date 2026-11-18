@@ -22,6 +22,7 @@ import {
   CORE_CHANGE_SOURCES,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, deviceProfileServiceAccess } from "@waitron/venue-service";
 import {
@@ -1433,6 +1434,18 @@ describe("Putting a printer on every station (hardware.manage and venue.configur
     const before = await stationRows();
 
     const res = await send(app, "POST", everyStation(randomUUID()), { cookie: managerCookie });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    expect(await stationRows()).toEqual(before);
+  });
+
+  it("refuses an office printer and changes no station", async () => {
+    const printerId = await withTransaction(suite.db, insertA4Printer);
+    await seedStation("Office printer");
+    const before = await stationRows();
+
+    const res = await send(mountApp(), "POST", everyStation(printerId), { cookie: managerCookie });
 
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });

@@ -141,6 +141,7 @@ async function withPrinters(
     resolution: "180dpi" | "203dpi";
     active?: boolean;
     deviceActive?: boolean;
+    kind?: "a4";
   }[],
   fn: () => Promise<void>,
 ): Promise<void> {
@@ -151,6 +152,7 @@ async function withPrinters(
         .insert(printers)
         .values({
           name: `Printer ${row.device}`,
+          kind: row.kind,
           transport: "network_tcp",
           host: "192.0.2.10",
           paperWidth: row.paperWidth,
@@ -381,6 +383,16 @@ describe("POST /management-api/receipt-preview", () => {
   it("is drawn 512 dots wide (80 mm at 180 dpi) when the venue has no active receipt printer", async () => {
     await withPrinters(
       [{ device: "Till 1", paperWidth: "58mm", resolution: "203dpi", active: false }],
+      async () => {
+        const result = await rendered({});
+        expect([result.preview.widthDots, result.preview.columns]).toEqual([512, 42]);
+      },
+    );
+  });
+
+  it("uses the default width when a device points to an office printer", async () => {
+    await withPrinters(
+      [{ device: "Office", paperWidth: "58mm", resolution: "203dpi", kind: "a4" }],
       async () => {
         const result = await rendered({});
         expect([result.preview.widthDots, result.preview.columns]).toEqual([512, 42]);

@@ -3,6 +3,7 @@ import { and, eq, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import {
   kitchenPrintJobs,
   printJobs,
+  isReceiptPrinter,
   printers,
   receiptReprints,
   type Transaction,
@@ -101,7 +102,7 @@ export async function reprintJobOn(
       },
     })
     .from(printJobs)
-    .innerJoin(printers, eq(printers.id, printJobs.printerId))
+    .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
     .where(eq(printJobs.id, jobId));
   if (found === undefined) throw new AppError("print_job.not_found", { id: jobId });
   const { job } = found;
@@ -113,7 +114,14 @@ export async function reprintJobOn(
   const [target] = await tx
     .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
     .from(printers)
-    .where(and(eq(printers.id, printerId), eq(printers.active, true), isNull(printers.deletedAt)));
+    .where(
+      and(
+        isReceiptPrinter(),
+        eq(printers.id, printerId),
+        eq(printers.active, true),
+        isNull(printers.deletedAt),
+      ),
+    );
   if (target === undefined)
     throw new AppError("print_job.printer_unsuitable", { id: jobId, printerId });
   const printerDots = textGrid(target.paperWidth, target.resolution).widthDots;

@@ -1,6 +1,13 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
-import { invoiceDeliveries, printJobs, printers, sales, type Transaction } from "@waitron/db";
+import {
+  invoiceDeliveries,
+  printJobs,
+  isReceiptPrinter,
+  printers,
+  sales,
+  type Transaction,
+} from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import {
@@ -91,7 +98,7 @@ export async function requestPrintDelivery(
   const [setting] = await tx
     .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
     .from(printers)
-    .where(eq(printers.id, printer.id));
+    .where(and(isReceiptPrinter(), eq(printers.id, printer.id)));
   const ticket =
     sale.workingOrderId === null
       ? await readTransactionReceipt(deps.backend, tx, deps.cfg, sale.id)

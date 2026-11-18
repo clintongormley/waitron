@@ -20,6 +20,7 @@ import {
   saleSubstitutions,
   receiptReprints,
   printJobs,
+  isReceiptPrinter,
   printers,
   invoicePdfDownloads,
   orderPortions,
@@ -797,7 +798,7 @@ export function orderInvoicePrinters(tx: Transaction): PrinterOffer {
     const receipt = await tx
       .select({ id: printers.id, name: printers.name })
       .from(printers)
-      .where(eq(printers.active, true))
+      .where(and(isReceiptPrinter(), eq(printers.active, true)))
       .orderBy(asc(printers.name), asc(printers.id));
     const a4 = await tx
       .select({ id: pagePrinters.id, name: pagePrinters.name })
@@ -1236,7 +1237,7 @@ async function readReprints(tx: Transaction, saleId: string): Promise<OrderRepri
     })
     .from(receiptReprints)
     .innerJoin(printJobs, eq(printJobs.id, receiptReprints.printJobId))
-    .innerJoin(printers, eq(printers.id, printJobs.printerId))
+    .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
     .leftJoin(persons, eq(persons.id, receiptReprints.personId))
     .where(and(eq(receiptReprints.saleId, saleId), eq(printJobs.receiptCopy, true)))
     .orderBy(receiptReprints.requestedAt, sql`${receiptReprints}.rowid`);

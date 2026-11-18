@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { printers, sales, type Database, type Transaction } from "@waitron/db";
+import { isReceiptPrinter, printers, sales, type Database, type Transaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { persons } from "@waitron/identity";
 import { cardReaders } from "@waitron/payments";
@@ -108,7 +108,7 @@ export async function collectBoxHealth(
     const printerRows = await db
       .select({ id: printers.id, name: printers.name })
       .from(printers)
-      .where(and(eq(printers.active, true), isNull(printers.deletedAt)))
+      .where(and(isReceiptPrinter(), eq(printers.active, true), isNull(printers.deletedAt)))
       .orderBy(asc(printers.name));
     const readerRows = readers.paymentsEnabled
       ? await db

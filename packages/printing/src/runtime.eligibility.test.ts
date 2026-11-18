@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, printAgents, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { esc } from "./escpos.js";
@@ -71,6 +72,8 @@ describe("claim eligibility — derived from transport and visible keys", () => 
         host: "10.0.0.5",
       });
       await enqueuePrintJob(tx, p.id, esc(SETTING).line("x").bytes());
+      const office = await insertA4Printer(tx);
+      await tx.insert(printJobs).values({ printerId: office, payload: new Uint8Array([1]) });
       const claimed = await claimPrintJobs(tx, otherAgentId, { visibleKeys: [] });
       expect(claimed).toHaveLength(1);
       expect(claimed[0]).toMatchObject({
@@ -78,6 +81,7 @@ describe("claim eligibility — derived from transport and visible keys", () => 
         host: "10.0.0.5",
         local_key: null,
       });
+      expect(await claimPrintJobs(tx, otherAgentId, { visibleKeys: [] })).toEqual([]);
     });
   });
 

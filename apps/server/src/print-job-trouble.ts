@@ -5,6 +5,7 @@ import {
   kitchenPrintJobs,
   kitchenStations,
   printJobs,
+  isReceiptPrinter,
   printers,
   stationPrinterPairs,
   type Transaction,
@@ -156,6 +157,7 @@ export function printersInTroubleQuery(tx: Transaction, now: Date) {
       .crossJoin(sql`${printJobs} indexed by print_jobs_pull_idx`)
       .where(
         and(
+          isReceiptPrinter(),
           eq(printJobs.printerId, printers.id),
           eq(printers.active, true),
           // Lets the index search skip printed jobs.

@@ -12,6 +12,7 @@ import {
   devices,
   invoiceDeliveries,
   kitchenStations,
+  isReceiptPrinter,
   printers,
   printJobs,
   stationPrinterPairs,
@@ -30,7 +31,7 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
   const [printer] = await tx
     .select({ id: printers.id, name: printers.name })
     .from(printers)
-    .where(and(eq(printers.id, id), isNull(printers.deletedAt)));
+    .where(and(isReceiptPrinter(), eq(printers.id, id), isNull(printers.deletedAt)));
   if (printer === undefined) throw new AppError("printer.not_found", { id });
 
   const jobIds = await readPrinterDeleteJobIds(tx, id);
@@ -50,7 +51,7 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
     .select({ id: devices.id, name: devices.label })
     .from(printers)
     .innerJoin(devices, eq(devices.id, printers.heldByDeviceId))
-    .where(eq(printers.id, id));
+    .where(and(isReceiptPrinter(), eq(printers.id, id)));
 
   const choosing = await tx
     .select({
@@ -179,6 +180,6 @@ export async function deletePrinter(
   await tx
     .update(printers)
     .set({ active: false, deletedAt: now.toISOString() })
-    .where(and(eq(printers.id, id), isNull(printers.deletedAt)));
+    .where(and(isReceiptPrinter(), eq(printers.id, id), isNull(printers.deletedAt)));
   return rules.impact;
 }
