@@ -15,6 +15,7 @@ import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -43,7 +44,7 @@ it("puts the selected tab's sole action row in the modal footer", async () => {
 });
 it.each([
   ["light", "en", "The service steps were not accepted. Change them and save again."],
-  ["dark", "es", "No se han aceptado los pasos de servicio. Cámbialos y vuelve a guardar."],
+  ["dark", "es", VENUE_SERVICE_STRINGS.es["venue.service_steps_refused"]],
 ] as const)(
   "shows a list refusal only above Save in the modal footer (%s, %s)",
   async (theme, locale, refusal) => {
