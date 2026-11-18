@@ -1095,7 +1095,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
   });
 });
 
-describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => {
+describe("the run wrapper (the shared error boundary)", () => {
   it("maps a registered but UNMAPPED AppError code to 400 (its default)", async () => {
     const app = new Hono();
     // `content.language_invalid` is a real code deliberately absent from STATUS, so it takes the `?? 400`
@@ -1184,7 +1184,7 @@ describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => 
   });
 });
 
-describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected routes)", () => {
+describe("requireSession (validates an OPEN session for protected routes)", () => {
   // A throwaway route standing in for the protected routes: it calls `requireSession` and echoes what
   // it resolved.
   function guardApp(db: Database, options: Parameters<typeof requireSession>[2] = {}): Hono {
@@ -1676,7 +1676,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       onboardingIntent: "prepare",
       venueName: "Test SL",
       nif: venueTaxId,
-      // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded venue has none, so `[]` reaches
+      // The venue's ACTIVE kitchen courses — the seeded venue has none, so `[]` reaches
       // the wire (the tab course picker offers nothing then).
       courses: [],
       // Cookieless: no device → no reader to resolve → `none`; the venue has no readers configured.
@@ -1883,7 +1883,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     });
   });
 
-  it("GET /api/till echoes the venue's ACTIVE kitchen courses in display order (KDS-2 §5b)", async () => {
+  it("GET /api/till echoes the venue's ACTIVE kitchen courses in display order", async () => {
     // Seed two courses out of display order, plus a deactivated one, to prove the boot read
     // returns the ACTIVE ones sorted by `display_order` (the coursing sequence the tab picker
     // offers) and drops the retired one. Cleaned up in `finally` so the shared venue's default `[]`
@@ -2506,7 +2506,7 @@ describe("POST /api/sales (session-guarded sale)", () => {
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("POST with a malformed workingOrderId is 400 shared.invalid_id, not an opaque 500", async () => {
+  it("POST with a malformed workingOrderId is 400 shared.invalid_id", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const token = await openSession(suite.db);
@@ -2671,7 +2671,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     });
   });
 
-  it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b /api/pay sibling)", async () => {
+  it("POST with a malformed id is 400 shared.invalid_id", async () => {
     const token = await openSession(suite.db);
     const app = new Hono();
     // The route screen refuses the malformed id 400 before the empty stub provider is invoked.
@@ -3229,7 +3229,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
   });
 
-  it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b park sibling)", async () => {
+  it("POST with a malformed id is 400 shared.invalid_id", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -3398,7 +3398,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
 
   // The retrieve/edit/abandon routes: the `requireUuidId` screen refuses a malformed `:id` before any
   // query runs, with the same domain code an absent/non-open id gets on that route.
-  it("GET /:id with a malformed id is 404 working_order.not_found, not an opaque 500", async () => {
+  it("GET /:id with a malformed id is 404 working_order.not_found", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -3410,7 +3410,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
   });
 
-  it("PUT /:id with a malformed id is 409 working_order.not_open, not an opaque 500", async () => {
+  it("PUT /:id with a malformed id is 409 working_order.not_open", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -3427,7 +3427,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
   });
 
-  it("DELETE /:id with a malformed id is 409 working_order.not_open, not an opaque 500", async () => {
+  it("DELETE /:id with a malformed id is 409 working_order.not_open", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -3504,7 +3504,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     expect(await rePlace.json()).toEqual({ id, status: "placed" });
   });
 
-  it("POST with a malformed id is 409 working_order.not_open, not an opaque 500 (the 7b isUuid follow-up)", async () => {
+  it("POST with a malformed id is 409 working_order.not_open", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -3524,7 +3524,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
 // Station-display operate routes: GET /api/stations, GET /api/stations/:id/queue, POST
 // Per-item preparation operations. Under this suite's
 // `prepay` cfg, `placeOrder`'s fire seeds ticket items with no fiscal write.
-describe("KDS-1 station-display operate routes", () => {
+describe("station-display operate routes", () => {
   /** The seeded default station "Cocina", read back through `GET /api/stations` (the picker's own read). */
   async function defaultStation(
     app: Hono,
@@ -3671,7 +3671,7 @@ describe("KDS-1 station-display operate routes", () => {
     expect(await queue()).toMatchObject({ id: itemId, state: "preparing" });
   });
 
-  it("POST /api/ticket-items/:id/advance with an unknown or malformed id is 404 ticket_item.not_found, not a 500", async () => {
+  it("POST /api/ticket-items/:id/advance with an unknown or malformed id is 404 ticket_item.not_found", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -3844,7 +3844,7 @@ describe("KDS-1 station-display operate routes", () => {
     expect(await firedItem(id)).toMatchObject({ state: "queued" });
   });
 
-  it("GET /api/stations/:id/queue with a malformed id is 404 station.not_found, not a 500", async () => {
+  it("GET /api/stations/:id/queue with a malformed id is 404 station.not_found", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -3959,14 +3959,10 @@ describe("KDS-1 station-display operate routes", () => {
 });
 
 describe("/api/working-orders/:id/collect (malformed id — the fiscal happy path is till-api.fiscal-sale-paths.test.ts)", () => {
-  it("POST with a malformed id is 409 working_order.not_placed BEFORE any fiscal dispatch, not an opaque 500", async () => {
+  it("POST with a malformed id is 409 working_order.not_placed BEFORE any fiscal dispatch", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
-
-    // The stub `backend: {} as FiscalBackend` would throw (a non-AppError → opaque 500) the moment
-    // `collectOrder` tried to use it — this 409, not a 500, is the witness that the `isUuid` screen
-    // refuses BEFORE `collectOrder` is even called.
     const res = await app.request("/api/working-orders/not-a-uuid/collect", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -4050,7 +4046,7 @@ describe("/api/working-orders/:id/cancel", () => {
     expect(order.rows[0]).toEqual({ status: "placed" });
   });
 
-  it("POST with a malformed id is 409 working_order.not_placed, not an opaque 500", async () => {
+  it("POST with a malformed id is 409 working_order.not_placed", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -4071,7 +4067,7 @@ describe("/api/working-orders/:id/cancel", () => {
 // zoneId + pendingToServe fields of the /api/tables/state read. served_at is a PRE-FISCAL
 // operational field: nothing here touches a fiscal path. Zone CRUD is the management API's, so a
 // zone is seeded directly.
-describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, Task 6)", () => {
+describe("/api/zones + served route + /api/tables/state occupancy fields", () => {
   async function tabZone(): Promise<{ zoneId: string; waterOffer: string }> {
     const offers = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, { zone: "tables", productIds: [waterProduct.id] }),
@@ -4234,7 +4230,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     }
   });
 
-  it("served POST with a malformed :id is 409 party.not_open, not an opaque 500", async () => {
+  it("served POST with a malformed :id is 409 party.not_open", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -4249,7 +4245,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     });
   });
 
-  it("served POST with items that are not a list of string lineId and quantity is 400 management.request_invalid, not an opaque 500", async () => {
+  it("served POST with items that are not a list of string lineId and quantity is 400 management.request_invalid", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;

@@ -71,7 +71,7 @@ export interface CardDetails {
 }
 
 /**
- * `settledAt` feeds `RecordSaleTender.settledAt`: non-null on a `captured` result;
+ * `settledAt` feeds `RecordSaleTender.settledAt`: non-null on a `captured` result from `collect`;
  * null on `failed` and `network_unavailable`, where `recordSale` refuses. `paymentRef` is the
  * provider's opaque reference and the key that later associates the payment with the sale.
  */

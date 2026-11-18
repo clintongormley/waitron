@@ -345,7 +345,7 @@ describe("table + tab routes", () => {
     expect(await again.json()).toMatchObject({ error: { code: "tab.already_open" } });
   });
 
-  it("POST /api/tables/:id/seat with a malformed id → 404 table.not_found (isUuid guard, not a 500)", async () => {
+  it("POST /api/tables/:id/seat with a malformed id → 404 table.not_found", async () => {
     const res = await request("/api/tables/not-a-uuid/seat", {
       method: "POST",
       body: JSON.stringify({}),
@@ -571,13 +571,13 @@ describe("table + tab routes", () => {
     });
   });
 
-  it("a malformed :id on the lines read route → 409 tab.not_open (not a 500)", async () => {
+  it("a malformed :id on the lines read route → 409 tab.not_open", async () => {
     const res = await request("/api/working-orders/not-a-uuid/lines");
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "tab.not_open" } });
   });
 
-  it("a malformed :id on the groups route → 409 party.not_open (not a 500)", async () => {
+  it("a malformed :id on the groups route → 409 party.not_open", async () => {
     const res = await request("/api/parties/not-a-uuid/groups", {
       method: "POST",
       body: JSON.stringify({ submissionId: "s", expectedPartyRevision: 0, groups: [] }),

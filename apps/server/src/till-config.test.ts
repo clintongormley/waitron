@@ -78,7 +78,7 @@ describe("loadNodeIdentity", () => {
     );
   });
 
-  describe("the env card selection is gone (Task 12 cutover)", () => {
+  describe("env card-selection variables", () => {
     it("ignores WAITRON_TILL_CARD_PROVIDER / *_READER_ID entirely (no card field, no throw)", () => {
       // A card sale routes to its reader's provider through the pool, so these variables are ignored.
       const config = loadNodeIdentity({

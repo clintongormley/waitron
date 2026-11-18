@@ -53,18 +53,6 @@ their full text.
 - Found by #614 (`apps/till/src/screens`). Not restored because nothing confirms it: the
   table-order screen's `#lineGross` comment "same arithmetic the server files with".
 
-## Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`, `finalizeSettle`) cite `provider.ts:66-83`
-
-- Found by #613 (`apps/server` `till-*`), outside its files or not fixable in a comments-only
-  change. Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
-  `finalizeSettle`) cite `provider.ts:66-83`; the checker compares tool comments character for
-  character, so repointing them to `PaymentResult` in `packages/payments/src/provider.ts` is not
-  a comments-only change. Test titles #613 could not touch: "lost-T2" in
-  `till-sale-integrated.db.test.ts` (a captured card payment whose sale was never filed),
-  "Tasks 5 & 6", "7b", "FP-1, Task 6", "FP-2, Task 4", "SP-A.2 cutover", "Task 12 cutover",
-  "KDS-2/3" and "(Copilot)" in the `till-api*` and `till-config` suites, and 29 titles
-  saying "opaque 500".
-
 ## The booking state refusal describes a state move even when editing
 
 - **OPEN, carried from A394-18's run-it review.**
