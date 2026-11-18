@@ -20,8 +20,10 @@ settled bill"), §8 M8. Rules: [slice rules](2026-11-08-a1308-slice-rules.md).
 
 **Who lands:** the lane (rules §6: nothing fiscal; the receipt header that reads the zone is os8's).
 
-**First line of the PR description:** "Every venue is reset: core; backups and exports from before
-this cannot be restored or imported."
+**First line of the PR description:** "Every venue is reset for the core schema change. Venue
+backups made before the rebuild cannot be restored with this schema. Configuration exports stay at
+format 45." The 18 November 02:23 watcher clearance follows a configuration export at
+`3426e7ead9c9` imported at `e4c9d8aabc` through the configuration-transfer database test.
 
 ---
 
@@ -154,8 +156,9 @@ went in slice 5. The all-or-none CHECK is new: one row held all three as `NOT NU
    `apps/till/src/state/department-transfer-monitor.test.ts`. The watcher cleared this port and
    the dining-choice read on 2026-11-18 at 00:26 after #2824 removed the dedicated stream.
 4. **A settled bill's zone is pinned.** Test: Task 1.
-5. **A split bill copies its source's context** (`copyOrderServiceContext`, `:1363-1378`) as one
-   update of the new bill. Test: existing `draft-split.test.ts` and `transfer-lines.test.ts` cases.
+5. **A split bill copies its source's context** through `copyOrderServiceContext` as one update of
+   the new bill. In `packages/venue-service/src/operations.test.ts`, “inherits service mode, lists
+   zone offers, and freezes the order context” checks the copied zone, department and mode.
 
 ---
 
