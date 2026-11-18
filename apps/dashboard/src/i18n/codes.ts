@@ -546,12 +546,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta cuenta también requiere un código de autenticación. Inicia sesión con tu contraseña.",
   },
   "person.self_deactivation": {
-    en: "You cannot disable your own account. Ask another administrator.",
-    es: "No puedes deshabilitar tu propia cuenta. Pídeselo a otro administrador.",
+    en: "You cannot disable the account you are signed in with. To disable it, sign out, then sign in with another account that can manage it.",
+    es: "No puedes deshabilitar la cuenta con la que has iniciado sesión. Para deshabilitarla, cierra la sesión e inicia sesión con otra cuenta que pueda gestionarla.",
   },
   "person.suspended": {
-    en: "This account is disabled — ask a manager",
-    es: "Esta cuenta está deshabilitada. Avisa a un responsable",
+    en: "The account you were signed in with is disabled. Log in with another account. An account that can manage it can enable it again under Users and send it a new invitation.",
+    es: "La cuenta con la que habías iniciado sesión está deshabilitada. Inicia sesión con otra cuenta. Una cuenta con permiso para gestionarla puede volver a habilitarla en Usuarios y enviarle una nueva invitación.",
   },
   "person.not_found": {
     en: "That person could not be found",
