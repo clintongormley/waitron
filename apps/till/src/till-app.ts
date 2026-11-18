@@ -10082,12 +10082,12 @@ export class TillApp extends LitElement {
       // Each pick goes back to the list it was taken from, if the live offer still has it there.
       const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
       if (picks.notOffered.length > 0) extraNotOffered = true;
-      // On a line not yet sent, a still-offered list that nothing matched must be answered again:
-      // the server refuses the edit until it is, and falling back to the list's default would change
-      // what the diner asked for. A whole-order save keeps a sent line's answer.
+      // The server's test on a whole-order save: unanswered lists no unmatched frozen answer can stand
+      // for are new, and it refuses the line until they are answered. A sent line keeps its answers.
       const answers = deriveOptionSelections(product.offeredModifiers ?? [], line.optionSnapshots);
       const sent = line.workingOrderLineId !== undefined && sentLines.has(line.workingOrderLineId);
-      if (answers.unanswered.length > 0 && !sent) mustChooseAgain = true;
+      const unmatched = (line.optionSnapshots?.length ?? 0) - answers.options.length;
+      if (answers.unanswered.length > unmatched && !sent) mustChooseAgain = true;
       lines.push({
         product,
         quantity: displayQuantity(product, line.quantity),

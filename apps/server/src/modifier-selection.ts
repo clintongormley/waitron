@@ -193,6 +193,9 @@ function pairEach<Entry, Candidate>(
   return paired;
 }
 
+/** A frozen staff name is a one-entry map, keyed by the language it was frozen in. */
+const staffName = (names: Record<string, string>) => Object.values(names)[0];
+
 /**
  * The options answer to an edit of a SAVED line, or `null` when the edit gives the answers the line
  * already holds. A stored answer is kept as it is when an answer of the edit, frozen in the language
@@ -248,13 +251,40 @@ export function asksNoNewAnswer(
     if (list === undefined || label === undefined) return false;
     named.push({ list: list.name, label: label.name });
   }
-  const staffName = (names: Record<string, string>) => Object.values(names)[0];
   return pairEach(
     named,
     stored,
     (answer, held) =>
       staffName(held.listName) === answer.list && staffName(held.labelName) === answer.label,
   ).every((held) => held !== undefined);
+}
+
+/**
+ * Whether a request {@link asksNoNewAnswer} accepted leaves unanswered only lists that stored answers
+ * the menu no longer matches could stand for. A frozen answer holds names and no ids, so an unanswered
+ * list is taken for the renamed form of an unmatched answer; an answer the menu still matches must be
+ * sent.
+ */
+export function onlyStoredAnswersUnmatched(
+  offered: readonly OptionList[],
+  requested: readonly { listId: string; labelId: string }[],
+  stored: readonly OptionSnapshot[],
+): boolean {
+  const active = offered.filter((list) => list.active);
+  const unmatched = pairEach(
+    stored,
+    active,
+    (held, list) =>
+      list.name === staffName(held.listName) &&
+      list.labels.some((label) => label.available && label.name === staffName(held.labelName)),
+  ).filter((list) => list === undefined).length;
+  const unanswered = active.filter((list) => {
+    const answer = requested.find((entry) => entry.listId.toLowerCase() === list.id);
+    return !list.labels.some(
+      (label) => label.available && label.id === answer?.labelId.toLowerCase(),
+    );
+  }).length;
+  return unmatched > 0 && unanswered <= unmatched;
 }
 
 /** One pick as a request names it, read leniently: a malformed one is left to the validator. */

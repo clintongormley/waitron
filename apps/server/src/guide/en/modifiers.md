@@ -156,8 +156,8 @@ another list offering the same product cannot silently take its place.
 Renaming a list or an option leaves a dish already sent to its station as it was sent, on its
 ticket, bill and receipt.
 
-On a parked counter order, changing the staff name of a list or an option, or turning an option off,
-means an options answer no longer matches. The till will not guess: on a line not yet sent, it asks
-the operator to open that line and choose again before the order can be sent. An extras list is the
-exception, because an extra is matched by its product: renaming an extras list, or the product on
-it, leaves a parked order alone.
+A parked counter order keeps what was asked for when you change the staff name of a list or an
+option, turn an option off, or delete the list. On a line not yet sent, staff choose only for a list
+the dish did not have when the order was parked: the till asks them to open that line and choose
+before the order can be sent. Renaming an extras list, or the product on it, also leaves a parked
+order alone.

@@ -98,7 +98,8 @@ export interface OrderLine {
   endedPeriod?: EndedPeriod;
   /**
    * One entry per answered list; ABSENT when none. On a RETRIEVED line the ids are re-derived from the
-   * frozen wording (`deriveOptionSelections`), so a list whose wording nothing matches is missing here.
+   * frozen wording (`deriveOptionSelections`), so an answer the menu no longer matches is missing here
+   * and stays only in `optionSnapshots`.
    */
   options?: OptionSelection[];
   /** Never sent on the wire. */

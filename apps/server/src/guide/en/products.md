@@ -359,8 +359,8 @@ value → the new one. Choose **Keep editing** to go back, or **Put live now**. 
   from then on use the corrected values. Lines already on open orders keep their old price and VAT
   class.
 - On a parked counter order, renaming an options list or one of its choices does what it does after
-  a publish, as [What the till does with a list](modifiers.md#till) describes: a new staff name
-  makes the till ask for that answer to be chosen again, and a new customer-facing or prep station name
+  a publish, as [What the till does with a list](modifiers.md#till) describes: with a new staff name
+  the order keeps the answer it holds, and a new customer-facing or prep station name
   is saved onto those lines at the next change to the order, which can send a line the station
   already has to it again as a new ticket. Those lines keep their prices.
 - It changes nothing else: not the products, not the menu's own items and sections, not your other

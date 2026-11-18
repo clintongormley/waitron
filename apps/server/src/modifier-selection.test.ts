@@ -11,6 +11,7 @@ import {
   buildLineExtras,
   editLineExtras,
   editLineOptions,
+  onlyStoredAnswersUnmatched,
   type ExtraProductFacts,
 } from "./modifier-selection.js";
 
@@ -829,6 +830,88 @@ describe("asksNoNewAnswer", () => {
       { listId: cooked.id.toUpperCase(), labelId: mediumRare.id },
     ];
     expect(asksNoNewAnswer([cooked, twin], twice, both)).toBe(false);
+  });
+});
+
+describe("onlyStoredAnswersUnmatched", () => {
+  const rare = { listId: cooked.id, labelId: mediumRare.id };
+  const pepper = { listId: sauce.id, labelId: "label-pepper" };
+  const stored = freeze({ options: [cooked] }, { options: [rare] }).optionSnapshots;
+  const storedBoth = freeze(
+    { options: [cooked, sauce] },
+    { options: [rare, pepper] },
+  ).optionSnapshots;
+  const renamed: OptionList = { ...cooked, name: "Doneness staff" };
+  const relabelled: OptionList = {
+    ...cooked,
+    labels: cooked.labels.map((label) =>
+      label.id === mediumRare.id ? { ...label, name: "Pink staff" } : label,
+    ),
+  };
+  const withdrawn: OptionList = {
+    ...cooked,
+    labels: cooked.labels.map((label) =>
+      label.id === mediumRare.id ? { ...label, available: false } : label,
+    ),
+  };
+
+  it.each([
+    { case: "its list renamed", offered: [renamed], requested: [], held: stored },
+    { case: "its label renamed", offered: [relabelled], requested: [], held: stored },
+    { case: "its list gone", offered: [], requested: [], held: stored },
+    {
+      case: "its list switched off",
+      offered: [{ ...cooked, active: false }],
+      requested: [],
+      held: stored,
+    },
+    { case: "its label withdrawn, not named", offered: [withdrawn], requested: [], held: stored },
+    { case: "its withdrawn label named", offered: [withdrawn], requested: [rare], held: stored },
+    {
+      case: "one of two lists renamed, the other re-sent",
+      offered: [renamed, sauce],
+      requested: [pepper],
+      held: storedBoth,
+    },
+  ])("holds with $case", ({ offered, requested, held }) => {
+    expect(onlyStoredAnswersUnmatched(offered, requested, held)).toBe(true);
+  });
+
+  it.each([
+    { case: "every answer re-sent", offered: [cooked], requested: [rare], held: stored },
+    { case: "a still-matching answer left out", offered: [cooked], requested: [], held: stored },
+    {
+      case: "one of two answers unmatched and neither re-sent",
+      offered: [renamed, sauce],
+      requested: [],
+      held: storedBoth,
+    },
+    {
+      case: "a new list beside a re-sent answer",
+      offered: [cooked, sauce],
+      requested: [rare],
+      held: stored,
+    },
+    {
+      case: "more lists unanswered than answers unmatched",
+      offered: [renamed, sauce],
+      requested: [],
+      held: stored,
+    },
+    { case: "nothing stored", offered: [cooked], requested: [], held: [] },
+  ])("does not hold with $case", ({ offered, requested, held }) => {
+    expect(onlyStoredAnswersUnmatched(offered, requested, held)).toBe(false);
+  });
+
+  it("pairs one offered list with one stored answer only", () => {
+    expect(onlyStoredAnswersUnmatched([cooked], [rare], [...stored, ...stored])).toBe(true);
+  });
+
+  it("reads request ids in any case, as the validator does", () => {
+    const shouted = { listId: rare.listId.toUpperCase(), labelId: rare.labelId.toUpperCase() };
+    expect(onlyStoredAnswersUnmatched([cooked, sauce], [shouted], [...stored, ...stored])).toBe(
+      true,
+    );
   });
 });
 

@@ -378,8 +378,8 @@ como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **
   en pedidos abiertos mantienen su precio y su clase de IVA anteriores.
 - En un pedido aparcado de caja, cambiar el nombre de una lista de opciones o de una de sus opciones
   hace lo mismo que después de publicar, como explica
-  [Qué hace la caja con una lista](modifiers.md#till): un nombre del personal nuevo hace que la caja
-  pida volver a elegir esa respuesta, y un nombre para el cliente o de estación nuevo se guarda en
+  [Qué hace la caja con una lista](modifiers.md#till): con un nombre del personal nuevo, el pedido
+  conserva la respuesta que tiene, y un nombre para el cliente o de estación nuevo se guarda en
   esas líneas con el siguiente cambio del pedido, lo que puede volver a enviar a la estación, como
   una comanda nueva, una línea que ya tiene. Esas líneas conservan sus precios.
 - No cambia nada más: ni los productos, ni los elementos y secciones de la propia carta, ni tus

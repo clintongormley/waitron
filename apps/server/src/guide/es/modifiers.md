@@ -169,8 +169,8 @@ el mismo producto no puede ocupar su lugar sin avisar.
 Renombrar una lista o una opción deja un plato ya enviado a su estación tal como se envió, en su
 comanda, su cuenta y su ticket.
 
-En un pedido aparcado de caja, si cambias el nombre del personal de una lista o de una opción, o
-desactivas una opción, una respuesta de opciones deja de emparejarse. La caja no adivina: en una
-línea que aún no se ha enviado, pide al operador que abra esa línea y vuelva a elegir antes de poder
-enviar el pedido. Una lista de extras es la excepción, porque un extra se empareja por su producto:
-renombrar una lista de extras, o el producto que contiene, no afecta a un pedido aparcado.
+Un pedido aparcado de caja conserva lo que se pidió si cambias el nombre del personal de una lista o
+de una opción, desactivas una opción o eliminas la lista. En una línea que aún no se ha enviado, el
+personal solo elige en una lista que el plato no tenía cuando se aparcó el pedido: la caja le pide
+que abra esa línea y elija antes de poder enviar el pedido. Renombrar una lista de extras, o el
+producto que contiene, tampoco afecta a un pedido aparcado.

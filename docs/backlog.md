@@ -890,8 +890,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   enrolled device also reads the device and the till's setup.
   [Detail](backlog/till.md#the-tills-home-page-task-9-729)
 
-- **Reopening a held order keeps its lines right** (bundle of 1, 1 important, size S). [Detail](backlog/till.md#bundle-reopening-a-held-order-keeps-its-lines-right)
-
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).

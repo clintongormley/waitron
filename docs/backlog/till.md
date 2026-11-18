@@ -1380,17 +1380,6 @@ figures; the historical Serif 130% case above remains open. The permanent scroll
 contract stays in force (design-system.md, Till shell). For a future owner review: keep scrolling
 as designed, or revisit what stays on the bar? No collapse order is proposed.
 
-## Bundle: Reopening a held order keeps its lines right
-
-1 entry, size S.
-
-- **A retrieved line's options answers are re-sent by matching their WORDING**
-  (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
-  withdrawn label matches nothing, and on a line not yet sent the till surfaces
-  `held.options_changed`. A whole-order
-  save after an options list is deleted removes its answer from a line not yet sent on a parked
-  counter order. Preserve these recorded answers when reopening and saving the order.
-
 ## Bundle: One count of items everywhere
 
 1 entry, size M.
@@ -1607,6 +1596,9 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   sending cannot block the order. A save naming a different answer is a change, as through Change
   dish (`updateOrderLine`): the kitchen gets a recall and a new ticket, or the save is refused once
   the dish is started or served, or when its station refuses changes after sending.
+
+- **A parked dish not yet sent keeps a recorded options answer the menu no longer matches.** Staff
+  choose only for a list no unmatched answer can stand for; [the rule](../developers/modifiers.md).
 
 - **The server still works out each pass dish's age colour, which the till does not read (A773-2
   B4 plan, D68, 2026-11-02, not the owner).** "The server's `band` stays correct for any other

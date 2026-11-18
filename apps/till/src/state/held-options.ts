@@ -67,17 +67,16 @@ function assignAnswers(candidates: readonly ReadonlyMap<number, string>[]): (num
 
 /**
  * Re-derive a retrieved order's options answers, which come back as frozen NAMES with no ids, by
- * matching the STAFF name of the list and of the chosen label; on a line not yet sent the server
- * compares the other four. The walk is over the OFFERED lists, which are already narrowed to active
- * lists and available labels.
+ * matching the STAFF name of the list and of an available label; on a line not yet sent the server
+ * compares the other four. A set-lunch offer reaches here with its withdrawn labels still listed, and
+ * those match nothing.
  *
  * Two lists can share a staff name (`option_lists.name` has no unique index), so taking each answer as
  * first matched could strand a list; {@link assignAnswers} searches instead.
  *
- * An offered list nothing matched comes back in `unanswered`, and the caller tells the operator
- * when the line is not yet sent. Its `defaultLabelId` is deliberately NOT substituted: that would
- * change what the diner asked for on a line about to be billed. A frozen answer matching no offered
- * list is left out, because sending it would be refused.
+ * An offered list nothing matched comes back in `unanswered`. Its `defaultLabelId` is deliberately NOT
+ * substituted: that would change what the diner asked for. A frozen answer matching no offered list is
+ * left out, because sending it would be refused; a whole-order save keeps it on the line.
  */
 export function deriveOptionSelections(
   offered: readonly OfferedModifier[],
@@ -92,7 +91,9 @@ export function deriveOptionSelections(
       const wantedList = staffName(snapshot.listName);
       const wantedLabel = staffName(snapshot.labelName);
       if (wantedList === "" || wantedList !== list.name || wantedLabel === "") return;
-      const label = list.labels.find((candidate) => candidate.name === wantedLabel);
+      const label = list.labels.find(
+        (candidate) => candidate.available && candidate.name === wantedLabel,
+      );
       if (label !== undefined) byAnswer.set(answerIndex, label.id);
     });
     return byAnswer;

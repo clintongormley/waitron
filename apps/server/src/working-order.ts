@@ -117,6 +117,7 @@ import {
   editLineExtras,
   editLineOptions,
   namedPicks,
+  onlyStoredAnswersUnmatched,
 } from "./modifier-selection.js";
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type {
@@ -6247,9 +6248,9 @@ async function applyLineEdits(
     fresh: RequestedLine[];
     /** Refuse a lower count where a removal would be refused, rather than take it. */
     refuseSentDrop?: true;
-    /** Keep a sent dish's options answer while the edit names no answer it does not hold: a
-     * rename since sending cannot be told from a change. */
-    keepSentAnswers?: true;
+    /** Keep a line's options answers while the edit names none it does not hold, and the line was
+     * sent or only its stored answers went unmatched: a rename cannot be told from a change. */
+    keepRecordedAnswers?: true;
   },
   operatorId: string | undefined,
   attendance?: OrderAttendance,
@@ -6455,10 +6456,15 @@ async function applyLineEdits(
     const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
     let optionSnapshots = parent.optionSnapshots;
     const keepAnswer =
-      plan.keepSentAnswers === true &&
+      plan.keepRecordedAnswers === true &&
       intent.options !== null &&
-      wasSent(parent) &&
-      asksNoNewAnswer(modifiers.options, intent.options.set, parent.optionSnapshots);
+      asksNoNewAnswer(modifiers.options, intent.options.set, parent.optionSnapshots) &&
+      (wasSent(parent) ||
+        onlyStoredAnswersUnmatched(
+          modifiers.options,
+          intent.options.set as OptionSelection[],
+          parent.optionSnapshots,
+        ));
     if (intent.options !== null && !keepAnswer) {
       optionSnapshots =
         editLineOptions(
@@ -7492,7 +7498,7 @@ export async function updateHeldOrder(
         removed: order.parents.filter((parent) => !claimed.has(parent.id)),
         fresh,
         refuseSentDrop: true,
-        keepSentAnswers: true,
+        keepRecordedAnswers: true,
       },
       req.operatorId,
       attendance,

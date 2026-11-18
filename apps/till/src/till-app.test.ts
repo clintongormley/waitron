@@ -8069,87 +8069,173 @@ describe("till-app", () => {
     );
   });
 
-  it("tells the operator when a still-offered list's frozen answer no longer matches it", async () => {
-    // The label was renamed between the park and the retrieve, so the six frozen names name nothing
-    // on offer. Substituting the list's default would change what the diner asked for on a line
-    // about to be billed, so the answer is left off and the operator is told to choose again.
-    const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
+  const oatMilkList = {
+    ...donenessList,
+    id: "list-leche",
+    name: "Leche",
+    labels: [{ ...donenessList.labels[0]!, id: "label-avena", name: "Avena" }],
+  };
+  const frozenMilk = {
+    ...frozenDoneness,
+    listName: { es: "Leche" },
+    labelName: { es: "Avena" },
+  };
+  const renamedDoneness = { ...frozenDoneness, labelName: { es: "Muy hecho" } };
+
+  async function retrieveAnswered(offered: TillProduct["offeredModifiers"], answers: object[]) {
+    const offering: TillProduct = { ...coffee, offeredModifiers: offered };
+    const order = answeredOrder(answers[0] as Record<string, unknown>);
+    order.lines[0]!.optionSnapshots = answers as never;
     const { el } = await mountApp({
       listDefaultZoneOffers: vi
         .fn()
         .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
-      retrieveWorkingOrder: vi
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(order),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+    });
+    const counter = await toCounter(el);
+    emit(counter, "retrieve-order", { id: "wo-answered" });
+    await flush(el);
+    return { el, counter };
+  }
+
+  it("keeps a retrieved line's frozen answer without asking again when it no longer matches its list", async () => {
+    // The label was renamed between the park and the retrieve, so the six frozen names name nothing
+    // on offer. The list's default is not substituted: the order keeps what the diner asked for.
+    const { el, counter } = await retrieveAnswered([donenessList], [renamedDoneness]);
+
+    const line = counter.store.lines[0]!;
+    expect(line.options).toBeUndefined();
+    expect(line.optionSnapshots).toEqual([renamedDoneness]);
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.reread_failed"));
+  });
+
+  it("does not offer a withdrawn label as the retrieved line's answer, and does not ask again", async () => {
+    const withdrawn = {
+      ...donenessList,
+      labels: donenessList.labels.map((label) =>
+        label.id === "label-medium" ? { ...label, available: false } : label,
+      ),
+    };
+    const { el, counter } = await retrieveAnswered([withdrawn], [frozenDoneness]);
+
+    expect(counter.store.lines[0]!.options).toBeUndefined();
+    expect(counter.store.lines[0]!.optionSnapshots).toEqual([frozenDoneness]);
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
+  });
+
+  it.each([
+    { held: "a matching answer", answers: [frozenDoneness] },
+    { held: "a renamed answer", answers: [renamedDoneness] },
+  ])("asks to choose again for a list added since the order held $held", async ({ answers }) => {
+    const { el } = await retrieveAnswered([donenessList, oatMilkList], answers);
+
+    expect(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
+  });
+
+  it("saves only the answers that still match, leaving the server to keep the rest", async () => {
+    const { el, counter } = await retrieveAnswered(
+      [donenessList, oatMilkList],
+      [renamedDoneness, frozenMilk],
+    );
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
+
+    counter.store.setLineQuantity(0, "3");
+    await el.updateComplete;
+    emit(counter, "confirm-payment", { method: "cash", amount: "10" });
+    await flush(el);
+
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith(
+      "wo-answered",
+      expect.objectContaining({
+        lines: [
+          {
+            makeAt: null,
+            workingOrderLineId: "line-answered",
+            menuItemId: "menu-item-cafe-0",
+            quantity: "3",
+            options: [{ listId: "list-leche", labelId: "label-avena" }],
+          },
+        ],
+      }),
+    );
+  });
+
+  it("adds a fresh dish beside a line keeping an answer from a deleted list, never into it", async () => {
+    const { el, counter } = await retrieveAnswered([], [frozenDoneness]);
+
+    counter.store.addProduct({ ...coffee, offeredModifiers: [] }, "1");
+    await el.updateComplete;
+    emit(counter, "confirm-payment", { method: "cash", amount: "10" });
+    await flush(el);
+
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith(
+      "wo-answered",
+      expect.objectContaining({
+        lines: [
+          {
+            makeAt: null,
+            workingOrderLineId: "line-answered",
+            menuItemId: "menu-item-cafe-0",
+            quantity: "2",
+          },
+          { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
+        ],
+      }),
+    );
+  });
+
+  it.each([
+    { kitchen: "sent", sentAt: "2026-11-17T20:00:00.000Z", firedAt: null },
+    { kitchen: "fired", sentAt: null, firedAt: "2026-11-17T20:00:00.000Z" },
+    { kitchen: "not sent", sentAt: null, firedAt: null },
+  ])("does not ask to choose a renamed answer again: $kitchen", async ({ sentAt, firedAt }) => {
+    const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
+    const listed: TabLine = {
+      changesAfterSending: "held-or-waiting",
+      stationId: null,
+      movable: false,
+      id: "line-answered",
+      groupId: null,
+      lineNo: 1,
+      productId: "cafe",
+      quantity: "2.000",
+      unitPriceGross: "1.50",
+      servedAt: null,
+      courseId: null,
+      sentAt,
+      firedAt,
+      state: null,
+      note: null,
+      listId: null,
+      menuItemId: "menu-item-cafe-0",
+      parentProductId: null,
+    };
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi
         .fn()
-        .mockResolvedValue(answeredOrder({ ...frozenDoneness, labelName: { es: "Muy hecho" } })),
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(renamedDoneness)),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [listed], revision: 0 }),
     });
     const counter = await toCounter(el);
 
     emit(counter, "retrieve-order", { id: "wo-answered" });
     await flush(el);
 
-    const line = counter.store.lines[0]!;
-    expect(line.options).toBeUndefined();
-    // The wording the order holds stays on screen — it is what the diner asked for.
-    expect(line.optionSnapshots).toEqual([{ ...frozenDoneness, labelName: { es: "Muy hecho" } }]);
-    expect(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
+    expect(counter.store.lines[0]!.optionSnapshots).toEqual([renamedDoneness]);
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
   });
 
-  it.each([
-    { kitchen: "sent", sentAt: "2026-11-17T20:00:00.000Z", firedAt: null, banner: false },
-    { kitchen: "fired", sentAt: null, firedAt: "2026-11-17T20:00:00.000Z", banner: false },
-    { kitchen: "not sent", sentAt: null, firedAt: null, banner: true },
-  ])(
-    "asks to choose a renamed answer again only on a line not yet sent: $kitchen",
-    async ({ sentAt, firedAt, banner }) => {
-      const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
-      const renamed = { ...frozenDoneness, labelName: { es: "Muy hecho" } };
-      const listed: TabLine = {
-        changesAfterSending: "held-or-waiting",
-        stationId: null,
-        movable: false,
-        id: "line-answered",
-        groupId: null,
-        lineNo: 1,
-        productId: "cafe",
-        quantity: "2.000",
-        unitPriceGross: "1.50",
-        servedAt: null,
-        courseId: null,
-        sentAt,
-        firedAt,
-        state: null,
-        note: null,
-        listId: null,
-        menuItemId: "menu-item-cafe-0",
-        parentProductId: null,
-      };
-      const { el } = await mountApp({
-        listDefaultZoneOffers: vi
-          .fn()
-          .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
-        retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(renamed)),
-        getTabLines: vi.fn().mockResolvedValue({ lines: [listed], revision: 0 }),
-      });
-      const counter = await toCounter(el);
-
-      emit(counter, "retrieve-order", { id: "wo-answered" });
-      await flush(el);
-
-      expect(counter.store.lines[0]!.optionSnapshots).toEqual([renamed]);
-      if (banner) expect(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
-      else expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
-    },
-  );
-
   it("asks to read the order again, not to choose again, when it cannot tell which lines were sent", async () => {
-    // Re-picking a renamed answer on a dish already sent recalls it, or is refused once started.
-    const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
-    const renamed = { ...frozenDoneness, labelName: { es: "Muy hecho" } };
+    // Choosing for the new list on a dish already sent recalls it, or is refused once started.
+    const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList, oatMilkList] };
     const { el } = await mountApp({
       listDefaultZoneOffers: vi
         .fn()
         .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
-      retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(renamed)),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(renamedDoneness)),
       getTabLines: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
     const counter = await toCounter(el);
@@ -8157,7 +8243,7 @@ describe("till-app", () => {
     emit(counter, "retrieve-order", { id: "wo-answered" });
     await flush(el);
 
-    expect(counter.store.lines[0]!.optionSnapshots).toEqual([renamed]);
+    expect(counter.store.lines[0]!.optionSnapshots).toEqual([renamedDoneness]);
     expect(el.shadowRoot!.textContent).toContain(t("held.reread_failed"));
     expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
   });
