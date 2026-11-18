@@ -522,13 +522,15 @@ time. Waitron marks it «DUPLICADO» and records who printed it and when, but as
 Following answer 1.3, a ticket will be issued when the meal ends, paid or not (the owner's
 decision D1). Waitron will print on every ticket the payments known at the moment it is printed: each
 payment, with the card's brand and last four digits, and the amount still owed, if any. A payment
-made after the original was printed will get a payment slip with no invoice number, no QR code and
-no amount owed. Answer 2.2 confirmed that such a slip, printed beside the ticket, is not an invoice;
-this one may be printed hours or days after the ticket.
+made after the original was printed, in cash or by a card keyed into a separate terminal, will print
+a payment slip if the till has a printer for slips. One made through a connected card reader will
+print the same slip only if a slip is requested when paying. The slip has no invoice number, no QR
+code and no amount owed. Answer 2.2 confirmed that such a slip, printed beside the ticket, is not an
+invoice; this one may be printed hours or days after the ticket.
 
 *Example.* A table's €60.00 ticket is issued at 22:00 and printed with «Pendiente: 60,00 €». The next
-morning the customer pays €60.00 by card, gets the payment slip, and asks for a ticket that shows the
-payment. Staff reprint it: marked «DUPLICADO», with the same number, lines, totals and QR code, plus
+morning the customer pays €60.00 by card, asks for the payment slip, and also asks for a ticket that
+shows the payment. Staff reprint it: marked «DUPLICADO», with the same number, lines, totals and QR code, plus
 «Visa ****4034 60,00 €» and no amount owed.
 
 *We ask:*
@@ -1120,13 +1122,15 @@ cuándo, pero no pide el motivo.
 A partir de su respuesta 1.3, el tique se expedirá al terminar la comida, esté pagado o no. Waitron
 imprimirá en cada tique los pagos que consten en el momento de imprimirlo: cada pago, con la marca y
 las cuatro últimas cifras de la tarjeta, y el importe pendiente, si lo hay. Un pago posterior a la
-impresión del original dará lugar a un justificante de pago sin número de factura, sin código QR y
-sin importe pendiente. Su respuesta 2.2 confirmó que un justificante así, impreso junto al tique, no
-es una factura; este puede imprimirse horas o días después del tique.
+impresión del original, en efectivo o con una tarjeta tecleada en un terminal aparte, imprimirá un
+justificante de pago si la caja tiene impresora para justificantes. Un pago con el datáfono conectado
+imprimirá el mismo justificante solo si se solicita al pagar. El justificante no lleva número de
+factura, código QR ni importe pendiente. Su respuesta 2.2 confirmó que un justificante así, impreso
+junto al tique, no es una factura; este puede imprimirse horas o días después del tique.
 
 *Ejemplo.* El tique de 60,00 € de una mesa se expide a las 22:00 y se imprime con «Pendiente: 60,00
-€». A la mañana siguiente el cliente paga 60,00 € con tarjeta, recibe el justificante de pago y pide
-un tique en el que conste el pago. El personal lo reimprime: lleva «DUPLICADO», el mismo número, las
+€». A la mañana siguiente el cliente paga 60,00 € con tarjeta, solicita el justificante de pago y
+pide además un tique en el que conste el pago. El personal lo reimprime: lleva «DUPLICADO», el mismo número, las
 mismas líneas, los mismos importes y el mismo código QR, y además «Visa ****4034 60,00 €», sin
 importe pendiente.
 
