@@ -329,6 +329,7 @@ export type ZoneOfferedModifier =
 
 /** One entry of a live menu's structure: an offer, or a section holding its own entries in order. */
 export type ZoneMenuMember =
+  | { readonly kind: "set_menu"; readonly menuId: string; readonly name: string }
   | { readonly kind: "product"; readonly menuItemId: string; readonly productId: string }
   | {
       readonly kind: "section";

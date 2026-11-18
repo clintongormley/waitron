@@ -53,6 +53,7 @@ export type FrozenOffer = Omit<
 
 export type DocumentMember =
   | { kind: "product"; menuItemId: string; productId: string }
+  | { kind: "set_menu"; menuId: string; name: string }
   | {
       kind: "section";
       includedMenu?: { id: string; name: string };

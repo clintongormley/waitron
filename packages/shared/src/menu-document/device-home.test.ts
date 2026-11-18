@@ -104,6 +104,19 @@ describe("indexDocument", () => {
     color: null,
     members,
   });
+  it("skips a set menu and indexes the ordinary members around it", () => {
+    const cola = product("cola");
+    const drinks = section("drinks", [product("water")]);
+    const set = { kind: "set_menu", menuId: "daily", name: "Daily menu" } satisfies DocumentMember;
+    const members = [cola, set, drinks];
+    expect(shownMembers(members)).toEqual([cola, drinks]);
+    const indexed = indexDocument(members, (id) => id);
+    expect([...indexed.products]).toEqual([
+      ["p-cola", "mi-cola"],
+      ["p-water", "mi-water"],
+    ]);
+    expect([...indexed.sections.keys()]).toEqual(["drinks"]);
+  });
   it("keeps each product at its first place and only sections with something to order", () => {
     const index = indexDocument(
       [section("drinks", [product("cola"), section("empty", [product("ghost")])]), product("cola")],
@@ -151,7 +164,7 @@ describe("shownMembers", () => {
     ...(direct ? { direct: true as const } : {}),
     members,
   });
-  const ids = (members: DocumentMember[]) =>
+  const ids = (members: ReturnType<typeof shownMembers>) =>
     members.map((member) => (member.kind === "section" ? member.sectionId : member.productId));
   it("puts a direct node's members in its place, one level at a time", () => {
     const folderB = section("folderB", [product("b1")]);

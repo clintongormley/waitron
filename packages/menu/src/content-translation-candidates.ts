@@ -96,7 +96,7 @@ export function namedRows(
     from section_members m left join sections s on s.id = m.child_section_id
       left join sections l on l.id = m.section_id left join menus c on c.id = l.owner_menu_id
       left join menus a on a.id = s.owner_menu_id
-    where ${filter("included_menu", sql`m.id`)}
+    where a.kind = 'menu' and ${filter("included_menu", sql`m.id`)}
     union all select 'unit', u.id, u.staff_name, u.name, null, null, null,
       null, null, null, null, 1, 1, 1, null, 1, u.abbreviation
     from units u where ${filter("unit", sql`u.id`)}

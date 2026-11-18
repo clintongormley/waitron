@@ -548,7 +548,7 @@ export class TillMenuBrowser extends LitElement {
       members.some((member) =>
         member.kind === "product"
           ? index.products.has(member.productId)
-          : holdsOffers(member.members),
+          : member.kind === "section" && holdsOffers(member.members),
       );
     return holdsOffers(section.members);
   }
@@ -789,7 +789,7 @@ export class TillMenuBrowser extends LitElement {
     index: MenuIndex,
     mode: HomeTileMode,
   ): TemplateResult | typeof nothing {
-    if (ref.kind === "empty") return nothing;
+    if (ref.kind === "empty" || ref.kind === "set_menu") return nothing;
     if (ref.kind === "section") {
       const id = ref.sectionId;
       const own = "members" in ref ? ref : undefined;

@@ -3,7 +3,14 @@ import { eq, getTableColumns } from "drizzle-orm";
 import { SECTION_NAME } from "./sections.js";
 import { menus, sectionMembers, sections, type Transaction } from "@waitron/db";
 import { FOLLOWING_FOLDER } from "./include-folder-presentation.js";
-import type { IncludeFolder, SectionMember, SectionRole, TileRef } from "@waitron/shared";
+import type {
+  IncludeFolder,
+  MemberRef,
+  MenuKind,
+  SectionMember,
+  SectionRole,
+  TileRef,
+} from "@waitron/shared";
 
 export interface SectionRow {
   id: string;
@@ -40,33 +47,57 @@ export interface SectionGraph {
   role(sectionId: string): SectionRole | undefined;
   ownerMenu(sectionId: string): string | null;
   section(sectionId: string): SectionRow | undefined;
-  menu(menuId: string): { name: string; active: boolean } | undefined;
+  menu(menuId: string): { name: string; active: boolean; kind: MenuKind } | undefined;
   roots(): { menuId: string; sectionId: string }[];
   /** How an include shows its menu; a member with no stored setting is a folder that follows. */
   folder(memberId: string): IncludeFolder;
 }
 
-export function toSectionMember(row: MemberRow): SectionMember<TileRef> {
+export function toSectionMember(
+  row: MemberRow,
+  setMenuRoots: ReadonlyMap<string, string>,
+): SectionMember<MemberRef | TileRef> {
+  const { id, position, childSectionId, productId } = row;
+  if (childSectionId !== null) {
+    const menuId = setMenuRoots.get(childSectionId);
+    return {
+      id,
+      position,
+      ref:
+        menuId === undefined
+          ? { kind: "section", sectionId: childSectionId }
+          : { kind: "set_menu", menuId },
+    };
+  }
   return {
-    id: row.id,
-    position: row.position,
+    id,
+    position,
     ref:
-      row.childSectionId === null
-        ? row.productId === null
-          ? { kind: "missing", name: row.missingName! }
-          : { kind: "product", productId: row.productId }
-        : { kind: "section", sectionId: row.childSectionId },
+      productId === null
+        ? { kind: "missing", name: row.missingName! }
+        : { kind: "product", productId },
   };
+}
+
+export function isTile(
+  member: SectionMember<MemberRef | TileRef>,
+): member is SectionMember<TileRef> {
+  return member.ref.kind !== "set_menu";
 }
 
 export function buildSectionGraph(
   sections: readonly SectionRow[],
   members: readonly MemberRow[],
-  menuRows: readonly { id: string; name: string; active: boolean }[] = [],
+  menuRows: readonly { id: string; name: string; active: boolean; kind?: MenuKind }[] = [],
 ): SectionGraph {
-  const byMenu = new Map(menuRows.map((row) => [row.id, row]));
+  const byMenu = new Map(menuRows.map((row) => [row.id, { ...row, kind: row.kind ?? "menu" }]));
+  const setMenuRoots = new Map(
+    sections
+      .filter((row) => row.role === "menu_root" && byMenu.get(row.ownerMenuId)?.kind === "set_menu")
+      .map((row) => [row.id, row.ownerMenuId]),
+  );
   const byId = new Map(sections.map((row) => [row.id, row]));
-  const children = new Map<string, SectionMember<TileRef>[]>();
+  const children = new Map<string, SectionMember<MemberRef | TileRef>[]>();
   const parents = new Map<string, Set<string>>();
   const folders = new Map<string, IncludeFolder>();
   const ordered = [...members].sort(
@@ -74,7 +105,7 @@ export function buildSectionGraph(
   );
   for (const row of ordered) {
     const list = children.get(row.sectionId) ?? [];
-    list.push(toSectionMember(row));
+    list.push(toSectionMember(row, setMenuRoots));
     children.set(row.sectionId, list);
     const overrides = overridesFromRow(row);
     if (row.showAsFolder === false || Object.keys(overrides).length > 0)
@@ -98,7 +129,7 @@ export function buildSectionGraph(
         : (children.get(sectionId) ?? []).filter(
             (member): member is SectionMember => member.ref.kind !== "missing",
           ),
-    tiles: (homeSectionId) => children.get(homeSectionId) ?? [],
+    tiles: (homeSectionId) => (children.get(homeSectionId) ?? []).filter(isTile),
     parents: (sectionId) => [...(parents.get(sectionId) ?? [])],
     role: (sectionId) => byId.get(sectionId)?.role,
     ownerMenu: (sectionId) => byId.get(sectionId)?.ownerMenuId ?? null,
@@ -128,7 +159,7 @@ export async function loadSectionGraph(tx: Transaction): Promise<SectionGraph> {
     })
     .from(sectionMembers);
   const menuRows = await tx
-    .select({ id: menus.id, name: menus.name, active: menus.active })
+    .select({ id: menus.id, name: menus.name, active: menus.active, kind: menus.kind })
     .from(menus);
   return buildSectionGraph(sectionRows, memberRows, menuRows);
 }
@@ -169,7 +200,7 @@ export function reachableFrom(
     visited.add(sectionId);
     for (const { ref } of graph.children(sectionId)) {
       if (ref.kind === "product") products.add(ref.productId);
-      else {
+      else if (ref.kind === "section") {
         sections.add(ref.sectionId);
         walk(ref.sectionId);
       }
@@ -194,7 +225,8 @@ export function placementsByProduct(graph: SectionGraph, rootId: string): Map<st
         const paths = found.get(ref.productId) ?? [];
         paths.push(path);
         found.set(ref.productId, paths);
-      } else if (!path.includes(ref.sectionId)) walk([...path, ref.sectionId]);
+      } else if (ref.kind === "section" && !path.includes(ref.sectionId))
+        walk([...path, ref.sectionId]);
     }
   };
   walk([rootId]);

@@ -214,7 +214,11 @@ describe("seedMenus", () => {
       const sectionNames = new Map(sections.map((row) => [row.id, row.internalName]));
       const topLevel = async (menuId: string) =>
         (await readMenuStructure(tx, menuId)).nodes.map(({ ref }) =>
-          ref.kind === "section" ? sectionNames.get(ref.sectionId) : ref.productId,
+          ref.kind === "section"
+            ? sectionNames.get(ref.sectionId)
+            : ref.kind === "product"
+              ? ref.productId
+              : ref.menuId,
         );
       const negroni = productsByImage.get("negroni.png")!;
       const lunchNegroni = (await listMenuOffers(tx, [menuIds.lunch])).find(

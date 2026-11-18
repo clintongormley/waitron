@@ -73,7 +73,7 @@ function placedIn(
 ): Placed {
   for (const member of members)
     if (member.kind === "product") into.products.add(member.productId);
-    else {
+    else if (member.kind === "section") {
       into.sections.add(member.sectionId);
       placedIn(member.members, into);
     }
@@ -867,7 +867,7 @@ export class DeviceHomePreview extends LitElement {
     index: PreviewIndex,
     mode: HomeTileMode,
   ): TemplateResult | typeof nothing {
-    if (ref.kind === "empty") return nothing;
+    if (ref.kind === "empty" || ref.kind === "set_menu") return nothing;
     if (ref.kind === "section") {
       if (!index.sections.has(ref.sectionId)) return nothing;
       const section = "members" in ref ? ref : openedSection(ref.sectionId, index)!;

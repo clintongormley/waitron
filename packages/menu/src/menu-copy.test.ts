@@ -23,7 +23,7 @@ import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember, createSectionIn, deleteSection, removeMember } from "./sections.js";
 import { membersOf } from "./section-members.js";
-import type { TileRef } from "@waitron/shared";
+import type { MemberRef, TileRef } from "@waitron/shared";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 
 const fx = useMenuDb();
@@ -416,7 +416,7 @@ describe("duplicateMenu", () => {
             (section) => [section.id, section.internalName],
           ),
         );
-        const named = (members: readonly { position: number; ref: TileRef }[]) =>
+        const named = (members: readonly { position: number; ref: MemberRef | TileRef }[]) =>
           members.map(({ position, ref }) => [
             position,
             ref.kind === "section" ? names.get(ref.sectionId) : ref.kind,

@@ -200,7 +200,7 @@ export function validateMenuConfiguration(
   checkColors(tables.products, "products");
   checkColors(tables.categories, "categories");
   checkColors(tables.sections, "sections");
-  checkIncludeFolderRows(tables.section_members, tables.sections);
+  checkIncludeFolderRows(tables.section_members, tables.sections, tables.menus);
   const parentOf = new Map((tables.categories ?? []).map((row) => [row.id, row.parent_id ?? null]));
   const byParent = new Map<unknown, string[]>();
   for (const category of tables.categories ?? []) {

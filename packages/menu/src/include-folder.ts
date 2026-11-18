@@ -110,6 +110,7 @@ export async function setIncludeFolder(
 ): Promise<IncludeFolder> {
   const graph = await loadSectionGraph(tx);
   const { ref } = writableMember(graph, listId, memberId);
+  if (ref.kind === "set_menu") throw new AppError("set_menu.wrong_place", { menuId: ref.menuId });
   if (ref.kind !== "section") throw new AppError("menu_section.membership_invalid", {});
   const role = graph.role(ref.sectionId)!;
   if (role !== "menu_root")
@@ -170,22 +171,26 @@ function importedOverrides(row: Record<string, unknown>): IncludeFolderOverrides
 export function checkIncludeFolderRows(
   members: Rows | undefined,
   sections: Rows | undefined,
+  menus: Rows | undefined,
 ): void {
   for (const row of sections ?? [])
     if (
       row.role === "menu_root" ? row.internal_name != null : typeof row.internal_name !== "string"
     )
       throw new AppError("setup.request_invalid", { field: "sections.internal_name" });
-  const roles = new Map((sections ?? []).map((row) => [row.id, row.role]));
+  const sets = new Set((menus ?? []).filter((row) => row.kind === "set_menu").map((row) => row.id));
+  const byId = new Map((sections ?? []).map((row) => [row.id, row]));
   for (const row of members ?? []) {
     const show = row.show_as_folder;
     if (![undefined, 0, 1, true, false].includes(show as never))
       throw new AppError("setup.request_invalid", { field: "section_members.show_as_folder" });
     const overrides = importedOverrides(row);
-    const parentRole = roles.get(row.section_id);
+    const parentRole = byId.get(row.section_id)?.role;
+    const child = byId.get(row.child_section_id);
     const isInclude =
       typeof row.child_section_id === "string" &&
-      roles.get(row.child_section_id) === "menu_root" &&
+      child?.role === "menu_root" &&
+      !sets.has(child.owner_menu_id) &&
       parentRole !== undefined &&
       parentRole !== "home_layout";
     if (isInclude) continue;

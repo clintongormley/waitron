@@ -85,6 +85,7 @@ export function publicGuestMenu(
                 members: walk(member.members),
               },
             ];
+      if (member.kind !== "product") return [];
       const offer = document.offers[member.menuItemId]!;
       return [
         {

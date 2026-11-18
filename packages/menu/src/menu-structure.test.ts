@@ -47,8 +47,8 @@ import type { MemberRef } from "@waitron/shared";
 const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
-const product = (productId: string): MemberRef => ({ kind: "product", productId });
-const section = (sectionId: string): MemberRef => ({ kind: "section", sectionId });
+const product = (productId: string) => ({ kind: "product", productId }) as const;
+const section = (sectionId: string) => ({ kind: "section", sectionId }) as const;
 
 function stripPresentation(node: import("./menu-structure.js").MenuStructureNode): object {
   return {
@@ -124,7 +124,10 @@ async function fixture(): Promise<Fixture> {
 }
 
 /** The member of `sectionId` holding `ref`. */
-async function memberHolding(sectionId: string, ref: MemberRef): Promise<string> {
+async function memberHolding(
+  sectionId: string,
+  ref: Extract<MemberRef, { kind: "product" | "section" }>,
+): Promise<string> {
   const { rows } = await fx.db.execute<{ id: string }>(sql`
     select id from section_members where section_id = ${sectionId}
       and ${ref.kind === "product" ? sql`product_id = ${ref.productId}` : sql`child_section_id = ${ref.sectionId}`}`);
@@ -199,6 +202,7 @@ describe("creating a menu", () => {
       nodes: [],
       includable: [],
       includedBy: [],
+      placeableSetMenus: [],
     });
   });
 
