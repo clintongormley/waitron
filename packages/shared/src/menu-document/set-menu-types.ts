@@ -23,13 +23,6 @@ export type SetMenuProblem =
       courseId: string;
       courseName: string;
     }
-  | {
-      kind: "dish_vat_class_differs";
-      productId: string;
-      name: string;
-      parentName: string | null;
-      vatClass: VatClass;
-    }
   | { kind: "dish_sold_by_measure"; productId: string; name: string };
 
 export interface SetMenuTerms {

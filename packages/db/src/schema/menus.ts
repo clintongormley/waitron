@@ -50,6 +50,7 @@ export const menus = table(
     kind: menuKind("kind").notNull().default("menu"),
     setPrice: money("set_price"),
     setVatClass: label("set_vat_class"),
+    setTakeawayVatClass: label("set_takeaway_vat_class"),
   },
   (t) => [
     check(
@@ -68,10 +69,11 @@ export const menus = table(
     check(
       "menus_set_terms_ck",
       sql`(${t.kind} = 'set_menu' and ${t.setPrice} is not null and ${t.setVatClass} is not null)
-        or (${t.kind} = 'menu' and ${t.setPrice} is null and ${t.setVatClass} is null)`,
+        or (${t.kind} = 'menu' and ${t.setPrice} is null and ${t.setVatClass} is null and ${t.setTakeawayVatClass} is null)`,
     ),
     check("menus_set_price_ck", sql`${t.setPrice} is null or ${t.setPrice} >= 0`),
     check("menus_set_vat_class_ck", sql`${t.setVatClass} in ${vatClasses}`),
+    check("menus_set_takeaway_vat_class_ck", sql`${t.setTakeawayVatClass} in ${vatClasses}`),
     check("menus_set_not_default_ck", sql`${t.kind} = 'menu' or ${t.isDefault} = 0`),
     uniqueIndex("menus_one_default_uq")
       .on(t.isDefault)

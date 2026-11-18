@@ -864,7 +864,9 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
   (the rate on the day of issue).
 - A drink rung up at the counter as drunk on the premises stays at 10% when the customer carries
   it out, and staff may ring it up that way when the customer says nothing: "yes".
-- A set menu takes its main item's rate ([A1515](menu.md#a1515-set-menus)).
+- A set menu carries its own eat-in and takeaway rates and can include dishes at any rate.
+  Surcharges and paid extras sold as part of it use the menu's rate
+  ([A1515](menu.md#a1515-set-menus), watcher, 18 November at 20:28).
 - **Waiting:** drinks served in the restaurant without food may take 21%, certainly once the
   kitchen has stopped serving; unsettled, and the adviser will come back on it.
 

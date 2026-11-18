@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0cb38c47-b72f-43be-b70e-cf0c0aa4fb8d",
+  "id": "59b94b80-49ac-4b0f-aff8-7362ea20f1f2",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -7020,6 +7020,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "set_takeaway_vat_class": {
+          "name": "set_takeaway_vat_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -7066,7 +7073,7 @@
         },
         "menus_set_terms_ck": {
           "name": "menus_set_terms_ck",
-          "value": "(\"menus\".\"kind\" = 'set_menu' and \"menus\".\"set_price\" is not null and \"menus\".\"set_vat_class\" is not null)\n        or (\"menus\".\"kind\" = 'menu' and \"menus\".\"set_price\" is null and \"menus\".\"set_vat_class\" is null)"
+          "value": "(\"menus\".\"kind\" = 'set_menu' and \"menus\".\"set_price\" is not null and \"menus\".\"set_vat_class\" is not null)\n        or (\"menus\".\"kind\" = 'menu' and \"menus\".\"set_price\" is null and \"menus\".\"set_vat_class\" is null and \"menus\".\"set_takeaway_vat_class\" is null)"
         },
         "menus_set_price_ck": {
           "name": "menus_set_price_ck",
@@ -7075,6 +7082,10 @@
         "menus_set_vat_class_ck": {
           "name": "menus_set_vat_class_ck",
           "value": "\"menus\".\"set_vat_class\" in ('general','reduced','super_reduced','zero')"
+        },
+        "menus_set_takeaway_vat_class_ck": {
+          "name": "menus_set_takeaway_vat_class_ck",
+          "value": "\"menus\".\"set_takeaway_vat_class\" in ('general','reduced','super_reduced','zero')"
         },
         "menus_set_not_default_ck": {
           "name": "menus_set_not_default_ck",

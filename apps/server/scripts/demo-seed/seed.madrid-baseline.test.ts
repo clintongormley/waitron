@@ -1118,6 +1118,7 @@ for (const locale of ["en", "es"] as const) {
         row.kind = "menu";
         row.set_price = null;
         row.set_vat_class = null;
+        row.set_takeaway_vat_class = null;
       }
       const products = expected[phase].tables.products!;
       products.columns.splice(
@@ -2584,6 +2585,7 @@ for (const locale of ["en", "es"] as const) {
         { name: "kind", type: "TEXT", notnull: 1, dflt_value: "'menu'", pk: 0 },
         { name: "set_price", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
         { name: "set_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+        { name: "set_takeaway_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
       );
 
       delete phases[phase]!.menu_details;

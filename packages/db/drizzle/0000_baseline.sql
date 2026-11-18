@@ -1079,6 +1079,7 @@ CREATE TABLE `menus` (
 	`kind` text DEFAULT 'menu' NOT NULL,
 	`set_price` integer,
 	`set_vat_class` text,
+	`set_takeaway_vat_class` text,
 	CONSTRAINT "menus_handheld_columns_ck" CHECK("menus"."handheld_columns" between 2 and 3),
 	CONSTRAINT "menus_till_columns_ck" CHECK("menus"."till_columns" between 4 and 10),
 	CONSTRAINT "menus_handheld_tiles_ck" CHECK("menus"."handheld_tiles" in ('colours', 'thumbnails')),
@@ -1087,9 +1088,10 @@ CREATE TABLE `menus` (
 	CONSTRAINT "menus_till_order_ck" CHECK("menus"."till_order" in ('home_first', 'menu_first')),
 	CONSTRAINT "menus_kind_ck" CHECK("menus"."kind" in ('menu', 'set_menu')),
 	CONSTRAINT "menus_set_terms_ck" CHECK(("menus"."kind" = 'set_menu' and "menus"."set_price" is not null and "menus"."set_vat_class" is not null)
-        or ("menus"."kind" = 'menu' and "menus"."set_price" is null and "menus"."set_vat_class" is null)),
+        or ("menus"."kind" = 'menu' and "menus"."set_price" is null and "menus"."set_vat_class" is null and "menus"."set_takeaway_vat_class" is null)),
 	CONSTRAINT "menus_set_price_ck" CHECK("menus"."set_price" is null or "menus"."set_price" >= 0),
 	CONSTRAINT "menus_set_vat_class_ck" CHECK("menus"."set_vat_class" in ('general','reduced','super_reduced','zero')),
+	CONSTRAINT "menus_set_takeaway_vat_class_ck" CHECK("menus"."set_takeaway_vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "menus_set_not_default_ck" CHECK("menus"."kind" = 'menu' or "menus"."is_default" = 0)
 );
 --> statement-breakpoint

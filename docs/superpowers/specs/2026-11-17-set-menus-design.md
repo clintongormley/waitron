@@ -1,6 +1,6 @@
 # Set menus (A1515): design
 
-_2026-11-18: T17 and question 26(c) have the owner's answer, the adviser still to confirm the details — see question 4 of the [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md): a set menu takes its main item's VAT rate, eaten in or taken away, and is not split by its items' prices._
+_2026-11-18: The owner decided that set menus carry their own eat-in and takeaway VAT rates, may include dishes at any rate, and can be sold for takeaway. Supplements take the applicable set-menu rate. See the [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md)._
 
 Status: approved by the owner in conversation, 17 November 2026 ("yes"), after reading the list
 of the writer's calls; the calls stay marked **my call** below. **Revised on 18 November 2026** by
@@ -63,12 +63,11 @@ are charged as usual.
 - The bill choosing set-menu types, or moving dishes between set menus by itself (**owner**, 18
   November: "we may yet come back to automatically reassigning plates, but this seems like a
   simpler place to begin").
-- Set menus on counter orders. A set menu goes only on the bill of a seated table: a table in a
-  table-service zone, which includes a bar whose stools are set up as tables in such a zone
-  (**owner**, 17 November: "these set menus are only for tables/bars with seating"). A counter
-  order, eaten in or not, is never offered one. Other dishes are not limited this way: whether a
-  standing guest can have a dish is the waiter's call (owner, 17 November).
-- Set menus on takeaway or delivery orders, while adviser question T17 is open (see "Counter orders and takeaway").
+- Set menus on eat-in counter orders. Eat-in set menus go on the bill of a seated table,
+  including a bar whose stools are set up as tables in a table-service zone
+  (**owner**, 17 November: "these set menus are only for tables/bars with seating").
+  Whether a standing guest can have an ordinary dish is the waiter's call (owner, 17 November).
+  The [ordering plan](../plans/2026-11-18-a1515-set-menu-ordering.md) covers takeaway and delivery.
 - A selling schedule of the set menu's own. A set menu sells when the full menu it sits in sells,
   under that menu's existing periods (**owner**, 12 November: "with set menus, having a selling
   times section doesn't make sense - that can already be handled with periods and menus").
@@ -119,7 +118,7 @@ has no published versions of its own: it is copied into each full menu that hold
 **The editor is one page** (**owner**: drop the sections, products and "counts as" tabs of the first
 mock-up; dishes first, then the rules). Its parts, in order:
 
-- **Name** and **price per set menu** (gross, with VAT).
+- **Name**, **price per set menu** (gross), **eat-in VAT** and optional **takeaway VAT**.
 - **Dishes this set menu covers.** "Add products" adds products to the list. Adding a product
   that has variants lets the person choose which of its variants the set menu includes, and the
   choice can be changed later (**owner**, 17 November: "when we add products to a set menu we
@@ -137,10 +136,7 @@ mock-up; dishes first, then the rules). Its parts, in order:
   able to change the course they belong to from the default course. for instance we could treat a
   tapa as a starter"; asked whether that course also decides when the dish is sent: "both"). The
   dish then counts as that course on the bill and is sent with it; the same product à la carte is
-  unchanged. Until adviser question 26(c) is answered, a product whose eat-in VAT rate differs from
-  the set menu's cannot be added ("This product is taxed at 21%, the set menu at 10%"), because a
-  covered dish at another rate may need a share of the set menu's price (**owner**, 18 November,
-  on lane L's advice). A product with no course is listed under **No course** with "Choose a course for it
+  unchanged. A product with no course is listed under **No course** with "Choose a course for it
   here, or give it one on the product" and a link to the product; a set menu holding a dish with no
   course cannot be published.
 - **What one set menu includes.** A list of lines, each "N × course", where a line may accept more
@@ -315,15 +311,12 @@ for display as they do today (**my call**; `apps/server/src/receipt-lines.ts:150
 
 ### 4. The bill, the receipt and the invoice (passes lane L; the owner lands it)
 
-**VAT at the table.** A set menu eaten at the table is one restaurant service at 10%, drinks
-included (the watcher, relaying the owner, 12 November: "At the table, the whole set lunch is one
-10% service"; T17's reading, LIVA 91.Uno.2.2.º). The set-menu line takes the eat-in rate the set
-menu is given on the dashboard; a surcharge and a paid extra take their dish's eat-in rate, as any
-eat-in line does. Covered dishes at 0 carry no VAT. If the product VAT-rate redesign
-(`docs/handoffs/2026-11-16-vat-rates-per-product.md`, waiting for the adviser) lands first, the set
-menu takes a dated eat-in rate the way a product does. A covered dish takes its set menu's VAT
-class while it is covered, so that a 0.00 line at another rate adds no empty rate row to the
-breakdown (piece 4's plan, decision 7, confirmed by lane L on 18 November).
+**VAT on a set menu.** The set-menu price, supplements and paid extras sold as part of the menu
+use the set menu's own eat-in or takeaway rate (watcher, 18 November at 20:28, applying the owner's
+VAT decision). With an empty takeaway override, the eat-in rate applies. Covered dishes cost zero
+and carry the set menu's class so they add no empty row at another rate to the VAT breakdown.
+A dish sold on its own keeps its own rates. The product VAT-rate redesign and this work will need
+to agree on dated rates if the redesign lands first.
 
 **Receipt.** The receipt lists the set menus and the surcharges, not every covered dish at 0.00
 (**owner**). Paid extras on a set-menu dish are priced lines and are printed. How they are worded
@@ -360,15 +353,14 @@ A). Food-versus-drink revenue therefore does not split out for set-menu sales.
 
 ### 5. Counter orders and takeaway
 
-A counter order is never offered a set menu, and the server refuses a set menu or a set-menu dish
+An eat-in counter order offers no set menu. The server refuses a set menu or set-menu dish
 on one (**owner**, see Non-goals). A till at a counter can still order set menus for a seated
 table's bill, since what a bill may hold follows the table's zone, not the till's.
 
-While T17 is open, a takeaway or delivery order refuses a set menu, and switching an order holding
-set menus to takeaway is refused, as the set-lunch build did (`order.set_lunch_takeaway`, being
-removed with that build). The new refusal names the set menu and offers the à la carte alternative
-(**my call** on wording; follows CLAUDE.md §3 "A refusal explains what happened and what each choice
-does").
+Takeaway orders can hold a set menu even when they start at the counter (watcher, 18 November
+at 20:40, applying the owner's takeaway decision). Takeaway and delivery use the takeaway class
+for the set menu, supplements and paid extras. The
+[ordering plan](../plans/2026-11-18-a1515-set-menu-ordering.md) defines which bills can hold a set menu.
 
 ### 6. Courses for drinks, bread and coffee
 
@@ -430,8 +422,6 @@ Order: A1515-REMOVE lands first. Then 1 and 3 can go side by side; 2 needs both;
 
 ## Open, outside this design
 
-- **T17** (takeaway set menus and their VAT split): question 1 on the adviser sheet for
-  19 November 2026.
 - **Lane L:** whether covered dishes may be left off the ticket and the full invoice; how paid
   extras of a covered dish are worded.
 - **The product VAT-rate redesign:** whichever lands second adapts to the first.

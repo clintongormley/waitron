@@ -80,114 +80,123 @@ beforeEach(async () => {
   f = await app(fixture);
 });
 
-const differentClass = (productId: string) => ({
-  code: "set_menu.vat_class_differs",
-  params: { productId, productVatClass: "general", setMenuVatClass: "reduced" },
-});
 const reading = () => app((tx) => readSetMenu(tx, f.menuId));
 const choices = (includeBottle: boolean, surcharge: string | null = null) => [
   { variantId: f.glass, included: true, surcharge },
   { variantId: f.bottle, included: includeBottle, surcharge: null },
 ];
 
-it("refuses a different eat-in class before adding or replacing any dishes", async () => {
-  const member = await app((tx) => addMember(tx, f.root, { kind: "product", productId: f.soup }));
-  const before = await reading();
-  const source = await app(async (tx) => {
-    const menu = await createMenu(tx, { ...terms, name: "Evening menu", setVatClass: "general" });
-    await addSetMenuDishes(tx, menu.id, [pick(f.sirloin)]);
-    return menu;
-  });
-  await app(async (tx) => {
-    const ref = { kind: "product", productId: f.sirloin } as const;
-    for (const write of [
-      () => addSetMenuDishes(tx, f.menuId, [pick(f.sirloin)]),
-      () => addProducts(tx, f.root, [f.sirloin]),
-      () => addMember(tx, f.root, ref),
-      () => replaceMember(tx, f.root, member.id, ref),
-      () => copySetMenuDishes(tx, f.menuId, source.id),
-    ]) {
-      await expect(write()).rejects.toMatchObject(differentClass(f.sirloin));
-      expect(await readSetMenu(tx, f.menuId)).toEqual(before);
-    }
-  });
-});
-
-it("checks a kept variant's eat-in class, with inheritance from its parent", async () => {
-  await expect(app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.wine)]))).rejects.toMatchObject(
-    differentClass(f.bottle),
+function measuredUnit(tx: Transaction) {
+  return createUnit(
+    tx,
+    {
+      staffName: "Kilogram",
+      staffAbbreviation: "kg",
+      name: { en: "Kilogram" },
+      abbreviation: { en: "kg" },
+      precision: 3,
+      measure: true,
+    },
+    "en",
   );
+}
+
+it.each(["add", "add products", "add member", "replace", "copy"] as const)(
+  "%s accepts another VAT rate and refuses a dish sold by measure",
+  async (operation) => {
+    const ref = { kind: "product", productId: f.sirloin } as const;
+    const member = await app((tx) => addMember(tx, f.root, { kind: "product", productId: f.soup }));
+    const source = await app(async (tx) => {
+      const menu = await createMenu(tx, { ...terms, name: "Evening menu", setVatClass: "general" });
+      await addSetMenuDishes(tx, menu.id, [pick(f.sirloin)]);
+      return menu;
+    });
+    const write = () =>
+      app(async (tx) => {
+        const writes = {
+          add: () => addSetMenuDishes(tx, f.menuId, [pick(f.sirloin)]),
+          "add products": () => addProducts(tx, f.root, [f.sirloin]),
+          "add member": () => addMember(tx, f.root, ref),
+          replace: () => replaceMember(tx, f.root, member.id, ref),
+          copy: () => copySetMenuDishes(tx, f.menuId, source.id),
+        };
+        await writes[operation]();
+      });
+    await app(async (tx) => {
+      const unit = await measuredUnit(tx);
+      await updateProduct(tx, f.sirloin, { unitId: unit.id });
+    });
+    await expect(write()).rejects.toMatchObject({
+      code: "set_menu.dish_sold_by_measure",
+      params: { productId: f.sirloin },
+    });
+    expect((await reading()).dishes.map(({ productId }) => productId)).toEqual([f.soup]);
+
+    await app((tx) => updateProduct(tx, f.sirloin, { unitId: null }));
+    await write();
+    expect((await reading()).dishes.map(({ productId }) => productId)).toEqual(
+      operation === "replace" ? [f.sirloin] : [f.soup, f.sirloin],
+    );
+  },
+);
+
+it("can keep a variant whose rate differs from the set menu's", async () => {
   await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.wine, f.bottle)]));
   const [dish] = (await reading()).dishes;
   expect(dish!.variants.map(({ id, included }) => ({ id, included }))).toEqual([
     { id: f.glass, included: true },
     { id: f.bottle, included: false },
   ]);
-  await expect(
-    app((tx) => saveSetMenuVariantChoices(tx, f.menuId, dish!.menuItemId, choices(true))),
-  ).rejects.toMatchObject(differentClass(f.bottle));
-  expect((await reading()).dishes[0]).toEqual(dish);
-});
-
-it("uses the eat-in class when the takeaway class differs", async () => {
-  await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.soup)]));
-  expect((await reading()).dishes).toMatchObject([{ productId: f.soup, vatClass: "reduced" }]);
-});
-
-it("allows changing the VAT class before adding dishes", async () => {
-  await app((tx) => updateMenuDetails(tx, f.menuId, { setVatClass: "general" }));
-  await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.sirloin)]));
-  expect((await reading()).vatClass).toBe("general");
-});
-
-it("names the dish that prevents a class change below the VAT class field", async () => {
-  await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.soup)]));
-  await expect(
-    app((tx) => updateMenuDetails(tx, f.menuId, { setVatClass: "general" })),
-  ).rejects.toMatchObject({
-    code: "set_menu.vat_class_differs",
-    params: {
-      productId: f.soup,
-      productVatClass: "reduced",
-      setMenuVatClass: "reduced",
-      field: "setVatClass",
-      requestedVatClass: "general",
-    },
+  const includeBottle = () =>
+    app((tx) => saveSetMenuVariantChoices(tx, f.menuId, dish!.menuItemId, choices(true)));
+  await app(async (tx) => {
+    const unit = await measuredUnit(tx);
+    await updateProduct(tx, f.wine, { unitId: unit.id });
   });
-  expect((await reading()).vatClass).toBe("reduced");
-});
-
-it("reports a changed product class in its set menu's problems", async () => {
-  await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.soup), pick(f.wine, f.bottle)]));
-  expect((await reading()).problems).not.toContainEqual(
-    expect.objectContaining({
-      kind: "dish_vat_class_differs",
-    }),
+  await expect(includeBottle()).rejects.toMatchObject({
+    code: "set_menu.dish_sold_by_measure",
+    params: { productId: f.wine },
+  });
+  expect((await reading()).dishes[0]!.variants).toEqual(dish!.variants);
+  await app((tx) =>
+    saveSetMenuVariantChoices(
+      tx,
+      f.menuId,
+      dish!.menuItemId,
+      choices(false).map((choice) => ({ ...choice, included: false })),
+    ),
   );
+  expect((await reading()).dishes[0]!.variants.map(({ included }) => included)).toEqual([
+    false,
+    false,
+  ]);
+
+  await app((tx) => updateProduct(tx, f.wine, { unitId: null }));
+  await includeBottle();
+  expect(
+    (await reading()).dishes[0]!.variants.map(({ id, included }) => ({ id, included })),
+  ).toEqual([
+    { id: f.glass, included: true },
+    { id: f.bottle, included: true },
+  ]);
+});
+
+it("can change the menu rate when an existing dish has a different rate", async () => {
+  await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.soup)]));
+  await app((tx) => updateMenuDetails(tx, f.menuId, { setVatClass: "general" }));
+  expect(await reading()).toMatchObject({ vatClass: "general", dishes: [{ productId: f.soup }] });
+});
+
+it("keeps the same draft problems after a dish's VAT rate changes", async () => {
+  await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.soup), pick(f.wine, f.bottle)]));
+  const { problems } = await reading();
   await app((tx) => updateProduct(tx, f.soup, { vatClass: "general" }));
-  expect((await reading()).problems).toContainEqual({
-    kind: "dish_vat_class_differs",
-    productId: f.soup,
-    name: "Soup",
-    parentName: null,
-    vatClass: "general",
-  });
+  expect((await reading()).problems).toEqual(problems);
 });
 
 it("refuses measured dishes and reports a dish switched to a measured unit later", async () => {
   const turbot = await app(async (tx) => {
-    const unit = await createUnit(
-      tx,
-      {
-        staffName: "Kilogram",
-        staffAbbreviation: "kg",
-        name: { en: "Kilogram" },
-        abbreviation: { en: "kg" },
-        precision: 3,
-        measure: true,
-      },
-      "en",
-    );
+    const unit = await measuredUnit(tx);
     const fish = await createProduct(tx, {
       name: "Turbot",
       categoryId: null,
@@ -248,30 +257,14 @@ it("caps a kept variant surcharge at 10,000.00", async () => {
   expect((await reading()).dishes[0]!.variants[0]!.surcharge).toBe("10000.00");
 });
 
-it("keeps an existing member when replacing it with the same product after its class changed", async () => {
+it("keeps a measured dish when replacing its member with the same product", async () => {
   const ref = { kind: "product", productId: f.soup } as const;
   const member = await app((tx) => addMember(tx, f.root, ref));
-  await app((tx) => updateProduct(tx, f.soup, { vatClass: "general" }));
+  await app(async (tx) => {
+    const unit = await measuredUnit(tx);
+    await updateProduct(tx, f.soup, { unitId: unit.id });
+  });
   const before = await reading();
   expect(await app((tx) => replaceMember(tx, f.root, member.id, ref))).toEqual(member);
   expect(await reading()).toEqual(before);
-});
-
-it("checks the listed product's class when every kept variant has a matching class of its own", async () => {
-  const other = await app(async (tx) => {
-    await updateProduct(tx, f.glass, { vatClass: "reduced" });
-    await addSetMenuDishes(tx, f.menuId, [pick(f.wine, f.bottle)]);
-    await updateProduct(tx, f.wine, { vatClass: "general" });
-    return createMenu(tx, { ...terms, name: "Other menu" });
-  });
-  expect((await reading()).problems).toContainEqual({
-    kind: "dish_vat_class_differs",
-    productId: f.wine,
-    name: "Wine",
-    parentName: null,
-    vatClass: "general",
-  });
-  await expect(
-    app((tx) => addSetMenuDishes(tx, other.id, [pick(f.wine, f.bottle)])),
-  ).rejects.toMatchObject(differentClass(f.wine));
 });
