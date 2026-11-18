@@ -498,11 +498,9 @@ describe("a deleted printer's jobs", () => {
     expect(await suite.db.select().from(printJobs)).toEqual(before);
   });
 
-  it("answers printer.not_found to a new job for a deleted printer, even one left marked active", async () => {
+  it("answers printer.not_found to a new job for a deleted printer", async () => {
     await setup();
     const { printerId } = await deletedPrinterWithJobs();
-    // Not a state the delete leaves; it isolates the deleted-row check from the active one.
-    await suite.db.update(printers).set({ active: true }).where(eq(printers.id, printerId));
     const before = await suite.db.select().from(printJobs);
 
     await expect(

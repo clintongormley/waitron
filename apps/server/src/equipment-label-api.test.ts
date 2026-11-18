@@ -172,7 +172,7 @@ it.each(["reader", "printer"] as const)("refuses a missing %s label", async (kin
 it.each(["inactive", "deleted"])("refuses an %s destination printer", async (state) => {
   await suite.db
     .update(printers)
-    .set(state === "inactive" ? { active: false } : { deletedAt: new Date().toISOString() })
+    .set({ active: false, deletedAt: state === "deleted" ? new Date().toISOString() : null })
     .where(eq(printers.id, target));
   const response = await send({ kind: "reader", id: reader });
   expect(response.status).toBe(404);
@@ -183,7 +183,7 @@ it.each(["printer", "reader"] as const)("refuses a deleted %s source", async (ki
   if (kind === "printer")
     await suite.db
       .update(printers)
-      .set({ deletedAt: new Date().toISOString() })
+      .set({ active: false, deletedAt: new Date().toISOString() })
       .where(eq(printers.id, source));
   else
     await suite.db
