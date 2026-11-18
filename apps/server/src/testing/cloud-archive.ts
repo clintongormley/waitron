@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database, NodeDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
+import type { StagingTurn } from "../backup-staging-turn.js";
 import { runOnce } from "../backup-sweep.js";
 import { createCloudArchiveTarget } from "../cloud-archive-target.js";
 import type { CloudCaptureGrant, CloudCaptureMetadata } from "../cloud-backup.js";
@@ -14,6 +15,7 @@ interface CloudArchiveFixture {
   environment: "preproduction" | "production";
   stateDir: string;
   stagingDir?: string;
+  stagingTurn?: StagingTurn;
 }
 
 export async function captureCloudArchive(

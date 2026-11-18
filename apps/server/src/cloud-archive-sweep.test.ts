@@ -13,6 +13,10 @@ import { BACKUP_STAGING_DIR } from "@waitron/store";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { decryptArtifact } from "./artifact-cipher.js";
+import * as compression from "./backup-compression.js";
+import { dumpFileName } from "./backup-keys.js";
+import { createStagingTurn } from "./backup-staging-turn.js";
+import { createSpaceFreer, type FreedSpace } from "./free-space-now.js";
 import { unpackArchive } from "./backup-archive.js";
 import { captureCloudArchive, runCloudArchive } from "./testing/cloud-archive.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -25,7 +29,7 @@ const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((p) => rm(p, { recursive: true, force: true })));
 });
-it("builds an encrypted real SQLite archive with module versions and no Cloud credentials", async () => {
+it("keeps packing and uploads when Box status frees shared staging", async () => {
   const root = await mkdtemp(join(tmpdir(), "snapshot-archive-"));
   dirs.push(root);
   for (const path of RECOVERY_FILES) {
@@ -37,6 +41,47 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
   await mkdir(join(root, "cloud-tls"));
   await writeFile(join(root, "cloud-tls/staff.key"), "private staff key");
   const at = new Date("2026-09-24T12:00:00Z");
+  const staging = createStagingTurn();
+  const stagingDir = join(root, BACKUP_STAGING_DIR);
+  const leftover = join(stagingDir, dumpFileName(new Date("2026-09-23T12:00:00Z")));
+  await mkdir(stagingDir, { recursive: true });
+  await writeFile(leftover, "leftover");
+  const free = createSpaceFreer({
+    stateDir: root,
+    logDir: join(root, "logs"),
+    venueDir: root,
+    now: () => at,
+    staging,
+    backupDirs: () => [],
+    disk: { noted: () => false, full: async () => false },
+    space: { record: () => {} },
+    log: () => {},
+  });
+  let removed: FreedSpace | undefined;
+  let copySizes: [number, number] | undefined;
+  const compress = compression.compressArchive;
+  const runFree = vi
+    .spyOn(compression, "compressArchive")
+    .mockImplementationOnce((source, signal) =>
+      compress(
+        (async function* () {
+          for await (const bytes of source) {
+            if (removed === undefined) {
+              const scratch = join(root, "scratch");
+              const folder = (await readdir(scratch)).find((name) =>
+                name.startsWith("cloud-copy-"),
+              )!;
+              const copy = join(scratch, folder, dumpFileName(at));
+              const before = (await stat(copy)).size;
+              removed = await free("box-administrator");
+              copySizes = [before, (await stat(copy)).size];
+            }
+            yield bytes;
+          }
+        })(),
+        signal,
+      ),
+    );
   let ciphertext: Buffer | undefined;
   const result = await runCloudArchive(
     {
@@ -45,7 +90,8 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
       modules: ALL_MODULES,
       environment: "preproduction",
       stateDir: root,
-      stagingDir: join(root, BACKUP_STAGING_DIR),
+      stagingDir,
+      stagingTurn: staging,
     },
     "recovery key",
     at,
@@ -54,7 +100,11 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
       expect(await readdir(join(root, "scratch"))).toEqual(["backup"]);
       ciphertext = await readFile(file);
     },
-  );
+  ).finally(() => runFree.mockRestore());
+  expect(removed).toMatchObject({ deleted: 1, freedBytes: 8, failed: 0, backupRunning: false });
+  await expect(stat(leftover)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(copySizes?.[0]).toBeGreaterThan(0);
+  expect(copySizes?.[1]).toBe(copySizes?.[0]);
   const entries = new Map(
     unpackArchive(gunzipSync(decryptArtifact(ciphertext!, "recovery key"))).map((e) => [
       e.name,

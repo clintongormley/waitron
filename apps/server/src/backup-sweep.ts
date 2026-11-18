@@ -154,7 +154,7 @@ export interface BackupSweepDeps {
   deviceOf?: DeviceOf;
   /** DI for tests; defaults to `node:fs/promises`'s `statfs`. */
   statfs?: Statfs;
-  /** Protects shared staging and marks the Cloud pack as backup work. */
+  /** Protects shared backup staging until the local destinations and staging cleanup have settled. */
   stagingTurn?: StagingTurn;
 }
 
@@ -431,7 +431,6 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
             at: stamp,
             clock: await readClock(),
             signal: deps.signal,
-            stagingTurn: deps.stagingTurn,
           });
         } catch (error) {
           result = { stored: false, errorCode: codeOf(error) };

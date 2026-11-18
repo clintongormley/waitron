@@ -9,7 +9,6 @@ import { ARTIFACT_HEADER_BYTES } from "./artifact-cipher.js";
 import { encryptArtifactFile } from "./artifact-cipher-file.js";
 import { compressArchive } from "./backup-compression.js";
 import type { ScheduleClock } from "./backup-schedule.js";
-import type { StagingTurn } from "./backup-staging-turn.js";
 import {
   CLOUD_GRANT_MARGIN_MS,
   MAX_CLOUD_ARCHIVE_BYTES,
@@ -44,7 +43,6 @@ interface CloudArchiveInput {
   at: Date;
   clock: ScheduleClock;
   signal: AbortSignal;
-  stagingTurn?: StagingTurn;
 }
 
 type CloudArchiveOutcome = { stored: boolean; errorCode: string | null };
@@ -266,31 +264,27 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
           let grant = await reserve(pending);
           let metadata = pending.metadata;
           if (!metadata) {
-            const capture = async () => {
+            await rm(file, { force: true });
+            const scratch = join(deps.stateDir, SCRATCH_DIR);
+            await mkdir(scratch, { recursive: true, mode: 0o700 });
+            const working = await mkdtemp(join(scratch, "cloud-capture-"));
+            let sha256: string;
+            let bytes: number;
+            try {
+              const temporary = join(working, "archive.enc");
+              await encryptArtifactFile(
+                boundedCompressedArchive(input),
+                temporary,
+                grant.recoveryKey,
+                signal,
+              );
               allowed();
-              await rm(file, { force: true });
-              const scratch = join(deps.stateDir, SCRATCH_DIR);
-              await mkdir(scratch, { recursive: true, mode: 0o700 });
-              const working = await mkdtemp(join(scratch, "cloud-capture-"));
-              try {
-                const temporary = join(working, "archive.enc");
-                await encryptArtifactFile(
-                  boundedCompressedArchive(input),
-                  temporary,
-                  grant.recoveryKey,
-                  signal,
-                );
-                allowed();
-                const result = await digestFile(temporary, signal);
-                if (result.bytes <= ARTIFACT_HEADER_BYTES || result.bytes > MAX_CLOUD_ARCHIVE_BYTES)
-                  unavailable();
-                await publishFileDurable(temporary, file);
-                return result;
-              } finally {
-                await rm(working, { recursive: true, force: true });
-              }
-            };
-            const { sha256, bytes } = await (input.stagingTurn?.runBackup(capture) ?? capture());
+              ({ sha256, bytes } = await digestFile(temporary, signal));
+              if (bytes <= ARTIFACT_HEADER_BYTES || bytes > MAX_CLOUD_ARCHIVE_BYTES) unavailable();
+              await publishFileDurable(temporary, file);
+            } finally {
+              await rm(working, { recursive: true, force: true });
+            }
             const month = monthAt(input.at, input.clock);
             pending.month = month;
             pending.keyVersion = grant.keyVersion;

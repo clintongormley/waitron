@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { CloudConnectionStatus } from "./cloud-client.js";
 import type { CloudCaptureGrant, CloudCaptureMetadata, CloudCapturePoint } from "./cloud-backup.js";
-import { createStagingTurn } from "./backup-staging-turn.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 import { decryptArtifactAsync } from "./artifact-cipher.js";
@@ -476,29 +475,6 @@ it("writes temporary ciphertext in scratch and leaves no partial archive on fail
   expect(spoolEntries).toEqual(["state.json"]);
   expect(await readdir(join(f.root, "scratch"))).toEqual([]);
   expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual(["state.json"]);
-});
-
-it("holds the backup turn while packing and releases it before uploading", async () => {
-  const f = await fixture();
-  const turn = createStagingTurn();
-  const input = f.input();
-  const upload = f.deps.upload;
-  const states: boolean[] = [];
-  f.deps.upload = async (grant, path) => {
-    states.push(turn.backupRunning());
-    await upload(grant, path);
-  };
-  await expect(
-    createCloudArchiveTarget(f.deps).store({
-      ...input,
-      stagingTurn: turn,
-      async *entries() {
-        states.push(turn.backupRunning());
-        yield* input.entries();
-      },
-    }),
-  ).resolves.toEqual({ stored: true, errorCode: null });
-  expect(states).toEqual([true, false]);
 });
 
 it("stops packing when the ciphertext reaches its byte limit and removes the partial file", async () => {

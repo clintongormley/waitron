@@ -3320,8 +3320,8 @@ has already thrown (inferred, not isolated).
 
 The turn is `apps/server/src/backup-staging-turn.ts`. A backup run holds the turn from its first
 step to the end of its shared staging clean-up (`runBackup` in `backup-sweep.ts`). A Cloud-enabled
-run writes its shared database copy in private scratch. Cloud takes the turn while packing the copy
-and releases it before upload. A free-space deletion takes the turn through `ifNoBackup`,
+run writes its shared database copy in private scratch. Cloud packs and uploads outside the turn.
+A free-space deletion takes the turn through `ifNoBackup`,
 which answers `{ ran: false }` at once, and the deletion skips staging and says
 `backupRunning: true`, while a run holds the turn or waits for it — a deletion never waits for a
 run. A page's survey takes no turn: it measures staging best-effort and leaves it out while a run
