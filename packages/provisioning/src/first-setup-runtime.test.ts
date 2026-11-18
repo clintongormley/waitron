@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +19,7 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
+import { readModulePreparationHistory } from "./module-preparation-state.js";
 import { createFirstSetupRuntime as createFirstSetupModuleHost } from "./first-setup-runtime.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
 
@@ -621,6 +623,117 @@ it("hands a module the public evidence its host was given, for the binding the m
   });
   expect(await bound.readPublicEvidence(f.context.binding)).toBe(evidence);
   expect(asked).toEqual([f.context.binding]);
+});
+
+it("pairs the box's boot id with this server start, and leaves an unknown boot id unknown", async () => {
+  const f = await fixture();
+  expect(f.bound.readBoot).toBeUndefined();
+  let boot: { ms: number; id: string | null } = { ms: 1_234, id: "box-boot" };
+  const start = () => {
+    let bound!: ModuleOperationHost;
+    const modules = f.args.modules.map((module) => {
+      if (module.name !== MODULE) return module;
+      const seat = module.provisioning!.initialSetup!;
+      return {
+        ...module,
+        provisioning: {
+          ...module.provisioning!,
+          initialSetup: {
+            ...seat,
+            configure(host: ModuleOperationHost) {
+              bound = host;
+              return seat.configure!(host);
+            },
+          },
+        },
+      };
+    });
+    const host = createFirstSetupModuleHost({ ...f.args, modules, readBoot: () => boot });
+    return { bootId: host.bootId, bound };
+  };
+  const first = start();
+  const restarted = start();
+  expect(first.bootId).not.toBe(restarted.bootId);
+  expect(first.bound.readBoot!()).toEqual({ ms: 1_234, id: `box-boot ${first.bootId}` });
+  expect(restarted.bound.readBoot!()).toEqual({ ms: 1_234, id: `box-boot ${restarted.bootId}` });
+  boot = { ms: 5_678, id: null };
+  expect(first.bound.readBoot!()).toEqual({ ms: 5_678, id: null });
+});
+
+it.each(["intent", "wait"] as const)(
+  "accepts a %s write to preparation state until activation starts, and refuses it afterwards",
+  async (purpose) => {
+    const f = await fixture();
+    const authority = { intent: vi.fn(async () => {}), wait: vi.fn(async () => {}) };
+    const write = (value: string) =>
+      f.host.coordinator.run(() =>
+        f.host.withPreparationAuthorization(authority, () =>
+          f.bound.withPreparationState!(f.context.binding, (state) =>
+            state.replace({ value }, purpose),
+          ),
+        ),
+      );
+    await write("before activation");
+    expect(authority[purpose]).toHaveBeenCalledTimes(1);
+    const history = [{ value: "before activation" }];
+    expect(await readModulePreparationHistory(f.args, MODULE)).toEqual(history);
+
+    let state = (await f.host.store.read())!;
+    state = await f.host.store.update(state.frozen.attemptId, state.revision, {
+      kind: "consumption-intent",
+    });
+    await write("during consumption intent");
+    expect(authority[purpose]).toHaveBeenCalledTimes(2);
+    history.push({ value: "during consumption intent" });
+    expect(await readModulePreparationHistory(f.args, MODULE)).toEqual(history);
+
+    await f.host.store.update(state.frozen.attemptId, state.revision, {
+      kind: "activation-started",
+    });
+
+    await expect(write("after activation")).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+    expect(authority[purpose]).toHaveBeenCalledTimes(2);
+    expect(await readModulePreparationHistory(f.args, MODULE)).toEqual(history);
+  },
+);
+
+it("refuses to read setup facts for a binding the current attempt no longer has", async () => {
+  const f = await fixture();
+  const current = (await f.host.store.read())!;
+  let refusal: unknown;
+  await expect(
+    f.host.coordinator.run((hold) =>
+      f.bound.withPreparationState!(f.context.binding, async () => {
+        await f.host.store.update(
+          current.frozen.attemptId,
+          current.revision,
+          { kind: "abandoned" },
+          hold,
+        );
+        const attemptId = randomUUID();
+        await f.host.store.claim(
+          {
+            ...current.frozen,
+            attemptId,
+            sourceId: `first-setup:${attemptId}`,
+            administratorId: randomUUID(),
+            nodeId: randomUUID(),
+            modules: current.frozen.modules.map((module) => ({
+              ...module,
+              eventId: randomUUID(),
+            })),
+          },
+          current.ownerVerifier,
+          current.capabilityHash,
+          hold,
+        );
+        refusal = await f.bound.readSetupFacts!(f.context.binding).catch((error: unknown) => error);
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(refusal).toMatchObject({ code: "setup.attempt_conflict" });
 });
 
 it("leaves a module with no set of its own out of the sets an empty database must hold", async () => {

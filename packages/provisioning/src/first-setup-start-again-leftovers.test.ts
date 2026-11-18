@@ -478,6 +478,18 @@ it("classifyStartAgainRefusal gives files_found with the finisher's reason, and 
   expect(damagedBack.explained).toBe("marker unreadable");
 });
 
+it("a refusal on a box with no Start again marker comes back unchanged, with nothing to offer or explain", async () => {
+  const roots = await withFoundDatabase();
+  await rm(join(roots.venueDir, "first-setup-deleting.json"));
+  expect(await surveyStartAgainLeftovers(roots)).toBeNull();
+  const refused = new AppError("setup.start_again_incomplete", {}, { reason: "marker gone" });
+  const back = await classifyStartAgainRefusal(roots, refused);
+  expect(back.error).toBe(refused);
+  expect(back.error.code).toBe("setup.start_again_incomplete");
+  expect(back).not.toHaveProperty("survey");
+  expect(back).not.toHaveProperty("explained");
+});
+
 it("a marker naming another attempt or another frozen request than the setup record explains", async () => {
   for (const field of ["attemptId", "frozenDigest"] as const) {
     const roots = await withFoundDatabase();

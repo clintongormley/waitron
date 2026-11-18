@@ -17,6 +17,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import {
   createFirstSetupCoordinator,
   createFirstSetupStore,
+  assertOtherFirstSetupAllowed,
   assertOtherSetupAllowed,
   inspectFirstSetupMarker,
   type FirstSetupFrozen,
@@ -269,6 +270,18 @@ it("retains consumption intent and refuses free-again or unfinished completion a
     expect.objectContaining({ code: "setup.attempt_uncertain" }),
   );
   await expect(f.claim()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+});
+
+it("lets another setup route in only with no open attempt and no unfinished Start again", async () => {
+  const f = await fixture();
+  const allowed = () => assertOtherFirstSetupAllowed(f.options.venueDir, f.store);
+  await expect(allowed()).resolves.toBeUndefined();
+  const state = await f.claim();
+  await expect(allowed()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await f.store.update(state.frozen.attemptId, 1, { kind: "abandoned" });
+  await expect(allowed()).resolves.toBeUndefined();
+  await writeFile(join(f.options.venueDir, "first-setup-deleting.json"), "{}");
+  await expect(allowed()).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
 });
 
 it("keeps abandoned history and requires new event identities before another claim", async () => {

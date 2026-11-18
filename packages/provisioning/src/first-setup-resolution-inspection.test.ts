@@ -234,6 +234,21 @@ it("does not treat an absent independently configured register as proof of no re
   const result = await service.inspectFirstSetupResolution();
   expect(result.artifacts).toContainEqual({ name: "outside-evidence-0", status: "missing" });
 });
+it("records an evidence file behind a linked folder as unreadable, not as missing", async () => {
+  const f = await fixture();
+  await writeFile(join(f.stateDir, "register.json"), "{}");
+  const linked = join(f.root, "linked-register");
+  await symlink(f.stateDir, linked);
+  const service = createFirstSetupResolutionInspection({
+    modules: ALL_MODULES,
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    store: f.store,
+    publicEvidencePaths: [join(linked, "register.json")],
+  });
+  const result = await service.inspectFirstSetupResolution();
+  expect(result.artifacts).toContainEqual({ name: "outside-evidence-0", status: "unreadable" });
+});
 it("venue exclusion refuses a venue held by another process before its body runs", async () => {
   const f = await fixture("active");
   const child = spawn(
