@@ -396,13 +396,16 @@ it("uses the dish surcharge for a variant without its own and drops a dish with 
   expect((await copied())?.offers[f.wineItem]?.variants).toEqual([
     expect.objectContaining({ id: f.glass, unitPrice: "2.00", menuPrice: "2.00" }),
   ]);
-  await app((tx) =>
-    saveSetMenuVariantChoices(tx, f.daily, f.wineItem, [
+  await app(async (tx) => {
+    await tx.update(products).set({ courseId: f.drinks }).where(eq(products.id, f.bravas));
+    await addSetMenuDishes(tx, f.daily, [{ productId: f.bravas, excludedVariantIds: [] }]);
+    await saveSetMenuVariantChoices(tx, f.daily, f.wineItem, [
       { variantId: f.glass, included: false, surcharge: null },
       { variantId: f.bottle, included: false, surcharge: null },
-    ]),
-  );
-  const copy = await copied();
+    ]);
+  });
+  await publish();
+  const copy = await fromLive();
   expect(copy?.offers).not.toHaveProperty(f.wineItem);
   expect(copy?.root.members).not.toContainEqual(
     expect.objectContaining({ menuItemId: f.wineItem }),

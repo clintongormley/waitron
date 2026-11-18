@@ -33,7 +33,6 @@ export function freezeSetMenu(
         },
       ];
     });
-    // Dishes without a sellable choice still appear in the draft's publishing problems.
     if (variants.length === 0 && (offer.variants.length > 0 || dish.courseId === null)) continue;
     copied[offer.id] = {
       ...offer,
