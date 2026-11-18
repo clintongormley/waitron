@@ -32,8 +32,8 @@ controller's own timer at `bound-container-verifier.ts:65` backs it up), which
 cooperative checks cannot interrupt a synchronous SQLite statement"). A hostile certificate there
 costs one verification that ends as Cloud's timeout, and nothing else waits on that process.
 
-Cloud's in-process test fixture (`deploy/test-cloud/test-fixtures/snapshot-authorised-archive.test.ts:59`)
-is the one caller with no outside kill; it is a test with a generated certificate.
+Cloud's test fixture (`deploy/test-cloud/test-fixtures/snapshot-authorised-archive.test.ts:59`)
+runs the verifier in a child under `spawnSync`'s 60-second timeout.
 
 So the verifier's check calls the existing in-process `openCertificateFile`, after the same two
 size refusals the child opener makes (the file over `CERTIFICATE_MAX_BYTES`, and file plus password
@@ -55,8 +55,8 @@ Cloud verifier; no change to how the box opens a certificate.
    identical by construction. In `packages/fiscal-verifactu/src/backup-verification-secrets.ts`,
    call that helper (`too_large` and `unreadable` both answer `invalid`, as today), then
    `openCertificateFile`; drop the now unreachable `unavailable` branch. One comment at the call
-   names the outside kill that bounds it. Add a case: a certificate one byte over
-   `CERTIFICATE_MAX_BYTES` answers `invalid` (no test covers it today).
+   names the caller's duty to stop it at an outside deadline. Add a case: a certificate one byte
+   over `CERTIFICATE_MAX_BYTES` answers `invalid` (no test covers it today).
 3. **Existing tests:** `backup-verification-secrets.test.ts` and the fiscal backup-verification
    tests keep every answer (passed, invalid, unsupported, `decryption_unavailable` on a wrong
    passphrase). `backup-verification-secrets.test.ts:503` ("leaves a genuine backup check
