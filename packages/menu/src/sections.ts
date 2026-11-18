@@ -25,12 +25,14 @@ import {
   membersOf,
   moveMemberTo,
   nameOf,
+  productsAbsentFromList,
   refColumns,
   refKey,
   renumber,
   requirePosition,
 } from "./section-members.js";
 import { onStructureChanged } from "./section-structure.js";
+import { refuseIneligibleSetMenuProducts } from "./set-menus.js";
 import type {
   SectionDetails,
   MemberRef,
@@ -130,6 +132,13 @@ async function checkListRef(
       sectionId,
       childSectionId: ref.sectionId,
     });
+  const menuId = graph.ownerMenu(sectionId)!;
+  if (
+    ref.kind === "product" &&
+    graph.menu(menuId)?.kind === "set_menu" &&
+    !(replacing?.ref.kind === "product" && replacing.ref.productId === ref.productId)
+  )
+    await refuseIneligibleSetMenuProducts(tx, menuId, [ref.productId]);
   return stored;
 }
 
@@ -290,10 +299,14 @@ export async function addProducts(
   requireWritableList(graph, sectionId);
   if (!Array.isArray(productIds) || !(await allTopLevelProducts(tx, productIds, { active: true })))
     throw new AppError("menu_section.membership_invalid", {});
-  const added = await appendProductMembers(tx, sectionId, graph.children(sectionId), productIds);
-  const lines = await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
   const owner = graph.ownerMenu(sectionId)!;
-  return graph.menu(owner)?.kind === "set_menu"
+  const setMenu = graph.menu(owner)?.kind === "set_menu";
+  const members = graph.children(sectionId);
+  if (setMenu)
+    await refuseIneligibleSetMenuProducts(tx, owner, productsAbsentFromList(members, productIds));
+  const added = await appendProductMembers(tx, sectionId, members, productIds);
+  const lines = await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
+  return setMenu
     ? { added: added.length, addedLines: lines.get(owner) ?? [] }
     : { added: added.length };
 }

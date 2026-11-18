@@ -72,6 +72,7 @@ const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
   ["ThemeNameRefusal", "an enum: empty, too_long or reserved"],
   ["ThemeRefusalReason", "an enum of why a theme document is refused"],
   ["UnservedDish", "a dish's bill and line ids, its name, quantity and CancellationContext"],
+  ["VatClass", "an enum of VAT classes: general, reduced, super_reduced or zero"],
   ["VerifyFailure", "an enum of why a membership document fails verification"],
 ]);
 
@@ -130,6 +131,9 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["service_zone.not_found.departmentName", "the name of a department"],
   ["service_zone.not_found.name", "the name of a category or product in an import"],
   ["service_zone.not_found.zoneName", "the name of a zone"],
+  ["set_menu.vat_class_differs.productVatClass", "the listed product or variant's VAT class"],
+  ["set_menu.vat_class_differs.setMenuVatClass", "the set menu's current VAT class"],
+  ["set_menu.vat_class_differs.requestedVatClass", "the requested VAT class for the set menu"],
   ["special_day.date_taken.name", "the name of a special day"],
   ["role.name_taken.name", "the name of an access role"],
   ["staff_role.name_taken.name", "the name of a staff role"],

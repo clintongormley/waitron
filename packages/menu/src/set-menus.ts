@@ -28,11 +28,12 @@ import { reachableMenuItem, requireMenuRoot, syncMenuOffers } from "./menu-struc
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
 import { loadSectionGraph, menusContaining, type SectionGraph } from "./section-graph.js";
-import { appendProductMembers, memberOrder } from "./section-members.js";
+import { appendProductMembers, memberOrder, productsAbsentFromList } from "./section-members.js";
 import {
   effectiveProductColumns as effective,
   parentJoin,
   parentProducts,
+  unitOwnerJoin,
 } from "./variant-fallback.js";
 import { variantsOfProducts } from "./variants.js";
 import "./errors.js";
@@ -66,6 +67,14 @@ export function setMenuPriceCents(price: string | null | undefined): number {
   if (cents > MAX_SET_MENU_AMOUNT_CENTS)
     throw new AppError("set_menu.invalid", { field: "setPrice" });
   return cents;
+}
+
+export function setMenuSurchargeCents(surcharge: string): number {
+  if (typeof surcharge === "string" && isProductPrice(surcharge)) {
+    const cents = stringToCents(surcharge);
+    if (cents <= MAX_SET_MENU_AMOUNT_CENTS) return cents;
+  }
+  throw new AppError("set_menu.invalid", { field: "surcharge" });
 }
 
 export function setMenuVatClass(vatClass: VatClass | null | undefined): VatClass {
@@ -108,6 +117,7 @@ export interface SetMenuDetails {
 }
 
 type DraftLine = Omit<SetMenuLine, "id" | "courseIds"> & { courseIds: readonly string[] };
+type DishSelection = { productId: string; keptVariantIds: readonly string[] };
 type VariantChoice = { variantId: string; included: boolean; surcharge: string | null };
 
 export async function touchSetMenu(tx: Transaction, menuId: string): Promise<void> {
@@ -125,7 +135,9 @@ async function activeCourses(tx: Transaction): Promise<SetMenuDetails["courses"]
     .orderBy(kitchenCourses.displayOrder, kitchenCourses.name, kitchenCourses.id);
 }
 
-async function storedLines(tx: Transaction, menuId: string) {
+type StoredLine = SetMenuLine & { position: number };
+
+async function storedLines(tx: Transaction, menuId: string): Promise<StoredLine[]> {
   const rows = await tx
     .select({
       id: setMenuLines.id,
@@ -147,7 +159,7 @@ async function storedLines(tx: Transaction, menuId: string) {
       kitchenCourses.name,
       kitchenCourses.id,
     );
-  const lines = new Map<string, SetMenuLine & { position: number }>();
+  const lines = new Map<string, StoredLine>();
   for (const { id, position, count, courseId } of rows) {
     const line = lines.get(id) ?? { id, position, count, courseIds: [] };
     if (courseId !== null) line.courseIds.push(courseId);
@@ -336,6 +348,38 @@ function includedDishChoices(dish: SetMenuDishSetting): {
     }));
 }
 
+function dishVatClasses(dish: SetMenuDishSetting) {
+  const choices = includedDishChoices(dish);
+  if (dish.variants.length === 0) return choices;
+  // The listed product must match the menu's class even when only its variants are sold.
+  return [
+    { id: dish.productId, name: dish.name, parentName: null, vatClass: dish.vatClass },
+    ...choices,
+  ];
+}
+
+export async function refuseSetMenuVatClassChange(
+  tx: Transaction,
+  menuId: string,
+  requestedVatClass: VatClass,
+): Promise<void> {
+  const { vatClass } = await setMenuRow(tx, menuId);
+  if (vatClass === requestedVatClass) return;
+  const root = await requireMenuRoot(tx, menuId);
+  const dishes = await dishSettings(tx, menuId, root, await activeCourses(tx));
+  const differing = dishes
+    .flatMap(dishVatClasses)
+    .find((dish) => dish.vatClass !== requestedVatClass);
+  if (differing !== undefined)
+    throw new AppError("set_menu.vat_class_differs", {
+      productId: differing.id,
+      productVatClass: differing.vatClass,
+      setMenuVatClass: vatClass,
+      field: "setVatClass",
+      requestedVatClass,
+    });
+}
+
 export function setMenuProblems(details: Omit<SetMenuDetails, "problems">): SetMenuProblem[] {
   const choices = details.dishes.flatMap(includedDishChoices);
   const problems: SetMenuProblem[] = [];
@@ -355,6 +399,13 @@ export function setMenuProblems(details: Omit<SetMenuDetails, "problems">): SetM
         courseId,
         courseName: courseNames.get(courseId)!,
       });
+  }
+  for (const dish of details.dishes) {
+    for (const { id: productId, name, parentName, vatClass } of dishVatClasses(dish))
+      if (vatClass !== details.vatClass)
+        problems.push({ kind: "dish_vat_class_differs", productId, name, parentName, vatClass });
+    if (dish.soldByMeasure)
+      problems.push({ kind: "dish_sold_by_measure", productId: dish.productId, name: dish.name });
   }
   for (const { id: lineId, courseIds } of details.lines) {
     if (courseIds.length === 0) problems.push({ kind: "line_without_course", lineId });
@@ -376,13 +427,23 @@ export async function addLinesForCourses(
   const lines = await storedLines(tx, menuId);
   const dishes = await dishSettings(tx, menuId, root, courses);
   const added = new Set(productIds);
-  const accepted = new Set(lines.flatMap(({ courseIds }) => courseIds));
   const wanted = new Set(
     dishes
       .filter(({ productId }) => added.has(productId))
       .flatMap(includedDishChoices)
       .map(({ courseId }) => courseId),
   );
+  return appendMissingCourseLines(tx, menuId, courses, lines, wanted);
+}
+
+function appendMissingCourseLines(
+  tx: Transaction,
+  menuId: string,
+  courses: SetMenuDetails["courses"],
+  lines: StoredLine[],
+  wanted: ReadonlySet<string | null>,
+): Promise<SetMenuLine[]> {
+  const accepted = new Set(lines.flatMap(({ courseIds }) => courseIds));
   return insertLines(
     tx,
     menuId,
@@ -390,6 +451,114 @@ export async function addLinesForCourses(
       .filter(({ id }) => wanted.has(id) && !accepted.has(id))
       .map(({ id }) => ({ count: 1, courseIds: [id] })),
     (lines.at(-1)?.position ?? -1) + 1,
+  );
+}
+
+export async function saveSetMenuDishCourse(
+  tx: Transaction,
+  menuId: string,
+  menuItemId: string,
+  courseId: string | null,
+): Promise<{ addedLines: SetMenuLine[]; removedLines: SetMenuLine[] }> {
+  await requireSetMenu(tx, menuId);
+  const root = await requireMenuRoot(tx, menuId);
+  const courses = await activeCourses(tx);
+  const before = await dishSettings(tx, menuId, root, courses);
+  const dish = before.find((candidate) => candidate.menuItemId === menuItemId);
+  if (dish === undefined) throw new AppError("set_menu.not_found", { menuId });
+  if (courseId !== null && !courses.some(({ id }) => id === courseId))
+    throw new AppError("set_menu.invalid", { field: "courseId" });
+
+  const override = courseId === dish.productCourseId ? null : courseId;
+  if (override === dish.courseOverrideId) return { addedLines: [], removedLines: [] };
+
+  if (override === null)
+    await tx.delete(setMenuDishCourses).where(eq(setMenuDishCourses.menuItemId, menuItemId));
+  else
+    await tx
+      .insert(setMenuDishCourses)
+      .values({ menuItemId, courseId: override })
+      .onConflictDoUpdate({
+        target: setMenuDishCourses.menuItemId,
+        set: { courseId: override },
+      });
+
+  const lines = await storedLines(tx, menuId);
+  const after = await dishSettings(tx, menuId, root, courses);
+  const changedDish = after.find((candidate) => candidate.menuItemId === menuItemId)!;
+  const previousByChoice = new Map(
+    includedDishChoices(dish).map(({ id, courseId }) => [id, courseId]),
+  );
+  const changed = includedDishChoices(changedDish).filter(
+    ({ id, courseId }) => previousByChoice.get(id) !== courseId,
+  );
+  const wanted = new Set(changed.map(({ courseId }) => courseId));
+  const addedLines = await appendMissingCourseLines(tx, menuId, courses, lines, wanted);
+  const previous = new Set(previousByChoice.values());
+  const remaining = new Set(after.flatMap(includedDishChoices).map((choice) => choice.courseId));
+  const removedLines = lines
+    .filter(
+      ({ count, courseIds }) =>
+        count === 1 &&
+        courseIds.length === 1 &&
+        previous.has(courseIds[0]!) &&
+        !remaining.has(courseIds[0]!),
+    )
+    .map(({ id, count, courseIds }) => ({ id, count, courseIds }));
+  for (const batch of batches(removedLines.map(({ id }) => id)))
+    await tx.delete(setMenuLines).where(inArray(setMenuLines.id, batch));
+  await touchSetMenu(tx, menuId);
+  return { addedLines, removedLines };
+}
+
+export async function refuseDishesSetMenuCannotHold(
+  tx: Transaction,
+  menuId: string,
+  dishes: readonly DishSelection[],
+): Promise<void> {
+  if (dishes.length === 0) return;
+  const { vatClass: setMenuVatClass } = await setMenuRow(tx, menuId);
+  const ids = new Set(
+    dishes.flatMap(({ productId, keptVariantIds }) => [productId, ...keptVariantIds]),
+  );
+  const eligibility = new Map<string, { vatClass: VatClass; measure: boolean | null }>();
+  for (const batch of batches([...ids]))
+    for (const { id, vatClass, measure } of await tx
+      .select({ id: products.id, vatClass: effective.vatClass, measure: units.measure })
+      .from(products)
+      .leftJoin(parentProducts, parentJoin)
+      .leftJoin(units, unitOwnerJoin)
+      .where(inArray(products.id, batch)))
+      eligibility.set(id, { vatClass: vatClass as VatClass, measure });
+  for (const { productId, keptVariantIds } of dishes) {
+    if (eligibility.get(productId)?.measure)
+      throw new AppError("set_menu.dish_sold_by_measure", { productId });
+    for (const id of [productId, ...keptVariantIds]) {
+      const productVatClass = eligibility.get(id)!.vatClass;
+      if (productVatClass !== setMenuVatClass)
+        throw new AppError("set_menu.vat_class_differs", {
+          productId: id,
+          productVatClass,
+          setMenuVatClass,
+        });
+    }
+  }
+}
+
+/** A member write starts with every active variant included. */
+export async function refuseIneligibleSetMenuProducts(
+  tx: Transaction,
+  menuId: string,
+  productIds: readonly string[],
+): Promise<void> {
+  const families = await activeVariantsByProduct(tx, productIds);
+  await refuseDishesSetMenuCannotHold(
+    tx,
+    menuId,
+    productIds.map((productId) => ({
+      productId,
+      keptVariantIds: [...(families.get(productId) ?? [])],
+    })),
   );
 }
 
@@ -408,6 +577,7 @@ export async function saveSetMenuVariantChoices(
   const seen = new Set<string>();
   const exclusions = [];
   const surcharges = [];
+  const keptVariantIds = [];
   for (const { variantId, included, surcharge } of variants) {
     if (!allowed?.has(variantId)) throw new AppError("product.variant_not_found", { variantId });
     if (seen.has(variantId) || typeof included !== "boolean")
@@ -415,14 +585,15 @@ export async function saveSetMenuVariantChoices(
     seen.add(variantId);
     const row = { menuItemId, productId, variantId };
     if (!included) exclusions.push(row);
-    else if (surcharge !== null) {
-      if (typeof surcharge !== "string" || !isProductPrice(surcharge))
-        throw new AppError("set_menu.invalid", { field: "surcharge" });
-      surcharges.push({ ...row, price: stringToCents(surcharge) });
+    else {
+      keptVariantIds.push(variantId);
+      if (surcharge !== null) surcharges.push({ ...row, price: setMenuSurchargeCents(surcharge) });
     }
   }
   if (seen.size !== (allowed?.size ?? 0))
     throw new AppError("set_menu.invalid", { field: "variants" });
+  if (keptVariantIds.length > 0)
+    await refuseDishesSetMenuCannotHold(tx, menuId, [{ productId, keptVariantIds }]);
   for (const batch of batches([...seen])) {
     await tx
       .delete(setMenuVariantExclusions)
@@ -455,10 +626,18 @@ async function activeVariantsByProduct(tx: Transaction, productIds: readonly str
   return variants;
 }
 
-async function appendDishes(tx: Transaction, menuId: string, productIds: readonly string[]) {
+async function appendDishes(tx: Transaction, menuId: string, dishes: readonly DishSelection[]) {
   const root = await requireMenuRoot(tx, menuId);
   const before = await loadSectionGraph(tx);
-  const added = await appendProductMembers(tx, root, before.children(root), productIds);
+  const members = before.children(root);
+  const ids = dishes.map(({ productId }) => productId);
+  const adding = new Set(productsAbsentFromList(members, ids));
+  await refuseDishesSetMenuCannotHold(
+    tx,
+    menuId,
+    dishes.filter(({ productId }) => adding.has(productId)),
+  );
+  const added = await appendProductMembers(tx, root, members, ids);
   await syncMenuOffers(tx, [menuId], before);
   const items = new Map<string, string>();
   for (const batch of batches(added))
@@ -484,7 +663,17 @@ export async function addSetMenuDishes(
     for (const variantId of excludedVariantIds)
       if (!families.get(productId)?.has(variantId))
         throw new AppError("product.variant_not_found", { variantId });
-  const { added, items } = await appendDishes(tx, menuId, ids);
+  const { added, items } = await appendDishes(
+    tx,
+    menuId,
+    dishes.map(({ productId, excludedVariantIds }) => {
+      const excluded = new Set(excludedVariantIds);
+      return {
+        productId,
+        keptVariantIds: [...(families.get(productId) ?? [])].filter((id) => !excluded.has(id)),
+      };
+    }),
+  );
   const exclusions = dishes.flatMap(({ productId, excludedVariantIds }) => {
     const menuItemId = items.get(productId);
     return menuItemId === undefined
@@ -505,7 +694,10 @@ export async function copySetMenuDishes(
   const { added, items } = await appendDishes(
     tx,
     menuId,
-    source.dishes.map(({ productId }) => productId),
+    source.dishes.map(({ productId, variants }) => ({
+      productId,
+      keptVariantIds: variants.filter(({ included }) => included).map(({ id }) => id),
+    })),
   );
   const itemIds = new Map<string, string>();
   for (const dish of source.dishes) {
