@@ -1,3 +1,4 @@
+import { ensureOperator } from "./cancel-line.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { eq, sql } from "drizzle-orm";
 import { withTransaction, workingOrders, type Transaction, type Database } from "@waitron/db";
@@ -67,6 +68,8 @@ export async function updateOrderLine(
   operatorId?: string,
   attendance?: OrderAttendance,
 ) {
+  const observed = await authority(tx, id, operatorId);
+  if (observed.operatorId !== undefined) await ensureOperator(tx, observed.operatorId);
   return line(
     tx,
     cfg,
@@ -74,7 +77,7 @@ export async function updateOrderLine(
     lineNo,
     { portionLineNos: [], ...patch },
     revision,
-    { ...(await authority(tx, id, operatorId)), admission: testTradingAdmission() },
+    { ...observed, admission: testTradingAdmission() },
     attendance,
   );
 }

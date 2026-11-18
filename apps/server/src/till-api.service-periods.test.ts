@@ -2591,18 +2591,26 @@ describe("a dish whose period ended earlier today", () => {
       });
     });
 
-    it("Fire line at 14:05 on a held Main changed at 13:55 is refused unconfirmed, naming it, and then sent confirmed and marked", async () => {
-      const { t, pie } = await pieStoredAtLunch("hold");
-      at(mondayAt("14:05"));
-      expect(await fireLine(t, pie.id)).toEqual(refusal(t, [pie.id]));
-      expect(await courseLine(t, "pie")).toEqual(pie);
-      expect((await fireLine(t, pie.id, lateSend(t.v))).status).toBe(200);
-      expect(await courseLine(t, "pie")).toMatchObject({
-        firedAt: expect.any(String),
-        latePeriodName: "Lunch",
-        lateConfirmedBy: t.v.personId,
-      });
-    });
+    it.each(["open", "placed", "settled"] as const)(
+      "Fire line at 14:05 on a held Main of a %s bill is refused unconfirmed and then sent confirmed and marked",
+      async (status) => {
+        const { t, pie } = await pieStoredAtLunch("hold");
+        if (status !== "open")
+          await suite.db
+            .update(workingOrders)
+            .set({ status, settledAt: status === "settled" ? new Date().toISOString() : null })
+            .where(eq(workingOrders.id, t.tabId));
+        at(mondayAt("14:05"));
+        expect(await fireLine(t, pie.id)).toEqual(refusal(t, [pie.id]));
+        expect(await courseLine(t, "pie")).toEqual(pie);
+        expect((await fireLine(t, pie.id, lateSend(t.v))).status).toBe(200);
+        expect(await courseLine(t, "pie")).toMatchObject({
+          firedAt: expect.any(String),
+          latePeriodName: "Lunch",
+          lateConfirmedBy: t.v.personId,
+        });
+      },
+    );
 
     it("Fire course at 14:05 across two bills is refused once, naming each bill's stored Main, and one confirmation marks both", async () => {
       const { t, groupId, pie } = await pieStoredAtLunch("hold");

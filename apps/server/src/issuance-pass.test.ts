@@ -1,10 +1,13 @@
-import { clearSavedOffer } from "./testing/order-writer-fixture.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
-import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
+import {
+  addTabRound,
+  clearSavedOffer,
+  placeOrder,
+  updateHeldOrder,
+} from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,

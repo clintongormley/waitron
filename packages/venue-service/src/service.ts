@@ -63,8 +63,6 @@ import { kitchenNoteKey, readKitchenNotes, writeKitchenNote } from "./order-kitc
 import { resolveDefaultMenu, resolveDepartmentService } from "./menu-timetable.js";
 import {
   copyOrderServiceContext,
-  copyWorkingLineContext,
-  copyWorkingLineContexts,
   findOrderServiceContext,
   findOrderServiceModes,
   findOrderServiceZones,
@@ -175,8 +173,6 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   acceptDepartmentTransfer,
   declineDepartmentTransfer,
   copyOrderContext: copyOrderServiceContext,
-  copyLineContext: copyWorkingLineContext,
-  copyLineContexts: copyWorkingLineContexts,
   findOrderContext: findOrderServiceContext,
   findOrderModes: findOrderServiceModes,
   findOrderZones: findOrderServiceZones,

@@ -1227,13 +1227,6 @@ export interface VenueServiceContribution {
     fromWorkingOrderId: string,
     toWorkingOrderId: string,
   ): Promise<void>;
-  copyLineContext(
-    tx: Transaction,
-    fromWorkingOrderLineId: string,
-    toWorkingOrderLineId: string,
-  ): Promise<void>;
-  /** `copyLineContext` for each pair, in one read. */
-  copyLineContexts(tx: Transaction, pairs: readonly { from: string; to: string }[]): Promise<void>;
   /** Which of the lines were sold in Each: by the unit id their context froze, and for a stored
    *  unit by that unit's current seed key; a line with no context is not. */
   readLinesSoldInEach(tx: Transaction, lineIds: readonly string[]): Promise<ReadonlySet<string>>;

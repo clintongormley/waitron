@@ -1,5 +1,5 @@
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
-import { cancelItemForTest } from "./testing/cancel-line.js";
+import { cancelItemForTest, ensureOperator } from "./testing/cancel-line.js";
 
 import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -42,7 +42,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergenMap, Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedPerson } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignMenuToVenue,
   createMenu,
@@ -191,11 +191,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     invoiceLocales: [LOCALE],
   });
   const nodeId = await seedNode(db);
-  await seedPerson(db, { id: OPERATOR, displayName: "Order operator" });
-  await seedPerson(db, {
-    id: "cccccccc-0000-4000-8000-0000000000f1",
-    displayName: "Fixture order writer",
-  });
+  await withTransaction(db, (tx) => ensureOperator(tx, OPERATOR));
 
   const { coffeeId, waterId, menuId, zoneId, coffeeOfferId, premiumCoffeeOfferId } =
     await withTransaction(db, async (tx) => {

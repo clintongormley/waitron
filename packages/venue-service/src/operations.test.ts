@@ -1,3 +1,4 @@
+import { stampFixtureLineContexts } from "./testing/zone-menus.js";
 import { taxpayer, menus } from "@waitron/db";
 import { deleteDepartment } from "./service-delete.js";
 import * as settingsOperations from "./operations.js";
@@ -45,7 +46,6 @@ import {
   dayCutoverChanges,
   sales,
   withTransaction,
-  workingLineContexts,
   workingOrderLines,
   workingOrders,
   todayColumns,
@@ -69,8 +69,6 @@ import { ensureDefaultSeasons } from "./seasons.js";
 import {
   type Department,
   copyOrderServiceContext,
-  copyWorkingLineContext,
-  copyWorkingLineContexts,
   configureZone,
   createDepartment,
   createServiceZone,
@@ -85,7 +83,7 @@ import {
   listVenueReadiness,
   listZoneOffers,
   recordOrderServiceContext,
-  recordWorkingLineContexts,
+  lineContextColumns,
   resolveNewOrderZone,
   resolveSalePolicy,
   recordSaleReceiptHeader,
@@ -881,7 +879,7 @@ describe("venue service routing", () => {
         lineTotal: 623,
         category: "Cold cuts",
       });
-      await recordWorkingLineContexts(
+      await stampFixtureLineContexts(
         tx,
         "00000000-0000-4000-8000-000000000001",
         [{ workingOrderLineId: workingLineId, menuItemId: offer.id }],
@@ -931,7 +929,7 @@ describe("venue service routing", () => {
       });
       // Published, but on a menu the zone does not sell.
       await expect(
-        recordWorkingLineContexts(
+        stampFixtureLineContexts(
           tx,
           "00000000-0000-4000-8000-000000000001",
           [{ workingOrderLineId: workingLineId, menuItemId: hiddenOffer.id }],
@@ -964,9 +962,9 @@ describe("venue service routing", () => {
         department_name: string;
         category_name: string;
       }>(sql`
-        select menu_name, department_name, category_name
-        from working_line_contexts
-        where working_order_line_id = ${workingLineId}`);
+        select menu_name, department_name, offer_category_name as category_name
+        from working_order_lines
+        where id = ${workingLineId}`);
       expect(attribution.rows).toEqual([
         {
           menu_name: "Deli takeaway",
@@ -976,38 +974,14 @@ describe("venue service routing", () => {
       ]);
 
       const copiedOrderId = "00000000-0000-4000-8000-000000000003";
-      const copiedLineId = "00000000-0000-4000-8000-000000000004";
       await tx.execute(sql`
         insert into working_orders (id, source, node_id, order_number, opened_at, dining) values (${copiedOrderId}, 'dashboard', ${nodeId}, 2, ${new Date().toISOString()}, 'eat_in')`);
-      await tx.insert(workingOrderLines).values({
-        id: copiedLineId,
-        workingOrderId: copiedOrderId,
-        lineNo: 1,
-        productId: ham.id,
-        name: "Sliced ham",
-        descriptions: { "en-GB": "Sliced ham" },
-        // 100 g, in thousandths like the line above.
-        quantity: 100,
-        unitPriceGross: 2490,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
-        lineTotal: 249,
-        category: "Cold cuts",
-      });
       await copyOrderServiceContext(tx, "00000000-0000-4000-8000-000000000001", copiedOrderId);
-      await copyWorkingLineContext(tx, workingLineId, copiedLineId);
       await expect(getOrderServiceContext(tx, copiedOrderId)).resolves.toEqual({
         zoneId: zone,
         departmentId: department.id,
         serviceMode: "prepay",
       });
-      await expect(listWorkingLineContexts(tx, copiedOrderId)).resolves.toEqual([
-        expect.objectContaining({
-          workingOrderLineId: copiedLineId,
-          menuItemId: offer.id,
-          menuName: "Deli takeaway",
-        }),
-      ]);
     });
   });
 
@@ -1065,7 +1039,7 @@ describe("venue service routing", () => {
       });
 
       await expect(
-        recordWorkingLineContexts(
+        stampFixtureLineContexts(
           tx,
           orderId,
           [{ workingOrderLineId: workingLineId, menuItemId: offer.id }],
@@ -1074,8 +1048,8 @@ describe("venue service routing", () => {
       ).resolves.not.toThrow();
 
       const ctx = await tx.execute<{ unit_id: string }>(sql`
-        select unit_id from working_line_contexts
-        where working_order_line_id = ${workingLineId}`);
+        select unit_id from working_order_lines
+        where id = ${workingLineId}`);
       expect(ctx.rows[0]!.unit_id).toBe("00000000-0000-0000-0000-000000000001");
     });
   });
@@ -2173,7 +2147,7 @@ it("says whether an order holds a set lunch, by its lines' recorded versions", a
     await recordOrderServiceContext(tx, id, venue.diningZone);
     expect(await orderHasSetLunch(tx, id)).toBe(false);
     const ordinary = await addLine(tx, venue, id, 1);
-    await recordWorkingLineContexts(
+    await stampFixtureLineContexts(
       tx,
       id,
       [{ workingOrderLineId: ordinary, menuItemId: venue.menuItemId }],
@@ -2183,7 +2157,7 @@ it("says whether an order holds a set lunch, by its lines' recorded versions", a
     await updateProduct(tx, venue.productId, { setLunch: true });
     await publish(tx, venue.menuId);
     const lunch = await addLine(tx, venue, id, 2);
-    await recordWorkingLineContexts(
+    await stampFixtureLineContexts(
       tx,
       id,
       [{ workingOrderLineId: lunch, menuItemId: venue.menuItemId }],
@@ -2201,7 +2175,7 @@ it("reads lunch identity from each line's recorded version after republishing", 
     const id = await openOrder(tx, venue, 1);
     await recordOrderServiceContext(tx, id, venue.diningZone);
     const ordinary = await addLine(tx, venue, id, 1);
-    await recordWorkingLineContexts(
+    await stampFixtureLineContexts(
       tx,
       id,
       [{ workingOrderLineId: ordinary, menuItemId: venue.menuItemId }],
@@ -2211,7 +2185,7 @@ it("reads lunch identity from each line's recorded version after republishing", 
     await publish(tx, venue.menuId);
     const lunch = await addLine(tx, venue, id, 2);
     const withoutVersion = await addLine(tx, venue, id, 3);
-    await recordWorkingLineContexts(
+    await stampFixtureLineContexts(
       tx,
       id,
       [lunch, withoutVersion].map((workingOrderLineId) => ({
@@ -2221,9 +2195,9 @@ it("reads lunch identity from each line's recorded version after republishing", 
       await listZoneOffers(tx, venue.diningZone),
     );
     await tx
-      .update(workingLineContexts)
+      .update(workingOrderLines)
       .set({ menuVersionId: null })
-      .where(eq(workingLineContexts.workingOrderLineId, withoutVersion));
+      .where(eq(workingOrderLines.id, withoutVersion));
     await updateProduct(tx, venue.productId, { setLunch: false });
     await publish(tx, venue.menuId);
     expect(await readLunchLineIds(tx, [ordinary, lunch, withoutVersion, randomUUID()])).toEqual(
@@ -2244,7 +2218,7 @@ describe("order service context", () => {
       const orderId = await openOrder(tx, venue, 1);
       await recordOrderServiceContext(tx, orderId, venue.diningZone);
       const lineId = await addLine(tx, venue, orderId, 1);
-      await recordWorkingLineContexts(
+      await stampFixtureLineContexts(
         tx,
         orderId,
         [{ workingOrderLineId: lineId, menuItemId: venue.menuItemId }],
@@ -2259,8 +2233,8 @@ describe("order service context", () => {
         serviceMode: "prepay",
       });
       const snapshot = await tx.execute<{ department_id: string; department_name: string }>(sql`
-        select department_id, department_name from working_line_contexts
-        where working_order_line_id = ${lineId}`);
+        select offer_department_id as department_id, department_name from working_order_lines
+        where id = ${lineId}`);
       expect(snapshot.rows).toEqual([
         { department_id: venue.restaurantId, department_name: "Restaurant" },
       ]);
@@ -2289,13 +2263,13 @@ describe("order service context", () => {
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
       const offers = await listZoneOffers(tx, venue.diningZone);
-      await expect(recordWorkingLineContexts(tx, orderId, [], offers)).resolves.toBeUndefined();
+      await expect(lineContextColumns(tx, orderId, [], offers)).resolves.toEqual(new Map());
 
       // Control: a round with a line on the same order needs the context the order lacks.
       const lineId = await addLine(tx, venue, orderId, 1);
       await expect(
         rejection(
-          recordWorkingLineContexts(
+          stampFixtureLineContexts(
             tx,
             orderId,
             [{ workingOrderLineId: lineId, menuItemId: venue.menuItemId }],
@@ -2327,101 +2301,29 @@ describe("order service context", () => {
       const offers = await listZoneOffers(tx, venue.diningZone);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
 
-      await recordWorkingLineContexts(tx, orderId, [line(first!)], offers);
+      const one = await lineContextColumns(tx, orderId, [line(first!)], offers);
       const oneLine = prepared.mock.calls.length;
       prepared.mockClear();
-      await recordWorkingLineContexts(tx, orderId, [line(second!), line(third!)], offers);
+      const many = await lineContextColumns(tx, orderId, [line(second!), line(third!)], offers);
       expect(prepared).toHaveBeenCalledTimes(oneLine);
 
-      const recorded = await listWorkingLineContexts(tx, orderId);
-      expect(recorded.map((row) => [row.workingOrderLineId, row.menuItemId]).sort()).toEqual(
+      expect([...one, ...many].map(([id, row]) => [id, row.menuItemId]).sort()).toEqual(
         [first!, second!, third!].map((id) => [id, venue.menuItemId]).sort(),
       );
     });
   });
 
-  it("copies no snapshot from an order or a line that never had one", async () => {
+  it("leaves a copied bill and a bare line without context", async () => {
     const venue = await seedSellingVenue();
     await scoped(async (tx) => {
       const from = await openOrder(tx, venue, 1);
       const to = await openOrder(tx, venue, 2);
-      const fromLine = await addLine(tx, venue, from, 1);
-      const toLine = await addLine(tx, venue, to, 1);
+      await addLine(tx, venue, to, 1);
 
       await expect(copyOrderServiceContext(tx, from, to)).resolves.toBeUndefined();
-      await expect(copyWorkingLineContext(tx, fromLine, toLine)).resolves.toBeUndefined();
 
       await expect(findOrderServiceContext(tx, to)).resolves.toBeNull();
       await expect(listWorkingLineContexts(tx, to)).resolves.toEqual([]);
-    });
-  });
-
-  it("copies many lines' snapshots in one read and one write, each from its own line, skipping a line that never had one", async () => {
-    const venue = await seedSellingVenue();
-    await scoped(async (tx) => {
-      const orderId = await openOrder(tx, venue, 1);
-      await recordOrderServiceContext(tx, orderId, venue.diningZone);
-      const lineIds: string[] = [];
-      for (let lineNo = 1; lineNo <= 7; lineNo++)
-        lineIds.push(await addLine(tx, venue, orderId, lineNo));
-      const [onTime, late, bare, onTimeCopy, onTimeCopy2, lateCopy, bareCopy] = lineIds as [
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-      ];
-      await recordWorkingLineContexts(
-        tx,
-        orderId,
-        [
-          { workingOrderLineId: onTime, menuItemId: venue.menuItemId },
-          {
-            workingOrderLineId: late,
-            menuItemId: venue.menuItemId,
-            late: { periodName: "Lunch", confirmedBy: randomUUID() },
-          },
-        ],
-        await listZoneOffers(tx, venue.diningZone),
-      );
-      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-
-      await copyWorkingLineContexts(tx, []);
-      expect(prepared).not.toHaveBeenCalled();
-      await copyWorkingLineContexts(tx, [
-        { from: onTime, to: onTimeCopy },
-        { from: onTime, to: onTimeCopy2 },
-        { from: late, to: lateCopy },
-        { from: bare, to: bareCopy },
-      ]);
-      expect(prepared).toHaveBeenCalledTimes(2);
-      prepared.mockRestore();
-
-      const recorded = new Map(
-        (
-          await tx
-            .select()
-            .from(workingLineContexts)
-            .where(inArray(workingLineContexts.workingOrderLineId, lineIds))
-        ).map((row) => [row.workingOrderLineId, row]),
-      );
-      expect([...recorded.keys()].sort()).toEqual(
-        [onTime, late, onTimeCopy, onTimeCopy2, lateCopy].sort(),
-      );
-      expect(recorded.get(onTime)).not.toEqual({
-        ...recorded.get(late),
-        workingOrderLineId: onTime,
-      });
-      for (const [copy, original] of [
-        [onTimeCopy, onTime],
-        [onTimeCopy2, onTime],
-        [lateCopy, late],
-      ] as const)
-        expect({ ...recorded.get(copy), workingOrderLineId: original }).toEqual(
-          recorded.get(original),
-        );
     });
   });
 });
@@ -2539,7 +2441,7 @@ describe("zone offers from the published menus", () => {
       for (const lineNo of [1, 2, 3, 4]) lineIds.push(await addLine(tx, venue, orderId, lineNo));
       const offers = await listZoneOffers(tx, venue.diningZone);
       const round = (lines: { workingOrderLineId: string; menuItemId: string }[]) =>
-        recordWorkingLineContexts(tx, orderId, lines, offers);
+        lineContextColumns(tx, orderId, lines, offers);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
 
       await round([{ workingOrderLineId: lineIds[0]!, menuItemId: venue.menuItemId }]);
@@ -2566,7 +2468,7 @@ describe("zone offers from the published menus", () => {
         await addLine(tx, venue, orderId, 3),
       ];
       const offers = await listZoneOffers(tx, venue.diningZone);
-      await recordWorkingLineContexts(
+      await stampFixtureLineContexts(
         tx,
         orderId,
         [
@@ -2576,7 +2478,7 @@ describe("zone offers from the published menus", () => {
         offers,
       );
       const recorded = await tx.execute<{ working_order_line_id: string; menu_version_id: string }>(
-        sql`select working_order_line_id, menu_version_id from working_line_contexts`,
+        sql`select id as working_order_line_id, menu_version_id from working_order_lines where menu_item_id is not null`,
       );
       expect(
         recorded.rows.map((row) => [row.working_order_line_id, row.menu_version_id]).sort(),
@@ -2589,7 +2491,7 @@ describe("zone offers from the published menus", () => {
 
       await expect(
         rejection(
-          recordWorkingLineContexts(
+          stampFixtureLineContexts(
             tx,
             orderId,
             [{ workingOrderLineId: stranger!, menuItemId: UNKNOWN_ID }],
@@ -2602,7 +2504,7 @@ describe("zone offers from the published menus", () => {
       });
 
       await expect(
-        recordWorkingLineContexts(
+        stampFixtureLineContexts(
           tx,
           orderId,
           [{ workingOrderLineId: stranger!, menuItemId: venue.menuItemId }],
@@ -2611,7 +2513,7 @@ describe("zone offers from the published menus", () => {
       ).rejects.toThrow(/no live version/);
 
       const noSuchVersion = await captureError(() =>
-        recordWorkingLineContexts(
+        stampFixtureLineContexts(
           tx,
           orderId,
           [{ workingOrderLineId: stranger!, menuItemId: venue.menuItemId }],
@@ -2658,7 +2560,7 @@ describe("zone offers from the published menus", () => {
       await recordOrderServiceContext(tx, orderId, venue.diningZone);
       const plain = await addLine(tx, venue, orderId, 1);
       const large = await addLine(tx, venue, orderId, 2);
-      await recordWorkingLineContexts(
+      await stampFixtureLineContexts(
         tx,
         orderId,
         [
@@ -3839,15 +3741,15 @@ it.each(["create", "rename"])("allows department %s onto a deleted name", async 
 });
 
 describe("a line sent late", () => {
-  it("records the late mark on a line's context, reads only marked lines, and copies it on a split", async () => {
+  it("records a late mark on a line and reads only marked lines", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
       const orderId = await openOrder(tx, venue, 1);
       await recordOrderServiceContext(tx, orderId, venue.diningZone);
       const late = await addLine(tx, venue, orderId, 1);
       const onTime = await addLine(tx, venue, orderId, 2);
-      const split = await addLine(tx, venue, orderId, 3);
-      await recordWorkingLineContexts(
+      await seedPerson(tx, { id: "person-7", displayName: "Late confirmer" });
+      await stampFixtureLineContexts(
         tx,
         orderId,
         [
@@ -3861,15 +3763,11 @@ describe("a line sent late", () => {
         await listZoneOffers(tx, venue.diningZone),
       );
       const stored = await tx.execute<{ late_confirmed_by: string | null }>(sql`
-        select late_confirmed_by from working_line_contexts
-        where working_order_line_id in (${late}, ${onTime}) order by late_confirmed_by`);
+        select late_confirmed_by from working_order_lines
+        where id in (${late}, ${onTime}) order by late_confirmed_by`);
       expect(stored.rows.map((row) => row.late_confirmed_by)).toEqual([null, "person-7"]);
       await expect(readLateSendMarks(tx, [late, onTime])).resolves.toEqual(
         new Map([[late, { periodName: "Lunch", agreed: true }]]),
-      );
-      await copyWorkingLineContext(tx, late, split);
-      await expect(readLateSendMarks(tx, [split, onTime])).resolves.toEqual(
-        new Map([[split, { periodName: "Lunch", agreed: true }]]),
       );
       await expect(readLateSendMarks(tx, [])).resolves.toEqual(new Map());
     });
@@ -3885,13 +3783,14 @@ describe("a line sent late", () => {
         await addLine(tx, venue, orderId, 2),
         await addLine(tx, venue, orderId, 3),
       ];
-      await recordWorkingLineContexts(
+      await stampFixtureLineContexts(
         tx,
         orderId,
         lines.map((workingOrderLineId) => ({ workingOrderLineId, menuItemId: venue.menuItemId })),
         await listZoneOffers(tx, venue.diningZone),
       );
       const [asked, unasked, untouched] = lines as [string, string, string];
+      await seedPerson(tx, { id: "person-7", displayName: "Late confirmer" });
       await recordLateSendMarks(tx, [
         { lineId: asked, periodName: "Lunch", confirmedBy: "person-7" },
         { lineId: unasked, periodName: "Brunch", confirmedBy: null },
@@ -3901,9 +3800,9 @@ describe("a line sent late", () => {
         late_period_name: string | null;
         late_confirmed_by: string | null;
       }>(sql`
-        select working_order_line_id, late_period_name, late_confirmed_by
-        from working_line_contexts
-        where working_order_line_id in (${asked}, ${unasked}, ${untouched})`);
+        select id as working_order_line_id, late_period_name, late_confirmed_by
+        from working_order_lines
+        where id in (${asked}, ${unasked}, ${untouched})`);
       expect(
         Object.fromEntries(
           stored.rows.map((row) => [

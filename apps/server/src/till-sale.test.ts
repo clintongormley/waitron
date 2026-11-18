@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import type { TradingContext } from "./trading-context.js";
 import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -1034,7 +1035,9 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
   it("credits a walk-up's lines to the operator who rang it, in no group", async () => {
     const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES"], { es: "Café" });
     const workingOrderId = randomUUID();
-    const operatorId = "cccccccc-0000-4000-8000-00000000000a";
+    const operatorId = await withTransaction(suite.db, (tx) =>
+      ensureOperator(tx, "cccccccc-0000-4000-8000-00000000000a"),
+    );
 
     await payWorkingOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },

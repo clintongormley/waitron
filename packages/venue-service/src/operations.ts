@@ -33,7 +33,6 @@ import {
   saleReceiptHeaders,
   UNIQUE_VIOLATION,
   kitchenStations,
-  workingLineContexts,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -1301,6 +1300,7 @@ export async function listWorkingLineContexts(
     unitId: row.unitId!,
     unitName: row.unitName!,
     unitPrecision: row.unitPrecision!,
+    vatClass: row.vatClass!,
     hardwareUnit: row.hardwareUnit as "kg" | "g" | "mg" | null,
   }));
 }
@@ -1486,43 +1486,6 @@ export async function copyOrderServiceContext(
   const context = await findOrderServiceContext(tx, fromWorkingOrderId);
   if (context === null) return;
   await tx.update(workingOrders).set(context).where(eq(workingOrders.id, toWorkingOrderId));
-}
-
-/** Copy a line's immutable selling snapshot when a quantity is split onto a new line id. */
-export async function copyWorkingLineContext(
-  tx: Transaction,
-  fromWorkingOrderLineId: string,
-  toWorkingOrderLineId: string,
-): Promise<void> {
-  const [context] = await tx
-    .select()
-    .from(workingLineContexts)
-    .where(eq(workingLineContexts.workingOrderLineId, fromWorkingOrderLineId));
-  if (context === undefined) return;
-  await tx.insert(workingLineContexts).values({
-    ...context,
-    workingOrderLineId: toWorkingOrderLineId,
-  });
-}
-
-/** {@link copyWorkingLineContext} for many lines, in one read. */
-export async function copyWorkingLineContexts(
-  tx: Transaction,
-  pairs: readonly { from: string; to: string }[],
-): Promise<void> {
-  if (pairs.length === 0) return;
-  const contexts = await tx
-    .select()
-    .from(workingLineContexts)
-    .where(
-      inArray(workingLineContexts.workingOrderLineId, [...new Set(pairs.map(({ from }) => from))]),
-    );
-  const byLine = new Map(contexts.map((context) => [context.workingOrderLineId, context]));
-  const copies = pairs.flatMap(({ from, to }) => {
-    const context = byLine.get(from);
-    return context === undefined ? [] : [{ ...context, workingOrderLineId: to }];
-  });
-  await insertInChunks(tx, workingLineContexts, copies);
 }
 
 type ZoneKeepOpenState = NonNullable<ZoneMenuState["service"]["zoneKeepOpen"]>;

@@ -2344,35 +2344,6 @@ CREATE TABLE `sale_receipt_headers` (
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE `working_line_contexts` (
-	`working_order_line_id` text PRIMARY KEY NOT NULL,
-	`menu_item_id` text NOT NULL,
-	`menu_id` text NOT NULL,
-	`menu_version_id` text,
-	`menu_name` text NOT NULL,
-	`department_id` text NOT NULL,
-	`department_name` text NOT NULL,
-	`category_name` text NOT NULL,
-	`unit_id` text NOT NULL,
-	`unit_name` text NOT NULL,
-	`unit_precision` integer NOT NULL,
-	`sold_in_each` integer DEFAULT false NOT NULL,
-	`hardware_unit` text,
-	`vat_class` text NOT NULL,
-	`allergens` text,
-	`sent_nutrition` text,
-	`diet` text,
-	`diet_override` text,
-	`late_period_name` text,
-	`late_confirmed_by` text,
-	FOREIGN KEY (`working_order_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`menu_item_id`) REFERENCES `menu_items`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`menu_version_id`) REFERENCES `menu_versions`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "working_line_contexts_unit_precision_ck" CHECK("working_line_contexts"."unit_precision" between 0 and 3),
-	CONSTRAINT "working_line_contexts_hardware_unit_ck" CHECK("working_line_contexts"."hardware_unit" is null or "working_line_contexts"."hardware_unit" in ('kg','g','mg')),
-	CONSTRAINT "working_line_contexts_vat_class_ck" CHECK("working_line_contexts"."vat_class" in ('general','reduced','super_reduced','zero'))
-);
---> statement-breakpoint
 CREATE TABLE `kitchen_notices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`station_id` text NOT NULL,
@@ -3294,7 +3265,9 @@ BEGIN
           AND (
             status = 'placed'
             OR (status = 'settled' AND (
-              new.group_id IS NOT old.group_id OR new.sent_nutrition IS NOT old.sent_nutrition
+              new.group_id IS NOT old.group_id
+              OR new.sent_nutrition IS NOT old.sent_nutrition
+              OR new.late_period_name IS NOT old.late_period_name
             ))
           )
       )
@@ -3341,8 +3314,18 @@ BEGIN
       AND new.allergens IS old.allergens
       AND new.diet IS old.diet
       AND new.diet_override IS old.diet_override
-      AND new.late_period_name IS old.late_period_name
-      AND new.late_confirmed_by IS old.late_confirmed_by
+      -- A late release records its decision before taking the sent stamp.
+      AND (
+        (new.late_period_name IS old.late_period_name AND new.late_confirmed_by IS old.late_confirmed_by)
+        OR (
+          new.group_id IS old.group_id
+          AND old.menu_item_id IS NOT NULL
+          AND old.sent_at IS NULL
+          AND old.late_period_name IS NULL
+          AND old.late_confirmed_by IS NULL
+          AND new.late_period_name IS NOT NULL
+        )
+      )
       -- Sending records the first declaration just after taking the line's sent stamp.
       AND (
         new.sent_nutrition IS old.sent_nutrition

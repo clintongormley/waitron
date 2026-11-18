@@ -436,7 +436,9 @@ BEGIN
           AND (
             status = 'placed'
             OR (status = 'settled' AND (
-              new.group_id IS NOT old.group_id OR new.sent_nutrition IS NOT old.sent_nutrition
+              new.group_id IS NOT old.group_id
+              OR new.sent_nutrition IS NOT old.sent_nutrition
+              OR new.late_period_name IS NOT old.late_period_name
             ))
           )
       )
@@ -483,8 +485,18 @@ BEGIN
       AND new.allergens IS old.allergens
       AND new.diet IS old.diet
       AND new.diet_override IS old.diet_override
-      AND new.late_period_name IS old.late_period_name
-      AND new.late_confirmed_by IS old.late_confirmed_by
+      -- A late release records its decision before taking the sent stamp.
+      AND (
+        (new.late_period_name IS old.late_period_name AND new.late_confirmed_by IS old.late_confirmed_by)
+        OR (
+          new.group_id IS old.group_id
+          AND old.menu_item_id IS NOT NULL
+          AND old.sent_at IS NULL
+          AND old.late_period_name IS NULL
+          AND old.late_confirmed_by IS NULL
+          AND new.late_period_name IS NOT NULL
+        )
+      )
       -- Sending records the first declaration just after taking the line's sent stamp.
       AND (
         new.sent_nutrition IS old.sent_nutrition

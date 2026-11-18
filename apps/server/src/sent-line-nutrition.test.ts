@@ -325,12 +325,34 @@ it("keeps captured declarations through quantity splitting and a bill move", asy
   );
   await inTx(v, (tx) => fireAll(tx, v.cfg, id));
   expect((await inTx(v, (tx) => readTabLines(tx, id)))[0]!.sentAt).toEqual(expect.any(String));
+  await inTx(v, (tx) =>
+    tx
+      .update(workingOrderLines)
+      .set({ latePeriodName: "Lunch", lateConfirmedBy: OPERATOR })
+      .where(eq(workingOrderLines.workingOrderId, id)),
+  );
+  const factsOf = (bill: string) =>
+    inTx(v, (tx) =>
+      tx
+        .select({
+          menuVersionId: workingOrderLines.menuVersionId,
+          latePeriodName: workingOrderLines.latePeriodName,
+          lateConfirmedBy: workingOrderLines.lateConfirmedBy,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, bill)),
+    );
+  const facts = await factsOf(id);
+  expect(facts).toEqual([
+    { menuVersionId: expect.any(String), latePeriodName: "Lunch", lateConfirmedBy: OPERATOR },
+  ]);
   await inTx(v, (tx) => splitLinesWithinOrder(tx, v.cfg, id, [{ lineNo: 1, quantity: "1" }]));
   await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: { eggs: {} } }));
   const lines = await inTx(v, (tx) => readTabLines(tx, id));
   expect(lines).toHaveLength(2);
   const other = await split(v, party.partyId, id, [lines[1]!.lineNo]);
   for (const bill of [id, other]) {
+    expect(await factsOf(bill)).toEqual(facts);
     expect((await inTx(v, (tx) => readTabLines(tx, bill))).map((line) => line.nutrition)).toEqual([
       { allergens: { milk: {} }, dietaryDeclarations: [] },
     ]);

@@ -757,7 +757,7 @@ in the zone also sells its product and variant on its own, and otherwise refuses
 `menu_period.ended` (409) unless the request's `lateSend` names its menu and, where its department's
 `late_send_needs_manager` is on, someone holding `venue.configure` authorises it — the
 sender, or a manager's PIN (`apps/server/src/late-send.ts`). A confirmed dish's service context
-rows (`working_line_contexts.late_period_name` and `late_confirmed_by`) record the period and who
+rows (`working_order_lines.late_period_name` and `late_confirmed_by`) record the period and who
 confirmed; the kitchen ticket and the kitchen screen read them through `readLateSendMarks`. Plan
 D19–D28. Extras added later to a dish already sent (stamped sent or holding a ticket item, held or
 fired; for a set lunch, one of its courses) whose period ended earlier that day, through either
@@ -772,7 +772,7 @@ course the lunch's product. A late dish's unmarked extras are marked with it, as
 An unmarked extra on a dish already marked was stored after the dish was judged, so it is judged on
 its own, by its dish's product, and a refusal names its dish's line. A dish whose menu the order's
 department neither sells now nor lists as ended today is judged by the department its context
-records (`working_line_contexts.department_id`): not late if that department sells the menu now,
+records (`working_order_lines.offer_department_id`): not late if that department sells the menu now,
 late by that department's period if it ended there today. Otherwise (its period's menu replaced or its period moved since
 the dish was stored, or that department gone) no stored row names the period: if the
 order was opened (`working_orders.opened_at`) on the current business day, the dish is late under

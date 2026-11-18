@@ -323,6 +323,7 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "working_line_contexts",
   "order_service_contexts",
   "bill_edit_states",
   "working_order_counters",
@@ -446,10 +447,6 @@ const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
   ],
   units: [["name", "staff_name", "staff_abbreviation"]],
   webauthn_credentials: [["created_at", "aaguid"]],
-  working_line_contexts: [
-    ["menu_name", "menu_version_id"],
-    ["hardware_unit", "sold_in_each"],
-  ],
   working_orders: [
     ["collected_at", "delivery_table_label"],
     [
@@ -475,7 +472,6 @@ const REBUILT_FOREIGN_KEY_ORDER: Record<string, readonly number[]> = {
   page_printers: [1, 0],
   print_jobs: [3, 4, 0, 1, 2],
   tenders: [1, 0],
-  working_line_contexts: [2, 0, 1],
 };
 const byName = <T>(tables: Record<string, T>) =>
   Object.fromEntries(Object.entries(tables).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
@@ -1148,21 +1144,50 @@ for (const locale of ["en", "es"] as const) {
         delete row.recipe_derivation;
         delete row.diet_derivation;
       }
-      const contexts = expected[phase].tables.working_line_contexts!;
-      contexts.columns = contexts.columns.filter((column) => column.name !== "diet_derivation");
-      for (const row of Object.values(contexts.rows)) delete row.diet_derivation;
-      contexts.columns.splice(
-        contexts.columns.findIndex((column) => column.name === "allergens") + 1,
-        0,
-        {
-          name: "sent_nutrition",
-          type: "TEXT",
-          notnull: 0,
-          dflt_value: null,
-          pk: 0,
-        },
-      );
-      for (const row of Object.values(contexts.rows)) row.sent_nutrition = null;
+      for (const name of [
+        "menu_item_id",
+        "menu_id",
+        "menu_name",
+        "menu_version_id",
+        "offer_department_id",
+        "department_name",
+        "unit_id",
+        "sold_in_each",
+        "hardware_unit",
+        "allergens",
+        "diet",
+        "diet_override",
+        "late_period_name",
+        "late_confirmed_by",
+        "sent_nutrition",
+        "offer_unit_name",
+        "offer_unit_precision",
+        "offer_vat_class",
+        "offer_category_name",
+      ]) {
+        const type =
+          name === "sold_in_each" || name === "offer_unit_precision" ? "INTEGER" : "TEXT";
+        orderLines.columns.push({ name, type, notnull: 0, dflt_value: null, pk: 0 });
+        for (const row of Object.values(orderLines.rows)) row[name] = null;
+      }
+      orderLines.foreignKeys = [
+        ...[
+          ["credited_to", "persons"],
+          ["late_confirmed_by", "persons"],
+          ["menu_version_id", "menu_versions"],
+          ["menu_item_id", "menu_items"],
+        ].map(([from, table], id) => ({
+          id,
+          seq: 0,
+          table: table!,
+          from: from!,
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        })),
+        ...orderLines.foreignKeys.map((key) => ({ ...key, id: key.id + 4 })),
+      ];
       type Classed = { vatClass: string; takeawayVatClass?: string };
       for (const row of Object.values(expected[phase].tables.menu_versions!.rows)) {
         const document = row.document as {

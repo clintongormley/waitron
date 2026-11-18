@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
@@ -214,7 +215,9 @@ const confirming = (menuIds: string[], personId = randomUUID()) => ({
   personId,
   lateSend: {
     menuIds: new Set(menuIds),
-    confirm: vi.fn(async () => personId),
+    confirm: vi.fn((tx: Parameters<LateSendConfirmation["confirm"]>[0], _needsManager: boolean) =>
+      ensureOperator(tx, personId),
+    ),
   },
 });
 

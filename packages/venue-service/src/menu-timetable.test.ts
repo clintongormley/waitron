@@ -1,3 +1,4 @@
+import { stampFixtureLineContexts } from "./testing/zone-menus.js";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPerson, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
@@ -62,7 +63,6 @@ import {
   listVenueReadiness,
   resolveZoneContext,
   recordOrderServiceContext,
-  recordWorkingLineContexts,
 } from "./operations.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
@@ -1490,7 +1490,7 @@ async function recordedLine(v: Timed) {
       lineTotal: 450,
       category: "Uncategorised",
     });
-    await recordWorkingLineContexts(
+    await stampFixtureLineContexts(
       tx,
       orderId,
       [{ workingOrderLineId: lineId, menuItemId: offer.id }],
@@ -1500,7 +1500,7 @@ async function recordedLine(v: Timed) {
 }
 
 const lineContexts = () =>
-  db.execute(sql`select * from working_line_contexts order by working_order_line_id`);
+  db.execute(sql`select * from working_order_lines where menu_item_id is not null order by id`);
 
 /** The restaurant's painted day rows and ranges a special day holds on `date`. */
 const paintOn = async (_v: Venue, date: string) => {

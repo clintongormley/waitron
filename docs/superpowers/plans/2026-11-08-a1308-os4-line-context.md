@@ -26,6 +26,12 @@
 > printed unit name and 188 null categories paired with `Uncategorised`, as well as 688 differing
 > non-null unit names, 315 differing precisions and 27 differing VAT classes. Keep all four
 > `offer_` columns. M2 stays periodic under the 10 November note.
+>
+> The first send of a held line can follow presentation or payment. The line trigger permits the
+> first late mark before the sent stamp and the first declaration after it in that send's
+> transaction. The table route's "Fire line at 14:05" case exercises open, placed and settled
+> bills. The priced facts remain fixed after placement. The watcher cleared the test ports at
+> 03:23, 03:28 and 03:32, and cleared up to 1,500 counted lines at 03:37 with shared person seeding.
 
 **Goal:** Fold `working_line_contexts` (the menu, department, unit, allergens and late-send facts
 frozen when a line is added) into `working_order_lines`, so a line is written once, with its context,
@@ -125,7 +131,7 @@ pnpm exec vitest run scripts/schema-constraints.test.ts scripts/behavioural-trig
 | --- | --- | --- |
 | `working_line_contexts` | `missing table working_line_contexts`; `missing index working_line_contexts.primary key(working_order_line_id)` | all |
 | `working_line_contexts` | `missing trigger waitron_change_working_line_contexts_insert`, `_update`, `_delete` | change-feed |
-| `working_order_lines` | `extra table working_order_lines.columns[<c>]` for each of the 14 columns in item 2 (18 if M3 keeps the `offer_` four) | all |
+| `working_order_lines` | `extra table working_order_lines.columns[<c>]` for each of the 14 columns in item 2, the four retained `offer_` fields and `sent_nutrition` | all |
 | `working_order_lines` | `extra table working_order_lines.checks[working_order_lines_hardware_unit_ck]`, `[working_order_lines_context_ck]` (and the two `offer_` CHECKs if kept) | all |
 | `working_order_lines` | `extra table working_order_lines.foreignKeys[menu_item_id->menu_items(id)]`, `[menu_version_id->menu_versions(id)]`, `[late_confirmed_by->persons(id)]`, `[credited_to->persons(id)]` | all |
 | `working_order_lines` | `changed table working_order_lines.columnOrder` | all |

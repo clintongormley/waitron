@@ -860,6 +860,7 @@ also qualifies the historical operation-description references in this section.
   Devices hold their assigned station and invoice printer choice revision on the device row.
   The devices and printing work continues with printer holders.
   Kitchen tickets now read their bill through the order line, with no copied bill id to update on a move.
+  Each order line now carries its recorded offer and first-send facts, which stay with the line when it is split or moved.
   Floor splits now check the parties the till read, separately from the room layout revision;
   saved joined designs form ordinary live groups. Zones now carry their department and sale overrides;
   saved designs now carry membership, placements retain off-layout sizes, and sets carry their

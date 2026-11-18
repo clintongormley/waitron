@@ -30,7 +30,6 @@ export {
   serviceSteps,
   specialDayDates,
   specialDays,
-  workingLineContexts,
   ZONE_PAINT_KINDS,
 } from "@waitron/db";
 export type { ServiceStepStart } from "@waitron/db";

@@ -9,7 +9,6 @@ import {
   routingCells,
   saleReceiptHeaders,
   withTransaction,
-  workingLineContexts,
   floorZones,
 } from "@waitron/db";
 import { seedTaxpayer, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -114,22 +113,6 @@ const EXPECTED: Record<
     uniqueConstraints: [],
     primaryKeys: [],
   },
-  working_line_contexts: {
-    table: workingLineContexts,
-    foreignKeys: [
-      "working_line_contexts_line_fk",
-      "working_line_contexts_menu_item_fk",
-      "working_line_contexts_menu_version_fk",
-    ],
-    checks: [
-      "working_line_contexts_unit_precision_ck",
-      "working_line_contexts_hardware_unit_ck",
-      "working_line_contexts_vat_class_ck",
-    ],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: ["working_line_contexts_pk"],
-  },
   kitchen_notices: {
     table: kitchenNotices,
     foreignKeys: [
@@ -163,7 +146,7 @@ const EXPECTED: Record<
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
   it("covers the remaining service tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(8);
+    expect(Object.keys(EXPECTED)).toHaveLength(7);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {
