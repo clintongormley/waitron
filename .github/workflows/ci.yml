@@ -458,14 +458,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - id: lint-cache-day
         name: Note the date for the lint results key
@@ -546,14 +546,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -623,14 +623,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -928,14 +928,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -1031,14 +1031,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -1141,14 +1141,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -1240,14 +1240,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -1392,14 +1392,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -1549,14 +1549,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -1636,14 +1636,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -1760,14 +1760,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -1851,14 +1851,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -1995,14 +1995,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -2150,14 +2150,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -2242,14 +2242,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -2368,14 +2368,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -2456,14 +2456,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -2554,14 +2554,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -2726,14 +2726,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -2808,14 +2808,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -2895,14 +2895,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -2984,14 +2984,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -3075,14 +3075,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -3167,14 +3167,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -3258,14 +3258,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -3349,14 +3349,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -3442,14 +3442,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -3524,14 +3524,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -3591,14 +3591,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -3662,14 +3662,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -3784,14 +3784,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 
@@ -3900,14 +3900,14 @@ jobs:
         continue-on-error: true
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
       - name: Set up Node, second attempt
         if: steps.setup-node.outcome == 'failure'
         uses: actions/setup-node@v7
         timeout-minutes: 2
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
 
       - run: pnpm install --frozen-lockfile
 

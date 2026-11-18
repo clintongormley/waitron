@@ -3550,6 +3550,22 @@ skips the retry. The job's existing deadline still covers all its steps, so a fi
 can exhaust its time before both attempts finish. This does not bound the runner's earlier
 action-repository download or add a separate limit to post-job cache saving.
 
+On 18 November 2026, a 177,466,126-byte pnpm archive paused during download to
+disposable runners. In [server shard 4](https://github.com/clintongormley/waitron/actions/runs/44368424650/job/135029629291),
+both attempts reported zero bytes for about 30 seconds before receiving data and later
+reached their deadlines. The cause of the pauses is unknown.
+
+CI jobs that can run on the disposable server pass `cache: pnpm` to both Node setup attempts
+on GitHub-hosted runners. On disposable runners they pass an empty cache input and populate
+the store during the frozen install. The enclosing job deadline still covers the install.
+The cache case in `scripts/ci-workflow.test.mjs` evaluates the declared inputs for both runner
+environments. Job logs show which downloads actually ran.
+
+| Source | Source words | Application here |
+| --- | --- | --- |
+| [GitHub Actions runner context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#runner-context) | “The environment of the runner executing the job” | Use `runner.environment` to choose the cache input after placement. |
+| [setup-node at 949feb2](https://github.com/actions/setup-node/blob/949feb2413d6458794dcd2491c4babbbce0c15c1/src/main.ts#L146-L169) | `const npmRegex = /^(\^)?npm(@.*)?$/` | With an empty input, the automatic detector does not enable caching for this repository's pnpm declaration. |
+
 A1254 measured the latest 200 repository workflow runs returned by the API on 2026-10-31,
 from `2026-10-30T18:26:26Z` through `2026-10-31T08:09:05Z`. Across 6,268 job records,
 4,343 main `Run actions/setup-node@v7` steps were present, excluding `Post …` steps:
