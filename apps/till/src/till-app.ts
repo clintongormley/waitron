@@ -8754,7 +8754,7 @@ export class TillApp extends LitElement {
         return;
       }
       if (row.state === "paid-not-handed-over") {
-        const result = await this.api.getFiledTicket(row.workingOrderId);
+        const result = await this.api.getFiledTicket(row.workingOrderId, { receiptPreview: true });
         if (!current()) return;
         this.result = result;
         this.#showTicket(row.workingOrderId, false);
@@ -22898,7 +22898,6 @@ export class TillApp extends LitElement {
           @back-to-find-bill=${() => this.#requestLeave(() => this.#backToFindBill())}
           slot="drill"
           .result=${this.result}
-          .issuer=${this.issuer}
           .invoiceLocale=${this.invoiceLocale}
           .originalReceiptAvailable=${this.originalReceiptAvailable}
           .originalReceiptPrint=${this.originalReceiptPrint}
@@ -22932,8 +22931,6 @@ export class TillApp extends LitElement {
             this.deviceId === undefined || this.capabilities.includes("print-receipt")
           }
           .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
-          .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
-          .simulatedCardPayment=${this.result?.simulatedCardPayment === true}
         ></till-ticket-view>`;
       case "hours":
         return html`<till-hours-screen
@@ -23543,7 +23540,6 @@ export class TillApp extends LitElement {
                 .result=${this.result!}
                 .cashChange=${this.settlementDocument.cashChange}
                 .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
-                .issuer=${this.issuer}
                 .invoiceLocale=${this.invoiceLocale}
                 .originalReceiptAvailable=${this.originalReceiptAvailable}
                 .originalReceiptPrint=${this.originalReceiptPrint}

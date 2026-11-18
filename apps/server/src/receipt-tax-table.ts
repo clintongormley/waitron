@@ -1,11 +1,7 @@
 import type { TableLine } from "./receipt-table.js";
 
-export interface TaxTableRow {
-  rate: string;
-  base: string;
-  tax: string;
-  total: string;
-}
+import type { TaxTableRow } from "@waitron/shared";
+export type { TaxTableRow } from "@waitron/shared";
 
 const amountsOf = (row: TaxTableRow): string[] => [row.base, row.tax, row.total];
 

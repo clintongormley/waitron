@@ -1,24 +1,16 @@
 import { equipmentItem, roleOf } from "../../test/pay-equipment-fixtures.js";
-import { getCountryPack, RECIPIENT_REGION_NAMES } from "@waitron/country-packs";
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { qrSvg } from "../qr.js";
 import { t as uiText, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
-import type { TicketIssuer } from "./till-ticket-view.js";
 import type {
   InvoiceDeliveryAttempt,
   InvoiceDeliveryStatus,
   OriginalReceiptPrint,
   TillSaleResult,
 } from "../api/client.js";
-import type { ReceiptConfig } from "../layout.js";
-import { receiptLabelsFor } from "@waitron/country-packs";
-import { formatMoney } from "@waitron/shared";
-
-// es-ES currency formatting separates the amount and € with a non-breaking space (U+00A0, or a
-// narrow no-break U+202F on some ICU builds); normalise both to a plain space before asserting.
-const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
 
 // A mixed-rate ticket with a weighed line: café 2 → 3,00 (21 %), jamón 0,320 kg → 6,40 (10 %).
 // Total 9,40; €10 cash tendered → 0,60 change.
@@ -50,17 +42,14 @@ const result: TillSaleResult = {
   qrText: { caption: "QR tributario:", legend: "VERI*FACTU" },
 };
 
-const issuer: TicketIssuer = { venueName: "Deli Delicioso SL", nif: "B12345678" };
-
-const mount = (over: Partial<TillSaleResult> = {}, receipt?: ReceiptConfig) =>
+const mount = (over: Partial<TillSaleResult> = {}) =>
   mountWidget<TillTicketView>("till-ticket-view", {
-    result: { ...result, ...over, ...(receipt ? { receiptTrim: receipt } : {}) },
-    issuer,
+    result: { ...result, ...over },
     // Pinned so the "operator UI is English, ticket stays Spanish" test is unambiguous.
     invoiceLocale: "es-ES",
   });
 
-const text = (el: TillTicketView): string => norm(el.shadowRoot!.textContent ?? "");
+const text = (el: TillTicketView): string => el.shadowRoot!.textContent ?? "";
 
 // setLocale mutates module-level state; put the shipped default (en-GB) back for the other suites.
 afterEach(() => {
@@ -69,90 +58,111 @@ afterEach(() => {
 });
 
 describe("till-ticket-view", () => {
-  it.each([
-    {
-      ui: "en-GB",
-      saved: "es-ES",
-      fallback: "en-GB",
-      name: "Saved Spanish name",
-      figure: "9,40 €",
-    },
-    { ui: "es-ES", saved: "en-GB", fallback: "es-ES", name: "Saved English name", figure: "€9.40" },
-  ])(
-    "A965 labels uses saved $saved receipt language beside $ui controls",
-    async ({ ui, saved, fallback, name, figure }) => {
-      setLocale(ui);
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        result: {
-          ...result,
-          locale: saved,
-          lines: [
-            {
-              descriptions: { "es-ES": "Saved Spanish name", "en-GB": "Saved English name" },
-              quantity: "1",
-              gross: "9.40",
-            },
-          ],
-        },
-        issuer,
-        invoiceLocale: fallback,
-      });
-      const body = text(el);
-      expect(body).toContain(saved === "en-GB" ? "Cash" : receiptLabelsFor("es-ES").cash);
-      expect(body).toContain(saved === "en-GB" ? "Change" : receiptLabelsFor("es-ES").change);
-      expect(body).toContain(name);
-      expect(body).not.toContain(saved === "en-GB" ? "Saved Spanish name" : "Saved English name");
-      expect(body).toContain(figure);
-      expect(el.shadowRoot!.querySelector("[data-test=reprint]")!.textContent).toContain(
-        uiText("action.reprint", ui),
-      );
-    },
-  );
-
-  it("A965 labels uses component English fallback only when the saved locale is absent", async () => {
-    setLocale("es-ES");
-    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      result: {
-        ...result,
-        lines: [
-          {
-            descriptions: { "es-ES": "Saved Spanish name", "en-GB": "Saved English name" },
-            quantity: "1",
-            gross: "9.40",
-          },
-        ],
-      },
-      issuer,
-      invoiceLocale: "en-GB",
-    });
-    expect(text(el)).toContain("Cash");
-    expect(text(el)).toContain("Saved English name");
-    expect(text(el)).toContain("€9.40");
-  });
-  it("shows a later recalled extra under its original dish with its charged amount", async () => {
+  it("draws the supplied practice marks on either side of the receipt contents", async () => {
     const { el } = await mount({
-      total: "34.00",
-      vatBreakdown: [{ rate: "0", base: "34.00", tax: "0.00" }],
-      lines: [
-        { descriptions: { "es-ES": "Primer plato" }, quantity: "1", gross: "10.00" },
-        { descriptions: { "es-ES": "Segundo plato" }, quantity: "1", gross: "20.00" },
+      receiptPreview: [
+        { kind: "text", text: "DOCUMENTO DE PRUEBA", indent: 0 },
+        { kind: "rule" },
+        { kind: "amount", caption: "2  Plato del día", amount: "9,40 A", indent: { after: "2  " } },
+        { kind: "rule" },
+        { kind: "text", text: "DOCUMENTO DE PRUEBA", indent: 0 },
+      ],
+    });
+    const article = el.shadowRoot!.querySelector("article")!;
+    const body = article.textContent!;
+    expect(body.match(/DOCUMENTO DE PRUEBA/g)).toHaveLength(2);
+    expect(body.indexOf("Plato del día")).toBeGreaterThan(body.indexOf("DOCUMENTO DE PRUEBA"));
+    expect(body.indexOf("9,40 A")).toBeLessThan(body.lastIndexOf("DOCUMENTO DE PRUEBA"));
+    expect(body).not.toContain("Jamón");
+  });
+
+  it("associates supplied headings with the item, continuation and tax columns", async () => {
+    const header = {
+      units: "Uds.",
+      item: "Artículo",
+      price: "Precio",
+      amount: "Importe",
+      rate: "IVA",
+    };
+    const { el } = await mount({
+      receiptPreview: [
+        { kind: "align", alignment: "center" },
+        { kind: "text", text: "Factura", indent: 0, style: { bold: true } },
+        { kind: "align", alignment: "left" },
         {
-          descriptions: { "es-ES": "Extra del primero" },
-          quantity: "1",
-          gross: "4.00",
-          parentLineNo: 1,
+          kind: "table",
+          table: {
+            header,
+            withRate: true,
+            rows: [{ units: "4", item: "Croquetas", price: "1,00", amount: "4,00", rate: "10%" }],
+          },
+        },
+        { kind: "text", text: "<b>Artículo a granel</b>", indent: 0 },
+        {
+          kind: "table",
+          table: {
+            withRate: true,
+            rows: [
+              {
+                units: "",
+                item: "Descuento",
+                itemIndent: 2,
+                price: "",
+                amount: "−0,50",
+                rate: "10%",
+              },
+            ],
+          },
+        },
+        {
+          kind: "taxTable",
+          header: { rate: "IVA", base: "Base imponible", tax: "Cuota", total: "Total" },
+          rows: [{ rate: "A 10%", base: "3,50", tax: "0,35", total: "3,85" }],
         },
       ],
     });
-    const rows = [...el.shadowRoot!.querySelectorAll(".line")];
-    expect(rows.map((row) => row.querySelector(".line-name")!.textContent!.trim())).toEqual([
-      "Primer plato",
-      "Extra del primero",
-      "Segundo plato",
+    const tables = [...el.shadowRoot!.querySelectorAll("article table")];
+    expect(
+      tables.map((table) =>
+        [...table.querySelectorAll("th[scope=col]")].map((cell) => cell.textContent!.trim()),
+      ),
+    ).toEqual([
+      ["Uds.", "Artículo", "Precio", "Importe", "IVA"],
+      ["Uds.", "Artículo", "Precio", "Importe", "IVA"],
+      ["IVA", "Base imponible", "Cuota", "Total"],
     ]);
-    expect(rows[1]!.classList.contains("option")).toBe(true);
-    expect(norm(rows[1]!.textContent!)).toContain("4,00 €");
-    expect(rows[2]!.classList.contains("option")).toBe(false);
+    expect(
+      tables.map((table) => table.querySelector("th[scope=row]")?.textContent?.trim()),
+    ).toEqual(["Croquetas", "Descuento", "A 10%"]);
+    expect(tables[0]!.querySelector("tbody td")?.textContent).toBe("4");
+    expect(el.shadowRoot!.querySelector("article")?.textContent).toContain(
+      "<b>Artículo a granel</b>",
+    );
+    expect(el.shadowRoot!.querySelector("article b")).toBeNull();
+  });
+
+  it("leaves the receipt area empty when the answer has no preview", async () => {
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("article")?.textContent?.trim() ?? "").toBe("");
+    expect(el.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
+  });
+
+  it.each([
+    ["en-GB", "es-ES", "Café", "9,40 €"],
+    ["es-ES", "en-GB", "Coffee", "€9.40"],
+  ])("uses %s controls beside the supplied %s receipt", async (ui, locale, name, total) => {
+    setLocale(ui);
+    const { el } = await mount({
+      locale,
+      receiptPreview: [{ kind: "amount", caption: name, amount: total, indent: 0 }],
+    });
+    const article = el.shadowRoot!.querySelector("article")!;
+    expect(article.lang).toBe(locale);
+    expect(article.textContent).toContain(name);
+    expect(article.textContent).toContain(total);
+    expect(el.shadowRoot!.querySelector("[data-test=reprint]")!.textContent).toContain(
+      uiText("action.reprint", ui),
+    );
   });
 
   it("hides drawer opening on a historical cash receipt even when the device can open it", async () => {
@@ -165,33 +175,6 @@ describe("till-ticket-view", () => {
     expect(el.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
   });
-  it.each([
-    [120, "15 Oct 2026, 01:30"],
-    [0, "14 Oct 2026, 23:30"],
-  ])("shows saved F2 issue offset %s independently of the browser", async (offset, want) => {
-    const { el } = await mount({
-      invoiceType: "F2",
-      locale: "en-GB",
-      issuedAt: "2026-10-14T23:30:00.000Z",
-      issuedOffsetMinutes: offset,
-    });
-    expect(el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent).toContain(want);
-    expect(el.shadowRoot!.querySelector(".recipient")).toBeNull();
-    expect(el.shadowRoot!.querySelector(".domicile")).toBeNull();
-  });
-  it.each([
-    [60, "1 mar 2026, 00:05"],
-    [0, "28 feb 2026, 23:05"],
-    [-480, "28 feb 2026, 15:05"],
-  ])("shows saved F1 issue offset %s independently of the browser", async (offset, want) => {
-    const { el } = await mount({
-      invoiceType: "F1",
-      issuedAt: "2026-02-28T23:05:00.000Z",
-      issuedOffsetMinutes: offset,
-    });
-    expect(el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent).toContain(want);
-  });
-
   it.each([
     [undefined, "Checking the original print status…", null],
     [{ status: "not_queued" }, "The original has not been sent to a printer.", "print-receipt"],
@@ -218,7 +201,6 @@ describe("till-ticket-view", () => {
     ],
   ] as const)("keeps F1 undelivered with original status %j", async (print, message, action) => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      issuer,
       result: { ...result, invoiceType: "F1" },
       originalReceiptPrint: print as OriginalReceiptPrint | undefined,
       originalReceiptAvailable: true,
@@ -245,7 +227,6 @@ describe("till-ticket-view", () => {
     async (locale, message, autoRetry) => {
       setLocale(locale);
       const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        issuer,
         result: { ...result, invoiceType: "F1" },
         originalReceiptPrint: {
           status: "failed",
@@ -270,7 +251,6 @@ describe("till-ticket-view", () => {
     async (locale) => {
       setLocale(locale);
       const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        issuer,
         result: { ...result, invoiceType: "F1" },
         originalReceiptPrint: { status: "done", jobId: "original", canRetry: false },
         canPrintReceipt: false,
@@ -326,7 +306,6 @@ describe("till-ticket-view", () => {
     "does not offer customer handover before an original completes: %j",
     async (print) => {
       const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        issuer,
         result: { ...result, invoiceType: "F1" },
         originalReceiptPrint: print,
       });
@@ -337,7 +316,6 @@ describe("till-ticket-view", () => {
   it("keeps F1 status visible without device printing capability and exposes only the status check", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      issuer,
       result: { ...result, invoiceType: "F1" },
       originalReceiptPrint: { status: "not_queued" },
       canPrintReceipt: false,
@@ -355,7 +333,6 @@ describe("till-ticket-view", () => {
 
   it("emits original retry and status check events while preserving the filed result", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      issuer,
       result: { ...result, invoiceType: "F1" },
       originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true },
     });
@@ -381,7 +358,6 @@ describe("till-ticket-view", () => {
 
   it("does not show an F1 delivery warning or retry action for F2", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      issuer,
       result: { ...result, invoiceType: "F2" },
       originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true },
       originalReceiptAvailable: true,
@@ -391,253 +367,28 @@ describe("till-ticket-view", () => {
     expect(el.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
   });
 
-  it.each([
-    ["es-ES", "IVA incluido"],
-    ["ca-ES", "IVA inclòs"],
-    ["gl-ES", "IVE incluído"],
-    ["eu-ES", "BEZa barne"],
-    ["en-GB", "VAT included"],
-  ])("identifies VAT-inclusive F1 reductions in %s", async (locale, included) => {
-    const invoice = {
-      ...result,
-      total: "10.30",
-      vatBreakdown: [{ rate: "21.00", base: "8.51", tax: "1.79" }],
-      lines: [
-        {
-          descriptions: { "es-ES": "Plato", en: "Dish" },
-          quantity: "1",
-          gross: "10.30",
-          listGross: "12.00",
-          net: {
-            unitPrice: "8.51",
-            priceQuantity: "1.000",
-            base: "8.51",
-            rate: "21.00",
-            tax: "1.79",
-          },
-          adjustments: [{ kind: "discount" as const, percentBp: 1000, amount: "1.20" }],
-        },
-        {
-          descriptions: { "es-ES": "Extra", en: "Extra" },
-          quantity: "1",
-          gross: "0.00",
-          listGross: "1.10",
-          parentLineNo: 1,
-          net: {
-            unitPrice: "0.00",
-            priceQuantity: "1.000",
-            base: "0.00",
-            rate: "10.00",
-            tax: "0.00",
-          },
-          adjustments: [{ kind: "comp" as const, amount: "1.10" }],
-        },
-      ],
-      billAdjustments: [{ kind: "discount" as const, amount: "0.50" }],
-    };
-    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      issuer,
-      invoiceLocale: locale,
-      result: { ...invoice, invoiceType: "F1" },
-    });
-    const reductions = [...el.shadowRoot!.querySelectorAll(".adjustment, .bill-adjustment")];
-    expect(reductions).toHaveLength(3);
-    for (const row of reductions) expect(row.textContent).toContain(`(${included})`);
-    const expected =
-      locale === "en-GB" ? ["-€1.20", "-€1.10", "-€0.50"] : ["-1,20 €", "-1,10 €", "-0,50 €"];
-    expect(reductions.map((row) => norm(row.querySelector(".line-gross")!.textContent!))).toEqual(
-      expected,
-    );
-    el.result = { ...invoice, invoiceType: "F2" };
-    await el.updateComplete;
-    expect(text(el)).not.toContain(`(${included})`);
-  });
-
-  it("shows saved VAT in each F1 dish and extra row", async () => {
-    const { el } = await mount({
-      invoiceType: "F1",
-      lines: [
-        {
-          ...result.lines[0]!,
-          net: {
-            unitPrice: "1.24",
-            priceQuantity: "1.000",
-            base: "2.48",
-            rate: "21.00",
-            tax: "0.52",
-          },
-        },
-        {
-          ...result.lines[1]!,
-          parentLineNo: 1,
-          net: {
-            unitPrice: "18.18",
-            priceQuantity: "1.000",
-            base: "5.82",
-            rate: "10.00",
-            tax: "0.58",
-          },
-        },
-      ],
-    });
-    const facts = [...el.shadowRoot!.querySelectorAll(".invoice-facts")].map((node) =>
-      norm([...node.querySelectorAll("span")].map((span) => span.textContent).join(" "))
-        .replace(/\s+/g, " ")
-        .trim(),
-    );
-    expect(facts[0]).toContain("IVA 21.00% 0,52 €");
-    expect(facts[1]).toContain("IVA 10.00% 0,58 €");
-  });
-
-  it("keeps the F2 gross layout even when net facts are present", async () => {
-    const { el } = await mount({
-      invoiceType: "F2",
-      lines: [
-        {
-          ...result.lines[0]!,
-          net: { unitPrice: "1.24", priceQuantity: "1.000", base: "2.48", rate: "21.00" },
-        },
-      ],
-    });
-    expect(text(el)).not.toContain("Factura completa");
-    expect(el.shadowRoot!.querySelector(".invoice-facts")).toBeNull();
-    expect(norm(el.shadowRoot!.querySelector(".line-gross")!.textContent!)).toBe("3,00 €");
-  });
-
-  it.each(["ca-ES", "gl-ES", "eu-ES"])(
-    "shows F1 labels and a sub-unit price quantity in %s",
-    async (locale) => {
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        issuer,
-        invoiceLocale: locale,
-        result: {
-          ...result,
-          invoiceType: "F1",
-          lines: [
-            {
-              descriptions: { [locale]: "Ham" },
-              quantity: "0.32",
-              gross: "6.40",
-              unitName: { es: "kg" },
-              net: { unitPrice: "1.82", priceQuantity: "0.100", base: "5.82", rate: "10.00" },
-            },
-          ],
-        },
-      });
-      const priceLabels = {
-        "ca-ES": "Preu sense IVA",
-        "gl-ES": "Prezo sen IVE",
-        "eu-ES": "BEZik gabeko prezioa",
-      };
-      expect(text(el)).toContain(priceLabels[locale as keyof typeof priceLabels]);
-      expect(
-        norm(el.shadowRoot!.querySelector(".invoice-facts span:last-child")!.textContent!)
-          .replace(/\s+/g, " ")
-          .trim(),
-      ).toBe("1,82 € / 0,1 kg");
-    },
-  );
-
-  it("shows the filed combined quantity for an F1 extra", async () => {
-    const { el } = await mount({
-      invoiceType: "F1",
-      lines: [
-        {
-          descriptions: { "es-ES": "Plato" },
-          quantity: "2",
-          gross: "3.00",
-          net: { unitPrice: "1.24", priceQuantity: "1.000", base: "2.48", rate: "21.00" },
-        },
-        {
-          descriptions: { "es-ES": "Extra" },
-          quantity: "4",
-          parentLineNo: 1,
-          gross: "6.40",
-          net: { unitPrice: "1.45", priceQuantity: "1.000", base: "5.82", rate: "10.00" },
-        },
-      ],
-    });
-    expect(el.shadowRoot!.querySelector(".line.option")!.textContent).toContain("Extra 4");
-    expect(el.shadowRoot!.querySelector(".line.option")!.textContent).not.toContain("x2");
-  });
-
-  it.each(["es-ES", "en-GB"])(
-    "shows filed F1 net prices and price quantities (%s)",
-    async (locale) => {
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        issuer,
-        invoiceLocale: locale,
-        result: {
-          ...result,
-          invoiceType: "F1",
-          lines: [
-            {
-              descriptions: { "es-ES": "Jamón", "en-GB": "Ham" },
-              quantity: "0.32",
-              unitName: { es: "kg" },
-              gross: "6.40",
-              net: { unitPrice: "18.18", priceQuantity: "1.000", base: "5.82", rate: "10.00" },
-            },
-            {
-              descriptions: { "es-ES": "Extra", "en-GB": "Extra" },
-              quantity: "2",
-              parentLineNo: 1,
-              gross: "3.00",
-              net: { unitPrice: "1.24", priceQuantity: "1.000", base: "2.48", rate: "21.00" },
-            },
-          ],
-        },
-      });
-      expect(text(el)).toContain(receiptLabelsFor(locale).fullInvoice);
-      const facts = [...el.shadowRoot!.querySelectorAll(".invoice-facts")].map((node) =>
-        norm([...node.querySelectorAll("span")].map((span) => span.textContent).join(" "))
-          .replace(/\s+/g, " ")
-          .trim(),
-      );
-      expect(facts).toHaveLength(2);
-      expect(facts[0]).toContain(
-        `${receiptLabelsFor(locale).netUnitPrice} ${locale === "es-ES" ? "18,18 €" : "€18.18"} / 1 kg`,
-      );
-      expect(facts[0]).toContain(`Base 10.00% ${locale === "es-ES" ? "5,82 €" : "€5.82"}`);
-      expect(facts[1]).toContain(`Base 21.00% ${locale === "es-ES" ? "2,48 €" : "€2.48"}`);
-      expect(el.shadowRoot!.querySelector(".lines")!.textContent).not.toContain(
-        locale === "es-ES" ? "6,40" : "6.40",
-      );
-    },
-  );
-
   it.each(["light", "dark"] as const)(
-    "wraps long F1 identity text on a phone (%s)",
+    "wraps long supplied invoice text on a phone (%s)",
     async (theme) => {
       const width = window.innerWidth;
       const height = window.innerHeight;
+      const customer = "Customer".repeat(12);
       await page.viewport(390, 844);
       try {
         const { el } = await mountWidget<TillTicketView>(
           "till-ticket-view",
           {
-            issuer,
             result: {
               ...result,
               invoiceType: "F1",
-              issuer: {
-                venueName: "Filed Venue SL",
-                nif: "B87654321",
-                domicile: "Calle fiscal original 27, Madrid",
-              },
-              recipient: {
-                legalName: "Customer".repeat(12),
-                taxId: "B11223344",
-                address: "Avenida del cliente original 123, Madrid",
-                countryCode: "ES",
-              },
+              receiptPreview: [{ kind: "text", text: customer, indent: 0 }],
             },
           },
           theme,
         );
-        const recipient = el.shadowRoot!.querySelector<HTMLElement>(".recipient")!;
-        expect(recipient.textContent).toContain("Customer".repeat(12));
-        expect(recipient.scrollWidth).toBeLessThanOrEqual(recipient.clientWidth);
+        const row = el.shadowRoot!.querySelector<HTMLElement>("article p")!;
+        expect(row.textContent).toContain(customer);
+        expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
       } finally {
         await page.viewport(width, height);
@@ -645,569 +396,59 @@ describe("till-ticket-view", () => {
     },
   );
 
-  it.each([
-    { invoiceType: "F1", domicile: "Calle Fiscal 27", showVenueAddress: true },
-    { invoiceType: "F1", domicile: undefined, showVenueAddress: true },
-    { invoiceType: "F2", domicile: "Calle Fiscal 27", showVenueAddress: true },
-    { invoiceType: "F2", domicile: undefined, showVenueAddress: true },
-  ] as const)(
-    "keeps filed F1 domicile separate from the current venue address on $invoiceType with domicile=$domicile",
-    async ({ invoiceType, domicile, showVenueAddress }) => {
-      for (const locale of ["es-ES", "en-GB"]) {
-        const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-          result: {
-            ...result,
-            locale,
-            invoiceType,
-            issuer: { ...issuer, ...(domicile === undefined ? {} : { domicile }) },
-            venueAddress: ["Location Street 45", "28001 Madrid"],
-            receiptSettings: { printAddress: true },
-            receiptTrim: { phone: "910000000", email: "venue@example.com" },
-          },
-          issuer,
-          invoiceLocale: locale,
-        });
-        const header = norm(el.shadowRoot!.querySelector(".issuer")!.textContent ?? "");
-        expect(header.includes("Location Street 45")).toBe(showVenueAddress);
-        expect(header.includes("28001 Madrid")).toBe(showVenueAddress);
-        expect(header.includes("Calle Fiscal 27")).toBe(
-          invoiceType === "F1" && domicile !== undefined,
-        );
-        expect(header).toContain("910000000");
-        expect(header).toContain("venue@example.com");
-      }
-    },
-  );
-
-  it("shows the filed F1 domicile and recipient instead of the current issuer", async () => {
-    const { el } = await mount({
-      invoiceType: "F1",
-      issuer: {
-        venueName: "Filed Venue SL",
-        nif: "B87654321",
-        domicile: "Calle fiscal original 27, Madrid",
-      },
-      recipient: {
-        legalName: "Filed Customer SL",
-        taxId: "B11223344",
-        address: "Avenida original 123, Madrid",
-        countryCode: "ES",
-      },
-    });
-    const content = text(el);
-    expect(content).toContain("Filed Venue SL");
-    expect(content).toContain("Calle fiscal original 27, Madrid");
-    expect(content).toContain("Filed Customer SL");
-    expect(content).toContain("NIF: B11223344");
-    expect(content).toContain("Avenida original 123, Madrid");
-    expect(content).not.toContain("Deli Delicioso SL");
-    const article = el.shadowRoot!.querySelector("article")!;
-    expect(article.querySelectorAll(".qr")).toHaveLength(1);
-    const sections = [...article.children];
-    expect(sections.indexOf(article.querySelector(".qr-block")!)).toBeLessThan(
-      sections.indexOf(article.querySelector(".issuer")!),
-    );
-    expect(sections.indexOf(article.querySelector(".meta")!)).toBeLessThan(
-      sections.indexOf(article.querySelector(".recipient")!),
-    );
-  });
-
   it("registers as a custom element", () => {
     expect(customElements.get("till-ticket-view")).toBe(TillTicketView);
   });
 
-  it("marks a practice receipt without claiming whether money moved", async () => {
-    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      result,
-      issuer,
-      invoiceLocale: "es-ES",
-      simulated: true,
+  it("renders the supplied QR and centers it between its caption and legend", async () => {
+    const url = "https://example.test/verify/17";
+    const { el } = await mount({
+      receiptPreview: [
+        { kind: "align", alignment: "center" },
+        { kind: "text", text: "QR tributario:", indent: 0 },
+        { kind: "qr", text: url },
+        { kind: "text", text: "VERI*FACTU", indent: 0 },
+        { kind: "rule" },
+        { kind: "text", text: "Filed issuer", indent: 0 },
+      ],
     });
-    expect(el.shadowRoot!.querySelector("[data-test=simulation-notice]")?.textContent).toContain(
-      "DOCUMENTO DE PRUEBA",
+    const qr = el.shadowRoot!.querySelector("article .qr")!;
+    const expected = new DOMParser().parseFromString(qrSvg(url), "image/svg+xml");
+    expect(qr.querySelector("path")?.getAttribute("d")).toBe(
+      expected.querySelector("path")!.getAttribute("d"),
     );
+    expect(qr.previousElementSibling?.textContent?.trim()).toBe("QR tributario:");
+    expect(qr.nextElementSibling?.textContent?.trim()).toBe("VERI*FACTU");
+    expect(getComputedStyle(qr).textAlign).toBe("center");
+    expect(getComputedStyle(qr.previousElementSibling!).textAlign).toBe("center");
   });
 
-  it.each([false, true])(
-    "limits the ticket's no-charge line to a simulator payment (%s)",
-    async (simulatedCardPayment) => {
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        result,
-        issuer,
-        invoiceLocale: "es-ES",
-        simulated: true,
-        simulatedCardPayment,
-      });
-      const notice = el.shadowRoot!.querySelector("[data-test=simulation-notice]")!.textContent!;
-      expect(notice).toContain("DOCUMENTO DE PRUEBA");
-      expect(notice.includes("SIN COBRO REAL")).toBe(simulatedCardPayment);
-    },
-  );
-
-  it("prints the issuer venue name and NIF (RD 1619/2012 art. 7.1.d)", async () => {
-    const { el } = await mount();
-    const t = text(el);
-    expect(t).toContain("Deli Delicioso SL");
-    expect(t).toContain("NIF");
-    expect(t).toContain("B12345678");
-  });
-
-  it("prefers the issuer stored with the filed invoice over current boot identity", async () => {
+  it("keeps outside-card details beside the receipt and the manual reference within it", async () => {
     const { el } = await mount({
-      issuer: { venueName: "Filed Venue SL", nif: "B87654321" },
-    });
-    const t = text(el);
-    expect(t).toContain("Filed Venue SL");
-    expect(t).toContain("B87654321");
-    expect(t).not.toContain("Deli Delicioso SL");
-    expect(t).not.toContain("B12345678");
-  });
-
-  it("shows the filed trading name above the legal issuer when it was printed", async () => {
-    const { el } = await mount({
-      issuer: { venueName: "Filed Venue SL", nif: "B87654321" },
-      receiptHeader: { tradingName: "Terrace Bar", printTradingName: true },
-    });
-    const header = el.shadowRoot!.querySelector(".issuer")!;
-    expect([...header.querySelectorAll("p")].map((row) => row.textContent!.trim())).toEqual([
-      "Terrace Bar",
-      "Filed Venue SL",
-      "NIF: B87654321",
-    ]);
-  });
-
-  it("prints the invoice number + series and the formatted issue date (art. 7.1.a, 7.1.b)", async () => {
-    const { el } = await mount();
-    const expectedDate = new Intl.DateTimeFormat("es-ES", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(result.issuedAt));
-    expect(text(el)).toContain("A/1");
-    expect(text(el)).toContain(norm(expectedDate));
-  });
-
-  it("prints the order grouping label and number so split documents can be collected together", async () => {
-    const { el } = await mount();
-    expect(text(el)).toContain("Table 6 · Pedido 41");
-
-    const { el: unlabelled } = await mount({ orderLabel: null, orderNumber: 42 });
-    expect(text(unlabelled)).toContain("Pedido 42");
-  });
-
-  it("identifies each good from the FILED lines: name (invoice locale), quantity and per-line gross (art. 7.1.e)", async () => {
-    const { el } = await mount();
-    const rows = el.shadowRoot!.querySelectorAll(".line");
-    expect(rows).toHaveLength(2);
-    expect(rows[0]!.textContent).toContain("Café");
-    expect(rows[0]!.textContent).toContain("2");
-    expect(norm(rows[0]!.textContent!)).toContain("3,00 €");
-    expect(rows[1]!.textContent).toContain("Jamón");
-    expect(rows[1]!.textContent).toContain("0,32 kg");
-    expect(norm(rows[1]!.textContent!)).toContain("6,40 €");
-  });
-
-  it("renders the SERVER's filed lines, not any client basket — a diverging line list follows result.lines", async () => {
-    // Overriding `lines` to a DIFFERENT composition shows the rows track the filed result.
-    const { el } = await mount({
-      lines: [{ descriptions: { "es-ES": "Agua" }, quantity: "3", gross: "6.00" }],
-    });
-    const rows = el.shadowRoot!.querySelectorAll(".line");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.textContent).toContain("Agua");
-    expect(rows[0]!.textContent).toContain("3");
-    expect(norm(rows[0]!.textContent!)).toContain("6,00 €");
-    expect(el.shadowRoot!.textContent).not.toContain("Café");
-    expect(el.shadowRoot!.textContent).not.toContain("Jamón");
-  });
-
-  it("groups a filed dish's option lines under it — dish at its price, options indented at their delta", async () => {
-    // A PAID option (+0.50) and a FREE option (0.00), both children of the dish (lineNo 1).
-    const { el } = await mount({
-      lines: [
-        {
-          descriptions: { "es-ES": "Hamburguesa" },
-          quantity: "1",
-          gross: "10.00",
-          parentLineNo: null,
-        },
-        { descriptions: { "es-ES": "Extra queso" }, quantity: "1", gross: "0.50", parentLineNo: 1 },
-        { descriptions: { "es-ES": "Sin cebolla" }, quantity: "1", gross: "0.00", parentLineNo: 1 },
-      ],
-    });
-    const rows = el.shadowRoot!.querySelectorAll(".line");
-    expect(rows).toHaveLength(3);
-    expect(rows[0]!.textContent).toContain("Hamburguesa");
-    expect(rows[0]!.classList.contains("option")).toBe(false);
-    expect(norm(rows[0]!.textContent!)).toContain("10,00 €");
-    // The free option shows 0,00 €, never omitted.
-    expect(rows[1]!.classList.contains("option")).toBe(true);
-    expect(rows[1]!.textContent).toContain("Extra queso");
-    expect(norm(rows[1]!.textContent!)).toContain("0,50 €");
-    expect(rows[2]!.classList.contains("option")).toBe(true);
-    expect(rows[2]!.textContent).toContain("Sin cebolla");
-    expect(norm(rows[2]!.textContent!)).toContain("0,00 €");
-  });
-
-  it("shows an xN badge for an option taken more than once per dish, and none for a plain option (per-option quantity)", async () => {
-    // FILED lines carry the COMBINED count on the child (dishQty × optionQty).
-    const { el } = await mount({
-      lines: [
-        {
-          descriptions: { "es-ES": "Hamburguesa" },
-          quantity: "2",
-          gross: "20.00",
-          parentLineNo: null,
-        },
-        {
-          descriptions: { "es-ES": "Extra chupito" },
-          quantity: "4",
-          gross: "2.00",
-          parentLineNo: 1,
-        },
-        { descriptions: { "es-ES": "Sin cebolla" }, quantity: "2", gross: "0.00", parentLineNo: 1 },
-      ],
-    });
-    const rows = el.shadowRoot!.querySelectorAll(".line");
-    expect(rows[1]!.textContent).toContain("Extra chupito");
-    expect(rows[1]!.textContent).toContain("x2"); // 4 / 2 = 2 → badge
-    expect(rows[2]!.textContent).toContain("Sin cebolla");
-    expect(rows[2]!.textContent).not.toContain(" x2"); // 2 / 2 = 1 → no badge
-  });
-
-  it("shows a weighted extra's filed physical amount and frozen unit without a pick-count badge", async () => {
-    const { el } = await mount({
-      lines: [
-        {
-          descriptions: { "es-ES": "Tostada" },
-          quantity: "1",
-          gross: "2.00",
-          parentLineNo: null,
-        },
-        {
-          descriptions: { "es-ES": "Jamón" },
-          quantity: "0.150",
-          gross: "0.03",
-          unitName: { es: "kg" },
-          unitPrecision: 3,
-          parentLineNo: 1,
-        },
-      ],
-      total: "2.03",
-    });
-    const rows = el.shadowRoot!.querySelectorAll(".line");
-    expect(rows[1]!.textContent).toContain("Jamón");
-    expect(rows[1]!.textContent).toContain("0,150 kg");
-    expect(rows[1]!.textContent).not.toContain("x");
-  });
-
-  it.each([
-    { locale: "es-ES", ui: "en-GB", mark: "," },
-    { locale: "en-GB", ui: "es-ES", mark: "." },
-  ])(
-    "writes weighed quantities with the $locale receipt's decimal mark under a $ui till",
-    async ({ locale, ui, mark }) => {
-      setLocale(ui);
-      const dish = {
-        descriptions: { [locale]: "Jamón" },
-        quantity: "0.35",
-        gross: "7.00",
-        unitName: { es: "kg", en: "kg" },
-        unitPrecision: 3,
-        parentLineNo: null,
-      };
-      const extra = {
-        descriptions: { [locale]: "Queso" },
-        quantity: "0.150",
-        gross: "0.30",
-        unitName: { es: "kg", en: "kg" },
-        unitPrecision: 3,
-        parentLineNo: 1,
-      };
-      const mountAs = (over: Partial<TillSaleResult>) =>
-        mountWidget<TillTicketView>("till-ticket-view", {
-          issuer,
-          invoiceLocale: locale,
-          result: { ...result, ...over },
-        });
-
-      const { el: simplified } = await mountAs({ lines: [dish, extra] });
-      expect(norm(simplified.shadowRoot!.querySelector(".line-qty")!.textContent!).trim()).toBe(
-        `0${mark}35 kg`,
-      );
-      expect(simplified.shadowRoot!.querySelector(".line.option")!.textContent).toContain(
-        `Queso 0${mark}150 kg`,
-      );
-
-      const net = { unitPrice: "2.00", priceQuantity: "0.100", base: "6.36", rate: "10.00" };
-      const { el: full } = await mountAs({
-        invoiceType: "F1",
-        lines: [
-          { ...dish, net },
-          { ...extra, net: { ...net, base: "0.27" } },
-        ],
-      });
-      expect(norm(full.shadowRoot!.querySelector(".line-qty")!.textContent!).trim()).toBe(
-        `0${mark}35 kg`,
-      );
-      expect(full.shadowRoot!.querySelector(".line.option")!.textContent).toContain(
-        `Queso 0${mark}150 kg`,
-      );
-      const facts = [...full.shadowRoot!.querySelectorAll(".invoice-facts .vat-row:first-child")];
-      expect(facts).toHaveLength(2);
-      for (const row of facts)
-        expect(norm(row.textContent!).replace(/\s+/g, " ")).toContain(`/ 0${mark}1 kg`);
-    },
-  );
-
-  it("shows a filed Each extra as x3 instead of its translated unit abbreviation", async () => {
-    const { el } = await mount({
-      lines: [
-        { descriptions: { "es-ES": "Tostada" }, quantity: "1", gross: "2.00", parentLineNo: null },
-        {
-          descriptions: { "es-ES": "Queso" },
-          quantity: "3",
-          gross: "1.50",
-          parentLineNo: 1,
-          unitName: { es: "pzas" },
-          unitPrecision: 0,
-          soldInEach: true,
-        },
-      ],
-      total: "3.50",
-    });
-    const row = el.shadowRoot!.querySelectorAll(".line")[1]!;
-    expect(row.textContent).toContain("Queso x3");
-    expect(row.textContent).not.toContain("3 pzas");
-  });
-
-  it("keeps an integral volume amount and unit when the filed identity is not Each", async () => {
-    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      result: {
-        ...result,
-        lines: [
-          { descriptions: { "en-GB": "Tea" }, quantity: "1", gross: "2.00", parentLineNo: null },
-          {
-            descriptions: { "en-GB": "Milk" },
-            quantity: "150",
-            gross: "1.50",
-            parentLineNo: 1,
-            unitName: { en: "ml" },
-            unitPrecision: 0,
-          },
-        ],
+      receiptPreview: [{ kind: "text", text: "Ref. 4471", indent: 0 }],
+      tender: {
+        method: "card",
+        charged: "20.90",
+        tip: "0.00",
+        reference: "4471",
+        externalProvider: "other",
+        externalMachine: "Bank counter",
       },
-      issuer,
-      invoiceLocale: "en-GB",
     });
-    const row = el.shadowRoot!.querySelectorAll(".line")[1]!;
-    expect(row.textContent).toContain("Milk 150 ml");
-    expect(row.textContent).not.toContain("Milk x150");
+    const article = el.shadowRoot!.querySelector("article")!;
+    expect(article.textContent).toContain("Ref. 4471");
+    expect(article.textContent).not.toContain("Bank counter");
+    expect(text(el)).toContain("Bank counter");
+    expect(text(el)).toContain(uiText("tender.outside_other"));
   });
 
-  it("shows the taxable base per rate, plus the (allowed extra) cuota per rate (art. 7.1.f)", async () => {
-    const { el } = await mount();
-    const t = text(el);
-    expect(t).toContain("Base 21.00%");
-    expect(t).toContain("2,48 €"); // base at 21 %
-    expect(t).toContain("Base 10.00%");
-    expect(t).toContain("5,82 €"); // base at 10 %
-    expect(t).toContain("IVA 21.00%");
-    expect(t).toContain("0,52 €"); // cuota at 21 %
-    expect(t).toContain("IVA 10.00%");
-    expect(t).toContain("0,58 €"); // cuota at 10 %
-  });
-
-  it("shows the total and the operational efectivo/cambio lines (art. 7.1.g + allowed extras)", async () => {
-    const { el } = await mount();
-    const t = text(el);
-    expect(t).toContain("TOTAL");
-    expect(t).toContain("9,40 €");
-    expect(t).toContain("Efectivo");
-    expect(t).toContain("10,00 €"); // tendered = total + change
-    expect(t).toContain("Cambio");
-    expect(t).toContain("0,60 €");
-  });
-
-  describe("card tender", () => {
-    it("keeps card identity off the fiscal ticket while retaining the card tender", async () => {
-      const { el } = await mount({
-        tender: {
-          method: "card",
-          charged: "20.90",
-          tip: "0.00",
-          reference: null,
-        },
-      });
-      const t = text(el);
-      expect(t).toContain("Tarjeta");
-      expect(t).not.toContain("VISA");
-      expect(t).not.toContain("5838");
-      expect(t).not.toContain("Sin contacto");
-      expect(t).not.toContain("328600");
-      expect(t).not.toContain("Efectivo");
-    });
-
-    it("shows Propina/Cobrado only when a tip rode on the card", async () => {
-      const { el } = await mount({
-        tender: {
-          method: "card",
-          charged: "21.40",
-          tip: "0.50",
-          reference: null,
-        },
-      });
-      const t = text(el);
-      expect(t).toContain("Propina");
-      expect(norm(t)).toContain("0,50 €");
-      expect(t).toContain("Cobrado");
-      expect(norm(t)).toContain("21,40 €");
-    });
-
-    it("omits Propina/Cobrado when the card carries no tip", async () => {
-      const { el } = await mount({
-        tender: {
-          method: "card",
-          charged: "20.90",
-          tip: "0.00",
-          reference: null,
-        },
-      });
-      const t = text(el);
-      expect(t).not.toContain("Propina");
-      expect(t).not.toContain("Cobrado");
-      const rows = el.shadowRoot!.querySelectorAll(".tender-row");
-      expect(rows).toHaveLength(1);
-    });
-
-    it("shows the operator's manual reference when present", async () => {
-      const { el } = await mount({
-        tender: {
-          method: "card",
-          charged: "20.90",
-          tip: "0.00",
-          reference: "4471",
-          externalProvider: "other",
-          externalMachine: "Bank counter",
-        },
-      });
-      expect(text(el)).toContain("Ref. 4471");
-      expect(text(el)).toContain("Bank counter");
-      expect(text(el)).toContain(uiText("tender.outside_other"));
-    });
-
-    it("still shows the cash Efectivo/Cambio rows for a cash sale, unchanged", async () => {
-      const { el } = await mount({ tender: { method: "cash", change: "0.60" } });
-      const t = text(el);
-      expect(t).toContain("Efectivo");
-      expect(t).toContain("Cambio");
-    });
-
-    it("renders no tender extras for an invoice issued before payment", async () => {
-      const { el } = await mount({ tender: { method: "unpaid" } });
-      const t = text(el);
-      expect(t).not.toContain("Efectivo");
-      expect(t).not.toContain("Cambio");
-      expect(t).not.toContain("Tarjeta");
+  it.each(["unpaid", "deferred"] as const)(
+    "offers no card slip for an %s tender",
+    async (method) => {
+      const { el } = await mount({ tender: { method } });
       expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
-    });
-
-    it("names a bill closed as a deferred payment as still to be paid, with no card row or payment slip", async () => {
-      const { el } = await mount({ tender: { method: "deferred" } });
-      const rows = [...el.shadowRoot!.querySelectorAll(".tender-row")].map((row) =>
-        norm(row.textContent ?? "").trim(),
-      );
-      expect(rows).toEqual(["Pago aplazado"]);
-      expect(text(el)).not.toContain("Tarjeta");
-      expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
-    });
-  });
-
-  it("renders the QR from the verification URL and the VERI*FACTU legend", async () => {
-    const { el } = await mount();
-    expect(el.shadowRoot!.querySelector("svg")).not.toBeNull();
-    expect(text(el)).toContain("VERI*FACTU");
-  });
-
-  it("shows «QR tributario:» centred, directly above the QR, in an English operator UI too", async () => {
-    setLocale("en-GB");
-    const { el } = await mount();
-    const qr = el.shadowRoot!.querySelector("svg")!.closest(".qr")!;
-    const caption = qr.previousElementSibling as HTMLElement | null;
-    expect(caption?.textContent?.trim()).toBe("QR tributario:");
-    expect(getComputedStyle(caption!).textAlign).toBe("center");
-  });
-
-  it("shows neither the caption nor the legend when no QR is shown, even if the words are given", async () => {
-    const { el } = await mount({ qr: "" });
-    expect(text(el)).not.toContain("QR tributario");
-    expect(text(el)).not.toContain("VERI*FACTU");
-  });
-
-  it("shows no QR and no legend when the regime minted no verification URL", async () => {
-    const { el } = await mount({ qr: "", qrText: undefined });
-    expect(el.shadowRoot!.querySelector("svg")).toBeNull();
-    expect(el.shadowRoot!.querySelector(".legend")).toBeNull();
-    expect(text(el)).not.toContain("VERI*FACTU");
-  });
-
-  it("shows the caption and the legend the sale carries, not words of its own", async () => {
-    const { el } = await mount({ qrText: { caption: "CAP-X", legend: "LEG-Y" } });
-    const top = el.shadowRoot!.querySelector(".qr-block")!;
-    expect(top.querySelector(".qr-caption")!.textContent).toBe("CAP-X");
-    expect(top.querySelector(".legend")!.textContent).toBe("LEG-Y");
-    expect(text(el)).not.toContain("VERI*FACTU");
-    expect(text(el)).not.toContain("QR tributario");
-  });
-
-  // AEAT's QR specification v0.5.0 §3: the QR goes at the start of the invoice, before the
-  // invoice's own content, with «QR tributario:» above it and VERI*FACTU directly under it.
-  describe("the QR comes first on an invoice that carries one", () => {
-    /** The ticket's top-level blocks in order, each as its class name, with the QR block spelt out. */
-    const blocks = (el: TillTicketView): string[] =>
-      [...el.shadowRoot!.querySelector("article.ticket")!.children].map((child) =>
-        child.matches(".qr-block")
-          ? `qr-block[${[...child.children].map((part) => part.className).join(",")}]`
-          : child.className,
-      );
-
-    it("shows the caption, the QR and the legend as the ticket's first content, before the issuer", async () => {
-      const { el } = await mount({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" });
-      expect(blocks(el).slice(0, 2)).toEqual(["qr-block[qr-caption,qr,legend]", "issuer"]);
-      const top = el.shadowRoot!.querySelector(".qr-block")!;
-      expect(top.querySelector(".qr-caption")!.textContent).toBe("QR tributario:");
-      expect(top.querySelector(".qr svg")).not.toBeNull();
-      expect(top.querySelector(".legend")!.textContent).toBe("VERI*FACTU");
-      expect(el.shadowRoot!.querySelectorAll(".legend")).toHaveLength(1);
-      expect(blocks(el).slice(-2)).toEqual(["tender", "footer-message"]);
-    });
-
-    it("keeps the practice notice above the QR block on a simulated ticket", async () => {
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        result,
-        issuer,
-        invoiceLocale: "es-ES",
-        simulated: true,
-      });
-      expect(blocks(el).slice(0, 3)).toEqual([
-        "simulation-notice",
-        "qr-block[qr-caption,qr,legend]",
-        "issuer",
-      ]);
-    });
-
-    it("shows a QR the regime gives no words for on its own, before the issuer", async () => {
-      const { el } = await mount({ qrText: undefined });
-      expect(blocks(el).slice(0, 2)).toEqual(["qr-block[qr]", "issuer"]);
-    });
-
-    it("prints a sale with no QR issuer-first, and no legend anywhere: the footer follows the tender", async () => {
-      const { el } = await mount({ qr: "", qrText: undefined }, { footerMessage: "Gracias" });
-      const all = blocks(el);
-      expect(all[0]).toBe("issuer");
-      expect(all.slice(-2)).toEqual(["tender", "footer-message"]);
-      expect(el.shadowRoot!.querySelector(".legend")).toBeNull();
-    });
-  });
+    },
+  );
 
   it("emits a composed new-sale event when New sale is pressed", async () => {
     const { el } = await mount();
@@ -1231,7 +472,6 @@ describe("till-ticket-view", () => {
   it("offers the original at completion, then emits print-receipt instead of reprint", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
       result,
-      issuer,
       originalReceiptAvailable: true,
     });
     let captured: Event | undefined;
@@ -1247,6 +487,7 @@ describe("till-ticket-view", () => {
     it("pairs each outside-card detail with its payment and operation number", async () => {
       const { el } = await mount({
         total: "30.00",
+        receiptPreview: [{ kind: "text", text: "TOTAL", indent: 0 }],
         payments: [
           {
             method: "card",
@@ -1277,105 +518,6 @@ describe("till-ticket-view", () => {
       expect(
         el.shadowRoot!.querySelector("article")!.querySelector("[data-outside-card-details]"),
       ).toBeNull();
-    });
-
-    const tenderRows = (el: TillTicketView): string[] =>
-      [...el.shadowRoot!.querySelectorAll(".tender .tender-row")].map((row) =>
-        norm(row.textContent ?? "")
-          .replace(/\s+/g, " ")
-          .trim(),
-      );
-
-    // The bottle: €30.00 paid by three people at €10.00 each — cash from a €20.00 note, a hand-keyed
-    // card with a €1.00 tip on top, and exact cash.
-    it("lists every payment with what was handed over, its change and its tip, not only the first", async () => {
-      const { el } = await mount({
-        total: "30.00",
-        tender: { method: "cash", change: "10.00" },
-        payments: [
-          {
-            method: "cash",
-            amount: "10.00",
-            tip: "0.00",
-            tendered: "20.00",
-            change: "10.00",
-            refunds: [],
-          },
-          {
-            method: "card",
-            amount: "11.00",
-            tip: "1.00",
-            reference: "OP-9",
-            externalProvider: "connected_account",
-            externalMachine: "Spare Solo",
-            refunds: [],
-          },
-          {
-            method: "cash",
-            amount: "10.00",
-            tip: "0.00",
-            tendered: "10.00",
-            change: "0.00",
-            refunds: [],
-          },
-        ],
-      });
-
-      expect(text(el)).toContain("Spare Solo");
-      expect(tenderRows(el)).toEqual([
-        "Efectivo 20,00 €",
-        "Cambio 10,00 €",
-        "Tarjeta 11,00 €",
-        "Ref. OP-9",
-        "Propina 1,00 €",
-        "Efectivo 10,00 €",
-      ]);
-    });
-
-    // €20.00 charged, €5.00 given back: the card's amount is already net of the refund, so the row
-    // shows the original charge and the refund beneath it, as the printed receipt does.
-    it("shows a card payment's original charge and each refund given back from it", async () => {
-      const { el } = await mount({
-        total: "15.00",
-        tender: { method: "card", charged: "15.00", tip: "0.00", reference: null },
-        payments: [
-          {
-            method: "card",
-            amount: "15.00",
-            tip: "0.00",
-            reference: null,
-            refunds: [
-              { amount: "4.00", tip: "0.00" },
-              { amount: "1.00", tip: "0.00" },
-            ],
-          },
-        ],
-      });
-
-      expect(tenderRows(el)).toEqual([
-        "Tarjeta 20,00 €",
-        "Devolución -4,00 €",
-        "Devolución -1,00 €",
-      ]);
-    });
-
-    it("shows cash handed over, not the total plus the first payment's change", async () => {
-      const { el } = await mount({
-        total: "40.00",
-        tender: { method: "cash", change: "0.00" },
-        payments: [
-          {
-            method: "cash",
-            amount: "40.00",
-            tip: "0.00",
-            tendered: "50.00",
-            change: "0.00",
-            refunds: [{ amount: "10.00", tip: "0.00" }],
-          },
-        ],
-      });
-
-      expect(tenderRows(el)).toEqual(["Efectivo 50,00 €", "Devolución -10,00 €"]);
     });
   });
 
@@ -1422,7 +564,6 @@ describe("till-ticket-view", () => {
         ...result,
         tender: { method: "card", charged: "9.40", tip: "0.00", reference: null },
       },
-      issuer,
       originalReceiptAvailable: true,
       canPrintReceipt: false,
     });
@@ -1445,7 +586,6 @@ describe("till-ticket-view", () => {
   it("hides the manual drawer action when the caller cannot open a drawer", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
       result,
-      issuer,
       canOpenDrawer: false,
     });
 
@@ -1468,637 +608,6 @@ describe("till-ticket-view", () => {
     expect(enEl.shadowRoot!.querySelector("[data-test=open-drawer]")!.textContent).toContain(
       "Open drawer",
     );
-  });
-
-  it("renders the fiscal labels in the INVOICE locale (Spanish) even when the operator UI is English", async () => {
-    setLocale("en");
-    const { el } = await mount();
-    const t = text(el);
-    expect(t).toContain("Efectivo"); // es — the operator-UI word would be "Cash"
-    expect(t).toContain("Cambio"); // es — the operator-UI word would be "Change"
-    expect(t).toContain("Café"); // product name in the invoice locale, not "Coffee"
-    expect(t).not.toContain("Cash");
-    expect(t).not.toContain("Change");
-    expect(t).not.toContain("Coffee");
-  });
-
-  describe("the top block mirrors the paper (W111)", () => {
-    const LOGO = `${"d".repeat(64)}.png`;
-    const full: ReceiptConfig = {
-      headerSubtitle: "El mejor jamón",
-      phone: "+34 912 345 678",
-      email: "hola@deli.es",
-      logo: LOGO,
-    };
-    const mountTop = (receipt: ReceiptConfig, venueAddress: string[], locale = "es-ES") =>
-      mountWidget<TillTicketView>("till-ticket-view", {
-        result: {
-          ...result,
-          locale,
-          receiptHeader: { tradingName: "La Tienda", printTradingName: true },
-          receiptTrim: receipt,
-          venueAddress,
-          receiptSettings: { printAddress: receipt.printAddress !== false },
-        },
-        issuer,
-        invoiceLocale: locale,
-      });
-    const headerLines = (el: TillTicketView) =>
-      [...el.shadowRoot!.querySelector(".issuer")!.children].map((child) =>
-        child instanceof HTMLImageElement
-          ? `img ${child.getAttribute("src")}`
-          : norm(child.textContent!.trim()),
-      );
-
-    it("draws the logo, names, slogan, address, phone and email above the NIF, in the paper's order", async () => {
-      const { el } = await mountTop(full, ["Calle Mayor 1", "28013 Madrid"]);
-      expect(headerLines(el)).toEqual([
-        `img /media/${LOGO}`,
-        "La Tienda",
-        "El mejor jamón",
-        "Deli Delicioso SL",
-        "Calle Mayor 1",
-        "28013 Madrid",
-        "Tel. +34 912 345 678",
-        "hola@deli.es",
-        "NIF: B12345678",
-      ]);
-      const logo = el.shadowRoot!.querySelector<HTMLImageElement>(".issuer img")!;
-      expect(logo.alt).toBe("");
-      expect(getComputedStyle(el.shadowRoot!.querySelector(".issuer")!).textAlign).toBe("center");
-    });
-
-    it("draws none of the new lines when the receipt sets none and no address prints", async () => {
-      const { el } = await mountTop({}, []);
-      expect(headerLines(el)).toEqual(["La Tienda", "Deli Delicioso SL", "NIF: B12345678"]);
-    });
-
-    it("keeps the logo no wider than the ticket and no taller than its own bound", async () => {
-      const { el } = await mountTop({ logo: LOGO }, []);
-      const logo = el.shadowRoot!.querySelector<HTMLImageElement>(".issuer img")!;
-      const style = getComputedStyle(logo);
-      expect(style.maxWidth).toBe("100%");
-      expect(style.maxHeight).not.toBe("none");
-      expect(style.objectFit).toBe("contain");
-    });
-
-    it("prints the phone's label in the receipt's language", async () => {
-      const { el } = await mountTop({ phone: "943 000 000" }, [], "eu-ES");
-      expect(headerLines(el)).toContain("Tel. 943 000 000");
-    });
-  });
-
-  describe("receipt trim", () => {
-    const following = (a: Element, b: Element) =>
-      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-
-    it("renders headerSubtitle before the legal name and footerMessage after the payment lines", async () => {
-      const { el } = await mount(
-        {},
-        { headerSubtitle: "Calle Mayor 1, Madrid", footerMessage: "Gracias por su visita" },
-      );
-      const sub = el.shadowRoot!.querySelector(".header-subtitle");
-      const foot = el.shadowRoot!.querySelector(".footer-message");
-      expect(sub!.textContent).toContain("Calle Mayor 1, Madrid");
-      expect(foot!.textContent).toContain("Gracias por su visita");
-      const venue = el.shadowRoot!.querySelector(".issuer .venue")!;
-      expect(el.shadowRoot!.querySelector(".issuer .header-subtitle")).not.toBeNull();
-      expect(following(sub!, venue)).toBe(true);
-      const tender = el.shadowRoot!.querySelector(".tender")!;
-      expect(following(tender, foot!)).toBe(true);
-    });
-
-    it("renders neither slot (no empty node) when the receipt config is absent", async () => {
-      const { el } = await mount();
-      expect(el.shadowRoot!.querySelector(".header-subtitle")).toBeNull();
-      expect(el.shadowRoot!.querySelector(".footer-message")).toBeNull();
-    });
-
-    it("renders neither slot when the receipt config is empty ({})", async () => {
-      const { el } = await mount({}, {});
-      expect(el.shadowRoot!.querySelector(".header-subtitle")).toBeNull();
-      expect(el.shadowRoot!.querySelector(".footer-message")).toBeNull();
-    });
-
-    it("renders only the field that is present (footer only)", async () => {
-      const { el } = await mount({}, { footerMessage: "Wifi: DELI-2026" });
-      expect(el.shadowRoot!.querySelector(".header-subtitle")).toBeNull();
-      expect(el.shadowRoot!.querySelector(".footer-message")!.textContent).toContain(
-        "Wifi: DELI-2026",
-      );
-    });
-
-    it("FISCAL-SAFETY: a receipt config cannot suppress or reorder any mandated art. 7.1 element, the QR or the legend", async () => {
-      // The whole immutable core must still render, in its fixed positions, even WITH both trim fields set.
-      const { el } = await mount({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" });
-      const t = text(el);
-      // 7.1.d issuer venue + NIF
-      expect(t).toContain("Deli Delicioso SL");
-      expect(t).toContain("NIF");
-      expect(t).toContain("B12345678");
-      // 7.1.a número/serie + 7.1.b fecha
-      expect(t).toContain("A/1");
-      // 7.1.e goods identification — both filed lines still present
-      expect(el.shadowRoot!.querySelectorAll(".line")).toHaveLength(2);
-      expect(t).toContain("Café");
-      expect(t).toContain("Jamón");
-      // 7.1.f tipo + base per rate (both rates)
-      expect(t).toContain("Base 21.00%");
-      expect(t).toContain("Base 10.00%");
-      expect(t).toContain("IVA 21.00%");
-      expect(t).toContain("IVA 10.00%");
-      // 7.1.g total
-      expect(t).toContain("TOTAL");
-      expect(t).toContain("9,40 €");
-      // «QR tributario:» caption (AEAT QR specification v0.5.0 §3) + QR + VERI*FACTU legend
-      expect(t).toContain("QR tributario:");
-      expect(el.shadowRoot!.querySelector("svg")).not.toBeNull();
-      expect(t).toContain("VERI*FACTU");
-      // The trim renders ONLY in its two slots — the core order is untouched: the issuer header still
-      // precedes the meta block, and the footer trim follows the payment lines.
-      const header = el.shadowRoot!.querySelector(".issuer")!;
-      const meta = el.shadowRoot!.querySelector(".meta")!;
-      const tender = el.shadowRoot!.querySelector(".tender")!;
-      const foot = el.shadowRoot!.querySelector(".footer-message")!;
-      expect(following(header, meta)).toBe(true);
-      expect(following(tender, foot)).toBe(true);
-    });
-  });
-});
-
-it("shows saved nonprice modifier answers literally without inventing charge rows", async () => {
-  const { el } = await mount({
-    lines: [
-      {
-        ...result.lines[0]!,
-        optionSnapshots: [
-          {
-            listName: { es: "Dedicatoria" },
-            listCustomerName: null,
-            listKitchenName: null,
-            labelName: { es: "<b>Happy day</b>" },
-            labelCustomerName: null,
-            labelKitchenName: null,
-          },
-          {
-            listName: { es: "Guarnición" },
-            listCustomerName: null,
-            listKitchenName: null,
-            labelName: { es: "Ensalada" },
-            labelCustomerName: null,
-            labelKitchenName: null,
-          },
-        ],
-      },
-    ],
-  });
-  const answers = [...el.shadowRoot!.querySelectorAll(".modifier-answer")];
-  expect(answers.map((answer) => answer.textContent?.trim())).toEqual([
-    "Dedicatoria: <b>Happy day</b>",
-    "Guarnición: Ensalada",
-  ]);
-  expect(
-    el.shadowRoot!.querySelectorAll(".modifier-answer b, .modifier-answer .line-gross"),
-  ).toHaveLength(0);
-});
-
-it("resolves a filed line's unit abbreviation from a BARE content-language key", async () => {
-  // Only `descriptions` is keyed by the venue's invoice locales; a line's `unit_name` keeps the
-  // bare content-language keys it was stored under, so an exact-key lookup against "es-ES" misses
-  // every one of them and shows whichever language happens to come first.
-  const { el } = await mount({
-    lines: [
-      {
-        descriptions: { "es-ES": "Jamón" },
-        unitName: { ca: "u", en: "ea", es: "ud" },
-        unitPrecision: 3,
-        quantity: "0.32",
-        gross: "6.40",
-      },
-    ],
-  });
-  expect(norm(el.shadowRoot!.querySelector(".line-qty")!.textContent ?? "").trim()).toBe("0,32 ud");
-});
-
-it("names a filed line from the non-blank description whose language code sorts first when none is in the names language, as the printed receipt does", async () => {
-  const { el } = await mount({
-    lines: [
-      { descriptions: { fr: "Eau", de: "Wasser" }, quantity: "1", gross: "2.00" },
-      { descriptions: { en: " ", fr: "Eau" }, quantity: "1", gross: "2.00" },
-    ],
-  });
-  const names = [...el.shadowRoot!.querySelectorAll(".line-name")].map((n) => n.textContent);
-  expect(names).toEqual(["Wasser", "Eau"]);
-});
-
-it("prints an empty name, not a crash, for a filed line with no descriptions at all", async () => {
-  const { el } = await mount({
-    lines: [{ descriptions: {}, quantity: "1", gross: "2.00" }],
-  });
-  const rows = el.shadowRoot!.querySelectorAll(".line");
-  expect(rows).toHaveLength(1);
-  expect(rows[0]!.querySelector(".line-name")!.textContent).toBe("");
-  expect(norm(rows[0]!.textContent!)).toContain("2,00 €");
-});
-
-it("shows a dish's frozen options answers in the DINER's wording", async () => {
-  // Three different texts per name, so the assertion fails if the receipt reads the staff or the
-  // kitchen side by mistake (CLAUDE.md §3).
-  const { el } = await mount({
-    lines: [
-      {
-        ...result.lines[0]!,
-        optionSnapshots: [
-          {
-            listName: { es: "Punto personal" },
-            listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
-            listKitchenName: "PTO",
-            labelName: { es: "Poco personal" },
-            labelCustomerName: { "es-ES": "Poco hecho" },
-            labelKitchenName: "PH",
-          },
-        ],
-      },
-    ],
-  });
-  expect(
-    [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) =>
-      answer.textContent?.trim(),
-    ),
-  ).toEqual(["¿Cómo lo quiere?: Poco hecho"]);
-});
-
-describe("till-ticket-view: a line given away or discounted", () => {
-  // Every row prints its list price and each amount taken off is its own line, as on paper
-  // (`apps/server/src/receipt-ticket.ts`).
-  const adjusted: Partial<TillSaleResult> = {
-    total: "25.50",
-    lines: [
-      {
-        descriptions: { "es-ES": "Hamburguesa" },
-        quantity: "1",
-        gross: "0.00",
-        listGross: "12.00",
-        adjustments: [{ kind: "comp", amount: "12.00" }],
-      },
-      {
-        descriptions: { "es-ES": "Aceitunas" },
-        quantity: "1",
-        gross: "0.00",
-        listGross: "1.50",
-        parentLineNo: 1,
-        adjustments: [{ kind: "comp", amount: "1.50" }],
-      },
-      {
-        descriptions: { "es-ES": "Rioja" },
-        quantity: "1",
-        gross: "24.00",
-        listGross: "30.00",
-        adjustments: [{ kind: "discount", percentBp: 2000, amount: "6.00" }],
-      },
-      { descriptions: { "es-ES": "Pan" }, quantity: "1", gross: "2.50" },
-    ],
-    billAdjustments: [{ kind: "discount", amount: "1.00" }],
-  };
-  const rowText = (row: Element) =>
-    norm(row.textContent!)
-      .replace(/[ \n\t]+/g, " ")
-      .trim();
-
-  it("shows each dish at its list price, with what was taken off on its own line after its options", async () => {
-    const { el } = await mount(adjusted);
-    const rows = [...el.shadowRoot!.querySelectorAll(".lines > li")];
-
-    expect(rows.map(rowText)).toEqual([
-      "Hamburguesa 1 12,00 €",
-      "Aceitunas 1,50 €",
-      "Descuento 100% -12,00 €",
-      "Descuento 100% -1,50 €",
-      "Rioja 1 30,00 €",
-      "Descuento 20% -6,00 €",
-      "Pan 1 2,50 €",
-      "Descuento -1,00 €",
-    ]);
-  });
-
-  it("prints a full comp in Basque as the discount word with 100%", async () => {
-    const { el } = await mount({
-      locale: "eu-ES",
-      lines: [
-        {
-          descriptions: { "eu-ES": "Hanburgesa" },
-          quantity: "1",
-          gross: "0.00",
-          listGross: "12.00",
-          adjustments: [{ kind: "comp", amount: "12.00" }],
-        },
-      ],
-    });
-    const rows = [...el.shadowRoot!.querySelectorAll(".lines > li")].map(rowText);
-
-    expect(rows[rows.indexOf("Hanburgesa 1 12,00 €") + 1]).toBe("Deskontua 100% -12,00 €");
-  });
-
-  it("shows no struck-through price", async () => {
-    const { el } = await mount(adjusted);
-
-    expect(el.shadowRoot!.querySelectorAll("s")).toHaveLength(0);
-  });
-
-  it("writes a percentage in the invoice locale, to two decimals at most", async () => {
-    const { el } = await mount({
-      lines: [
-        {
-          descriptions: { "es-ES": "Rioja" },
-          quantity: "1",
-          gross: "26.25",
-          listGross: "30.00",
-          adjustments: [{ kind: "discount", percentBp: 1250, amount: "3.75" }],
-        },
-        {
-          descriptions: { "es-ES": "Vermut" },
-          quantity: "3",
-          gross: "8.00",
-          listGross: "9.00",
-          adjustments: [{ kind: "discount", percentBp: 1111, amount: "1.00" }],
-        },
-      ],
-    });
-    const entries = [...el.shadowRoot!.querySelectorAll(".lines > .adjustment")];
-
-    expect(entries.map(rowText)).toEqual(["Descuento 12,5% -3,75 €", "Descuento 11,11% -1,00 €"]);
-  });
-
-  it("shows a discount on the whole bill once, after the goods and before the VAT breakdown", async () => {
-    const { el } = await mount(adjusted);
-    const bill = [...el.shadowRoot!.querySelectorAll(".bill-adjustment")];
-    const firstVat = el.shadowRoot!.querySelector(".vat-row")!;
-    const lastGoods = [...el.shadowRoot!.querySelectorAll(".lines > li:not(.bill-adjustment)")].at(
-      -1,
-    )!;
-
-    expect(bill.map(rowText)).toEqual(["Descuento -1,00 €"]);
-    expect(
-      lastGoods.compareDocumentPosition(bill[0]!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      bill[0]!.compareDocumentPosition(firstVat) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-});
-
-describe("till-ticket-view: the sale's own language", () => {
-  const rows = (el: TillTicketView, selector: string): string[] =>
-    [...el.shadowRoot!.querySelectorAll(selector)].map((row) =>
-      norm(row.textContent ?? "")
-        .replace(/\s+/g, " ")
-        .trim(),
-    );
-  // Measured in Playwright's Chromium 153 and Chrome 154: neither formats Galician or Basque
-  // numbers or dates, so those sales are formatted the Spanish way.
-  const spanishDate = norm(
-    new Intl.DateTimeFormat("es-ES", { dateStyle: "medium", timeStyle: "short" }).format(
-      new Date(result.issuedAt),
-    ),
-  );
-  const catalan: Partial<TillSaleResult> = {
-    locale: "ca-ES",
-    lines: [
-      { descriptions: { "ca-ES": "Cafè" }, quantity: "2", gross: "3.00" },
-      { descriptions: { "ca-ES": "Pernil" }, quantity: "1", gross: "6.40" },
-    ],
-  };
-
-  it("prints its fixed words in the language the sale was filed in, not the till's boot language", async () => {
-    const { el } = await mount(catalan);
-    const t = text(el);
-
-    expect(rows(el, ".meta-row")[0]).toBe("Factura A/1");
-    expect(rows(el, ".meta-row")[1]).toBe(
-      `Data ${norm(
-        new Intl.DateTimeFormat("ca-ES", { dateStyle: "medium", timeStyle: "short" }).format(
-          new Date(result.issuedAt),
-        ),
-      )}`,
-    );
-    expect(rows(el, ".order-group")).toEqual(["Table 6 · Comanda 41"]);
-    expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("ca-ES");
-    expect(rows(el, ".lines > li")).toEqual(["Cafè 2 3,00 €", "Pernil 1 6,40 €"]);
-    expect(rows(el, ".vat-row")).toEqual([
-      "Base 21.00% 2,48 €",
-      "IVA 21.00% 0,52 €",
-      "Base 10.00% 5,82 €",
-      "IVA 10.00% 0,58 €",
-    ]);
-    expect(rows(el, ".total-row")).toEqual(["TOTAL 9,40 €"]);
-    expect(rows(el, ".tender .tender-row")).toEqual(["Efectiu 10,00 €", "Canvi 0,60 €"]);
-    for (const spanish of ["Fecha", "Pedido", "Efectivo", "Cambio"]) {
-      expect(t).not.toContain(spanish);
-    }
-  });
-
-  it("names dishes, units and option answers by the sale's `namesLocale`, keeping the fixed words in the sale's", async () => {
-    const { el } = await mount({
-      locale: "es-ES",
-      namesLocale: "ca-ES",
-      lines: [
-        {
-          descriptions: { "es-ES": "Jamón", "ca-ES": "Pernil" },
-          unitName: { es: "ud", ca: "u" },
-          unitPrecision: 0,
-          quantity: "2",
-          gross: "8.00",
-          optionSnapshots: [
-            {
-              listName: { es: "Punto", ca: "Punt" },
-              listCustomerName: { "es-ES": "¿Cómo lo quiere?", "ca-ES": "Com el vol?" },
-              listKitchenName: "PTO",
-              labelName: { es: "Poco", ca: "Poc" },
-              labelCustomerName: { "es-ES": "Poco hecho", "ca-ES": "Poc fet" },
-              labelKitchenName: "PH",
-            },
-          ],
-        },
-        {
-          parentLineNo: 1,
-          descriptions: { "es-ES": "Pan", "ca-ES": "Pa" },
-          quantity: "2",
-          gross: "1.40",
-        },
-      ],
-    });
-
-    expect(rows(el, ".lines > li")).toEqual([
-      "Pernil 2 u 8,00 €",
-      "Com el vol?: Poc fet",
-      "Pa 1,40 €",
-    ]);
-    expect(rows(el, ".order-group")).toEqual(["Table 6 · Pedido 41"]);
-    expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("es-ES");
-  });
-
-  it("shows goods stored once in the default content language under the sale's Catalan fixed words", async () => {
-    const { el } = await mount({
-      locale: "ca-ES",
-      namesLocale: "ca-ES",
-      lines: [
-        {
-          descriptions: { "ca-ES": "ES Jamón" },
-          unitName: { es: "ES-ud" },
-          unitPrecision: 0,
-          quantity: "2",
-          gross: "8.00",
-          optionSnapshots: [
-            {
-              listName: { es: "STAFF Punto" },
-              listCustomerName: { es: "ES ¿Cómo lo quiere?" },
-              listKitchenName: "PTO",
-              labelName: { es: "STAFF Poco" },
-              labelCustomerName: { es: "ES Poco hecho" },
-              labelKitchenName: "PH",
-            },
-          ],
-        },
-      ],
-    });
-
-    expect(rows(el, ".lines > li")).toEqual([
-      "ES Jamón 2 ES-ud 8,00 €",
-      "ES ¿Cómo lo quiere?: ES Poco hecho",
-    ]);
-    expect(rows(el, ".tender .tender-row")).toEqual(["Efectiu 10,00 €", "Canvi 0,60 €"]);
-    expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("ca-ES");
-  });
-
-  it("keeps the VERI*FACTU legend and AEAT's QR caption word for word", async () => {
-    const { el } = await mount(catalan);
-
-    expect(el.shadowRoot!.querySelector(".legend")!.textContent).toBe("VERI*FACTU");
-    expect(el.shadowRoot!.querySelector(".qr-caption")!.textContent).toBe("QR tributario:");
-  });
-
-  it("names a card, its reference, tip and charge in the sale's language", async () => {
-    const { el } = await mount({
-      locale: "eu-ES",
-      tender: {
-        method: "card",
-        charged: "9.90",
-        tip: "0.50",
-        reference: "4471",
-        externalProvider: "other",
-        externalMachine: "Bank counter",
-      },
-    });
-
-    expect(
-      el.shadowRoot!.querySelector("article")!.querySelector("[data-outside-card-details]"),
-    ).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-outside-payment-facts]")?.textContent).toContain(
-      "Bank counter",
-    );
-    expect(rows(el, ".meta-row")[1]).toBe(`Data ${spanishDate}`);
-    expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("eu-ES");
-    expect(rows(el, ".tender .tender-row")).toEqual([
-      "Txartela",
-      "Erref. 4471",
-      "Eskupekoa 0,50 €",
-      "Kobratua 9,90 €",
-    ]);
-  });
-
-  it("names each payment of a bill paid in parts, and its refund, in the sale's language", async () => {
-    const { el } = await mount({
-      locale: "eu-ES",
-      total: "21.00",
-      tender: { method: "cash", change: "10.00" },
-      payments: [
-        {
-          method: "cash",
-          amount: "10.00",
-          tip: "0.00",
-          tendered: "20.00",
-          change: "10.00",
-          refunds: [],
-        },
-        {
-          method: "card",
-          amount: "11.00",
-          tip: "1.00",
-          reference: "OP-9",
-          refunds: [{ amount: "2.00", tip: "0.00" }],
-        },
-      ],
-    });
-
-    expect(rows(el, ".tender .tender-row")).toEqual([
-      "Eskudirua 20,00 €",
-      "Itzulia 10,00 €",
-      "Txartela 13,00 €",
-      "Erref. OP-9",
-      "Eskupekoa 1,00 €",
-      "Itzulketa -2,00 €",
-    ]);
-  });
-
-  it("names a comp and a discount in the sale's language", async () => {
-    const { el } = await mount({
-      locale: "ca-ES",
-      lines: [
-        {
-          descriptions: { "ca-ES": "Hamburguesa" },
-          quantity: "1",
-          gross: "0.00",
-          listGross: "12.00",
-          adjustments: [{ kind: "comp", amount: "12.00" }],
-        },
-        {
-          descriptions: { "ca-ES": "Rioja" },
-          quantity: "1",
-          gross: "24.00",
-          listGross: "30.00",
-          adjustments: [{ kind: "discount", percentBp: 2000, amount: "6.00" }],
-        },
-      ],
-      billAdjustments: [{ kind: "discount", amount: "1.00" }],
-    });
-
-    expect(rows(el, ".lines > li")).toEqual([
-      "Hamburguesa 1 12,00 €",
-      "Descompte 100% -12,00 €",
-      "Rioja 1 30,00 €",
-      "Descompte 20% -6,00 €",
-      "Descompte -1,00 €",
-    ]);
-  });
-
-  it("marks a practice receipt in the sale's language, with the screen's long dash", async () => {
-    const practice = (over: Partial<TillSaleResult>) =>
-      mountWidget<TillTicketView>("till-ticket-view", {
-        result: { ...result, ...over },
-        issuer,
-        invoiceLocale: "es-ES",
-        simulated: true,
-      });
-    const notice = (el: TillTicketView) =>
-      el.shadowRoot!.querySelector("[data-test=simulation-notice]")!.textContent!.trim();
-
-    expect(notice((await practice({ locale: "ca-ES" })).el)).toBe("PROVA");
-    expect(notice((await practice({})).el)).toBe("DOCUMENTO DE PRUEBA");
-  });
-
-  it("falls back to the till's boot language when the result names none", async () => {
-    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      result: {
-        ...result,
-        lines: [{ descriptions: { "gl-ES": "Café" }, quantity: "1", gross: "9.40" }],
-        tender: { method: "card", charged: "9.40", tip: "0.00", reference: null },
-      },
-      issuer,
-      invoiceLocale: "gl-ES",
-    });
-
-    expect(rows(el, ".vat-row")).toContain("IVE 21.00% 0,52 €");
-    expect(rows(el, ".tender .tender-row")).toEqual(["Tarxeta"]);
   });
 });
 
@@ -2138,7 +647,6 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   };
   const mountF1 = (props: Record<string, unknown>, over: Partial<TillSaleResult> = {}) =>
     mountWidget<TillTicketView>("till-ticket-view", {
-      issuer,
       result: { ...result, invoiceType: "F1", ...over },
       originalReceiptPrint: { status: "not_queued" },
       ...props,
@@ -2710,7 +1218,6 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
 
   it("shows nothing new on a simplified invoice", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      issuer,
       result: { ...result, invoiceType: "F2" },
       originalReceiptAvailable: true,
       deliveries: statusOf(attempt({ status: "failed" }), {
@@ -2900,229 +1407,11 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   });
 });
 
-it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "es"])(
-  "shows the separately saved recipient country in receipt language %s",
-  async (locale) => {
-    setLocale("en-GB");
-    const { el } = await mount({
-      invoiceType: "F1",
-      locale,
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Customer Ltd",
-        countryCode: "ES",
-        address: "2 Main Street, 28013 Madrid, Madrid",
-      },
-    });
-    expect(el.shadowRoot!.querySelector(".recipient")!.textContent).toContain(
-      getCountryPack("ES")!.countryNames![locale === "es" ? "es-ES" : locale]!,
-    );
-    expect(el.shadowRoot!.querySelector(".recipient")!.textContent).toContain(
-      "2 Main Street, 28013 Madrid, Madrid",
-    );
-  },
-);
-
-it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "unknown"])(
-  "shows a French snapshot country in saved receipt language %s on an English till",
-  async (locale) => {
-    setLocale("en-GB");
-    const { el } = await mount({
-      invoiceType: "F1",
-      locale,
-      recipient: {
-        taxId: "Passport 123",
-        legalName: "Alex Guest",
-        countryCode: "FR",
-        address: "2 Main Street, Paris",
-      },
-    });
-    const language = ["en-GB", "es-ES", "ca-ES", "gl-ES", "eu-ES"].includes(locale)
-      ? locale
-      : "es-ES";
-    const country =
-      RECIPIENT_REGION_NAMES[new Intl.Locale(language).language]?.["FR"] ??
-      new Intl.DisplayNames([language], { type: "region" }).of("FR")!;
-    const recipient = el.shadowRoot!.querySelector(".recipient")!;
-    expect(recipient.textContent).toContain(country);
-    expect(recipient.textContent).toContain("2 Main Street, Paris");
-    expect(recipient.textContent).not.toContain(locale === "en-GB" ? "Francia" : "France");
-  },
-);
-
-it.each([
-  ["en-GB", "Passport"],
-  ["es-ES", "Pasaporte"],
-])("labels a foreign document using saved receipt language %s", async (locale, label) => {
-  setLocale(locale === "en-GB" ? "es-ES" : "en-GB");
-  const { el } = await mount({
-    invoiceType: "F1",
-    locale,
-    recipient: {
-      taxId: " Ab-09 /xy ",
-      identifierType: "passport",
-      identifierCountryCode: "FR",
-      legalName: "Guest",
-      countryCode: "ES",
-      address: "2 Main Street, Madrid",
-    },
-  });
-  expect(el.shadowRoot!.querySelector(".recipient")!.textContent).toContain(
-    `${label}:  Ab-09 /xy `,
-  );
-});
-
-describe("till-ticket-view: identical dishes (A803)", () => {
-  const beer = { descriptions: { "es-ES": "Caña" }, quantity: "1", gross: "1.50" };
-  const potatoes = { descriptions: { "es-ES": "Bravas" }, quantity: "1", gross: "6.00" };
-  const oneRate = { total: "9.00", vatBreakdown: [{ rate: "10.00", base: "8.18", tax: "0.82" }] };
-  const rowsOf = (el: TillTicketView) =>
-    [...el.shadowRoot!.querySelectorAll("li.line:has(.line-qty)")].map((row) => [
-      row.querySelector(".line-name")!.textContent!.trim(),
-      row.querySelector(".line-qty")!.textContent!.trim(),
-      norm(row.querySelector(".line-gross")?.textContent ?? ""),
-    ]);
-
-  it("A803 portion grouping: two filed rows of Caña at 1.50 show as one row of 2 at 3,00", async () => {
-    const { el } = await mount({ ...oneRate, lines: [beer, potatoes, beer] });
-    expect(rowsOf(el)).toEqual([
-      ["Caña", "2", "3,00 €"],
-      ["Bravas", "1", "6,00 €"],
-    ]);
-  });
-
-  it("A803 portion grouping: a different price, VAT rate, list price or adjustment entry keeps rows apart", async () => {
-    const { el } = await mount({
-      ...oneRate,
-      lines: [
-        beer,
-        { ...beer, gross: "1.60" },
-        { ...beer, listGross: "2.00" },
-        { ...beer, adjustments: [{ kind: "discount", amount: "0.50" }] },
-      ],
-    });
-    expect(rowsOf(el)).toEqual([
-      ["Caña", "1", "1,50 €"],
-      ["Caña", "1", "1,60 €"],
-      ["Caña", "1", "2,00 €"],
-      ["Caña", "1", "1,50 €"],
-    ]);
-    cleanupWidgets();
-    const { el: twoRates } = await mount({
-      vatBreakdown: [
-        { rate: "10.00", base: "1.36", tax: "0.14" },
-        { rate: "21.00", base: "1.24", tax: "0.26" },
-      ],
-      lines: [beer, beer],
-    });
-    expect(rowsOf(twoRates)).toEqual([
-      ["Caña", "1", "1,50 €"],
-      ["Caña", "1", "1,50 €"],
-    ]);
-  });
-
-  it("A803 portion grouping: rows apart in name, extras, answers or unit stay apart", async () => {
-    const shown = async (lines: TillSaleResult["lines"]) => {
-      cleanupWidgets();
-      const { el } = await mount({ ...oneRate, lines });
-      return [
-        ...rowsOf(el),
-        ...[...el.shadowRoot!.querySelectorAll("li.line.option:not(.modifier-answer)")].map(
-          (row) => [norm(row.textContent!).replace(/\s+/g, " ").trim()],
-        ),
-      ];
-    };
-    const water = { descriptions: { "es-ES": "Agua" }, quantity: "1", gross: "1.50" };
-    expect(await shown([beer, water])).toEqual([
-      ["Caña", "1", "1,50 €"],
-      ["Agua", "1", "1,50 €"],
-    ]);
-    const extra = (parentLineNo: number, quantity = "1", gross = "1.00") => ({
-      descriptions: { "es-ES": "Queso" },
-      quantity,
-      gross,
-      parentLineNo,
-    });
-    expect(await shown([beer, beer, extra(2)])).toEqual([
-      ["Caña", "1", "1,50 €"],
-      ["Caña", "1", "1,50 €"],
-      ["Queso 1,00 €"],
-    ]);
-    expect(await shown([beer, extra(1), beer, extra(3, "2", "2.00")])).toEqual([
-      ["Caña", "1", "1,50 €"],
-      ["Caña", "1", "1,50 €"],
-      ["Queso 1,00 €"],
-      ["Queso x2 2,00 €"],
-    ]);
-    expect(await shown([beer, extra(1), beer, extra(3)])).toEqual([
-      ["Caña", "2", "3,00 €"],
-      ["Queso 2,00 €"],
-    ]);
-    const answer = (labelName: Record<string, string>) => ({
-      ...beer,
-      optionSnapshots: [
-        {
-          listName: { es: "Tamaño" },
-          listCustomerName: null,
-          listKitchenName: null,
-          labelName,
-          labelCustomerName: null,
-          labelKitchenName: null,
-        },
-      ],
-    });
-    expect(await shown([answer({ es: "Grande" }), answer({ es: "Pequeña" })])).toEqual([
-      ["Caña", "1", "1,50 €"],
-      ["Caña", "1", "1,50 €"],
-    ]);
-    const reordered = answer({ es: "Grande" });
-    reordered.optionSnapshots = reordered.optionSnapshots.map(
-      (snapshot) => Object.fromEntries(Object.entries(snapshot).reverse()) as typeof snapshot,
-    );
-    expect(await shown([answer({ es: "Grande" }), reordered])).toEqual([["Caña", "2", "3,00 €"]]);
-    const kilo = { ...beer, unitName: { "es-ES": "kg" }, unitPrecision: 3, gross: "30.00" };
-    expect(await shown([kilo, kilo])).toEqual([
-      ["Caña", "1 kg", "30,00 €"],
-      ["Caña", "1 kg", "30,00 €"],
-    ]);
-    const half = { ...beer, quantity: "0.5", gross: "0.75" };
-    expect(await shown([half, half])).toEqual([
-      ["Caña", "0,5", "0,75 €"],
-      ["Caña", "0,5", "0,75 €"],
-    ]);
-  });
-
-  it("A803 portion grouping: printed totals equal the filed total and breakdown", async () => {
-    const { el } = await mount({ ...oneRate, lines: [beer, potatoes, beer] });
-    const cents = rowsOf(el).reduce(
-      (sum, [, , gross]) => sum + Number(gross!.replace(/\D/g, "")),
-      0,
-    );
-    expect(cents).toBe(900);
-    expect(text(el)).toContain("9,00 €");
-    expect(text(el)).toContain("8,18 €");
-    expect(text(el)).toContain("0,82 €");
-  });
-
-  it("A803 portion grouping: a full invoice lists every filed row", async () => {
-    const filed = {
-      ...beer,
-      net: { unitPrice: "1.36", priceQuantity: "1.000", base: "1.36", tax: "0.14", rate: "10.00" },
-    };
-    const { el } = await mount({ ...oneRate, invoiceType: "F1", lines: [filed, filed] });
-    expect(rowsOf(el).map(([name, quantity]) => [name, quantity])).toEqual([
-      ["Caña", "1"],
-      ["Caña", "1"],
-    ]);
-  });
-});
-
 describe("A790 recorded document then printer", () => {
   const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
   const office = equipmentItem("office", "Office", { kind: "a4" });
   const mountChoice = (props: Record<string, unknown> = {}, invoiceType: "F1" | "F2" = "F1") =>
     mountWidget<TillTicketView>("till-ticket-view", {
-      issuer,
       result: { ...result, invoiceType },
       invoicePrintersEnabled: true,
       originalReceiptPrint: { status: "not_queued" },
@@ -3325,197 +1614,11 @@ describe("A790 recorded document then printer", () => {
   });
 });
 
-it("keeps lunch diners separate and shows included choices without prices", async () => {
-  const supplement = receiptLabelsFor("es-ES").supplement.split("{item}").join("Hake $& chips $$");
-  const lunch = {
-    descriptions: { "es-ES": "House lunch" },
-    quantity: "1",
-    gross: "18.00",
-    setLunch: true as const,
-  };
-  const hake = { descriptions: { "es-ES": "Hake $& chips $$" }, quantity: "1", gross: "3.00" };
-  const coffee = { descriptions: { "es-ES": "Coffee" }, quantity: "2", gross: "0.00" };
-  const { el } = await mount({
-    total: "42.00",
-    vatBreakdown: [{ rate: "10", base: "38.18", tax: "3.82" }],
-    lines: [
-      lunch,
-      { ...hake, parentLineNo: 1 },
-      { ...coffee, parentLineNo: 1 },
-      lunch,
-      { ...hake, parentLineNo: 4 },
-      { ...coffee, parentLineNo: 4 },
-    ],
-  });
-  const rows = [...el.shadowRoot!.querySelectorAll("li.line")].map((row) => [
-    row.querySelector(".line-name")?.textContent?.trim(),
-    norm(row.querySelector(".line-gross")?.textContent ?? ""),
-  ]);
-  expect(rows).toEqual([
-    ["House lunch", "18,00 €"],
-    [supplement, "3,00 €"],
-    ["Hake $& chips $$", ""],
-    ["Coffee x2", ""],
-    ["House lunch", "18,00 €"],
-    [supplement, "3,00 €"],
-    ["Hake $& chips $$", ""],
-    ["Coffee x2", ""],
-  ]);
-});
-
 describe("a corrective invoice", () => {
-  it.each(["en-GB", "es-ES"])(
-    "in %s, marks itself above its number and names the invoice it corrects below its date",
-    async (locale) => {
-      const labels = receiptLabelsFor(locale);
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        result: {
-          ...result,
-          locale,
-          invoiceType: "R5",
-          invoiceNumber: "R/3",
-          total: "-1.21",
-          corrects: {
-            invoiceNumber: "A/1",
-            issuedAt: "2026-08-04T10:05:00.000Z",
-            issuedOffsetMinutes: 120,
-          },
-        },
-        issuer,
-      });
-      const meta = norm(el.shadowRoot!.querySelector(".meta")!.textContent ?? "").replace(
-        /\s+/g,
-        " ",
-      );
-      const corrected = new Intl.DateTimeFormat(locale, {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: "UTC",
-      }).format(new Date("2026-08-04T12:05:00.000Z"));
-      const order = [
-        labels.correctiveInvoice,
-        "R/3",
-        labels.correctsInvoice,
-        "A/1",
-        norm(corrected).replace(/\s+/g, " "),
-      ].map((part) => meta.indexOf(part));
-      expect(order.every((at) => at >= 0)).toBe(true);
-      expect(order).toEqual([...order].sort((a, b) => a - b));
-    },
-  );
-
-  it.each(["en-GB", "es-ES"])(
-    "in %s, shows a replacement as replacing the invoice in full, with a zero rectification",
-    async (locale) => {
-      const labels = receiptLabelsFor(locale);
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        result: {
-          ...result,
-          locale,
-          invoiceType: "R5",
-          invoiceNumber: "R/3",
-          corrects: {
-            invoiceNumber: "A/1",
-            issuedAt: "2026-08-04T10:05:00.000Z",
-            issuedOffsetMinutes: 120,
-            inFull: true,
-          },
-        },
-        issuer,
-      });
-      const meta = norm(el.shadowRoot!.querySelector(".meta")!.textContent ?? "").replace(
-        /\s+/g,
-        " ",
-      );
-      const order = [
-        labels.correctiveInvoice,
-        "R/3",
-        labels.replacesInvoiceInFull,
-        "A/1",
-        `${labels.rectificationAmount} ${norm(formatMoney("0.00", locale))}`,
-      ].map((part) => meta.indexOf(part));
-      expect(
-        order.every((at) => at >= 0),
-        meta,
-      ).toBe(true);
-      expect(order).toEqual([...order].sort((a, b) => a - b));
-      expect(meta).not.toContain(labels.correctsInvoice);
-    },
-  );
-
-  it("shows neither replacement word on a by-differences corrective", async () => {
-    const labels = receiptLabelsFor("es-ES");
-    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      result: {
-        ...result,
-        invoiceType: "R5",
-        corrects: { invoiceNumber: "A/1", issuedAt: "2026-08-04T10:05:00.000Z" },
-      },
-      issuer,
-    });
-    expect(text(el)).toContain(labels.correctsInvoice);
-    expect(text(el)).not.toContain(labels.replacesInvoiceInFull);
-    expect(text(el)).not.toContain(labels.rectificationAmount);
-  });
-
-  const replacementOfFull: Partial<TillSaleResult> = {
-    invoiceType: "R4",
-    invoiceNumber: "R/4",
-    issuer: { venueName: "Filed Venue SL", nif: "B87654321", domicile: "Calle Fiscal 27, Madrid" },
-    recipient: {
-      legalName: "Filed Customer SL",
-      taxId: "B11223344",
-      address: "Avenida original 123, Madrid",
-      countryCode: "ES",
-    },
-    corrects: {
-      invoiceNumber: "F/9",
-      issuedAt: "2026-08-04T10:05:00.000Z",
-      issuedOffsetMinutes: 120,
-      inFull: true,
-    },
-    lines: [
-      {
-        ...result.lines[0]!,
-        net: {
-          unitPrice: "1.24",
-          priceQuantity: "1.000",
-          base: "2.48",
-          rate: "21.00",
-          tax: "0.52",
-        },
-      },
-    ],
-  };
-
-  it("lays out a replacement of a full invoice as a full invoice, with its customer and the corrective heading", async () => {
-    const labels = receiptLabelsFor("es-ES");
-    const { el } = await mount(replacementOfFull);
-    const content = text(el);
-    expect(content).toContain("Filed Customer SL");
-    expect(content).toContain("NIF: B11223344");
-    expect(content).toContain("Avenida original 123, Madrid");
-    expect(content).toContain("Calle Fiscal 27, Madrid");
-    const meta = norm(el.shadowRoot!.querySelector(".meta")!.textContent ?? "").replace(
-      /\s+/g,
-      " ",
-    );
-    expect(meta).toContain(labels.correctiveInvoice);
-    expect(meta).toContain(labels.replacesInvoiceInFull);
-    expect(meta).toContain("F/9");
-    expect(meta).toContain(`${labels.rectificationAmount} ${norm(formatMoney("0.00", "es-ES"))}`);
-    const facts = [...el.shadowRoot!.querySelectorAll(".invoice-facts")].map((node) =>
-      norm([...node.querySelectorAll("span")].map((span) => span.textContent).join(" "))
-        .replace(/\s+/g, " ")
-        .trim(),
-    );
-    expect(facts[0]).toContain("IVA 21.00% 0,52 €");
-    expect(el.shadowRoot!.querySelector(".issuer")!.textContent).not.toContain(labels.fullInvoice);
-  });
+  const replacementOfFull = { invoiceType: "R4" as const, invoiceNumber: "R/4" };
 
   it("offers no full-invoice (A4) choice on a replacement of a full invoice", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      issuer,
       result: { ...result, ...replacementOfFull },
       originalReceiptPrint: { status: "not_queued" },
       invoicePrintersEnabled: true,
@@ -3538,7 +1641,6 @@ describe("a corrective invoice", () => {
     // With no print status read yet, a full invoice offers no receipt print; a receipt offers its
     // original while the till still holds it.
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      issuer,
       result: { ...result, ...replacementOfFull },
       originalReceiptAvailable: true,
       invoicePrintersEnabled: true,
@@ -3548,150 +1650,5 @@ describe("a corrective invoice", () => {
     );
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
-  });
-
-  it("lays out a replacement of a full invoice's lines, extras and reductions as a full invoice", async () => {
-    const labels = receiptLabelsFor("es-ES");
-    const net = (unitPrice: string, base: string, tax: string) => ({
-      unitPrice,
-      priceQuantity: "1.000",
-      base,
-      rate: "10.00",
-      tax,
-    });
-    const beer = {
-      descriptions: { "es-ES": "Caña" },
-      quantity: "1",
-      gross: "1.50",
-      net: net("1.36", "1.36", "0.14"),
-    };
-    const { el } = await mount({
-      ...replacementOfFull,
-      total: "13.60",
-      vatBreakdown: [{ rate: "10.00", base: "12.36", tax: "1.24" }],
-      lines: [
-        beer,
-        beer,
-        {
-          descriptions: { "es-ES": "Plato" },
-          quantity: "1",
-          gross: "10.80",
-          listGross: "12.00",
-          net: net("9.82", "9.82", "0.98"),
-          adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
-        },
-        {
-          descriptions: { "es-ES": "Extra" },
-          quantity: "2",
-          gross: "1.80",
-          parentLineNo: 3,
-          net: net("0.82", "1.64", "0.16"),
-        },
-      ],
-      billAdjustments: [{ kind: "discount", amount: "0.50" }],
-    });
-    const dishes = [...el.shadowRoot!.querySelectorAll("li.line:has(.line-qty)")];
-    expect(
-      dishes.map((row) => [
-        row.querySelector(".line-name")!.textContent!.trim(),
-        row.querySelector(".line-qty")!.textContent!.trim(),
-      ]),
-    ).toEqual([
-      ["Caña", "1"],
-      ["Caña", "1"],
-      ["Plato", "1"],
-    ]);
-    expect(dishes.map((row) => row.querySelector(".line-gross"))).toEqual([null, null, null]);
-    const extra = el.shadowRoot!.querySelector(".line.option")!;
-    expect(extra.querySelector(".line-name")!.textContent).toContain("Extra 2");
-    expect(extra.querySelector(".line-name")!.textContent).not.toContain("x2");
-    expect(extra.querySelector(".line-gross")).toBeNull();
-    const facts = [...el.shadowRoot!.querySelectorAll(".invoice-facts")].map((node) =>
-      norm([...node.querySelectorAll("span")].map((span) => span.textContent).join(" "))
-        .replace(/\s+/g, " ")
-        .trim(),
-    );
-    expect(facts).toHaveLength(4);
-    expect(facts[3]).toContain("IVA 10.00% 0,16 €");
-    expect(el.shadowRoot!.querySelector(".adjustment")!.textContent).toContain(
-      `(${labels.vatIncluded})`,
-    );
-    expect(el.shadowRoot!.querySelector(".bill-adjustment")!.textContent).toContain(
-      `(${labels.vatIncluded})`,
-    );
-  });
-
-  it.each([
-    ["R4", "en-GB"],
-    ["R5", "en-GB"],
-    ["R4", "es-ES"],
-    ["R5", "es-ES"],
-  ] as const)(
-    "shows an %s replacement's day of sale in %s, below its own date",
-    async (type, locale) => {
-      const labels = receiptLabelsFor(locale);
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        issuer,
-        result: {
-          ...result,
-          ...(type === "R4" ? replacementOfFull : {}),
-          invoiceType: type,
-          locale,
-          corrects: { invoiceNumber: "F/9", issuedAt: "2026-08-04T10:05:00.000Z", inFull: true },
-          saleDay: "2026-03-15",
-        },
-      });
-      const meta = norm(el.shadowRoot!.querySelector(".meta")!.textContent ?? "").replace(
-        /\s+/g,
-        " ",
-      );
-      const day = norm(
-        new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
-          new Date("2026-03-15T00:00:00Z"),
-        ),
-      ).replace(/\s+/g, " ");
-      expect(meta).toContain(`${labels.saleDate} ${day}`);
-      expect(meta.indexOf(labels.saleDate)).toBeLessThan(
-        meta.indexOf(labels.replacesInvoiceInFull),
-      );
-    },
-  );
-
-  it.each([
-    ["en-GB", "15 Mar 2026"],
-    ["es-ES", "15 mar 2026"],
-  ])("in %s, shows the day of sale as written on a till west of UTC", async (locale, written) => {
-    // The browser's own zone cannot be set from a test, so a stand-in reads every date format that
-    // names no zone in the Azores (UTC-1), where midnight UTC on 15 March is still 14 March.
-    const Real = Intl.DateTimeFormat;
-    Intl.DateTimeFormat = class extends Real {
-      constructor(locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) {
-        super(locales, { timeZone: "Atlantic/Azores", ...options });
-      }
-    } as typeof Intl.DateTimeFormat;
-    try {
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        issuer,
-        result: { ...result, ...replacementOfFull, locale, saleDay: "2026-03-15" },
-      });
-      const meta = norm(el.shadowRoot!.querySelector(".meta")!.textContent ?? "").replace(
-        /\s+/g,
-        " ",
-      );
-      expect(meta).toContain(`${receiptLabelsFor(locale).saleDate} ${written}`);
-    } finally {
-      Intl.DateTimeFormat = Real;
-    }
-  });
-
-  it("shows no day of sale on a replacement whose sale day is its issue day", async () => {
-    const { el } = await mount(replacementOfFull);
-    expect(text(el)).not.toContain(receiptLabelsFor("es-ES").saleDate);
-  });
-
-  it("marks nothing on an invoice that corrects none", async () => {
-    const { el } = await mount();
-    expect(text(el)).not.toContain(receiptLabelsFor("es-ES").correctiveInvoice);
-    expect(text(el)).not.toContain(receiptLabelsFor("es-ES").correctsInvoice);
   });
 });

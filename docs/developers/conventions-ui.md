@@ -1665,8 +1665,9 @@ language. A963's Chromium 156 probe returned no supported locale for `gl-ES` or 
 resolved their French country name to English; Node returned Galician and Basque names. The
 country registry carries pinned CLDR translations for those two languages, with its licence in
 `deploy/third-party/unicode-cldr/`. The French-snapshot cases in
-`apps/till/src/screens/till-ticket-view.test.ts` fail when that fallback is removed. Other receipt
-languages and unsupported stored locale tags keep their separately tested receipt-word fallback.
+`apps/server/src/receipt-document.test.ts` check the translated country in the shared receipt layout.
+The till displays the text supplied by that layout. Other receipt languages and unsupported stored
+locale tags keep their separately tested receipt-word fallback.
 
 ## Unsaved changes: shared close interception, owner-provided draft comparisons
 

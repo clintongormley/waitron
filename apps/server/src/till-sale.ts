@@ -44,7 +44,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import type { Decimal, SaleId, ReceiptPresentation } from "@waitron/shared";
+import type { Decimal, SaleId, ReceiptElement, ReceiptPresentation } from "@waitron/shared";
 import { refuseOtherDining } from "./order-dining.js";
 import type { GrossLines } from "@waitron/menu";
 import {
@@ -349,6 +349,7 @@ export interface BillTenderRefund {
 }
 
 export interface TillSaleResult extends ReceiptPresentation {
+  receiptPreview?: readonly ReceiptElement[];
   simulatedCardPayment: boolean;
   invoiceEvidence?: import("@waitron/fiscal").FiledInvoiceEvidence;
   issuedOffsetMinutes?: number;

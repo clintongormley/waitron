@@ -133,8 +133,8 @@ come from the published menu, the order's way of selling picks one, and the rate
   called by `priceOrderLines`, `apps/server/src/working-order.ts`). A receipt prints the entry for
   the sale's names language (`namesLocale`, the first of `sales.invoice_locales`), else, through
   `resolveSnapshotText`, its bare language and then the non-blank entry whose language code sorts first
-  (`lineName`, `apps/server/src/receipt-document.ts`, and the till's on-screen copy in
-  `apps/till/src/screens/till-ticket-view.ts`), so it prints the same name
+  (`lineName` in `apps/server/src/receipt-document.ts`, which builds the paper receipt and the
+  till's receipt preview), so it shows the same name
   whatever receipt language staff choose. An order placed before the venue's receipt languages
   change and collected after keeps the keys its lines were stored under (the case "accepts a change
   while an order is placed, and the order can still be collected" in

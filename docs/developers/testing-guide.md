@@ -4297,8 +4297,7 @@ proved the thrown error preserved the local reader while the HTTP client silentl
 When a label and identifier must read as one string, interpolate the complete string. A formatter
 can wrap adjacent Lit interpolations onto separate lines, changing the DOM text between them.
 The identifier remains unchanged in storage while a screen assertion, copy or reader receives
-extra whitespace. The recipient-line checks in `apps/till/src/screens/till-ticket-view.test.ts`
-assert the complete domestic and foreign text; they do not audit other formatted templates.
+extra whitespace. The receipt builder now supplies the complete recipient line to the till.
 
 Measured on A963, 2026-10-28: after formatting the new recipient label expression, the unchanged
 `NIF: B11223344` assertion and two new passport assertions failed on intervening newlines. One

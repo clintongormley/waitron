@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { page } from "vitest/browser";
 import { setMediaServer } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import type { ReceiptPresentation } from "@waitron/shared";
@@ -7,7 +6,6 @@ import type { TillSaleResult } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
 
-const issuer = { venueName: "Filed Legal SL", nif: "B12345678", domicile: "Filed Fiscal Street" };
 const facts: TillSaleResult = {
   receiptTrim: {},
   venueAddress: [],
@@ -21,28 +19,20 @@ const facts: TillSaleResult = {
   lines: [{ descriptions: { "es-ES": "Café" }, quantity: "1", gross: "3.00" }],
   tender: { method: "cash", change: "2.00" },
   qr: "",
-  issuer,
   locale: "es-ES",
 };
 const rich: ReceiptPresentation = {
-  receiptTrim: {
-    logo: `${"a".repeat(64)}.png`,
-    headerSubtitle: "Terraza",
-    phone: "910001111",
-    email: "terraza@example.com",
-    footerMessage: "Hasta pronto",
-  },
-  venueAddress: ["Current Street", "Madrid"],
-  receiptSettings: { printAddress: true },
+  receiptTrim: { logo: `${"a".repeat(64)}.png` },
+  venueAddress: [],
+  receiptSettings: { printAddress: false },
 };
-const answer = (presentation: ReceiptPresentation): TillSaleResult & ReceiptPresentation => ({
+const line = (text: string) => ({ kind: "text", text, indent: 0 }) as const;
+const answer = (presentation: ReceiptPresentation): TillSaleResult => ({
   ...facts,
   ...presentation,
+  receiptPreview: [{ kind: "logo" }, line("Filed Legal SL")],
 });
-const header = (el: TillTicketView) =>
-  [...el.shadowRoot!.querySelector(".issuer")!.children].map((node) =>
-    node instanceof HTMLImageElement ? node.getAttribute("src") : node.textContent!.trim(),
-  );
+
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
@@ -55,7 +45,7 @@ describe("per-answer receipt presentation", () => {
     const nextUrl = `/media/renditions/v1/${"c".repeat(64)}.webp/display/5000-5000-100.webp`;
     const first = answer({ ...rich, receiptTrim: { ...rich.receiptTrim, logoUrl: firstUrl } });
     const saved = structuredClone(first);
-    const { el } = await mountWidget<TillTicketView>("till-ticket-view", { result: first, issuer });
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", { result: first });
     expect(el.shadowRoot!.querySelector<HTMLImageElement>("img.logo")!.getAttribute("src")).toBe(
       firstUrl,
     );
@@ -67,7 +57,6 @@ describe("per-answer receipt presentation", () => {
     expect(first).toEqual(saved);
     expect(el.result.receiptTrim.logo).toBe(rich.receiptTrim.logo);
     expect(el.shadowRoot!.textContent).toContain("Filed Legal SL");
-    expect(el.shadowRoot!.textContent).toContain("2,00");
   });
   it.each([
     ["the answer's logo address", `/media/renditions/v1/${"b".repeat(64)}.webp/display/1-1-1.webp`],
@@ -79,7 +68,6 @@ describe("per-answer receipt presentation", () => {
     setMediaServer("https://spare.deli.test");
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
       result: answer({ ...rich, receiptTrim: { ...rich.receiptTrim, logoUrl } }),
-      issuer,
     });
     expect(logo(el)).toBe(`https://spare.deli.test${path}`);
     setMediaServer("https://main.deli.test");
@@ -92,173 +80,22 @@ describe("per-answer receipt presentation", () => {
     await el.updateComplete;
     expect(logo(el)).toBe(`https://third.deli.test${path}`);
   });
-  it.each([false, true])(
-    "uses department address permission %j beside filed identity",
-    async (printAddress) => {
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        result: { ...answer(rich), invoiceType: "F1", receiptSettings: { printAddress } },
-        issuer,
-      });
-      expect(el.shadowRoot!.textContent!.includes("Current Street")).toBe(printAddress);
-      expect(el.shadowRoot!.textContent!.includes("Madrid")).toBe(printAddress);
-      expect(el.shadowRoot!.querySelector(".domicile")!.textContent).toBe("Filed Fiscal Street");
-      expect(el.shadowRoot!.textContent).toContain("terraza@example.com");
-    },
-  );
-
-  it("renders answer trim before filed legal identity and uses its current address", async () => {
+  it("replaces the supplied trim and clears it when the next answer omits it", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      result: answer(rich),
-      issuer,
+      result: {
+        ...answer(rich),
+        receiptPreview: [{ kind: "logo" }, line("Terraza"), line("Hasta pronto")],
+      },
     });
-    expect(header(el)).toEqual([
-      `/media/${rich.receiptTrim.logo}`,
-      "Terraza",
-      "Filed Legal SL",
-      "Current Street",
-      "Madrid",
-      "Tel. 910001111",
-      "terraza@example.com",
-      "NIF: B12345678",
-    ]);
-    expect(el.shadowRoot!.querySelector(".footer-message")!.textContent).toBe("Hasta pronto");
-  });
-
-  it("replaces department details and clears every optional line on an empty next answer", async () => {
-    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      result: answer(rich),
-      issuer,
-    });
-    el.result = answer({
-      receiptTrim: { headerSubtitle: "Comedor", footerMessage: "Gracias" },
-      venueAddress: ["Edited Street"],
-      receiptSettings: { printAddress: true },
-    });
+    const article = () => el.shadowRoot!.querySelector("article")!;
+    const lines = () => [...article().querySelectorAll("p")].map((row) => row.textContent!.trim());
+    expect(article().textContent).toContain("Terraza");
+    el.result = { ...facts, receiptPreview: [line("Comedor"), line("Gracias")] };
     await el.updateComplete;
-    expect(header(el)).toEqual(["Comedor", "Filed Legal SL", "Edited Street", "NIF: B12345678"]);
-    expect(el.shadowRoot!.querySelector(".footer-message")!.textContent).toBe("Gracias");
-    el.result = answer({
-      receiptTrim: {},
-      venueAddress: [],
-      receiptSettings: { printAddress: false },
-    });
+    expect(lines()).toEqual(["Comedor", "Gracias"]);
+    el.result = { ...facts, receiptPreview: [line("Filed Legal SL")] };
     await el.updateComplete;
-    expect(header(el)).toEqual(["Filed Legal SL", "NIF: B12345678"]);
-    expect(el.shadowRoot!.querySelector(".footer-message")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain("Terraza");
-    expect(el.shadowRoot!.textContent).not.toContain("Comedor");
-    expect(el.shadowRoot!.textContent).toContain("2,00");
+    expect(lines()).toEqual(["Filed Legal SL"]);
+    expect(article().querySelector("img")).toBeNull();
   });
-
-  it.each(["F1", "F2"] as const)(
-    "department address switch hides current address for %s and preserves filed domicile",
-    async (invoiceType) => {
-      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        result: { ...answer(rich), invoiceType, receiptSettings: { printAddress: false } },
-        issuer,
-      });
-      expect(el.shadowRoot!.textContent).not.toContain("Current Street");
-      expect(el.shadowRoot!.textContent).not.toContain("Madrid");
-      expect(el.shadowRoot!.querySelector(".domicile")?.textContent ?? null).toBe(
-        invoiceType === "F1" ? "Filed Fiscal Street" : null,
-      );
-      expect(el.shadowRoot!.textContent).toContain("terraza@example.com");
-    },
-  );
-
-  it("shows optional current address beside a distinct filed F1 domicile when enabled", async () => {
-    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-      result: { ...answer(rich), invoiceType: "F1" },
-      issuer,
-    });
-    expect(header(el)).toEqual([
-      "Factura completa",
-      `/media/${rich.receiptTrim.logo}`,
-      "Terraza",
-      "Filed Legal SL",
-      "Current Street",
-      "Madrid",
-      "Tel. 910001111",
-      "terraza@example.com",
-      "NIF: B12345678",
-      "Filed Fiscal Street",
-    ]);
-  });
-});
-
-for (const locale of ["en-GB", "es-ES"] as const) {
-  for (const theme of ["light", "dark"] as const) {
-    for (const width of [390, 1280]) {
-      it(`keeps recorded F2 dates on reprint in ${locale}/${theme}/${width}`, async () => {
-        const previous = { width: window.innerWidth, height: window.innerHeight };
-        try {
-          await page.viewport(width, 1000);
-          setLocale(locale);
-          const { el } = await mountWidget<TillTicketView>(
-            "till-ticket-view",
-            {
-              historical: true,
-              invoiceLocale: locale,
-              result: {
-                ...facts,
-                locale,
-                invoiceType: "F2",
-                issuedAt: "2026-10-14T23:30:00.000Z",
-                issuedOffsetMinutes: 120,
-              },
-              issuer,
-            },
-            theme,
-          );
-          for (const offset of [120, 0]) {
-            el.result = { ...el.result!, issuedOffsetMinutes: offset };
-            await el.updateComplete;
-            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-            const expected = new Intl.DateTimeFormat(locale, {
-              dateStyle: "medium",
-              timeStyle: "short",
-              timeZone: "UTC",
-            })
-              .formatToParts(
-                new Date(offset === 120 ? "2026-10-15T01:30:00Z" : "2026-10-14T23:30:00Z"),
-              )
-              .map((part) => (part.type === "hour" ? part.value.padStart(2, "0") : part.value))
-              .join("");
-            expect(el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent).toContain(
-              expected,
-            );
-            expect(el.shadowRoot!.querySelector(".recipient")).toBeNull();
-            expect(el.shadowRoot!.querySelector(".domicile")).toBeNull();
-            expect(el.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
-            await page.screenshot({
-              path: `__screenshots__/a696-recorded-offset/${locale}-${theme}-${width}-${offset}.png`,
-            });
-          }
-        } finally {
-          await page.viewport(previous.width, previous.height);
-        }
-      });
-    }
-  }
-}
-
-describe("a takeaway sale's on-screen receipt", () => {
-  // Fails if a takeaway sale's on-screen receipt stops saying so beside its order, in the receipt's
-  // language, or an eat-in one gains the line.
-  it.each([
-    ["es-ES", "Para llevar"],
-    ["en-GB", "Take away"],
-  ])(
-    "says Take away under the order in %s, and nothing on an eat-in one",
-    async (locale, words) => {
-      const mark = async (result: TillSaleResult) => {
-        const { el } = await mountWidget<TillTicketView>("till-ticket-view", { result, issuer });
-        const text = el.shadowRoot!.querySelector("[data-test='take-away']")?.textContent?.trim();
-        cleanupWidgets();
-        return text;
-      };
-      expect(await mark({ ...facts, locale, takeAway: true })).toBe(words);
-      expect(await mark({ ...facts, locale })).toBeUndefined();
-    },
-  );
 });

@@ -1,34 +1,18 @@
 import { outsideCardSummary } from "../widgets/outside-card.js";
 import { equipmentTakeover } from "../widgets/equipment-dialog.js";
-import { optionAnswers } from "../widgets/option-snapshot.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { live } from "lit/directives/live.js";
+import { styleMap } from "lit/directives/style-map.js";
+import { ChangeObserver, baseStyles, mediaAddress, subscribeMediaServer } from "@waitron/ui";
 import {
-  ChangeObserver,
-  baseStyles,
-  formatDecimalInput,
-  mediaAddress,
-  subscribeMediaServer,
-} from "@waitron/ui";
-import {
-  addDecimal,
-  compareDecimal,
-  decimal,
-  formatMoney,
-  multiplyDecimal,
-  negateDecimal,
-  perDishOptionQuantity,
   resolveSnapshotText,
+  type ReceiptElement,
+  type ReceiptIndent,
+  type ReceiptTableRow,
+  type TaxTableRow,
 } from "@waitron/shared";
-import {
-  FALLBACK_RECEIPT_LOCALE,
-  recipientIdentifierLabel,
-  receiptCountryNameFor,
-  receiptLabelsFor,
-} from "@waitron/country-packs";
-import type { ReceiptLabels } from "@waitron/country";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { t } from "../i18n/t.js";
@@ -38,14 +22,11 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import type { InvoiceEmailRefusal } from "../widgets/invoice-email-dialog.js";
 import {
   a4HoldCodes,
-  type BillTenderLine,
   type EquipmentItem,
   type InvoiceDeliveryAttempt,
   type InvoiceDeliveryStatus,
   type OriginalReceiptPrint,
   type RoleEquipment,
-  type ReceiptAdjustment,
-  type TillSaleLine,
   type TillSaleResult,
 } from "../api/client.js";
 
@@ -55,310 +36,111 @@ export interface TicketIssuer {
   nif: string;
 }
 
-/**
- * A filed line's goods name (art. 7.1.e), looked up under the sale's names language.
- *
- * `descriptions` is keyed by the venue's receipt languages when the line was added; a line added
- * from an order holds the same text under every key (`defaultLanguageDescriptions`,
- * `packages/menu/src/default-language-text.ts`). A later change can leave the keys without the
- * names language, so the lookup falls back through `resolveSnapshotText`, as the printed twin
- * (`apps/server/src/receipt-document.ts`) does. The line's `unitName` is keyed by a content language
- * such as `es`, never a receipt language, and the quantity below resolves it the same way.
- */
 export function lineName(descriptions: Record<string, string>, locale: string): string {
   return resolveSnapshotText(descriptions, locale, locale);
 }
 
-interface LineGroup {
-  dish: TillSaleLine;
-  options: TillSaleLine[];
-}
+const itemColumns = ["units", "item", "price", "amount"] as const;
+const taxColumns = ["rate", "base", "tax", "total"] as const;
 
-/** Parent numbers name positions in the unchanged filed list; an extra may follow other dishes.
- * Orphans stay visible. Twin: `apps/server/src/receipt-lines.ts` / `apps/till/src/screens/till-ticket-view.ts`. */
-function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
-  const groups: LineGroup[] = [];
-  const byPosition = new Map<number, LineGroup>();
-  for (const [index, line] of lines.entries()) {
-    const parent = line.parentLineNo == null ? undefined : byPosition.get(line.parentLineNo);
-    if (parent === undefined) {
-      const group = { dish: line, options: [] as TillSaleLine[] };
-      groups.push(group);
-      byPosition.set(index + 1, group);
-    } else {
-      parent.options.push(line);
+function receiptTable<Row>(
+  keys: readonly (keyof Row)[],
+  rowHeading: keyof Row,
+  header: Row | undefined,
+  rows: readonly Row[],
+  indent: (row: Row) => number = () => 0,
+) {
+  return html`<table class="receipt-table">
+    ${
+      header
+        ? html`<thead>
+            <tr>
+              ${keys.map((key) => html`<th scope="col" ?data-label=${key === rowHeading}>${header[key]}</th>`)}
+            </tr>
+          </thead>`
+        : nothing
     }
-  }
-  return groups;
+    <tbody>
+      ${rows.map(
+        (row) =>
+          html`<tr>
+            ${keys.map((key) =>
+              key === rowHeading
+                ? html`<th scope="row" style=${styleMap(indentation(indent(row)))}>${row[key]}</th>`
+                : html`<td>${row[key]}</td>`,
+            )}
+          </tr>`,
+      )}
+    </tbody>
+  </table>`;
 }
 
-/**
- * A set lunch stays with its diner. Ordinary identical dishes may share a simplified receipt row.
- * A group joins an earlier one
- * when its dish and each extra print the same at the same unit price and VAT rate, counted not
- * measured, with no list price and no comp or discount; counts and amounts add. A row carries its
- * rate only on a full invoice, so the other rows group only when `oneRate` says the sale filed one.
- * Twin: `apps/server/src/receipt-lines.ts`.
- */
-function mergeIdenticalGroups(groups: readonly LineGroup[], oneRate: boolean): LineGroup[] {
-  const merged: LineGroup[] = [];
-  for (const group of groups) {
-    const at = merged.findIndex((earlier) => samePrinting(earlier, group, oneRate));
-    if (at === -1) {
-      merged.push(group);
-      continue;
-    }
-    const earlier = merged[at]!;
-    merged[at] = {
-      dish: summed(earlier.dish, group.dish),
-      options: earlier.options.map((option, i) => summed(option, group.options[i]!)),
-    };
-  }
-  return merged;
-}
-
-function summed(left: TillSaleLine, right: TillSaleLine): TillSaleLine {
+function indentation(indent: ReceiptIndent) {
+  const width = typeof indent === "number" ? indent : indent.after.length;
   return {
-    ...left,
-    quantity: String(Number(left.quantity) + Number(right.quantity)),
-    gross: addDecimal(decimal(left.gross), decimal(right.gross)),
+    "--receipt-indent": `min(${width}ch, 25%)`,
+    textIndent: typeof indent === "number" ? null : "calc(-1 * var(--receipt-indent))",
   };
 }
 
-function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
-  const lines = (group: LineGroup) => [group.dish, ...group.options];
-  if (a.dish.setLunch || b.dish.setLunch) return false;
-  if (a.options.length !== b.options.length) return false;
-  if (![...lines(a), ...lines(b)].every(groupable)) return false;
-  if (answersKey(a.dish) !== answersKey(b.dish)) return false;
-  const [aDishes, bDishes] = [decimal(a.dish.quantity), decimal(b.dish.quantity)];
-  return lines(a).every((left, i) => {
-    const right = lines(b)[i]!;
-    const [aCount, bCount] = [decimal(left.quantity), decimal(right.quantity)];
-    return (
-      sameNames(left.descriptions, right.descriptions) &&
-      sameRate(left, right, oneRate) &&
-      // The same count per dish, and the same price each: compared crosswise, so nothing divides.
-      compareDecimal(multiplyDecimal(aCount, bDishes), multiplyDecimal(bCount, aDishes)) === 0 &&
-      compareDecimal(
-        multiplyDecimal(decimal(left.gross), bCount),
-        multiplyDecimal(decimal(right.gross), aCount),
-      ) === 0
-    );
-  });
-}
-
-/** The dish's answers by value: neither their order nor any key order tells two dishes apart. */
-function answersKey(dish: TillSaleLine): string {
-  const sorted = (value: unknown): unknown =>
-    value === null || typeof value !== "object"
-      ? value
-      : Object.fromEntries(
-          Object.entries(value)
-            .sort(([x], [y]) => (x < y ? -1 : 1))
-            .map(([key, inner]) => [key, sorted(inner)]),
+function renderReceipt(result: TillSaleResult, language: string) {
+  if (result.receiptPreview === undefined) return nothing;
+  let alignment: "left" | "center" = "left";
+  let itemHeader: ReceiptTableRow | undefined;
+  const logo = result.receiptTrim?.logo;
+  const lines = result.receiptPreview.map((element: ReceiptElement) => {
+    switch (element.kind) {
+      case "align":
+        alignment = element.alignment;
+        return nothing;
+      case "rule":
+        return html`<hr />`;
+      case "logo":
+        return logo
+          ? html`<img
+              class="logo"
+              src=${mediaAddress(result.receiptTrim.logoUrl ?? `/media/${encodeURIComponent(logo)}`)}
+              alt=""
+            />`
+          : nothing;
+      case "qr":
+        return html`<div class="qr" data-align=${alignment}>
+          ${unsafeHTML(qrSvg(element.text))}
+        </div>`;
+      case "text":
+        return html`<p
+          class="receipt-line"
+          data-align=${alignment}
+          ?data-bold=${element.style?.bold}
+          ?data-double=${element.style?.double}
+          style=${styleMap(indentation(element.indent))}
+        >
+          <span>${element.text.trimStart()}</span>
+        </p>`;
+      case "amount":
+        return html`<p
+          class="receipt-line receipt-amount"
+          data-align=${alignment}
+          ?data-bold=${element.style?.bold}
+          ?data-double=${element.style?.double}
+        >
+          <span style=${styleMap(indentation(element.indent))}>${element.caption.trimStart()}</span>
+          <span>${element.amount}</span>
+        </p>`;
+      case "table":
+        itemHeader = element.table.header ?? itemHeader;
+        return receiptTable<ReceiptTableRow>(
+          element.table.withRate ? [...itemColumns, "rate"] : itemColumns,
+          "item",
+          itemHeader,
+          element.table.rows,
+          (row) => row.itemIndent ?? 0,
         );
-  return JSON.stringify(
-    (dish.optionSnapshots ?? []).map((answer) => JSON.stringify(sorted(answer))).sort(),
-  );
-}
-
-function groupable(line: TillSaleLine): boolean {
-  return (
-    line.unitName == null &&
-    /^[1-9]\d*$/.test(line.quantity) &&
-    line.listGross === undefined &&
-    (line.adjustments ?? []).length === 0
-  );
-}
-
-function sameNames(a: Record<string, string>, b: Record<string, string>): boolean {
-  const keys = Object.keys(a);
-  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
-}
-
-function sameRate(a: TillSaleLine, b: TillSaleLine, oneRate: boolean): boolean {
-  if (a.net === undefined && b.net === undefined) return oneRate;
-  return (
-    a.net !== undefined &&
-    b.net !== undefined &&
-    compareDecimal(decimal(a.net.rate), decimal(b.net.rate)) === 0
-  );
-}
-
-/** A row at its list price; what a comp or discount took off is its own line (`adjustmentRow`). */
-function lineGross(line: TillSaleLine, locale: string) {
-  return html`<span class="line-gross">${formatMoney(line.listGross ?? line.gross, locale)}</span>`;
-}
-
-function netFacts(line: TillSaleLine, names: string, format: string, labels: ReceiptLabels) {
-  if (line.net === undefined) return nothing;
-  const unit = line.unitName == null ? "" : ` ${resolveSnapshotText(line.unitName, names, names)}`;
-  return html`<li class="invoice-facts">
-    <div class="vat-row">
-      <span>${labels.netUnitPrice}</span
-      ><span
-        >${formatMoney(line.net.unitPrice, format)} /
-        ${formatDecimalInput(line.net.priceQuantity.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1"), format)}${unit}</span
-      >
-    </div>
-    <div class="vat-row">
-      <span>${labels.base} ${line.net.rate}%</span
-      ><span>${formatMoney(line.net.base, format)}</span>
-    </div>
-    ${
-      line.net.tax === undefined
-        ? nothing
-        : html`<div class="vat-row">
-            <span>${labels.vat} ${line.net.rate}%</span
-            ><span>${formatMoney(line.net.tax, format)}</span>
-          </div>`
+      case "taxTable":
+        return receiptTable<TaxTableRow>(taxColumns, "rate", element.header, element.rows);
     }
-  </li>`;
-}
-
-const percentFormatters = new Map<string, Intl.NumberFormat>();
-
-/** `Descuento 12,5%` for 1250 basis points, and a full comp as 100%, as
- *  `apps/server/src/receipt-document.ts`'s `adjustmentLabel` words them. */
-function adjustmentLabel(
-  adjustment: ReceiptAdjustment,
-  locale: string,
-  labels: ReceiptLabels,
-): string {
-  const percentBp = adjustment.kind === "comp" ? 10000 : adjustment.percentBp;
-  if (percentBp === undefined) return labels.discount;
-  let formatter = percentFormatters.get(locale);
-  if (formatter === undefined) {
-    formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
-    percentFormatters.set(locale, formatter);
-  }
-  return `${labels.discount} ${formatter.format(percentBp / 100)}%`;
-}
-
-function adjustmentRow(
-  adjustment: ReceiptAdjustment,
-  locale: string,
-  labels: ReceiptLabels,
-  kind: "adjustment" | "bill-adjustment",
-  full: boolean,
-) {
-  return html`<li class="line ${kind}">
-    <span class="line-name"
-      >${adjustmentLabel(adjustment, locale, labels)}${full ? ` (${labels.vatIncluded})` : ""}</span
-    >
-    <span class="line-gross">-${formatMoney(adjustment.amount, locale)}</span>
-  </li>`;
-}
-
-function issueDate(iso: string, locale: string, offsetMinutes?: number): string {
-  const instant = new Date(iso);
-  const date =
-    offsetMinutes === undefined ? instant : new Date(instant.getTime() + offsetMinutes * 60_000);
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-    ...(offsetMinutes === undefined ? {} : { timeZone: "UTC" }),
-  })
-    .formatToParts(date)
-    .map((part) => (part.type === "hour" ? part.value.padStart(2, "0") : part.value))
-    .join("");
-}
-
-/** A calendar day (`YYYY-MM-DD`) in words, read as written whatever the browser's zone. */
-function saleDay(isoDate: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
-    new Date(`${isoDate}T00:00:00Z`),
-  );
-}
-
-function tenderRow(label: string, amount: string, locale: string) {
-  return html`<div class="tender-row">
-    <span>${label}</span>
-    <span>${formatMoney(amount, locale)}</span>
-  </div>`;
-}
-
-/** One payment of a bill paid in parts, as the printed receipt (`apps/server/src/receipt-ticket.ts`)
- * lists it. */
-function renderBillPayment(payment: BillTenderLine, locale: string, labels: ReceiptLabels) {
-  const given = (refund: { amount: string; tip: string }) =>
-    addDecimal(decimal(refund.amount), decimal(refund.tip));
-  const paid =
-    payment.method === "cash"
-      ? html`${tenderRow(labels.cash, payment.tendered, locale)}
-        ${payment.change !== "0.00" ? tenderRow(labels.change, payment.change, locale) : nothing}`
-      : html`${tenderRow(
-          labels.card,
-          // A card's amount is net of its refunds, which are listed beneath it: show the original
-          // charge.
-          payment.refunds.reduce(
-            (sum, refund) => addDecimal(sum, given(refund)),
-            decimal(payment.amount),
-          ),
-          locale,
-        )}
-        ${
-          payment.reference !== null
-            ? html`<div class="tender-row">
-                <span>${labels.reference} ${payment.reference}</span>
-              </div>`
-            : nothing
-        }`;
-  return html`
-    ${paid} ${payment.tip !== "0.00" ? tenderRow(labels.tip, payment.tip, locale) : nothing}
-    ${payment.refunds.map((refund) =>
-      tenderRow(labels.refund, negateDecimal(given(refund)), locale),
-    )}
-  `;
-}
-
-/** An allowed operational extra alongside `result.total`. Card-present identity lives on the separate
- * payment slip. */
-function renderTender(result: TillSaleResult, locale: string, labels: ReceiptLabels) {
-  if (result.payments !== undefined && result.payments.length > 0) {
-    return result.payments.map((payment) => renderBillPayment(payment, locale, labels));
-  }
-  const t = result.tender;
-  if (t.method === "unpaid") return nothing;
-  if (t.method === "deferred")
-    return html`<div class="tender-row"><span>${labels.deferredPayment}</span></div>`;
-  if (t.method === "cash") {
-    return html`
-      <div class="tender-row">
-        <span>${labels.cash}</span>
-        <span>${formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale)}</span>
-      </div>
-      <div class="tender-row">
-        <span>${labels.change}</span>
-        <span>${formatMoney(t.change, locale)}</span>
-      </div>
-    `;
-  }
-  return html`
-    <div class="tender-row"><span>${labels.card}</span></div>
-    ${
-      t.reference !== null
-        ? html`<div class="tender-row"><span>${labels.reference} ${t.reference}</span></div>`
-        : nothing
-    }
-    ${
-      // String compare: the filed `tip`/`charged` are canonical decimal strings ("0.00"/"0.50") — a
-      // `decimal(...)` compare here would test object identity and always be true.
-      t.tip !== "0.00"
-        ? html`
-            <div class="tender-row">
-              <span>${labels.tip}</span>
-              <span>${formatMoney(t.tip, locale)}</span>
-            </div>
-            <div class="tender-row">
-              <span>${labels.charged}</span>
-              <span>${formatMoney(t.charged, locale)}</span>
-            </div>
-          `
-        : nothing
-    }
-  `;
+  });
+  return html`<article class="ticket" lang=${language}>${lines}</article>`;
 }
 
 function printLabel(
@@ -420,22 +202,77 @@ export class TillTicketView extends LitElement {
         border-radius: var(--wt-radius-md);
         box-shadow: var(--wt-shadow-1);
         font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
       }
 
-      .issuer {
-        margin: 0 0 var(--wt-space-3);
+      .receipt-line {
+        margin: var(--wt-space-1) 0;
+      }
+
+      .receipt-line span {
+        white-space: pre-wrap;
+      }
+
+      [data-align="center"] {
         text-align: center;
-        overflow-wrap: anywhere;
       }
 
-      .domicile,
-      .recipient p {
-        margin: var(--wt-space-1) 0 0;
+      .receipt-line[data-bold] {
+        font-weight: var(--wt-font-weight-bold);
       }
 
-      .recipient {
-        margin: 0 0 var(--wt-space-3);
-        overflow-wrap: anywhere;
+      .receipt-line[data-double] {
+        font-size: var(--wt-font-size-lg);
+      }
+
+      .receipt-amount {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) fit-content(55%);
+        gap: var(--wt-space-2);
+      }
+
+      .receipt-amount span:last-child {
+        text-align: end;
+      }
+
+      .receipt-line,
+      .receipt-amount span:first-child {
+        padding-inline-start: var(--receipt-indent, 0);
+      }
+
+      .receipt-table {
+        inline-size: 100%;
+        border-collapse: collapse;
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .receipt-table :is(td, th) {
+        padding-block: var(--wt-space-1);
+        text-align: end;
+        vertical-align: top;
+      }
+
+      .receipt-table :is(td, th) + :is(td, th) {
+        padding-inline-start: var(--wt-space-1);
+      }
+
+      .receipt-table :is([data-label], [scope="row"]) {
+        text-align: start;
+      }
+
+      .receipt-table tbody th {
+        padding-inline-start: var(--receipt-indent, 0);
+        font-weight: inherit;
+      }
+
+      .receipt-table td + th {
+        padding-inline-start: calc(var(--wt-space-1) + var(--receipt-indent, 0));
+      }
+
+      .ticket hr {
+        margin-block: var(--wt-space-2);
+        border: 0;
+        border-block-start: 1px solid var(--wt-color-border);
       }
 
       .simulation-notice {
@@ -455,137 +292,13 @@ export class TillTicketView extends LitElement {
         object-fit: contain;
       }
 
-      .venue {
-        margin: 0;
-        font-size: var(--wt-font-size-lg);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .nif {
-        margin: var(--wt-space-1) 0 0;
-        color: var(--wt-color-text-muted);
-      }
-
-      /* Non-fiscal receipt trim, rendered AROUND the immutable core — never inside it. */
-      .header-subtitle,
-      .contact,
-      .footer-message {
-        margin: var(--wt-space-1) 0 0;
-        text-align: center;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .footer-message {
-        margin-top: var(--wt-space-2);
-      }
-
-      .meta,
-      .lines {
-        margin: 0 0 var(--wt-space-3);
-        padding: 0 0 var(--wt-space-3);
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-
-      .lines {
-        list-style: none;
-      }
-
-      .meta-row,
-      .line,
-      .vat-row,
-      .total-row,
-      .tender-row {
-        display: flex;
-        justify-content: space-between;
-        gap: var(--wt-space-3);
-        padding: var(--wt-space-1) 0;
-      }
-
-      .corrective,
-      .corrects {
-        margin: 0;
-        padding: var(--wt-space-1) 0;
-      }
-
-      .corrective,
-      .take-away {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .meta-label,
-      .vat-label,
-      .line-qty,
-      .tender-row {
-        color: var(--wt-color-text-muted);
-      }
-
-      .invoice-facts {
-        padding-left: var(--wt-space-4);
-        font-size: var(--wt-font-size-sm);
-        overflow-wrap: anywhere;
-      }
-
-      .invoice-facts .vat-row span:last-child {
-        text-align: end;
-      }
-
-      .line-name {
-        flex: 1;
-      }
-
-      /* An option, or an amount taken off a dish, is indented beneath the dish as the printed
-         receipt indents it. */
-      .line.option,
-      .line.adjustment {
-        padding-left: var(--wt-space-4);
-      }
-
-      .line.option,
-      .line.adjustment,
-      .line.bill-adjustment {
-        color: var(--wt-color-text-muted);
-      }
-
-      .total-row {
-        margin: var(--wt-space-2) 0;
-        padding-top: var(--wt-space-2);
-        border-top: 1px solid var(--wt-color-border);
-        font-size: var(--wt-font-size-lg);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .tender {
-        margin-bottom: var(--wt-space-3);
-      }
-
-      .qr-block {
-        margin: 0 0 var(--wt-space-3);
-        padding: 0 0 var(--wt-space-3);
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-
-      .qr-caption {
-        margin: 0 0 var(--wt-space-1);
-        text-align: center;
-      }
-
       .qr {
-        display: flex;
-        justify-content: center;
-        margin: 0 0 var(--wt-space-3);
+        margin-block: var(--wt-space-2);
       }
 
       .qr svg {
-        width: var(--wt-till-receipt-qr-size);
+        width: min(100%, var(--wt-till-receipt-qr-size));
         height: var(--wt-till-receipt-qr-size);
-      }
-
-      .legend {
-        margin: 0;
-        text-align: center;
-        font-weight: var(--wt-font-weight-bold);
-        letter-spacing: var(--wt-letter-spacing-wide);
       }
 
       .new-sale {
@@ -643,11 +356,9 @@ export class TillTicketView extends LitElement {
 
   /** Set before the element connects. */
   @property({ attribute: false }) result!: TillSaleResult;
-  /** Current boot issuer, used when an immediate ticket response has no filed issuer identity. */
-  @property({ attribute: false }) issuer!: TicketIssuer;
   /** The receipt language for a result that names none. NEVER the operator-UI `currentLocale()`. */
   @property() invoiceLocale = "es-ES";
-  /** True for Demo and Preparation transactions. This warning is outside the fiscal core below. */
+  /** Used by the settlement document dialog. */
   @property({ type: Boolean }) simulated = false;
   @property({ type: Boolean }) simulatedCardPayment = false;
   @property({ type: Boolean }) historical = false;
@@ -1176,19 +887,6 @@ export class TillTicketView extends LitElement {
 
   override render() {
     const r = this.result;
-    const issuer = r.issuer ?? this.issuer;
-    const language = r.locale ?? this.invoiceLocale;
-    const names = r.namesLocale ?? language;
-    const labels = receiptLabelsFor(language);
-    // A replacement of a full invoice (R4) is laid out as the full invoice it replaces.
-    const full = r.invoiceType === "F1" || r.invoiceType === "R4";
-    // Browsers ship no number or date formats for some receipt languages (Galician and Basque in
-    // Chromium 153 and Chrome 154), and would write those amounts the English way.
-    const format =
-      Intl.NumberFormat.supportedLocalesOf([language]).length > 0
-        ? language
-        : FALLBACK_RECEIPT_LOCALE;
-    const svg = qrSvg(r.qr);
     const attempt = this.deliveries?.current;
     const notQueued = this.originalReceiptPrint?.status === "not_queued";
     const failedReceipt = this.originalReceiptPrint?.status === "failed";
@@ -1202,255 +900,8 @@ export class TillTicketView extends LitElement {
         attempt.medium !== "receipt" &&
         (attempt.status === "queued" || attempt.status === "sending"));
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
-    const orderGroup = `${r.orderLabel === null ? "" : `${r.orderLabel} · `}${labels.order} ${r.orderNumber}`;
     return html`
-      <article class="ticket" lang=${language}>
-        ${
-          this.simulated
-            ? html`<p class="simulation-notice" data-test="simulation-notice">
-                ${labels.practice.replace(" - ", " — ")}
-                ${this.simulatedCardPayment ? html`<br />${labels.noRealCharge}` : nothing}
-              </p>`
-            : nothing
-        }
-        ${
-          svg
-            ? html`<div class="qr-block">
-                ${r.qrText ? html`<p class="qr-caption">${r.qrText.caption}</p>` : nothing}
-                <div class="qr">${unsafeHTML(svg)}</div>
-                ${r.qrText ? html`<p class="legend">${r.qrText.legend}</p>` : nothing}
-              </div>`
-            : nothing
-        }
-        <header class="issuer">
-          ${r.invoiceType === "F1" ? html`<p class="venue">${labels.fullInvoice}</p>` : nothing}
-          ${
-            r.receiptTrim?.logo
-              ? html`<img
-                  class="logo"
-                  src=${mediaAddress(
-                    r.receiptTrim.logoUrl ?? `/media/${encodeURIComponent(r.receiptTrim.logo)}`,
-                  )}
-                  alt=""
-                />`
-              : nothing
-          }
-          ${
-            r.receiptHeader?.printTradingName &&
-            r.receiptHeader.tradingName.trim() &&
-            r.receiptHeader.tradingName.trim() !== issuer.venueName.trim()
-              ? html`<p class="venue">${r.receiptHeader.tradingName.trim()}</p>`
-              : nothing
-          }
-          ${
-            r.receiptTrim?.headerSubtitle
-              ? html`<p class="header-subtitle">${r.receiptTrim.headerSubtitle}</p>`
-              : nothing
-          }
-          <p class="venue">${issuer.venueName}</p>
-          ${
-            r.receiptSettings.printAddress
-              ? r.venueAddress.map((line) => html`<p class="contact">${line}</p>`)
-              : nothing
-          }
-          ${
-            r.receiptTrim?.phone
-              ? html`<p class="contact">${labels.phone} ${r.receiptTrim.phone}</p>`
-              : nothing
-          }
-          ${r.receiptTrim?.email ? html`<p class="contact">${r.receiptTrim.email}</p>` : nothing}
-          <p class="nif">${labels.nif}: ${issuer.nif}</p>
-          ${
-            full && r.issuer?.domicile
-              ? html`<p class="domicile">${r.issuer.domicile}</p>`
-              : nothing
-          }
-        </header>
-
-        <div class="meta">
-          ${
-            r.corrects
-              ? html`<p class="corrective" data-test="corrective-invoice">
-                  ${labels.correctiveInvoice}
-                </p>`
-              : nothing
-          }
-          <div class="meta-row">
-            <span class="meta-label">${labels.invoice}</span>
-            <span class="invoice-number">${r.invoiceNumber}</span>
-          </div>
-          <div class="meta-row">
-            <span class="meta-label">${labels.date}</span>
-            <span>${issueDate(r.issuedAt, format, r.issuedOffsetMinutes)}</span>
-          </div>
-          ${
-            r.saleDay !== undefined
-              ? html`<div class="meta-row" data-test="sale-day">
-                  <span class="meta-label">${labels.saleDate}</span>
-                  <span>${saleDay(r.saleDay, format)}</span>
-                </div>`
-              : nothing
-          }
-          ${
-            r.corrects
-              ? html`<p class="corrects meta-label" data-test="corrects-invoice">
-                    ${r.corrects.inFull ? labels.replacesInvoiceInFull : labels.correctsInvoice}
-                  </p>
-                  <div class="meta-row">
-                    <span class="meta-label">${labels.invoice}</span>
-                    <span>${r.corrects.invoiceNumber}</span>
-                  </div>
-                  <div class="meta-row">
-                    <span class="meta-label">${labels.date}</span>
-                    <span
-                      >${issueDate(r.corrects.issuedAt, format, r.corrects.issuedOffsetMinutes)}</span
-                    >
-                  </div>
-                  ${
-                    r.corrects.inFull
-                      ? html`<div class="meta-row" data-test="rectification-amount">
-                          <span class="meta-label">${labels.rectificationAmount}</span>
-                          <span>${formatMoney("0.00", format)}</span>
-                        </div>`
-                      : nothing
-                  }`
-              : nothing
-          }
-          <div class="meta-row order-group">
-            <span>${orderGroup}</span>
-          </div>
-          ${
-            r.takeAway === true
-              ? html`<div class="meta-row take-away" data-test="take-away">
-                  <span>${labels.takeAway}</span>
-                </div>`
-              : nothing
-          }
-        </div>
-
-        ${
-          full && r.recipient
-            ? html`<section class="recipient">
-                <p>${r.recipient.legalName}</p>
-                <p>
-                  ${`${recipientIdentifierLabel(r.recipient.identifierType, language)}: ${r.recipient.taxId}`}
-                </p>
-                <p>${r.recipient.address}</p>
-                <p>${receiptCountryNameFor(r.recipient.countryCode, language)}</p>
-              </section>`
-            : nothing
-        }
-
-        <ul class="lines">
-          ${(full
-            ? groupByParent(r.lines)
-            : mergeIdenticalGroups(groupByParent(r.lines), r.vatBreakdown.length <= 1)
-          ).map(
-            // Each line is the FILED composition the server returned, NOT the mutable client basket, so
-            // the goods list can never diverge from the invoice.
-            (group) => html`
-              <li class="line">
-                <span class="line-name">${lineName(group.dish.descriptions, names)}</span>
-                <span class="line-qty"
-                  >${formatDecimalInput(group.dish.quantity, format)}${
-                    group.dish.unitName == null
-                      ? ""
-                      : ` ${resolveSnapshotText(group.dish.unitName, names, names)}`
-                  }</span
-                >
-                ${full && group.dish.net !== undefined ? nothing : lineGross(group.dish, format)}
-              </li>
-              ${full ? netFacts(group.dish, names, format, labels) : nothing}
-              ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale: names }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
-              ${group.options
-                .filter(
-                  (option) =>
-                    !group.dish.setLunch ||
-                    option.listGross !== undefined ||
-                    compareDecimal(decimal(option.gross), decimal("0")) !== 0,
-                )
-                .map((option) => {
-                  let amount: string;
-                  if (full) {
-                    const unit =
-                      option.unitName == null
-                        ? ""
-                        : ` ${resolveSnapshotText(option.unitName, names, names)}`;
-                    amount = ` ${formatDecimalInput(option.quantity, format)}${unit}`;
-                  } else if (option.unitName == null || option.soldInEach === true) {
-                    const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
-                    amount = perDish > 1 ? ` x${perDish}` : "";
-                  } else {
-                    amount = ` ${formatDecimalInput(option.quantity, format)} ${resolveSnapshotText(option.unitName, names, names)}`;
-                  }
-                  return html`
-                    <li class="line option">
-                      <span class="line-name"
-                        >${group.dish.setLunch ? labels.supplement.replace("{item}", () => lineName(option.descriptions, names)) : lineName(option.descriptions, names)}${amount}</span
-                      >
-                      ${full && option.net !== undefined ? nothing : lineGross(option, format)}
-                    </li>
-                    ${full ? netFacts(option, names, format, labels) : nothing}
-                  `;
-                })}
-              ${
-                group.dish.setLunch
-                  ? group.options.map((option) => {
-                      const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
-                      const quantity =
-                        option.unitName != null && option.soldInEach !== true
-                          ? ` ${formatDecimalInput(option.quantity, format)} ${resolveSnapshotText(option.unitName, names, names)}`
-                          : perDish > 1
-                            ? ` x${perDish}`
-                            : "";
-                      return html`<li class="line option">
-                        <span class="line-name"
-                          >${lineName(option.descriptions, names)}${quantity}</span
-                        >
-                      </li>`;
-                    })
-                  : nothing
-              }
-              ${[group.dish, ...group.options].flatMap((line) =>
-                (line.adjustments ?? []).map((adjustment) =>
-                  adjustmentRow(adjustment, format, labels, "adjustment", full),
-                ),
-              )}
-            `,
-          )}
-          ${(r.billAdjustments ?? []).map((adjustment) =>
-            adjustmentRow(adjustment, format, labels, "bill-adjustment", full),
-          )}
-        </ul>
-
-        <div class="vat">
-          ${r.vatBreakdown.map(
-            (v) => html`
-              <div class="vat-row">
-                <span class="vat-label">${labels.base} ${v.rate}%</span>
-                <span class="vat-amount">${formatMoney(v.base, format)}</span>
-              </div>
-              <div class="vat-row">
-                <span class="vat-label">${labels.vat} ${v.rate}%</span>
-                <span class="vat-amount">${formatMoney(v.tax, format)}</span>
-              </div>
-            `,
-          )}
-        </div>
-
-        <div class="total-row">
-          <span>${labels.total}</span>
-          <span>${formatMoney(r.total, format)}</span>
-        </div>
-
-        <div class="tender">${renderTender(r, format, labels)}</div>
-
-        ${
-          r.receiptTrim?.footerMessage
-            ? html`<p class="footer-message">${r.receiptTrim.footerMessage}</p>`
-            : nothing
-        }
-      </article>
+      ${renderReceipt(r, r.locale ?? this.invoiceLocale)}
       <section data-outside-payment-facts>
         ${
           r.payments?.length

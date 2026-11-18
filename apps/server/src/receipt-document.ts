@@ -16,7 +16,10 @@ import {
   perDishOptionQuantity,
   resolveSnapshotText,
   subtractDecimal,
+  type ReceiptElement,
+  type ReceiptIndent,
   type ReceiptLogoRaster,
+  type ReceiptStyle,
   type ReceiptPaperWidth,
   type ReceiptPresentation,
 } from "@waitron/shared";
@@ -41,7 +44,6 @@ import { printsAsFullInvoice } from "./invoice-typing.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
-import type { TaxTableRow } from "./receipt-tax-table.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 export interface ReceiptIssuer {
@@ -76,26 +78,7 @@ export interface ReceiptDocumentInput {
   guests?: number;
 }
 
-// The roll renderer resolves an indent after this prefix against the columns the line is drawn in.
-export type ReceiptIndent = number | { after: string };
-export type ReceiptStyle = { bold?: true; double?: true };
-export type ReceiptElement =
-  | { kind: "text"; text: string; indent: ReceiptIndent; style?: ReceiptStyle }
-  | {
-      kind: "amount";
-      caption: string;
-      amount: string;
-      indent: ReceiptIndent;
-      style?: ReceiptStyle;
-      /** The fewest spaces between caption and amount on one line; fewer, and the amount drops. */
-      gap?: number;
-    }
-  | { kind: "rule" }
-  | { kind: "align"; alignment: "left" | "center" }
-  | { kind: "logo" }
-  | { kind: "qr"; text: string }
-  | { kind: "table"; table: ReceiptTable }
-  | { kind: "taxTable"; header: TaxTableRow; rows: TaxTableRow[] };
+export type { ReceiptElement, ReceiptIndent, ReceiptStyle } from "@waitron/shared";
 
 /** A part of the trim the dashboard's preview highlights. */
 export type ReceiptPart =

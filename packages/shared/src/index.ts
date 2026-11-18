@@ -247,6 +247,14 @@ export type {
 } from "./receipt-text.js";
 
 export type {
+  ReceiptElement,
+  ReceiptIndent,
+  ReceiptStyle,
+  ReceiptTable,
+  ReceiptTableRow,
+  TaxTableRow,
+} from "./receipt-document.js";
+export type {
   ReceiptPaperWidth,
   StoredReceiptLogoRaster,
   ReceiptLogoRasters,

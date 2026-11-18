@@ -271,25 +271,6 @@ checked on the box).
   of 2026-10-16 put the «Comensales» field on the payment screen only; this records the gap
   without deciding whether Find a bill should ask too.
 
-## The till's on-screen receipt is a second copy of the layout
-
-The till draws a sale's receipt
-itself (`apps/till/src/screens/till-ticket-view.ts`): `netFacts` prints its own «Precio sin IVA
-… / 1 ud» line, and the item and summary VAT lines print the rate as the sale carries it («21.00%»
-for a filed sale), so A663's rate spelling, its simplified-receipt layout, and its item table, do not reach it. It
-also still prints «4 ud» where paper now prints the bare count «4» (owner, Q8), labels each
-rate's base «Base» (`labels.base`) where a printed full invoice prints «Base imponible» (owner, Q11, for one rate; Part 2b's own decision for several), and a full
-invoice's discounts with VAT where paper now prints them before VAT: the till shows each discount
-of a dish under the dish and a whole-bill discount once, where a printed full invoice shows a
-dish's own discount under it and the whole-bill discount once per rate at the end of the table. Bring it
-into line with the printed receipt; A661 (#1745), which changed that file, has landed. It does
-not show the «N comensales · por persona» line either, which paper now prints (A663 Part 3a), nor
-paper's header rows (A754): on every sale it shows captioned invoice-number and date rows, the
-date in words, with the table and order on a line beneath them; it does pad the hour to two
-digits as paper does. Nor does it show what a printed simplified receipt gained in
-RECEIPT-LAYOUT-1: a price each, a rate letter beside each amount on a bill with more than one
-VAT rate, and one tax-table row per rate under TOTAL.
-
 ## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
 
 A268 discards a waiting device's request when the last Add dialog closes. An agent told
@@ -333,10 +314,6 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
   rule, and since A405 it can send a full invoice's original that never printed (out of delivery
   attempts, or still waiting on a disabled or unseen printer) to any other active receipt printer.
   Decide whether a manager's reprint should.
-
-## Loose ends left by A663 Parts 1a, 1b and 2 (#1748, #1756, #1768)
-
-- [The till's on-screen receipt is a second copy of the layout](#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout).
 
 ## A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).
 
@@ -440,10 +417,8 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Bundle: Receipt layout pass
 
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size M.
 
-- **Loose ends left by A663 Parts 1a, 1b and 2 (#1748, #1756, #1768).**
-  [Detail](printers.md#loose-ends-left-by-a663-parts-1a-1b-and-2-1748-1756-1768)
 - **A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full
   comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).**
   [Detail](printers.md#a960-on-an-80-mm-roll-in-basque-a-full-invoice-with-more-than-one-vat-rate-prints-a-full-comps-deskontua-100-with-100-on-its-own-line-under-the-figures-left-open-by-a758-4)

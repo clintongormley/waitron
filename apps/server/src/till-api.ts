@@ -84,6 +84,7 @@ import {
   reprintSale,
   printSaleReceipt,
 } from "./till-sale.js";
+import { tillReceiptPreview } from "./till-receipt-preview.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
 import { readGuestCountChoice } from "./receipt-guests.js";
 import {
@@ -2434,7 +2435,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           .where(eq(sales.workingOrderId, id));
         if (sale === undefined)
           throw new AppError("working_order.not_found", { workingOrderId: id });
-        return readSettledTicket(deps.backend, tx, cfg, id);
+        const ticket = await readSettledTicket(deps.backend, tx, cfg, id);
+        return c.req.query("receiptPreview") === "1"
+          ? tillReceiptPreview(tx, sale.id, ticket, cfg.practiceMode === true)
+          : ticket;
       });
       return c.json(ticket);
     }),

@@ -550,7 +550,9 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
         headers: { cookie: readerCookie },
       });
       expect(res.status).toBe(200);
-      expect(await res.json()).toMatchObject({
+      const result = await res.json();
+      expect(result).not.toHaveProperty("receiptPreview");
+      expect(result).toMatchObject({
         invoiceType: "F2",
         invoiceNumber: "A/1",
         locale: "es-ES",
@@ -560,6 +562,16 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
         lines: [{ descriptions: { "es-ES": "Agua mineral" }, quantity: "1", gross: "1.50" }],
       });
     }
+    const preview = await freshApp.request(`/api/sales/${orderId}?receiptPreview=1`, {
+      headers: { cookie: readerCookie },
+    });
+    expect(preview.status).toBe(200);
+    expect(await preview.json()).toMatchObject({
+      receiptPreview: expect.arrayContaining([
+        expect.objectContaining({ kind: "amount", caption: "A/1" }),
+        expect.objectContaining({ kind: "amount", caption: "1  Agua mineral" }),
+      ]),
+    });
     expect(await snapshot()).toEqual(before);
   });
 
@@ -568,7 +580,7 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const id = randomUUID();
-    const denied = await app.request(`/api/sales/${id}`);
+    const denied = await app.request(`/api/sales/${id}?receiptPreview=1`);
     expect(denied.status).toBe(401);
     expect(await denied.json()).toMatchObject({ error: { code: "session.required" } });
     const cookie = await login(app, cfg, operatorId);

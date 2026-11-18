@@ -200,9 +200,17 @@ it("reprints a duplicate document with an audit row and no drawer or fiscal chan
   expect(after.reprints.at(-1)).toMatchObject({ saleId: id, personId: venue.operatorId });
   expect(await snapshot()).toEqual(before);
 });
-it("prints the guests stored with the sale on its copy", async () => {
+it("shows the saved guests in the preview and on the paper copy", async () => {
   const id = await billlessSale(venue);
   await inTx(venue, (tx) => tx.insert(saleReceiptGuests).values({ saleId: id, guestCount: 5 }));
+  const answer = await get(id);
+  expect(answer.status).toBe(200);
+  expect(answer.json).toMatchObject({
+    receiptPreview: expect.arrayContaining([
+      expect.objectContaining({ kind: "amount", caption: "5 comensales · por persona" }),
+      expect.objectContaining({ kind: "text", text: "Tarjetas SL" }),
+    ]),
+  });
   const printed = (await jobs()).prints.length;
   expect((await reprint(id)).status).toBe(200);
   const { prints } = await jobs();
@@ -211,6 +219,20 @@ it("prints the guests stored with the sale on its copy", async () => {
   const copy = decodeTicket(prints.at(-1)!.payload);
   expect(copy).toContain("DUPLICADO");
   expect(copy).toContain("5 comensales · por persona");
+});
+it("marks a practice receipt twice without claiming a cash payment was simulated", async () => {
+  const id = await billlessSale(venue);
+  const app = venue.appWith({ practiceMode: true });
+  const answer = await send(app, venue.cookie, "GET", `/api/transactions/${id}/receipt`);
+  expect(answer.status).toBe(200);
+  const { receiptPreview } = answer.json as unknown as TillSaleResult;
+  const marks = receiptPreview?.filter(
+    (element) => element.kind === "text" && /PRUEBA|COBRO REAL/.test(element.text),
+  );
+  expect(marks).toEqual([
+    { kind: "text", text: "DOCUMENTO DE PRUEBA", indent: 0 },
+    { kind: "text", text: "DOCUMENTO DE PRUEBA", indent: 0 },
+  ]);
 });
 let projectionNumber = 900100;
 async function projectionInvoice(

@@ -6,7 +6,8 @@ compact 80 mm layout. A 58 mm print can format its date differently and an A4 pr
 layout. The browser's text wraps and stays readable in either theme. The scope ends at the receipt
 article and its signed-in reads. Lane L owns paper and fiscal output.
 
-**Ask.** [Bring the till receipt into line with paper](../../backlog/printers.md#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout).
+**Ask.** “Bring it into line with the printed receipt” (`docs/backlog/printers.md:274` at
+`fd0dc1c922`).
 The server's `buildReceiptDocument` supplies the content. Its existing structured elements let
 the browser render text and table headings for people using assistive technology.
 

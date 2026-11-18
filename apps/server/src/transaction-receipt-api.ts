@@ -27,6 +27,7 @@ import {
 import { requestCfg } from "./request-config.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { assertRequestDevice, requireSession } from "./till-session.js";
+import { tillReceiptPreview } from "./till-receipt-preview.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import { checkZones } from "./zone-access.js";
@@ -201,7 +202,8 @@ export function mountTransactionReceiptApi(
           session,
           scope.workingOrderIds.map((orderId) => ({ orderId })),
         );
-        return readTransactionReceipt(deps.backend, tx, deps.cfg, id);
+        const ticket = await readTransactionReceipt(deps.backend, tx, deps.cfg, id);
+        return tillReceiptPreview(tx, id, ticket, deps.cfg.practiceMode === true);
       });
       return c.json(result);
     }),

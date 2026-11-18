@@ -123,7 +123,7 @@ export interface LineGroup {
 }
 
 /** Parent numbers name positions in the unchanged filed list; an extra may follow other dishes.
- * Orphans stay visible. Twin: `apps/server/src/receipt-lines.ts` / `apps/till/src/screens/till-ticket-view.ts`. */
+ * Orphans stay visible. */
 export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
   const groups: LineGroup[] = [];
   const byPosition = new Map<number, LineGroup>();
@@ -145,7 +145,6 @@ export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
  * A group joins an earlier one
  * when its dish and each extra print the same at the same unit price and VAT rate, counted not
  * measured, with no list price and no comp or discount; counts and amounts add.
- * Twin: `apps/till/src/screens/till-ticket-view.ts`.
  */
 export function mergeIdenticalGroups(groups: readonly LineGroup[], oneRate: boolean): LineGroup[] {
   const merged: LineGroup[] = [];
