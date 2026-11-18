@@ -657,4 +657,25 @@ describe("a page printer is never a receipt printer", () => {
     ).toEqual([]);
     expect(await stored(id)).toMatchObject({ name: "Office", active: true });
   });
+
+  it("is refused by Put on every station, by domain code, and joins no station", async () => {
+    const app = mountApp();
+    const { id } = await onePrinter(app, "10.61.11.3");
+    await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
+
+    const res = await send(app, "POST", `/management-api/printers/${id}/stations`, {
+      cookie: managerCookie,
+    });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    expect(
+      await suite.db
+        .select({
+          stationId: stationPrinterPairs.stationId,
+          printerId: stationPrinterPairs.printerId,
+        })
+        .from(stationPrinterPairs),
+    ).toEqual([]);
+  });
 });

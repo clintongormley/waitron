@@ -2556,6 +2556,16 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
+  it("putPrinterOnEveryStation POSTs /printers/:pid/stations and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.putPrinterOnEveryStation("p1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/stations", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
   it("detachPrinterFromStation DELETEs /stations/:sid/printers/:pid and resolves undefined on an empty 204", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

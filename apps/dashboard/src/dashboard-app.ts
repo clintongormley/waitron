@@ -3554,6 +3554,10 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-printers-screen
           .api=${this.api}
           .canManage=${this.#sessionPermissions.includes("hardware.manage")}
+          .canManageStationPrinters=${
+            this.#sessionPermissions.includes("hardware.manage") &&
+            this.#sessionPermissions.includes("venue.configure")
+          }
           .canOpen=${this.#canOpenScreen}
         ></dashboard-printers-screen>`;
       case "floor-plan":

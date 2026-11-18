@@ -62,6 +62,7 @@ import {
   attachPrinterToStation,
   detachPrinterFromStation,
   listStationPrinters,
+  putPrinterOnEveryStation,
 } from "./station-printers.js";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -1923,6 +1924,21 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
       const rows = await gated(sessionId, (tx) => listStationPrinters(tx, { printerId }));
       return c.json(rows);
+    }),
+  );
+
+  app.post("/management-api/printers/:pid/stations", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
+      await gated(sessionId, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "venue.configure",
+        });
+        await putPrinterOnEveryStation(tx, printerId);
+      });
+      return c.body(null, 204);
     }),
   );
 

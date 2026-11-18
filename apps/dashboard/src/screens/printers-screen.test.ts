@@ -14424,3 +14424,444 @@ describe("stable printer column inputs", () => {
     }
   });
 });
+
+describe("Putting a printer on every station", () => {
+  type Dialog = HTMLElementTagNameMap["wt-dialog"];
+  const sel = (test: string) => `[data-test="${test}"]`;
+  const bar: Printer = { ...printers[0]!, id: "p5", name: "Bar" };
+  const dialogOf = (el: PrintersScreen) => q(el, sel("every-station-dialog")) as Dialog;
+  const confirmOf = (el: PrintersScreen) => q(el, sel("every-station-confirm")) as WtButton;
+  const noticeOf = (el: PrintersScreen) => q(el, sel("every-station-notice"));
+
+  function focused(): Element | null {
+    let at = document.activeElement;
+    while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement;
+    return at;
+  }
+
+  async function mounted(overrides: Partial<DashboardApi> = {}, canManageStationPrinters = true) {
+    const liveData = new LiveData();
+    const api = stubApi({
+      liveData,
+      listPrinters: vi.fn().mockResolvedValue([...printers, bar]),
+      putPrinterOnEveryStation: vi.fn().mockResolvedValue(undefined),
+      ...overrides,
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api,
+      canManage: true,
+      canManageStationPrinters,
+    } as Partial<PrintersScreen>);
+    await flush(el);
+    await selectTab(el, "printers");
+    return { api, el, liveData };
+  }
+
+  async function openFor(el: PrintersScreen, id = "p1"): Promise<void> {
+    q(el, sel(`every-station-${id}`))!.click();
+    await flush(el);
+  }
+
+  async function confirm(el: PrintersScreen): Promise<void> {
+    confirmOf(el).click();
+    await flush(el);
+  }
+
+  async function listChanges(
+    api: DashboardApi,
+    liveData: LiveData,
+    el: PrintersScreen,
+    next: Printer[],
+  ): Promise<void> {
+    vi.mocked(api.listPrinters).mockResolvedValue(next);
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await vi.waitFor(() => expect(dialogOf(el).open).toBe(false));
+    await flush(el);
+  }
+
+  /** Holds the next read of the printers until the returned function answers it. */
+  function pendingList(api: DashboardApi): (rows: Printer[]) => void {
+    let answer!: (rows: Printer[]) => void;
+    vi.mocked(api.listPrinters).mockReturnValueOnce(
+      new Promise<Printer[]>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    return (rows) => answer(rows);
+  }
+
+  function pendingAnswer() {
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<void>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("sits after Print test page in the row menu", async () => {
+    const { el } = await mounted();
+    const menu = q(el, sel("every-station-p1"))!.closest("dashboard-row-actions")!;
+    expect(
+      [...menu.querySelectorAll<HTMLElement>("wt-button")].map((button) => button.dataset.test),
+    ).toEqual(["edit-printer-p1", "print-test-page-p1", "every-station-p1", "delete-printer-p1"]);
+    expect(text(el, sel("every-station-p1"))).toBe(t("printers.every_station"));
+  });
+
+  it("is not offered without both permissions the Prep stations editor requires", async () => {
+    const { el } = await mounted({}, false);
+    expect(q(el, sel("print-test-page-p1"))).not.toBeNull();
+    expect(q(el, sel("every-station-p1"))).toBeNull();
+  });
+
+  it("asks first, naming the printer, and sends nothing until confirmed", async () => {
+    const { api, el } = await mounted();
+    expect(dialogOf(el).open).toBe(false);
+    await openFor(el);
+    expect(dialogOf(el).open).toBe(true);
+    expect(dialogOf(el).heading).toBe(fill("printers.every_station_heading", { name: "Kitchen" }));
+    expect(dialogOf(el).textContent).toContain(t("printers.every_station_body"));
+    expect(confirmOf(el).textContent!.trim()).toBe(t("printers.every_station"));
+    expect(api.putPrinterOnEveryStation).not.toHaveBeenCalled();
+  });
+
+  it("Cancel closes it, sends nothing and hands focus back to the row menu's button", async () => {
+    const { api, el } = await mounted();
+    const menu = q(el, sel("every-station-p5"))!.closest("dashboard-row-actions")!;
+    const trigger = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+    (focused() as HTMLElement | null)?.blur();
+    await openFor(el, "p5");
+    expect(dialogOf(el).opener).toBe(trigger);
+    const closed = dialogClosed(dialogOf(el));
+    q(el, sel("every-station-cancel"))!.click();
+    await closed;
+    await flush(el);
+    expect(dialogOf(el).open).toBe(false);
+    expect(api.putPrinterOnEveryStation).not.toHaveBeenCalled();
+    expect(noticeOf(el)).toBeNull();
+    expect(focused()).toBe(trigger);
+  });
+
+  it("confirming sends once for that printer, closes, says so in a notice and reads the lists again", async () => {
+    const { api, el } = await mounted();
+    await openFor(el);
+    const reads = vi.mocked(api.listPrinterStationNames).mock.calls.length;
+    await confirm(el);
+    expect(api.putPrinterOnEveryStation).toHaveBeenCalledExactlyOnceWith("p1");
+    expect(dialogOf(el).open).toBe(false);
+    const notice = noticeOf(el) as HTMLElement & { duration: number };
+    expect(notice.localName).toBe("wt-notice");
+    expect(notice.textContent!.trim()).toBe(
+      fill("printers.every_station_done", { name: "Kitchen" }),
+    );
+    expect(notice.duration).toBeGreaterThan(0);
+    expect(vi.mocked(api.listPrinterStationNames).mock.calls.length).toBeGreaterThan(reads);
+
+    notice.dispatchEvent(
+      new CustomEvent("wt-notice-gone", { bubbles: true, composed: true, detail: {} }),
+    );
+    await flush(el);
+    expect(noticeOf(el)).toBeNull();
+  });
+
+  it("names the printer as it is now when it was renamed while the request was out", async () => {
+    const answer = pendingAnswer();
+    const { api, el, liveData } = await mounted({
+      putPrinterOnEveryStation: vi.fn().mockReturnValue(answer.promise),
+    });
+    await openFor(el);
+    await confirm(el);
+    vi.mocked(api.listPrinters).mockResolvedValue([{ ...printers[0]!, name: "Pass" }, bar]);
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await vi.waitFor(() =>
+      expect(dialogOf(el).heading).toBe(fill("printers.every_station_heading", { name: "Pass" })),
+    );
+
+    answer.resolve();
+    await flush(el);
+    expect(noticeOf(el)!.textContent!.trim()).toBe(
+      fill("printers.every_station_done", { name: "Pass" }),
+    );
+  });
+
+  it("words the notice in the language in force when it is drawn", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mounted();
+      await openFor(el);
+      await confirm(el);
+      const spanish = fill("printers.every_station_done", { name: "Kitchen" });
+      expect(noticeOf(el)!.textContent!.trim()).toBe(spanish);
+
+      setLocale("en-GB");
+      el.requestUpdate();
+      await flush(el);
+      const english = fill("printers.every_station_done", { name: "Kitchen" });
+      expect(english).not.toBe(spanish);
+      expect(noticeOf(el)!.textContent!.trim()).toBe(english);
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("on printer.not_found closes and adds no message beside a printer still listed", async () => {
+    const { api, el } = await mounted({
+      putPrinterOnEveryStation: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+    });
+    await openFor(el);
+    const reads = vi.mocked(api.listPrinters).mock.calls.length;
+    const answerList = pendingList(api);
+    await confirm(el);
+    await vi.waitFor(() => expect(dialogOf(el).open).toBe(false));
+    await flush(el);
+    expect(vi.mocked(api.listPrinters).mock.calls.length).toBeGreaterThan(reads);
+    expect(q(el, "p.error")).toBeNull();
+    expect(await dialogMessageOf(dialogOf(el))).toBe("");
+    expect(noticeOf(el)).toBeNull();
+    expect(q(el, sel("every-station-p1"))).not.toBeNull();
+
+    answerList([{ ...printers[0]!, active: false }, bar]);
+    await vi.waitFor(() =>
+      expect(q(el, sel("every-station-p1"))!.hasAttribute("disabled")).toBe(true),
+    );
+    await flush(el);
+    expect(q(el, "p.error")).toBeNull();
+    expect(noticeOf(el)).toBeNull();
+  });
+
+  it("on printer.not_found says so once the list no longer has the printer", async () => {
+    const { api, el } = await mounted({
+      putPrinterOnEveryStation: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+    });
+    await openFor(el);
+    const answerList = pendingList(api);
+    await confirm(el);
+    await vi.waitFor(() => expect(dialogOf(el).open).toBe(false));
+    await flush(el);
+    expect(q(el, "p.error")).toBeNull();
+    expect(q(el, sel("every-station-p1"))).not.toBeNull();
+
+    answerList([bar]);
+    await vi.waitFor(() => expect(q(el, "p.error")).not.toBeNull());
+    expect(text(el, "p.error")).toBe(codeMessage("printer.not_found"));
+    expect(q(el, sel("every-station-p1"))).toBeNull();
+    expect(noticeOf(el)).toBeNull();
+  });
+
+  it("drops that message when another printer's dialog opened during the reload", async () => {
+    const { api, el } = await mounted({
+      putPrinterOnEveryStation: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+    });
+    await openFor(el);
+    const answerList = pendingList(api);
+    await confirm(el);
+    await vi.waitFor(() => expect(dialogOf(el).open).toBe(false));
+    await flush(el);
+    await openFor(el, "p5");
+    expect(dialogOf(el).open).toBe(true);
+
+    answerList([bar]);
+    await vi.waitFor(() => expect(q(el, sel("every-station-p1"))).toBeNull());
+    await flush(el);
+    expect(dialogOf(el).open).toBe(true);
+    const closed = dialogClosed(dialogOf(el));
+    q(el, sel("every-station-cancel"))!.click();
+    await closed;
+    await flush(el);
+    expect(q(el, "p.error")).toBeNull();
+  });
+
+  it("opens without a refusal left on the page by the last attempt", async () => {
+    const { api, el } = await mounted({
+      putPrinterOnEveryStation: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "printer.not_found" })
+        .mockResolvedValueOnce(undefined),
+    });
+    await openFor(el);
+    vi.mocked(api.listPrinters).mockResolvedValue([bar]);
+    await confirm(el);
+    await vi.waitFor(() => expect(q(el, "p.error")).not.toBeNull());
+    await flush(el);
+
+    await openFor(el, "p5");
+    expect(q(el, "p.error")).toBeNull();
+    await confirm(el);
+    expect(noticeOf(el)!.textContent!.trim()).toBe(
+      fill("printers.every_station_done", { name: "Bar" }),
+    );
+    expect(q(el, "p.error")).toBeNull();
+  });
+
+  it("keeps the dialog open on a refusal, shows its message once, and lets the person retry", async () => {
+    const { api, el } = await mounted({
+      putPrinterOnEveryStation: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValueOnce(undefined),
+    });
+    await openFor(el);
+    await confirm(el);
+    expect(dialogOf(el).open).toBe(true);
+    expect(await dialogMessageOf(dialogOf(el))).toBe(codeMessage("connection.failed"));
+    expect(q(el, "p.error[role=alert]")).toBeNull();
+    expect(noticeOf(el)).toBeNull();
+    expect(confirmOf(el).disabled).toBe(false);
+    expect(confirmOf(el).loading).toBe(false);
+
+    await confirm(el);
+    expect(api.putPrinterOnEveryStation).toHaveBeenCalledTimes(2);
+    expect(dialogOf(el).open).toBe(false);
+    expect(noticeOf(el)).not.toBeNull();
+  });
+
+  it("opens without the last attempt's refusal", async () => {
+    const { el } = await mounted({
+      putPrinterOnEveryStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    await openFor(el);
+    await confirm(el);
+    const closed = dialogClosed(dialogOf(el));
+    q(el, sel("every-station-cancel"))!.click();
+    await closed;
+    await flush(el);
+    await openFor(el);
+    expect(await dialogMessageOf(dialogOf(el))).toBe("");
+  });
+
+  it("sends once when pressed again while sending, and cannot be dismissed meanwhile", async () => {
+    const answer = pendingAnswer();
+    const { api, el } = await mounted({
+      putPrinterOnEveryStation: vi.fn().mockReturnValue(answer.promise),
+    });
+    await openFor(el);
+    await confirm(el);
+    expect(confirmOf(el).loading).toBe(true);
+    expect(dialogOf(el).dismissible).toBe(false);
+    await confirm(el);
+    q(el, sel("every-station-cancel"))!.click();
+    await flush(el);
+    expect(api.putPrinterOnEveryStation).toHaveBeenCalledOnce();
+    expect(dialogOf(el).open).toBe(true);
+
+    answer.resolve();
+    await flush(el);
+    expect(dialogOf(el).open).toBe(false);
+  });
+
+  it("is disabled for an inactive printer, and pressing it opens nothing", async () => {
+    const { api, el } = await mounted();
+    expect(q(el, sel("every-station-p2"))!.hasAttribute("disabled")).toBe(true);
+    await openFor(el, "p2");
+    expect(dialogOf(el).open).toBe(false);
+    expect(api.putPrinterOnEveryStation).not.toHaveBeenCalled();
+  });
+
+  it("is not offered on an A4 printer's row", async () => {
+    const { el } = await mounted({
+      listPagePrinters: vi.fn().mockResolvedValue([
+        {
+          id: "pp1",
+          name: "Office",
+          host: "10.0.0.56",
+          port: 631,
+          resourcePath: "/ipp/print",
+          documentFormat: "application/pdf",
+          supportedFormats: ["application/pdf"],
+          media: "iso_a4_210x297mm",
+          resolutionDpi: 300,
+          active: true,
+          agentId: "a1",
+          agentName: "Kitchen agent",
+        },
+      ] satisfies PagePrinterRow[]),
+    });
+    expect(q(el, sel("delete-page-printer-pp1"))).not.toBeNull();
+    expect(q(el, sel("every-station-pp1"))).toBeNull();
+  });
+
+  it("closes and says why when the printer leaves the live list", async () => {
+    const { api, el, liveData } = await mounted();
+    await openFor(el);
+    await listChanges(api, liveData, el, [bar]);
+    expect(api.putPrinterOnEveryStation).not.toHaveBeenCalled();
+    expect(noticeOf(el)).toBeNull();
+    expect(text(el, "p.error")).toBe(codeMessage("printer.not_found"));
+    expect(q(el, sel("every-station-p1"))).toBeNull();
+  });
+
+  it("closes when the printer goes inactive in the live list", async () => {
+    const { api, el, liveData } = await mounted();
+    await openFor(el);
+    await listChanges(api, liveData, el, [{ ...printers[0]!, active: false }, bar]);
+    expect(q(el, sel("every-station-p1"))!.hasAttribute("disabled")).toBe(true);
+
+    vi.mocked(api.listPrinters).mockResolvedValue([printers[0]!, bar]);
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await vi.waitFor(() =>
+      expect(q(el, sel("every-station-p1"))!.hasAttribute("disabled")).toBe(false),
+    );
+    await flush(el);
+    expect(dialogOf(el).open).toBe(false);
+  });
+
+  it("stays closed when the printer comes back before the browser reports the close", async () => {
+    const { api, el, liveData } = await mounted();
+    await openFor(el);
+    let answerInactive!: (rows: Printer[]) => void;
+    let answerActive!: (rows: Printer[]) => void;
+    const reads = vi.mocked(api.listPrinters).mock.calls.length;
+    vi.mocked(api.listPrinters)
+      .mockReturnValueOnce(
+        new Promise<Printer[]>((resolve) => {
+          answerInactive = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<Printer[]>((resolve) => {
+          answerActive = resolve;
+        }),
+      );
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(reads + 1));
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    let closeReports = 0;
+    dialogOf(el).addEventListener("wt-close", () => closeReports++);
+
+    answerInactive([{ ...printers[0]!, active: false }, bar]);
+    for (let turn = 0; turn < 100 && dialogOf(el).open; turn++) await Promise.resolve();
+    await dialogOf(el).updateComplete;
+    expect(dialogOf(el).open).toBe(false);
+    // The browser's close report is a task away, and everything up to here ran without yielding one.
+    expect(closeReports).toBe(0);
+
+    answerActive([printers[0]!, bar]);
+    await flush(el);
+    expect(q(el, sel("every-station-p1"))!.hasAttribute("disabled")).toBe(false);
+    expect(q(el, "p.error")).toBeNull();
+    expect(dialogOf(el).open).toBe(false);
+  });
+
+  it("ignores the answer for a printer whose dialog has since closed", async () => {
+    const answer = pendingAnswer();
+    const { api, el, liveData } = await mounted({
+      putPrinterOnEveryStation: vi
+        .fn()
+        .mockReturnValueOnce(answer.promise)
+        .mockResolvedValue(undefined),
+    });
+    await openFor(el);
+    await confirm(el);
+    await listChanges(api, liveData, el, [bar]);
+    await openFor(el, "p5");
+    expect(confirmOf(el).loading).toBe(false);
+
+    answer.reject({ code: "connection.failed" });
+    await flush(el);
+    expect(dialogOf(el).open).toBe(true);
+    expect(await dialogMessageOf(dialogOf(el))).toBe("");
+    expect(noticeOf(el)).toBeNull();
+  });
+});

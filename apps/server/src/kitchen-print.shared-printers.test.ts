@@ -1,6 +1,7 @@
 import { setMadeHere } from "./testing/made-here-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
+import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   kitchenPrintJobLines,
@@ -20,6 +21,9 @@ import { createPrinter, updatePrinter } from "@waitron/printing";
 import type { OriginConfig } from "./trading-context.js";
 
 import { createStation, updateStation } from "./kitchen.js";
+import { createPairingMode } from "./pairing-mode.js";
+import { mountPrintApi } from "./print-api.js";
+import { sessionHolding } from "./testing/session-holding.js";
 import { enqueueKitchenTickets, reprintOrderTickets } from "./kitchen-print.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
@@ -274,6 +278,54 @@ describe("a printer shared by several stations", () => {
     ]);
     expect(shared.stationIds).toEqual([venue.x, venue.y, venue.z].sort());
     expect(shared.lineCount).toBe(3);
+  });
+
+  it("prints every station's dishes on a printer put on every station through the route", async () => {
+    const { cfg } = await setupVenue();
+    const { venue, pass } = await withTransaction(db, async (tx) => {
+      const venue = await threeStations(tx);
+      const pass = await makePrinter(tx, "Pass");
+      await attachPrinterToStation(tx, { stationId: venue.x, printerId: pass });
+      return { venue, pass };
+    });
+    const { cookie } = await sessionHolding(db, ["hardware.manage", "venue.configure"]);
+    const app = new Hono();
+    mountPrintApi(
+      app,
+      {
+        db,
+        cfg,
+        pairingMode: createPairingMode(),
+        readMembership: async () => null,
+        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+        layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
+        venueLocale: "es-ES",
+      },
+      () => {},
+    );
+
+    const res = await app.request(`/management-api/printers/${pass}/stations`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(204);
+
+    const jobs = await withTransaction(db, async (tx) => {
+      await fireNewOrder(tx, cfg, [line(venue.salad), line(venue.steak), line(venue.tart)]);
+      return sentJobs(tx);
+    });
+    const ticket = onPrinter(jobs, pass);
+    expect(ticket.printed.slice(4)).toEqual([
+      "Cold",
+      "1 x Salad",
+      "Grill",
+      "1 x Steak",
+      "Pastry",
+      "1 x Tart",
+      "",
+    ]);
+    expect(ticket.stationIds).toEqual([venue.x, venue.y, venue.z].sort());
+    expect(ticket.lineCount).toBe(3);
   });
 
   it("prints the plain station ticket when only one of its stations is in the send", async () => {

@@ -2059,6 +2059,11 @@ export const en = {
   "printers.ruler_print": "Print width test",
   "printers.print_test_page": "Print test page",
   "printers.test_page_sent": "Test page sent to {name}",
+  "printers.every_station": "Put on every station",
+  "printers.every_station_heading": "Put {name} on every station?",
+  "printers.every_station_body":
+    "It will print the tickets of every prep station you have now. To take it off one, edit that station in Prep stations.",
+  "printers.every_station_done": "{name} is on every prep station",
   "printers.ruler_last_number": "Last number fully visible on the ruler",
   "printers.ruler_disagrees":
     "The ruler shows {ruler} dots, but this paper width and resolution print {setting} dots. Check the ruler and the QR code’s square again.",
@@ -6529,6 +6534,11 @@ export const es: Record<StringKey, string> = {
   "printers.ruler_print": "Imprimir prueba de ancho",
   "printers.print_test_page": "Imprimir página de prueba",
   "printers.test_page_sent": "Página de prueba enviada a {name}",
+  "printers.every_station": "Poner en todas las estaciones",
+  "printers.every_station_heading": "¿Poner {name} en todas las estaciones?",
+  "printers.every_station_body":
+    "Imprimirá las comandas de todas las estaciones de preparación que tienes ahora. Para quitarla de una, edita esa estación en Estaciones de preparación.",
+  "printers.every_station_done": "{name} está en todas las estaciones de preparación",
   "printers.ruler_last_number": "Último número que se ve completo",
   "printers.ruler_disagrees":
     "La regla muestra {ruler} puntos, pero este ancho de papel y esta resolución imprimen {setting} puntos. Vuelve a comprobar la regla y el cuadrado del código QR.",
