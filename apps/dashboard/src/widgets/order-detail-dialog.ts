@@ -58,7 +58,7 @@ const stateLabel = (state: string, names: Record<string, StringKey>) =>
 
 const DELIVERY_REREAD_MS = 5_000;
 
-function deliveryWords(attempt: OrderDeliveryAttempt | null): string {
+function deliveryWords(attempt: OrderDeliveryAttempt | null, mayHaveArrived: boolean): string {
   if (attempt === null) return t("orders.detail.delivery_none");
   if (attempt.lateSuccess) return t("orders.detail.delivery_late_success");
   const hold = attempt.printerHold;
@@ -81,7 +81,7 @@ function deliveryWords(attempt: OrderDeliveryAttempt | null): string {
     case "sent":
       return t(`orders.detail.delivery_sent_${attempt.medium}`);
     case "failed":
-      return t("orders.detail.delivery_failed");
+      return t(mayHaveArrived ? "orders.detail.delivery_unknown" : "orders.detail.delivery_failed");
     case "unknown":
       return t(
         hold === null ? "orders.detail.delivery_unknown" : "orders.detail.delivery_unknown_held",
@@ -296,14 +296,14 @@ export class OrderDetailDialog extends LitElement {
 
   #renderDeliveries(status: OrderDeliveries, downloads: OrderDetailDto["invoicePdfDownloads"]) {
     const lateAttempt = status.history.some((attempt) => attempt.lateSuccess);
+    // A late success does not complete the original, but the customer may have the document.
+    const mayHaveArrived = lateAttempt && !status.originalCompleted;
     const currentStatus = status.current?.status;
     const askToCheck =
-      lateAttempt &&
-      !status.originalCompleted &&
-      (currentStatus === "failed" || currentStatus === "unknown");
+      mayHaveArrived && (currentStatus === "failed" || currentStatus === "unknown");
     return html`<section>
       <h3>${t("orders.detail.delivery")}</h3>
-      <p data-test="delivery-status">${deliveryWords(status.current)}</p>
+      <p data-test="delivery-status">${deliveryWords(status.current, mayHaveArrived)}</p>
       ${
         lateAttempt && !status.current?.lateSuccess
           ? html`<p data-test="delivery-late-success">

@@ -410,10 +410,17 @@ describe("the full invoice's delivery status", () => {
       expect(text(el, "delivery-status")).toBe("Entregada al final.");
     });
 
-    it("leaves a newer failed attempt's own headline and history line", async () => {
+    it("heads a newer failure as possibly delivered, leaving its history line", async () => {
       setLocale("en-GB");
       const el = await open(stubApi(behindFailure(delivered)));
-      expect(text(el, "delivery-status")).toBe("Not delivered.");
+      expect(text(el, "delivery-status")).toBe("May not have been delivered.");
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(text(el, "delivery-status")).toBe("Puede que no se haya entregado.");
+      setLocale("en-GB");
+      el.requestUpdate();
+      await el.updateComplete;
       expect(lines(el)).toHaveLength(2);
       expect(lines(el)[0]).toContain("· Not delivered ·");
       expect(lines(el)[1]).toContain("· Delivered after all ·");
@@ -481,6 +488,23 @@ describe("the full invoice's delivery status", () => {
       const el = await open(stubApi(behindFailure(delivered)));
       expect(text(el, "delivery-late-success")).toBe(FACT);
       expect(text(el, "delivery-late-check")).toBe(CHECK);
+    });
+
+    it("keeps a failed copy's headline once the original was delivered", async () => {
+      setLocale("en-GB");
+      const copy = attempt({
+        id: "delivery-3",
+        medium: "email",
+        designation: "duplicate",
+        status: "failed",
+      });
+      const original = attempt({ id: "delivery-2", medium: "email", status: "sent" });
+      const el = await open(
+        stubApi(
+          f1(deliveries(copy, { originalCompleted: true, history: [copy, original, lateEmail] })),
+        ),
+      );
+      expect(text(el, "delivery-status")).toBe("Not delivered.");
     });
 
     it("adds neither line when no attempt was delivered late", async () => {

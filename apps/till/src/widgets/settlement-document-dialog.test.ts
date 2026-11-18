@@ -244,7 +244,7 @@ it.each(["F1", "F2"] as const)(
       },
     );
     expect(el.shadowRoot!.querySelector("[data-test=delivery-status]")?.textContent).toContain(
-      "Not delivered.",
+      "May not have been delivered.",
     );
     expect(
       el.shadowRoot!.querySelector("[data-test=delivery-late-success]")?.textContent?.trim(),

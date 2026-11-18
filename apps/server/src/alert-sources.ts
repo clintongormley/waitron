@@ -524,7 +524,11 @@ export function undeliveredInvoice(
   const officePrinter = () => context.officePrinters.get(current.id!)!;
   if (current.status === "failed" || current.status === "unknown") {
     const since = current.at ?? current.requestedAt;
-    if (current.status === "failed") return { kind: "failed", since };
+    if (current.status === "failed") {
+      // A late success does not complete the original, but the customer may have the document.
+      const mayHaveArrived = status.history.some((attempt) => attempt.lateSuccess);
+      return { kind: mayHaveArrived ? "uncertain" : "failed", since };
+    }
     // `rowAttempt` keeps a hold on A4 rows only.
     return current.printerHold === null
       ? { kind: "uncertain", since }

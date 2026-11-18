@@ -439,6 +439,171 @@ describe("invoiceDeliveryAlertSource", () => {
   });
 });
 
+describe("invoiceDeliveryAlertSource, after a success reported too late to count", () => {
+  const LATE = new Date("2026-10-12T10:30:00.000Z");
+
+  /** An email attempt whose claim has lapsed, with the claim its sender still holds. */
+  async function lapsedEmail(saleId: string) {
+    const reserved = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, saleId, {
+        requestKey: randomUUID(),
+        personId: "staff-one",
+        medium: "email",
+        recipient: CUSTOMER.email,
+      }),
+    );
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({ nextAttemptAt: START.toISOString() })
+      .where(eq(invoiceDeliveries.id, reserved.id));
+    const claim = (await withTransaction(suite.db, (tx) =>
+      claimInvoiceDelivery(tx, reserved.id, "server-one", START),
+    ))!;
+    await withTransaction(suite.db, (tx) => expireInvoiceDeliveryClaims(tx, EXPIRED));
+    return claim;
+  }
+
+  type Claim = Awaited<ReturnType<typeof lapsedEmail>>;
+
+  const reportLate = (claim: Claim, outcome: Parameters<typeof reportInvoiceDelivery>[2]) =>
+    withTransaction(suite.db, (tx) => reportInvoiceDelivery(tx, claim, outcome, LATE));
+
+  const sent = { status: "sent" } as const;
+
+  const alertFor = (saleId: string, number: string, code: string, since: Date) => ({
+    key: `invoice_delivery.undelivered:${saleId}`,
+    code,
+    params: { invoice: number },
+    severity: "error",
+    since: since.toISOString(),
+    screen: "orders",
+  });
+
+  it.each(["email", "a4", "receipt"] as const)(
+    "asks for a check when a newer %s attempt failed",
+    async (medium) => {
+      const v = await venue();
+      const sale = await invoice(v);
+      const claim = await lapsedEmail(sale.saleId);
+      await attempt(v, sale.saleId, medium, "failed");
+      await reportLate(claim, sent);
+
+      expect(await alerts()).toEqual([
+        alertFor(sale.saleId, sale.number, "invoice_delivery.uncertain", REPORTED),
+      ]);
+    },
+  );
+
+  it("replaces a raised failed alert when the late success arrives", async () => {
+    const v = await venue();
+    const sale = await invoice(v);
+    const claim = await lapsedEmail(sale.saleId);
+    await attempt(v, sale.saleId, "email", "failed");
+    expect(await alerts()).toEqual([
+      alertFor(sale.saleId, sale.number, "invoice_delivery.failed", REPORTED),
+    ]);
+
+    await reportLate(claim, sent);
+
+    expect(await alerts()).toEqual([
+      alertFor(sale.saleId, sale.number, "invoice_delivery.uncertain", REPORTED),
+    ]);
+  });
+
+  it("still asks for a check when a further retry fails after the late success", async () => {
+    const v = await venue();
+    const sale = await invoice(v);
+    const claim = await lapsedEmail(sale.saleId);
+    await attempt(v, sale.saleId, "email", "failed");
+    await reportLate(claim, sent);
+
+    await attempt(v, sale.saleId, "a4", "failed");
+
+    expect(await alerts()).toEqual([
+      alertFor(sale.saleId, sale.number, "invoice_delivery.uncertain", REPORTED),
+    ]);
+  });
+
+  it("clears when a retry after the late success is delivered", async () => {
+    const v = await venue();
+    const sale = await invoice(v);
+    const claim = await lapsedEmail(sale.saleId);
+    await attempt(v, sale.saleId, "email", "failed");
+    await reportLate(claim, sent);
+    expect(await alerts()).toHaveLength(1);
+
+    await attempt(v, sale.saleId, "email", "sent");
+
+    expect(await alerts()).toEqual([]);
+  });
+
+  it("raises nothing when no retry was reserved, because the late success delivers the original", async () => {
+    const v = await venue();
+    const sale = await invoice(v);
+    const claim = await lapsedEmail(sale.saleId);
+    expect(await alerts()).toEqual([
+      alertFor(sale.saleId, sale.number, "invoice_delivery.uncertain", EXPIRED),
+    ]);
+
+    await reportLate(claim, sent);
+
+    expect(await alerts()).toEqual([]);
+  });
+
+  it("raises nothing for a failed copy after the original was delivered", async () => {
+    const v = await venue();
+    const sale = await invoice(v);
+    const claim = await lapsedEmail(sale.saleId);
+    await attempt(v, sale.saleId, "email", "failed");
+    await reportLate(claim, sent);
+    await attempt(v, sale.saleId, "email", "sent");
+    const copy = await attempt(v, sale.saleId, "email", "failed");
+    expect(copy.designation).toBe("duplicate");
+
+    expect(await alerts()).toEqual([]);
+  });
+
+  it("keeps the failed alert when the old attempt's late report was a failure", async () => {
+    const v = await venue();
+    const sale = await invoice(v);
+    const claim = await lapsedEmail(sale.saleId);
+    await attempt(v, sale.saleId, "email", "failed");
+
+    await reportLate(claim, { status: "failed", failureCode: "transport_failed" });
+
+    expect(await alerts()).toEqual([
+      alertFor(sale.saleId, sale.number, "invoice_delivery.failed", REPORTED),
+    ]);
+  });
+
+  it("keeps the alert a held newer attempt raises", async () => {
+    const v = await venue();
+    const sale = await invoice(v);
+    const claim = await lapsedEmail(sale.saleId);
+    await attempt(v, sale.saleId, "a4", "unknown", undefined, "paper_out");
+    await reportLate(claim, sent);
+
+    expect(await alerts()).toEqual([
+      expect.objectContaining({
+        code: "invoice_delivery.uncertain_held",
+        params: { invoice: sale.number, printer: "Back office" },
+      }),
+    ]);
+  });
+
+  it("keeps the alert for a newer A4 no agent has taken", async () => {
+    const v = await venue();
+    const sale = await invoice(v);
+    const claim = await lapsedEmail(sale.saleId);
+    await attempt(v, sale.saleId, "a4", "queued");
+    await reportLate(claim, sent);
+
+    expect(await alerts()).toEqual([
+      expect.objectContaining({ code: "invoice_delivery.office_printer_unclaimed" }),
+    ]);
+  });
+});
+
 describe("invoiceDeliveryAlertSource's database reads", () => {
   /** Reads the alerts through a transaction that counts the queries the source builds. */
   async function countedAlerts(): Promise<{ queries: number; raised: number }> {

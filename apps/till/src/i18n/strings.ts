@@ -461,6 +461,7 @@ export const en = {
   "invoice.check_print": "Check print status",
   "invoice.print_done": "Printing completed. Hand the original to the customer.",
   "invoice.print_failed": "Printing failed. Retry the original.",
+  "invoice.print_failed_check": "Printing failed. Check before printing again.",
   "invoice.print_failed_withdrawn":
     "Printing failed on a printer this device does not print invoices on.",
   "invoice.print_auto_retry": "Printing failed. Automatic retry is pending.",
@@ -470,6 +471,7 @@ export const en = {
   "invoice.print_checking": "Checking the original print status…",
   "invoice.print_status_failed": "Could not check the original print status. Check again.",
   "invoice.not_delivered": "Full invoice not delivered",
+  "invoice.may_not_be_delivered": "Full invoice may not have been delivered",
   "invoice.delivered": "Full invoice delivered",
   "invoice.confirm_handover": "I handed the original to the customer",
   "invoice.handover_confirmed": "Customer handover confirmed",
@@ -2587,6 +2589,7 @@ export const es: Record<StringKey, string> = {
   "invoice.check_print": "Comprobar impresión",
   "invoice.print_done": "Impresión completada. Entrega el original al cliente.",
   "invoice.print_failed": "La impresión falló. Reintenta el original.",
+  "invoice.print_failed_check": "La impresión falló. Compruébalo antes de volver a imprimir.",
   "invoice.print_failed_withdrawn":
     "La impresión falló en una impresora en la que este dispositivo no imprime facturas.",
   "invoice.print_auto_retry": "La impresión falló. Hay un reintento automático pendiente.",
@@ -2597,6 +2600,7 @@ export const es: Record<StringKey, string> = {
   "invoice.print_status_failed":
     "No se pudo consultar la impresión del original. Vuelve a comprobarla.",
   "invoice.not_delivered": "Factura completa no entregada",
+  "invoice.may_not_be_delivered": "Puede que la factura completa no se haya entregado",
   "invoice.delivered": "Factura completa entregada",
   "invoice.confirm_handover": "He entregado el original al cliente",
   "invoice.handover_confirmed": "Entrega al cliente confirmada",
