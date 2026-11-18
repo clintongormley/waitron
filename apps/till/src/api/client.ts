@@ -1047,6 +1047,12 @@ export type TenderBlock =
       externalMachine?: string;
     };
 
+export interface PaymentSlipChoice {
+  id: string;
+  amount: string;
+  last4: string | null;
+}
+
 /** The recorded ticket carried by payment answers and receipt reads. */
 export interface TillSaleResult extends ReceiptPresentation {
   receiptPreview?: readonly ReceiptElement[];
@@ -1091,6 +1097,8 @@ export interface TillSaleResult extends ReceiptPresentation {
   tender: TenderBlock;
   /** Every payment, when the bill was paid in parts before its invoice; absent otherwise. */
   payments?: BillTenderLine[];
+  /** On the ticket screen's read, each card payment this device can print a slip copy of. */
+  paymentSlips?: PaymentSlipChoice[];
   qr: string;
   /** The fiscal backend's words around the QR; present only beside a non-empty `qr`. */
   qrText?: { caption: string; legend: string };
@@ -3243,8 +3251,8 @@ export class TillApi {
   }
 
   /** Print the separate card-payment slip for the filed sale's integrated capture, when one exists. */
-  async printPaymentSlip(workingOrderId: string): Promise<void> {
-    await this.#request<void>(`/api/sales/${workingOrderId}/payment-slip`, "POST", {});
+  async printPaymentSlip(workingOrderId: string, paymentId: string): Promise<void> {
+    await this.#request<void>(`/api/sales/${workingOrderId}/payment-slip/${paymentId}`, "POST", {});
   }
 
   /**

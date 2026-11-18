@@ -1769,7 +1769,7 @@ describe("till-app receipt issuance", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    emit(ticket(el)!, "payment-slip");
+    emit(ticket(el)!, "payment-slip", { paymentId: "pay-1" });
     await flush(el);
 
     expect(printPaymentSlip).toHaveBeenCalledOnce();
@@ -1792,7 +1792,7 @@ describe("till-app receipt issuance", () => {
     await flush(el);
     const paid = ticket(el)!.result;
 
-    emit(ticket(el)!, event);
+    emit(ticket(el)!, event, { paymentId: "pay-1" });
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(codeMessage("storage.disk_full"));

@@ -153,7 +153,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/sales/:id/deliveries                          | order                  | refuses POST /api/sales/:id/deliveries               |
  * | POST /api/sales/:id/deliveries/:deliveryId/to-receipt   | order                  | refuses POST .../deliveries/:deliveryId/to-receipt   |
  * | POST /api/sales/:id/deliveries/:deliveryId/retry        | order                  | refuses POST .../deliveries/:deliveryId/retry        |
- * | POST /api/sales/:id/receipt, /payment-slip              | order                  | refuses POST /api/sales/:id/receipt, /payment-slip   |
+ * | POST /api/sales/:id/receipt, /payment-slip/:paymentId   | order                  | refuses POST /api/sales/:id/receipt, /payment-slip/… |
  * | POST /api/sales/:id/reprint                             | order                  | refuses POST /api/sales/:id/reprint                  |
  * | POST /api/working-orders/:id/collect                    | order                  | refuses POST /api/working-orders/:id/collect         |
  * | POST /api/working-orders/:id/cancel                     | order                  | refuses POST /api/working-orders/:id/cancel          |
@@ -238,7 +238,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * runs in a helper that opens its own transaction — `/api/sales`, `/api/pay`, POST
  * `/api/working-orders`, GET, PUT and DELETE `/api/working-orders/:id`, `/placed`,
  * `/invoice-choice`, `/receipt-language`, `/place`, `/collect`, `/cancel`, `/api/sales/:id/receipt`,
- * `/payment-slip`, `/reprint` and the four bill-payment routes — where it reads just before, outside
+ * `/payment-slip/:paymentId`, `/reprint` and the four bill-payment routes — where it reads just before, outside
  * any transaction.
  *
  * Not zone-gated: `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today`,
@@ -774,9 +774,9 @@ const ROUTES: readonly Row[] = [
     deliOrderZone,
   ],
   [
-    "POST /api/sales/:id/payment-slip",
+    "POST /api/sales/:id/payment-slip/:paymentId",
     "POST",
-    (x) => `/api/sales/${x.deliOrder}/payment-slip`,
+    (x) => `/api/sales/${x.deliOrder}/payment-slip/${id}`,
     () => ({}),
     deliOrderZone,
   ],

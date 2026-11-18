@@ -408,6 +408,12 @@ async function documentRequest(kind: DocumentRoute) {
     );
     return { path: `/api/transactions/${sale!.id}/reprint`, body: {} };
   }
+  if (kind === "payment-slip") {
+    const [capture] = await suite.db.all<{ id: string }>(
+      sql`select id from payments where working_order_id = ${payment.id}`,
+    );
+    return { path: `/api/sales/${payment.id}/payment-slip/${capture!.id}`, body: {} };
+  }
   return { path: `/api/sales/${payment.id}/${kind}`, body: {} };
 }
 

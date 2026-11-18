@@ -1,13 +1,17 @@
 import "./errors.js";
 import type { Logger } from "./logger.js";
-import { and, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import {
+  billPaymentRefunds,
   billPayments,
+  correctivesOf,
   workingOrders,
   devices,
   deviceProfiles,
   readTaxpayer,
   sales,
+  tenderRefunds,
   tenders,
   withTransaction,
   type Database,
@@ -128,10 +132,12 @@ export async function printCapturedCardSlip(
   }
 }
 
+/** Prints a copy of one card payment's slip; one the sale has no copy for prints nothing. */
 export async function printSalePaymentSlip(
   db: Database,
   cfg: OriginConfig,
   workingOrderId: string,
+  paymentId: string,
 ): Promise<void> {
   await withTransaction(db, async (tx) => {
     const [sale] = await tx
@@ -139,8 +145,51 @@ export async function printSalePaymentSlip(
       .from(sales)
       .where(eq(sales.workingOrderId, workingOrderId));
     if (sale === undefined) throw new AppError("working_order.not_found", { workingOrderId });
-    const cards = await tx
+    const [payment] = await tx
+      .select({ id: payments.id })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.id, paymentId),
+          eq(payments.saleId, sale.id),
+          eq(payments.workingOrderId, workingOrderId),
+        ),
+      );
+    if (payment === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+    const cards = (await readSaleSlipCards(tx, sale.id, workingOrderId)).filter(
+      (card) => card.id === paymentId,
+    );
+    await enqueueSlips(tx, cfg, workingOrderId, cards, sale.locale, true);
+  });
+}
+
+/** The card payments this device can print a copy of, for the till to offer. */
+export async function readSalePaymentSlips(
+  tx: Transaction,
+  cfg: OriginConfig,
+  saleId: string,
+  workingOrderId: string,
+) {
+  if ((await resolvePaymentSlipPrinter(tx, cfg.origin)) === undefined) return [];
+  const cards = await readSaleSlipCards(tx, saleId, workingOrderId);
+  return cards.map((card) => ({
+    id: card.id,
+    amount: centsToDecimal(card.charged),
+    last4: card.last4,
+  }));
+}
+
+async function readSaleSlipCards(tx: Transaction, saleId: string, workingOrderId: string) {
+  const corrective = alias(sales, "corrective");
+  const [corrected] = await tx
+    .select({ id: corrective.id })
+    .from(corrective)
+    .where(correctivesOf(sql`${corrective}`, sql`${saleId}`));
+  if (corrected !== undefined) return [];
+  return (
+    tx
       .select({
+        id: payments.id,
         charged: payments.amount,
         paidAt: payments.settledAt,
         tip: tenders.tipAmount,
@@ -170,19 +219,38 @@ export async function printSalePaymentSlip(
       .where(
         and(
           or(isNull(cardReaders.id), eq(cardReaders.printsOwnSlipAutomatically, false)),
-          eq(payments.saleId, sale.id),
+          eq(payments.saleId, saleId),
           eq(payments.workingOrderId, workingOrderId),
           ne(payments.provider, "manual"),
+          eq(payments.state, "captured"),
           // An associated capture carries its settlement instant; do not invent a payment date.
           isNotNull(payments.settledAt),
+          // A refund still being sent counts as money given back; a failed one does not.
+          notExists(
+            tx
+              .select({ id: billPaymentRefunds.id })
+              .from(billPaymentRefunds)
+              .where(
+                and(
+                  eq(billPaymentRefunds.billPaymentId, payments.billPaymentId),
+                  ne(billPaymentRefunds.state, "failed"),
+                ),
+              ),
+          ),
+          notExists(
+            tx
+              .select({ id: tenderRefunds.id })
+              .from(tenderRefunds)
+              .where(
+                and(eq(tenderRefunds.tenderId, tenders.id), ne(tenderRefunds.state, "failed")),
+              ),
+          ),
         ),
       )
       // Two cards can settle in the same millisecond; a tie falls back to `rowid`, the order the
       // rows were written in.
-      .orderBy(payments.settledAt, sql`${payments}.rowid`);
-    if (cards.length === 0) return;
-    await enqueueSlips(tx, cfg, workingOrderId, cards, sale.locale, false);
-  });
+      .orderBy(payments.settledAt, sql`${payments}.rowid`)
+  );
 }
 
 export async function readBillSlipPayments(tx: Transaction, workingOrderId: string) {

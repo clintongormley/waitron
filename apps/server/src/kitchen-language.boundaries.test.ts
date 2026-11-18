@@ -310,7 +310,7 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
       writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] }),
     );
     const old = await v.db.select().from(printJobs);
-    await printSalePaymentSlip(v.db, cfg, id);
+    await printSalePaymentSlip(v.db, cfg, id, payment!.id);
     const next = (await v.db.select().from(printJobs)).filter(
       (j) => !old.some((o) => o.id === j.id),
     );

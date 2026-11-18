@@ -10854,11 +10854,11 @@ export class TillApp extends LitElement {
   }
 
   /** Enqueue the separate card payment slip. Presentation failure cannot affect the filed sale. */
-  async #onPaymentSlip(): Promise<void> {
+  async #onPaymentSlip(event: CustomEvent<{ paymentId: string }>): Promise<void> {
     if (this.ticketWorkingOrderId === undefined) return;
     this.errorKey = undefined;
     try {
-      await this.api.printPaymentSlip(this.ticketWorkingOrderId);
+      await this.api.printPaymentSlip(this.ticketWorkingOrderId, event.detail.paymentId);
     } catch (error) {
       this.errorKey =
         (error as { code?: string } | undefined)?.code === "storage.disk_full"
@@ -22997,7 +22997,7 @@ export class TillApp extends LitElement {
         @retry-email=${() => void this.#onRetryEmail()}
         @invoice-email-send=${(event: Event) => void this.#onSendEmail(event)}
         @invoice-email-cancel=${() => this.#onEmailCancel()}
-        @payment-slip=${() => void this.#onPaymentSlip()}
+        @payment-slip=${(event: CustomEvent<{ paymentId: string }>) => void this.#onPaymentSlip(event)}
         @open-drawer=${() => void this.#onOpenDrawer()}
         @find-bill=${() =>
           this.#requestLeave(() => {
