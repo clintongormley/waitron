@@ -27,7 +27,8 @@ import {
 } from "../venue-settings.js";
 import { readSettings, saveSettings } from "../settings.js";
 import { dayCutoverChanges } from "../schema/day-cutover-changes.js";
-import { menus } from "../schema/menus.js";
+import { menuItems } from "../schema/menu/menu.js";
+import { menus, products } from "../schema/menus.js";
 import { createVenueSettings, saveVenueFields, readVenueSettings, type Venue } from "../venue.js";
 
 import { deviceProfileAdmissionRoles } from "../schema/identity/profile-admission.js";
@@ -153,6 +154,19 @@ export async function seedVenue(
 export async function seedNode(db: Database | Transaction): Promise<NodeId> {
   const [row] = await db.insert(nodes).values({ name: "Test node" }).returning({ id: nodes.id });
   return brandNodeId(row!.id);
+}
+
+export async function seedMenuItem(db: Database | Transaction, id?: string): Promise<string> {
+  const [menu] = await db.insert(menus).values({ name: "Test menu" }).returning({ id: menus.id });
+  const [product] = await db
+    .insert(products)
+    .values({ name: "Test product", unitPrice: 100, vatClass: "general" })
+    .returning({ id: products.id });
+  const [item] = await db
+    .insert(menuItems)
+    .values({ id, menuId: menu!.id, productId: product!.id })
+    .returning({ id: menuItems.id });
+  return item!.id;
 }
 
 /** Seeds one kitchen station; defaults to the default station. */

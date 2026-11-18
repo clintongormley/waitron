@@ -12,7 +12,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedMenuItem, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 
 import { AppError } from "@waitron/shared";
 import * as editing from "./bill-editing.js";
@@ -34,7 +34,8 @@ async function fixture() {
     const [party] = await tx.insert(parties).values({ openedBy: anna!.id }).returning();
     const bill = await seedWorkingOrder(tx, { orderNumber: 1, partyId: party!.id });
     const other = await seedWorkingOrder(tx, { orderNumber: 2, partyId: party!.id });
-    return { bill: bill!, other: other!, party: party!, anna: anna!, lewis: lewis! };
+    const menuItemId = await seedMenuItem(tx);
+    return { bill: bill!, other: other!, party: party!, anna: anna!, lewis: lewis!, menuItemId };
   });
 }
 
@@ -61,7 +62,7 @@ async function open(data: Awaited<ReturnType<typeof fixture>>, operatorId = data
       .values({
         draftId: draft!.id,
         position: 1,
-        menuItemId: "aaaaaaaa-0000-4000-8000-000000000001",
+        menuItemId: data.menuItemId,
         options: [],
         extras: [],
         quantity: 1000,

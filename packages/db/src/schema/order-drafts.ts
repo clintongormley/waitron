@@ -17,6 +17,7 @@ import {
 } from "./columns.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { kitchenStations } from "./kitchen-stations.js";
+import { menuItems } from "./menu/menu.js";
 import { orderGroups } from "./order-groups.js";
 import { workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
@@ -61,7 +62,6 @@ export const orderDraftLines = table(
     id: id("id").primaryKey().$defaultFn(newId),
     draftId: id("draft_id").notNull(),
     position: count("position").notNull(),
-    // No key yet.
     menuItemId: id("menu_item_id").notNull(),
     variantId: id("variant_id"),
     menuVersionId: id("menu_version_id"),
@@ -83,6 +83,11 @@ export const orderDraftLines = table(
       columns: [t.draftId],
       foreignColumns: [orderDrafts.id],
       name: "order_draft_lines_draft_fk",
+    }),
+    foreignKey({
+      columns: [t.menuItemId],
+      foreignColumns: [menuItems.id],
+      name: "order_draft_lines_menu_item_fk",
     }),
     foreignKey({
       columns: [t.courseId],

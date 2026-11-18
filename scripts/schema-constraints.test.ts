@@ -176,6 +176,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["order_draft_lines", ["course_id"], "kitchen_courses"],
   ["order_draft_lines", ["draft_id"], "order_drafts"],
   ["order_draft_lines", ["make_at_station_id"], "kitchen_stations"],
+  ["order_draft_lines", ["menu_item_id"], "menu_items"],
   ["order_drafts", ["party_id"], "parties"],
   ["order_events", ["actor_device_id"], "devices"],
   ["order_events", ["actor_id"], "persons"],

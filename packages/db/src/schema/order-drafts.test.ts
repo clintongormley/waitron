@@ -1,4 +1,3 @@
-import { seedPerson } from "../testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -6,7 +5,7 @@ import { checkFailed, refusalOn, triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedVenue, seedWorkingOrder } from "../testing/seed.js";
+import { seedMenuItem, seedPerson, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
@@ -35,6 +34,7 @@ describe("order_drafts, order_draft_lines and order_events", () => {
       name: "Dining room",
       invoiceLocales: ["en"],
     });
+    await seedMenuItem(suite.db, MENU_ITEM);
   });
 
   const defaultBills = new Map<string, string>();
@@ -278,6 +278,23 @@ describe("order_drafts, order_draft_lines and order_events", () => {
       );
       expect(checkFailed(error, "order_draft_lines_quantity_ck")).toBe(true);
     }
+  });
+
+  it("refuses a draft line whose menu item does not exist", async () => {
+    const draftId = await draft({ partyId: await party(), ownerId: ALEX });
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(orderDraftLines).values({
+          draftId,
+          position: 1,
+          menuItemId: MISSING,
+          options: [],
+          extras: [],
+          quantity: 1000,
+        }),
+      ),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("refuses a line naming no kitchen course", async () => {

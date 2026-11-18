@@ -943,7 +943,7 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 - **`registro_sif`: decide the remaining DELETE restriction (A805 follow-up).**
 - Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
   burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
-- **Finish the remaining person-id foreign keys and `order_draft_lines.menu_item_id`.**
+- **Finish the remaining person-id foreign keys.**
   Columns still marked "No key yet" need keys as A1308 rewrites their starting migrations
   (CLAUDE.md §3: declare every foreign key). Their old reason — `persons` lived in another
   migration set — ended when A760 moved it into core.

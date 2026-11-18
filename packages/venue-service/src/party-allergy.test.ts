@@ -12,7 +12,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, seedWorkingOrder, seedPerson } from "@waitron/db/testing/seed.js";
+import { seedMenuItem, seedPerson, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import * as allergy from "./index.js";
 
 const suite = useVenueDb({
@@ -83,7 +83,7 @@ async function draftLine(id = partyId) {
     .values({
       draftId: draft!.id,
       position: 0,
-      menuItemId: randomUUID(),
+      menuItemId: await seedMenuItem(suite.db),
       options: [],
       extras: [],
       quantity: 1000,
@@ -327,7 +327,7 @@ it("moves a draft tick to its corresponding working dish and keeps unsubmitted t
     .values({
       draftId: draft!.id,
       position: 1,
-      menuItemId: randomUUID(),
+      menuItemId: await seedMenuItem(suite.db),
       options: [],
       extras: [],
       quantity: 1000,
