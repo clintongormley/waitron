@@ -280,7 +280,6 @@ export async function receiveReturnedOriginals(
       active: 0,
       deleted_at: now.toISOString(),
       enrolled_at: now.toISOString(),
-      created_at: now.toISOString(),
     });
   }
   const acceptedSales = new Set(
