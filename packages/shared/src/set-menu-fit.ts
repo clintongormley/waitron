@@ -1,5 +1,10 @@
 import { AppError, type ErrorParams } from "./errors.js";
-import { mixCount, searchMixes, type MixSearchResult } from "./set-menu-search.js";
+import {
+  mixCount,
+  searchMixes,
+  type MixSearchProblem,
+  type MixSearchResult,
+} from "./set-menu-search.js";
 
 export { MAX_SET_MENU_MIXES } from "./set-menu-search.js";
 export const MAX_SET_MENU_AMOUNT_CENTS = 1_000_000;
@@ -335,7 +340,7 @@ export function fitSetMenus(input: SetMenuFitInput): SetMenuFit {
     return { kind: "too_large" };
 
   const classes = [...classesByKey.values()];
-  const result = searchMixes({
+  const search: MixSearchProblem = {
     offerCount: offers.length,
     unfixed,
     mixCost: (counts) => {
@@ -357,8 +362,42 @@ export function fitSetMenus(input: SetMenuFitInput): SetMenuFit {
       uncoveredCost,
       classes: classes.map(({ dishes, arcs }) => ({ count: dishes.length, arcs })),
     },
-  });
-  if (result.placement.uncovered > 0) return { kind: "uncovered", setMenusNeeded: null };
+  };
+  const result = searchMixes(search);
+  const missing = result.placement.uncovered;
+  if (missing > 0) {
+    const probe = {
+      ...search,
+      mixCost: () => 0,
+      placement: {
+        uncoveredCost: 1,
+        classes: search.placement.classes.map(({ count, arcs }) => ({
+          count,
+          arcs: arcs.map(({ pair }) => ({ pair, cost: 0 })),
+        })),
+      },
+    };
+    // A separate new menu for each unplaced dish is sufficient. Adding menus preserves a fit.
+    let sufficient = unfixed + missing;
+    let low = unfixed + 1;
+    let high = sufficient;
+    while (low < high) {
+      const count = Math.floor((low + high) / 2);
+      const total = menus.length + count - unfixed;
+      if (
+        mixCount(count, offers.length) === Infinity ||
+        !Number.isSafeInteger(1 + dishes.length + placesPerMenu * total)
+      ) {
+        high = count;
+      } else if (searchMixes({ ...probe, unfixed: count }).placement.uncovered === 0) {
+        sufficient = count;
+        high = count;
+      } else {
+        low = count + 1;
+      }
+    }
+    return { kind: "uncovered", setMenusNeeded: menus.length + sufficient - unfixed };
+  }
   return deal(offers, menus, pairs, classes, result, {
     assigned,
     preferences,

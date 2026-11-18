@@ -558,3 +558,50 @@ describe("refitting set menus", () => {
     }
   });
 });
+
+describe("additional set menus", () => {
+  it.each([
+    [0, 1, null, "soup", 1],
+    [1, 3, null, "soup", 3],
+    [2, 1, "daily", "sea bass", 3],
+    [40, 41, null, "soup", 41],
+  ] as const)(
+    "finds the total for %i menus and %i dishes",
+    (menuCount, dishCount, fixed, product, needed) => {
+      const offers = [daily, special, ...["a", "b", "c"].map((id) => ({ ...daily, id }))];
+      const dishes = menus(dishCount).map(({ id }) =>
+        dish(id, product, product === "soup" ? "starter" : "main"),
+      );
+      expect(fitSetMenus(smallBill({ offers, setMenus: menus(menuCount, fixed), dishes }))).toEqual(
+        { kind: "uncovered", setMenusNeeded: needed },
+      );
+    },
+  );
+
+  it("keeps pins when counting extra menus", () => {
+    const pinnedTo = { setMenuId: "s1", lineIndex: 0 };
+    const dishes = [{ ...dish("pinned", "soup"), pinnedTo }, dish("new", "soup")];
+    expect(fitSetMenus(smallBill({ setMenus: menus(1, "daily"), dishes }))).toEqual({
+      kind: "uncovered",
+      setMenusNeeded: 2,
+    });
+  });
+
+  it("returns a sufficient total when the first covering count exceeds the mix cap", () => {
+    const offers = Array.from({ length: 5 }, (_, i) => ({ ...daily, id: String(i) }));
+    const dishes = menus(50).map(({ id }) => dish(id, "soup"));
+    expect(fitSetMenus(smallBill({ offers, setMenus: menus(46), dishes }))).toEqual({
+      kind: "uncovered",
+      setMenusNeeded: 50,
+    });
+  });
+});
+
+it("uses the smallest sufficient count when a new menu can take more than one dish", () => {
+  const offers = [offer("daily", 1400, ["soup"], [{ count: 2, courseIds: ["starter"] }])];
+  const dishes = menus(5).map(({ id }) => dish(id, "soup"));
+  expect(fitSetMenus(smallBill({ offers, setMenus: menus(1), dishes }))).toEqual({
+    kind: "uncovered",
+    setMenusNeeded: 3,
+  });
+});
