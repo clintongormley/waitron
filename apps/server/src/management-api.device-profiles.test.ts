@@ -9,14 +9,18 @@ import {
   floorZones,
   devices,
   pagePrinters,
-  printerHolders,
   printers,
   withTransaction,
 } from "@waitron/db";
 import { createMenu } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedZone } from "@waitron/db/testing/seed.js";
+import {
+  readPrinterHoldsForTest,
+  holdPrinterForTest,
+  seedDevice,
+  seedZone,
+} from "@waitron/db/testing/seed.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -1326,7 +1330,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         // The device holds R, which it does not use: a save that reached device settling would
         // release it.
         await suite.db.update(printers).set({ portable: true }).where(eq(printers.id, r));
-        await suite.db.insert(printerHolders).values({ printerId: r, deviceId: device!.id });
+        await holdPrinterForTest(suite.db, r, device!.id);
         await removePrinter(p);
         const before = await stored(app, id);
         const choicesOf = async () =>
@@ -1341,7 +1345,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
               .where(eq(devices.id, device!.id))
           )[0];
         const choicesBefore = await choicesOf();
-        const holdersBefore = await suite.db.select().from(printerHolders);
+        const holdersBefore = await readPrinterHoldsForTest(suite.db);
 
         const res = await app.request(`/management-api/device-profiles/${id}`, {
           method: "PUT",
@@ -1364,7 +1368,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         });
         expect(await stored(app, id)).toEqual(before);
         expect(await choicesOf()).toEqual(choicesBefore);
-        expect(await suite.db.select().from(printerHolders)).toEqual(holdersBefore);
+        expect(await readPrinterHoldsForTest(suite.db)).toEqual(holdersBefore);
       },
     );
 

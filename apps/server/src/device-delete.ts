@@ -11,7 +11,6 @@ import {
   billPayments,
   deviceNotDeleted,
   devices,
-  printerHolders,
   printers,
   workingOrders,
   type Transaction,
@@ -80,9 +79,8 @@ async function deviceDeleteRules(
     .where(and(eq(tillSessions.deviceId, id), isNull(tillSessions.endedAt)));
   const heldPrinters = await tx
     .select({ id: printers.id, name: printers.name })
-    .from(printerHolders)
-    .innerJoin(printers, eq(printers.id, printerHolders.printerId))
-    .where(eq(printerHolders.deviceId, id));
+    .from(printers)
+    .where(eq(printers.heldByDeviceId, id));
   const heldReaders = await tx
     .select({ id: cardReaders.id, name: cardReaders.name })
     .from(cardReaders)

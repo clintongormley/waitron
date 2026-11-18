@@ -1,7 +1,11 @@
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
-import { seedVenueSettings, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
+import {
+  holdPrinterForTest,
+  seedVenueSettings,
+  attachStationPrinterForTest,
+} from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -19,7 +23,6 @@ import {
   nowIso,
   printAgents,
   printJobs,
-  printerHolders,
   printers,
   withTransaction,
 } from "@waitron/db";
@@ -1686,10 +1689,13 @@ describe("mountPrintApi — management: printers CRUD", () => {
       });
     }
     const [stored] = await suite.db
-      .select({ pickupRoles: printers.pickupRoles })
+      .select({
+        picksUpReceipts: printers.picksUpReceipts,
+        picksUpPaymentSlips: printers.picksUpPaymentSlips,
+      })
       .from(printers)
       .where(eq(printers.id, printerId));
-    expect(stored!.pickupRoles).toEqual(["receipt", "payment_slip"]);
+    expect(stored).toEqual({ picksUpReceipts: true, picksUpPaymentSlips: true });
   });
 
   it("creates a printer with a custom pick-up set and treats repeated roles as one choice", async () => {
@@ -1706,10 +1712,13 @@ describe("mountPrintApi — management: printers CRUD", () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
     const [stored] = await suite.db
-      .select({ pickupRoles: printers.pickupRoles })
+      .select({
+        picksUpReceipts: printers.picksUpReceipts,
+        picksUpPaymentSlips: printers.picksUpPaymentSlips,
+      })
       .from(printers)
       .where(eq(printers.id, id));
-    expect(stored!.pickupRoles).toEqual(["payment_slip"]);
+    expect(stored).toEqual({ picksUpReceipts: false, picksUpPaymentSlips: true });
     const invalid = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: { name: "Invalid", transport: "network_tcp", host: "10.0.0.65", pickupRoles: null },
@@ -2000,7 +2009,10 @@ describe("portable printers", () => {
   const seeded: { deviceId: string; profileId: string }[] = [];
   afterEach(async () => {
     for (const { deviceId, profileId } of seeded.splice(0)) {
-      await suite.db.delete(printerHolders).where(eq(printerHolders.deviceId, deviceId));
+      await suite.db
+        .update(printers)
+        .set({ heldByDeviceId: null, heldAt: null })
+        .where(eq(printers.heldByDeviceId, deviceId));
       await suite.db.delete(devices).where(eq(devices.id, deviceId));
       await suite.db.delete(deviceProfiles).where(eq(deviceProfiles.id, profileId));
     }
@@ -2038,7 +2050,7 @@ describe("portable printers", () => {
     const app = mountApp();
     const id = await addPrinter(app, { host: "10.0.0.63", portable: true });
     const deviceId = await seedHolder("Ana's handheld");
-    await suite.db.insert(printerHolders).values({ printerId: id, deviceId });
+    await holdPrinterForTest(suite.db, id, deviceId);
     expect((await listed(app, id)).holder).toEqual({
       deviceId,
       deviceName: "Ana's handheld",
@@ -2071,7 +2083,7 @@ describe("portable printers", () => {
     const app = mountApp();
     const id = await addPrinter(app, { host: "10.0.0.65", portable: true });
     const deviceId = await seedHolder();
-    await suite.db.insert(printerHolders).values({ printerId: id, deviceId });
+    await holdPrinterForTest(suite.db, id, deviceId);
     const patched = await send(app, "PATCH", `/management-api/printers/${id}`, {
       cookie: managerCookie,
       body: { portable: false },

@@ -2972,7 +2972,7 @@ describe("a device's current printers", () => {
     const t = await listedTill(venue, app);
     await suite.db
       .update(printers)
-      .set({ pickupRoles: ["receipt"] })
+      .set({ picksUpReceipts: true, picksUpPaymentSlips: false })
       .where(eq(printers.id, t.bar));
     const scan = (body: unknown) =>
       send(app, "PUT", "/api/device/equipment", {

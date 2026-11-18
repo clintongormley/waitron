@@ -1,5 +1,5 @@
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { readPrinterHoldsForTest, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ensureOperator } from "./testing/cancel-line.js";
@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { devices, printerHolders, printJobs, printers, withTransaction } from "@waitron/db";
+import { devices, printJobs, printers, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -157,11 +157,10 @@ async function readerChoice(deviceId: string): Promise<string | null> {
 }
 
 async function printerHoldersOf(ids: string[]): Promise<Record<string, string>> {
-  const rows = await suite.db
-    .select()
-    .from(printerHolders)
-    .where(inArray(printerHolders.printerId, ids));
-  return Object.fromEntries(rows.map((r) => [r.printerId, r.deviceId]));
+  const rows = await readPrinterHoldsForTest(suite.db);
+  return Object.fromEntries(
+    rows.filter((r) => ids.includes(r.printerId)).map((r) => [r.printerId, r.deviceId!]),
+  );
 }
 
 async function readerHoldersOf(ids: string[]): Promise<Record<string, string>> {
@@ -876,7 +875,10 @@ describe("printer pick-up sets", () => {
     const profile = await seedProfile();
     const printer = await seedPrinter("Unlisted");
     const a = await enrol(venue, "A", profile);
-    await suite.db.update(printers).set({ pickupRoles: [] }).where(eq(printers.id, printer));
+    await suite.db
+      .update(printers)
+      .set({ picksUpReceipts: false, picksUpPaymentSlips: false })
+      .where(eq(printers.id, printer));
     const pickup = () =>
       inTx((tx) =>
         selectDeviceEquipment(tx, {
@@ -907,7 +909,7 @@ describe("printer pick-up sets", () => {
     const a = await enrol(venue, "A", profile);
     await suite.db
       .update(printers)
-      .set({ pickupRoles: ["payment_slip"], active: false })
+      .set({ picksUpReceipts: false, picksUpPaymentSlips: true, active: false })
       .where(eq(printers.id, printer));
     await expect(
       inTx((tx) =>
@@ -942,7 +944,12 @@ describe("printer pick-up sets", () => {
       );
     await suite.db
       .update(printers)
-      .set({ pickupRoles: [], active: false, deletedAt: "2026-10-13T10:00:00.000Z" })
+      .set({
+        picksUpReceipts: false,
+        picksUpPaymentSlips: false,
+        active: false,
+        deletedAt: "2026-10-13T10:00:00.000Z",
+      })
       .where(eq(printers.id, printer));
     await expect(pickUp()).rejects.toMatchObject({
       code: "printer.not_found",
@@ -1002,7 +1009,10 @@ describe("printer pick-up sets", () => {
       paymentSlipPrinterIds: [handheld],
     });
     const a = await enrol(venue, "A", profile);
-    await suite.db.update(printers).set({ pickupRoles: [] }).where(eq(printers.id, handheld));
+    await suite.db
+      .update(printers)
+      .set({ picksUpReceipts: false, picksUpPaymentSlips: false })
+      .where(eq(printers.id, handheld));
     const pickup = () =>
       inTx((tx) =>
         selectDeviceEquipment(tx, {

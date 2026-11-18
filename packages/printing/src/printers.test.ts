@@ -124,7 +124,8 @@ describe("createPrinter", () => {
         resolution: "203dpi",
         hasCashDrawer: true,
         portable: true,
-        pickupRoles: ["receipt"],
+        picksUpReceipts: true,
+        picksUpPaymentSlips: false,
       });
     }
   });
@@ -359,11 +360,10 @@ describe("updatePrinter", () => {
 
 describe("a deleted printer", () => {
   async function markDeleted(id: string): Promise<void> {
-    // Deletion is set independently of `active`, so a predicate that reads only `active` fails here.
     await asTx((tx) =>
       tx
         .update(printers)
-        .set({ deletedAt: "2026-10-09T10:00:00.000Z", active: true })
+        .set({ deletedAt: "2026-10-09T10:00:00.000Z", active: false })
         .where(eq(printers.id, id)),
     );
   }
@@ -388,10 +388,11 @@ describe("a deleted printer", () => {
     await setup();
     const id = await seedPrinter();
     await markDeleted(id);
-    await expect(asTx((tx) => updatePrinter(tx, id, { active: false }))).rejects.toMatchObject({
+    const before = await fullRow(id);
+    await expect(asTx((tx) => updatePrinter(tx, id, { active: true }))).rejects.toMatchObject({
       code: "printer.not_found",
     });
-    expect((await fullRow(id)).active).toBe(true);
+    expect(await fullRow(id)).toEqual(before);
   });
 
   it("a deleted printer's local_key can be registered again", async () => {
@@ -554,4 +555,18 @@ it("lists pick-up roles as a set so repeated roles do not appear as multiple cho
   );
   const listed = await asTx((tx) => listPrinters(tx));
   expect(listed.find((row) => row.id === id)!.pickupRoles).toEqual(["receipt"]);
+});
+
+it("lists both pick-up roles in receipt-first order regardless of input order", async () => {
+  await setup();
+  const { id } = await asTx((tx) =>
+    createPrinter(tx, {
+      name: "Both roles",
+      transport: "network_tcp",
+      host: "10.0.0.8",
+      pickupRoles: ["payment_slip", "receipt"],
+    }),
+  );
+  const listed = await asTx((tx) => listPrinters(tx));
+  expect(listed.find((row) => row.id === id)!.pickupRoles).toEqual(["receipt", "payment_slip"]);
 });

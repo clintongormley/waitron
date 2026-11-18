@@ -381,7 +381,6 @@ it.each([
       "printers",
       "print_jobs",
       "invoice_deliveries",
-      "printer_holders",
       "devices",
       "device_profiles",
       "device_profile_printers",
@@ -398,7 +397,6 @@ it.each([
       "bill_payments",
       "bill_payment_refunds",
       "working_orders",
-      "printer_holders",
       "printers",
       "card_readers",
       "join_requests",
@@ -437,7 +435,6 @@ it.each([
       "device_profiles",
       "kitchen_stations",
       "device_approved_profiles",
-      "printer_holders",
       "device_profile_printers",
       "printers",
       "page_printers",
@@ -561,7 +558,7 @@ it("subscribes no read to the retired watcher tables, and has no watcher list", 
     expect(named).not.toContain(table);
   }
   expect(Object.keys(QUERY_DEPENDENCIES)).not.toContain("listWatchers");
-  expect(QUERY_DEPENDENCIES.listPrinters).toEqual(["printers", "print_jobs", "printer_holders"]);
+  expect(QUERY_DEPENDENCIES.listPrinters).toEqual(["printers", "print_jobs"]);
 });
 
 it("subscribes no read to the product label tables, which products no longer carry", () => {

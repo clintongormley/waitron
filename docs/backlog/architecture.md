@@ -985,9 +985,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
 - **Left open by #1261's review (W111):** database enforcement of theme-logo retention remains open, as do the receipt editor's copied phone and email limits. [Detail](printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05).
 
-- **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** — left open by the product
-  folders work. Printing no longer reads the column. Dropping it rebuilds `printers`, so leave it
-  until the venue reset that permits the rebuild.
 - **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, when
   A1308 rewrites the starting migrations.**
   [Detail](box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-when-a1308-rewrites-the-starting-migrations)

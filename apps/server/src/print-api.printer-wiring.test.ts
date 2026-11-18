@@ -12,7 +12,6 @@ import {
   pagePrinters,
   printAgents,
   printJobs,
-  printerHolders,
   printers,
   stationPrinterPairs,
   taxpayer,
@@ -26,6 +25,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, deviceProfileServiceAccess } from "@waitron/venue-service";
 import {
+  readPrinterHoldsForTest,
+  holdPrinterForTest,
   seedDevice,
   seedDeviceProfiles,
   seedVenue,
@@ -1024,7 +1025,6 @@ describe("printer delete routes (hardware.manage)", () => {
       "devices",
       "device_profile_printers",
       "kitchen_stations",
-      "printer_holders",
       "drawer_opens",
       "receipt_reprints",
     ]) {
@@ -1067,7 +1067,7 @@ describe("printer delete routes (hardware.manage)", () => {
       .update(devices)
       .set({ receiptPrinterId: printerId })
       .where(eq(devices.id, device.id));
-    await suite.db.insert(printerHolders).values({ printerId, deviceId: device!.id });
+    await holdPrinterForTest(suite.db, printerId, device!.id);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     const device_ = { id: device!.id, name: deviceLabel };
     const profile_ = { id: profile!.id, name: profileName };
@@ -1152,7 +1152,7 @@ describe("printer delete routes (hardware.manage)", () => {
         .where(eq(deviceProfilePrinters.printerId, p.printerId)),
     ).toEqual([]);
     expect(
-      await suite.db.select().from(printerHolders).where(eq(printerHolders.printerId, p.printerId)),
+      (await readPrinterHoldsForTest(suite.db)).filter((hold) => hold.printerId === p.printerId),
     ).toEqual([]);
 
     const before = await printingRows();

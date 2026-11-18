@@ -16,32 +16,24 @@ const stationRefusal = expect.objectContaining({
 });
 
 describe("validateCoreConfiguration", () => {
-  it.each([
-    null,
-    1,
-    [],
-    "{not json",
-    "null",
-    "{}",
-    '"receipt"',
-    "[null]",
-    '[["receipt"]]',
-    '["cash_drawer"]',
-  ])("refuses malformed printer pick-up roles %j", (pickup_roles) => {
-    expect(() => validateCoreConfiguration({ printers: [{ pickup_roles }] })).toThrowError(
-      expect.objectContaining({
-        code: "setup.request_invalid",
-        params: { field: "printers.pickup_roles" },
-      }),
+  describe.each(["picks_up_receipts", "picks_up_payment_slips"])("%s", (field) => {
+    it.each([[null], [-1], [2], [0.5], ["1"], [true], [[]], [{}]])(
+      "refuses a malformed flag %j",
+      (value) => {
+        expect(() => validateCoreConfiguration({ printers: [{ [field]: value }] })).toThrowError(
+          expect.objectContaining({
+            code: "setup.request_invalid",
+            params: { field: `printers.${field}` },
+          }),
+        );
+      },
     );
-  });
 
-  it.each(["[]", '["receipt"]', '["payment_slip"]', '["payment_slip","receipt"]'])(
-    "accepts a stored printer pick-up set %s",
-    (pickup_roles) => {
-      expect(() => validateCoreConfiguration({ printers: [{ pickup_roles }] })).not.toThrow();
-    },
-  );
+    it.each([undefined, 0, 1])("accepts a missing or binary flag %j", (value) => {
+      const row = value === undefined ? {} : { [field]: value };
+      expect(() => validateCoreConfiguration({ printers: [row] })).not.toThrow();
+    });
+  });
 
   it("refuses a station colour a save would refuse", () => {
     expect(() =>
@@ -348,10 +340,10 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
     });
   });
 
-  it("leaves a deleted printer behind and never carries its poll credential", () => {
+  it("leaves deleted printers, poll credentials and portable holds behind", () => {
     expect(CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "printers")).toEqual({
       name: "printers",
-      omit: ["poll_token_hash"],
+      omit: ["poll_token_hash", "held_by_device_id", "held_at"],
       reconnect: true,
       leaveBehindWhenSet: "deleted_at",
     });

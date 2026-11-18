@@ -1,5 +1,5 @@
 import { setMadeHere } from "./testing/made-here-fixture.js";
-import { seedDeviceProfiles, seedPerson } from "@waitron/db/testing/seed.js";
+import { holdPrinterForTest, seedDeviceProfiles, seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -17,7 +17,6 @@ import {
   kitchenStations,
   orderGroups,
   parties,
-  printerHolders,
   printers,
   removeChangeFeed,
   subscribeToChanges,
@@ -117,7 +116,6 @@ function withEndedSessions(snap: Snapshot, deviceId: string, open: Set<unknown>)
 }
 
 function afterDelete(before: Snapshot, deviceId: string): Snapshot {
-  const notMine = (rows: Rows) => rows.filter((row) => row.device_id !== deviceId);
   return {
     ...before,
     devices: byJson(
@@ -128,7 +126,13 @@ function afterDelete(before: Snapshot, deviceId: string): Snapshot {
         row.device_id === deviceId && row.ended_at === null ? { ...row, ended_at: ENDED } : row,
       ),
     ),
-    printer_holders: notMine(before.printer_holders!),
+    printers: byJson(
+      before.printers!.map((row) =>
+        row.held_by_device_id === deviceId
+          ? { ...row, held_by_device_id: null, held_at: null }
+          : row,
+      ),
+    ),
     card_readers: byJson(
       before.card_readers!.map((row) =>
         row.held_by_device_id === deviceId ? { ...row, held_by_device_id: null } : row,
@@ -308,10 +312,8 @@ async function seed() {
     .update(devices)
     .set({ receiptPrinterId: passP, cashDrawerPrinterId: counterP })
     .where(eq(devices.id, pass));
-  await suite.db.insert(printerHolders).values([
-    { printerId: handheldP, deviceId: barTill },
-    { printerId: passP, deviceId: pass },
-  ]);
+  await holdPrinterForTest(suite.db, handheldP, barTill);
+  await holdPrinterForTest(suite.db, passP, pass);
 
   const readerR = await reader("Reader R");
   const readerS = await reader("Reader S");
@@ -663,7 +665,7 @@ describe("the device delete impact", () => {
     for (const [table, column] of [
       ["devices", "id"],
       ["till_sessions", "device_id"],
-      ["printer_holders", "device_id"],
+      ["printers", "held_by_device_id"],
       ["card_readers", "held_by_device_id"],
       ["device_approved_profiles", "device_id"],
     ] as const) {

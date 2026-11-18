@@ -10,7 +10,6 @@ import {
   invoiceSeries,
   sales,
   pagePrinters,
-  printerHolders,
   printers,
   withTransaction,
   taxpayer,
@@ -21,7 +20,11 @@ import { persons, tillSessions, startManagementSession } from "@waitron/identity
 import { emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import {
+  readPrinterHoldsForTest,
+  holdPrinterForTest,
+  seedDevice,
+} from "@waitron/db/testing/seed.js";
 import { setProfileServiceScope } from "@waitron/venue-service";
 import { recordSale } from "@waitron/core";
 import {
@@ -147,7 +150,7 @@ it("offers follow recorded sale and role", async () => {
   expect(result.language).toBe(venue.cfg.locale);
   expect(result.origin).toEqual(deps.originSource.current());
   expect(result.actions.email).toBe(false);
-  await suite.db.insert(printerHolders).values({ printerId: terrace, deviceId: venue.deviceId });
+  await holdPrinterForTest(suite.db, terrace, venue.deviceId);
   expect((await offers(till)).printers).toEqual([
     { id: terrace, name: "Terrace", kind: "receipt" },
   ]);
@@ -236,10 +239,10 @@ it("device-free dashboard offers all active venue printers for both documents", 
       context: { surface: "dashboard", deviceId: null, profileId: null },
     });
   }
-  const remembered = await suite.db.select().from(printerHolders);
+  const remembered = await readPrinterHoldsForTest(suite.db);
   await suite.db.update(printers).set({ active: false }).where(eq(printers.id, terrace));
   expect((await offers(dashboard)).printers.map((p) => p.id)).not.toContain(terrace);
-  expect(await suite.db.select().from(printerHolders)).toEqual(remembered);
+  expect(await readPrinterHoldsForTest(suite.db)).toEqual(remembered);
 });
 
 it("accompanying device still restricts management delivery", async () => {
@@ -250,7 +253,7 @@ it("accompanying device still restricts management delivery", async () => {
     deviceProof: till.deviceProof,
   };
   expect((await offers(accompanied)).printers).toEqual([]);
-  await suite.db.insert(printerHolders).values({ printerId: terrace, deviceId: venue.device2Id });
+  await holdPrinterForTest(suite.db, terrace, venue.device2Id);
   expect((await offers(accompanied)).printers).toEqual([]);
   expect(
     (await offers(accompanied, "invoice", await fullSale())).printers.map((p) => p.id),
@@ -261,8 +264,7 @@ it("accompanying device still restricts management delivery", async () => {
     .where(eq(deviceProfiles.id, till.deviceProof.device.deviceProfileId));
   await expect(offers(accompanied)).rejects.toMatchObject({ code: "device.forbidden_action" });
   expect(
-    (await suite.db.select().from(printerHolders)).find((row) => row.printerId === terrace)
-      ?.deviceId,
+    (await readPrinterHoldsForTest(suite.db)).find((row) => row.printerId === terrace)?.deviceId,
   ).toBe(venue.device2Id);
 });
 

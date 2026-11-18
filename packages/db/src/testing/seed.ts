@@ -5,7 +5,7 @@ import { withPrinter } from "../station-printer-list.js";
 import { parties } from "../schema/parties.js";
 import { partyAllergyGuests } from "../schema/venue-service/party-allergy.js";
 import { persons } from "../schema/identity/persons.js";
-import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
@@ -15,6 +15,7 @@ import { deviceFormFactorEnum, deviceProfiles } from "../schema/device-profiles.
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
+import { printers } from "../schema/printers.js";
 import { workingOrders } from "../schema/orders.js";
 import { newId, nowIso } from "../schema/columns.js";
 import { settings } from "../schema/settings.js";
@@ -427,4 +428,23 @@ export async function seedPhotoMetadata(
     .insert(mediaImages)
     .values({ ...image, originalHash: hash })
     .onConflictDoNothing({ target: mediaImages.filename });
+}
+
+export async function holdPrinterForTest(
+  db: Database | Transaction,
+  printerId: string,
+  deviceId: string,
+): Promise<void> {
+  await db
+    .update(printers)
+    .set({ heldByDeviceId: deviceId, heldAt: nowIso() })
+    .where(eq(printers.id, printerId));
+}
+
+export function readPrinterHoldsForTest(db: Database | Transaction) {
+  return db
+    .select({ printerId: printers.id, deviceId: printers.heldByDeviceId, heldAt: printers.heldAt })
+    .from(printers)
+    .where(isNotNull(printers.heldByDeviceId))
+    .orderBy(asc(printers.id));
 }

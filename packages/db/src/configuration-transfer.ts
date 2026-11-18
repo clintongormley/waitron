@@ -43,8 +43,11 @@ export function validateCoreConfiguration(
   for (const row of tables.printers ?? []) {
     if (row.deleted_at !== undefined && row.deleted_at !== null)
       throw new AppError("setup.request_invalid", { field: "printers.deleted_at" });
-    if (row.pickup_roles !== undefined && !isPrinterPickupSet(row.pickup_roles))
-      throw new AppError("setup.request_invalid", { field: "printers.pickup_roles" });
+    for (const field of ["picks_up_receipts", "picks_up_payment_slips"]) {
+      const value = row[field];
+      if (value !== undefined && value !== 0 && value !== 1)
+        throw new AppError("setup.request_invalid", { field: `printers.${field}` });
+    }
   }
   // An import makes a new venue, so the file's rows are all of its tables; the plan's tables have
   // no unique index to catch a clash later.
@@ -136,7 +139,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     },
     {
       name: "printers",
-      omit: ["poll_token_hash"],
+      omit: ["poll_token_hash", "held_by_device_id", "held_at"],
       reconnect: true,
       leaveBehindWhenSet: "deleted_at",
     },
@@ -167,19 +170,3 @@ export const CORE_CONFIGURATION_TRANSFER = {
         .where(eq(kitchenStations.id, station.id));
   },
 } as const;
-
-function isPrinterPickupSet(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-  let roles: unknown;
-  try {
-    roles = JSON.parse(value);
-  } catch {
-    return false;
-  }
-  return (
-    Array.isArray(roles) &&
-    roles.every(
-      (role) => typeof role === "string" && (role === "receipt" || role === "payment_slip"),
-    )
-  );
-}
