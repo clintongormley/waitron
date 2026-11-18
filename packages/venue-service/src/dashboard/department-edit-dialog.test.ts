@@ -76,7 +76,9 @@ it.each([
     await expect
       .poll(async () => (await formMessageOf(departmentActions(form)))?.textContent?.trim())
       .toBe(refusal);
+    await steps.updateComplete;
     expect(steps.shadowRoot!.textContent).not.toContain(refusal);
+    expect(form.shadowRoot!.textContent).not.toContain(refusal);
     const message = (await formMessageOf(departmentActions(form)))!;
     expect(message.checkVisibility()).toBe(true);
     expect(message.getBoundingClientRect().bottom).toBeLessThanOrEqual(
