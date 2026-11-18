@@ -20146,27 +20146,18 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     this.mealEnd = null;
     this.mealEndSending = true;
-    let sends = 0;
     try {
       await this.#resend(
-        (signal) => {
-          sends++;
-          return asked.api.endMeal(party.id, request, { signal });
-        },
+        (signal) => asked.api.endMeal(party.id, request, { signal }),
         limit.signal,
         live,
       );
     } catch (error) {
       if (!live() || this.#hasLeftParty(party.id, sent)) return;
-      if (sends > 1 && isNetworkFailure(error)) {
+      // An invoice number on the bill proves nothing here: another till's payment may have issued it.
+      if (isNetworkFailure(error)) {
         await this.#loadPartyBills();
-        if (!live() || this.#hasLeftParty(party.id, sent)) return;
-        const now = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
-        if (now?.invoiceNumber !== undefined) {
-          await this.#onMealEnded(party.id, workingOrderId, visit, sent);
-          return;
-        }
-        this.errorKey = "meal_end.unconfirmed";
+        if (live() && !this.#hasLeftParty(party.id, sent)) this.errorKey = "meal_end.unconfirmed";
         return;
       }
       await this.#onMealEndRefused(party.id, request, error, live, sent, visit);

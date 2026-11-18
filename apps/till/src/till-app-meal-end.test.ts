@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { clockUnusableText, overLimitText, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { EndedMeal, PartyBill, TabLine, TillApi } from "./api/client.js";
 import type { CapabilityFlag } from "./layout.js";
+import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import {
   bill120,
   billOf,
@@ -96,6 +97,30 @@ async function printBill(el: TillApp): Promise<void> {
   emit(tableOrder(el), "end-meal", { workingOrderId: "wo-4" });
   await flush(el, 6);
 }
+
+/** The till's request deadlines stop running by themselves; `expire` ends those set so far. */
+function deadlinesByHand() {
+  const set = globalThis.setTimeout;
+  const pending: (() => void)[] = [];
+  const timers = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+    run: () => void,
+    ms?: number,
+    ...rest: unknown[]
+  ) => {
+    if (ms !== TABLE_REQUEST_LIMIT_MS) return set(run, ms, ...(rest as []));
+    pending.push(run);
+    return 0;
+  }) as typeof setTimeout);
+  onTestFinished(() => timers.mockRestore());
+  return { expire: () => pending.splice(0).forEach((run) => run()) };
+}
+
+/** A send that waits, with no answer, until its deadline cuts it off, as `fetch` does. */
+const unansweredUntilDeadline = (_party: unknown, _request: unknown, options: unknown) =>
+  new Promise<EndedMeal>((_resolve, reject) => {
+    const { signal } = options as { signal: AbortSignal };
+    signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+  });
 
 /** A promise the test settles by hand, for an answer held back. */
 function heldAnswer<T>() {
@@ -221,6 +246,40 @@ describe("till-app: Print the bill", () => {
       .toContain(t("meal_end.unconfirmed"));
 
     expect(endMeal).toHaveBeenCalledTimes(3);
+    expect(printedNotice(el)).toBeNull();
+  });
+
+  it("says a bill whose only send used up the whole deadline may have been printed, and reads the bills again", async () => {
+    const { el, endMeal } = await openBill({ endMeal: unansweredUntilDeadline });
+    const deadlines = deadlinesByHand();
+    await printBill(el);
+    expect(endMeal).toHaveBeenCalledOnce();
+    const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+    deadlines.expire();
+    await flush(el, 6);
+
+    expect(endMeal).toHaveBeenCalledOnce();
+    expect(banner(el)!.textContent).toContain(t("meal_end.unconfirmed"));
+    expect(banner(el)!.textContent).not.toContain(t("table.error"));
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
+    expect(printedNotice(el)).toBeNull();
+  });
+
+  it("does not claim Bill issued when no send was answered and the bill now has an invoice number", async () => {
+    const endMeal = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await openBill({
+      endMeal,
+      getPartyBills: vi.fn(async () => [endMeal.mock.calls.length < 3 ? billOf() : printedBill]),
+    });
+
+    await printBill(el);
+    await expect
+      .poll(() => banner(el)?.textContent ?? "", { timeout: GIVE_UP_MS })
+      .toContain(t("meal_end.unconfirmed"));
+
+    expect(endMeal).toHaveBeenCalledTimes(3);
+    expect(tableOrder(el).bills[0]!.invoiceNumber).toBe("F-0042");
     expect(printedNotice(el)).toBeNull();
   });
 
