@@ -29,6 +29,8 @@ section 6 (courses) and "Left to the builder" before Task 1. A code map of the a
 `18fe6c2661`, is in the owner's checkout at `docs/handoffs/2026-11-17-set-menus-code-map.md`
 (gitignored); line numbers below are from `ed2ac2ea00`.
 
+**Pull-request boundaries:** see the [Lane D scope check](2026-11-18-a1515-set-menu-dashboard-scope.md).
+
 **Order:** after A1515-REMOVE (lane D), which deletes `products.set_lunch` and the `setLunch` fields
 this plan's files sit beside. Both rebuild the core baseline: on a rebase conflict in
 `packages/db/drizzle/`, take main's copy and rerun the rebuild (CLAUDE.md §3). Piece 3 (the fit)
@@ -210,7 +212,7 @@ second amendment are marked **my call (plan writer)**:
   | `set_menu.wrong_place`     | `{ menuId }`      | a set menu named where only an ordinary menu fits: default menu, a period, an include, Prices, publishing it |
   | `set_menu.dishes_only`     | `{ menuId }`      | a section, an included menu or a set menu added to a set menu's list                            |
   | `set_menu.not_publishable` | `{ menuId, count }` | publishing (now or queued) a full menu holding a set menu that has problems (Task 5a)         |
-  | `set_menu.vat_class_differs` | `{ productId, productVatClass, setMenuVatClass }` | a dish or kept variant at another eat-in VAT class than the set menu's, or the set menu's class changed under its dishes, or a live correction that would do either (decision 11, Task 5c) |
+  | `set_menu.vat_class_differs` | `{ productId, productVatClass, setMenuVatClass }`, plus `field: "setVatClass"` and `requestedVatClass` for a class change | a dish or kept variant at another eat-in VAT class than the set menu's, or the set menu's class changed under its dishes, or a live correction that would do either (decision 11, Task 5c) |
   | `set_menu.dish_sold_by_measure` | `{ productId }` | a product sold by measure added to a set menu (decision 12)                                 |
 
 - **Forms:** new or changed forms follow `docs/developers/design-system.md` → Forms and
@@ -290,10 +292,12 @@ second amendment are marked **my call (plan writer)**:
 **Interfaces:**
 - Produces, on `menus`: `kind` (`enumType(["menu","set_menu"])`, not null, default `"menu"`),
   `setPrice` (`money`, nullable), `setVatClass` (`label`, nullable). CHECKs:
-  `menus_set_terms_ck`: `(kind = 'set_menu') = (set_price is not null and set_vat_class is not null)`;
-  `menus_set_price_ck`: `set_price is null or set_price >= 0`;
-  `menus_set_vat_class_ck`: the same four classes as `products_vat_class_ck` (`menus.ts:175-176`);
-  and a set menu is never the default: `menus_set_not_default_ck`: `kind = 'menu' or is_default = 0`.
+  Use `enumCheck(t.kind)` for `menus_kind_ck`. In `menus_set_terms_ck`, accept either
+  `(kind = 'set_menu' and set_price is not null and set_vat_class is not null)` or
+  `(kind = 'menu' and set_price is null and set_vat_class is null)`.
+  The price check is `set_price is null or set_price >= 0`. Reuse the four classes from
+  `products_vat_class_ck` in `menus_set_vat_class_ck`. Use
+  `kind = 'menu' or is_default = 0` for `menus_set_not_default_ck`.
 - Produces `setMenuLines` (`set_menu_lines`): `id`, `menuId` → `menus.id` on delete cascade,
   `position` (`count`), `count` (`count`, CHECK `between 1 and 99`), index on `(menu_id, position)`.
 - Produces `setMenuLineCourses` (`set_menu_line_courses`): `lineId` → `set_menu_lines.id` cascade,
@@ -312,7 +316,8 @@ second amendment are marked **my call (plan writer)**:
   `useVenueDb({ migrations: [CORE_MIGRATIONS] })` as `schema/menu/migrations.test.ts:30-33` does:
   - `"a set menu needs a price and a VAT class, and an ordinary menu holds neither"`: inserting
     `kind: "set_menu"` without `setPrice` is refused naming `menus_set_terms_ck`; an ordinary menu
-    with `setPrice: 1400` is refused the same way; a set menu with both is accepted.
+    with `setPrice: 1400` alone or `setVatClass: "reduced"` alone is refused the same way.
+    An ordinary menu with neither and a set menu with both are accepted.
   - `"a set menu cannot be the venue's default menu"`: `is_default = 1` on a set menu is refused
     naming `menus_set_not_default_ck`.
   - `"a line takes 1 to 99"`: 0 and 100 refused, 1 and 99 accepted.
@@ -455,8 +460,9 @@ export interface SetMenuTerms {
 - [ ] **Step 2: Write the failing period test** in `menu-timetable.test.ts`:
   `"a period cannot sell a set menu as its customer menu or a staff menu"`: both refused with
   `set_menu.wrong_place` `{ menuId }`; a set menu is sold only by being placed in a menu the period
-  sells. venue-service already depends on `@waitron/menu` (`packages/venue-service/package.json:37`),
-  so call `refuseSetMenu` beside the existing check at `:365-371`.
+  sells. Call `refuseSetMenu` beside the existing period write check. Add a read case for the
+  timetable management model, which supplies both period pickers, and filter its menu query
+  by `kind = "menu"`.
 - [ ] **Step 3: Run; they fail.**
 - [ ] **Step 4: Implement.** `listMenus`/`MenuSummary` carry `kind` and `setPrice` so the list
   (Task 8a) can show them; grep every `MENU_COLUMNS` reader to keep the type complete.
@@ -485,11 +491,11 @@ export interface SetMenuTerms {
   `menus.kind`; `SectionGraph.menu()` returns `{ name, active, kind }`.
 - Adding a member accepts `{ kind: "set_menu", menuId }` (resolved to the set menu's root). It is
   refused with `set_menu.wrong_place` when written as `{ kind: "section", sectionId: <a set menu's
-  root> }`, including as a Home page shortcut (`checkRef` lets a shortcut name a menu's root
-  today), and with `set_menu.dishes_only` when the target list belongs to a set menu. A set menu's
-  own list takes only products: a section, an include or a set menu is refused
-  `set_menu.dishes_only`. Folder settings (`PUT .../members/:memberId/folder`) on a set-menu member
-  are refused `set_menu.wrong_place`: it has none in this piece.
+  root> }`, including as a Home page shortcut. A Home page shortcut also refuses a direct
+  `set_menu` ref with `set_menu.wrong_place`. A set menu's list takes only products. A section, an
+  include or a set menu is refused with `set_menu.dishes_only`. Folder settings
+  (`PUT .../members/:memberId/folder`) on a set-menu member are refused with
+  `set_menu.wrong_place`.
 - `includableMenus` leaves set menus out; `readMenuStructure` adds
   `placeableSetMenus: { id: string; name: string }[]` (active set menus not already in this list).
 
@@ -506,9 +512,10 @@ export interface SetMenuTerms {
   - `"a set menu's list takes only products"`: adding a new section, an include and another set
     menu to it are each refused `set_menu.dishes_only`.
   - `"a set menu is placed only as a set menu"`: the section ref to its root, as a member and as a
-    Home shortcut, is refused `set_menu.wrong_place`; folder settings on the placed member are
-    refused the same way; `includableMenus` and `readMenuStructure(fullMenu).includable` leave it
-    out; `placeableSetMenus` lists it until placed.
+    Home shortcut, is refused `set_menu.wrong_place`. A direct set-menu ref is also refused as a
+    Home shortcut. Folder settings on the placed member are refused with `set_menu.wrong_place`.
+    `includableMenus` and `readMenuStructure(fullMenu).includable` omit it.
+    `placeableSetMenus` lists it until placed.
 - [ ] **Step 2: Run; they fail.**
 - [ ] **Step 3: Implement.** Run `pnpm --filter @waitron/menu typecheck` and fix the sites in the
   files this task lists. Sites the new ref kind breaks in other packages are Task 3b's: 3a and 3b
@@ -644,6 +651,8 @@ export interface SetMenuDetails {
   /** Active courses in display order, for the editor's grouping and line choices. */
   courses: { id: string; name: string }[];
   problems: SetMenuProblem[];
+  /** Full menus holding this draft, with names for the editor links. */
+  heldBy: { id: string; name: string }[];
 }
 
 export function readSetMenu(tx: Transaction, menuId: string): Promise<SetMenuDetails>;
@@ -690,6 +699,9 @@ export function setMenuProblems(details: Omit<SetMenuDetails, "problems">): SetM
   exclusion and deletes any override; `included: true` deletes any exclusion and stores the
   surcharge as `menu_item_variant_overrides.price`, or deletes it when null. A variant not of this
   dish → `product.variant_not_found`, as `setMenuVariants` does (`variants.ts:403-406`).
+- `readSetMenu` uses `menusContaining` from Task 3c for `heldBy`. Assert the parent id and name
+  in the details read of a placed set menu. Filter to full menus so the set menu itself is
+  omitted. Reuse the graph already loaded for a batch document build.
 - `readSetMenu` reads `set_menu_dish_courses` for `courseOverrideId` (null until Task 4c writes
   any); the write is Task 4c's.
 - **Every write that changes a set menu calls `touchSetMenu`** in the same transaction (decision
@@ -787,7 +799,9 @@ export function setMenuProblems(details: Omit<SetMenuDetails, "problems">): SetM
   that calls `addLinesForCourses`, Task 4), and `saveSetMenuVariantChoices` for each variant it
   includes. Decisions 11 and 12; both codes are declared in `errors.ts` with these params.
 - `updateMenuDetails` refuses a new `setVatClass` with `set_menu.vat_class_differs` naming the
-  first included dish or variant still at another class.
+  first included dish or variant still at another class. The refusal carries
+  `{ productId, productVatClass, setMenuVatClass, field: "setVatClass", requestedVatClass }`
+  so the editor can explain the attempted change next to the field.
 - On a set menu's menu item, `updateMenuItem` refuses a surcharge above
   `MAX_SET_MENU_AMOUNT_CENTS` with `set_menu.invalid` `{ field: "surcharge" }`, and
   `saveSetMenuVariantChoices` does the same for a variant's surcharge (decision 13). Import the
@@ -1013,8 +1027,10 @@ export interface PublishedSetMenu {
   stores the document when queued, so the copy is taken then), `packages/menu/src/menu-publication.ts`
   (`previewMenu`), `packages/menu/src/menu-document.ts` (`diffEntries`),
   `packages/shared/src/menu-document/menu-document-types.ts` (`MenuPreview`, `MenuChangeBody`,
-  `MenuChangeSource`), `packages/menu/src/menu-navigation.ts`, `packages/menu/src/menu-undo.ts`
-- Test: `packages/menu/src/set-menu-document.changes.test.ts`
+  `MenuChangeSource`), `packages/menu/src/menu-navigation.ts`, `packages/menu/src/menu-undo.ts`,
+  `apps/dashboard/src/widgets/menu-preview.ts` and `apps/dashboard/src/i18n/strings.ts`
+- Test: `packages/menu/src/set-menu-document.changes.test.ts`,
+  `apps/dashboard/src/widgets/menu-preview-tree.test.ts`
 
 **Interfaces:**
 - Consumes the copy and `BuiltMenu.setMenuProblems` (Task 5a).
@@ -1033,7 +1049,8 @@ export interface PublishedSetMenu {
   undo: `menu-undo.ts` treats it as not undoable, and the preview links to the set menu's page
   instead (**my call**: the change is made there). Placing or removing a set menu shows as the
   member change it already is. The dashboard's `widgets/menu-preview.ts` and `strings.ts` word the
-  new kind and source (Task 8a).
+  new kind and source in the same change as the shared types. Check the change words, editor
+  link and absence of an undo in the Preview test.
 
 - [ ] **Step 1: Write the failing tests** in `set-menu-document.changes.test.ts`, on Task 5a's
   fixture with Lunch published:
@@ -1318,7 +1335,9 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 - Removing a dish and setting a surcharge use the existing section-member and
   `PATCH .../items/:itemId` routes; the existing add-products member route still works on a set
   menu's list (all variants included) and answers `addedLines` too. Placing a set menu uses the existing
-  `POST /management-api/sections/:id/members` with the `set_menu` ref.
+  `POST /management-api/sections/:id/members` with the `set_menu` ref. Extend the existing
+  `memberRef` parser with a validated `menuId`. Test member add and replace and the refusal
+  from both Home shortcut routes that share the parser.
 - **Dashboard refresh.** Add `set_menu_lines`, `set_menu_line_courses`, `set_menu_dish_courses`
   and `set_menu_variant_exclusions` to `MENU_PUBLICATION_READS` (`apps/dashboard/src/api/live-queries.ts:4-22`),
   so a change to a set menu refreshes the status and Preview of the full menus holding it; no guard
@@ -1371,43 +1390,32 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 ### Task 8a: Dashboard — adding a set menu, the list, and the editor's shell
 
 **Files:**
-- Modify: `apps/dashboard/src/screens/menus-screen.ts` (`TABS` `:92`, `#renderAddMenu`
-  `:2551-2562`, list columns, `#renderEditor` `:3910-3965`, the Preview tab)
+- Modify: `apps/dashboard/src/screens/menus-screen.ts` (`TABS` `:92`, list columns,
+  `#renderEditor` `:3910-3965`, the Preview tab)
 - Create: `apps/dashboard/src/widgets/set-menu-editor.ts` (the one page: Task 8b draws its terms,
   Task 9 its dishes, Task 10 its lines)
 - Modify: `apps/dashboard/src/i18n/strings.ts`
 - Test: `apps/dashboard/src/screens/menus-screen.set-menu.test.ts`, `set-menu-editor.a11y.test.ts`
 
 **Interfaces:**
-- **Add menu** becomes a choice of **Menu** or **Set menu** (a `wt-*` menu button, or two buttons
-  if no menu-button primitive exists; check `packages/ui` first and never draw a native one). Menu
-  opens today's form; Set menu opens Task 8b's form in a modal, which creates the set menu and opens
-  its editor. Until 8b lands, the Set menu choice opens nothing: land 8a and 8b on the same branch.
+- Land the list and editor with Task 8b. Task 11 connects Add menu to the finished editor.
 - The menus list shows a **Kind** column ("Menu" / "Set menu") and, for a set menu, its price and
   no publication status.
-- `widgets/menu-preview.ts` and `strings.ts` word the `set_menu_changed` change and the
-  `"set_menu"` source ("Daily menu (set menu): price changed", linking to its page).
 - A set menu's editor has one tab, **Set menu** (`set-menu`, drawing `dashboard-set-menu-editor`),
   and no Publish (decision 3). Structure, Prices, Home page and Preview are not shown; a stored
   address naming one of those for a set menu opens **Set menu**. Under its heading the editor says
   where its changes go: "Changes reach the tills when you publish a menu that holds this set menu:
   Lunch, Dinner", each name linking to that menu's Preview, or "Place it in a menu to sell it" when
-  no menu holds it (`menusContaining`, Task 3c; **my call** on wording).
+  no menu holds it (from `SetMenuDetails.heldBy`; **my call** on wording).
 - A full menu's **Preview** lists `setMenuProblems` above the publish button, each set menu's name
   linking to its page, and shows each `set_menu_changed` entry with that link instead of an undo.
-- The editor's heading carries a `wt-help-tooltip` with `mode="help-mode"` (CLAUDE.md §3) that
-  orients in a few sentences — a set menu is a fixed price for one of each of its lines; dishes
-  with a surcharge cost that on top; place it in a menu to sell it — and links to the guide's
-  `{#set-menus}` section (Task 11). Write it from the code as built.
 
 - [ ] **Step 1: Write the failing tests** in `menus-screen.set-menu.test.ts`:
-  `"Add menu offers Menu and Set menu"`; `"the list shows a set menu's kind and price"`;
+  `"the list shows a set menu's kind and price"`;
   `"a set menu's editor has no Structure, Prices, Home page or Preview tab, and an old address for
   one opens Set menu"`; `"a set menu's editor names the menus that publish it, linking to each"`;
-  `"a full menu's Preview lists its set menus' problems and a set-menu change links to the set
-  menu"`;
-  `"the editor's help bubble shows only in help mode and links to the guide"`. The a11y file: axe on
-  the editor shell in both themes.
+  `"a full menu's Preview lists its set menus' problems and links to their editors"`. Run axe
+  on the editor shell in both themes.
 - [ ] **Step 2: Run; they fail.** **Step 3: Implement.**
 - [ ] **Step 4: Run the new tests and `menus-screen.test.ts`, `menus-screen.a11y.test.ts`.**
 - [ ] **Step 5: Commit** — "Set menus: offer a set menu on the menus list and give it its own editor".
@@ -1416,30 +1424,31 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 
 **Files:**
 - Create: `apps/dashboard/src/widgets/set-menu-terms-form.ts`
-- Modify: `apps/dashboard/src/widgets/set-menu-editor.ts`, `apps/dashboard/src/screens/menus-screen.ts`
-  (the Set menu choice from 8a), `apps/dashboard/src/i18n/strings.ts`
-- Test: `apps/dashboard/src/widgets/set-menu-terms-form.{test,a11y.test,unsaved.test}.ts`,
-  `menus-screen.set-menu.test.ts` (one more case)
+- Modify: `apps/dashboard/src/widgets/set-menu-editor.ts`, `apps/dashboard/src/i18n/strings.ts`,
+  `apps/dashboard/src/i18n/domain.ts` and `apps/dashboard/src/screens/venue-defaults-panel.ts`
+- Test: `apps/dashboard/src/widgets/set-menu-terms-form.{test,a11y.test,unsaved.test}.ts`
 
 **Interfaces:**
 - The form: **Name** (required), customer names by language as the section form takes them (reuse
   `dashboard-section-details-form`'s name fields if it can be composed, rather than copying them),
   **Price per set menu** (required, `wt-price-input`, gross), **VAT class** (required; the same
   field and default the product editor gives a new product — read
-  `product-editor.vat-default.test.ts` for how the default is chosen). It creates (from Add menu) or
-  saves (at the top of the editor) and emits `set-menu-terms-saved`. Saves quiet until the draft
-  changes.
+  `product-editor.vat-default.test.ts` for how the default is chosen). It creates from the Task 11
+  dialog or saves at the top of the editor and emits `set-menu-terms-saved`. Saves quiet until
+  the draft changes. Use the refusal's `field` and `requestedVatClass` for the class change, and
+  find the dish or variant in the loaded details. For example, "This set menu holds Soup at
+  Reduced (10%), so its class can't change to General (21%). Remove those dishes first, or keep
+  Reduced." Move the shared `vatClassLabel` to `i18n/domain.ts` here and use it in Task 9 too.
 
-- [ ] **Step 1: Write the failing tests:** `"creating a set menu opens its editor on the Set menu
-  tab"` (screen); in the form test: required marks; `"a negative or blank price shows its error
+- [ ] **Step 1: Write the failing form tests:** required marks; `"a negative or blank price shows its error
   under the field and disables Save"`; `"Save stays quiet until something changes"`; a refused save
   puts `set_menu.invalid` `{ field: "setPrice" }` under the price field; a refused class change
-  puts `set_menu.vat_class_differs` (Task 9's words) under the VAT class field. The a11y file: axe in both
+  puts the class-change wording for `set_menu.vat_class_differs` under the VAT class field. The a11y file: axe in both
   themes for the empty, filled and refused states. The unsaved file: leaving with a changed price
   asks, as the other `*.unsaved` tests do.
 - [ ] **Step 2: Run; they fail.** **Step 3: Implement.** **Step 4: Run them.**
-- [ ] **Step 5: Look at it.** Start Claude's own stack (`wa-wt demo <worktree>`, never slot 1,
-  CLAUDE.md §6), create a set menu, and check the list and editor in both themes and at phone width.
+- [ ] **Step 5: Look at it.** Open a fixture draft and check the list and editor in both themes and
+  at phone width. Task 11 checks creation through Add menu on the dev stack.
 - [ ] **Step 6: Commit** — "Set menus: create a set menu and change its price on the dashboard".
 
 ### Task 9: Dashboard — the dishes it covers
@@ -1464,9 +1473,7 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   products, Copy dishes, Variants…), naming the product, and the dialog stays open with nothing
   saved. Their wording in `codes.ts`, **my call (plan writer)** (the owner's example in the spec,
   section 1: "This product is taxed at 21%, the set menu at 10%"), with each class through
-  `vatClassLabel` (`apps/dashboard/src/screens/venue-defaults-panel.ts:39-42`, which reads
-  "Reduced (10%)"); move it to `i18n/domain.ts` beside `vatClassName` if the dialog cannot import
-  it from a screen:
+  `vatClassLabel` in `i18n/domain.ts` (moved in Task 8b):
   - `set_menu.vat_class_differs`: "{product} is taxed at {productClass}, and this set menu at
     {setMenuClass}. Until the tax treatment of a set menu with dishes at another rate is confirmed,
     a set menu can only hold products at its own rate. Leave {product} out, or correct its VAT
@@ -1544,20 +1551,23 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 
 **Files:**
 - Modify: `apps/dashboard/src/widgets/menu-structure-table.ts` (`StructureAddAction` `:119-123`,
-  member rows), `apps/dashboard/src/screens/menus-screen.ts` (the include dialog `:3598-3690`)
-- Modify: `packages/venue-service/src/dashboard/period-dialog.ts` (`:49-59`, `:174-175`) and the
-  default-menu choice (grep `default-menu` under `apps/dashboard/src`)
+  member rows), `apps/dashboard/src/screens/menus-screen.ts` (Add menu and Structure) and
+  `apps/dashboard/src/help-guide.ts`
 - Modify: `apps/server/src/guide/en/products.md`, `apps/server/src/guide/es/products.md`
-- Test: `apps/dashboard/src/widgets/menu-structure-table.set-menu.test.ts`,
-  `packages/venue-service/src/dashboard/period-dialog.test.ts`
+- Test: `apps/dashboard/src/widgets/menu-structure-table.set-menu.test.ts` and
+  `apps/dashboard/src/screens/menus-screen.set-menu.test.ts`
 
 **Interfaces:**
 - The Structure tab's **Add** gains **Set menu…** (`"add-set-menu"`), listing
   `placeableSetMenus`; choosing one places it in the list being viewed. A placed set menu's row
   shows its name, "Set menu" and its price, opens the set menu's editor when clicked, and offers
   Move and Remove like an include. It has no folder settings in this piece.
-- The include picker, the period dialog's customer and staff menu choices, and the default-menu
-  choice list ordinary menus only (`kind === "menu"`).
+- **Add menu** offers **Menu** or **Set menu** using the existing `wt-*` controls. Menu opens
+  today's form. Set menu opens the terms form in a dialog and opens the new draft's editor.
+- The editor heading's `wt-help-tooltip` uses `mode="help-mode"`. Explain the price, surcharges
+  and placing the set menu. Link to `{#set-menus}` through the dashboard's guide links.
+- The include and period choices already omit set menus through the reads in Tasks 3a and 2.
+  The default-menu write refuses one through Task 2.
 - Guide: a `## Set menus {#set-menus}` section in both languages, written from the code as built:
   what a set menu is, creating one, its dishes and surcharges, giving a dish another course in
   the set menu (on a bill it counts as that course in this set menu, and a dish ordered from this
@@ -1568,7 +1578,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 
 - [ ] **Step 1: Write the failing tests:** `"Add offers Set menu and places the chosen one"`;
   `"a placed set menu's row shows its price and opens its editor"`; `"the include picker leaves set
-  menus out"`; `"the period dialog offers no set menu as a customer or staff menu"`.
+  menus out"`; `"Add menu offers Menu and Set menu"`; `"creating a set menu opens its editor on the Set menu
+  tab"`; `"the editor's help bubble shows only in help mode and links to the guide"`.
 - [ ] **Step 2: Run; they fail.** **Step 3: Implement.** **Step 4: Run them, and
   `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`.**
 - [ ] **Step 5: Look at it end to end** on Claude's stack: create Daily menu (€14) with Soup, Hake
