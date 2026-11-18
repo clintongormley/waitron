@@ -1,16 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
-import {
-  inTx,
-  seatWithNoAllergies,
-  setupPartyVenue,
-  type PartyVenue,
-} from "./testing/party-venue.js";
+import { addGroupedTabRound, addTabRound } from "./order-writer-fixture.js";
+import { inTx, seatWithNoAllergies, setupPartyVenue, type PartyVenue } from "./party-venue.js";
 
 let v: PartyVenue;
 useVenueDb({
@@ -38,7 +33,15 @@ it("addTabRound writes a quantity of three as three dishes, each with its own fi
   expect(lines.map((line) => line.wholePortion)).toEqual([true, true, true]);
   expect(lines[0]!.cohortId).not.toBeNull();
   expect(new Set(lines.map((line) => line.cohortId)).size).toBe(1);
-  const items = await v.db.select().from(ticketItems);
+  const items = await v.db
+    .select()
+    .from(ticketItems)
+    .where(
+      inArray(
+        ticketItems.workingOrderLineId,
+        lines.map((line) => line.id),
+      ),
+    );
   const firedLines = items
     .filter((item) => item.firedAt !== null)
     .map((item) => item.workingOrderLineId);

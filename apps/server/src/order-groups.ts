@@ -127,7 +127,7 @@ import {
 export type GroupRelease = "fire" | "hold";
 
 /** A line of a submitted group: a round line, released with its group rather than by course. */
-export type GroupLine = Omit<TabRoundLine, "hold" | "release">;
+export type GroupLine = TabRoundLine;
 
 export interface SubmitGroupsInput {
   allergy?: AllergyPatch;
@@ -323,13 +323,7 @@ export async function placeGroups(
     }
     if (afterGroupId !== undefined) await requireHeldGroup(tx, partyId, afterGroupId);
   }
-  const lines = input.groups.flatMap((group) =>
-    group.lines.map((line) => ({
-      ...line,
-      hold: group.release === "hold",
-      release: group.release === "fire",
-    })),
-  );
+  const lines = input.groups.flatMap((group) => group.lines);
   const empty = (group: PlaceGroupsInput["groups"][number]) =>
     group.lines.length === 0 && (group.existingLineIds?.length ?? 0) === 0;
   const priced =

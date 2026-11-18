@@ -2996,17 +2996,12 @@ export async function bumpBillReady(
   );
 }
 
-/**
- * One line of a round. `hold` and `release` are {@link fireLines}' flags for the line.
- */
 export type TabRoundLine = {
   menuItemId: string;
   quantity: string;
   courseId?: string | null;
   extras?: ExtraSelection[];
   options?: OptionSelection[];
-  hold?: boolean;
-  release?: boolean;
 } & LineExtras &
   RetainedCourseLine;
 

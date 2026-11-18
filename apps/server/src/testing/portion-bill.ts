@@ -36,8 +36,8 @@ export function portionRefsOf(rows: readonly PricedTabRound["rows"][number][]): 
   );
 }
 
-/** A round priced for an open bill and expanded to one row per dish, as the product's add writes
- * it; `requestOfRow` gives each row's index in `lines`. Writes nothing. */
+/** A round priced for an open bill and expanded to one row per dish, as `placeGroups` expands it;
+ * `requestOfRow` gives each row's index in `lines`. Writes nothing. */
 export async function pricePortionRound(
   tx: Transaction,
   cfg: TradingContext,

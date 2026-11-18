@@ -191,14 +191,10 @@ describe("A669 release matrix", () => {
   });
   it("the raw round writer refuses an unanswered party before any kitchen write", async () => {
     const p = await seat(v, await v.table(`Raw round ${randomUUID().slice(0, 8)}`));
-    const expectedEdit = await inTx(v, (tx) => readBillEditState(tx, p.tabId));
     const before = frozen();
     await expect(
       inTx(v, (tx) =>
-        addTabRound(tx, v.cfg, p.tabId, [{ menuItemId: v.item("Burger"), quantity: "1" }], {
-          operatorId: OPERATOR,
-          expectedEdit,
-        }),
+        addTabRound(tx, v.cfg, p.tabId, [{ menuItemId: v.item("Burger"), quantity: "1" }]),
       ),
     ).rejects.toMatchObject({ code: "allergy.unanswered" });
     expect(frozen()).toEqual(before);

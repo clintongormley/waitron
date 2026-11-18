@@ -1932,7 +1932,7 @@ async function ticketRow(tabId: string, lineNo: number) {
   return row ?? null;
 }
 
-/** A tab with one café line fired to the default station at `quantity`, and that station's id. */
+/** A tab with `quantity` cafés fired to the default station (one line under `addGroupedTabRound`). */
 async function tabWithFiredCoffee(quantity = "1", add = addTabRound) {
   const venue = await setupVenue();
   const { cfg, tableId, coffeeOffer } = venue;
@@ -2462,7 +2462,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   });
 
   it("refuses an edit made from a copy another edit has since changed, changing nothing", async () => {
-    const { cfg, tabId } = await tabWithFiredCoffee("3");
+    const { cfg, tabId } = await tabWithFiredCoffee("3", addGroupedTabRound);
     const copy = await revisionOf(tabId);
 
     await asApp(cfg, (tx) =>
@@ -3294,7 +3294,7 @@ async function twoTabs() {
 }
 type Tabs = Awaited<ReturnType<typeof twoTabs>>;
 
-/** A party's tab at a table of its own, with a café line of 3 fired. */
+/** A party's tab at a table of its own, with 3 cafés fired. */
 async function partyTab(add = addTabRound) {
   const venue = await setupVenue();
   const { cfg, tableId, coffeeOffer } = venue;

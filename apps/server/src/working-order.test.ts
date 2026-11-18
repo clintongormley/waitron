@@ -7090,12 +7090,12 @@ describe("correction slips on line changes and cancellations (A6)", () => {
   });
 });
 
-// Coursing editing — `hold` on send. A round line may carry `hold: true`; `addTabRound` correlates
-// that marker onto the priced PARENT row (parents come out of `priceOrderLines` in input order) and hands
-// it to `fireLines`, which inserts the held line with `fired_at NULL` REGARDLESS of its course — greyed on
-// the KDS, no kitchen print — until a later `sendLines`/`fireOrderLines` releases it. Transient: read at fire
-// time, never stored. These cases prove the hold short-circuit and the parent
-// correlation under modifier expansion.
+// Coursing editing — `hold` on send. A round line may carry `hold: true`; the test helper
+// `addTabRound` puts that marker on the line's dish rows and hands them to `fireLines`, which
+// inserts the held line with `fired_at NULL` REGARDLESS of its course — greyed on the KDS, no
+// kitchen print — until a later `sendLines`/`fireOrderLines` releases it. Transient: read at fire
+// time, never stored. These cases prove the hold short-circuit and the parent correlation under
+// modifier expansion.
 // ---------------------------------------------------------------------------------------------------
 describe("addTabRound hold-on-send (A3)", () => {
   it("holds a line marked hold:true even when its course would auto-fire, printing only the fired line", async () => {

@@ -1518,15 +1518,15 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 - **A1197. Is part-quantity handling of a whole dish still reachable outside tests? (left open by
   A803 slice 1, D12 and D26).** New dishes reach an order through `createOpenOrder`, `placeGroups`
   and the whole-order save's new lines, and each of those stores every whole dish (a unit with no
-  decimal places, no scale and no measure) as a line of its own. One line holding several whole
-  dishes is now written only by test helpers in `apps/server/src/testing/`: `addGroupedTabRound`
-  (`order-writer-fixture.ts`) and the older grouped writers beside it (`grouped-counter-order.ts`,
-  `kitchen-table-order.ts`, `group-submit-fixture.ts`, `adjustment-venue.ts`). A803 slice 1's D12
-  kept the part-quantity paths (part cancel, part serve, part split and transfer, part adjustment
-  and item payment) for measured lines and grouped counter lines. Not traced: which of them a
+  decimal places, no scale and no measure) as a line of its own. Tests still write one line
+  holding several whole dishes: through grouped helpers in `apps/server/src/testing/`
+  (`addGroupedTabRound` in `order-writer-fixture.ts` is one), by pricing a round and inserting it
+  unexpanded, or by setting a row's quantity by hand. A803 slice 1's D12 kept the part-quantity
+  paths (part cancel, part serve, part split and transfer, part adjustment and item payment) for
+  measured lines and grouped counter lines. Not traced: which of them a
   measured line still uses, and whether the save's rise of an existing line that is not a portion,
   or a transfer's part row, can still produce a line of several whole dishes. Establish that, then
-  remove the rest together with the tests that reach them only through the grouped helpers.
+  remove the rest together with the tests that reach them only through a grouped row a test wrote.
 
 ## Bundle: Add a device: loose ends from A268
 
