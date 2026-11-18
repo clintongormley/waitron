@@ -125,7 +125,6 @@ function scanSequence(entries: readonly TimeEntryRecord[]) {
 function validateSequenceChange(
   before: readonly TimeEntryRecord[],
   after: readonly TimeEntryRecord[],
-  retimesClockOut = false,
 ): void {
   const candidate = scanSequence(after);
   if (candidate.faults.size === 0) return;
@@ -133,10 +132,8 @@ function validateSequenceChange(
   for (const [entryId, reason] of candidate.faults) {
     if (existing.faults.get(entryId) !== reason) correctionInvalid(reason);
   }
-  if (retimesClockOut) {
-    for (const start of existing.completedStarts) {
-      if (!candidate.completedStarts.has(start)) correctionInvalid("unmatched_out");
-    }
+  for (const start of existing.completedStarts) {
+    if (!candidate.completedStarts.has(start)) correctionInvalid("unmatched_out");
   }
 }
 function isMissingPair(requests: readonly TimeEntryRecord[]): boolean {
@@ -209,11 +206,10 @@ export function correctionGroupCanApply(
     additions.push({ ...request, entryId: target?.entryId ?? request.entryId, entryKind: kind });
   }
   try {
-    validateSequenceChange(
-      effective,
-      [...effective.filter((e) => !targets.has(e.entryId)), ...additions],
-      additions.some((entry) => entry.correctsEntryId && entry.entryKind === "out"),
-    );
+    validateSequenceChange(effective, [
+      ...effective.filter((e) => !targets.has(e.entryId)),
+      ...additions,
+    ]);
     return true;
   } catch (error) {
     if (error instanceof AppError && error.code === "correction.invalid") return false;
@@ -235,7 +231,6 @@ function validateChange(
       effective.map((e) =>
         e === target ? { ...e, eventAt: change.eventAt, offsetMinutes: change.offsetMinutes } : e,
       ),
-      target.entryKind === "out",
     );
   } else {
     if (!settling && effective.length === 0 && change.extension?.missingEntryKind !== "in") return;

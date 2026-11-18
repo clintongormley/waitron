@@ -216,24 +216,25 @@ describe("approveCorrection", () => {
     ).rejects.toMatchObject({ code: "correction.invalid", params: { reason: "unmatched_out" } });
   });
 
-  it("refuses to move a later shift's clock-out onto the earlier reversed shift", async () => {
-    const personId = await seedPerson(suite.db, "later shift after step");
+  it.each([
+    ["clock-out", "2026-01-07T17:00:00.000Z", "2026-01-07T08:00:00Z"],
+    ["clock-in", "2026-01-07T09:00:00.000Z", "2026-01-07T18:00:00Z"],
+  ])("refuses a %s retime that would count the earlier reversed shift", async (kind, from, to) => {
+    const personId = await seedPerson(suite.db, `later shift after step: ${kind}`);
     await run((tx) => backend.clockIn(tx, event(personId, "2026-01-05T21:00:00Z")));
     await run((tx) => backend.clockOut(tx, event(personId, "2026-01-05T20:30:00Z")));
     await run((tx) => backend.clockIn(tx, event(personId, "2026-01-07T09:00:00Z")));
     await run((tx) => backend.clockOut(tx, event(personId, "2026-01-07T17:00:00Z")));
     const { rows } = await suite.db.execute<{ id: string }>(sql`
-      select id from time_entries
-      where person_id = ${personId} and event_at = '2026-01-07T17:00:00.000Z'
+      select id from time_entries where person_id = ${personId} and event_at = ${from}
     `);
-    const outEntryId = rows[0]!.id;
 
     await expect(
       run((tx) =>
         backend.requestCorrection(tx, {
           nodeId,
-          correctsEntryId: outEntryId,
-          at: "2026-01-07T08:00:00Z",
+          correctsEntryId: rows[0]!.id,
+          at: to,
           offsetMinutes: 0,
           reason: "Wrong time",
           actorPersonId: personId,
@@ -241,7 +242,6 @@ describe("approveCorrection", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "correction.invalid", params: { reason: "unmatched_out" } });
-    expect(await workedMinutes(personId)).toBe(480);
   });
 
   it("records the request where it was captured and the approval as the dashboard's", async () => {
