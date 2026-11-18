@@ -5390,6 +5390,38 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect((await groupRow(group)).holdPrintedAt).not.toBeNull();
     });
 
+    it("takes a moved portion off HOLD paper when its destination group has none", async () => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      await setHeld(true, v.stationId);
+      const [source] = (
+        await submitGrouped(v, s, [{ release: "hold", lines: [line(v, "steak", "2")] }])
+      ).groups;
+      await setHeld(false, v.stationId);
+      const [destination] = (
+        await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "fish")] }])
+      ).groups;
+      const original = await lineOf(s, source!.id, "steak", v);
+      expect(original.quantity).toBe(2000);
+
+      await move(v, s.partyId, [{ lineId: original.id, quantity: "1" }], {
+        groupId: destination!.id,
+      });
+
+      const portion = await lineOf(s, destination!.id, "steak", v);
+      expect(portion.id).not.toBe(original.id);
+      const tickets = await db
+        .select()
+        .from(ticketItems)
+        .where(inArray(ticketItems.workingOrderLineId, [original.id, portion.id]));
+      expect(tickets.find((ticket) => ticket.workingOrderLineId === original.id)).toMatchObject({
+        holdPaperQueued: true,
+      });
+      expect(tickets.find((ticket) => ticket.workingOrderLineId === portion.id)).toMatchObject({
+        holdPaperQueued: false,
+      });
+    });
+
     it("with no station printing held work, nothing prints and nothing is recorded", async () => {
       const { v, barPrinter, group } = await twoStations({ kitchenOn: false, barOn: false });
 
