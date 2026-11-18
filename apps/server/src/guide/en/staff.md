@@ -165,6 +165,9 @@ Choose **What it can do** for actions and screens. Choose one kitchen screen and
 
 To print station tickets, choose the printer in **Prep stations**.
 
+If moving or deleting a zone would leave a device profile with nowhere to take orders, choose
+another allowed zone in the profile and try again.
+
 ## Who can sign in on a device {#device-profile-sign-in}
 
 Open **Device profiles** and edit the profile used by the device. Under **Who can sign in**,

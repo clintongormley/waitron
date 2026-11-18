@@ -141,10 +141,12 @@ import {
 } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
 import {
+  configureZone,
   createDepartment,
   saveServiceSteps,
   listServiceSteps,
   deleteDepartment,
+  deleteZone,
   setDepartmentSalePolicyField,
   setDepartmentTransferSettings,
   setProfileServiceScope,
@@ -152,6 +154,7 @@ import {
   departments,
   readHolidays,
   readHolidayAreaModel,
+  readDepartmentDeleteImpact,
   readProfileServiceAccess,
   readProfileServiceScopes,
   saveHolidayArea,
@@ -4658,6 +4661,133 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
 });
 
 describe("device profile scope round trip (M4)", () => {
+  it.each([
+    {
+      description: "keeps the profile when department deletion is refused",
+      hasFallback: false,
+      department: true,
+    },
+    {
+      description: "keeps the profile when zone deletion is refused",
+      hasFallback: false,
+      department: false,
+    },
+    {
+      description: "exports the replacement starting zone after department deletion",
+      hasFallback: true,
+      department: true,
+    },
+  ])(
+    "$description after moving its starting zone to another department",
+    async ({ hasFallback, department }) => {
+      const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
+        db: suite.db,
+        modules: ALL_MODULES,
+      });
+      const cfg: TradingContext = {
+        nodeId: nodeId(source.nodeId),
+        locale: "es-ES",
+        tipsEnabled: false,
+        simplifiedInvoiceLimit: null,
+      };
+      const ids = await withTransaction(suite.db, async (tx) => {
+        const home = await createDepartment(tx, { name: "Home department", orderStart: "table" });
+        const other = await createDepartment(tx, { name: "Other department", orderStart: "table" });
+        const moved = await createServiceZone(tx, { name: "Moved zone", departmentId: home.id });
+        const retained = await createServiceZone(tx, {
+          name: "Retained zone",
+          departmentId: home.id,
+        });
+        const [desk, remaining] = await seedDeviceProfiles(tx, [
+          { name: "Transfer desk", formFactor: "till", capabilities: ["take-orders"] },
+          { name: "Remaining till", formFactor: "till", capabilities: ["take-orders"] },
+        ]);
+        await setProfileServiceScope(tx, desk!.id, {
+          departmentId: home.id,
+          startingZoneId: moved.id,
+          allowedZoneIds: hasFallback ? [moved.id, retained.id] : [moved.id],
+        });
+        await setProfileServiceScope(tx, remaining!.id, {
+          departmentId: home.id,
+          startingZoneId: retained.id,
+          allowedZoneIds: null,
+        });
+        await setDepartmentTransferSettings(tx, home.id, {
+          receivingProfileId: desk!.id,
+          destinationDepartmentIds: [],
+        });
+        if (hasFallback) await configureZone(tx, { zoneId: moved.id, departmentId: other.id });
+        else
+          // Exercise deletion with the starting zone already in another department.
+          await tx
+            .update(floorZones)
+            .set({ departmentId: other.id })
+            .where(eq(floorZones.id, moved.id));
+        return {
+          home: home.id,
+          other: other.id,
+          desk: desk!.id,
+          remaining: remaining!.id,
+          moved: moved.id,
+          retained: retained.id,
+        };
+      });
+      const at = new Date("2026-10-11T12:00:00Z");
+      const { floorDeletion } = moduleCoreServices(
+        cfg,
+        enabledTableRemovals(ALL_MODULES),
+        () => at,
+      );
+      const impact =
+        department &&
+        (await withTransaction(suite.db, (tx) =>
+          readDepartmentDeleteImpact(tx, floorDeletion, ids.other, at),
+        ));
+      if (impact)
+        expect(impact.refusals).toEqual(
+          hasFallback
+            ? []
+            : [
+                {
+                  code: "department.profile_in_use",
+                  params: { departmentId: ids.other, profileId: ids.desk },
+                  targets: [{ id: ids.desk, name: "Transfer desk" }],
+                },
+              ],
+        );
+      const remove = withTransaction(suite.db, (tx) =>
+        department
+          ? deleteDepartment(tx, floorDeletion, ids.other, at)
+          : deleteZone(tx, floorDeletion, ids.moved, at),
+      );
+      if (hasFallback) await remove;
+      else
+        await expect(remove).rejects.toMatchObject({
+          code: department ? "department.profile_in_use" : "zone.profile_in_use",
+          params: {
+            ...(department ? { departmentId: ids.other } : { zoneId: ids.moved }),
+            profileId: ids.desk,
+          },
+        });
+
+      const { tables } = await exportConfigurationTables(suite.db, ALL_MODULES);
+      const expectedStart = hasFallback ? ids.retained : ids.moved;
+      expect(tables.departments!.find((row) => row.id === ids.home)?.transfer_desk_profile_id).toBe(
+        ids.desk,
+      );
+      expect(tables.device_profiles!.find((row) => row.id === ids.desk)).toMatchObject({
+        order_department_id: ids.home,
+        order_starting_zone_id: expectedStart,
+        order_zone_ids: JSON.stringify([expectedStart]),
+      });
+      expect(
+        tables.device_profiles!.find((row) => row.id === ids.remaining)?.order_starting_zone_id,
+      ).toBe(ids.retained);
+      expect(tables.floor_zones!.some((row) => row.id === ids.retained)).toBe(true);
+      expect(tables.floor_zones!.some((row) => row.id === ids.moved)).toBe(!hasFallback);
+    },
+  );
+
   it("exports a zone list without its deleted zone id", async () => {
     const [profile] = await seedDeviceProfiles(suite.db, {
       name: "Profile with a stale zone",

@@ -48,6 +48,46 @@ function uniqueRefusals(rows: readonly DeleteImpactRefusal[]): DeleteImpactRefus
   }));
 }
 
+export async function profilesBlockedByZoneChange(
+  tx: Transaction,
+  zoneIds: readonly string[],
+  options: { deletingDepartmentId?: string | null; movingToDepartmentId?: string },
+): Promise<DeleteTarget[]> {
+  const scopes = await tx
+    .select({
+      id: deviceProfiles.id,
+      name: deviceProfiles.name,
+      retiredAt: deviceProfiles.retiredAt,
+      formFactor: deviceProfiles.formFactor,
+      departmentId: deviceProfiles.orderDepartmentId,
+      zoneIds: deviceProfiles.orderZoneIds,
+      startingZoneId: deviceProfiles.orderStartingZoneId,
+    })
+    .from(deviceProfiles)
+    .where(isNotNull(deviceProfiles.orderDepartmentId));
+  const candidates = await tx
+    .select({ id: floorZones.id, departmentId: floorZones.departmentId })
+    .from(floorZones)
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+    .where(and(eq(floorZones.active, true), eq(departments.active, true)));
+  return ordered(scopes).filter((profile) => {
+    if (profile.retiredAt !== null || profile.formFactor === "kds") return false;
+    if (profile.departmentId === options.movingToDepartmentId) return false;
+    if (profile.departmentId === options.deletingDepartmentId) return true;
+    // A moved zone can still be named by a profile that orders for its previous department.
+    const affected =
+      (profile.startingZoneId !== null && zoneIds.includes(profile.startingZoneId)) ||
+      profile.zoneIds?.some((zoneId) => zoneIds.includes(zoneId));
+    if (!affected) return false;
+    return !candidates.some(
+      (candidate) =>
+        candidate.departmentId === profile.departmentId &&
+        !zoneIds.includes(candidate.id) &&
+        (profile.zoneIds === null || profile.zoneIds.includes(candidate.id)),
+    );
+  });
+}
+
 async function selection(
   tx: Transaction,
   floor: FloorDeletion,
@@ -186,50 +226,19 @@ async function selection(
       });
   }
 
-  const scopes = await tx
-    .select({
-      id: deviceProfiles.id,
-      name: deviceProfiles.name,
-      retiredAt: deviceProfiles.retiredAt,
-      formFactor: deviceProfiles.formFactor,
-      departmentId: deviceProfiles.orderDepartmentId,
-      zoneIds: deviceProfiles.orderZoneIds,
-      startingZoneId: deviceProfiles.orderStartingZoneId,
-    })
-    .from(deviceProfiles)
-    .where(isNotNull(deviceProfiles.orderDepartmentId))
-    .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
-  const candidates = await tx
-    .select({ id: floorZones.id, departmentId: floorZones.departmentId })
-    .from(floorZones)
-    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .where(and(eq(floorZones.active, true), eq(departments.active, true)));
-  for (const profile of ordered(scopes)) {
-    if (profile.retiredAt !== null || profile.formFactor === "kds") continue;
-    if (departmentId !== null) {
-      if (profile.departmentId === departmentId)
-        refusals.push({
-          code: "department.profile_in_use",
-          params: { departmentId, profileId: profile.id },
-          targets: [{ id: profile.id, name: profile.name }],
-        });
-      continue;
-    }
-    const affected =
-      (profile.startingZoneId !== null && zoneIds.includes(profile.startingZoneId)) ||
-      profile.zoneIds?.some((zoneId) => zoneIds.includes(zoneId));
-    if (!affected) continue;
-    const allowed = candidates.filter(
-      (candidate) =>
-        candidate.departmentId === profile.departmentId &&
-        (profile.zoneIds === null || profile.zoneIds.includes(candidate.id)),
+  for (const profile of await profilesBlockedByZoneChange(tx, zoneIds, {
+    deletingDepartmentId: departmentId,
+  })) {
+    const targets = [{ id: profile.id, name: profile.name }];
+    refusals.push(
+      departmentId === null
+        ? { code: "zone.profile_in_use", params: { zoneId: id, profileId: profile.id }, targets }
+        : {
+            code: "department.profile_in_use",
+            params: { departmentId, profileId: profile.id },
+            targets,
+          },
     );
-    if (allowed.some((candidate) => !zoneIds.includes(candidate.id))) continue;
-    refusals.push({
-      code: "zone.profile_in_use",
-      params: { zoneId: id, profileId: profile.id },
-      targets: [{ id: profile.id, name: profile.name }],
-    });
   }
 
   const removes = [...floorImpact.removes, ...settings];

@@ -47,14 +47,14 @@ export const deviceProfiles = table(
     capabilities: json("capabilities").notNull().default([]),
     // Auto-logout idle timeout in seconds; NULL = never.
     inactivityTimeoutSeconds: count("inactivity_timeout_seconds"),
-    // NULL = the fixed home screen. No CHECK: one would make drizzle-kit rebuild this table. The
-    // store (`validateStartingScreen`, @waitron/layouts) refuses a screen the profile does not show.
+    // The store refuses a screen the profile does not show. NULL opens the fixed home screen.
     startingScreen: label("starting_screen"),
     orderDepartmentId: id("order_department_id").references((): AnySQLiteColumn => departments.id),
     orderStartingZoneId: id("order_starting_zone_id").references(
       (): AnySQLiteColumn => floorZones.id,
     ),
     // With a department, NULL allows every zone and an empty list allows none.
+    // The scope writer checks the zone ids. Deleting a zone removes it from the list.
     orderZoneIds: json<string[]>("order_zone_ids"),
     cardReaders: json<DeviceProfileCardReaders>("card_readers").notNull().default({}),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),

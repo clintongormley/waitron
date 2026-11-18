@@ -126,9 +126,12 @@ export class DepartmentsList extends LitElement {
       await this.api.configureZone(zoneId, { departmentId });
       if (this.isConnected && this.generation === generation)
         this.#emit("zone-moved", { zoneId, focus: keyboard && this.moveFocus === zoneId });
-    } catch {
+    } catch (error) {
       if (this.isConnected && this.generation === generation)
-        this.moveFailure = t("venue.save_error");
+        this.moveFailure =
+          (error as { code?: string } | undefined)?.code === "zone.profile_in_use"
+            ? t("venue.move_zone_profile_in_use")
+            : t("venue.save_error");
     } finally {
       if (this.generation === generation) {
         const moving = new Set(this.moving);

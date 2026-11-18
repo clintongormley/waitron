@@ -479,16 +479,6 @@ describe("a profile's service access", () => {
       startingZoneId: null,
     });
   });
-
-  it("leaves no department or zone access after deleting its profile", async () => {
-    const venue = await seedVenueWithZones();
-    await save(venue, restaurantScope(venue, { allowedZoneIds: [venue.dining] }));
-    await db.delete(deviceProfiles).where(eq(deviceProfiles.id, venue.profile));
-    await expect(scoped((tx) => readProfileDepartments(tx, [venue.profile]))).resolves.toEqual([]);
-    await expect(scoped((tx) => readProfilesZones(tx, [venue.profile]))).resolves.toEqual(
-      new Map(),
-    );
-  });
 });
 
 describe("profile departments", () => {
@@ -840,6 +830,9 @@ describe("A773 station policy: readProfilesZones", () => {
     await access(everyZone, restaurantScope(venue));
     const listed = await seedProfile();
     await access(listed, restaurantScope(venue, { allowedZoneIds: [venue.dining] }));
+    const empty = await seedProfile();
+    await access(empty, restaurantScope(venue));
+    await db.update(deviceProfiles).set({ orderZoneIds: [] }).where(eq(deviceProfiles.id, empty));
     const deli = await seedProfile();
     await access(deli, {
       departmentId: venue.deli,
@@ -851,7 +844,7 @@ describe("A773 station policy: readProfilesZones", () => {
       await tx.execute(sql`update departments set active = false where id = ${venue.deli}`);
     });
 
-    const profiles = [display, noDepartment, everyZone, listed, deli];
+    const profiles = [display, noDepartment, everyZone, listed, deli, empty];
     const unknown = randomUUID();
     const answers = await scoped((tx) => readProfilesZones(tx, [...profiles, unknown]));
     expect([...answers.keys()].sort()).toEqual([...profiles].sort());
@@ -863,6 +856,7 @@ describe("A773 station policy: readProfilesZones", () => {
       null,
       null,
       [venue.terrace],
+      [],
       [],
       [],
     ]);

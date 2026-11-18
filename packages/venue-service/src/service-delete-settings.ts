@@ -14,7 +14,7 @@ import {
   menuPeriods,
   routingCellPeriods,
   routingCells,
-  removeIdFromJson,
+  removeIdsFromJson,
   serviceSteps,
   openingHours,
   type Transaction,
@@ -298,8 +298,7 @@ export async function clearServiceDeleteSettings(
     .update(deviceProfiles)
     .set({ orderDepartmentId: null, orderStartingZoneId: null, orderZoneIds: null })
     .where(inArray(deviceProfiles.id, selected.obsoleteIds));
-  for (const zoneId of selected.zoneIds)
-    await removeIdFromJson(tx, deviceProfiles.orderZoneIds, zoneId);
+  await removeIdsFromJson(tx, deviceProfiles.orderZoneIds, selected.zoneIds);
   await tx
     .delete(deviceZoneSelectionZones)
     .where(inArray(deviceZoneSelectionZones.zoneId, selected.zoneIds));

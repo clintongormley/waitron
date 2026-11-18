@@ -572,6 +572,8 @@ const en = {
   "venue.day.6": "Saturday",
   "venue.load_error": "The venue configuration could not be loaded.",
   "venue.save_error": "The change could not be saved.",
+  "venue.move_zone_profile_in_use":
+    "Choose another allowed zone in the device profile, then move this zone.",
   "venue.readiness": "Ready for service",
   "venue.readiness.default_station_missing":
     "No default prep station is active. Items no rule sends anywhere cannot be sent.",
@@ -1514,6 +1516,8 @@ const es: Record<keyof typeof en, string> = {
   "venue.day.6": "Sábado",
   "venue.load_error": "No se pudo cargar la configuración del local.",
   "venue.save_error": "No se pudo guardar el cambio.",
+  "venue.move_zone_profile_in_use":
+    "Elige otra zona permitida en el perfil de dispositivo y luego mueve esta zona.",
   "venue.readiness": "Preparado para el servicio",
   "venue.readiness.default_station_missing":
     "Ninguna estación de preparación predeterminada está activa. Los artículos que ninguna regla envía a una estación no se pueden enviar.",
