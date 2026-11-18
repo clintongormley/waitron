@@ -31,6 +31,7 @@ class FloorLeaveApp extends LitElement {
     return html`<till-floor-screen
         .zones=${[{ id: "z1", name: "Dining room", displayOrder: 0, active: true, serviceMode: "table_tab" }]}
         .tables=${[freeTable]}
+        .canChangeToday=${true}
         @open-table=${(event: CustomEvent) => this.opened.push(event.detail)}
       ></till-floor-screen
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;

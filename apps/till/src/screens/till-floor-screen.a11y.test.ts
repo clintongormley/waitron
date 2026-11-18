@@ -726,7 +726,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
   it("has no violations with the seat dialog open", async () => {
     const { el, host } = await mountWidget<TillFloorScreen>(
       "till-floor-screen",
-      { zones, tables },
+      { zones, tables, canChangeToday: true },
       theme,
     );
     el.shadowRoot!.querySelector<HTMLElement>('[data-table="t3"]')!.click();
@@ -979,6 +979,7 @@ for (const locale of ["en-GB", "es-ES"]) {
                     ...(view === "map" ? { today: todayRow(2) } : {}),
                   },
                 ],
+                canChangeToday: true,
               },
               theme,
             );
@@ -1041,6 +1042,7 @@ for (const locale of ["en-GB", "es-ES"]) {
                     ...(view === "map" ? { today: todayRow(2) } : {}),
                   },
                 ],
+                canChangeToday: true,
               },
               theme,
             );

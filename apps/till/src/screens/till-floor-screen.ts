@@ -903,8 +903,8 @@ export class TillFloorScreen extends LitElement {
     new Map();
   @property({ attribute: false }) api?: TillApi;
   @property({ attribute: false }) operatorSession = 0;
-  /** The device's profile allows `take-orders`, which every change to today's plan needs: the map's
-   * drag and the details sheet's actions. */
+  /** The device's profile allows `take-orders`, which every change to today's plan needs: seating a
+   * free table, the map's drag and the details sheet's actions. */
   @property({ attribute: false }) canChangeToday = false;
   /** The device's profile allows `take-orders`, so a card offers Done on its step. Its own
    * property, not `canChangeToday`: Done must not follow if today's floor gets its own action. */
@@ -1161,6 +1161,7 @@ export class TillFloorScreen extends LitElement {
       return;
     }
     if (table.party === null && !table.hasOpenTab) {
+      if (!this.canChangeToday) return;
       const zone = this.zones.find((candidate) => candidate.id === table.zoneId);
       if (zone !== undefined && (zone.closed || !seatsGuests(zone))) {
         this.refusal = null;

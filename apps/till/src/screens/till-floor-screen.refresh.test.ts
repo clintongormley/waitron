@@ -168,6 +168,7 @@ describe("till-floor-screen's guest count and re-read", () => {
   it("leaves the seat dialog's placeholder empty for today's seats or a merge", async () => {
     const el = await mount({
       tables: [planned("t1", { seats: 6 }), planned("t2", { joinId: "j1", joinSeats: 10 })],
+      canChangeToday: true,
     });
 
     await tapMap(el, "t1");
@@ -379,7 +380,7 @@ describe("hierarchy deletion snapshots", () => {
   });
 
   it("closes seating for a deleted table and refuses its retained confirmation", async () => {
-    const el = await mount();
+    const el = await mount({ canChangeToday: true });
     await tapMap(el, "t1");
     const removedDialog = seatDialog(el)!;
     await removedDialog.updateComplete;
@@ -399,7 +400,7 @@ describe("hierarchy deletion snapshots", () => {
   });
 
   it("keeps seating for an unaffected table after another zone is deleted", async () => {
-    const el = await mount({ zones: [zone(), zone({ id: "z2" })] });
+    const el = await mount({ zones: [zone(), zone({ id: "z2" })], canChangeToday: true });
     await tapMap(el, "t1");
     el.zones = [zone()];
     el.tables = [planned("t1")];

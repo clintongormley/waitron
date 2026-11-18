@@ -240,6 +240,7 @@ describe("till-floor-screen", () => {
     const { el } = await mount({
       zones: [zone()],
       tables: [table({ id: "t1", state: "free", hasOpenTab: false })],
+      canChangeToday: true,
     });
     const seen = captureOpenTable(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-table="t1"]')!.click();
@@ -253,6 +254,19 @@ describe("till-floor-screen", () => {
       }),
     );
     expect(seen.detail).toEqual({ tableId: "t1", seated: false, guestCount: null });
+  });
+
+  it("does not offer to seat a free table on a device whose profile cannot take orders", async () => {
+    const { el } = await mount({
+      zones: [zone()],
+      tables: [table({ id: "t1", state: "free", hasOpenTab: false })],
+      canChangeToday: false,
+    });
+    const seen = captureOpenTable(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-table="t1"]')!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+    expect(seen.detail).toBeUndefined();
   });
 
   it("emits open-table with seated:true when an occupied table is tapped", async () => {
@@ -481,6 +495,8 @@ describe("till-floor-screen — map/list toggle and tray", () => {
 
   it("opens a free tray table (asking for its guest count) when it is tapped in VIEW mode", async () => {
     const el = await mountFloor({ tables: [placed("t1"), table({ id: "t9", label: "9" })] });
+    el.canChangeToday = true;
+    await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-tray-table="t9"]')!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-seat-dialog")!.tableLabel).toBe("9");
@@ -519,6 +535,7 @@ describe("closed floor zones", () => {
           zone({ name: "Terrace", closed: true }),
           zone({ id: "z2", name: "Room", displayOrder: 1 }),
         ],
+        canChangeToday: true,
       });
       const open = vi.fn();
       el.addEventListener("open-table", open);
@@ -554,7 +571,7 @@ describe("closed floor zones", () => {
   });
 
   it("seats free tables after the zone reopens and clears the old notice", async () => {
-    const { el } = await mount({ zones: [zone({ closed: true })] });
+    const { el } = await mount({ zones: [zone({ closed: true })], canChangeToday: true });
     el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
@@ -590,7 +607,10 @@ describe("floor zones that seat no one", () => {
     const previous = currentLocale();
     try {
       setLocale(locale);
-      const { el } = await mount({ zones: [zone({ serviceMode: "prepay" })] });
+      const { el } = await mount({
+        zones: [zone({ serviceMode: "prepay" })],
+        canChangeToday: true,
+      });
       const open = vi.fn();
       el.addEventListener("open-table", open);
       el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
@@ -610,7 +630,7 @@ describe("floor zones that seat no one", () => {
   });
 
   it("refuses a free table in a zone with no service mode", async () => {
-    const { el } = await mount({ zones: [zone({ serviceMode: null })] });
+    const { el } = await mount({ zones: [zone({ serviceMode: null })], canChangeToday: true });
     el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
@@ -630,7 +650,7 @@ describe("floor zones that seat no one", () => {
   });
 
   it("leaves a table whose zone the till has not read to the server", async () => {
-    const { el } = await mount({ zones: [zone({ serviceMode: "prepay" })] });
+    const { el } = await mount({ zones: [zone({ serviceMode: "prepay" })], canChangeToday: true });
     const card = el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!;
     el.zones = [];
     card.click();
@@ -639,7 +659,10 @@ describe("floor zones that seat no one", () => {
   });
 
   it("still seats a free table in a table-service zone", async () => {
-    const { el } = await mount({ zones: [zone({ serviceMode: "table_tab" })] });
+    const { el } = await mount({
+      zones: [zone({ serviceMode: "table_tab" })],
+      canChangeToday: true,
+    });
     el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
@@ -647,7 +670,7 @@ describe("floor zones that seat no one", () => {
   });
 
   it("seats free tables once the zone takes table service and clears the old notice", async () => {
-    const { el } = await mount({ zones: [zone({ serviceMode: "prepay" })] });
+    const { el } = await mount({ zones: [zone({ serviceMode: "prepay" })], canChangeToday: true });
     el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).not.toBeNull();

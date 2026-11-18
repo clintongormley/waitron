@@ -119,8 +119,6 @@ Left open by A429 slice 4
 - A second drop made while the first is still being sent replaces the first's drawn place.
 - When a table is dropped on another to seat a party, the till checks only the dragged table's
   gates; the server's join refusals are believed to cover the target, but that was not run.
-- Tapping a table to seat it is not limited to devices whose profile takes orders, while every
-  other floor write is. Believed older than slice 4; not re-checked.
 - From the look pass: at 390 px a fixed stool shows no name; the refusal line is plain text; two
   tables' labels overlap while they line up mid-drag.
 - The new floor test files repeat their setup; shared helpers were left out to avoid churn.
