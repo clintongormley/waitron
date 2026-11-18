@@ -104,6 +104,57 @@ describe("one mail sender", () => {
       lock.mockRestore();
     }
   });
+  describe("an owner's sweep", () => {
+    const deadline = new Date("2026-11-09T12:00:10.000Z");
+
+    beforeEach(() => {
+      deps.owners = [
+        {
+          ...owner,
+          sweep: {
+            due: async (_db, now) => ({ now: now >= deadline, nextAt: deadline }),
+            run: async (tx) => {
+              await tx
+                .update(persons)
+                .set(withFoldedPersonChanges({ displayName: "Swept" }))
+                .where(eq(persons.id, personId));
+            },
+          },
+        },
+        { ...owner, kind: "certificate_reminder" },
+      ];
+    });
+
+    it("does work without a mail row and reports that no mail was processed", async () => {
+      time = deadline;
+      expect(await runMailPass(deps)).toEqual({ processed: false });
+      const [person] = await suite.db.select().from(persons).where(eq(persons.id, personId));
+      expect(person?.displayName).toBe("Swept");
+    });
+
+    it("sets the next deadline without joining a write turn while idle", async () => {
+      const lock = vi.spyOn(suite.db, "withWriteLock");
+      try {
+        const job = mailSendJob({ ...deps, maxSleepMs: 60_000 });
+        expect(await job.pass({ now: time, signal: controller.signal })).toEqual({
+          nextDueAt: deadline,
+        });
+        expect(lock).not.toHaveBeenCalled();
+      } finally {
+        lock.mockRestore();
+      }
+    });
+
+    it("keeps the sweep deadline when SMTP is missing", async () => {
+      await queue();
+      deps.resolveDelivery = async () => ({ mode: "unconfigured" });
+      const job = mailSendJob({ ...deps, maxSleepMs: 60_000 });
+      expect(await job.pass({ now: time, signal: controller.signal })).toEqual({
+        nextDueAt: deadline,
+      });
+      expect((await row())?.status).toBe("pending");
+    });
+  });
   it.each([
     ["local_capture", "sent", 1],
     ["smtp", "sent", 0],

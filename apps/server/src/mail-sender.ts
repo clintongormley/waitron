@@ -64,6 +64,10 @@ export interface MailKindOwner<Prepared = unknown> {
     now: Date,
     prepared?: Prepared,
   ): Promise<void>;
+  sweep?: {
+    due(db: Database, now: Date): Promise<{ now: boolean; nextAt: Date | null }>;
+    run(tx: Transaction, now: Date): Promise<void>;
+  };
 }
 export type MailTransport = (
   smtp: SmtpConnection,
@@ -110,6 +114,21 @@ const due = (row: OutgoingMail, owner: MailKindOwner, now: number) =>
   waiting(row) &&
   (Date.parse(row.nextAttemptAt) <= now ||
     Date.parse(row.nextAttemptAt) > now + owner.longestWaitMs);
+
+async function readSweeps(
+  { db, owners }: Pick<MailSenderDeps, "db" | "owners">,
+  now: Date,
+): Promise<{ now: boolean; nextAt: Date | null }> {
+  let next: Date | null = null;
+  for (const { sweep } of owners) {
+    if (!sweep) continue;
+    const due = await sweep.due(db, now);
+    if (due.now) return { now: true, nextAt: now };
+    if (due.nextAt && (!next || due.nextAt < next)) next = due.nextAt;
+  }
+  return { now: false, nextAt: next };
+}
+
 function liveRows(tx: Transaction, owners: readonly MailKindOwner[]) {
   return tx
     .select()
@@ -179,7 +198,8 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
   const allowed = () => !deps.signal.aborted && deps.isPrimary();
   if (!allowed()) return { processed: false };
   const owners = new Map(deps.owners.map((o) => [o.kind, o]));
-  const firstNow = deps.now().getTime();
+  const firstTime = deps.now();
+  const firstNow = firstTime.getTime();
   const first = await liveRows(deps.db, deps.owners);
   if (
     !first.some(
@@ -187,7 +207,8 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
         (waiting(r) && Date.parse(r.notAfter) <= firstNow) ||
         lapsed(r, firstNow) ||
         due(r, owners.get(r.kind)!, firstNow),
-    )
+    ) &&
+    !(await readSweeps(deps, firstTime)).now
   )
     return { processed: false };
   await deps.beforeClaim?.();
@@ -229,6 +250,9 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
       if (!allowed()) return { processed: false } as MailPassResult;
       const now = deps.now();
       const stamp = now.toISOString();
+      for (const { sweep } of deps.owners) {
+        if (sweep && (await sweep.due(tx, now)).now) await sweep.run(tx, now);
+      }
       let changed = false;
       let expired = 0;
       const rows = await liveRows(tx, deps.owners);
@@ -505,11 +529,13 @@ export function mailSendJob(
       if (!result.processed && result.emailUnconfigured) {
         if (!waitingForSetup) deps.log("info", "mail.waiting_for_email_setup");
         waitingForSetup = true;
-        return { nextDueAt: null };
+        return { nextDueAt: (await readSweeps(deps, deps.now())).nextAt };
       }
       if (result.processed && result.mailId !== null) waitingForSetup = false;
       if (result.processed) return { nextDueAt: deps.now() };
-      return { nextDueAt: await nextMailDueAt(deps) };
+      const mailAt = await nextMailDueAt(deps);
+      const { nextAt: sweepAt } = await readSweeps(deps, deps.now());
+      return { nextDueAt: mailAt && (!sweepAt || mailAt < sweepAt) ? mailAt : sweepAt };
     },
   };
 }
