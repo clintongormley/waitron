@@ -55,7 +55,7 @@ Fiscal rows, left unchanged for Lane L:
 | `hour-promotion.test.ts` | 847, 944 | Configured origins; initial binds unreserved, later rebind separate. |
 | `hour-recovery-placement-3.test.ts` | 419, 780 | Configured management origin and later recovery start; initial binds unreserved. |
 
-Cloud’s external `scripts/test-waitron-pairing.mjs:56` stops and relaunches the same saved origin while no process holds its port; retain that socket in Cloud’s runner across restarts (source read, not run). Later saved-origin rebinds still need their own handoff audit, including those in `handover-controlled.e2e.test.ts` and the spare join scenarios. The bench’s refused endpoint has its own entry below.
+Cloud’s external `scripts/test-waitron-pairing.mjs:56` stops and relaunches the same saved origin while no process holds its port; retain that socket in Cloud’s runner across restarts (source read, not run). Later saved-origin rebinds still need their own handoff audit, including those in `handover-controlled.e2e.test.ts` and the spare join scenarios. The bundled upgrade test also reacquires the same port after the first child exits. Its next reservation still has that later rebind gap. The bench’s refused endpoint has its own entry below.
 
 A1152 applies the bind-time port-zero fixture to the matching in-process `boot*.test.ts`
 siblings. The fixture delegates to real Hono, waits for its real listener, and directs requests

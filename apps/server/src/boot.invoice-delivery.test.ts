@@ -59,7 +59,6 @@ import { claimInvoicePrintJobs } from "./invoice-print.js";
 import { writeModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
-import { DEFAULT_HTTP_PORT } from "./config.js";
 import { freePort } from "./testing/free-ports.js";
 import {
   retainHttpListener,
@@ -195,7 +194,7 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_STATE_DIR: stateDir,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_HTTP_PORT: String(DEFAULT_HTTP_PORT),
+    WAITRON_HTTP_PORT: String(await freePort()),
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_ENV: environment,
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),

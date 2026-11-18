@@ -6,7 +6,7 @@ import { mkdir } from "node:fs/promises";
 import { seedVenueSettings, seedBusinessDay, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { payments } from "@waitron/payments";
 import { sql } from "drizzle-orm";
-import { connect, createServer as createNetServer, type Server } from "node:net";
+import { connect, type Server } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -422,10 +422,7 @@ async function triggerFaults(venueDir: string, tables: readonly string[]) {
   }
 }
 
-/**
- * Resolves once something accepts a connection on `port`. `startServer` resolves before its listener
- * binds, and closing an unbound listener rejects.
- */
+/** Waits for the adopting server to accept connections before a test tries to close it. */
 async function listening(port: number): Promise<void> {
   await vi.waitFor(
     () => {
@@ -473,8 +470,8 @@ async function stateDir(
   return dir;
 }
 
-/** Resolves once `port` could be bound on boot's default host; rejects `EADDRINUSE` while held. */
 async function bindAndRelease(port: number): Promise<void> {
+  // Closing an adopted holder before probing can hide a server that never released the socket.
   const unused = reservations.get(port);
   if (!adopted.has(port) && unused?.server.listening) {
     await unused.close();
@@ -559,7 +556,6 @@ describe("a start that fails after the venue folder is opened gives the folder b
       const localPort = await reservePort();
       const blocker = mode === "busy" ? await retainHttpListener() : undefined;
       const staffPort = blocker?.port ?? (await reservePort());
-      let originalStaffHolder: RetainedHttpListener | undefined;
       const material = mintSelfSignedServerCert({
         now: new Date(),
         hostnames: ["staff.example.test"],
@@ -630,21 +626,6 @@ describe("a start that fails after the venue folder is opened gives the folder b
             ),
           ).toEqual([]);
           expect(adopted.has(staffPort)).toBe(false);
-          originalStaffHolder = reservations.get(staffPort)!;
-          const { host } = originalStaffHolder;
-          const handoff = adoptRetainedListeners([originalStaffHolder]);
-          try {
-            reservations.set(
-              staffPort,
-              await retainHttpListener(
-                host,
-                createNetServer((socket) => socket.destroy()),
-                staffPort,
-              ),
-            );
-          } finally {
-            handoff.restore();
-          }
           await install();
           expect(workerOptions?.onStaffCertificate).toBeTypeOf("function");
           await withPortAdoption([staffPort], () =>
@@ -684,7 +665,6 @@ describe("a start that fails after the venue folder is opened gives the folder b
           for (const result of vi.mocked(startStaffListener).mock.results)
             await result.value?.close();
         } finally {
-          if (originalStaffHolder?.server.listening) await originalStaffHolder.close();
           if (blocker?.server.listening && !reservations.has(staffPort)) await blocker.close();
         }
       }
