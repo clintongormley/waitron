@@ -1,7 +1,11 @@
 # Set menus (A1515): design
 
 Status: approved by the owner in conversation, 17 November 2026 ("yes"), after reading the list
-of the writer's calls; the calls stay marked **my call** below. Plans: one per piece, under
+of the writer's calls; the calls stay marked **my call** below. **Revised on 18 November 2026** by
+the owner's decisions in conversation: set menus are added by type, and a dish stays where it is
+placed (sections 2 and 3, rewritten), so the bill no longer works out a mix of types or reprices
+itself, and nothing needs freezing at payment (section 4). The rewritten sections are for the
+owner to read. Plans: one per piece, under
 "The pieces, for planning". Replaces the set-lunch design in
 [2026-11-12-a1515-set-lunch-proposal.md](2026-11-12-a1515-set-lunch-proposal.md), whose build is
 being removed first (A1515-REMOVE, queued on lane D).
@@ -28,31 +32,35 @@ to another course. A set menu is "a fixed price for one of each of the following
 
 A **set menu** is a new kind of menu. It has a price, a list of the dishes it covers (each either
 included or carrying a surcharge), and a short list of what one set menu includes, such as "1
-starter, 1 main or starter, 1 dessert or coffee, 1 bread, 1 drink". The waiter adds a number of set
-menus to a table ("4 set menus") and then orders dishes as ordinary lines, from set-menu folders in
-the full menu. Each dish is an ordinary order line with its own options, extras, variant and course.
-The bill works out, by itself, the cheapest mix of set-menu types that covers the dishes ordered
-(say 3 Menú del día and 1 Menú especial). Each set menu is charged as its own priced line. Covered
-dishes cost nothing, a surcharge is charged on its dish, and paid extras are charged as usual.
+starter, 1 main or starter, 1 dessert or coffee, 1 bread, 1 drink". The waiter adds set menus to a
+table by type ("2 Menú del día, 2 Menú especial") and then orders dishes as ordinary lines, from
+set-menu folders in the full menu. Each dish is an ordinary order line with its own options,
+extras, variant and course. Each dish goes into the cheapest open place among the bill's set menus
+that list it, whichever folder it was tapped in, and stays there. Each set menu is charged as its
+own priced line. Covered dishes cost nothing, a surcharge is charged on its dish, and paid extras
+are charged as usual.
 
 ## Goals
 
 1. A dish ordered as part of a set menu behaves on the till, in the kitchen and on the order exactly
    as the same dish ordered à la carte: options, paid extras, variants, course, firing, moving
    course, cancelling, moving to another bill.
-2. The waiter never has to decide which set menu a dish belongs to, or which type of set menu a
-   diner is having. The bill finds the cheapest outcome for the customer.
+2. The waiter decides how many set menus of each type a table has, but never which set menu a dish
+   belongs to: the bill puts each dish in the cheapest open place, and a dish's price never
+   changes once it is on the bill.
 3. A venue can sell several set menus at different prices that share dishes.
 4. A table can mix set menus and à la carte dishes on one bill.
-5. The waiter can see at any time how the bill is counting the set menus and what is still open.
+5. The waiter can see at any time which set menu each dish is on and what is still open.
 6. Setting up a set menu on the dashboard is one page: its price, its dishes, and what one set menu
    includes.
 
 ## Non-goals
 
-- Tying set menus to diners or seats. The bill counts set menus; it never says which person had
-  which (**owner**: "leaning towards optimising, not per person", with the worked example under
-  "The fit" below).
+- Tying set menus to diners or seats. The bill holds set menus; it never says which person had
+  which (**owner**: "not per person").
+- The bill choosing set-menu types, or moving dishes between set menus by itself (**owner**, 18
+  November: "we may yet come back to automatically reassigning plates, but this seems like a
+  simpler place to begin").
 - Set menus on counter orders. A set menu goes only on the bill of a seated table: a table in a
   table-service zone, which includes a bar whose stools are set up as tables in such a zone
   (**owner**, 17 November: "these set menus are only for tables/bars with seating"). A counter
@@ -73,7 +81,7 @@ dishes cost nothing, a surcharge is charged on its dish, and paid extras are cha
 - A waiter picking the "wrong" folder costs the customer money (**owner**, folder question, answer
   A: a folder is for finding a dish and does not tie it to that set menu).
 - A diner's dish choices are narrower inside a set menu than à la carte.
-- The total jumps without the waiter being able to see why.
+- A dish's price changes after it is on the bill without the waiter choosing it.
 - Payment is blocked because a set menu has a place nobody filled. A table that orders fewer dishes
   than its set menus allow still pays for every set menu it ordered (**owner**: "fewer than 4 still
   pays for 4").
@@ -87,8 +95,7 @@ afterwards.
 - **A. Each set menu is its own priced line; its dishes are ordinary lines (chosen).** The bill
   holds "Menú del día €14.00" lines, and the dishes are ordinary lines priced at 0 or at their
   surcharge. Every à la carte feature works on the dishes unchanged, because they are ordinary
-  lines. The new work is the calculation that decides each line's price, and keeping it in step
-  as the order changes.
+  lines. The new work is placing each dish in a set menu and pricing it there, once.
 - **B. No set-menu line; the set menu's price is shared out over its dishes.** Each covered dish
   would carry a share of €14. Every change to the order would reprice several lines, receipts would
   show odd prices per dish, and a set menu whose places are not all filled would have nowhere to
@@ -128,7 +135,10 @@ mock-up; dishes first, then the rules). Its parts, in order:
   able to change the course they belong to from the default course. for instance we could treat a
   tapa as a starter"; asked whether that course also decides when the dish is sent: "both"). The
   dish then counts as that course on the bill and is sent with it; the same product à la carte is
-  unchanged. A product with no course is listed under **No course** with "Choose a course for it
+  unchanged. Until adviser question 26(c) is answered, a product whose eat-in VAT rate differs from
+  the set menu's cannot be added ("This product is taxed at 21%, the set menu at 10%"), because a
+  covered dish at another rate may need a share of the set menu's price (**owner**, 18 November,
+  on lane L's advice). A product with no course is listed under **No course** with "Choose a course for it
   here, or give it one on the product" and a link to the product; a set menu holding a dish with no
   course cannot be published.
 - **What one set menu includes.** A list of lines, each "N × course", where a line may accept more
@@ -162,17 +172,13 @@ times can hold different copies of the same set menu. Detail: decision 3 of the
 
 ### 2. Ordering on the till
 
-**The count.** The order panel has a **Set menus − N +** count with no type (**owner**: "yes this
-works" for the "4 set menus, the bill picks the cheapest mix" design, whose mock-up put the count
-at the top of the Set menus folder; moving it to the order panel, so it does not depend on where
-set menus sit in the tree, is **my call**). The waiter sets it to the
-number of set menus the table is having. The bill decides each one's type.
-
-**Fixing a type when a table asks.** "We're all having the especial": the waiter can fix one or
-more set menus to a type, by adding from the top of that set menu's folder ("Add a Menú especial")
-or by choosing a type on a row of the unfolded summary. A fixed set menu keeps its type whatever
-the dishes; the rest stay free (**my call** on the two ways in; the owner agreed a waiter "can
-still fix a type").
+**Adding set menus, by type** (**owner**, 18 November 2026: "a count per menu", with set menus
+added by type, chosen over a single count whose types the bill would work out, for fear of
+"complexity and unintended consequences"). The order panel shows a count for each set menu the
+bill can take: "Menú del día − 2 +", "Menú especial − 1 +". The waiter sets how many of each the
+table is having; the folder of each set menu also has **Add a Menú especial** at its top. Each tap
+is saved straight onto the bill, so every till at the table sees the same counts (**owner**,
+18 November, answer to the writer's question). The bill never changes a set menu's type.
 
 **The folders.** Each set menu's folder is laid out like its board: its lines as headings, the
 dishes under them, each showing **included** or its surcharge in that set menu (**owner**: one
@@ -180,143 +186,126 @@ folder per set menu, shared dishes appear in each). A dish whose course more tha
 is listed under the first such line (**my call**). Tapping a dish opens exactly what it opens à la
 carte: its variants, required options and extras.
 
-**What a set-menu dish is.** A line ordered from a set-menu folder is marked as a set-menu dish.
-Which folder it came from does not matter to the bill (**owner**, answer A). The same product
-ordered from an à la carte folder is an ordinary à la carte line at its à la carte price, and the
-bill never turns it into a set-menu dish (**my call**).
+**What a set-menu dish is.** A line ordered from a set-menu folder is a set-menu dish. The same
+product ordered from an à la carte folder is an ordinary à la carte line at its à la carte price,
+and is never turned into a set-menu dish (**my call**).
 
-**What a dish counts as.** A set-menu dish counts as the course the set menu gives it, if it gives
-one, and is sent with that course too (**owner**, 18 November 2026, "both"). Otherwise it counts as
-the course its product had when the full
-menu holding the set menu was last published, fixed in that copy and recorded on the line
-(**owner**, 18 November 2026: "The menu should freeze the definition - we shouldn't read courses
-from the live product list"; this replaces "its product's course at the moment it was ordered"). Moving it to another course to serve it (a starter served as a
-main) changes when it is sent, not what it counts as on the bill (**owner**: "classification is
-fixed"). An order line already keeps its course (`course_id`) apart from its firing group
-(`group_id`) (`packages/db/src/schema/orders.ts:210-226`); the counts-as course is a third,
-separate value.
+**Where a dish goes** (**owner**, 18 November: "if the same dish appears on both menus, then you
+can order it from either menu - it would get priced according to the menu it gets assigned to. so
+somebody orders the especial, then adds the steak from the standard menu (with 5€ surcharge). it
+gets added to the especial menu (where it is included) without the surcharge.").
+- A set-menu dish goes into an open place in one of the bill's set menus that lists it, whichever
+  folder it was tapped in, and is priced by that set menu: included, or its surcharge there.
+- When several open places fit, it takes the cheapest for the customer. Between equally cheap
+  places it takes a line that accepts fewer courses, which keeps "Mains or Starters" free for
+  either; then the set menu added first (**my call**).
+- **Once placed, a dish stays where it is** (**owner**, 18 November: "leave the dish where it was
+  added … we may yet come back to automatically reassigning plates, but this seems like a simpler
+  place to begin"). Nothing added, cancelled or paid later moves it or changes its price, unless
+  the waiter chooses a move (below).
+- A dish is placed when it goes on the bill, at Send, in the order the waiter added the dishes.
+  While the waiter is ordering, the till shows where each draft dish will go, worked out the same
+  way (**my call**).
 
-**A dish the set menus cannot cover.** When a set-menu dish would be left uncovered by the set
-menus on the bill (none yet, all places of its kind taken, or it is listed only on a type that the
-fixed set menus rule out), the till asks before adding it: "Not covered by the set menus on this
-bill. Add a set menu?" The waiter adds one, or orders the dish à la carte instead, or cancels
-(**owner**, answer A). The à la carte choice is offered only when the dish is on an à la carte menu
-selling in that zone now (**my call**). The server refuses a set-menu dish the bill cannot cover,
-so the till's question is a convenience, not the guard (**my call**).
+**What a dish counts as.** A dish fills a place by the course the set menu it lands in gives it.
+That is the set menu's own course for the dish if it gives one (**owner**, 18 November: "we could
+treat a tapa as a starter", and "both" for counting and sending); otherwise it is the product's
+course, as copied when the full menu holding the set menu was last published (**owner**, 18
+November: "The menu should freeze the definition"). So bravas are a starter on an especial that
+makes them one, and a sharing plate on a del día, whichever folder they were tapped in (**owner**,
+18 November: "each set menu decides", after the Fable review showed that taking it from the folder
+let the folder change the price). The folder tapped decides the course the dish is sent with.
+Moving a dish to another course to serve it changes when it is sent, not what it counts as
+(**owner**: "classification is fixed"). An order line already keeps its course (`course_id`)
+apart from its firing group (`group_id`) (`packages/db/src/schema/orders.ts:210-226`).
+
+**A dish with no place.** When a tapped set-menu dish fits no open place in the bill's set menus,
+the till asks at once, before the dish's choices (**owner**, 18 November: "as soon as tapped"):
+"No place for Sea bass in the set menus on this bill." It offers:
+- **Add a Menú especial (20.00)**, for each set menu that lists the dish; the dish goes in the new
+  one;
+- **Move Steak to the Menú del día (+5.00) and put Sea bass in its place**, when moving dishes
+  already on the bill to other open places would make room. It shows what each moved dish will
+  cost, and is the cheapest such rearrangement (**owner**, 18 November: "add this"). It is the
+  waiter's choice; the bill never moves dishes by itself. A dish carrying a discount, a comp or a
+  payment of its own is never moved (**my call**).
+- **Order it à la carte (18.00)**, when the dish is on an à la carte menu selling in that zone now
+  (**my call**);
+- **Cancel**.
+
+A choice made afterwards (a bottle where the set menu covers only a glass) can leave the dish with
+no place; the till asks again then. The server refuses a set-menu dish it cannot place, so the
+till's question is a convenience, not the guard (**my call**).
 
 **Swaps.** "An extra starter instead of a main: yes. Two mains instead of a starter: no"
 (**owner**). These are just lines that accept more than one course: "1 × Mains or Starters" lets a
 second starter take the main's place; nothing lets a main take a starter's place.
 
 **The summary.** Above the order's lines, the set menus are summarised in one line that unfolds
-(the owner found the one-row-per-set-menu view clearer but said it needs space "unless it
-folds"; the fold is **my call**):
+(the fold is **my call**):
 
 ```text
-4 set menus · charged as 3 Menú del día + 1 Menú especial          ▾ show
+4 set menus · 2 Menú del día + 2 Menú especial                   ▾ show
 open: 4 Dessert or coffee · 4 Bread · 4 Drink
 ```
 
-Unfolded, one row per set menu, its places filled with the dish the bill has put there or shown as
-open:
+Unfolded, one row per set menu, its places filled with the dishes placed there or shown as open:
 
 ```text
 Menú del día    Soup · Hake · [Dessert or coffee] · [Bread] · [Drink]
 Menú del día    Soup · Sirloin +€5 · [Dessert or coffee] · [Bread] · [Drink]
-Menú del día    Soup · Sirloin +€5 · [Dessert or coffee] · [Bread] · [Drink]
+Menú especial   Soup · Sirloin · [Dessert or coffee] · [Bread] · [Drink]
 Menú especial   Soup · Sea bass · [Dessert or coffee] · [Bread] · [Drink]
 ```
 
-The rows say how the bill is counting, not who is eating what (**owner** agreed the summary must
-show which set menu is still missing a dish; the labelling as "how the bill counts" is the
-proposal the owner was answering when approach A was chosen, so **my call** until the owner says
-otherwise). When a change moves the mix or moves a dish between set menus, the summary marks what
-moved, and a note shows once with the change in total ("Sea bass is only on the Menú especial, so
-one set menu is now an especial: +€6.00"), so the waiter can tell the table.
+The rows are the bill's set menus, not people (**owner**: "not per person").
 
 **Order lines** show a set-menu dish in its firing group as today, with a small **menu** tag when
-covered or its surcharge ("+€5.00") when it carries one (**my call**, drawn in the till mock-ups; the owner has not said yes to it explicitly).
+included or its surcharge ("+€5.00") when it carries one (**my call**, drawn in the till mock-ups).
 
-**Reducing the count.** The count cannot go below the number of set menus the set-menu dishes on
-the bill need. The refusal says so and how to fix it: remove a dish first, or order it à la carte
-(**my call**).
+**Reducing a count.** − on a type removes one set menu of that type that holds no dishes; Cancel on
+a set-menu line removes that set menu the same way, without asking a reason or telling the kitchen
+(**owner**, 18 November: "cancel works too"). A set menu that holds dishes cannot be removed; the
+refusal names its dishes and says what to do: cancel them, or move them to another set menu or
+à la carte (**my call**).
 
-### 3. The fit: how the bill decides
+### 3. Placing a dish: the calculation
 
-**What it decides.** Given the set menus on the bill (how many; which are fixed to a type), every
-set-menu dish on the bill (its product, variant and counts-as course), and the set menus offered to
-the bill (each with price, dishes and surcharges, and lines), the fit chooses:
+**One function, two uses.** The calculation already on `main`
+(`packages/shared/src/set-menu-fit.ts`, piece 3, #3730) does both, with every set menu on the bill
+fixed to its type:
+- **Placing a dish:** every dish already placed is pinned to its place, and the new dish is free.
+  The answer is the new dish's cheapest open place, or none.
+- **The suggested move:** no dish is pinned except those carrying a discount, a comp or a payment.
+  The cheapest arrangement, compared with today's places, names the dishes that would move; the
+  fit's preference for the arrangement closest to the current one keeps the moves few.
 
-- a type for each set menu that is not fixed, and
-- for each set-menu dish, which set menu covers it and in which of its lines,
+With every type fixed there is one mix to consider, so the size bound the fit was built for is not
+reached. Keeping the full calculation leaves the door open to the owner's "we may yet come back
+to automatically reassigning plates". The till runs it to preview and to ask; the server runs it
+when dishes are sent and its answer is the one stored (**my call**). What a dish counts as comes
+from the set menu, so each offered dish in the calculation carries its own counts-as course; this
+is a small change to the landed function.
 
-so that every dish is covered, no line holds more dishes than its "N ×", every dish sits in a line
-that accepts its counts-as course of a set menu that lists it, and the total (set-menu prices plus
-surcharges) is the lowest possible (**owner**: pooling with the cheapest fit, "i like that").
+**Which set menus a bill may use.** A bill records one copy of each set menu: the newest on sale
+in its zone when that set menu is first added to the bill (**owner**, 18 November, "ok", after the
+Fable review showed that recording every copy on sale let an older, cheaper price win). It keeps
+that copy for the rest of the bill's life, so a full menu republished mid-meal does not reprice a
+table already eating (**owner**, 18 November, "keep what the bill started with").
 
-**Worked example (from the agreed mock-up).** Del día €14 (sirloin +€5), especial €20 (sirloin and
-sea bass included; sea bass is not on the del día). Four set menus; ordered 4 soup, 1 hake, 2
-sirloin, 1 sea bass. Cheapest: 3 del día + 1 especial + two sirloin surcharges = €42 + €20 + €10 =
-€72. Two especials would be €73. The sea bass takes the especial; the sirloins stay on del días
-because +€5 costs less than the €6 step up.
+**After the set menu stops selling.** A bill that already holds a set menu can still add more of
+that type and order its dishes after the full menu's period ends, so a table that sat down at
+15:30 can order its desserts and coffee at 16:15. A set menu not yet on the bill cannot be added
+once nothing is selling it (**owner**, 18 November, same answer). The existing question before
+sending a dish saved before its menu period ended (#3414) still applies.
 
-**Why not per person (owner's example).** Diner A wants a cheap starter and a starter only on the
-especial; diner B a cheap starter and a main only on the especial. Counted per person, both pay the
-especial. Counted by the bill, one especial covers both especial-only dishes if its lines accept
-them, and the other set menu is a del día.
-
-**Exact, and stable.** The fit must find the true lowest total, not a near one, for any table a
-venue meets; the bound to meet is at least 40 set menus, 5 types and 200 set-menu dishes on one
-bill, on the till's hardware, fast enough to feel instant (**my call** on the figures). When two
-outcomes cost the same, it prefers the one closest to the bill's current outcome, so dishes do not
-shuffle between set menus for nothing, and otherwise breaks ties the same way every time.
-
-The set menus of one type are interchangeable, and each set menu's lines are independent of each
-other, so for a chosen number of each type the dish placement is a transport problem (dishes to
-"type, line" pairs, each pair holding "set menus of that type × N", each edge costing that dish's
-surcharge in that type). Placing dishes into individual set menus for the unfolded summary is then
-a matter of dealing them out. Trying every split of the set menus between the types and solving
-each placement, which this section first suggested, is exact but took 8–12 seconds on random tables
-at the bound in a prototype measured on 17 November 2026; the build plan
-([2026-11-17-a1515-set-menu-fit.md](../plans/2026-11-17-a1515-set-menu-fit.md)) uses a method that
-took 43 ms at worst on the same tables, with the measurements.
-
-**One function, two callers.** The fit is a pure function in a package both the till and the
-server use (browser-safe). The till runs it to show the summary and to ask about an uncovered dish
-before sending; the server runs it on every change to the bill and its answer is the one stored
-(**my call**).
-
-**Which set menus it may use.** The set-menu copies live and selling for that bill's zone when the
-bill's first set menu was added (each named by the full menu's version and the set menu), recorded on the
-bill, for the rest of that bill's life (**my call**: a full menu republished mid-meal must not
-reprice a table already eating).
-
-**After the set menu stops selling.** A bill that already holds set menus keeps its set-menu
-folders, from the versions it recorded, after the full menu's period ends, so a table that sat down
-at 15:30 can order its desserts and coffee at 16:15 (**my call**: the owner's flow has the waiter
-"come back for desserts and coffees"). A bill with no set menus cannot start one once the period
-has ended. The existing question before sending a dish saved before its menu period ended (#3414)
-still applies to any dish saved before the end and sent after it.
-
-**When it stops changing.** The bill is fitted again on every change (a dish added, cancelled or
-moved, the count changed, a type fixed) until the first payment, or the first discount or
-complimentary adjustment, on that bill. From then on, the set menus already on the bill keep their
-types and dishes; a dish added later goes into an open place or into a set menu added for it (**my
-call**: a payment and an adjustment both fix amounts that a later refit would contradict;
-`apps/server/src/bill-payments.ts:916-993` fixes an item payment's amount, and adjustments overwrite
-`unit_price_gross` and keep the list price, `apps/server/src/adjustments-apply.ts:1274-1315`). The
-outcome is final when the bill's ticket is issued (today at full payment; at the meal's end once
-lane L's meal-end ticket lands, adviser answer 1.3, `docs/compliance/2026-11-15-adviser-answers.md`
-Part B1).
-
-**What is stored.** Today a line's price is stored when it is added and never recomputed
-(`apps/server/src/working-order.ts:612,1067-1075`). Set-menu lines and set-menu dishes break that
-rule on purpose, until the fit stops changing: the fit writes its outcome into the lines it
-affects, and every other line keeps today's rule. It writes: each set-menu line's type and price, each set-menu dish's price
-(0 or its surcharge) and which set-menu line covers it. Paid extras keep their own prices, untouched
-by the fit. Each unit of a set-menu dish may land on a different set menu at a different price, so
-a set-menu dish is stored one unit per line, and the till and receipts merge identical lines for
-display as they do today (**my call**; `apps/server/src/receipt-lines.ts:150-165`).
+**What is stored.** Each set-menu line holds its set menu's copy and its price. Each set-menu dish
+holds the set-menu line it is placed on, its place, its price (0 or its surcharge) and its
+counts-as course, written once when it is placed and changed only by a move the waiter chooses.
+This keeps today's rule that a line's price is stored when it is added and never recomputed
+(`apps/server/src/working-order.ts:612,1067-1075`). Each unit of a set-menu dish is placed on its
+own, so a set-menu dish is stored one unit per line; the till and receipts merge identical lines
+for display as they do today (**my call**; `apps/server/src/receipt-lines.ts:150-165`).
 
 ### 4. The bill, the receipt and the invoice (passes lane L; the owner lands it)
 
@@ -326,7 +315,9 @@ included (the watcher, relaying the owner, 12 November: "At the table, the whole
 menu is given on the dashboard; a surcharge and a paid extra take their dish's eat-in rate, as any
 eat-in line does. Covered dishes at 0 carry no VAT. If the product VAT-rate redesign
 (`docs/handoffs/2026-11-16-vat-rates-per-product.md`, waiting for the adviser) lands first, the set
-menu takes a dated eat-in rate the way a product does.
+menu takes a dated eat-in rate the way a product does. A covered dish takes its set menu's VAT
+class while it is covered, so that a 0.00 line at another rate adds no empty rate row to the
+breakdown (piece 4's plan, decision 7, confirmed by lane L on 18 November).
 
 **Receipt.** The receipt lists the set menus and the surcharges, not every covered dish at 0.00
 (**owner**). Paid extras on a set-menu dish are priced lines and are printed. How they are worded
@@ -347,15 +338,14 @@ set-lunch parent is left out of service the same way today, `apps/server/src/ser
 
 **Moving dishes to another bill.** A move takes lines, or part of a line by quantity
 (`apps/server/src/bill-actions.ts:270,364`, `apps/server/src/working-order.ts:4994,5069-5132`);
-set-menu dishes are one unit per line anyway. A set-menu line can be moved like a dish. After a move,
-both bills are fitted again; a move that would leave a set-menu dish uncovered on either bill is
-refused, and the refusal says how many set menus to move with it (**my call**). The move screen lets
-the waiter move set menus as well as dishes.
+set-menu dishes are one unit per line anyway. A set menu moves with the dishes placed on it. A
+set-menu dish moved on its own is placed again on the target bill, as if added there, and the move
+screen shows its new price first; a dish with no place there is refused, and the refusal says to
+move a set menu with it (**my call**). Nothing moves on the bill it left.
 
 **Corrections after the ticket.** A correction is an amount spread over chosen lines
 (`packages/core/src/correction-allocation.ts:48-120`), so a set menu is corrected through its own
-line, and a covered dish at 0 cannot be corrected on its own, as today. No refit happens after the
-ticket.
+line, and a covered dish at 0 cannot be corrected on its own, as today.
 
 **Sales reports** show each set menu as an item of its own ("Menú del día: 4 sold, €56"), and its
 covered dishes as sold at €0; nothing shares a set menu's price across its dishes, in reports or
@@ -410,15 +400,14 @@ line with no course is sent straight away. So:
 
 1. **Dashboard:** the set-menu kind of menu, its editor, placing it in a full menu, publishing,
    and the published document carrying set-menu offers.
-2. **Ordering:** the count, fixed types, set-menu folders on the till, the set-menu-dish mark and
-   counts-as course on the line, the uncovered-dish question and refusal, the summary, the
-   count-reduction refusal, moves between bills, and storing the outcome on the open bill (moved
-   here from piece 4 on 18 November 2026, because the till's total reads it). Until piece 4 lands,
-   a bill holding set menus cannot be paid, comped or discounted.
-3. **The fit:** the shared function, its tests (including the worked example and the owner's
-   per-person example), stability, and its performance bound.
-4. **Bill, receipt and invoice:** freezing the outcome at the first payment, discount or comp,
-   letting such a bill be paid, the receipt and invoice layout, VAT on the set-menu line. Passes
+2. **Ordering:** a count per set menu, set-menu folders on the till, placing each dish and storing
+   its place and price, what it counts as, the no-place question with its suggested move, the
+   summary, removing set menus, and moves between bills. Until piece 4 lands, a bill holding set
+   menus cannot be paid, comped or discounted.
+3. **The calculation:** landed (#3730). It needs one change: what a dish counts as comes from each
+   offered set menu, not from the dish (section 2, "What a dish counts as").
+4. **Bill, receipt and invoice:** letting such a bill be paid, comped and discounted, the receipt
+   and invoice layout, VAT on the set-menu line and on covered dishes, and sales reports. Passes
    lane L; the owner lands it.
 5. **Demo**, including the courses in section 6. (The set-up guide lands with piece 1 and the
    table-service guide with piece 2, with their screens.)
@@ -429,7 +418,6 @@ Order: A1515-REMOVE lands first. Then 1 and 3 can go side by side; 2 needs both;
 
 - Table and column names, and whether a set menu's eat-in VAT and its names in the receipt
   languages are held on the menu or on a product that stands behind it.
-- The fit's method, provided it is exact and meets the bound.
 - Error codes, which follow CLAUDE.md §3 (named for the domain concept).
 - Screen layout details within the agreed mock-ups.
 
