@@ -1054,10 +1054,12 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `readTransactionReceipt` retain `_cfg` in their signatures, among others
   (`git grep -n '_cfg:' apps/server/src`). Left open by SQLite slice 1
   (#490 and the preparation tasks) and A1308 5f-ii's five-function scope. Size on 2026-11-14 for
-  the five most-called of the eight, counted as matches of `<name>(` in `apps/server/src`
-  (declarations and same-named test wrappers included): `offerProducts` 284, `createTable` 187,
-  `defaultLayout` 68, `readDrafts` 49, `setLineCourse` 20, mostly in tests, plus 11 `void cfg;`
-  lines.
+  four of the most-called, counted as matches of `<name>(` in `apps/server/src` (declarations and
+  same-named test wrappers included): `offerProducts` 284, `createTable` 187, `defaultLayout` 68,
+  `setLineCourse` 20, mostly in tests, plus 11 `void cfg;` lines. On 2026-11-18 `readDrafts`,
+  `readOpenDraft` and `writeMerge` lost theirs, leaving `saveDraft` (68), `takeOverDraft` (20),
+  `readPartyAllergyView` (12) and `readAllergySendView` (5) carrying `_cfg` instead (lines counted
+  with `git grep -c`).
 
 ## Bundle: Printer, reader and device delete wording and tidying
 

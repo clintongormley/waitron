@@ -209,15 +209,15 @@ for (const op of operations)
       await save(other, venue.managerId);
       const states = [await edit(p.billId), await edit(other.billId)];
       const drafts = await inTx(venue, async (tx) => [
-        await readDrafts(tx, venue.cfg, p.partyId),
-        await readDrafts(tx, venue.cfg, other.partyId),
+        await readDrafts(tx, p.partyId),
+        await readDrafts(tx, other.partyId),
       ]);
       await run(p, op, await request(p, states[0]!, op));
       expect([await edit(p.billId), await edit(other.billId)]).toEqual(states);
       expect(
         await inTx(venue, async (tx) => [
-          await readDrafts(tx, venue.cfg, p.partyId),
-          await readDrafts(tx, venue.cfg, other.partyId),
+          await readDrafts(tx, p.partyId),
+          await readDrafts(tx, other.partyId),
         ]),
       ).toEqual(drafts);
     });
@@ -356,6 +356,6 @@ it("cancelling sent work keeps a remaining fresh dish owned", async () => {
     ...saved!.edit,
     draftRevision: saved!.edit.draftRevision!,
   });
-  const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+  const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
   expect(drafts[0]!.lines).toMatchObject([{ menuItemId: venue.item("Bread"), quantity: "1.000" }]);
 });

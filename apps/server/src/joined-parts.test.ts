@@ -120,7 +120,7 @@ describe("a saved joined table's real members", () => {
   it("merges Bar with Counter 5's ordinary group", async () => {
     const { table } = await LONG_AND_BAR();
     await inTx(v, (tx) =>
-      writeMerge(tx, v.cfg, {
+      writeMerge(tx, {
         movingId: table.bar!,
         targetId: table.c5!,
         side: "right",

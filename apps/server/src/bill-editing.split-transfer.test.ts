@@ -164,7 +164,7 @@ describe("splitting a bill requires its current editor before creating a destina
     const p = await fixture(),
       saved = await save(p, p.tabId);
     const other = await save(p, p.otherId, venue.adminId);
-    const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+    const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
     const result = await split(p, saved.edit);
     expect(await edit(p.tabId)).toEqual(saved.edit);
     expect(await edit(p.otherId)).toEqual(other.edit);
@@ -176,7 +176,7 @@ describe("splitting a bill requires its current editor before creating a destina
       draftId: null,
       draftRevision: null,
     });
-    expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(drafts);
+    expect(await inTx(venue, (tx) => readDrafts(tx, p.partyId))).toEqual(drafts);
     const moved = await venue.db
       .select()
       .from(workingOrderLines)
@@ -247,11 +247,11 @@ describe("transferring dishes compares both bills including an empty destination
     const p = await fixture(),
       a = await save(p, p.tabId),
       b = await save(p, p.otherId);
-    const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+    const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
     await transfer(p, await edits(p));
     expect(await edit(p.tabId)).toEqual(a.edit);
     expect(await edit(p.otherId)).toEqual(b.edit);
-    expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(drafts);
+    expect(await inTx(venue, (tx) => readDrafts(tx, p.partyId))).toEqual(drafts);
     const moved = await venue.db
       .select()
       .from(workingOrderLines)

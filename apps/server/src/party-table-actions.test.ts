@@ -1215,7 +1215,7 @@ describe("drafts when parties combine", () => {
     const moving = await opts(anna.partyId, lewis.partyId);
     await act((tx) => moveGuests(tx, v.cfg, anna.partyId, m7, moving));
 
-    const drafts = await act((tx) => readDrafts(tx, v.cfg, lewis.partyId));
+    const drafts = await act((tx) => readDrafts(tx, lewis.partyId));
     expect(
       drafts
         .map((draft) => ({
@@ -2559,13 +2559,13 @@ describe("A803 split", () => {
           items: draft.lines.map((line) => line.menuItemId),
         }))
         .sort((a, b) => a.billId.localeCompare(b.billId));
-    expect(facts(await act((tx) => readDrafts(tx, v.cfg, result.partyId)))).toEqual(
+    expect(facts(await act((tx) => readDrafts(tx, result.partyId)))).toEqual(
       [
         { billId: b2, partyId: result.partyId, revision: 1, items: [v.item("Paella")] },
         { billId: b3, partyId: result.partyId, revision: 1, items: [v.item("Caña")] },
       ].sort((a, b) => a.billId.localeCompare(b.billId)),
     );
-    expect(facts(await act((tx) => readDrafts(tx, v.cfg, anna.partyId)))).toEqual([
+    expect(facts(await act((tx) => readDrafts(tx, anna.partyId)))).toEqual([
       { billId: b1, partyId: anna.partyId, revision: 0, items: [v.item("Water")] },
     ]);
     for (const edit of edits) {
@@ -2690,7 +2690,7 @@ describe("A803 split", () => {
       const [a, b, c] = [table[`a${twin}`]!, table[`b${twin}`]!, table[`c${twin}`]!];
       for (const movingId of [b, c]) {
         await act((tx) =>
-          writeMerge(tx, v.cfg, { movingId, targetId: a, side: "right", seats: 14, free: true }),
+          writeMerge(tx, { movingId, targetId: a, side: "right", seats: 14, free: true }),
         );
       }
       const anna = await seat(v, a);

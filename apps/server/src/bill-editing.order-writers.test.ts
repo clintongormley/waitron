@@ -162,10 +162,10 @@ for (const op of operations)
       await save(p);
       await save(other, venue.adminId);
       const states = [await edit(p.id), await edit(other.id)];
-      const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+      const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
       await run(p, op, states[0]!);
       expect([await edit(p.id), await edit(other.id)]).toEqual(states);
-      expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(drafts);
+      expect(await inTx(venue, (tx) => readDrafts(tx, p.partyId))).toEqual(drafts);
       const [after] = await venue.db
         .select()
         .from(workingOrderLines)
@@ -243,7 +243,7 @@ for (const op of [...operations, "make-at"] as const)
       const owned = await save(p);
       await save(other, venue.adminId);
       const states = [await edit(p.id), await edit(other.id)];
-      const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+      const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
       const answer = await send(
         venue.app,
         venue.cookie,
@@ -253,7 +253,7 @@ for (const op of [...operations, "make-at"] as const)
       );
       expect(answer.status).toBe(200);
       expect([await edit(p.id), await edit(other.id)]).toEqual(states);
-      expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(drafts);
+      expect(await inTx(venue, (tx) => readDrafts(tx, p.partyId))).toEqual(drafts);
       const [line] = await venue.db
         .select()
         .from(workingOrderLines)

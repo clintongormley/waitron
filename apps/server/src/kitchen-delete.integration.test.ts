@@ -146,7 +146,7 @@ it("keeps retained draft, group, course and ready station history through manage
     ends: [],
     removes: [{ key: "course_products", count: 1, targets: [] }],
   });
-  const [retained] = await inTx(v, (tx) => readDrafts(tx, v.cfg, seated.partyId));
+  const [retained] = await inTx(v, (tx) => readDrafts(tx, seated.partyId));
   expect(retained!.lines).toEqual([
     {
       ...draft.lines[0],

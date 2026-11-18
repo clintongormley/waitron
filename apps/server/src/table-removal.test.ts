@@ -282,7 +282,7 @@ describe("removing a live table the master no longer has", () => {
           .update(diningTables)
           .set(todaySet({ x, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 }))
           .where(eq(diningTables.id, tableId));
-      await writeMerge(tx, v.cfg, {
+      await writeMerge(tx, {
         movingId: second!,
         targetId: first!,
         side: "right",

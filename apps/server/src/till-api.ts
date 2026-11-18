@@ -3192,7 +3192,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
               if (merge !== null) {
                 const held = merge.moving === tableId ? merge.target : merge.moving;
                 if (!heldBefore.includes(held)) throw invalid("merge");
-                await writeMerge(tx, cfg, {
+                await writeMerge(tx, {
                   movingId: merge.moving,
                   targetId: merge.target,
                   side: merge.side,
@@ -3660,7 +3660,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const answer = await deps.db.withWriteLock(async () => {
         const tx = deps.db;
         await checkZones(tx, session, [{ partyId }]);
-        const drafts = await readDrafts(tx, deps.cfg, partyId);
+        const drafts = await readDrafts(tx, partyId);
         const family = await partyFamily(tx, partyId);
         const bills = await tx
           .select({ id: workingOrders.id })
@@ -3832,7 +3832,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ partyId }]);
         const at = new Date();
-        const draft = (await readDrafts(tx, cfg, partyId)).find((entry) => entry.id === draftId);
+        const draft = (await readDrafts(tx, partyId)).find((entry) => entry.id === draftId);
         if (draft === undefined) throw new AppError("draft.not_found", { draftId });
         const ids = new Set(body.lineIds);
         const selected = draft.lines.filter((line) => ids.has(line.id));

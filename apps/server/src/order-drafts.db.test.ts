@@ -352,8 +352,8 @@ async function takeOver(
   return inTx((tx) => takeOverDraft(tx, v.cfg, partyId, draftId, operatorId, revision));
 }
 
-async function draftsOf(v: Venue, partyId: string): Promise<Draft[]> {
-  return inTx((tx) => readDrafts(tx, v.cfg, partyId));
+async function draftsOf(partyId: string): Promise<Draft[]> {
+  return inTx((tx) => readDrafts(tx, partyId));
 }
 
 /** What each line orders, without the ids a save mints. */
@@ -585,7 +585,7 @@ describe("separate drafts (spec §12 item 1)", () => {
 
     expect(alex).toMatchObject({ partyId: table4.partyId, ownerId: ALEX, ownerName: "Alex" });
     expect(sam).toMatchObject({ partyId: table4.partyId, ownerId: SAM, ownerName: "Sam" });
-    const drafts = byOwner(await draftsOf(v, table4.partyId));
+    const drafts = byOwner(await draftsOf(table4.partyId));
     expect(drafts).toEqual([alex, sam]);
     expect(drafts.map(orders)).toEqual([
       [
@@ -601,7 +601,7 @@ describe("separate drafts (spec §12 item 1)", () => {
       code: "draft.taken_over",
       params: { draftId: alex.id, ownerId: ALEX, ownerName: "Alex" },
     });
-    expect(byOwner(await draftsOf(v, table4.partyId))).toEqual([alex, sam]);
+    expect(byOwner(await draftsOf(table4.partyId))).toEqual([alex, sam]);
 
     // Two rows on Alex's draft hold three units: the count is of rows.
     expect(await unsentDraftsAt(table4.tableId)).toEqual([
@@ -662,7 +662,7 @@ describe("separate drafts (spec §12 item 1)", () => {
     await db.update(orderDrafts).set({ state: "discarded" }).where(eq(orderDrafts.id, alex.id));
     expect(await storedLines(alex.id)).toHaveLength(1);
     expect(await unsentDraftsAt(table4.tableId)).toEqual([]);
-    expect(await draftsOf(v, table4.partyId)).toEqual([]);
+    expect(await draftsOf(table4.partyId)).toEqual([]);
   });
 });
 
@@ -725,7 +725,7 @@ describe("saving a draft", () => {
         unavailable: false,
       },
     ]);
-    expect(await draftsOf(v, partyId)).toEqual([draft]);
+    expect(await draftsOf(partyId)).toEqual([draft]);
   });
 
   it("folds every id it parses to lower case, so an upper-case line adds into its lower-case twin", async () => {
@@ -827,7 +827,7 @@ describe("saving a draft", () => {
       code: "draft.out_of_date",
       params: { draftId: draft.id, revision: 0 },
     });
-    expect(await draftsOf(v, partyId)).toEqual([draft]);
+    expect(await draftsOf(partyId)).toEqual([draft]);
   });
 
   it("answers draft.out_of_date, writing nothing, to a save from a stale revision", async () => {
@@ -839,7 +839,7 @@ describe("saving a draft", () => {
       code: "draft.out_of_date",
       params: { draftId: first.id, revision: 1 },
     });
-    expect(await draftsOf(v, partyId)).toEqual([second]);
+    expect(await draftsOf(partyId)).toEqual([second]);
   });
 
   it("answers draft.not_found for an unknown draft, a draft of another party and a discarded draft", async () => {
@@ -943,7 +943,7 @@ describe("draft bill ownership", () => {
     expect(first).toMatchObject({ billId: tabId });
     expect(second).toMatchObject({ billId: secondId });
     expect(first.id).not.toBe(second.id);
-    expect(await draftsOf(v, partyId)).toEqual([first, second]);
+    expect(await draftsOf(partyId)).toEqual([first, second]);
     expect(await draftRow(first.id)).toMatchObject({ billId: tabId });
     expect(await draftRow(second.id)).toMatchObject({ billId: secondId });
     await refusedWritingNothing(() => onBill(v, partyId, tabId), {
@@ -1055,7 +1055,7 @@ describe("draft bill ownership", () => {
     );
     await refusedWritingNothing(() => takeOver(v, partyId, draft.id, SAM, draft.revision), error);
     await refusedWritingNothing(() => onBill(v, partyId, tabId, ALEX, draft), error);
-    await expect(draftsOf(v, partyId)).rejects.toMatchObject(error);
+    await expect(draftsOf(partyId)).rejects.toMatchObject(error);
   });
 
   it("takes over on the source bill without absorbing the taker's draft on another bill", async () => {
@@ -1071,7 +1071,7 @@ describe("draft bill ownership", () => {
     expect(taken.lines).toEqual(alex.lines);
     expect(await draftRow(sam.id)).toMatchObject({ billId: tabId, revision: 0, state: "open" });
     expect(await storedLines(sam.id)).toHaveLength(1);
-    expect((await draftsOf(v, partyId)).map(({ id }) => id)).toEqual([sam.id, alex.id]);
+    expect((await draftsOf(partyId)).map(({ id }) => id)).toEqual([sam.id, alex.id]);
   });
 
   it("a colleague cannot create a second outbox and takeover retains the single existing one", async () => {
@@ -1096,7 +1096,7 @@ describe("draft bill ownership", () => {
     });
     expect(await storedLines(samFirst.id)).toEqual(firstRows);
     expect(await storedLines(alex.id)).toEqual(alexRows);
-    expect(await draftsOf(v, partyId)).toEqual([samFirst, taken]);
+    expect(await draftsOf(partyId)).toEqual([samFirst, taken]);
   });
 
   it("shows one floor summary per bill even when its editors have the same name", async () => {
@@ -1137,9 +1137,7 @@ describe("draft bill ownership", () => {
         lineCount: 1,
       },
     ]);
-    expect(
-      (await draftsOf(v, partyId)).map(({ billId, ownerId }) => ({ billId, ownerId })),
-    ).toEqual([
+    expect((await draftsOf(partyId)).map(({ billId, ownerId }) => ({ billId, ownerId }))).toEqual([
       { billId: tabId, ownerId: ALEX },
       { billId: secondId, ownerId: ALEX },
       { billId: thirdId, ownerId: SAM },
@@ -1181,7 +1179,7 @@ describe("stable fresh draft line identities", () => {
       { id: burgerLine!.id, position: 2 },
       { id: second.lines[2]!.id, position: 3 },
     ]);
-    expect((await draftsOf(v, partyId))[0]!.lines).toEqual(second.lines);
+    expect((await draftsOf(partyId))[0]!.lines).toEqual(second.lines);
     const taken = await takeOver(v, partyId, second.id, SAM, second.revision);
     expect(taken.lines).toEqual(second.lines);
     const savedAgain = await save(v, partyId, SAM, taken.id, taken.revision, taken.lines);
@@ -1335,7 +1333,7 @@ describe("draft placement persistence", () => {
         { ...sent, quantity: "2" },
       ]);
       expect(second.lines).toMatchObject([{ ...place, quantity: "2.000" }]);
-      expect((await draftsOf(v, partyId))[0]!.lines).toEqual(second.lines);
+      expect((await draftsOf(partyId))[0]!.lines).toEqual(second.lines);
       expect((await takeOver(v, partyId, second.id, SAM, second.revision)).lines).toEqual(
         second.lines,
       );
@@ -1379,7 +1377,7 @@ describe("draft placement persistence", () => {
         quantity,
       })),
     ).toEqual(places.map((place) => ({ ...place, quantity: "3.000" })));
-    expect(await draftsOf(v, partyId)).toEqual([draft]);
+    expect(await draftsOf(partyId)).toEqual([draft]);
     expect(await storedLines(draft.id)).toMatchObject(places);
   });
 
@@ -1390,7 +1388,7 @@ describe("draft placement persistence", () => {
       { menuItemId: v.offer("beer"), quantity: "1" },
     ]);
     expect(draft.lines).toMatchObject([{ slot: 0, joinGroupId: null, afterGroupId: null }]);
-    expect((await draftsOf(v, partyId))[0]!.lines).toEqual(draft.lines);
+    expect((await draftsOf(partyId))[0]!.lines).toEqual(draft.lines);
   });
 });
 
@@ -1468,7 +1466,7 @@ describe("draft placement membership", () => {
         code: "group.not_held",
         params: { groupId },
       });
-      expect(await draftsOf(v, partyId)).toEqual([draft]);
+      expect(await draftsOf(partyId)).toEqual([draft]);
     });
   });
 
@@ -1571,7 +1569,7 @@ describe("draft placement input", () => {
     expect(orders(draft)).toEqual([
       { menuItemId: v.offer("beer"), quantity: "1.000", unavailable: false },
     ]);
-    expect(await draftsOf(v, partyId)).toEqual([draft]);
+    expect(await draftsOf(partyId)).toEqual([draft]);
   });
 
   it("names the second line's bad placement and keeps the first unsaved", async () => {
@@ -1595,7 +1593,7 @@ describe("draft placement input", () => {
     expect(orders(draft)).toEqual([
       { menuItemId: v.offer("beer"), quantity: "1.000", unavailable: false },
     ]);
-    expect(await draftsOf(v, partyId)).toEqual([draft]);
+    expect(await draftsOf(partyId)).toEqual([draft]);
   });
 });
 
@@ -1898,7 +1896,7 @@ describe("a refused save writes nothing", () => {
     const { partyId } = await seated(v);
     await save(v, partyId, ALEX, null, 0, [item(v, "beer", { courseId: v.courseId })]);
     await inTx((tx) => deleteCourse(tx, v.courseId));
-    const [draft] = await draftsOf(v, partyId);
+    const [draft] = await draftsOf(partyId);
     expect(draft!.lines[0]!.course).toMatchObject({ id: v.courseId, fireNowZoneIds: [] });
   });
 
@@ -1917,7 +1915,7 @@ describe("a refused save writes nothing", () => {
       .from(kitchenCourses)
       .where(eq(kitchenCourses.id, v.courseId));
     await inTx((tx) => deleteCourse(tx, v.courseId));
-    const [retained] = await draftsOf(v, partyId);
+    const [retained] = await draftsOf(partyId);
     expect(retained!.lines[0]).toEqual({
       ...draft.lines[0],
       course: { ...course, fireNowZoneIds: [] },
@@ -2018,7 +2016,7 @@ describe("taking over a draft (D5, spec §2)", () => {
       code: "draft.out_of_date",
       params: { draftId: first.id, revision: 1 },
     });
-    expect(await draftsOf(v, partyId)).toEqual([second]);
+    expect(await draftsOf(partyId)).toEqual([second]);
     expect(await eventsOf(first.id)).toHaveLength(1);
   });
 
@@ -2100,7 +2098,7 @@ describe("taking over a draft (D5, spec §2)", () => {
     expect(taken.lines.map((line) => line.id)).toEqual(alex.lines.map((line) => line.id));
     expect(await storedLines(alex.id)).toEqual(alexRows);
     expect(await storedLines(sam.id)).toEqual(samRows);
-    expect(await draftsOf(v, table4.partyId)).toEqual([taken, sam]);
+    expect(await draftsOf(table4.partyId)).toEqual([taken, sam]);
     expect(await draftRow(alex.id)).toMatchObject({ state: "open", ownerId: SAM, revision: 1 });
     expect(await eventsOf(alex.id)).toEqual([
       { kind: "draft.created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
@@ -2159,7 +2157,7 @@ describe("taking over arranged draft lines", () => {
       { id: sam.lines[0]!.id, position: 1, slot: 1 },
       { id: sam.lines[1]!.id, position: 2, slot: 3 },
     ]);
-    expect(await draftsOf(v, partyId)).toEqual([sam, taken]);
+    expect(await draftsOf(partyId)).toEqual([sam, taken]);
   });
 
   it("retains each bill's held anchors and slot numbers in place", async () => {
@@ -2187,7 +2185,7 @@ describe("taking over arranged draft lines", () => {
     const taken = await takeOver(v, partyId, alex.id, SAM, alex.revision);
 
     expect(taken.lines).toEqual(alex.lines);
-    expect(await draftsOf(v, partyId)).toEqual([sam, taken]);
+    expect(await draftsOf(partyId)).toEqual([sam, taken]);
   });
 
   it("keeps Fire-now, held joins and new-group slots unchanged on both bills", async () => {
@@ -2211,7 +2209,7 @@ describe("taking over arranged draft lines", () => {
     const taken = await takeOver(v, partyId, alex.id, SAM, alex.revision);
 
     expect(taken.lines).toEqual(alex.lines);
-    expect(await draftsOf(v, partyId)).toEqual([sam, taken]);
+    expect(await draftsOf(partyId)).toEqual([sam, taken]);
     expect((await storedLines(alex.id)).map((row) => [row.id, row.slot, row.joinGroupId])).toEqual(
       alex.lines.map((line) => [line.id, line.slot, line.joinGroupId]),
     );
@@ -2247,7 +2245,7 @@ describe("taking over arranged draft lines", () => {
     const taken = await takeOver(v, partyId, alex.id, SAM, alex.revision);
 
     expect(taken.lines).toEqual(alex.lines);
-    expect(await draftsOf(v, partyId)).toEqual([sam, taken]);
+    expect(await draftsOf(partyId)).toEqual([sam, taken]);
     expect(await inTx((tx) => readPartyAllergy(tx, partyId))).toEqual(before);
     expect(await storedLines(alex.id)).toMatchObject([{ id: alex.lines[0]!.id, slot: 1 }]);
   });
@@ -2259,7 +2257,7 @@ describe("who a draft was taken over from", () => {
     const { partyId } = await seated(v);
     const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer"), item(v, "fish")]);
     expect(draft.takenOverFrom).toBeNull();
-    expect((await draftsOf(v, partyId)).map((read) => read.takenOverFrom)).toEqual([null]);
+    expect((await draftsOf(partyId)).map((read) => read.takenOverFrom)).toEqual([null]);
     const { draft: rest } = await submit(v, partyId, draft, ALEX, [
       { lineIds: [draft.lines[0]!.id], release: "fire" },
     ]);
@@ -2274,7 +2272,7 @@ describe("who a draft was taken over from", () => {
 
     const taken = await takeOver(v, partyId, alex.id, SAM, 0);
     expect(taken.takenOverFrom).toEqual(fromAlex);
-    expect((await draftsOf(v, partyId)).map((read) => read.takenOverFrom)).toEqual([fromAlex]);
+    expect((await draftsOf(partyId)).map((read) => read.takenOverFrom)).toEqual([fromAlex]);
     const sams = await save(v, partyId, SAM, alex.id, 1, taken.lines);
     expect(sams.takenOverFrom).toEqual(fromAlex);
     const { draft: rest } = await submit(v, partyId, sams, SAM, [
@@ -2297,7 +2295,7 @@ describe("who a draft was taken over from", () => {
     } finally {
       vi.useRealTimers();
     }
-    expect((await draftsOf(v, partyId)).map((read) => read.takenOverFrom)).toEqual([
+    expect((await draftsOf(partyId)).map((read) => read.takenOverFrom)).toEqual([
       { personId: SAM, name: "Sam" },
     ]);
   });
@@ -2315,7 +2313,7 @@ describe("who a draft was taken over from", () => {
     await takeOver(v, partyId, alex.id, SAM, 0);
     await takeOver(v, partyId, noras.id, ALEX, 0);
 
-    const read = byOwner(await draftsOf(v, partyId));
+    const read = byOwner(await draftsOf(partyId));
     expect(read.map(({ ownerId, takenOverFrom }) => ({ ownerId, takenOverFrom }))).toEqual([
       { ownerId: ALEX, takenOverFrom: { personId: nora, name: "Nora" } },
       { ownerId: mia, takenOverFrom: null },
@@ -2331,7 +2329,7 @@ describe("who a draft was taken over from", () => {
 
     const merged = await takeOver(v, partyId, alex.id, SAM, 0);
     expect(merged).toMatchObject({ id: alex.id, takenOverFrom: { personId: ALEX, name: "Alex" } });
-    expect(await draftsOf(v, partyId)).toEqual([merged, sam]);
+    expect(await draftsOf(partyId)).toEqual([merged, sam]);
   });
 });
 
@@ -2343,7 +2341,7 @@ describe("unavailable lines (spec §10)", () => {
     const stored = await storedLines(draft.id);
 
     await db.run(sql`update products set available = 0 where id = ${v.productId.burger}`);
-    const [soldOut] = await draftsOf(v, partyId);
+    const [soldOut] = await draftsOf(partyId);
     expect(orders(soldOut!)).toEqual([
       { menuItemId: v.offer("beer"), quantity: "1.000", unavailable: false },
       { menuItemId: v.offer("burger"), quantity: "1.000", unavailable: true },
@@ -2352,7 +2350,7 @@ describe("unavailable lines (spec §10)", () => {
     expect(await storedLines(draft.id)).toEqual(stored);
 
     await db.run(sql`update products set available = 1 where id = ${v.productId.burger}`);
-    expect(await draftsOf(v, partyId)).toEqual([draft]);
+    expect(await draftsOf(partyId)).toEqual([draft]);
     expect(await storedLines(draft.id)).toEqual(stored);
   });
 
@@ -2363,7 +2361,7 @@ describe("unavailable lines (spec §10)", () => {
     const { partyId } = await seated(v);
     const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer"), item(v, "sauce")]);
     await sauceNotSoldSeparately(v);
-    const [marked] = await draftsOf(v, partyId);
+    const [marked] = await draftsOf(partyId);
     expect(orders(marked!)).toEqual([
       { menuItemId: v.offer("beer"), quantity: "1.000", unavailable: false },
       { menuItemId: v.offer("sauce"), quantity: "1.000", unavailable: true },
@@ -2416,10 +2414,10 @@ describe("unavailable lines (spec §10)", () => {
       { listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
     ];
     await save(v, partyId, ALEX, null, 0, [item(v, "burger", { extras: sauce })]);
-    expect((await draftsOf(v, partyId))[0]!.lines[0]!.unavailable).toBe(false);
+    expect((await draftsOf(partyId))[0]!.lines[0]!.unavailable).toBe(false);
 
     await db.run(sql`update products set available = 0 where id = ${v.productId.sauce}`);
-    expect((await draftsOf(v, partyId))[0]!.lines[0]!.unavailable).toBe(true);
+    expect((await draftsOf(partyId))[0]!.lines[0]!.unavailable).toBe(true);
   });
 
   it("marks a line whose chosen option label is withdrawn, clears the mark when it returns, and never rewrites the line", async () => {
@@ -2436,14 +2434,14 @@ describe("unavailable lines (spec §10)", () => {
     const stored = await storedLines(draft.id);
 
     await db.run(sql`update option_labels set available = 0 where id = ${v.rare.labelId}`);
-    expect((await draftsOf(v, partyId))[0]!.lines.map((line) => line.unavailable)).toEqual([
+    expect((await draftsOf(partyId))[0]!.lines.map((line) => line.unavailable)).toEqual([
       true,
       false,
     ]);
     expect(await storedLines(draft.id)).toEqual(stored);
 
     await db.run(sql`update option_labels set available = 1 where id = ${v.rare.labelId}`);
-    expect(await draftsOf(v, partyId)).toEqual([draft]);
+    expect(await draftsOf(partyId)).toEqual([draft]);
     expect(await storedLines(draft.id)).toEqual(stored);
   });
 
@@ -2522,7 +2520,7 @@ describe("unavailable lines (spec §10)", () => {
       const { partyId } = await seated(v);
       const line = await prepare(v);
       await save(v, partyId, ALEX, null, 0, [line]);
-      expect((await draftsOf(v, partyId))[0]!.lines[0]!.unavailable).toBe(true);
+      expect((await draftsOf(partyId))[0]!.lines[0]!.unavailable).toBe(true);
       await expect(
         inTx(async (tx) =>
           submitGroups(tx, v.cfg, partyId, {
@@ -2556,7 +2554,7 @@ describe("unavailable lines (spec §10)", () => {
       item(v, "beer", { options: [v.rare] }),
       item(v, "burger", { options: [{ listId: v.rare.listId, labelId: randomUUID() }] }),
     ]);
-    expect((await draftsOf(v, partyId))[0]!.lines.map((line) => line.unavailable)).toEqual([
+    expect((await draftsOf(partyId))[0]!.lines.map((line) => line.unavailable)).toEqual([
       true,
       true,
     ]);
@@ -2569,7 +2567,7 @@ describe("unavailable lines (spec §10)", () => {
       { listId: v.sauceListId, picks: [{ productId: v.productId.beer, quantity: 1 }] },
     ];
     await save(v, partyId, ALEX, null, 0, [item(v, "burger", { extras: beerAsSauce })]);
-    expect((await draftsOf(v, partyId))[0]!.lines[0]!.unavailable).toBe(true);
+    expect((await draftsOf(partyId))[0]!.lines[0]!.unavailable).toBe(true);
   });
 
   it("marks a line naming a sold-out or unknown variant, and not an Available one", async () => {
@@ -2580,7 +2578,7 @@ describe("unavailable lines (spec §10)", () => {
       item(v, "wine", { variantId: v.bottle }),
       item(v, "wine", { variantId: randomUUID() }),
     ]);
-    expect((await draftsOf(v, partyId))[0]!.lines.map((line) => line.unavailable)).toEqual([
+    expect((await draftsOf(partyId))[0]!.lines.map((line) => line.unavailable)).toEqual([
       false,
       true,
       true,
@@ -2591,14 +2589,14 @@ describe("unavailable lines (spec §10)", () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
     await save(v, partyId, ALEX, null, 0, [await beerFromAnotherMenu(v)]);
-    expect((await draftsOf(v, partyId))[0]!.lines[0]!.unavailable).toBe(true);
+    expect((await draftsOf(partyId))[0]!.lines[0]!.unavailable).toBe(true);
   });
 
   it("reads no drafts on a party that has none, open or not", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
-    expect(await draftsOf(v, partyId)).toEqual([]);
-    expect(await draftsOf(v, randomUUID())).toEqual([]);
+    expect(await draftsOf(partyId)).toEqual([]);
+    expect(await draftsOf(randomUUID())).toEqual([]);
   });
 });
 
@@ -2886,7 +2884,7 @@ describe("one submission, in both orders (Review Focus 1)", () => {
     await submit(v, partyId, alex, ALEX, [{ lineIds: [alex.lines[0]!.id], release: "fire" }], {
       submissionId,
     });
-    const [rest] = await draftsOf(v, partyId);
+    const [rest] = await draftsOf(partyId);
 
     await refusedWritingNothing(
       () =>
@@ -2895,7 +2893,7 @@ describe("one submission, in both orders (Review Focus 1)", () => {
         }),
       { code: "submission.id_reused", params: { submissionId } },
     );
-    expect(await draftsOf(v, partyId)).toEqual([rest]);
+    expect(await draftsOf(partyId)).toEqual([rest]);
   });
 });
 
@@ -2963,7 +2961,7 @@ describe("partial submission", () => {
 
     const left = { ...draft, revision: 1, lines: [burgerLine, fish] };
     expect(drinks.draft).toEqual(left);
-    expect(await draftsOf(v, partyId)).toEqual([left]);
+    expect(await draftsOf(partyId)).toEqual([left]);
     expect((await storedLines(draft.id)).map((row) => [row.id, row.position])).toEqual([
       [burgerLine!.id, 2],
       [fish!.id, 4],
@@ -2989,7 +2987,7 @@ describe("partial submission", () => {
     expect(food.groups.map((group) => group.state)).toEqual(["held", "held"]);
     expect(await draftRow(draft.id)).toMatchObject({ state: "submitted", revision: 2 });
     expect(await storedLines(draft.id)).toEqual([]);
-    expect(await draftsOf(v, partyId)).toEqual([]);
+    expect(await draftsOf(partyId)).toEqual([]);
     expect((await eventsOf(draft.id)).map(({ kind, detail }) => [kind, detail])).toEqual([
       ["draft.created", {}],
       ["draft.submitted", { groupIds: [drinks.groups[0]!.id] }],
@@ -3349,7 +3347,7 @@ describe("unavailable lines at submission (spec §10)", () => {
     expect((await tabLines(partyId)).map((row) => row.productId)).toEqual([v.productId.beer]);
 
     await db.run(sql`update products set available = 1 where id = ${v.productId.burger}`);
-    expect((await draftsOf(v, partyId))[0]!.lines).toEqual([burgerLine]);
+    expect((await draftsOf(partyId))[0]!.lines).toEqual([burgerLine]);
   });
 
   it("refuses at submission a menu item the zone does not offer (service_zone.offer_not_allowed)", async () => {
@@ -3453,7 +3451,7 @@ describe("merging parties (D2)", () => {
         operatorId: SAM,
       }),
     );
-    const drafts = await draftsOf(v, into.partyId);
+    const drafts = await draftsOf(into.partyId);
     expect(drafts).toEqual([own, { ...incoming, partyId: into.partyId, revision: 1 }]);
     expect(await draftRow(incoming.id)).toMatchObject({ billId: from.tabId, state: "open" });
     expect(await storedLines(incoming.id)).toHaveLength(1);
@@ -3487,7 +3485,7 @@ describe("merging parties (D2)", () => {
     await merge(v, table4, table5, ALEX);
     await takeOver(v, table4.partyId, samOn5.id, SAM, moved.revision + 1);
 
-    const [alex, sam] = byOwner(await draftsOf(v, table4.partyId));
+    const [alex, sam] = byOwner(await draftsOf(table4.partyId));
     expect(alex).toEqual({
       ...alexOn4,
       revision: alexOn4.revision + 1,
@@ -3502,7 +3500,7 @@ describe("merging parties (D2)", () => {
       takenOverFrom: { personId: ALEX, name: "Alex" },
     });
     expect(await openOwnersOn(table4.partyId)).toEqual([ALEX, SAM].sort());
-    expect(await draftsOf(v, table5.partyId)).toEqual([]);
+    expect(await draftsOf(table5.partyId)).toEqual([]);
 
     expect(await draftRow(alexOn5.id)).toMatchObject({
       partyId: table4.partyId,
@@ -3721,7 +3719,7 @@ describe("finishing the table", () => {
     }
     expect(await storedLines(alex.id)).toEqual(kept.alex);
     expect(await storedLines(sam.id)).toEqual(kept.sam);
-    expect((await draftsOf(v, partyId)).map((d) => d.id).sort()).toEqual([alex.id, sam.id].sort());
+    expect((await draftsOf(partyId)).map((d) => d.id).sort()).toEqual([alex.id, sam.id].sort());
     await save(v, partyId, ALEX, alex.id, alex.revision, []);
     await save(v, partyId, SAM, sam.id, sam.revision, []);
     const { state } = await inTx(async (tx) =>
@@ -3732,7 +3730,7 @@ describe("finishing the table", () => {
       }),
     );
     expect(state).toBe("closed");
-    expect(await draftsOf(v, partyId)).toEqual([]);
+    expect(await draftsOf(partyId)).toEqual([]);
     await expect(
       save(v, partyId, ALEX, alex.id, alex.revision + 1, [item(v, "beer")]),
     ).rejects.toMatchObject({ code: "party.not_open" });
@@ -3863,7 +3861,7 @@ it("A669 keeps separately assigned identical dishes when joining two drafts of t
       expectedOtherPartyRevision: await partyRevision(b.partyId),
     }),
   );
-  const joined = await draftsOf(v, a.partyId);
+  const joined = await draftsOf(a.partyId);
   expect(joined).toHaveLength(2);
   expect(joined.map(({ billId }) => billId)).toEqual([a.tabId, b.tabId]);
   expect(joined.flatMap(({ lines }) => lines.map((line) => [line.id, line.quantity]))).toEqual([
@@ -4140,8 +4138,8 @@ describe("fresh drafts alongside existing bill families", () => {
       }),
     );
 
-    const [read] = await draftsOf(v, partyId);
-    expect(await draftsOf(v, partyId)).toHaveLength(1);
+    const [read] = await draftsOf(partyId);
+    expect(await draftsOf(partyId)).toHaveLength(1);
     expect(read).toMatchObject({ id: own.id, billId: intoId, revision: 1 });
     expect(read!.lines.map((line) => [line.id, line.slot])).toEqual([
       [own.lines[0]!.id, 1],
@@ -4219,7 +4217,7 @@ describe("fresh drafts alongside existing bill families", () => {
       revision: 2,
     });
     expect(await draftRow(own.id)).toMatchObject({ state: "open", billId: intoId, revision: 1 });
-    const read = (await draftsOf(v, partyId)).find((draft) => draft.id === own.id)!;
+    const read = (await draftsOf(partyId)).find((draft) => draft.id === own.id)!;
     expect(read.lines.map((line) => line.id)).toEqual([...lineIds(own), ...lineIds(source)]);
     expect(
       await db.select().from(workingOrderLines).where(eq(workingOrderLines.id, frozen.parentId)),
@@ -4253,7 +4251,7 @@ describe("fresh drafts alongside existing bill families", () => {
     const own = await billDraft(v, into.partyId, into.tabId);
     const source = await withBillFamily(v, from.partyId, from.tabId);
     await merge(v, into, from, ALEX);
-    const read = await draftsOf(v, into.partyId);
+    const read = await draftsOf(into.partyId);
     expect(read).toHaveLength(1);
     expect(read[0]).toMatchObject({
       id: own.id,
@@ -4270,7 +4268,7 @@ describe("fresh drafts alongside existing bill families", () => {
       state: "discarded",
       billId: into.tabId,
     });
-    expect(await draftsOf(v, from.partyId)).toEqual([]);
+    expect(await draftsOf(from.partyId)).toEqual([]);
   });
 
   async function movingFamily(v: Venue, state: "held" | "fired", active = false) {
@@ -4437,13 +4435,13 @@ describe("fresh drafts alongside existing bill families", () => {
             .from(workingOrderLines)
             .where(eq(workingOrderLines.workingOrderId, billId)),
         ).toEqual(familyBefore.map((line) => ({ ...line, groupId: arrivingGroups[0]!.id })));
-        const reads = await draftsOf(v, partyId);
+        const reads = await draftsOf(partyId);
         expect(reads).toHaveLength(own === null ? 1 : 2);
         expect(reads.find((row) => row.id === draft.id)!.lines).toMatchObject([
           { id: draft.lines[0]!.id, slot: 0, joinGroupId: groupId },
           { id: draft.lines[1]!.id, slot: 2, afterGroupId: groupId },
         ]);
-        expect(await draftsOf(v, from.partyId)).toEqual([]);
+        expect(await draftsOf(from.partyId)).toEqual([]);
         if (own !== null) expect(reads.find((row) => row.id === own.id)!.lines).toEqual(own.lines);
         const staying = await inTx((tx) => readPartyAllergy(tx, from.partyId));
         const arriving = await inTx((tx) => readPartyAllergy(tx, partyId));
@@ -4512,7 +4510,7 @@ describe("fresh drafts alongside existing bill families", () => {
     expect(
       (await db.select().from(orderGroups).where(eq(orderGroups.id, moving.groupId)))[0],
     ).toMatchObject({ partyId: target.partyId, state: "held" });
-    const reads = await draftsOf(v, target.partyId);
+    const reads = await draftsOf(target.partyId);
     expect(reads).toHaveLength(2);
     expect(reads.find((row) => row.id === own.id)!.lines).toEqual(own.lines);
     expect(reads.find((row) => row.id === moving.draft.id)!.lines).toEqual(moving.draft.lines);
@@ -4589,7 +4587,7 @@ describe("fresh drafts alongside existing bill families", () => {
       expect(
         (await db.select().from(orderGroups).where(eq(orderGroups.id, moving.groupId)))[0],
       ).toMatchObject({ partyId: moving.from.partyId, state: "removed" });
-      const read = (await draftsOf(v, partyId)).find((row) => row.id === moving.draft.id)!;
+      const read = (await draftsOf(partyId)).find((row) => row.id === moving.draft.id)!;
       expect(read.lines).toMatchObject([
         { id: moving.draft.lines[0]!.id, slot: 0, joinGroupId: copy!.id },
         { id: moving.draft.lines[1]!.id, slot: 2, afterGroupId: copy!.id },
@@ -4706,13 +4704,13 @@ describe("fresh drafts alongside existing bill families", () => {
       billId: target.tabId,
     });
     expect(await storedLines(moving.draft.id)).toEqual(freshBefore);
-    const reads = await draftsOf(v, target.partyId);
+    const reads = await draftsOf(target.partyId);
     expect(reads).toHaveLength(2);
     expect(reads.find((row) => row.id === own.id)!.lines).toEqual(own.lines);
     expect(reads.find((row) => row.id === moving.draft.id)!.lines.map((line) => line.id)).toEqual([
       ...lineIds(moving.draft),
     ]);
-    expect(await draftsOf(v, moving.from.partyId)).toEqual([]);
+    expect(await draftsOf(moving.from.partyId)).toEqual([]);
     expect((await inTx((tx) => readPartyAllergy(tx, target.partyId))).ticks).toHaveLength(2);
     expect(
       (await ticketItemsWithBill(db)).every((item) => item.workingOrderId !== moving.billId),
@@ -4951,7 +4949,7 @@ describe("fresh drafts alongside existing bill families", () => {
     const taken = await takeOver(v, partyId, draft.id, SAM, draft.revision);
     expect(taken.id).toBe(draft.id);
     expect(taken.lines.map((line) => line.id)).toEqual([draft.lines[0]!.id, draft.lines[1]!.id]);
-    expect(await draftsOf(v, partyId)).toEqual([taken, own]);
+    expect(await draftsOf(partyId)).toEqual([taken, own]);
     expect(await draftRow(draft.id)).toMatchObject({ state: "open", ownerId: SAM });
     expect(
       await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, tabId)),
