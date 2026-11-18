@@ -1,5 +1,7 @@
 # R5-TICKET-SERIES: number ticket correctives in the ticket series — implementation plan
 
+_2026-11-18: the owner's answer, the adviser still to confirm the details — see question 8 of the [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md): "always use a separate series for correctives"._
+
 > **Not built (2026-11-15).** The owner reversed this at ~12:02: ticket correctives stay in the corrective series, and the question goes to the adviser ([meeting sheet](../../compliance/2026-11-19-adviser-meeting.md), question 4).
 
 > **For agentic workers:** `superpowers:subagent-driven-development`, each task dispatched as

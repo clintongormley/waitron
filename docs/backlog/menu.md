@@ -988,5 +988,12 @@ add a line for each new course. Draft writes enforce the dish's eat-in VAT class
 units and the surcharge limit. A dish can have its own course in the draft.
 The dashboard editor and placement controls, publishing the full set-menu copy, till ordering,
 paying such a bill and its documents, and updating the demo and guides remain open.
-Takeaway/delivery VAT treatment remains with S10/Lane L and adviser question
-[T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement).
+_2026-11-18: adviser question
+[T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer
+(owner, 2026-11-18, question 4 of the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md);
+the adviser is still to confirm the details): a set menu
+takes the VAT rate of its main item, so food with a drink takes the food's rate, eaten in or
+taken away, and its price is not split between its items' rates; items ordered separately to take
+away keep their own rates. Covered dishes may be left off the ticket; whether also off a full
+invoice is open. The spec's refusal of set menus on takeaway and delivery orders, and the plans'
+refusal of a dish at another rate, are the owner's to revisit._

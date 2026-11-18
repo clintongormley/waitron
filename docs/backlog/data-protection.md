@@ -16,7 +16,9 @@ compliance”.
 
   **Owner-adopted proposal for specialist review:** keep live undeleted business/evidence on
   one shared schedule based on the longest applicable legal floor, preserving necessary dinner
-  allergy evidence rather than expiring it at service end. Six years is a discussion baseline;
+  allergy evidence rather than expiring it at service end. Six years is a discussion baseline (the
+  owner noted on 18 November that some records need ten years, which ones to be confirmed:
+  question 10 of the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md));
   actual book/venue clocks, longer floors and proportionality require fiscal/commercial, labour
   and privacy agreement. Unnecessary identifying information is assessed separately for earlier
   removal, subject to remaining evidence duties. The schema has booking names/phones, account

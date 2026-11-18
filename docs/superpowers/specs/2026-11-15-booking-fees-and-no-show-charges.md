@@ -35,6 +35,8 @@ Your chosen flow returns the whole advance on arrival. Applying his answer to th
 
 [Question 18 in the adviser meeting](../../compliance/2026-11-19-adviser-meeting.md) remains unanswered: when you keep a deposit as no-show compensation, does its original VAT ticket stand, or do you issue a corrective removing VAT despite refunding no money? Do not treat the compensation's VAT treatment as settled.
 
+_2026-11-18: the owner's answer, the adviser still to confirm the details — see question 6 of the [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md): the venue issues the corrective._
+
 Online booking is not built, [A1013 remains open](../../backlog/till.md#a1013-online-booking-for-customers-owner-2026-10-22), and this comparison and its tax qualification authorise no implementation.
 
 ## Provenance

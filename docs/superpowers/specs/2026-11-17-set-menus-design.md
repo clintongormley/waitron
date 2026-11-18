@@ -1,5 +1,7 @@
 # Set menus (A1515): design
 
+_2026-11-18: T17 and question 26(c) have the owner's answer, the adviser still to confirm the details — see question 4 of the [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md): a set menu takes its main item's VAT rate, eaten in or taken away, and is not split by its items' prices._
+
 Status: approved by the owner in conversation, 17 November 2026 ("yes"), after reading the list
 of the writer's calls; the calls stay marked **my call** below. **Revised on 18 November 2026** by
 the owner's decisions in conversation: set menus are added by type, and a dish stays where it is

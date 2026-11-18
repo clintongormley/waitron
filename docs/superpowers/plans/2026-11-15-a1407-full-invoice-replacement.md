@@ -1,5 +1,7 @@
 # A1407 step 2: put right a full invoice AEAT refused for a future date — implementation plan
 
+_2026-11-18: S14 answered — answer 1.14 of 15 November (ticket and full-invoice correctives may not share a series), and the owner's answer to question 8 of the [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md) (owner, 2026-11-18: "always use a separate series for correctives")._
+
 > **For agentic workers:** use `superpowers:subagent-driven-development`. Dispatch each task as
 > `subagent_type: "implementer"`. Every task is test-first: write the named failing check, run it,
 > see it fail for the stated reason, then write the smallest code that passes it. Fiscal: the owner

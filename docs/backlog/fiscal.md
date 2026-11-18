@@ -20,9 +20,12 @@ or qualified by this research; current delivery and preservation checks remain o
 ## A445. A free item on a bill with mixed VAT rates should take a share of the price paid
 
 Allocate by value instead of setting the item to €0 (V0555-17, binding). Only bills mixing rates
-are affected (the deli's 4%, 10% and 21%). A table given everything free may be self-supply taxed at
-cost (V2347-24). Asked as
-[S10](../compliance/asesor-questions.md#the-shortened-list-2026-10-09); decide before going live.
+are affected (the deli's 4%, 10% and 21%). Asked as
+[S10](../compliance/asesor-questions.md#the-shortened-list-2026-10-09), and confirmed by the
+adviser's answer 1.10 of 15 November; the owner's decision D4 is to build it now. A table given its
+whole meal free is not this entry: the owner's answer of 18 November (owner, 2026-11-18; the adviser
+still to confirm the details) is that it is a self-supply only
+when given in exchange for services, and that it goes on the [report for the accountant](#a-report-for-the-accountant-corrections-to-filed-quarters-wrong-vat-rates-and-free-meals).
 Fiscal: the owner lands it.
 
 ## A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows
@@ -33,6 +36,11 @@ for the foreseeable future". A table's ticket is issued when staff close the tab
 [adviser answers B1](../compliance/2026-11-15-adviser-answers.md#b1-a-tables-ticket-waits-until-the-bill-is-fully-paid)).
 The design (A803 §3.9) and what the plans say about the pre-bill are kept as written. The rest of
 this entry is the 4 November decision, which this one sets aside.
+
+**Owner, 2026-11-18** (the adviser is still to confirm the details; question 2 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)): "No pre-bill is fine, and saves us
+the hassle of having another system to track. If the bill changes after it is issued then we just
+issue a correction or cancellation." Guests who split a bill after it was printed take either.
 
 **Owner, 2026-11-04: build it now to the strict reading, without waiting for S2.** Today a table
 cannot get a printed bill before paying: "bill requested" only marks the floor plan. If S2 says a
@@ -46,11 +54,34 @@ marks a line sent (Q21).
 AEAT's FAQ calls a system without that link «susceptible de sanción»,
 and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as [S2](../compliance/asesor-questions.md#the-shortened-list-2026-10-09).
 
-## A447. A guest's part-payment taken before the table is fully served may need its own advance-payment invoice
+## A447. Money paid before a meal's ticket is an advance; an open bill is issued when the trading day ends
 
-See LIVA 75.Dos, RD 1619/2012 art. 2.1. The server (#721) holds such money with no invoice until the
-bill is paid. Asked as
-[S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09); no change until answered.
+Asked as [S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) (LIVA 75.Dos, RD
+1619/2012 art. 2.1). The owner's answers of 18 November 2026 (owner, 2026-11-18, question 1 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details:
+
+- **When the meal ends, and so when its ticket is issued:** "Whichever comes first: printing the
+  bill; taking the last payment; close of trading day". The trading day is the venue's own day,
+  set to end at an hour when it is closed, such as 05:00. A ticket issued before it is paid shows
+  the amount still owed.
+- **Money paid before then is an advance, even when it names no dishes** ("€30 towards the
+  bill", a group's €1,000 towards its tab, a company paying for its dinner on the 14th): "an
+  invoice should be issued and VAT should be payed. It would be reasonable to charge 10% for
+  hospitality services/food." The final ticket deducts it as it deducts a deposit (adviser answer
+  1.8, [Part C](../compliance/2026-11-15-adviser-answers.md#part-c-to-remember-when-these-are-built)):
+  it shows the meal's total, the advance's amount before VAT and its VAT, and what is left, and its
+  record carries only what is left.
+
+To build: an advance's ticket when money is paid towards a bill whose ticket is not yet issued,
+its deduction on the final ticket and record, and issuing, when the trading day ends, a bill that
+was neither printed nor fully paid. Today a payment that leaves a bill part-paid issues no invoice
+(`apps/server/src/bill-payments-api.test.ts:771`, "leaves €70.00 outstanding on a €120.00 bill …
+and issues no invoice"). Printing the bill, which issues the ticket before payment, is lane L's
+MEAL-END-TICKET (#3704 and #3724, not landed); a payment after that is not an advance but a
+payment slip (question 2). The answer does not say what an advance's ticket describes when it
+names no dishes (the sheet proposed "payment on account for the meal at table 7"), and the sheet
+records as open that its "yes" does not single out recording that the guests left without paying
+as one of the moments of issue.
 
 ## Adviser confirmation: supplier invoice numbers by issue year
 
@@ -145,8 +176,10 @@ No stored fiscal row is to be rewritten.
 - Found by #601 (`packages/reporting`). **Owner decision 2026-09-24: a void counts on the day it
   is made, not the day of the sale** (built in #605 for the daily close's VAT, the period VAT
   summary and top sellers). The quarterly _modelo 303_ keeps its old behaviour, pinned by a test in
-  `vat-return.test.ts`, until the asesor answers `docs/compliance/asesor-questions.md` Q25 (which
-  VAT period a later annulment lands in). No till screen or server route calls `recordVoid` yet.
+  `vat-return.test.ts`, until the [report for the accountant](#a-report-for-the-accountant-corrections-to-filed-quarters-wrong-vat-rates-and-free-meals) is built: Q25
+  (which VAT period a later annulment lands in) is settled by owner decision D12 of 2026-11-16,
+  which the owner's answer of 18 November keeps (owner, 2026-11-18, question 8 of the
+  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. No till screen or server route calls `recordVoid` yet.
   `stableStringify` (`src/daily-close-hash.ts`) throws on a `null`, and a key holding `undefined`
   hashes differently from the row the database stores (the column drops the key); its comment now
   states the precondition, and nothing enforces it for callers. Not fixable in a comments-only
@@ -284,8 +317,10 @@ file's edit scope is authorised. The live procedure is documented in
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-Importing, matching or reconciling recovered history, and any missing-history remedy, stay out
-until the adviser answers Q41. Signed witnesses and fencing (W41s-10b) were retired on 9 November
+Importing, matching or reconciling recovered history, and any missing-history remedy, stay out:
+the owner's answer to Q41 (owner, 2026-11-18, question 10 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details) is to record what happened rather
+than rebuild lost invoices from AEAT's records ([incident record](#an-incident-record-the-venue-can-show-the-tax-office-hardware-faults-a-break-in-lost-data)). Signed witnesses and fencing (W41s-10b) were retired on 9 November
 2026: A1342 (#2654) stops a returning old main box once a spare it vouched for has taken over, on
 signed newer evidence in the backup bucket. A box restored from backup keeps the old box's id, so
 the old box is not fenced after a restore: A1418 part 1 is a plan only
@@ -820,9 +855,25 @@ job count as a physical exactly-once printing guarantee.
   whether the box keeps the previous seal's key, since the owner then has no file of their own, and
   what the card shows while a request is pending.
 
-## VAT at line add (M7v, A68)
+## VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68)
 
-Asesor Q26 (the rate on the day of issue) is open. Owner rulings
+The owner's brainstorm of 16 November 2026, paused for the adviser: VAT classes go; each product
+keeps a dated history of two rates, one for eating in and one for taking away, chosen from the
+rates AEAT accepts (0, 2, 4, 5, 7.5, 10 and 21), and a change can be scheduled ahead; an invoice
+takes each product's rates on the day its meal ends, and a deposit keeps the rate of the day it
+was paid. The owner's answers of 18 November (owner, 2026-11-18, questions 4 and 5 of
+the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details:
+
+- the two dated rates, taken on the day the meal ends: "correct". This also settles asesor Q26
+  (the rate on the day of issue).
+- A drink rung up at the counter as drunk on the premises stays at 10% when the customer carries
+  it out, and staff may ring it up that way when the customer says nothing: "yes".
+- A set menu takes its main item's rate ([A1515](menu.md#a1515-set-menus)).
+- **Waiting:** drinks served in the restaurant without food may take 21%, certainly once the
+  kitchen has stopped serving; unsettled, and the adviser will come back on it.
+
+A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-corrections-to-filed-quarters-wrong-vat-rates-and-free-meals). Next: write
+the design and get the owner's approval. From M7v, owner rulings
 at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
 box holding order lines is reset rather than given data-migration code; and every invoice path
 reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
@@ -848,6 +899,14 @@ A802 slice 5b (#3108):
   2026-10-18): once A802 lands, a refund of cancelled dishes files their partial R5 in the same
   step. §3.8.1 there has a worked example: €5.50 back at 10% is an R5 of −€5.50, base −€5.00, VAT
   −€0.50.
+- **Money given back as goodwill takes a corrective.** Asked whether a €10 goodwill return on a
+  paid €62 ticket needs a corrective, the owner answered "yes" (owner, 2026-11-18, question 6 of the
+  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details); the sheet
+  records as open that the "yes" does not say which of the two choices it answers, and reads it as
+  the corrective being required. Today a refund files a corrective only when it is a leg of an
+  invoice correction (`refundSettledTender`, `apps/server/src/tender-refunds.ts:144-146`), and the
+  A802 design leaves a served dish's goodwill return to the ordinary **Refund a payment** on purpose
+  (`docs/superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md:301-302`).
 
 Also open, from before A802:
 
@@ -855,27 +914,40 @@ Also open, from before A802:
   the invoice: a −12.00 corrective whose lines came to −12.10 was accepted (from `e56323007c`, #982;
   the runs in the [A802 slice 3 plan](../superpowers/plans/2026-11-10-a802-correction-history.md)).
 
-## A corrections report for earlier quarters' VAT (was: Correct VAT without returning money)
+## A report for the accountant: corrections to filed quarters, wrong VAT rates and free meals
 
 Settled by the owner's decisions D6 and D12 of 2026-11-16, after the tax adviser's answers 1.12 and
-1.13 ([what they change](../compliance/2026-11-15-adviser-answers.md), Parts B6 and B13):
+1.13 ([what they change](../compliance/2026-11-15-adviser-answers.md), Parts B6 and B13), then
+kept and widened by the owner's answers of 18 November (owner, 2026-11-18, questions 5, 6 and 8 of
+the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. Waitron files nothing itself:
+each case goes on a report for the accountant, who decides what to file.
 
-- A wrong VAT rate found after sale gets no document for customers: the adviser says the law bars
-  charging them the difference (LIVA 89.Tres.1.º). The venue pays it, and the product's rate is
-  corrected for future sales.
-- A quarter's VAT report counts that quarter's own invoices, with corrections made to them within
-  the same quarter, and a filed report never changes. Any later correction of an earlier quarter's
-  invoice (a cancellation, a corrective, a wrong date, a wrong rate, an invoice issued after its
-  meal's quarter) is left out of the current quarter, whichever way it moves the VAT, and listed on
-  a separate corrections report by original quarter and rate, reductions and additions apart. The
-  accountant files reductions in the current return or a corrected earlier one, and additions as
-  complementary returns. Waitron files nothing itself.
+- **Corrections to a filed quarter** (question 8: "yes"). A quarter's VAT report counts that
+  quarter's own invoices, with corrections made to them within the same quarter, and a filed
+  report never changes. Any later correction of an earlier quarter's invoice (a cancellation, a
+  corrective, a wrong date, a wrong rate, an invoice issued after its meal's quarter) is left out
+  of the current quarter, whichever way it moves the VAT, and listed by original quarter and rate,
+  reductions and additions apart. That holds when the error is found only after the next quarter
+  is filed too: "any correctives to the previous quarter should be reported in the correctives
+  report."
+- **A VAT rate set too low** (question 5). Customers' tickets stay as they are and nothing goes to
+  AEAT: the law bars charging customers the difference (LIVA 89.Tres.1.º). The VAT owed is worked
+  out per invoice line, treating the price charged as including the right rate, and the product's
+  rate is corrected for future sales.
+- **A VAT rate set too high** (question 5): "we just produce a correction report which goes to
+  the accountant", who decides whether to ask for the earlier return to be corrected.
+- **Meals given free** (question 6). A free meal is a self-supply (autoconsumo), taxed at cost,
+  only when given in exchange for services; one given as marketing, to a loyal customer, after a
+  bad experience or to an employee is not, and then the VAT paid on its ingredients may not be
+  recoverable. In the owner's words, "This is way too complex for us to handle automatically in
+  Waitron, instead this should be part of some report that we make available to the accountant to
+  decide what to do." So the report lists what was given free, with its reason; the owner gave
+  a margin as one basis for the cost (a 30% margin makes the cost 70% of the price).
 - Today `packages/reporting/src/vat-return.ts` counts a corrective in the quarter it is issued, at
   the original's rate, and moves a wrong-date corrective's VAT back to the real day, changing a
   filed quarter's figures (read, not run).
-- Question 7 of the [19 November meeting sheet](../compliance/2026-11-19-adviser-meeting.md) asks the
-  adviser to confirm. How a wrong rate is recorded waits on the per-product VAT rate design under
-  discussion on 2026-11-16 (dated rates per product, chosen from a list Waitron ships).
+- How a wrong rate is recorded on the product waits on the design of
+  [VAT rates per product](#vat-rates-per-product-eaten-in-or-taken-away-was-vat-at-line-add-m7v-a68).
 
 ## "No tax (0%)" is an open fiscal question, and it must be answered before the first live filing
 
@@ -946,10 +1018,11 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   that applies to every later record (one about the taxpayer's identity, say) opens one case per
   record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
   [Detail](fiscal.md#still-open-after-w41s-3-1289-one-reply-can-open-up-to-1000-filing-cases)
-- **Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the asesor; owner 2026-10-06).
-  The decision is put to the asesor as [Q47](../compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12) (S19 in the short list),
-  covering this hold and the three-refusal brake.
-  [Detail](fiscal.md#re-examine-the-hold-behind-an-unknown-outcome-once-the-asesor-answers)
+- **Re-examine the hold behind an unknown outcome once AEAT's developer channel answers** — OPEN (owner 2026-10-06).
+  The owner's view on [Q47](../compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12) (S19),
+  (owner, 2026-11-18; the adviser is still to confirm the details): nothing seems to need holding back, since AEAT accepts later records when
+  an earlier one is refused; the owner suggests asking AEAT's developer channel first. No change until then.
+  [Detail](fiscal.md#re-examine-the-hold-behind-an-unknown-outcome-once-aeats-developer-channel-answers)
 
 ## Bundle: Show a late success, decide the address, fix those strings
 
@@ -977,6 +1050,34 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 - **Test files in `packages/fiscal-verifactu` still name their database handle `pg`**
   (`git grep -l 'const pg = ' packages/fiscal-verifactu`), among them `write-path.e2e.test.ts` and
   `inmutabilidad.test.ts`. Rename it in the same authorised edit. Left by the T2 sweep (2026-09-23).
+
+## Every ticket is printed unless it is emailed: the till's None choice goes
+
+Owner, 2026-11-18 (the adviser is still to confirm the details; question 3 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)): "It is required to deliver a
+ticket. We must always print one unless we email it instead." The owner had kept None on
+16 November (decision D2, [adviser answers B2](../compliance/2026-11-15-adviser-answers.md#b2-a-ticket-can-end-up-never-delivered)).
+
+After payment the till's document window has a None button that closes the window
+(`apps/till/src/widgets/settlement-document-dialog.ts:113-119`, sending `settlement-close`, as
+the window's own close does at `:37`). To build: the ticket prints at payment unless the customer
+chooses email, however the window closes, and None leaves the window, the guides and the tests.
+The email step should tell the customer how the ticket will arrive and that paper is available
+(the sheet's wording: "We'll email your ticket to this address. You can ask for a paper copy at
+any time."); the till's strings (`apps/till/src/i18n/strings.ts`) hold no such sentence.
+
+## An incident record the venue can show the tax office: hardware faults, a break-in, lost data
+
+Asked whether a venue whose server was restored from an old backup may rebuild the missing
+invoices from AEAT's query service (the adviser's answer 1.16 of 15 November), the owner answered
+(owner, 2026-11-18; the adviser is still to confirm the details; question 10 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)): "if the data is gone, how would
+we rebuild? the important thing is to record all issues eg hardware issues, being hacked, data
+loss, etc, so that we can explain what happened". This replaces the 15 November recommendation
+(D9) to keep what AEAT returns so copies could be rebuilt. The venue needs a record of every such
+incident that outlives the data it explains and that it can show the tax office. Not designed:
+what is recorded and by whom, how a person adds an incident the box cannot see (a break-in), what
+the box adds by itself, and how the record reaches the tax office.
 
 ## Decisions and deliberate limits
 
@@ -1336,24 +1437,23 @@ cancellation of a refused invoice were dropped on 2026-10-12 (owner); the brake 
 behind an unknown answer are unchanged.
 [W41s detail](#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
-## Re-examine the hold behind an unknown outcome once the asesor answers
+## Re-examine the hold behind an unknown outcome once AEAT's developer channel answers
 
-**Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the
-asesor; owner 2026-10-06). The owner kept the hold for now (it landed with W41s-3c, #1304) and
+**Re-examine the hold behind an unknown outcome once AEAT's developer channel answers** — OPEN (owner
+2026-10-06; the owner's view, 2026-11-18). The owner kept the hold for now (it landed with W41s-3c, #1304) and
 asked to revisit it when the asesor answers Q37 and its siblings
 ([questions](../compliance/asesor-questions.md)): drop the hold, keep it, or add the overtaking case
 to the W41s-1b probe first. The W41s-1b probes have since run without an overtaking case; their
 results are in [W41s-1c's receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains).
 The decision is put to the asesor as [Q47](../compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
-(S19 in the short list), covering this hold and the three-refusal brake. The holds after a 3000
+(S19 in the short list), covering this hold and the three-refusal brake. The owner's view (owner,
+2026-11-18; the adviser is still to confirm the details; question 11 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)): "we should ask on the AEAT
+developer's channel, but given that they already accept invoices 2-999 when invoice 1 in the chain
+has been rejected, it seems that we don't need to hold anything back." Nothing changes until AEAT's
+developer channel answers; the decision then covers the hold and the brake, as before. The holds after a 3000
 conflict and behind a cancellation of a refused invoice were dropped on 2026-10-12 (owner).
 [W41s detail](#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
-
-## Asesor questions to send
-
-The [curated list](../compliance/2026-11-06-adviser-questions.md) replaces the Spanish batch of 5 November and is for the owner to review. The old batch: It separates fiscal/accounting, labour, privacy and consumer-law questions, retaining their stable references. It has not been sent by this campaign; adviser answers remain open.
-
-The owner records the earlier shortened list as sent around 15 October in [the question register](../compliance/asesor-questions.md). Q27–Q29 and Q32 belong to that earlier batch; follow up their answers rather than duplicating the enquiry. The new batch covers Q13(d), Q48–Q61 and the labour list, excluding points already answered by primary sources. Q19 also remains open in the earlier question register.
 
 ## A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).
 
@@ -1399,7 +1499,8 @@ own producer check there, then pushes from the builder's cache, and that sequenc
 plan's 8g Step 5) is still to do.
 Slice 2 landed (#2820, #2827 and #2836; [plan](../superpowers/plans/2026-11-11-a940-2-release-declaration.md)): the text, its renderer, the A4 PDF's renderer, the package's `declaration` command (`show`, `write`, `check`), and `pnpm release prepare` and `pnpm release tag` with their [runbook](../operations/release.md). Both release commands refuse until the release-blocker line in `packages/fiscal-verifactu/declarations/template.md` is deleted, by whoever records the asesor's answer to Q53. Slice 3 landed (#2861, #2874, #2916, #2974; [plan](../superpowers/plans/2026-11-11-a940-3-in-app-declaration.md)): every box answers `/legal/declaration` (and `.pdf`, `.txt`) and `/legal/about` on every listener, and says it has none when its image carries none; every terminal opens it — the dashboard, the till, a kitchen screen, the till's sign-in and join screens and the setup wizard — and the guide's About Waitron page says where. Slice 4 landed (#2987, #3001, #3014; [plan](../superpowers/plans/2026-11-12-a940-4-release-image.md)): a `v1.2.3` tag on `main` publishes an image whose records say `1.2.3` and which holds that version's declaration in `/app/declaration/`, checked inside the built image with `node /app/server.js check-release 1.2.3`; CI refuses a tag that is not on `main`, is not a release version, whose declaration is missing, blocked or disagrees with the code, or whose version is already published; a `release` job attaches `waitron-1.2.3-declaration.pdf` and `.txt`, copied out of the published image, to the GitHub Release; `waitron.sh install v1.2.3` pulls the published images; a production start of a bundle built without a release version stops on the recovery page with `server.unreleased_build` ("This box is running a test build."), while a start from source is not refused; and a root guard (`scripts/released-declarations.mjs`) fails when a released version's declaration changes or its tag is missing. So no box can start in production until `v1.0.0` exists, which waits for Q53. Open point, for the owner: the recovery page's action "Install a release." (the design's §5.1 wording) offers no way to do that from the page, whose only button retries the same build; the page cannot offer one until a release can be installed without a terminal (B3's installer, A950's upgrades). Slice 5 landed (#3051; [plan](../superpowers/plans/2026-11-13-a940-5-kept-declarations.md)): a box that starts selling keeps the declaration of the release it runs in the venue database, and the declaration page every About screen opens lists each earlier version it has kept under «Versiones anteriores», each opening that version's text. Slice 6 (`@waitron/verifactu`'s own declaration) remains. 1b (A993) waits until a producer change is scheduled.
 Still needed from outside: the asesor's answer to Q53, now question 9 of the
-[19 November adviser sheet](../compliance/2026-11-19-adviser-meeting.md). The
+[19 November adviser sheet](../compliance/2026-11-19-adviser-meeting.md); the owner's answers
+of 18 November leave items d) and f) to be confirmed. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.
 
 ## A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.

@@ -1916,7 +1916,10 @@ Design revision 7 (2026-10-24); every owner question answered except one the sli
   [plan](../superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md),
   [design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md).
 
-Two slices from those answers are open, each its own pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)), built and parked for the owner as #2331; and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](../superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Open asesor questions:
+Two slices from those answers are open, each its own pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)), built and parked for the owner as #2331; and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](../superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Asesor questions; of these, question 8 of the
+  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md) covers the dating ones; the owner's answers
+  (owner, 2026-11-18; the adviser is still to confirm the details): a sale dated on the wrong day takes a corrective, as A1215 in the backlog describes;
+  a wrong time on the right day is not corrected, "yes probably, tbc". Q61 was not on that sheet:
   [Q51](../compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24),
   [Q52](../compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21),
   [Q60](../compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24)

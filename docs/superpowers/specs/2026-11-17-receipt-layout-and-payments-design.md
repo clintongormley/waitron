@@ -45,6 +45,7 @@ to say what is still owed.
 - No duplicado after payment printed automatically. A duplicado prints only when staff reprint, as
   today. Whether that is allowed on request, and whether it may show later payments, is question 24
   of the 19 November adviser meeting (`docs/compliance/2026-11-19-adviser-meeting.md`).
+  _2026-11-18: the owner's answer, the adviser still to confirm the details — see question 2 of the 19 November sheet: a duplicate may be printed whenever the venue wants, and a slip may name the ticket it pays but need not; whether a duplicate may show later payments is still open._
 - No pre-bill (A446 stays on the backlog, owner 2026-11-17).
 - No change to the full invoice's (F1) item table or tax rows: goals 1–3 are simplified-receipt
   only. F1 already has unit-price and rate columns.

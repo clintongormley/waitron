@@ -87,8 +87,13 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 
 **1. The owner's sessions, which need no building.**
 
-- Send the [curated adviser list](compliance/2026-11-06-adviser-questions.md), once the Spanish is rebuilt from it. It holds up 26 entries,
-  seven of them go-live, including 0% VAT and free items on mixed-rate bills.
+- Get the tax adviser's details on the owner's answers of 18 November on the
+  [19 November sheet](compliance/2026-11-19-adviser-meeting.md) (owner, 2026-11-18: the answers
+  there are the owner's own, and the adviser will come back with more). Still open even in the
+  owner's answers: drinks served without food (question 4), tips (7), a wrong time on the right
+  day (8), the declaration's items d) and f) (9), and a copy's header and logo and which records
+  are kept ten years (10). Question 11's labour, privacy and selling-by-weight questions still
+  need advisers of their own.
 - [The owner's yes-or-no read: built defaults that wait only for a nod](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 - [One session at the real box: printers, paper, tax QR, the drawer](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 - [One session with real phones and password managers](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
@@ -235,7 +240,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).**
   Task 8 landed: the producer's name, tax number and postal address are three public settings each official image carries from repository secrets, never committed; a production start refuses without them, and refuses when its chain was made under another producer. The three secrets hold placeholder values for now (owner, 2026-11-08); replacing them (`gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron`) is safe only while no box has started in production, because a production chain refuses a different producer tax number until A993 lands, and every full run's publish job fails while any is missing; once an image carrying a placeholder is published, the publish job also refuses the real tax number unless the repository variable `WAITRON_PRODUCER_CHANGE_ALLOWED` holds it; apart from replacing the placeholder, do not change the tax number until A993 lands; watch the first nightly or manual publish (its load-then-push build had not run on GitHub before). The real-fork test (the plan's 8g Step 5) is still to do. Slice 2 landed (#2820, #2827 and #2836): the text, its renderer, the A4 PDF's renderer, the package's `declaration` command, and `pnpm release prepare` and `pnpm release tag` with their [runbook](operations/release.md). Both release commands refuse until the template's release-blocker line is deleted, when the asesor's answer to Q53 is recorded. Slice 3 landed (#2861, #2874, #2916, #2974; [plan](superpowers/plans/2026-11-11-a940-3-in-app-declaration.md)): every box, in every state and on every listener, answers `/legal/declaration` (and `.pdf`, `.txt`) and `/legal/about`, and says it has no declaration when its image carries none; every terminal opens it: the dashboard's account menu and sign-in screen open About Waitron; on the till, More holds About Waitron just above Log out, and a kitchen screen's corner, the till's sign-in and join screens and the setup wizard have an ⓘ that opens it; the guide's About Waitron page says where to find it. Slice 4 landed (#2987, #3001, #3014; [plan](superpowers/plans/2026-11-12-a940-4-release-image.md)): a `v1.2.3` tag on `main` publishes an image whose records say `1.2.3` and which carries that version's declaration; CI refuses a tag off `main`, a bad version, a missing, blocked or disagreeing declaration, or a version already published; the GitHub Release gets the declaration's PDF and text from the published image; `waitron.sh install v1.2.3` pulls it; a production start on a bundle that is not a release refuses `server.unreleased_build`; a root guard fails when a released declaration changes or its tag is missing. So no box can start in production until `v1.0.0` exists, which waits for Q53. Slice 5 landed (#3051; [plan](superpowers/plans/2026-11-13-a940-5-kept-declarations.md)): a box that starts selling keeps its release's declaration in the venue database, and the declaration page lists each earlier version kept under «Versiones anteriores». Slice 6's library half landed (waitron-io/verifactu#152; [plan](superpowers/plans/2026-11-14-a940-6-library-declaration.md)): from 0.3.0 each `@waitron/verifactu` release carries its own declaration on its GitHub Release and inside the npm package, and AEAT's demand service is removed. Still open: releasing 0.3.0, which waits for the asesor's Q53 answer and for the owner to set `WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID`, `WAITRON_PRODUCER_ADDRESS` (secrets) and `DECLARATION_PLACE` (variable) on waitron-io/verifactu; then Waitron moves to `^0.3.0` and `pnpm release prepare` refuses a library with no declaration. 1b (A993) waits until a producer change is scheduled.
-  Still needed from outside: the asesor's answer to Q53, now question 9 of the [19 November adviser sheet](compliance/2026-11-19-adviser-meeting.md). The owner's publishable address is settled (supplied 2026-11-04; it travels with the other two).
+  Still needed from outside: the asesor's answer to Q53, now question 9 of the [19 November adviser sheet](compliance/2026-11-19-adviser-meeting.md); the owner's answers of 18 November leave items d) and f) to be confirmed. The owner's publishable address is settled (supplied 2026-11-04; it travels with the other two).
   [Detail](backlog/fiscal.md#a940-waitrons-declaración-responsable--design-approved-2026-10-22-slice-1-landed-2026-10-23-2000).
 
 - **A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.**
@@ -252,23 +257,30 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A445. A free item on a bill with mixed VAT rates should take a share of the price paid.** Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a445-a-free-item-on-a-bill-with-mixed-vat-rates-should-take-a-share-of-the-price-paid).
 
-- **A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows — NOT SCHEDULED: it stays on the backlog for the foreseeable future (owner, 2026-11-17: "the printed pre-bill, leave it on the backlog for the foreseeable future").** A table's ticket is issued when staff close the table instead (decision D1, MEAL-END-TICKET). The design stays A803 §3.9, kept as written.
+- **A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows — NOT SCHEDULED: it stays on the backlog for the foreseeable future (owner, 2026-11-17: "the printed pre-bill, leave it on the backlog for the foreseeable future").** A table's ticket is to be issued when staff print the bill instead (decision D1, MEAL-END-TICKET, #3704 and #3724, not landed). The design stays A803 §3.9, kept as written. The owner's answer (owner, 2026-11-18, question 2 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): no pre-bill is needed, and a bill changed after it is issued takes a corrective or a cancellation; the adviser is still to confirm the details.
   [Detail](backlog/fiscal.md#a446-build-the-pre-bill-each-printed-pre-bill-is-stored-as-printed-and-linked-to-the-invoice-that-follows).
 
-- **A447. A guest's part-payment taken before the table is fully served may need its own advance-payment invoice.** No change until answered.
-  [Detail](backlog/fiscal.md#a447-a-guests-part-payment-taken-before-the-table-is-fully-served-may-need-its-own-advance-payment-invoice).
+- **A447. Money paid before a meal's ticket is an advance; an open bill is issued when the trading day ends.** Owner, 2026-11-18 (question 1 of the
+  [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): every payment towards a meal before its ticket is issued, even one
+  naming no dishes, gets its own invoice with VAT, and the final ticket deducts it; the adviser is still to confirm the details. Fiscal: the owner lands it.
+  [Detail](backlog/fiscal.md#a447-money-paid-before-a-meals-ticket-is-an-advance-an-open-bill-is-issued-when-the-trading-day-ends).
 
 - **A448. Whether a customer's email address alone satisfies TRLGDCU art. 63.3 for an emailed full invoice.**
   [Detail](backlog/fiscal.md#decisions-and-deliberate-limits) _2026-10-12: the product no longer asks for consent at all — A231q's tasks C1a and C1b
   removed it ([plan](superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md)) on the owner's 2026-10-09 answer. Until 2026-10-12 this entry asked
   that the consent request say how the invoice will arrive and how consent is withdrawn._
 
+- **Every ticket is printed unless it is emailed: the till's None choice goes (go-live).** Owner, 2026-11-18 (question 3 of the
+  [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): "We must always print one unless we email it instead." This
+  reverses the owner's decision D2 of 16 November to keep None; the adviser is still to confirm the details. Fiscal: the owner lands it.
+  [Detail](backlog/fiscal.md#every-ticket-is-printed-unless-it-is-emailed-the-tills-none-choice-goes)
+
 - **Loose ends left by A230 (`@waitron/verifactu` 0.2.1, #1099).**
   An unusable `TiempoEsperaEnvio` is not recorded anywhere (the raw value is dropped).
   [Detail](backlog/fiscal.md#loose-ends-left-by-a230-waitronverifactu-021-1099)
 
 - **Owner decision 2026-09-24: a void counts on the day it is made, not the day of the sale** —
-  The quarterly _modelo 303_ keeps its old behaviour until the asesor answers Q25 (which VAT period a later annulment lands in).
+  The quarterly _modelo 303_ keeps its old behaviour until the report for the accountant below is built: Q25 (which VAT period a later annulment lands in) is settled by owner decision D12, which the owner's answer of 18 November keeps (owner, 2026-11-18, question 8 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details.
   No till screen or server route calls `recordVoid` yet.
   [Detail](backlog/fiscal.md#owner-decision-2026-09-24-a-void-counts-on-the-day-it-is-made-not-the-day-of-the-sale)
 
@@ -292,8 +304,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#a556-a-full-invoice-that-later-replaces-a-bills-simplified-one-would-not-be-delivered-through-the-bill)
 
 - **W41s. Fiscal prevention and offline recovery.**
-  Importing, matching or reconciling recovered history, and any missing-history remedy, wait for
-  the adviser's answer to Q41. Signed witnesses and fencing (W41s-10b)
+  Importing, matching or reconciling recovered history, and any missing-history remedy, stay out:
+  the owner's answer to Q41 (owner, 2026-11-18, question 10 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)) is to
+  record what happened rather than rebuild lost invoices (the incident record below); the adviser is still to confirm the details. Signed witnesses and fencing (W41s-10b)
   were retired on 9 November 2026: A1342 (#2654) stops a returning old main box once a spare it
   vouched for has taken over. A box restored from backup keeps the old box's id, so nothing stops
   the old box after a restore; A1418 part 1, still a plan, adds a check for a venue of one box.
@@ -308,21 +321,23 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   `packages/fiscal-verifactu/src/record-remedy-routes.ts:32`).
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
+- **An incident record the venue can show the tax office: hardware faults, a break-in, lost data.** Owner, 2026-11-18 (question 10 of the
+  [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): record every incident rather than rebuild lost invoices from
+  AEAT's records; the adviser is still to confirm the details. Not designed.
+  [Detail](backlog/fiscal.md#an-incident-record-the-venue-can-show-the-tax-office-hardware-faults-a-break-in-lost-data)
+
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
   authority.** Complete the copy and authenticated establishment path before presenting a successful fiscal
   join. The pending file alone supplies no live authority.
   [detail](backlog/fiscal.md#w41s-4-adoption-boundary-checkpoint-2026-10-14).
 
-- **Settle the hold and the brake once** (bundle of 2, 2 important, size S, needs the adviser). [Detail](backlog/fiscal.md#bundle-settle-the-hold-and-the-brake-once)
+- **Settle the hold and the brake once** (bundle of 2, 2 important, size S, needs an answer from AEAT's developer channel). [Detail](backlog/fiscal.md#bundle-settle-the-hold-and-the-brake-once)
 
 - **The reconcile sweep may raise a second "accepted with errors" warning.**
   [Detail](backlog/fiscal.md#the-reconcile-sweep-may-raise-a-second-accepted-with-errors-warning).
 
 - **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030).**
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
-
-- **The next adviser batch awaits the owner's decisions, then sending.** The [curated English list](compliance/2026-11-06-adviser-questions.md) replaces the Spanish draft, which covered the additions after the shortened list and the labour questions. Adviser answers, including Q19, remain open. The owner records the earlier shortened list as sent around 15 October; do not send its questions again as a new batch.
-  [Detail](backlog/fiscal.md#asesor-questions-to-send)
 
 - **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows the original invoice total.** **PARKED (owner,
   2026-09-29)** until the product can issue a corrective invoice. Left
@@ -337,22 +352,23 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a853-the-box-makes-a-company-seals-private-key-itself)
 
-- **VAT at line add (M7v, A68).** — left open by the menus plan. Asesor Q26 (the rate on the day of
-  issue) is open. The till computes a basket VAT split (`vatBreakdown`,
-  `apps/till/src/state/working-order.ts`) that no screen shows.
-  [Detail](backlog/fiscal.md#vat-at-line-add-m7v-a68)
+- **VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68).** The owner's
+  answer (owner, 2026-11-18, question 5 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)) keeps the plan of two
+  dated rates per product, taken on the day the meal ends; the adviser is still to confirm the details. Design next. Drinks served
+  without food may take 21%: unsettled, and the adviser will come back on it. [Detail](backlog/fiscal.md#vat-rates-per-product-eaten-in-or-taken-away-was-vat-at-line-add-m7v-a68)
 
 - **Correcting a paid invoice: dish counts, earlier refunds and cancelled dishes (left open by
   A802 slice 5b, #3108).** The correction window ticks whole dishes; an earlier ordinary refund does not
   count towards a correction; a refund of cancelled dishes does not yet file its corrective in the
-  same step (A758 §3.8, owner Q43 e).
+  same step (A758 §3.8, owner Q43 e). Money given back as goodwill needs a corrective too (owner,
+  2026-11-18, question 6 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details).
   [Detail](backlog/fiscal.md#correcting-a-paid-invoice-what-a802-left-open)
 
-- **A corrections report for earlier quarters' VAT** (owner, D6 and D12, 2026-11-16). A filed
-  quarter never changes; every later correction of an earlier quarter's invoice goes on a separate
-  report for the accountant instead of into the current quarter. Waits on the adviser's answer to
-  question 7 on 19 November. Fiscal: the owner lands it.
-  [Detail](backlog/fiscal.md#a-corrections-report-for-earlier-quarters-vat-was-correct-vat-without-returning-money)
+- **A report for the accountant: corrections to filed quarters, wrong VAT rates and free meals**
+  (owner, D6 and D12, 2026-11-16; owner, 2026-11-18, questions 5, 6 and 8 of the
+  [19 November sheet](compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details). A filed quarter never changes; later corrections of earlier
+  quarters, a rate set too low or too high, and meals given free go on a report the accountant acts
+  on. Fiscal: the owner lands it. [Detail](backlog/fiscal.md#a-report-for-the-accountant-corrections-to-filed-quarters-wrong-vat-rates-and-free-meals)
 
 - **Probe a replacement R5 "S", and an R4 "S", on AEAT's test service (go-live; watcher, 2026-11-14 18:22; the R4 "S", watcher, 2026-11-15 01:52).** Run
   before the first real R5 'S': a simplified invoice refused for a future date (`1112`), then a
@@ -361,8 +377,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the same way, naming the same customer. It needs a new `live-aeat` mode in the
   `verifactu` repo, which needs the owner's approval, by A985's precedent. Left open by Q37-FIX.
   Turning on full-invoice replacement (`FULL_INVOICE_REPLACEMENT_ON`, A1407) waits for this probe
-  and for the answer to adviser question S14 (one corrective series for R4 and R5?): answer it
-  before the first real R4 is filed, since an R4 is numbered from the same corrective series as R5.
+  and for full invoices' correctives to get a series of their own. Adviser question S14 is answered:
+  correctives of tickets (R5) and of full invoices (R1 to R4) may not share one (answer 1.14,
+  15 November; owner, 2026-11-18: "always use a separate series for correctives"). Today an R4
+  replacement would take the same live corrective series as an R5
+  (`packages/fiscal-verifactu/src/record-remedy-replacement.ts:82`).
 
 - **"No tax (0%)" is an open fiscal question, and it must be answered before the first live filing.**
   The advisor is asked only to confirm (review item [R3](compliance/asesor-questions.md#the-shortened-list-2026-10-09)).
@@ -375,8 +394,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **Should `packages/fiscal-verifactu` have a mutation floor?**
   [Detail](backlog/fiscal.md#should-packagesfiscal-verifactu-have-a-mutation-floor).
-
-- **Should a cancelled or replaced invoice's copy say so?** Left open by A1411 (the tax office's Invoices page and month download). A question for the adviser on 19 Nov beside T4. If the adviser answers no on T4, remote access is needed on top. [Plan](superpowers/plans/2026-11-16-a1411-tax-office-invoices.md).
 
 ### The setup wizard, onboarding and the demo venue
 
@@ -399,10 +416,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   **Build remains open**; Cloud's qualified trial journey is prerequisite G1 in the plan.
   Stays in the backlog, in no lane, until Cloud's sign-up and trial pages and a real box-to-Cloud connection exist (owner, 2026-11-09).
   [Detail](backlog/setup.md#a1186-the-setup-tour-offers-waitron-clouds-level-2-trial-owner-2026-10-29).
-
-- **A1215. Correcting invoices issued under a wrong clock** (from A1207): a box can hold invoices
-  dated after the real time (a restored backup from a box whose clock was fast). Nothing in Waitron
-  corrects them, and what to do about them with AEAT is undesigned. Design first.
 
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).
@@ -580,11 +593,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Try the Calendar's long press on real Android and iOS phones (A720).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 
-
-- **Which name a record sent across a legal-name change carries** (A494 follow-up, 2026-10-11). A
-  record keeps the name it was written with, so one written before the change but sent after it
-  carries the old name, and a later cancellation of an earlier invoice carries the new one. Waits
-  on the asesor's answer to Q37(d), S18 in `docs/compliance/asesor-questions.md`.
 
 - **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
   kitchen agreed for**
@@ -1256,11 +1264,19 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Qualify clock confirmation through remote access** (bundle of 1, size M). [Detail](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
 
-- **A1407. A full invoice AEAT refused for a future date is put right by a replacement R4, built 2026-11-15 but switched off.** The writer and the case dialog's **Put this right** file an R4 "S" naming the same customer and the day the sale really happened, only while `FULL_INVOICE_REPLACEMENT_ON` in `packages/fiscal-verifactu/src/put-right.ts` is true; it is false, so the case dialog still says Waitron cannot put a full invoice right yet, and `computeVatReturn` counts such an invoice in its issue date's period until it is replaced. Turning it on waits for adviser question S14 and the R4 "S" probe on AEAT's test service (the probe entry under go-live). A simplified invoice refused for a future date is put right from the case dialog with a replacement R5 (Q37-FIX). Since A1420 PR 2, refusals for a future date (`1112`) no longer hold the rest of a chain; a record refused for a future date should get its corrective at once, naming the refused invoice, which AEAT's developer FAQ §17 says resolves it (case 2.a) and AEAT's test service accepted for an R1 (verifactu run 37286368370). Clocks running behind are not listed for the owner. The invoices to correct are those AEAT refuses as dated in the future (`1112`); a wrong date AEAT accepts is not corrected (owner, 2026-11-10; A1420 D8). An enabled remedy takes the start gate first (A1420 R7). AEAT's `TimestampPresentacion` is read but not stored: kept with each record, it would prove the real time of most sales, and that part needs a column, so it waits for the A1308 table hold to lift. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
+- **A1407. A full invoice AEAT refused for a future date is put right by a replacement R4, built 2026-11-15 but switched off.** The writer and the case dialog's **Put this right** file an R4 "S" naming the same customer and the day the sale really happened, only while `FULL_INVOICE_REPLACEMENT_ON` in `packages/fiscal-verifactu/src/put-right.ts` is true; it is false, so the case dialog still says Waitron cannot put a full invoice right yet, and `computeVatReturn` counts such an invoice in its issue date's period until it is replaced. Turning it on waits for full invoices' correctives to get a series of their own (adviser question S14 is answered: they may not share the tickets' corrective series) and for the R4 "S" probe on AEAT's test service (the probe entry under go-live). A simplified invoice refused for a future date is put right from the case dialog with a replacement R5 (Q37-FIX). Since A1420 PR 2, refusals for a future date (`1112`) no longer hold the rest of a chain; a record refused for a future date should get its corrective at once, naming the refused invoice, which AEAT's developer FAQ §17 says resolves it (case 2.a) and AEAT's test service accepted for an R1 (verifactu run 37286368370). Clocks running behind are not listed for the owner. The invoices to correct are those AEAT refuses as dated in the future (`1112`); a wrong date AEAT accepts is not corrected (owner, 2026-11-10; A1420 D8). An enabled remedy takes the start gate first (A1420 R7). AEAT's `TimestampPresentacion` is read but not stored: kept with each record, it would prove the real time of most sales, and that part needs a column, so it waits for the A1308 table hold to lift. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
 
-- **Correct the sales dated wrongly once the tax adviser answers Q60.** What the correction is
-  waits on [Q60](compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24);
-  A1420 PR 6 removed A1088's list, its notes and its download. Left open by A1088.
+- **A1215. Correct sales dated on the wrong day** (left open by A1088 and A1207). A clock that ran
+  ahead, or a restored backup from a box whose clock was fast, dates sales later than they
+  happened. The owner's answer (owner, 2026-11-18; [Q60](compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24),
+  question 8 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)), the adviser still to confirm the details: a sale dated on the wrong day gets a
+  corrective that states the real date and changes no amount, in a corrective series apart from
+  the tickets; the venue keeps it and gives it only to a customer it knows; nothing else goes to
+  AEAT; its VAT moves through the [report for the accountant](backlog/fiscal.md#a-report-for-the-accountant-corrections-to-filed-quarters-wrong-vat-rates-and-free-meals).
+  A wrong time on the right day is not corrected: "yes probably, tbc". The owner's rule of
+  10 November that a wrong date AEAT accepts is not corrected (A1420 D8, in A1407 above) predates
+  this answer; which stands is the owner's call. A1420 PR 6 removed A1088's list, its notes and its
+  download. Design first.
 
 - **The accountant's file is comma-separated in both languages, and a spreadsheet set to expect
   semicolons may open the Spanish file in one column.**
@@ -1965,11 +1981,11 @@ diagnostics (Slice 1, #192).
 
 ## The advisor gap — not a build track
 
-**No fiscal advisor is engaged yet.** One quoted on 2026-10-09: €300 an hour and about an hour for
-each of the 106 bullets in the 6 October list. The same day every bullet was researched against
-primary sources and the list was cut to seventeen questions, S1–S17 (S17, on selling by weight,
-is legal metrology rather than tax), and a review list, R1–R6:
-[the shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09). The owner records that list as sent around 15 October. The [next batch](compliance/2026-11-05-consultas-para-asesores.md) is prepared for the owner to review and send, with separate fiscal, labour, privacy and consumer-law parts. Answers remain open. Before paying for answers, agree the scope and price.
+**A tax adviser answered [the shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09)**
+(S1–S16 and the review list R1–R6; S17, on selling by weight, is legal metrology rather than tax)
+on 15 November 2026: [what the answers change](compliance/2026-11-15-adviser-answers.md). The
+follow-up questions became the [19 November sheet](compliance/2026-11-19-adviser-meeting.md); the answers
+written there on 18 November are the owner's own, and the adviser will come back with more details. The Status column below predates both.
 Cloud archive and hosting questions, including the historical cloud-storage document's §8a,
 are now tracked in the [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md).
 Keep core fiscal questions here and coordinate shared assumptions with that review.
@@ -1994,7 +2010,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 [asesor-laboral-questions.md](compliance/asesor-laboral-questions.md). Nothing there blocks the build;
 two items want confirming before go-live (the digital-registro RD's status; the provincial convenio
 and figures), plus whether the venue's exported working-time record may show per-node chains. The
-gestoría's payroll import layout is the one build dependency (it fixes the D3 export format). How card tips are booked remains Q49; the employer-paid tip payroll questions remain L6. Both are included in the next batch.
+gestoría's payroll import layout is the one build dependency (it fixes the D3 export format). How card tips are booked (Q49) is question 7 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md), where the owner's answer of 18 November is "to be confirmed"; the employer-paid tip payroll questions (L6) remain open.
 
 **Data protection (RGPD) is a third track, never scoped end-to-end.** Scope it before engaging a
 DPO: a data map (what personal data, where, how long); the controller-versus-processor split and
