@@ -10,7 +10,14 @@ import sharp from "sharp";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
-import { devices, printers, readTaxpayer, withTransaction, type Database } from "@waitron/db";
+import {
+  deviceProfilePrinters,
+  devices,
+  printers,
+  readTaxpayer,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { mediaImages, uploadImage, prepareImage, saveImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -389,17 +396,23 @@ describe("POST /management-api/receipt-preview", () => {
     );
   });
 
-  it("uses the default width when a device points to an office printer", async () => {
+  it("uses the default width when a profile's default receipt printer is an office printer", async () => {
     const office = await insertA4Printer(suite.db);
-    const { deviceId } = await seedDevice(suite.db, { label: "Office" });
+    const { deviceId, profileId } = await seedDevice(suite.db, { label: "Office" });
     onTestFinished(async () => {
       await suite.db.delete(devices).where(eq(devices.id, deviceId));
+      await suite.db
+        .delete(deviceProfilePrinters)
+        .where(eq(deviceProfilePrinters.deviceProfileId, profileId));
       await suite.db.delete(printers).where(eq(printers.id, office));
     });
-    await suite.db
-      .update(devices)
-      .set({ receiptPrinterId: office })
-      .where(eq(devices.id, deviceId));
+    await suite.db.insert(deviceProfilePrinters).values({
+      deviceProfileId: profileId,
+      printerId: office,
+      role: "receipt",
+      position: 0,
+      isDefault: true,
+    });
     const result = await rendered({});
     expect([result.preview.widthDots, result.preview.columns]).toEqual([512, 42]);
   });
