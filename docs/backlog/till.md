@@ -46,14 +46,6 @@ their full text.
 - Found by #614 (`apps/till/src/screens`). Not restored because nothing confirms it: the
   table-order screen's `#lineGross` comment "same arithmetic the server files with".
 
-## The booking state refusal describes a state move even when editing
-
-- **OPEN, carried from A394-18's run-it review.**
-  `packages/bookings/src/dashboard/strings.ts`'s `booking.invalid_transition` says
-  "can't move to that state now". An edit of a seated, completed, cancelled or no-show booking
-  now uses this code too. Choose wording that covers both edits and lifecycle actions, then
-  update English and Spanish and pin both messages in the bookings wording tests.
-
 ## Cash handed back for a voided cash sale is recorded nowhere
 
 A void writes no payment or refund row, so if staff give a customer cash back, the void's day shows

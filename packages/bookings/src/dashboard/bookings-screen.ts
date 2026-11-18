@@ -194,6 +194,11 @@ export class BookingsScreen extends LitElement {
     await this.#observeBookings();
   }
 
+  #rereadIfStatusChanged(error: unknown): void {
+    if (codeOf(error) === "booking.invalid_transition")
+      void this.#reload().catch((e: unknown) => this.#showReadError(e));
+  }
+
   async #observeBookings(): Promise<void> {
     const date = this.date;
     let initial = true;
@@ -278,7 +283,10 @@ export class BookingsScreen extends LitElement {
       await this.#reload();
     } catch (error) {
       if (written) this.#showReadError(error);
-      else if (write.isCurrent()) this.#showSaveRefusal(error);
+      else {
+        if (write.isCurrent()) this.#showSaveRefusal(error);
+        this.#rereadIfStatusChanged(error);
+      }
     } finally {
       this.busy = false;
     }
@@ -330,7 +338,10 @@ export class BookingsScreen extends LitElement {
       await this.#reload();
     } catch (error) {
       if (written) this.#showReadError(error);
-      else this.#showError(codeOf(error));
+      else {
+        this.#showError(codeOf(error));
+        this.#rereadIfStatusChanged(error);
+      }
     } finally {
       this.busy = false;
     }
@@ -347,7 +358,10 @@ export class BookingsScreen extends LitElement {
       await this.#reload();
     } catch (error) {
       if (written) this.#showReadError(error);
-      else this.#showError(codeOf(error));
+      else {
+        this.#showError(codeOf(error));
+        this.#rereadIfStatusChanged(error);
+      }
     } finally {
       this.busy = false;
     }

@@ -495,6 +495,39 @@ describe("bookings-screen", () => {
     }
   });
 
+  it.each([
+    [
+      "en",
+      "This booking's status changed while this page was open, so that change can't be made. Check its status in the list",
+    ],
+    [
+      "es",
+      "El estado de esta reserva ha cambiado mientras esta página estaba abierta, así que no se puede hacer ese cambio. Revisa su estado en la lista",
+    ],
+  ])(
+    "words an edit refused for the booking's state as a refused change (%s)",
+    async (locale, sentence) => {
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        const api = stubApi({
+          updateBooking: vi.fn().mockRejectedValue({ code: "booking.invalid_transition" }),
+        });
+        const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+        await flush(el);
+        await click(el, "edit-bk-early");
+        emitFromChild(form(el), "update-booking", { id: "bk-early", patch: { partySize: 6 } });
+        await flush(el);
+        expect(
+          (await formMessageOf(form(el).shadowRoot!.querySelector("wt-form-actions")!))
+            ?.textContent,
+        ).toContain(sentence);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
   const refusedTable = {
     code: "table.not_found",
     params: { tableId: "t-1", field: "tableId" },
@@ -543,8 +576,106 @@ describe("bookings-screen", () => {
     await click(el, "no-show-bk-late");
     await flush(el);
     expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("booking.invalid_transition", "es-ES"),
+      "El estado de esta reserva ha cambiado mientras esta página estaba abierta, así que no se puede hacer ese cambio. Revisa su estado en la lista",
     );
+  });
+
+  const staleStatus = { code: "booking.invalid_transition" };
+  const refusedMoves = [
+    ["a seat", "seatBooking", "seat-bk-early", "bk-early", "seated"],
+    ["a no-show", "markNoShow", "no-show-bk-late", "bk-late", "no_show"],
+  ] as const;
+
+  it.each(refusedMoves)(
+    "re-reads the list after %s refused for a changed status, keeping the refusal",
+    async (_, method, button, id, status) => {
+      const api = stubApi({ [method]: vi.fn().mockRejectedValue(staleStatus) });
+      const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+      await flush(el);
+      vi.mocked(api.listBookings).mockResolvedValue(
+        BOOKINGS.map((b) => (b.id === id ? { ...b, status } : b)),
+      );
+      await click(el, button);
+      await vi.waitFor(() => expect(api.listBookings).toHaveBeenCalledTimes(2));
+      await flush(el);
+      expect(q(el, button)).toBeNull();
+      expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+        codeMessage("booking.invalid_transition", "es-ES"),
+      );
+    },
+  );
+
+  it.each(refusedMoves)(
+    "keeps the refusal of %s when the re-read after it fails",
+    async (_, method, button) => {
+      const api = stubApi({ [method]: vi.fn().mockRejectedValue(staleStatus) });
+      const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+      await flush(el);
+      vi.mocked(api.listBookings).mockRejectedValue({ code: "connection.failed" });
+      await click(el, button);
+      await vi.waitFor(() => expect(api.listBookings).toHaveBeenCalledTimes(2));
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+        codeMessage("booking.invalid_transition", "es-ES"),
+      );
+    },
+  );
+
+  it.each([
+    ["re-read succeeds", true],
+    ["re-read fails", false],
+  ] as const)(
+    "keeps an edit refused for a changed status open with its refusal when the %s",
+    async (_, rereadSucceeds) => {
+      const api = stubApi({ updateBooking: vi.fn().mockRejectedValue(staleStatus) });
+      const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+      await flush(el);
+      await click(el, "edit-bk-early");
+      if (rereadSucceeds)
+        vi.mocked(api.listBookings).mockResolvedValue(
+          BOOKINGS.map((b) => (b.id === "bk-early" ? { ...b, status: "seated" as const } : b)),
+        );
+      else vi.mocked(api.listBookings).mockRejectedValue({ code: "connection.failed" });
+      emitFromChild(form(el), "update-booking", { id: "bk-early", patch: { partySize: 6 } });
+      await vi.waitFor(() => expect(api.listBookings).toHaveBeenCalledTimes(2));
+      await flush(el);
+      if (rereadSucceeds) expect(q(el, "edit-bk-early")).toBeNull();
+      expect(form(el).open).toBe(true);
+      expect(form(el).busy).toBe(false);
+      expect(
+        (await formMessageOf(form(el).shadowRoot!.querySelector("wt-form-actions")!))?.textContent,
+      ).toContain(codeMessage("booking.invalid_transition", "es-ES"));
+    },
+  );
+
+  it.each([
+    ["a seat", "seatBooking", "seat-bk-early"],
+    ["a no-show", "markNoShow", "no-show-bk-late"],
+  ] as const)("does not re-read after %s refused for another reason", async (_, method, button) => {
+    const api = stubApi({ [method]: vi.fn().mockRejectedValue({ code: "booking.not_found" }) });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    await click(el, button);
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      codeMessage("booking.not_found", "es-ES"),
+    );
+    expect(api.listBookings).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-read after an edit refused for another reason", async () => {
+    const api = stubApi({
+      updateBooking: vi.fn().mockRejectedValue({ code: "booking.not_found" }),
+    });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    await click(el, "edit-bk-early");
+    emitFromChild(form(el), "update-booking", { id: "bk-early", patch: { partySize: 6 } });
+    await flush(el);
+    await flush(el);
+    expect(form(el).open).toBe(true);
+    expect(api.listBookings).toHaveBeenCalledTimes(1);
   });
 
   it("single-flights the create: a second create while one is in flight is dropped", async () => {

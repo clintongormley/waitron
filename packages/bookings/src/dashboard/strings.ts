@@ -88,8 +88,8 @@ export const BOOKINGS_CODE_MESSAGES: Record<string, { en: string; es: string }> 
     es: "Revisa el número de comensales, de 1 a 999, y el nombre de contacto",
   },
   "booking.invalid_transition": {
-    en: "That booking can't move to that state now",
-    es: "Esa reserva no puede pasar a ese estado ahora",
+    en: "This booking's status changed while this page was open, so that change can't be made. Check its status in the list",
+    es: "El estado de esta reserva ha cambiado mientras esta página estaba abierta, así que no se puede hacer ese cambio. Revisa su estado en la lista",
   },
   "booking.table_required": {
     en: "Choose a table to seat this booking",
