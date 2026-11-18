@@ -317,6 +317,10 @@ const ADDED_TABLES = [
   "sale_line_dishes",
   "deferred_closures",
   "declaraciones_responsables",
+  "set_menu_lines",
+  "set_menu_line_courses",
+  "set_menu_variant_exclusions",
+  "set_menu_dish_courses",
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
@@ -1051,6 +1055,11 @@ for (const locale of ["en", "es"] as const) {
         on_delete: "NO ACTION",
         match: "NONE",
       });
+      for (const row of Object.values(expected[phase].tables.catalogues!.rows)) {
+        row.kind = "menu";
+        row.set_price = null;
+        row.set_vat_class = null;
+      }
       const products = expected[phase].tables.products!;
       products.columns.splice(
         products.columns.findIndex((column) => column.name === "vat_class") + 1,
@@ -2484,6 +2493,13 @@ for (const locale of ["en", "es"] as const) {
         },
       ]);
       expected[phase] = madridWithDroppedColumns(expected[phase], { menus: ["version"] });
+      const menus = expected[phase].tables.menus!;
+      menus.columns.push(
+        { name: "kind", type: "TEXT", notnull: 1, dflt_value: "'menu'", pk: 0 },
+        { name: "set_price", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
+        { name: "set_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+
       delete phases[phase]!.menu_details;
       delete phases[phase]!.category_details;
       expected[phase] = madridWithSectionColumns(expected[phase]);

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a65afc2c-8dbd-4c79-8cd3-70292194407c",
+  "id": "c400e375-dbb6-47aa-997c-7b92d2894765",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -6961,6 +6961,28 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'home_first'"
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'menu'"
+        },
+        "set_price": {
+          "name": "set_price",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_vat_class": {
+          "name": "set_vat_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -7000,6 +7022,26 @@
         "menus_till_order_ck": {
           "name": "menus_till_order_ck",
           "value": "\"menus\".\"till_order\" in ('home_first', 'menu_first')"
+        },
+        "menus_kind_ck": {
+          "name": "menus_kind_ck",
+          "value": "\"menus\".\"kind\" in ('menu', 'set_menu')"
+        },
+        "menus_set_terms_ck": {
+          "name": "menus_set_terms_ck",
+          "value": "(\"menus\".\"kind\" = 'set_menu' and \"menus\".\"set_price\" is not null and \"menus\".\"set_vat_class\" is not null)\n        or (\"menus\".\"kind\" = 'menu' and \"menus\".\"set_price\" is null and \"menus\".\"set_vat_class\" is null)"
+        },
+        "menus_set_price_ck": {
+          "name": "menus_set_price_ck",
+          "value": "\"menus\".\"set_price\" is null or \"menus\".\"set_price\" >= 0"
+        },
+        "menus_set_vat_class_ck": {
+          "name": "menus_set_vat_class_ck",
+          "value": "\"menus\".\"set_vat_class\" in ('general','reduced','super_reduced','zero')"
+        },
+        "menus_set_not_default_ck": {
+          "name": "menus_set_not_default_ck",
+          "value": "\"menus\".\"kind\" = 'menu' or \"menus\".\"is_default\" = 0"
         }
       }
     },
@@ -14267,6 +14309,252 @@
           "value": "\"content_suggestions\".\"text\" is null or \"content_suggestions\".\"language\" is not null"
         }
       }
+    },
+    "set_menu_dish_courses": {
+      "name": "set_menu_dish_courses",
+      "columns": {
+        "menu_item_id": {
+          "name": "menu_item_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "course_id": {
+          "name": "course_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "set_menu_dish_courses_menu_item_id_menu_items_id_fk": {
+          "name": "set_menu_dish_courses_menu_item_id_menu_items_id_fk",
+          "tableFrom": "set_menu_dish_courses",
+          "tableTo": "menu_items",
+          "columnsFrom": [
+            "menu_item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "set_menu_dish_courses_course_id_kitchen_courses_id_fk": {
+          "name": "set_menu_dish_courses_course_id_kitchen_courses_id_fk",
+          "tableFrom": "set_menu_dish_courses",
+          "tableTo": "kitchen_courses",
+          "columnsFrom": [
+            "course_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "set_menu_line_courses": {
+      "name": "set_menu_line_courses",
+      "columns": {
+        "line_id": {
+          "name": "line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "course_id": {
+          "name": "course_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "set_menu_line_courses_line_id_set_menu_lines_id_fk": {
+          "name": "set_menu_line_courses_line_id_set_menu_lines_id_fk",
+          "tableFrom": "set_menu_line_courses",
+          "tableTo": "set_menu_lines",
+          "columnsFrom": [
+            "line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "set_menu_line_courses_course_id_kitchen_courses_id_fk": {
+          "name": "set_menu_line_courses_course_id_kitchen_courses_id_fk",
+          "tableFrom": "set_menu_line_courses",
+          "tableTo": "kitchen_courses",
+          "columnsFrom": [
+            "course_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "set_menu_line_courses_line_id_course_id_pk": {
+          "columns": [
+            "line_id",
+            "course_id"
+          ],
+          "name": "set_menu_line_courses_line_id_course_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "set_menu_lines": {
+      "name": "set_menu_lines",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "menu_id": {
+          "name": "menu_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "count": {
+          "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "set_menu_lines_position_idx": {
+          "name": "set_menu_lines_position_idx",
+          "columns": [
+            "menu_id",
+            "position"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "set_menu_lines_menu_id_menus_id_fk": {
+          "name": "set_menu_lines_menu_id_menus_id_fk",
+          "tableFrom": "set_menu_lines",
+          "tableTo": "menus",
+          "columnsFrom": [
+            "menu_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "set_menu_lines_count_ck": {
+          "name": "set_menu_lines_count_ck",
+          "value": "\"set_menu_lines\".\"count\" between 1 and 99"
+        }
+      }
+    },
+    "set_menu_variant_exclusions": {
+      "name": "set_menu_variant_exclusions",
+      "columns": {
+        "menu_item_id": {
+          "name": "menu_item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "variant_id": {
+          "name": "variant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "set_menu_variant_exclusions_offer_fk": {
+          "name": "set_menu_variant_exclusions_offer_fk",
+          "tableFrom": "set_menu_variant_exclusions",
+          "tableTo": "menu_items",
+          "columnsFrom": [
+            "menu_item_id",
+            "product_id"
+          ],
+          "columnsTo": [
+            "id",
+            "product_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "set_menu_variant_exclusions_variant_fk": {
+          "name": "set_menu_variant_exclusions_variant_fk",
+          "tableFrom": "set_menu_variant_exclusions",
+          "tableTo": "products",
+          "columnsFrom": [
+            "product_id",
+            "variant_id"
+          ],
+          "columnsTo": [
+            "parent_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "set_menu_variant_exclusions_menu_item_id_variant_id_pk": {
+          "columns": [
+            "menu_item_id",
+            "variant_id"
+          ],
+          "name": "set_menu_variant_exclusions_menu_item_id_variant_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
     "adjustment_reasons": {
       "name": "adjustment_reasons",

@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 49,
+  version: 50,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -163,6 +163,7 @@ describe("staged configuration import", () => {
     ["A980 pre-privacy-contact export without it", { version: 8, privacyContact: undefined }],
     ["A1308 4a-i pre-recipe-removal export", { version: 12 }],
     ["A1308 4a-ii pre-menu-list-removal export", { version: 14 }],
+    ["export before set-menu configuration", { version: 49 }],
     ["old version", { version: 1 }],
     ["A1308 earlier schema export", { version: 11 }],
     ["previous format before venue-language storage", { version: 15 }],

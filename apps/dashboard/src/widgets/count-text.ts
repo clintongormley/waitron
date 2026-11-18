@@ -17,6 +17,8 @@ export function countOf(
     | "modifiers.delete_warning_products"
     | "kitchen.delete_course_products"
     | "kitchen.delete_course_service_steps"
+    | "kitchen.delete_course_set_menu_lines"
+    | "kitchen.delete_course_set_menu_dishes"
     | "appearance.hard_to_read_count"
     | "appearance.colour_count"
     | "appearance.text_size_count"

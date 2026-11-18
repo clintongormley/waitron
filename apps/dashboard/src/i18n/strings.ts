@@ -1893,6 +1893,10 @@ export const en = {
   "kitchen.delete_course": "Delete course",
   "kitchen.delete_course_products": "{count} products fire earliest.",
   "kitchen.delete_course_products_one": "1 product fires earliest.",
+  "kitchen.delete_course_set_menu_lines": "{count} set-menu lines lose this course.",
+  "kitchen.delete_course_set_menu_lines_one": "1 set-menu line loses this course.",
+  "kitchen.delete_course_set_menu_dishes": "{count} dishes return to their product's course.",
+  "kitchen.delete_course_set_menu_dishes_one": "1 dish returns to its product's course.",
   "kitchen.delete_course_service_steps":
     "{count} service steps that start when it is served or follow those steps.",
   "kitchen.delete_course_service_steps_one": "1 service step that starts when it is served.",
@@ -6369,6 +6373,11 @@ export const es: Record<StringKey, string> = {
   "kitchen.delete_course": "Eliminar curso",
   "kitchen.delete_course_products": "{count} productos se preparan primero.",
   "kitchen.delete_course_products_one": "1 producto se prepara primero.",
+  "kitchen.delete_course_set_menu_lines":
+    "{count} líneas de menú a precio fijo pierden este curso.",
+  "kitchen.delete_course_set_menu_lines_one": "1 línea de menú a precio fijo pierde este curso.",
+  "kitchen.delete_course_set_menu_dishes": "{count} platos vuelven al curso de su producto.",
+  "kitchen.delete_course_set_menu_dishes_one": "1 plato vuelve al curso de su producto.",
   "kitchen.delete_course_service_steps":
     "{count} pasos de servicio que empiezan al servirlo o tras esos pasos.",
   "kitchen.delete_course_service_steps_one": "1 paso de servicio que empieza al servirlo.",

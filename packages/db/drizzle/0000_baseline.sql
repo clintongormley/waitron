@@ -1073,12 +1073,21 @@ CREATE TABLE `menus` (
 	`till_columns` integer DEFAULT 6 NOT NULL,
 	`till_tiles` text DEFAULT 'colours' NOT NULL,
 	`till_order` text DEFAULT 'home_first' NOT NULL,
+	`kind` text DEFAULT 'menu' NOT NULL,
+	`set_price` integer,
+	`set_vat_class` text,
 	CONSTRAINT "menus_handheld_columns_ck" CHECK("menus"."handheld_columns" between 2 and 3),
 	CONSTRAINT "menus_till_columns_ck" CHECK("menus"."till_columns" between 4 and 10),
 	CONSTRAINT "menus_handheld_tiles_ck" CHECK("menus"."handheld_tiles" in ('colours', 'thumbnails')),
 	CONSTRAINT "menus_handheld_order_ck" CHECK("menus"."handheld_order" in ('home_first', 'menu_first')),
 	CONSTRAINT "menus_till_tiles_ck" CHECK("menus"."till_tiles" in ('colours', 'thumbnails')),
-	CONSTRAINT "menus_till_order_ck" CHECK("menus"."till_order" in ('home_first', 'menu_first'))
+	CONSTRAINT "menus_till_order_ck" CHECK("menus"."till_order" in ('home_first', 'menu_first')),
+	CONSTRAINT "menus_kind_ck" CHECK("menus"."kind" in ('menu', 'set_menu')),
+	CONSTRAINT "menus_set_terms_ck" CHECK(("menus"."kind" = 'set_menu' and "menus"."set_price" is not null and "menus"."set_vat_class" is not null)
+        or ("menus"."kind" = 'menu' and "menus"."set_price" is null and "menus"."set_vat_class" is null)),
+	CONSTRAINT "menus_set_price_ck" CHECK("menus"."set_price" is null or "menus"."set_price" >= 0),
+	CONSTRAINT "menus_set_vat_class_ck" CHECK("menus"."set_vat_class" in ('general','reduced','super_reduced','zero')),
+	CONSTRAINT "menus_set_not_default_ck" CHECK("menus"."kind" = 'menu' or "menus"."is_default" = 0)
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `menus_one_default_uq` ON `menus` (`is_default`) WHERE "menus"."is_default" = 1;--> statement-breakpoint
@@ -2181,6 +2190,40 @@ CREATE UNIQUE INDEX `content_suggestions_item_row_key` ON `content_suggestions` 
 CREATE INDEX `content_suggestions_language_idx` ON `content_suggestions` (`language`);--> statement-breakpoint
 CREATE INDEX `content_suggestions_job_idx` ON `content_suggestions` (`job_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `content_suggestions_item_language_key` ON `content_suggestions` (`kind`,`item_id`,`language`);--> statement-breakpoint
+CREATE TABLE `set_menu_dish_courses` (
+	`menu_item_id` text PRIMARY KEY NOT NULL,
+	`course_id` text NOT NULL,
+	FOREIGN KEY (`menu_item_id`) REFERENCES `menu_items`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE TABLE `set_menu_line_courses` (
+	`line_id` text NOT NULL,
+	`course_id` text NOT NULL,
+	PRIMARY KEY(`line_id`, `course_id`),
+	FOREIGN KEY (`line_id`) REFERENCES `set_menu_lines`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE TABLE `set_menu_lines` (
+	`id` text PRIMARY KEY NOT NULL,
+	`menu_id` text NOT NULL,
+	`position` integer NOT NULL,
+	`count` integer NOT NULL,
+	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "set_menu_lines_count_ck" CHECK("set_menu_lines"."count" between 1 and 99)
+);
+--> statement-breakpoint
+CREATE INDEX `set_menu_lines_position_idx` ON `set_menu_lines` (`menu_id`,`position`);--> statement-breakpoint
+CREATE TABLE `set_menu_variant_exclusions` (
+	`menu_item_id` text NOT NULL,
+	`product_id` text NOT NULL,
+	`variant_id` text NOT NULL,
+	PRIMARY KEY(`menu_item_id`, `variant_id`),
+	FOREIGN KEY (`menu_item_id`,`product_id`) REFERENCES `menu_items`(`id`,`product_id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`product_id`,`variant_id`) REFERENCES `products`(`parent_id`,`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
 CREATE TABLE `adjustment_reasons` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,

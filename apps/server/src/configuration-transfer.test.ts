@@ -100,6 +100,7 @@ import {
   routingCellPeriods,
   kitchenStations,
   kitchenCourses,
+  menuItems,
   dayCutoverChanges,
   settings as businessDaySettingsTable,
   printAgents,
@@ -482,7 +483,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 49,
+  version: 50,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -1697,6 +1698,102 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     if (extras.kind !== "extras") throw new Error("expected the extras list first");
     expect(extras.items.map((item) => item.price)).toEqual(["0.90"]);
   });
+});
+
+it("transfers set-menu terms, course choices, dish overrides and variant exclusions", async () => {
+  const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTransaction(suite.db, async (tx) => {
+    const menu = await createMenu(tx, { name: "Lunch special" });
+    const dish = await createProduct(tx, {
+      categoryId: null,
+      name: "Soup",
+      pricingUnit: "each",
+      unitPrice: "6.00",
+      vatClass: "reduced",
+    });
+    const { rootSectionId } = await readMenuStructure(tx, menu.id);
+    await addMember(tx, rootSectionId, { kind: "product", productId: dish.id });
+    const [offer] = await tx
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(eq(menuItems.menuId, menu.id));
+    await tx.insert(products).values({ id: "cup", parentId: dish.id, name: "Cup" });
+    await tx.insert(kitchenCourses).values({ id: "starter", name: "Starters" });
+    await tx.execute(sql`
+      update menus set kind = 'set_menu', set_price = 1400, set_vat_class = 'reduced'
+      where id = ${menu.id}
+    `);
+    await tx.execute(sql`
+      insert into set_menu_lines (id, menu_id, position, count) values ('line', ${menu.id}, 0, 2)
+    `);
+    await tx.execute(sql`
+      insert into set_menu_line_courses (line_id, course_id) values ('line', 'starter')
+    `);
+    await tx.execute(sql`
+      insert into set_menu_dish_courses (menu_item_id, course_id) values (${offer!.id}, 'starter')
+    `);
+    await tx.execute(sql`
+      insert into set_menu_variant_exclusions (menu_item_id, product_id, variant_id)
+      values (${offer!.id}, ${dish.id}, 'cup')
+    `);
+    return { menuId: menu.id, itemId: offer!.id, productId: dish.id };
+  });
+
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-11-18T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+  });
+  const { rows } = await targetSuite.db.execute(sql`
+    select menus.id as menu_id, menus.kind, menus.set_price, menus.set_vat_class,
+           line.id as line_id, line.count, course.id as course_id, course.name as course,
+           menu_items.id as item_id, dish.id as product_id, dish.name as dish,
+           variant.id as variant_id, variant.name as excluded_variant
+    from menus
+    join set_menu_lines line on line.menu_id = menus.id
+    join set_menu_line_courses choice on choice.line_id = line.id
+    join kitchen_courses course on course.id = choice.course_id
+    join menu_items on menu_items.menu_id = menus.id
+    join set_menu_dish_courses override on override.menu_item_id = menu_items.id and override.course_id = course.id
+    join set_menu_variant_exclusions excluded on excluded.menu_item_id = menu_items.id
+    join products dish on dish.id = excluded.product_id
+    join products variant on variant.id = excluded.variant_id
+    where menus.name = 'Lunch special'
+  `);
+  expect(rows).toEqual([
+    {
+      menu_id: expect.any(String),
+      kind: "set_menu",
+      set_price: 1400,
+      set_vat_class: "reduced",
+      line_id: expect.any(String),
+      count: 2,
+      course_id: expect.any(String),
+      course: "Starters",
+      item_id: expect.any(String),
+      product_id: expect.any(String),
+      dish: "Soup",
+      variant_id: expect.any(String),
+      excluded_variant: "Cup",
+    },
+  ]);
+  expect(rows[0]!.menu_id).not.toBe(original.menuId);
+  expect(rows[0]!.line_id).not.toBe("line");
+  expect(rows[0]!.course_id).not.toBe("starter");
+  expect(rows[0]!.item_id).not.toBe(original.itemId);
+  expect(rows[0]!.product_id).not.toBe(original.productId);
+  expect(rows[0]!.variant_id).not.toBe("cup");
 });
 
 it("transfers sections and their members, remapping ids, with a section's image", async () => {
@@ -5842,7 +5939,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(49);
+  expect(exported.version).toBe(50);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
