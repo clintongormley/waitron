@@ -65,7 +65,16 @@ function route(
       },
     },
     matrix: { shard: 1 },
-    needs: { changes: { outputs: { server_route: health } } },
+    needs: {
+      changes: {
+        outputs: {
+          server_route: health,
+          server_jobs: JSON.stringify(
+            health === "server" ? Object.fromEntries(jobs.map(({ id }) => [id, 1])) : {},
+          ),
+        },
+      },
+    },
     fromJSON: (text) => {
       const value = JSON.parse(text);
       if (!value || typeof value !== "object" || Array.isArray(value)) return value;
@@ -181,13 +190,13 @@ describe("server-first workflow routing", () => {
     for (const health of ["server", "hosted", ""]) expect(route(input, { health })).toBe(health);
   });
   it("keeps a timed-out route read from failing changes and defaults every job to hosted", () => {
-    const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}- )/)[1];
+    const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {2}#)/)[1];
     expect(step).toMatch(/^ {8}continue-on-error: true$/m);
     expect(step).toMatch(/^ {8}timeout-minutes: 2$/m);
     for (const job of jobs) expect(route(job.route, { health: "" }), job.id).toBe("ubuntu-latest");
   });
   it.each(["pull_request", "push", "schedule", "workflow_dispatch"])(
-    "sends every direct %s job to a server on first and later attempts",
+    "sends every selected direct %s job to a server and preserves later attempts",
     (event) => {
       expect(jobs.length).toBeGreaterThan(30);
       for (const attempt of [1, 2, 7])
@@ -263,7 +272,7 @@ cat "$FIXTURE_ROUTER"
 `,
         { mode: 0o755 },
       );
-      const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}(?:- |#))/)[1];
+      const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {2}#)/)[1];
       expect(step).toContain("CAPACITY_READ_TOKEN: ${{ secrets.DISPOSABLE_CAPACITY_READ_TOKEN }}");
       const token = step.match(/^ {10}GH_TOKEN: \$\{\{ (.+) \}\}$/m)?.[1];
       expect(token).toBeDefined();
