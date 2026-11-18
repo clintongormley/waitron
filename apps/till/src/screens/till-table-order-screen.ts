@@ -1458,6 +1458,8 @@ export class TillTableOrderScreen extends LitElement {
   /** Finish table was refused because a bill is unpaid. */
   @property({ type: Boolean }) finishRefused = false;
   @property({ attribute: false }) mealEnd: MealEndShown | null = null;
+  /** A Print the bill request has no answer yet, for any bill: the till sends one at a time. */
+  @property({ type: Boolean }) billPrintPending = false;
   /** This device's profile hands over orders, which marking a dish served needs. */
   @property({ type: Boolean }) canMarkServed = false;
   /** The app's answer to a name the server refused: the name sent, and why, shown beside the field. */
@@ -5298,7 +5300,7 @@ export class TillTableOrderScreen extends LitElement {
                     ? html`<wt-button
                         size="sm"
                         data-print-bill
-                        .disabled=${this.busy}
+                        .disabled=${this.busy || this.billPrintPending}
                         @click=${() =>
                           this.#dispatch("end-meal", {
                             workingOrderId: firstUnpaid.workingOrderId,
@@ -5367,7 +5369,7 @@ export class TillTableOrderScreen extends LitElement {
           size="sm"
           variant="primary"
           data-print-anyway
-          .disabled=${this.busy}
+          .disabled=${this.busy || this.billPrintPending}
           @click=${() =>
             this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId, printAnyway: true })}
         >
@@ -6766,10 +6768,11 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #tableMenu(): TemplateResult {
-    const action = (name: string, key: StringKey, choose: () => void) =>
+    const action = (name: string, key: StringKey, choose: () => void, disabled = false) =>
       html`<wt-button
         data-action=${name}
         data-record-departure=${name === "left-unpaid" ? "" : nothing}
+        .disabled=${disabled}
         @click=${(event: Event) => this.#fromMenu(event, choose)}
       >
         ${t(key)}
@@ -6812,8 +6815,11 @@ export class TillTableOrderScreen extends LitElement {
               ...this.#billDocumentItems(
                 shown,
                 this.#printBillOffered(shown)
-                  ? action("print-bill", "bill.print", () =>
-                      this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId }),
+                  ? action(
+                      "print-bill",
+                      "bill.print",
+                      () => this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId }),
+                      this.busy || this.billPrintPending,
                     )
                   : nothing,
               ),

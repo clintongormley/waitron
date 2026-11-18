@@ -65,6 +65,7 @@ async function mountScreen(
     fullInvoices?: boolean;
     requested?: boolean;
     busy?: boolean;
+    billPrintPending?: boolean;
     groupCommandBusy?: boolean;
     lines?: TabLine[];
     takesPayment?: boolean;
@@ -81,6 +82,7 @@ async function mountScreen(
     tables:
       party === null ? [] : party.tableIds.map((id) => table(id, party, over.requested ?? false)),
     busy: over.busy ?? false,
+    billPrintPending: over.billPrintPending ?? false,
     groupCommandBusy: over.groupCommandBusy ?? false,
     ...(over.takesPayment === undefined ? {} : { takesPayment: over.takesPayment }),
   });
@@ -335,6 +337,15 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     item(el, '[data-action="print-bill"]')!.click();
 
     expect(printed).toEqual([]);
+  });
+
+  it("shows Print the bill unavailable while another bill's print has no answer yet", async () => {
+    const el = await mountScreen({ billPrintPending: true });
+
+    const print = item(el, '[data-action="print-bill"]') as HTMLElement & { disabled: boolean };
+
+    expect(print.disabled).toBe(true);
+    expect((item(el, '[data-action="name-bill"]') as typeof print).disabled).toBe(false);
   });
 
   it("offers no Print the bill while a payment's answer is unknown", async () => {

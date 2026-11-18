@@ -4322,8 +4322,9 @@ export class TillApp extends LitElement {
    * revision it describes: once the party moves past it, the list is taken down, and Print anyway
    * sends that revision, so the server refuses it for a table changed since. */
   @state() private mealEnd: (MealEndShown & { partyId: string; revision?: number }) | null = null;
-  /** A Print the bill request is out; the table screen takes no other action meanwhile. */
-  @state() private mealEndSending = false;
+  /** The bill whose Print the bill request is out: that bill takes no other action meanwhile, and
+   * no other bill can be printed, so only one request is ever out. */
+  @state() private mealEndPrinting: string | null = null;
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
   @state() private departureApprovers?: StaffMember[];
@@ -20092,7 +20093,11 @@ export class TillApp extends LitElement {
     const { workingOrderId, printAnyway, showFirst } = (
       event as CustomEvent<{ workingOrderId: string; printAnyway?: boolean; showFirst?: boolean }>
     ).detail;
-    if (showFirst === true && !this.mealEndSending && this.activeTabId !== workingOrderId) {
+    if (
+      showFirst === true &&
+      this.mealEndPrinting === null &&
+      this.activeTabId !== workingOrderId
+    ) {
       const { api, orderParty: pressed } = this;
       const session = this.#operatorSession;
       const visit = this.#orderVisit;
@@ -20114,7 +20119,7 @@ export class TillApp extends LitElement {
     const warned = this.#mealEndShown();
     if (
       party === null ||
-      this.mealEndSending ||
+      this.mealEndPrinting !== null ||
       this.activeTabId !== workingOrderId ||
       bill === undefined ||
       !printBillOffered(bill, {
@@ -20145,7 +20150,7 @@ export class TillApp extends LitElement {
     const sent = this.#sentNow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     this.mealEnd = null;
-    this.mealEndSending = true;
+    this.mealEndPrinting = workingOrderId;
     try {
       await this.#resend(
         (signal) => asked.api.endMeal(party.id, request, { signal }),
@@ -20164,7 +20169,7 @@ export class TillApp extends LitElement {
       return;
     } finally {
       limit.done();
-      this.mealEndSending = false;
+      this.mealEndPrinting = null;
     }
     if (live()) await this.#onMealEnded(party.id, workingOrderId, visit, sent);
   }
@@ -22968,7 +22973,8 @@ export class TillApp extends LitElement {
       .splitRead=${this.splitRead}
       .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
       .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
-      .busy=${this.submitting || this.invoiceRecipientReading || this.mealEndSending}
+      .busy=${this.submitting || this.invoiceRecipientReading || this.mealEndPrinting === this.activeTabId}
+      .billPrintPending=${this.mealEndPrinting !== null}
       .sendingTender=${this.sendingTender}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
@@ -23161,7 +23167,8 @@ export class TillApp extends LitElement {
           .splitRead=${this.splitRead}
           .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
           .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
-          .busy=${this.submitting || this.invoiceRecipientReading || this.mealEndSending}
+          .busy=${this.submitting || this.invoiceRecipientReading || this.mealEndPrinting === this.activeTabId}
+          .billPrintPending=${this.mealEndPrinting !== null}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
           .takesCash=${this.#takesCash()}

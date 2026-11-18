@@ -591,6 +591,67 @@ describe("till-app: Print the bill", () => {
   });
 });
 
+describe("till-app: one bill's print waiting for its answer", () => {
+  const control = (el: TillApp, selector: string) =>
+    shadow(el).querySelector<HTMLElement & { disabled: boolean }>(selector)!;
+
+  const tablet = "tablet-landscape" as const;
+  it.each([
+    ["till", {}],
+    [
+      "tablet",
+      {
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          formFactor: tablet,
+          capabilities: ["print-receipt", "take-cash", "hand-over-orders"],
+        }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "till-dev", name: "Till 1", formFactor: tablet }),
+      },
+    ],
+  ])(
+    "leaves Pay open on another bill on a %s, with Print the bill unavailable there, and keeps the printing bill busy",
+    async (_device, device) => {
+      const answer = heldAnswer<EndedMeal>();
+      const { el, endMeal } = await openBill({
+        ...device,
+        endMeal: () => answer.promise,
+        finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+        getPartyBills: twoBills(),
+      });
+      await printBill(el);
+      expect(tableOrder(el).busy).toBe(true);
+      expect(control(el, "[data-pay-sheet]").disabled).toBe(true);
+
+      emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+      await flush(el, 6);
+
+      expect(tableOrder(el).orderId).toBe("wo-9");
+      expect(tableOrder(el).busy).toBe(false);
+      expect(control(el, "[data-pay-sheet]").disabled).toBe(false);
+      expect(control(el, '[data-table-menu] [data-action="print-bill"]').disabled).toBe(true);
+      emit(tableOrder(el), "finish-table", {});
+      await flush(el);
+      expect(control(el, "[data-finish-refusal] [data-print-bill]").disabled).toBe(true);
+
+      emit(tableOrder(el), "end-meal", { workingOrderId: "wo-9" });
+      await flush(el, 6);
+      expect(endMeal).toHaveBeenCalledOnce();
+
+      emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-4" });
+      await flush(el, 6);
+      expect(tableOrder(el).busy).toBe(true);
+
+      answer.resolve(ended);
+      await flush(el, 6);
+      expect(tableOrder(el).busy).toBe(false);
+      expect(tableOrder(el).billPrintPending).toBe(false);
+    },
+  );
+});
+
 describe("till-app: Print the bill with dishes not served", () => {
   it("shows the dishes by name, and Mark served serves those the kitchen has; Print the bill then prints", async () => {
     const endMeal = vi.fn().mockRejectedValueOnce(unservedRefusal).mockResolvedValue(ended);

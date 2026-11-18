@@ -525,6 +525,32 @@ describe("till-table-order-screen: Print the bill beside Finish table's refusal"
     expect(asked).toEqual([{ workingOrderId: "wo-check", showFirst: true }]);
   });
 
+  it("shows Print the bill unavailable while another bill's print has no answer yet", async () => {
+    const el = await mountScreen({ finishRefused: true, billPrintPending: true });
+
+    const print = shadow(el).querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-finish-refusal] [data-print-bill]",
+    )!;
+
+    expect(print.disabled).toBe(true);
+  });
+
+  it("shows Print anyway unavailable while another bill's print has no answer yet", async () => {
+    const el = await mountScreen({
+      billPrintPending: true,
+      mealEnd: {
+        workingOrderId: "wo-tab",
+        unserved: [{ lineId: "l1", dishName: "Paella", quantity: "1.000", released: false }],
+      },
+    });
+
+    const anyway = shadow(el).querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-print-anyway]",
+    )!;
+
+    expect(anyway.disabled).toBe(true);
+  });
+
   it("offers no Print the bill while the bill it names has a payment whose answer is unknown", async () => {
     const el = await mountScreen({
       finishRefused: true,
