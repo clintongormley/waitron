@@ -23,7 +23,8 @@ the browser render text and table headings for people using assistive technology
 2. **Render the document.** In `till-ticket-view.ts` use a Lit renderer that handles every
    element kind. Carry forward alignment and indentation and render native tables with scoped
    headings, reusing headings on a continued item table. Use the existing QR and followed-server
-   display logo. Draw the practice wording once from the document. Keep the exported `lineName`
+   display logo. Draw both practice marks in the supplied positions. Leave the receipt area empty when the
+   answer has no preview. Keep the exported `lineName`
    for the correction dialog, and the inherited delivery controls for the settlement dialog.
    Lane D's #3703 removes the same set-lunch formatting from both screen and paper. Reconcile
    that patch if it lands first. Update both table-service guides and the stale references in
@@ -31,8 +32,9 @@ the browser render text and table headings for people using assistive technology
    `receipt-lines.ts`. Remove the completed item and correct the printers backlog bundle count.
 3. **Verify test-first.** In `till-api.receipt.test.ts`, reopen the same sale with and without the
    flag, checking preview presence, the existing no-write snapshot and refusals. In
-   `transaction-receipt-api.test.ts`, check a mixed-rate simplified document with saved guests
-   and a discounted full invoice. In `till-app.test.ts` make the server preview disagree with
+   `transaction-receipt-api.test.ts`, check the saved guests, receipt language, issuer and
+   practice flags supplied to the layout. Mixed-rate and discount layout checks belong in
+   the receipt builder tests. In `till-app.test.ts` make the server preview disagree with
    the basket and check what opens in both entry paths. In the `till-ticket-view` main,
    presentation, kitchen-note and accessibility suites keep the assertions about what the browser
    renders, including literal text, table semantics, QR, logo replacement, language and controls.
@@ -43,3 +45,15 @@ the browser render text and table headings for people using assistive technology
 
 **Expected size.** Production about +250/−450 lines. Tests about +300/−1,500, mostly removing
 fixtures and checks duplicated by the paper suite. Keep the route and rendering tests in this PR.
+
+The watcher cleared this plan on 2026-11-18 at 05:35 with a stop at 800 added lines.
+
+| Existing checks | Build disposition |
+| --- | --- |
+| till-ticket-view.test.ts issuer, trim, address, regional names, date and order, quantities and extras, discounts and net rows, A803 grouping, tender amounts, and corrective contents | Use the existing receipt-document and receipt-ticket assertions for the layout's own rules. Carry over any assertion that has no matching case. Keep a browser case where the supplied full invoice and mixed-rate receipt exercise element order and table rendering. |
+| till-ticket-view.test.ts language, QR, practice and optical layout checks | Keep browser checks for article language beside operator labels, QR payload and alignment, both practice marks, and readable wrapping. Move caption wording and fixed-language content decisions to the existing builder cases. |
+| till-ticket-view.test.ts delivery, print, drawer, correction and refund controls | Keep the behavioral assertions. Update only fixtures and selectors affected by the article. |
+| till-ticket-view.presentation.test.ts | Keep immutable logo URL, old and new answer transitions and optional trim disappearing. Use supplied elements for text and remove duplicate currency and formatting fixtures only when the builder pins them. |
+| till-ticket-view.kitchen-note.test.ts | Check the server's preview omits operational instructions and the till draws only the provided customer content. |
+| till-ticket-view.a11y.test.ts | Retain both themes, delivery and choice states, and exercise the distinct element and table variations on actual preview fixtures. |
+| till-app.test.ts server-versus-basket test and affected entry tests | Keep the divergent fixture. Check that the preview appears when opening through the existing transaction and paid-bill path. |
