@@ -13,7 +13,11 @@ import { productMedia, productMediaFrame, productMediaStyles } from "./product-m
 import { swatchPartStyles } from "./swatch-styles.js";
 import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
 
-type Row = { key: string; parentKey: string | null; member: DocumentMember | null };
+type Row = {
+  key: string;
+  parentKey: string | null;
+  member: Exclude<DocumentMember, { kind: "set_menu" }> | null;
+};
 
 @customElement("dashboard-menu-document-tree")
 export class MenuDocumentTree extends LitElement {
@@ -153,6 +157,7 @@ export class MenuDocumentTree extends LitElement {
     const rows: Row[] = [{ key: "root", parentKey: null, member: null }];
     const walk = (members: DocumentMember[], parentKey: string, sections: string[]) => {
       for (const member of members) {
+        if (member.kind === "set_menu") continue;
         const id = member.kind === "section" ? member.sectionId : member.menuItemId;
         const key = [...sections, id].join("/");
         rows.push({ key, parentKey, member });

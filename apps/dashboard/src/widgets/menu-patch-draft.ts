@@ -37,6 +37,7 @@ function memberNodes(document: MenuDocument, members: readonly DocumentMember[])
           children: memberNodes(document, member.members),
         },
       ];
+    if (member.kind !== "product") return [];
     const offer = document.offers[member.menuItemId];
     if (offer === undefined) return [];
     return [
@@ -60,7 +61,7 @@ function* offersInMenuOrder(
 ): Generator<FrozenOffer> {
   for (const member of members)
     if (member.kind === "section") yield* offersInMenuOrder(document, member.members);
-    else if (document.offers[member.menuItemId] !== undefined)
+    else if (member.kind === "product" && document.offers[member.menuItemId] !== undefined)
       yield document.offers[member.menuItemId]!;
 }
 

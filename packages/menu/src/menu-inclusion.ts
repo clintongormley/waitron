@@ -41,7 +41,8 @@ export function placesOf(
     for (const { ref } of graph.children(id)) {
       if (ref.kind === "product") {
         if (ref.productId === productId) own = true;
-      } else if (graph.role(ref.sectionId) === "section") walk(ref.sectionId);
+      } else if (ref.kind === "section" && graph.role(ref.sectionId) === "section")
+        walk(ref.sectionId);
     }
   };
   const root = rootOf(graph, menuId);
@@ -53,6 +54,7 @@ export function placesOf(
       seen.add(id);
       return graph.children(id).some(({ ref }) => {
         if (ref.kind === "product") return ref.productId === productId;
+        if (ref.kind === "set_menu") return false;
         if (
           graph.role(ref.sectionId) === "menu_root" &&
           !graph.menu(graph.ownerMenu(ref.sectionId)!)?.active
@@ -67,6 +69,7 @@ export function placesOf(
 }
 
 export function includableMenus(graph: SectionGraph, menuId: string): string[] {
+  if (graph.menu(menuId)?.kind === "set_menu") return [];
   const root = rootOf(graph, menuId);
   if (root === undefined) return [];
   return graph
@@ -75,6 +78,7 @@ export function includableMenus(graph: SectionGraph, menuId: string): string[] {
       (other) =>
         other.menuId !== menuId &&
         graph.menu(other.menuId)?.active &&
+        graph.menu(other.menuId)?.kind === "menu" &&
         !wouldCreateCycle(graph, root, other.sectionId),
     )
     .map((other) => other.menuId);

@@ -186,7 +186,7 @@ function reachable(nodes: MenuStructureNode[]): { products: string[]; sections: 
   const walk = (list: MenuStructureNode[]): void => {
     for (const node of list)
       if (node.ref.kind === "product") products.add(node.ref.productId);
-      else {
+      else if (node.ref.kind === "section") {
         sections.add(node.ref.sectionId);
         walk(node.children ?? []);
       }
@@ -936,7 +936,7 @@ export class MenusScreen extends LitElement {
             const name = products.get(node.ref.productId);
             if (name !== undefined && !foundProducts.has(node.ref.productId))
               foundProducts.set(node.ref.productId, [...path, name].join(PATH_SEPARATOR));
-          } else {
+          } else if (node.ref.kind === "section") {
             const next = [...path, node.internalName ?? ""];
             if (!foundSections.has(node.ref.sectionId))
               foundSections.set(
@@ -1384,7 +1384,7 @@ export class MenusScreen extends LitElement {
 
   /** Every node on the path is a section, so no product name is needed. */
   #nodeName(node: MenuStructureNode): string {
-    return memberName(node.ref, NO_NAMES, this.#sectionNames);
+    return node.ref.kind === "section" ? memberName(node.ref, NO_NAMES, this.#sectionNames) : "";
   }
 
   // ── Menus ────────────────────────────────────────────────────────────────────────────────────
@@ -2949,7 +2949,7 @@ export class MenusScreen extends LitElement {
     return keys.flatMap((key) => {
       const path = key.split("/");
       const node = nodeAt(this.structure, path);
-      if (!node) return [];
+      if (!node || node.ref.kind === "set_menu") return [];
       const target = this.#targetAt(path.slice(0, -1));
       const name = memberName(node.ref, productNames, this.#sectionNames);
       return [
@@ -3030,14 +3030,14 @@ export class MenusScreen extends LitElement {
       const node = nodeAt(this.structure, key.split("/"));
       if (node?.ref.kind !== "section" || seen.has(node.ref.sectionId)) return [];
       seen.add(node.ref.sectionId);
-      return [{ id: node.ref.sectionId, node }];
+      return [{ id: node.ref.sectionId, node, ref: node.ref }];
     });
     const held = new Set(listed.flatMap(({ node }) => ownedSectionIds(node.children ?? [])));
     return listed
       .filter(({ id }) => !held.has(id))
-      .map(({ id, node }) => ({
+      .map(({ id, node, ref }) => ({
         id,
-        name: memberName(node.ref, NO_NAMES, this.#sectionNames),
+        name: memberName(ref, NO_NAMES, this.#sectionNames),
         below: new Set(ownedSectionIds(node.children ?? [])).size,
       }));
   }

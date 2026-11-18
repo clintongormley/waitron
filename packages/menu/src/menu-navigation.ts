@@ -28,7 +28,7 @@ export function indexMenuOccurrences(document: MenuDocument): MenuOccurrence[] {
           ancestorSectionIds: [...path],
         });
         walk(member.members, sectionIds);
-      } else {
+      } else if (member.kind === "product") {
         occurrences.push({
           target: {
             kind: "product",

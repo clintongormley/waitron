@@ -146,10 +146,10 @@ export async function addShortcut(
   const { rootSectionId, homeSectionId } = await requireMenuHome(tx, menuId);
   const graph = await loadSectionGraph(tx);
   requirePosition(position);
-  await checkRef(tx, graph, homeSectionId, ref);
-  if (!structuralReach(graph, rootSectionId)(ref))
+  const stored = await checkRef(tx, graph, homeSectionId, ref);
+  if (!structuralReach(graph, rootSectionId)(stored))
     throw new AppError("menu.shortcut_unreachable", { ref });
-  return insertMember(tx, homeSectionId, graph.tiles(homeSectionId), ref, position);
+  return insertMember(tx, homeSectionId, graph.tiles(homeSectionId), ref, stored, position);
 }
 
 export async function replaceShortcut(
@@ -161,10 +161,10 @@ export async function replaceShortcut(
   const { rootSectionId, homeSectionId } = await requireMenuHome(tx, menuId);
   const graph = await loadSectionGraph(tx);
   const current = heldMember(graph.tiles(homeSectionId), homeSectionId, memberId);
-  await checkRef(tx, graph, homeSectionId, ref, current);
-  if (!structuralReach(graph, rootSectionId)(ref))
+  const stored = await checkRef(tx, graph, homeSectionId, ref, current);
+  if (!structuralReach(graph, rootSectionId)(stored))
     throw new AppError("menu.shortcut_unreachable", { ref });
-  await tx.update(sectionMembers).set(refColumns(ref)).where(eq(sectionMembers.id, memberId));
+  await tx.update(sectionMembers).set(refColumns(stored)).where(eq(sectionMembers.id, memberId));
   return { ...current, ref };
 }
 

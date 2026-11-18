@@ -3,12 +3,14 @@ import type { HomeDisplay } from "./menu-document-types.js";
 /** Every section belongs to one menu. */
 export type SectionRole = "section" | "menu_root" | "home_layout";
 
-export type MemberRef =
+export type ShortcutRef =
   { kind: "product"; productId: string } | { kind: "section"; sectionId: string };
 
-export type TileRef = MemberRef | { kind: "missing"; name: string };
+export type MemberRef = ShortcutRef | { kind: "set_menu"; menuId: string };
 
-export interface SectionMember<Ref extends TileRef = MemberRef> {
+export type TileRef = ShortcutRef | { kind: "missing"; name: string };
+
+export interface SectionMember<Ref extends MemberRef | TileRef = MemberRef> {
   id: string;
   position: number;
   ref: Ref;

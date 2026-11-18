@@ -561,6 +561,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That menu could not be found",
     es: "No se ha encontrado esa carta",
   },
+  "set_menu.dishes_only": {
+    en: "A set menu can only hold dishes. Add a dish, or open a regular menu to add a section or another menu.",
+    es: "Una carta a precio fijo solo admite platos. Añade un plato o abre una carta normal para añadir una sección u otra carta.",
+  },
   "set_menu.wrong_place": {
     en: "A set menu is sold by placing it in a menu. Open that menu's Structure and add the set menu there.",
     es: "Para vender una carta a precio fijo, abre la Estructura de la carta que quieres publicar y añádela allí.",

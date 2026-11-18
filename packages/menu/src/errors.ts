@@ -80,6 +80,7 @@ declare module "@waitron/shared" {
     "menu.not_found": { menuId: string };
     "set_menu.invalid": { field: "setPrice" | "setVatClass" };
     "set_menu.not_found": { menuId: string };
+    "set_menu.dishes_only": { menuId: string };
     "set_menu.wrong_place": { menuId: string };
     "menu.name_taken": { field: "name" };
     "menu.reset_required": { menuId: string };

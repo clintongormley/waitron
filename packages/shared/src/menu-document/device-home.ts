@@ -78,10 +78,15 @@ type DocumentSection = Extract<DocumentMember, { kind: "section" }>;
 
 /** The members a device draws for `members`: an include shown directly gives way to its own
  * members, in their order; a direct include among those gives way too. */
-export function shownMembers(members: readonly DocumentMember[]): DocumentMember[] {
-  return members.flatMap((member) =>
-    member.kind === "section" && member.direct === true ? shownMembers(member.members) : [member],
-  );
+type ShownMember = Exclude<DocumentMember, { kind: "set_menu" }>;
+
+export function shownMembers(members: readonly DocumentMember[]): ShownMember[] {
+  return members.flatMap((member) => {
+    if (member.kind === "set_menu") return [];
+    return member.kind === "section" && member.direct === true
+      ? shownMembers(member.members)
+      : [member];
+  });
 }
 
 export interface HomeIndex<P> {
@@ -90,7 +95,7 @@ export interface HomeIndex<P> {
   /** Keyed by product id: each product the structure reaches and `offerOf` answers, once. */
   products: Map<string, P>;
   /** The members home's list shows, before tiles with nothing to order are dropped. */
-  home: DocumentMember[];
+  home: ShownMember[];
   /** Keyed by section id: the first copy `home` draws of each section in `sections`. */
   homeCopies: Map<string, DocumentSection>;
 }
@@ -180,7 +185,7 @@ export function indexDocument<P>(
         holdsSomething = true;
         // A product placed twice keeps its first place: a Map keeps a key where it was first set.
         index.products.set(member.productId, offer);
-      } else if (walk(member.members)) {
+      } else if (member.kind === "section" && walk(member.members)) {
         holdsSomething = true;
         index.sections.set(member.sectionId, member);
       }

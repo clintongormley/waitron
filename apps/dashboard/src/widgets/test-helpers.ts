@@ -434,7 +434,8 @@ export function menuDocument(
   const walk = (list: DocumentMember[]): void => {
     for (const member of list)
       if (member.kind === "section") walk(member.members);
-      else offers[member.menuItemId] = frozenOffer(member, names[member.productId]!, menuName);
+      else if (member.kind === "product")
+        offers[member.menuItemId] = frozenOffer(member, names[member.productId]!, menuName);
   };
   walk(members);
   return {

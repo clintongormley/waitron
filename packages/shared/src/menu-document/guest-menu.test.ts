@@ -117,7 +117,7 @@ it("resolves parent and variant names independently and prices each variant", ()
   });
   expect(JSON.stringify(item)).not.toContain("KITCHEN");
 });
-it("keeps section order and places directly included members in place", () => {
+it("keeps section order and direct includes while skipping set-menu placements", () => {
   const doc = document();
   const member = doc.root.members[0]!;
   doc.root.members = [
@@ -130,6 +130,7 @@ it("keeps section order and places directly included members in place", () => {
       color: "red",
       members: [member],
     },
+    { kind: "set_menu", menuId: "fixed-price-menu", name: "Set menu" },
     {
       kind: "section",
       direct: true,

@@ -263,6 +263,10 @@ export async function buildMenuDocuments(
             ? []
             : [{ kind: "product", menuItemId: offer.id, productId: ref.productId }];
         }
+        if (ref.kind === "set_menu") {
+          const menu = loaded.menu(ref.menuId);
+          return menu?.active ? [{ kind: "set_menu", menuId: ref.menuId, name: menu.name }] : [];
+        }
         if (path.includes(ref.sectionId)) return [];
         const includedMenuId =
           loaded.role(ref.sectionId) === "menu_root" ? loaded.ownerMenu(ref.sectionId) : null;
@@ -499,7 +503,7 @@ export function documentOffers(document: MenuDocument): FrozenOffer[] {
   const walk = (members: readonly DocumentMember[]): void => {
     for (const member of members)
       if (member.kind === "section") walk(member.members);
-      else if (!seen.has(member.menuItemId)) {
+      else if (member.kind === "product" && !seen.has(member.menuItemId)) {
         seen.add(member.menuItemId);
         ordered.push(document.offers[member.menuItemId]!);
       }
@@ -847,8 +851,12 @@ export function removedExtraOnlyProducts(
 }
 
 const same = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
-const memberKey = (member: DocumentMember): string =>
-  member.kind === "product" ? `p:${member.productId}` : `s:${member.sectionId}`;
+const memberKeys = (members: readonly DocumentMember[]): string[] =>
+  members.flatMap((member) => {
+    if (member.kind === "product") return [`p:${member.productId}`];
+    if (member.kind === "section") return [`s:${member.sectionId}`];
+    return [];
+  });
 
 function namesOf(shape: Shape, path: readonly string[]): string[] {
   return path.map((sectionId) => shape.sections.get(sectionId)!.node.internalName);
@@ -1310,10 +1318,11 @@ export function diffEntries(
     });
   }
 
-  const listKeys = (shape: Shape, list: string | null) =>
-    list === null
-      ? shape.document.root.members.map(memberKey)
-      : shape.sections.get(list)?.node.members.map(memberKey);
+  const listKeys = (shape: Shape, list: string | null) => {
+    const members =
+      list === null ? shape.document.root.members : shape.sections.get(list)?.node.members;
+    return members === undefined ? undefined : memberKeys(members);
+  };
   for (const list of [null, ...next.sections.keys()]) {
     const before = listKeys(prev, list);
     if (before === undefined) continue;

@@ -45,7 +45,10 @@ export interface MenusFixture {
   course: string;
 }
 
-export const product = (productId: string): MemberRef => ({ kind: "product", productId });
+export const product = (productId: string): Extract<MemberRef, { kind: "product" }> => ({
+  kind: "product",
+  productId,
+});
 export const section = (sectionId: string): MemberRef => ({ kind: "section", sectionId });
 
 /**

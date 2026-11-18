@@ -39,7 +39,7 @@ import {
   FOLLOWING_FOLDER,
   folderPresentation,
 } from "@waitron/menu/src/include-folder-presentation.js";
-import type { Presentation } from "@waitron/shared";
+import type { Presentation, ShortcutRef } from "@waitron/shared";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
@@ -57,7 +57,7 @@ const TOP_LIST = "";
  * helper sees members only. */
 export const ROOT_KEY = "root";
 
-type MemberRef = MenuStructureNode["ref"];
+type MemberRef = ShortcutRef;
 
 const sameRef = (a: MemberRef, b: MemberRef): boolean =>
   a.kind === "product"
@@ -65,7 +65,7 @@ const sameRef = (a: MemberRef, b: MemberRef): boolean =>
     : b.kind === "section" && a.sectionId === b.sectionId;
 
 const holds = (members: MenuStructureNode[], ref: MemberRef): boolean =>
-  members.some((member) => sameRef(member.ref, ref));
+  members.some((member) => member.ref.kind !== "set_menu" && sameRef(member.ref, ref));
 
 /** A section can be drawn in several places, so what lies inside a member is told by section id. */
 export function sectionIdsWithin(node: MenuStructureNode): string[] {
@@ -91,7 +91,7 @@ interface Row {
   /** ROOT_KEY for a member of the menu's own top level. */
   parentKey: string;
   path: string[];
-  node: MenuStructureNode;
+  node: MenuStructureNode & { ref: ShortcutRef };
   name: string;
   /** The name of the list holding this member: the menu's, or its section's. */
   holder: string;
@@ -1036,7 +1036,8 @@ export class MenuStructureTable extends LitElement {
     const walk = (nodes: MenuStructureNode[]) => {
       for (const node of nodes) {
         if (node.ref.kind === "product") products.add(node.ref.productId);
-        else if (!node.includedMenuId) sections.add(node.ref.sectionId);
+        else if (node.ref.kind === "section" && !node.includedMenuId)
+          sections.add(node.ref.sectionId);
         walk(node.children ?? []);
       }
     };
@@ -1057,20 +1058,31 @@ export class MenuStructureTable extends LitElement {
       list: string,
       readOnly: boolean,
     ) => {
-      for (const node of this.#ordered(nodes, list)) {
+      for (const { ref, ...node } of this.#ordered(nodes, list)) {
+        if (ref.kind === "set_menu") continue;
         const path = [...parentPath, node.memberId];
         const key = path.join("/");
-        const staffName = memberName(node.ref, this.#productNames, this.#sectionNames);
+        const staffName = memberName(ref, this.#productNames, this.#sectionNames);
         const name = node.includedMenuId
           ? fill("menus.menu_prefix", { name: staffName })
           : staffName;
-        rows.push({ kind: "member", key, parentKey, path, node, name, holder, list, readOnly });
+        rows.push({
+          kind: "member",
+          key,
+          parentKey,
+          path,
+          node: { ...node, ref },
+          name,
+          holder,
+          list,
+          readOnly,
+        });
         walk(
           node.children ?? [],
           path,
           key,
           staffName,
-          node.ref.kind === "section" ? node.ref.sectionId : list,
+          ref.kind === "section" ? ref.sectionId : list,
           readOnly || Boolean(node.includedMenuId),
         );
       }

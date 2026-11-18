@@ -2018,7 +2018,13 @@ describe("an include shown as a folder or directly", () => {
         member.kind === "section" && member.sectionId === sectionId,
     )!;
   const idsOf = (members: readonly DocumentMember[]) =>
-    members.map((member) => (member.kind === "product" ? member.productId : member.sectionId));
+    members.map((member) =>
+      member.kind === "product"
+        ? member.productId
+        : member.kind === "section"
+          ? member.sectionId
+          : member.menuId,
+    );
   const fixBar = (f: Awaited<ReturnType<typeof menusFixture>>, memberId: string) =>
     setFolder(f.lunchRoot, memberId, {
       showAsFolder: true,

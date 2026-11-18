@@ -73,7 +73,7 @@ function placedIn(
 ): Placed {
   for (const member of members)
     if (member.kind === "product") into.products.add(member.productId);
-    else {
+    else if (member.kind === "section") {
       into.sections.add(member.sectionId);
       placedIn(member.members, into);
     }
@@ -862,7 +862,7 @@ export class DeviceHomePreview extends LitElement {
    * section tile opens. A structural member is drawn from itself, a shortcut from the copy it
    * opens. */
   #tile(
-    ref: DocumentTile | DocumentMember,
+    ref: DocumentTile | ReturnType<typeof shownMembers>[number],
     opens: SectionStep[],
     index: PreviewIndex,
     mode: HomeTileMode,
@@ -878,7 +878,7 @@ export class DeviceHomePreview extends LitElement {
   }
 
   #listTiles(
-    list: readonly DocumentMember[],
+    list: ReturnType<typeof shownMembers>,
     path: SectionStep[],
     index: PreviewIndex,
     mode: HomeTileMode,

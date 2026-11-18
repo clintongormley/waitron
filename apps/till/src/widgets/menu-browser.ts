@@ -548,7 +548,7 @@ export class TillMenuBrowser extends LitElement {
       members.some((member) =>
         member.kind === "product"
           ? index.products.has(member.productId)
-          : holdsOffers(member.members),
+          : member.kind === "section" && holdsOffers(member.members),
       );
     return holdsOffers(section.members);
   }
@@ -784,7 +784,7 @@ export class TillMenuBrowser extends LitElement {
    * unfiltered index holds, else nothing; `opens` is the path a section tile opens. A structural
    * section is drawn from itself, a section shortcut from the copy it opens. */
   #tile(
-    ref: DocumentTile | DocumentMember,
+    ref: DocumentTile | ReturnType<typeof shownMembers>[number],
     opens: SectionStep[],
     index: MenuIndex,
     mode: HomeTileMode,
@@ -807,7 +807,7 @@ export class TillMenuBrowser extends LitElement {
   }
 
   #listTiles(
-    list: readonly DocumentMember[],
+    list: ReturnType<typeof shownMembers>,
     path: SectionStep[],
     index: MenuIndex,
     mode: HomeTileMode,

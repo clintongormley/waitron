@@ -104,7 +104,7 @@ export async function requireMenuRoot(tx: Transaction, menuId: string): Promise<
 
 function nodesOf(graph: SectionGraph, sectionId: string): MenuStructureNode[] {
   return graph.children(sectionId).map(({ id, ref }) =>
-    ref.kind === "product"
+    ref.kind !== "section"
       ? { memberId: id, ref }
       : {
           memberId: id,
@@ -128,6 +128,7 @@ export interface MenuStructure {
   nodes: MenuStructureNode[];
   includable: { id: string; name: string; rootSectionId: string }[];
   includedBy: { id: string; name: string }[];
+  placeableSetMenus: { id: string; name: string }[];
 }
 
 function structuresIn(graph: SectionGraph): (menuId: string) => MenuStructure {
@@ -149,6 +150,13 @@ function structuresIn(graph: SectionGraph): (menuId: string) => MenuStructure {
       rootSectionId: roots.get(id)!,
     }));
     const details = graph.section(rootSectionId)!;
+    const placeableSetMenus =
+      graph.menu(menuId)?.kind === "menu"
+        ? graph.roots().flatMap(({ menuId: id }) => {
+            const menu = graph.menu(id);
+            return menu?.kind === "set_menu" && menu.active ? [{ id, name: menu.name }] : [];
+          })
+        : [];
     const root: SectionDetails = {
       id: rootSectionId,
       internalName: details.internalName!,
@@ -162,6 +170,7 @@ function structuresIn(graph: SectionGraph): (menuId: string) => MenuStructure {
       root,
       nodes: nodesOf(graph, rootSectionId),
       includable,
+      placeableSetMenus,
       includedBy: includedBy.get(menuId) ?? [],
     };
   };

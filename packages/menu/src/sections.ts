@@ -26,6 +26,7 @@ import {
   nameOf,
   nextPosition,
   refColumns,
+  refKey,
   renumber,
   requirePosition,
 } from "./section-members.js";
@@ -107,7 +108,8 @@ async function checkListRef(
   sectionId: string,
   ref: MemberRef,
   replacing?: SectionMember,
-): Promise<void> {
+) {
+  if (ref?.kind !== "product") requireListAcceptsSections(graph, sectionId);
   if (ref?.kind === "section") {
     const role = graph.role(ref.sectionId);
     if (role === undefined)
@@ -116,12 +118,19 @@ async function checkListRef(
       throw new AppError("menu_section.wrong_role", { sectionId: ref.sectionId, role });
   }
   // An Inactive product is on no menu, so no list may take one.
-  await checkRef(tx, graph, sectionId, ref, replacing, { active: true });
+  const stored = await checkRef(tx, graph, sectionId, ref, replacing, { active: true });
   if (ref.kind === "section" && wouldCreateCycle(graph, sectionId, ref.sectionId))
     throw new AppError("menu_section.member_cycle", {
       sectionId,
       childSectionId: ref.sectionId,
     });
+  return stored;
+}
+
+function requireListAcceptsSections(graph: SectionGraph, sectionId: string): void {
+  const menuId = graph.ownerMenu(sectionId)!;
+  if (graph.menu(menuId)?.kind === "set_menu")
+    throw new AppError("set_menu.dishes_only", { menuId });
 }
 
 /** Any list by id; Home omits missing members. Use readMenuHome for its complete shortcuts. */
@@ -155,6 +164,7 @@ export async function createSectionIn(
   void fallbackLanguage;
   const graph = await loadSectionGraph(tx);
   requireWritableList(graph, listId);
+  requireListAcceptsSections(graph, listId);
   requirePosition(position);
   const internalName = internalNameOf(input.internalName);
   const names = input.names === undefined ? {} : namesOf(input.names);
@@ -171,13 +181,8 @@ export async function createSectionIn(
       ownerMenuId: graph.ownerMenu(listId)!,
     })
     .returning({ id: sections.id });
-  await insertMember(
-    tx,
-    listId,
-    graph.children(listId),
-    { kind: "section", sectionId: created!.id },
-    position,
-  );
+  const ref = { kind: "section", sectionId: created!.id } as const;
+  await insertMember(tx, listId, graph.children(listId), ref, ref, position);
   await onStructureChanged(tx, menusContaining(graph, listId), graph);
   return readSection(tx, created!.id);
 }
@@ -263,8 +268,8 @@ export async function addMember(
   const graph = await loadSectionGraph(tx);
   requireWritableList(graph, sectionId);
   requirePosition(position);
-  await checkListRef(tx, graph, sectionId, ref);
-  const added = await insertMember(tx, sectionId, graph.children(sectionId), ref, position);
+  const stored = await checkListRef(tx, graph, sectionId, ref);
+  const added = await insertMember(tx, sectionId, graph.children(sectionId), ref, stored, position);
   await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
   return added;
 }
@@ -342,9 +347,6 @@ function heldMembers(
     return { listId, member: heldMember(graph.children(listId), listId, memberId) };
   });
 }
-
-const refKey = (ref: MemberRef): string =>
-  ref.kind === "product" ? `product:${ref.productId}` : `section:${ref.sectionId}`;
 
 async function writeStructureChange(
   tx: Transaction,
@@ -441,7 +443,7 @@ export async function replaceMember(
   const graph = await loadSectionGraph(tx);
   const current = writableMember(graph, sectionId, memberId);
   refuseOwnedMember(graph, current);
-  await checkListRef(tx, graph, sectionId, ref, current);
+  const stored = await checkListRef(tx, graph, sectionId, ref, current);
   const sameInclude =
     ref.kind === "section" &&
     current.ref.kind === "section" &&
@@ -450,8 +452,8 @@ export async function replaceMember(
     .update(sectionMembers)
     .set(
       sameInclude
-        ? refColumns(ref)
-        : { ...refColumns(ref), showAsFolder: true, ...columnsFromOverrides({}) },
+        ? refColumns(stored)
+        : { ...refColumns(stored), showAsFolder: true, ...columnsFromOverrides({}) },
     )
     .where(eq(sectionMembers.id, memberId));
   // A replace changes what the list holds, never which menus reach the list.

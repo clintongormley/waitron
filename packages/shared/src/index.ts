@@ -454,6 +454,7 @@ export type {
 export type {
   SectionRole,
   MemberRef,
+  ShortcutRef,
   TileRef,
   SectionMember,
   SectionDetails,

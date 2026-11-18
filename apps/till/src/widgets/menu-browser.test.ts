@@ -868,6 +868,20 @@ describe("till-menu-browser", () => {
   });
 
   describe("sections", () => {
+    it("shows the ordinary tiles when the menu also holds a set menu", async () => {
+      const set = {
+        kind: "set_menu",
+        menuId: "daily",
+        name: "Daily menu",
+      } satisfies DocumentMember;
+      const { el } = await mount({
+        menu: lunch({ structure: { members: [member("water"), set, drinks] } }),
+      });
+      expect(names(entries(el, "structure"))).toEqual(["Agua", "Drinks (EN)"]);
+      await tap(el, entry(el, "structure", "Drinks (EN)"));
+      expect(names(entries(el, "section"))).toEqual(["Cola", "Lemonade", "Beer (EN)"]);
+    });
+
     it("opens a section tile's section, with a breadcrumb back home", async () => {
       const { el } = await mount();
       await tap(el, entry(el, "shortcuts", "Drinks (EN)"));
@@ -3214,7 +3228,10 @@ describe("A461 served-menu section search", () => {
   const cake = product("cake", "Coffee cake", { menuId: "other" });
   const current = lunch({ structure: { members: [member("cafe")] }, ...withShortcuts([]) });
   const first = section("copy", "internal", { en: "Coffee first" }, [member("espresso")]);
-  const second = section("copy", "internal", { en: "Coffee second" }, [member("cake")]);
+  const second = section("copy", "internal", { en: "Coffee second" }, [
+    { kind: "set_menu", menuId: "daily", name: "Daily menu" },
+    member("cake"),
+  ]);
   const other = {
     ...current,
     id: "other",
