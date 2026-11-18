@@ -328,10 +328,10 @@ it("explains each refusal about a table's party, in both languages", () => {
 
 it("words the presented, paid and other-party refusals of an order sent to a bill it cannot go on, in both languages", () => {
   expect(codeMessage("bill.presented", "en")).toBe(
-    "This bill has been presented, so it cannot be changed",
+    "This bill has been presented, so it cannot be changed. Put anything more on a new bill.",
   );
   expect(codeMessage("bill.presented", "es")).toBe(
-    "Esta cuenta ya se ha presentado, así que no se puede cambiar",
+    "Esta cuenta ya se ha presentado, así que no se puede cambiar. Pon lo que pidan después en una cuenta nueva.",
   );
   expect(codeMessage("bill.paid", "en")).toBe("This bill is closed");
   expect(codeMessage("bill.paid", "es")).toBe("Esta cuenta ya está cerrada");

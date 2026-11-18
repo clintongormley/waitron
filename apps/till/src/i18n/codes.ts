@@ -546,8 +546,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es una factura completa a nombre de un cliente y la caja no puede presentar una factura rectificativa para ella.",
   },
   "bill.presented": {
-    en: "This bill has been presented, so it cannot be changed",
-    es: "Esta cuenta ya se ha presentado, así que no se puede cambiar",
+    en: "This bill has been presented, so it cannot be changed. Put anything more on a new bill.",
+    es: "Esta cuenta ya se ha presentado, así que no se puede cambiar. Pon lo que pidan después en una cuenta nueva.",
   },
   "working_order.not_open": {
     en: "This bill is no longer open: it has been presented, paid or discarded",
