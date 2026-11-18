@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import {
   billPayments,
@@ -28,7 +28,7 @@ import { payments } from "@waitron/payments";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setProfileServiceAccess } from "@waitron/venue-service";
+import { setProfileServiceAccess, writeKitchenNote } from "@waitron/venue-service";
 import { inTx, send } from "./testing/bill-venue.js";
 import {
   billlessSale,
@@ -45,6 +45,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { invoiceDeliveryAlertSource } from "./alert-sources.js";
 import { createPageTestPages } from "./page-test-pages.js";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
+import * as receiptDocument from "./receipt-document.js";
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
 beforeEach(async () => {
@@ -99,6 +100,7 @@ async function jobs() {
 }
 it("reads the filed invoice before collection without settling or enqueuing anything", async () => {
   const order = await placedIssuedBill(venue, "Croquettes");
+  await inTx(venue, (tx) => writeKitchenNote(tx, { workingOrderId: order }, 0, "Train at 14:30"));
   const sale = await saleOf(order);
   await inTx(venue, (tx) =>
     tx.update(products).set({ customerName: { "es-ES": "Renamed after filing" } }),
@@ -117,10 +119,22 @@ it("reads the filed invoice before collection without settling or enqueuing anyt
     issuedAt: new Date(sale.issuedAt).toISOString(),
     lines: [{ descriptions: { "es-ES": "Croquetas de jamón" }, gross: "10.00" }],
   });
+  expect(JSON.stringify(result.receiptPreview)).toContain("Croquetas de jamón");
+  expect(JSON.stringify(result.receiptPreview)).not.toContain("Train at 14:30");
   expect(result.qr).not.toBe("");
   expect(result.issuer).toMatchObject({ venueName: "Tarjetas SL", nif: "61000002T" });
   expect(await snapshot()).toEqual(before);
   expect(await jobs()).toEqual(printed);
+});
+it("keeps the invoice available when its preview cannot be built", async () => {
+  const id = await billlessSale(venue);
+  const preview = vi.spyOn(receiptDocument, "buildReceiptDocument").mockImplementationOnce(() => {
+    throw new Error("preview failed");
+  });
+  onTestFinished(() => preview.mockRestore());
+  const answer = await get(id);
+  expect(answer).toMatchObject({ status: 200, json: { invoiceNumber: "A/1", total: "12.10" } });
+  expect(answer.json).not.toHaveProperty("receiptPreview");
 });
 it("reads paid and orderless original sales and a correction by their own identity", async () => {
   const order = await placedIssuedBill(venue, "Caña");

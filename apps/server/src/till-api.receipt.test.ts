@@ -460,6 +460,7 @@ async function ringSale(
   cookie: string,
   menuItemId: string,
   method: "cash" | "card" = "cash",
+  guestCount?: number,
 ): Promise<string> {
   const workingOrderId = randomUUID();
   const res = await app.request("/api/sales", {
@@ -468,6 +469,7 @@ async function ringSale(
     body: JSON.stringify({
       dining: "eat_in",
       workingOrderId,
+      guestCount,
       lines: [{ menuItemId, quantity: "1" }],
       tender: { method, amount: "1.50" },
     }),
@@ -516,12 +518,14 @@ it.each(["cash", "card"] as const)(
 describe("GET /api/sales/:id (filed ticket recovery)", () => {
   it("reopens a filed ticket from another device without payment, filing, printing or drawer writes", async () => {
     const { cfg, each, operatorId } = await setupVenue();
+    await seedVenueSettings(suite.db, { invoiceLocales: ["ca-ES"] });
+    await suite.db.update(departments).set({ tradingName: "Terrace Bar" });
     const printerId = await makePrinter();
     await configureReceipt({ printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const orderId = await ringSale(app, cookie, each.menuItemId);
+    const orderId = await ringSale(app, cookie, each.menuItemId, "cash", 2);
     expect(
       (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
         .status,
@@ -544,7 +548,7 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
     expect(before.jobs).toHaveLength(1);
     expect(before.drawers).toEqual([]);
     const freshApp = new Hono();
-    mountTillApi(freshApp, apiDeps(cfg), noopLog);
+    mountTillApi(freshApp, apiDeps({ ...cfg, practiceMode: true }), noopLog);
     for (const mounted of [app, freshApp]) {
       const res = await mounted.request(`/api/sales/${orderId}`, {
         headers: { cookie: readerCookie },
@@ -555,23 +559,30 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
       expect(result).toMatchObject({
         invoiceType: "F2",
         invoiceNumber: "A/1",
-        locale: "es-ES",
+        locale: "ca-ES",
         issuedAt: new Date(before.sales[0]!.issuedAt).toISOString(),
         total: "1.50",
         tender: { method: "cash", change: "0.00" },
-        lines: [{ descriptions: { "es-ES": "Agua mineral" }, quantity: "1", gross: "1.50" }],
+        lines: [{ descriptions: { "ca-ES": "Agua mineral" }, quantity: "1", gross: "1.50" }],
       });
     }
-    const preview = await freshApp.request(`/api/sales/${orderId}?receiptPreview=1`, {
-      headers: { cookie: readerCookie },
-    });
-    expect(preview.status).toBe(200);
-    expect(await preview.json()).toMatchObject({
-      receiptPreview: expect.arrayContaining([
-        expect.objectContaining({ kind: "amount", caption: "A/1" }),
-        expect.objectContaining({ kind: "amount", caption: "1  Agua mineral" }),
-      ]),
-    });
+    for (const path of [
+      `/api/sales/${orderId}?receiptPreview=1`,
+      `/api/transactions/${before.sales[0]!.id}/receipt`,
+    ]) {
+      const res = await freshApp.request(path, { headers: { cookie: readerCookie } });
+      expect(res.status).toBe(200);
+      const preview = JSON.stringify((await res.json()).receiptPreview);
+      for (const words of [
+        "A/1",
+        "Terrace Bar",
+        "PROVA",
+        "1  Agua mineral",
+        "2 comensals · per persona",
+      ])
+        expect(preview).toContain(words);
+      expect(preview).not.toContain("Calle Mayor 1");
+    }
     expect(await snapshot()).toEqual(before);
   });
 

@@ -3818,7 +3818,8 @@ describe("till-app", () => {
   });
 
   it("confirm-payment: records the sale with the mapped lines and tender, then shows the document choices", async () => {
-    const { el } = await mountApp();
+    const getFiledTicket = vi.fn();
+    const { el } = await mountApp({ getFiledTicket });
     const c = await toCounter(el);
     const store = c.store;
     store.addProduct(coffee, "2");
@@ -3851,7 +3852,7 @@ describe("till-app", () => {
     expect(view).not.toBeNull();
     expect(view.result).toBe(saleResult);
     expect(view.localName).toBe("till-settlement-document-dialog");
-    expect(currentApi.getFiledTicket).not.toHaveBeenCalled();
+    expect(getFiledTicket).not.toHaveBeenCalled();
   });
 
   it("opens customer details before a walk-up full invoice choice can pay", async () => {
@@ -4586,20 +4587,26 @@ describe("till-app", () => {
     );
   });
 
-  it("the printed receipt line list comes from the SERVER result, not the client basket (Finding 2)", async () => {
-    // The client basket and the FILED lines deliberately DIVERGE: the store holds café×2, but the
-    // server's filed result reports a different composition (agua×3). The rendered ticket must show the
-    // FILED "Agua"/"3"/"6,00 €" — proof the receipt renders `result.lines`, never the mutable basket, so
-    // a local edit can never make the printed goods list disagree with the invoice.
+  it("shows the server's receipt goods even when the sale fields and basket disagree", async () => {
     const filed: TillSaleResult = {
       ...saleResult,
       total: "6.00",
-      lines: [{ descriptions: { "es-ES": "Agua" }, quantity: "3", gross: "6.00" }],
+      lines: [{ descriptions: { "es-ES": "Raw sale wording" }, quantity: "3", gross: "6.00" }],
     };
     const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
     const { el } = await mountApp({
       recordSale: vi.fn().mockResolvedValue(filed),
-      getTransactionReceipt: vi.fn().mockResolvedValue(filed),
+      getTransactionReceipt: vi.fn().mockResolvedValue({
+        ...filed,
+        receiptPreview: [
+          {
+            kind: "amount",
+            caption: "3  Agua mineral",
+            amount: "6,00 €",
+            indent: { after: "3  " },
+          },
+        ],
+      }),
     });
     const c = await toCounter(el);
     c.store.addProduct(coffee, "2"); // client basket — different from the filed lines
@@ -4610,12 +4617,14 @@ describe("till-app", () => {
 
     expect(ticket(el)!.result).toBe(filed);
     await openFiledReceipt(el);
-    const rows = ticket(el)!.shadowRoot!.querySelectorAll(".line");
+    const article = ticket(el)!.shadowRoot!.querySelector("article")!;
+    const rows = article.querySelectorAll("p");
     expect(rows).toHaveLength(1);
     expect(rows[0]!.textContent).toContain("Agua");
     expect(rows[0]!.textContent).toContain("3");
     expect(norm(rows[0]!.textContent!)).toContain("6,00 €");
-    expect(ticket(el)!.shadowRoot!.textContent).not.toContain("Café");
+    expect(article.textContent).not.toContain("Café");
+    expect(article.textContent).not.toContain("Raw sale wording");
   });
 
   // ── Counter receipt/drawer: the ticket screen's Reprint + Abrir cajón buttons ────────────────
@@ -11836,15 +11845,7 @@ describe("till-app", () => {
           tender: { method: "card" as const, change: "0.00" },
         };
         const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: result });
-        const { el } = await mountApp({
-          pay,
-          getTransactionReceipt: vi.fn().mockResolvedValue({
-            ...result,
-            receiptPreview: simulatedCardPayment
-              ? [{ kind: "text", text: "SIN COBRO REAL", indent: 0 }]
-              : [{ kind: "text", text: "Tarjeta", indent: 0 }],
-          }),
-        });
+        const { el } = await mountApp({ pay });
         const c = await toCounter(el);
         const store = c.store;
         store.addProduct(coffee, "2");
@@ -11865,11 +11866,6 @@ describe("till-app", () => {
         expect(view).not.toBeNull();
         expect(view.result).toBe(result);
         expect(view.simulatedCardPayment).toBe(simulatedCardPayment);
-        await openFiledReceipt(el);
-        const receipt = el.shadowRoot!.querySelector("till-ticket-view")!;
-        expect(receipt.shadowRoot!.querySelector("article")?.textContent?.trim()).toBe(
-          simulatedCardPayment ? "SIN COBRO REAL" : "Tarjeta",
-        );
       },
     );
 
@@ -14271,11 +14267,20 @@ describe("till-app", () => {
         },
         { receiptTrim: {}, venueAddress: [], receiptSettings: { printAddress: false } },
       ];
+      const text = [
+        ["Terraza", "Current Street", "910001111", "Hasta pronto"],
+        ["Comedor", "comedor@example.com"],
+        ["Filed issuer"],
+      ];
       const recordSale = vi.fn();
       const getTransactionReceipt = vi.fn();
-      for (const presentation of presentations) {
+      for (const [index, presentation] of presentations.entries()) {
         recordSale.mockResolvedValueOnce({ ...saleResult, ...presentation });
-        getTransactionReceipt.mockResolvedValueOnce({ ...saleResult, ...presentation });
+        getTransactionReceipt.mockResolvedValueOnce({
+          ...saleResult,
+          ...presentation,
+          receiptPreview: text[index]!.map((text) => ({ kind: "text", text, indent: 0 })),
+        });
       }
       const { el } = await mountApp({
         recordSale,
@@ -14298,7 +14303,7 @@ describe("till-app", () => {
         const view = ticket(el)!;
         expect(view.result.receiptTrim).toEqual(presentation.receiptTrim);
         expect(view.result.receiptSettings).toEqual(presentation.receiptSettings);
-        const printed = view.shadowRoot!.textContent!;
+        const printed = view.shadowRoot!.querySelector("article")!.textContent!;
         expect(printed).not.toContain("Stale boot");
         expect(printed).not.toContain("Stale boot street");
         if (index === 0) {

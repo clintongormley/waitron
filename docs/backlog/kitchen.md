@@ -380,7 +380,7 @@ the change (plan PR 8 Decision 1).
 - **Each is decided by the unit's identity.** **Kept as it is, by the owner's choice
   (2026-09-28):** the till's ticket view (`apps/till/src/screens/till-ticket-view.ts`) still shows
   the Each unit. The printed receipt prints an Each count bare since A663 Part 2 (owner,
-  2026-10-15).
+  2026-10-15). **2026-11-18:** the till now uses the same receipt layout and shows the bare count.
 
 - **A party kitchen-note change prints one slip per affected printer and one notice per station,
   listing its affected bills (owner, 2026-11-06, A1378).** Acknowledging the notice covers every

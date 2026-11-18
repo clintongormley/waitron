@@ -74,6 +74,9 @@ describe("till-ticket-view", () => {
     expect(body.indexOf("Plato del día")).toBeGreaterThan(body.indexOf("DOCUMENTO DE PRUEBA"));
     expect(body.indexOf("9,40 A")).toBeLessThan(body.lastIndexOf("DOCUMENTO DE PRUEBA"));
     expect(body).not.toContain("Jamón");
+    expect(getComputedStyle(article.querySelector(".receipt-amount span")!).textIndent).not.toBe(
+      "0px",
+    );
   });
 
   it("associates supplied headings with the item, continuation and tax columns", async () => {
@@ -122,6 +125,7 @@ describe("till-ticket-view", () => {
       ],
     });
     const tables = [...el.shadowRoot!.querySelectorAll("article table")];
+    expect(getComputedStyle(tables[0]!.previousElementSibling!).fontWeight).toBe("600");
     expect(
       tables.map((table) =>
         [...table.querySelectorAll("th[scope=col]")].map((cell) => cell.textContent!.trim()),

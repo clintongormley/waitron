@@ -1,6 +1,6 @@
 import { outsideCardSummary } from "../widgets/outside-card.js";
 import { equipmentTakeover } from "../widgets/equipment-dialog.js";
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { live } from "lit/directives/live.js";
@@ -8,7 +8,6 @@ import { styleMap } from "lit/directives/style-map.js";
 import { ChangeObserver, baseStyles, mediaAddress, subscribeMediaServer } from "@waitron/ui";
 import {
   resolveSnapshotText,
-  type ReceiptElement,
   type ReceiptIndent,
   type ReceiptTableRow,
   type TaxTableRow,
@@ -30,7 +29,6 @@ import {
   type TillSaleResult,
 } from "../api/client.js";
 
-/** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
 export interface TicketIssuer {
   venueName: string;
   nif: string;
@@ -88,7 +86,7 @@ function renderReceipt(result: TillSaleResult, language: string) {
   let alignment: "left" | "center" = "left";
   let itemHeader: ReceiptTableRow | undefined;
   const logo = result.receiptTrim?.logo;
-  const lines = result.receiptPreview.map((element: ReceiptElement) => {
+  const lines = result.receiptPreview.map((element): TemplateResult | typeof nothing => {
     switch (element.kind) {
       case "align":
         alignment = element.alignment;

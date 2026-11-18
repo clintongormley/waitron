@@ -488,28 +488,13 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
             { kind: "qr", text: result.qr },
             { kind: "logo" },
             { kind: "rule" },
-            { kind: "align", alignment: "left" },
-            {
-              kind: "amount",
-              caption: "FACTURA",
-              amount: "A/1",
-              indent: 0,
-              style: { bold: true, double: true },
-            },
+            { kind: "amount", caption: "FACTURA", amount: "A/1", indent: 0 },
             {
               kind: "table",
               table: {
-                header: {
-                  units: "Uds.",
-                  item: "Artículo",
-                  price: "Precio",
-                  amount: "Importe",
-                  rate: "IVA",
-                },
-                withRate: true,
-                rows: [
-                  { units: "0,32 kg", item: "Jamón", price: "18,18", amount: "5,82", rate: "10%" },
-                ],
+                header: { units: "Uds.", item: "Artículo", price: "€/u", amount: "Importe" },
+                withRate: false,
+                rows: [{ units: "4", item: "Pan", price: "1,00", amount: "4,00" }],
               },
             },
             {
@@ -517,7 +502,6 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
               header: { rate: "IVA", base: "Base imponible", tax: "Cuota", total: "Total" },
               rows: [{ rate: "10%", base: "5,82", tax: "0,58", total: "6,40" }],
             },
-            { kind: "text", text: "DOCUMENTO DE PRUEBA", indent: 0 },
           ],
         },
       },

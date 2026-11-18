@@ -3237,7 +3237,7 @@ export class TillApp extends LitElement {
   /** The screen a kitchen display switched to after a refused press, shown for a while. */
   @state() private kitchenScreenSwitched?: KitchenScreenKind;
   #switchedTimer?: ReturnType<typeof setTimeout>;
-  /** The issuer identity printed on the ticket (venue name + NIF), from `getTill` (`#applyVenueSetup`). */
+  /** Venue identity from `getTill` for the bill payment dialogs. */
   @state() private issuer?: TicketIssuer;
   @state() cloudEmergency?: TillInfo["cloudEmergency"];
   /** Offers available in the counter's current service zone. Each carries a distinct menu-item ID,

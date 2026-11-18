@@ -1,5 +1,5 @@
 import { readTaxpayer, type Transaction } from "@waitron/db";
-import { buildReceiptDocument } from "./receipt-document.js";
+import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
 import { readPrintedGuests } from "./receipt-guests.js";
 import type { TillSaleResult } from "./till-sale.js";
 
@@ -16,7 +16,7 @@ export async function tillReceiptPreview(
     issuer = { venueName: taxpayer.legalName, nif: taxpayer.taxId };
   }
   const guests = await readPrintedGuests(tx, saleId);
-  const { elements } = buildReceiptDocument({
+  const input: ReceiptDocumentInput = {
     result: ticket,
     issuer,
     paperWidth: "80mm",
@@ -28,6 +28,14 @@ export async function tillReceiptPreview(
     simulated: practiceMode,
     simulatedCardPayment: ticket.simulatedCardPayment,
     guests,
-  });
-  return { ...ticket, receiptPreview: elements };
+  };
+  try {
+    return { ...ticket, receiptPreview: buildReceiptDocument(input).elements };
+  } catch {
+    console.warn("receipt.optional_read_failed", {
+      operation: "tillReceiptPreview",
+      code: "receipt.read_failed",
+    });
+    return ticket;
+  }
 }
