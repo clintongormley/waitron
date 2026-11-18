@@ -425,3 +425,114 @@ describe("Stripe reader refusal details through the real SDK", () => {
     },
   );
 });
+
+describe("stripeClient's terminal refund", () => {
+  function refundStripe(calls: unknown[], status: string | null): Stripe {
+    return {
+      refunds: {
+        create: (...args: unknown[]) => {
+          calls.push(args);
+          return Promise.resolve({ id: "re_t", status });
+        },
+      },
+    } as unknown as Stripe;
+  }
+
+  it("sends the amount in minor units with the key, and omits the amount when none is given", async () => {
+    const calls: unknown[] = [];
+    const client = stripeClient(refundStripe(calls, "succeeded"));
+
+    await client.refund({ paymentIntentId: "pi_1", amount: decimal("7.05"), idempotencyKey: "k1" });
+    await client.refund({ paymentIntentId: "pi_2", idempotencyKey: "k2" });
+
+    expect(calls).toEqual([
+      [{ payment_intent: "pi_1", amount: 705 }, { idempotencyKey: "k1" }],
+      [{ payment_intent: "pi_2" }, { idempotencyKey: "k2" }],
+    ]);
+  });
+
+  it.each([
+    ["succeeded", "succeeded"],
+    ["pending", "pending"],
+    ["requires_action", "failed"],
+    ["canceled", "failed"],
+    [null, "failed"],
+  ])("reports Stripe's %s refund as %s", async (stripeStatus, status) => {
+    const client = stripeClient(refundStripe([], stripeStatus));
+    expect(await client.refund({ paymentIntentId: "pi_1", idempotencyKey: "k" })).toEqual({
+      id: "re_t",
+      status,
+    });
+  });
+});
+
+describe("stripeClient's reader outcome", () => {
+  function readerStripe(reader: unknown, intent?: unknown): { stripe: Stripe; reads: string[] } {
+    const reads: string[] = [];
+    const stripe = {
+      terminal: { readers: { retrieve: () => Promise.resolve(reader) } },
+      paymentIntents: {
+        retrieve: (id: string) => {
+          reads.push(id);
+          return Promise.resolve(intent);
+        },
+      },
+    } as unknown as Stripe;
+    return { stripe, reads };
+  }
+
+  it.each([
+    ["a deleted reader", { id: "tmr", deleted: true }, { status: "in_progress" }],
+    ["a reader with no action", { id: "tmr", action: null }, { status: "in_progress" }],
+    [
+      "an action in progress",
+      { id: "tmr", action: { status: "in_progress" } },
+      { status: "in_progress" },
+    ],
+    ["a succeeded action", { id: "tmr", action: { status: "succeeded" } }, { status: "succeeded" }],
+    [
+      "a failed action with no reason",
+      { id: "tmr", action: { status: "failed" } },
+      { status: "failed", failureCode: undefined },
+    ],
+    [
+      "a failed action whose API error has only a code",
+      { id: "tmr", action: { status: "failed", api_error: { code: "expired_card" } } },
+      { status: "failed", failureCode: "expired_card" },
+    ],
+  ])("reports %s", async (_name, reader, outcome) => {
+    const { stripe, reads } = readerStripe(reader);
+    expect(await stripeClient(stripe).readerOutcome("tmr")).toEqual(outcome);
+    expect(reads).toEqual([]);
+  });
+
+  it("reads a decline reason from an already expanded payment intent without asking Stripe again", async () => {
+    const { stripe, reads } = readerStripe({
+      id: "tmr",
+      action: {
+        status: "failed",
+        failure_code: "card_declined",
+        process_payment_intent: {
+          payment_intent: { id: "pi_x", last_payment_error: { code: "incorrect_pin" } },
+        },
+      },
+    });
+    expect(await stripeClient(stripe).readerOutcome("tmr")).toEqual({
+      status: "failed",
+      failureCode: "incorrect_pin",
+    });
+    expect(reads).toEqual([]);
+  });
+
+  it("does not look for a decline reason when the reader names no payment intent", async () => {
+    const { stripe, reads } = readerStripe({
+      id: "tmr",
+      action: { status: "failed", failure_code: "card_declined" },
+    });
+    expect(await stripeClient(stripe).readerOutcome("tmr")).toEqual({
+      status: "failed",
+      failureCode: "card_declined",
+    });
+    expect(reads).toEqual([]);
+  });
+});

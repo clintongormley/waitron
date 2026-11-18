@@ -51,12 +51,6 @@ export default defineConfig({
       exclude: [
         ...coverageConfigDefaults.exclude,
         "src/dashboard/test-helpers.ts",
-        // The real Stripe SDK wrappers, which the nightly sandbox suites run against Stripe's test
-        // mode.
-        "src/stripe-client.ts",
-        "src/stripe-device-client.ts",
-        "src/stripe-hosted-client.ts",
-        "src/stripe-report-client.ts",
         "src/testing/**",
         "src/**/*.sandbox.test.ts",
       ],

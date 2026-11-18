@@ -65,8 +65,6 @@ export default defineConfig({
         ...coverageConfigDefaults.exclude,
         // Test-only mount/cleanup helper.
         "src/dashboard/test-helpers.ts",
-        // The real HTTP boundary to SumUp. Its hermetic tests are in src/sumup-client.test.ts.
-        "src/sumup-client.ts",
         "src/testing/**",
         "src/**/*.sandbox.test.ts",
       ],

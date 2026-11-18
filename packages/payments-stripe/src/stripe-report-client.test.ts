@@ -15,14 +15,15 @@ const NOW = new Date("2026-07-25T12:00:00Z");
 const OLD = new Date("2026-07-01T12:00:00Z");
 const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-02T00:00:00Z") };
 
+const pager = <T>(items: T[]) => ({
+  autoPagingEach: async (each: (item: T) => void) => {
+    for (const item of items) each(item);
+  },
+});
+
 /** The two list calls `stripeReportClient` makes, answered from fixed pages. `amount`, `fee` and
  * `net` are Stripe's own fields on a balance transaction: `net` is `amount` less `fee`. */
 function sdkWith(transactions: { amount: number; fee: number; net: number; pi: string }[]): Stripe {
-  const pager = <T>(items: T[]) => ({
-    autoPagingEach: async (each: (item: T) => void) => {
-      for (const item of items) each(item);
-    },
-  });
   return {
     balanceTransactions: {
       list: () =>
@@ -98,5 +99,79 @@ describe("stripeReportClient: Stripe's fee never makes a payment held", () => {
     expect(result.drift.map((m) => m.settledAmount)).toEqual([decimal("12.50")]);
     expect(result.remediated).toBe(0);
     expect(refunder.createRefundCalls).toHaveLength(0);
+  });
+});
+
+describe("stripeReportClient's reading of Stripe's lists", () => {
+  it("skips a balance transaction with no charge or no charge id, and keeps an expanded payment intent's id", async () => {
+    const stripe = {
+      balanceTransactions: {
+        list: () =>
+          pager([
+            { amount: 100, created: 1, source: null },
+            { amount: 200, created: 2, source: { id: "", payment_intent: "pi_empty" } },
+            { amount: 300, created: 3, source: { id: "ch_3", payment_intent: { id: "pi_3" } } },
+            { amount: 400, created: 4, source: { id: "ch_4", payment_intent: null } },
+          ]),
+      },
+    } as unknown as Stripe;
+    expect(await stripeReportClient(stripe).listSettlements(PERIOD)).toEqual([
+      { paymentIntentId: "pi_3", chargeId: "ch_3", amountMinor: 300, settledAt: new Date(3000) },
+      { paymentIntentId: null, chargeId: "ch_4", amountMinor: 400, settledAt: new Date(4000) },
+    ]);
+  });
+
+  it("asks for the window in Unix seconds and gives a session a hint only when both metadata keys are present", async () => {
+    const asked: unknown[] = [];
+    const stripe = {
+      checkout: {
+        sessions: {
+          list: (params: unknown) => {
+            asked.push(params);
+            return pager([
+              {
+                id: "cs_both",
+                payment_intent: "pi_both",
+                metadata: { working_order_id: "wo_1", payment_ref: "ref_1" },
+              },
+              { id: "cs_order_only", payment_intent: null, metadata: { working_order_id: "wo_2" } },
+              { id: "cs_ref_only", payment_intent: null, metadata: { payment_ref: "ref_3" } },
+              { id: "cs_none", payment_intent: { id: "pi_none" }, metadata: null },
+            ]);
+          },
+        },
+      },
+    } as unknown as Stripe;
+    expect(await stripeReportClient(stripe).listCheckoutSessions(PERIOD)).toEqual([
+      {
+        sessionId: "cs_both",
+        paymentIntentId: "pi_both",
+        hint: { workingOrderId: "wo_1", paymentRef: "ref_1" },
+      },
+      { sessionId: "cs_order_only", paymentIntentId: null },
+      { sessionId: "cs_ref_only", paymentIntentId: null },
+      { sessionId: "cs_none", paymentIntentId: "pi_none" },
+    ]);
+    expect(asked).toEqual([{ created: { gte: 1782864000, lt: 1782950400 }, limit: 100 }]);
+  });
+
+  it.each([
+    ["a bare id", "pi_bare", "pi_bare"],
+    ["an expanded payment intent", { id: "pi_obj" }, "pi_obj"],
+    ["no payment intent", null, null],
+  ])("paymentIntentForSession answers %s", async (_name, payment_intent, expected) => {
+    const retrieved: string[] = [];
+    const stripe = {
+      checkout: {
+        sessions: {
+          retrieve: (id: string) => {
+            retrieved.push(id);
+            return Promise.resolve({ id, payment_intent });
+          },
+        },
+      },
+    } as unknown as Stripe;
+    expect(await stripeReportClient(stripe).paymentIntentForSession("cs_1")).toBe(expected);
+    expect(retrieved).toEqual(["cs_1"]);
   });
 });

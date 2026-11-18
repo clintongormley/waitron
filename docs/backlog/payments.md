@@ -276,11 +276,6 @@ and by pay period, frozen when a pay period closes (once the product has a step 
 The first design had six build slices (its §7). Replaces the old "Tip-collection UI" entry: cash and
 typed-card tips already arrived with bill payments (#956).
 
-## Loose ends left by A633
-
-- `packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage
-  although the normal suite reaches it (CLAUDE.md §2).
-
 ## Loose ends left by W102 (NFC and equipment labels)
 
 - [Check NFC pick-up on the box's address](#check-nfc-pick-up-on-the-boxs-address).
@@ -293,8 +288,6 @@ typed-card tips already arrived with bill payments (#956).
 
 Remaining Stripe qualification and maintenance.
 
-- **Loose ends left by A633.**
-  [Detail](payments.md#loose-ends-left-by-a633)
 - **Turn off Stripe's on-reader tip screen, or read the tip back.** Backlog only; SumUp is the
   go-live provider (owner, 2026-10-21). A1389 reads the cloud reader's actual amount and tip;
   real-reader qualification and the on-device amount path remain.
