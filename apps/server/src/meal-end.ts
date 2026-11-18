@@ -1,4 +1,4 @@
-import { eq, inArray, and, sql } from "drizzle-orm";
+import { eq, inArray, and, isNull, sql } from "drizzle-orm";
 import {
   invoiceDeliveries,
   orderGroups,
@@ -23,7 +23,6 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { billOwes, checkAndBumpParty, partyFamily, runServiceCommand } from "./parties.js";
 import { enqueueOriginalReceipt, printerLookup } from "./receipt-print.js";
 import { readIssuedSales } from "./sale-due.js";
-import { serviceDishCondition } from "./service-dishes.js";
 import {
   readSettledTicket,
   refuseBillPaymentInFlight,
@@ -228,7 +227,7 @@ async function unservedDishes(tx: Transaction, billId: string) {
     .where(
       and(
         eq(workingOrderLines.workingOrderId, billId),
-        await serviceDishCondition(tx, eq(workingOrderLines.workingOrderId, billId)),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
       ),
     )
     .orderBy(workingOrderLines.lineNo);

@@ -3,13 +3,12 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billPayments,
-  deviceProfilePrinters,
   devices,
   invoiceDeliveries,
-  pagePrinters,
   parties,
   partyTables,
   printJobs,
+  printers,
   saleLines,
   saleSettlements,
   sales,
@@ -19,6 +18,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { seedDevice, seedZone } from "@waitron/db/testing/seed.js";
 import { deviceOrigin, thousandthsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
@@ -839,12 +839,8 @@ describe("Print the bill's receipt", () => {
     const { cfg, profileId } = await bareDevice();
     const printerId = await venuePrinterId();
     await inTx(venue, (tx) =>
-      tx.insert(deviceProfilePrinters).values({
-        deviceProfileId: profileId,
-        printerId,
-        role: "receipt",
-        position: 0,
-        isDefault: true,
+      setPrinterListsForTest(tx, profileId, {
+        receipt: { ids: [printerId], defaultId: printerId },
       }),
     );
     const party = await seatedWith(venue, "Red wine bottle");
@@ -913,18 +909,7 @@ describe("Print the bill's receipt", () => {
   async function stagedForA4(active: boolean) {
     const pagePrinterId = randomUUID();
     await inTx(venue, (tx) =>
-      tx.insert(pagePrinters).values({
-        id: pagePrinterId,
-        name: "Office",
-        host: pagePrinterId,
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-        active: true,
-      }),
+      insertA4Printer(tx, { id: pagePrinterId, name: "Office", host: pagePrinterId }),
     );
     const party = await seatedWith(venue, "Red wine bottle");
     expect((await choose(party.tabId, "F1")).status).toBe(200);
@@ -937,7 +922,7 @@ describe("Print the bill's receipt", () => {
     await serveAll(party);
     if (!active)
       await inTx(venue, (tx) =>
-        tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, pagePrinterId)),
+        tx.update(printers).set({ active: false }).where(eq(printers.id, pagePrinterId)),
       );
     return party;
   }
