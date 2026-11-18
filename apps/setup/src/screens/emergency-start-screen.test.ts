@@ -271,10 +271,8 @@ it("shows an unknown source contact and a known closure in Spanish", async () =>
     Response.json({ sourceLastHeardAt: null, reason: "no_payment_method" }),
   );
   await vi.waitFor(() => {
-    expect(el.shadowRoot!.textContent).toContain(
-      "Se desconoce el último contacto con el servidor anterior.",
-    );
-    expect(el.shadowRoot!.textContent).toContain("Añádelo en la cuenta del propietario en Cloud.");
+    expect(el.shadowRoot!.textContent).toContain(startEs["emergency.source_contact_unknown"]);
+    expect(el.shadowRoot!.textContent).toContain(startEs["emergency.status_no_payment_method"]);
   });
 });
 
