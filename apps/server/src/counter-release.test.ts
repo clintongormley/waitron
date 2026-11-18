@@ -79,7 +79,13 @@ describe("A773 counter release", () => {
       [5, 1000, null],
       [6, 1000, null],
     ]);
-    expect(after.lines).toEqual(lines.map((line) => ({ ...line, sentAt: expect.any(String) })));
+    expect(after.lines).toEqual(
+      lines.map((line) => ({
+        ...line,
+        sentAt: expect.any(String),
+        sentNutrition: { allergens: null, dietaryDeclarations: [] },
+      })),
+    );
     expect(after.items).toHaveLength(6);
     for (const line of lines) {
       const item = after.items.find((row) => row.workingOrderLineId === line.id)!;

@@ -2064,11 +2064,18 @@ describe("when each group was sent and who sent it (spec §4; owner 2026-09-28)"
   it("reads no sender, and still the time, when the person has no record", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const nobody = randomUUID();
+    const operator = await staff("Operator");
     const starters = await at(T(0), () =>
-      submitAs(v, s.partyId, nobody, "fire", [line(v, "croquetas")]),
+      submitAs(v, s.partyId, operator, "fire", [line(v, "croquetas")]),
     );
-    const mains = await at(T(1), () => submitAs(v, s.partyId, nobody, "hold", [line(v, "steak")]));
+    const mains = await at(T(1), () =>
+      submitAs(v, s.partyId, operator, "hold", [line(v, "steak")]),
+    );
+    const nobody = randomUUID();
+    await inTx(async (tx) => {
+      await tx.update(orderGroups).set({ firedBy: nobody }).where(eq(orderGroups.id, starters.id));
+      await tx.update(orderGroups).set({ submittedBy: nobody }).where(eq(orderGroups.id, mains.id));
+    });
 
     expect(await sent(s.partyId)).toEqual([
       [starters.id, T(0), null],
@@ -2321,6 +2328,8 @@ describe("a paid held dish fired on its own", () => {
         ...row,
         groupId: row.id === flan.id ? row.groupId : fired,
         sentAt: row.id === flan.id ? row.sentAt : expect.any(String),
+        sentNutrition:
+          row.id === flan.id ? row.sentNutrition : { allergens: null, dietaryDeclarations: [] },
       })),
     );
     expect(after.find((row) => row.id === flan.id)).toEqual(flan);

@@ -661,10 +661,14 @@ describe("a held dish split onto a check", () => {
         ).toEqual([{ requested: 1, firedAt: null, passControlled: 1 }]);
         expect(after.bill.status).toBe("settled");
         expect(await ticketsPrinting(held.printerId, "FLAN")).toBe(0);
-        expect({
-          ...after,
-          lines: after.lines.map((line) => ({ ...line, sentAt: null })),
-        }).toEqual(before);
+        expect(after).toEqual({
+          ...before,
+          lines: before.lines.map((line) => ({
+            ...line,
+            sentAt: expect.any(String),
+            sentNutrition: { allergens: null, dietaryDeclarations: [] },
+          })),
+        });
       } finally {
         await inTx(v, (tx) => setStationsWaitForPass(tx, false, stationIds));
       }

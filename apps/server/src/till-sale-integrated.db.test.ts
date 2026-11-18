@@ -100,7 +100,7 @@ import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
-import { cancelLine } from "./testing/cancel-line.js";
+import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import {
   ensureFixtureJobRole,
@@ -1235,7 +1235,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const app = suite.db;
     const provider = new SimulatorPaymentProvider(app);
     const id = randomUUID();
-    const operatorId = "cccccccc-0000-4000-8000-00000000000a";
+    const operatorId = await withTransaction(app, (tx) => ensureOperator(tx, OPERATOR));
     await payWorkingOrderIntegrated(
       { admission: testTradingAdmission(), db: app, backend, clock, provider },
       cfg,

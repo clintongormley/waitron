@@ -396,7 +396,11 @@ describe("release", () => {
     const [lineAfter] = await inTx(venue, (tx) =>
       tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, itemId)),
     );
-    expect(lineAfter).toEqual({ ...lineBefore, sentAt: at.toISOString() });
+    expect(lineAfter).toEqual({
+      ...lineBefore,
+      sentAt: at.toISOString(),
+      sentNutrition: { allergens: null, dietaryDeclarations: [] },
+    });
     expect(decodeTicket((await jobs(barPrinter))[oldBarJobs]!.payload)).toContain("HOLD CANCELLED");
     const paper = decodeTicket((await jobs(grillPrinter))[oldGrillJobs]!.payload);
     expect(paper).toContain("From Bar");

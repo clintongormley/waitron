@@ -2,6 +2,7 @@ import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { ensureOperator } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
@@ -188,7 +189,10 @@ async function signIn(deviceId: string, displayName = "Lucy") {
 async function cashSale(venue: Venue, deviceId: string): Promise<string> {
   const id = randomUUID();
   const cfg = { ...venue.cfg, origin: deviceOrigin(deviceId) };
-  const offers = await inTx((tx) => offerProducts(tx, cfg));
+  const offers = await inTx(async (tx) => {
+    await ensureOperator(tx, OPERATOR);
+    return offerProducts(tx, cfg);
+  });
   await recordTillSale(
     { admission: testTradingAdmission(), db: suite.db, backend, clock },
     cfg,
