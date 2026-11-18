@@ -744,8 +744,9 @@ carries the duty, period and `errorCode`.
 budget (a daily period plus slack) rather than drain's ~75 minutes, so the same reading applies to
 it for payment audits instead of a fiscal submission. This `/health` label covers the selected
 Stripe and SumUp duties together. Each run's row in `reconciliation_runs` keeps its provider's own
-`duty` key, `payments.reconcile.stripe` or `payments.reconcile.sumup`. Each runs only while the
-`payments` module is on and its own credential is provisioned; credentials are checked each pass.
+`duty` key, `payments.reconcile.stripe` or `payments.reconcile.sumup`. Each provider's check runs
+only while the `payments` module is on and its own credential is provisioned; credentials are
+checked each pass.
 
 The SumUp audit compares gross EUR charges with local captures and looks up locally failed
 payments by their saved references. An alert can identify a charge whose reply was lost, but the

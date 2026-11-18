@@ -27,9 +27,12 @@ function tickResult(over: Partial<TickResult> = {}): TickResult {
   return { ran: [], deferred: 0, beyondHorizon: 0, skipped: [], nextDueAt: null, ...over };
 }
 
+/** Log lines carry the provider's own `reconciliation_runs` key, never the `/health` label `RECONCILE_DUTY`. */
+const STRIPE_RUN = "payments.reconcile.stripe";
+
 function runRecord(over: Partial<RunRecord> = {}): RunRecord {
   return {
-    duty: RECONCILE_DUTY,
+    duty: STRIPE_RUN,
     period: PERIOD,
     generation: 1,
     outcome: "succeeded",
@@ -317,12 +320,13 @@ describe("runPass", () => {
           tickResult({
             deferred: 4,
             beyondHorizon: 2,
-            skipped: [{ duty: RECONCILE_DUTY, errorCode: "unknown" }],
+            skipped: [{ duty: STRIPE_RUN, errorCode: "unknown" }],
           }),
         ),
     });
     await runPass(d, NOW);
-    expect(d.lines.some((line) => line.startsWith("warn reconcile.pair_skipped"))).toBe(true);
+    const skippedLine = d.lines.find((line) => line.startsWith("warn reconcile.pair_skipped"));
+    expect(skippedLine).toContain(`"duty":"${STRIPE_RUN}"`);
     expect(d.lines.some((line) => line.includes('"deferred":4'))).toBe(true);
     expect(d.lines.some((line) => line.includes('"beyondHorizon":2'))).toBe(true);
   });
@@ -370,12 +374,13 @@ describe("runPass", () => {
 
       const failedLine = d.lines.find((l) => l.startsWith("warn reconcile.run_failed"));
       expect(failedLine).toBeDefined();
-      expect(failedLine).toContain(`"duty":"${RECONCILE_DUTY}"`);
+      expect(failedLine).toContain(`"duty":"${STRIPE_RUN}"`);
       expect(failedLine).toContain('"errorCode":"server.unavailable"');
       expect(failedLine).toContain(PERIOD.from.toISOString());
 
       const parkedLine = d.lines.find((l) => l.startsWith("error reconcile.run_parked"));
       expect(parkedLine).toBeDefined();
+      expect(parkedLine).toContain(`"duty":"${STRIPE_RUN}"`);
       expect(parkedLine).toContain('"errorCode":"credentials.key_version_unknown"');
 
       // Never a line for the succeeded run — that would defeat the point of a per-anomaly line.
