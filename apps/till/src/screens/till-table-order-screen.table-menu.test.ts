@@ -511,7 +511,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       expect(groups(el)[0]!.items).toEqual(["Name this bill", "Receipt copy"]);
     });
 
-    it("a presented bill keeps Name this bill, Move this bill, Receipt copy and Cancel and credit", async () => {
+    it("a presented bill keeps Name this bill, Move this bill, Record unpaid departure, Receipt copy and Cancel and credit", async () => {
       const el = await mountScreen({ bills: [presented] });
 
       expect(groups(el)[0]!.items).toEqual([

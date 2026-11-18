@@ -495,7 +495,7 @@ describe("till-table-order-screen: Finish table", () => {
       [...refusal.querySelectorAll<HTMLElement>("wt-button")].map((button) =>
         button.textContent!.trim(),
       ),
-    ).toEqual([t("table.take_payment")]);
+    ).toEqual([t("table.take_payment"), t("bill.print")]);
     expect(refusal.textContent).toContain(t("departure.finish_hint"));
     expect(refusal.querySelector("[data-record-departure]")).toBeNull();
   });
@@ -510,5 +510,118 @@ describe("till-table-order-screen: Finish table", () => {
     const el = await mountScreen();
 
     expect(shadow(el).querySelector("[data-finish-refusal]")).toBeNull();
+  });
+});
+
+describe("till-table-order-screen: Print the bill beside Finish table's refusal", () => {
+  it("offers Print the bill for the bill the refusal names, which sends end-meal for it", async () => {
+    const el = await mountScreen({ finishRefused: true });
+    const asked = capture(el, "end-meal");
+
+    const print = shadow(el).querySelector<HTMLElement>("[data-finish-refusal] [data-print-bill]")!;
+    expect(print.textContent!.trim()).toBe(t("bill.print"));
+    print.click();
+
+    expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
+  });
+
+  it("offers no Print the bill when the bill it names already has its receipt", async () => {
+    const printed: PartyBill = {
+      ...check,
+      status: "placed",
+      receiptAvailable: true,
+      invoiceNumber: "F-0009",
+    };
+    const el = await mountScreen({ finishRefused: true, bills: [paidTab, printed] });
+
+    const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    expect(refusal.querySelector("[data-take-payment]")).not.toBeNull();
+    expect(refusal.querySelector("[data-print-bill]")).toBeNull();
+  });
+});
+
+describe("till-table-order-screen: Print the bill's outcome", () => {
+  const unserved = {
+    workingOrderId: "wo-check",
+    unserved: [
+      { lineId: "line-1", dishName: "Paella", quantity: "2.000", released: true },
+      { lineId: "line-2", dishName: "Flan", quantity: "1.000", released: false },
+    ],
+  };
+  const warning = (el: TillTableOrderScreen) =>
+    shadow(el).querySelector<HTMLElement>("[data-meal-end-unserved]");
+
+  it("says the bill was printed", async () => {
+    const el = await mountScreen({ mealEnd: { workingOrderId: "wo-check", printed: true } });
+
+    const said = shadow(el).querySelector<HTMLElement>("[data-bill-printed]")!;
+    expect(said.getAttribute("role")).toBe("status");
+    expect(said.textContent!.trim()).toBe(t("bill.printed"));
+  });
+
+  it("lists the dishes not served by name, says what each choice does, and offers Mark served and Print anyway", async () => {
+    const el = await mountScreen({ mealEnd: unserved, canMarkServed: true });
+
+    const block = warning(el)!;
+    expect(block.getAttribute("role")).toBe("alert");
+    expect(block.textContent).toContain(codeMessage("meal_end.unserved_dishes"));
+    expect(block.textContent).toContain(t("meal_end.unserved_heading"));
+    expect(
+      [...block.querySelectorAll<HTMLElement>("[data-unserved-dish]")].map((dish) =>
+        dish.textContent!.replace(/\s+/g, " ").trim(),
+      ),
+    ).toEqual(["2 × Paella", "Flan"]);
+    expect(
+      [...block.querySelectorAll<HTMLElement>("wt-button")].map((button) =>
+        button.textContent!.trim(),
+      ),
+    ).toEqual([t("meal_end.mark_served"), t("meal_end.print_anyway")]);
+  });
+
+  it("Mark served serves only the dishes the kitchen has", async () => {
+    const el = await mountScreen({ mealEnd: unserved, canMarkServed: true });
+    const served = capture(el, "serve-lines");
+
+    warning(el)!.querySelector<HTMLElement>("[data-mark-served]")!.click();
+
+    expect(served).toEqual([{ items: [{ lineId: "line-1", quantity: "2" }] }]);
+  });
+
+  it("offers no Mark served on a device whose profile does not hand over orders", async () => {
+    const el = await mountScreen({ mealEnd: unserved, canMarkServed: false });
+
+    expect(warning(el)!.querySelector("[data-mark-served]")).toBeNull();
+    expect(warning(el)!.querySelector("[data-print-anyway]")).not.toBeNull();
+  });
+
+  it("offers no Mark served when the kitchen has none of the dishes", async () => {
+    const el = await mountScreen({
+      mealEnd: { ...unserved, unserved: [unserved.unserved[1]!] },
+      canMarkServed: true,
+    });
+
+    expect(warning(el)!.querySelector("[data-mark-served]")).toBeNull();
+  });
+
+  it("Print anyway sends end-meal for the bill with printAnyway", async () => {
+    const el = await mountScreen({ mealEnd: unserved, canMarkServed: true });
+    const asked = capture(el, "end-meal");
+
+    warning(el)!.querySelector<HTMLElement>("[data-print-anyway]")!.click();
+
+    expect(asked).toEqual([{ workingOrderId: "wo-check", printAnyway: true }]);
+  });
+
+  it("names the warning in Spanish", async () => {
+    setLocale("es");
+    const el = await mountScreen({ mealEnd: unserved, canMarkServed: true });
+
+    expect(warning(el)!.textContent).toContain("Aún sin servir:");
+    expect(warning(el)!.querySelector("[data-mark-served]")!.textContent!.trim()).toBe(
+      "Marcar como servidos",
+    );
+    expect(warning(el)!.querySelector("[data-print-anyway]")!.textContent!.trim()).toBe(
+      "Imprimir igualmente",
+    );
   });
 });

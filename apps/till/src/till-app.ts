@@ -332,6 +332,7 @@ import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
 import { otherPartyRead, shownTableNames, type SeatedRead } from "./widgets/table-targets.js";
 import type {
   BillPayDetail,
+  MealEndShown,
   MoveBillDetail,
   TableRelocationOpenDetail,
   SplitRefusal,
@@ -382,6 +383,7 @@ import type {
   BillRefundResult,
   CounterWaitingOrder,
   UnpaidDepartureRequest,
+  EndMealRequest,
   DeviceStationScreen,
   DevicePassBoard,
   DeadEndAnswer,
@@ -714,6 +716,16 @@ const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.record_invalid",
   "fiscal.foreign_recipient_unsupported",
   "sale.number_reused",
+]);
+
+/** Print the bill's refusals shown in their code's own words, beside the table refusals. */
+const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
+  "meal_end.already_issued",
+  "meal_end.no_printer",
+  "meal_end.delivery_unavailable",
+  "bill.unsent_dishes",
+  "bill.nothing_outstanding",
+  "authorization.not_permitted",
 ]);
 
 /** Table refusals shown in their code's own words. */
@@ -4253,6 +4265,10 @@ export class TillApp extends LitElement {
     return out !== undefined && out.dialogId !== dialogId;
   }
   @state() private departing: Departing | null = null;
+  /** Print the bill's last answer, for the party it was sent for. */
+  @state() private mealEnd: (MealEndShown & { partyId: string }) | null = null;
+  /** A Print the bill request is out; the table screen takes no other action meanwhile. */
+  @state() private mealEndSending = false;
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
   @state() private departureApprovers?: StaffMember[];
@@ -15410,6 +15426,7 @@ export class TillApp extends LitElement {
     });
     await this.#onServiceRequest(async (party, command) => {
       const answer = await api.markServed(party.id, items, command);
+      this.#dropServedFromMealEnd(party.id, items);
       if (
         this.isConnected &&
         api === this.api &&
@@ -15438,6 +15455,15 @@ export class TillApp extends LitElement {
       }
       return answer;
     });
+  }
+
+  #dropServedFromMealEnd(partyId: string, items: { lineId: string }[]): void {
+    const shown = this.mealEnd;
+    if (shown?.partyId !== partyId || !("unserved" in shown)) return;
+    const unserved = shown.unserved.filter(
+      (dish) => !items.some((item) => item.lineId === dish.lineId),
+    );
+    this.mealEnd = unserved.length === 0 ? null : { ...shown, unserved };
   }
 
   #currentServedCommand(): ServedCommand | null {
@@ -19981,6 +20007,123 @@ export class TillApp extends LitElement {
     }
   }
 
+  /**
+   * Print the bill: issues the bill's receipt, so a press is sent only for a bill on this party that
+   * still owes and has none, while the screen is as the press saw it. Each press is a new
+   * submission id; a lost answer is sent again under the same one.
+   */
+  async #onEndMeal(event: Event): Promise<void> {
+    const { workingOrderId, printAnyway } = (
+      event as CustomEvent<{ workingOrderId: string; printAnyway?: boolean }>
+    ).detail;
+    const party = this.orderParty;
+    const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
+    if (
+      party === null ||
+      this.mealEndSending ||
+      bill === undefined ||
+      bill.invoiceNumber !== undefined ||
+      bill.leftUnpaid ||
+      !owing(bill)
+    )
+      return;
+    if (
+      printAnyway === true &&
+      (this.mealEnd?.partyId !== party.id ||
+        this.mealEnd.workingOrderId !== workingOrderId ||
+        !("unserved" in this.mealEnd))
+    )
+      return;
+    this.errorKey = undefined;
+    const asked = this.#billComposition(this.partyBills.map((row) => row.workingOrderId));
+    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
+    const request: EndMealRequest = {
+      billId: workingOrderId,
+      expectedPartyRevision: asked.revisions.expectedPartyRevision!,
+      expectedEdits: asked.expectedEdits,
+      submissionId: crypto.randomUUID(),
+      ...(printAnyway === true ? { printAnyway: true } : {}),
+    };
+    const live = () => this.api === asked.api && this.#operatorSession === asked.session;
+    const visit = this.#orderVisit;
+    const sent = this.#sentNow();
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    this.mealEnd = null;
+    this.mealEndSending = true;
+    let sends = 0;
+    try {
+      await this.#resend(
+        (signal) => {
+          sends++;
+          return asked.api.endMeal(party.id, request, { signal });
+        },
+        limit.signal,
+        live,
+      );
+    } catch (error) {
+      if (!live() || this.#hasLeftParty(party.id, sent)) return;
+      if (sends > 1 && isNetworkFailure(error)) {
+        await this.#loadPartyBills();
+        if (!live() || this.#hasLeftParty(party.id, sent)) return;
+        const now = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
+        if (now?.invoiceNumber !== undefined) {
+          await this.#onMealEnded(party.id, workingOrderId, visit, sent);
+          return;
+        }
+      }
+      await this.#onMealEndRefused(party.id, workingOrderId, error, live, sent);
+      return;
+    } finally {
+      limit.done();
+      this.mealEndSending = false;
+    }
+    if (live()) await this.#onMealEnded(party.id, workingOrderId, visit, sent);
+  }
+
+  async #onMealEnded(partyId: string, workingOrderId: string, visit: number, sent: Sent) {
+    if (this.#hasLeftParty(partyId, sent)) return;
+    this.finishRefused = false;
+    this.mealEnd = { partyId, workingOrderId, printed: true };
+    const billId = this.activeTabId;
+    if (billId !== undefined) await this.#rereadAmounts(billId, visit);
+  }
+
+  /** Not served lists the dishes; a changed or closed party reloads the table as Finish does; any
+   * other refusal is said, and the party's bills are read again. */
+  async #onMealEndRefused(
+    partyId: string,
+    workingOrderId: string,
+    error: unknown,
+    live: () => boolean,
+    sent: Sent,
+  ): Promise<void> {
+    const refusal = error as { code?: unknown; dishes?: unknown } | undefined;
+    if (refusal?.code === "meal_end.unserved_dishes" && Array.isArray(refusal.dishes)) {
+      this.mealEnd = {
+        partyId,
+        workingOrderId,
+        unserved: refusal.dishes as Extract<MealEndShown, { unserved: unknown }>["unserved"],
+      };
+      return;
+    }
+    if (isPartyOutOfDate(error) || refusal?.code === "party.not_open") {
+      await this.#onTableRefusal(error, live);
+      return;
+    }
+    this.errorKey =
+      typeof refusal?.code === "string" && MEAL_END_REFUSALS.has(refusal.code)
+        ? { code: refusal.code }
+        : tableWriteError(error);
+    if (!this.#hasLeftParty(partyId, sent)) await this.#loadPartyBills();
+  }
+
+  /** Print the bill's answer, while the party it was sent for is on screen. */
+  #mealEndShown(): MealEndShown | null {
+    return this.mealEnd !== null && this.mealEnd.partyId === this.orderParty?.id
+      ? this.mealEnd
+      : null;
+  }
+
   /** Cancel and credit, offered on an invoiced bill nothing is paid on: its dialog opens. */
   #onCancelCreditBill(event: Event): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
@@ -22712,6 +22855,8 @@ export class TillApp extends LitElement {
       .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
       .billPaymentHeld=${this.activeTabId !== undefined && this.#billPaymentHeld(this.activeTabId)}
       .finishRefused=${this.finishRefused}
+      .mealEnd=${this.#mealEndShown()}
+      .canMarkServed=${this.capabilities.includes("hand-over-orders")}
       .nameRefusal=${this.nameRefusal}
       .billNameRefusal=${this.billNameRefusal}
       .revealOtherDrafts=${this.revealOtherDrafts}
@@ -22722,7 +22867,7 @@ export class TillApp extends LitElement {
       .splitRead=${this.splitRead}
       .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
       .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
-      .busy=${this.submitting || this.invoiceRecipientReading}
+      .busy=${this.submitting || this.invoiceRecipientReading || this.mealEndSending}
       .sendingTender=${this.sendingTender}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
@@ -22902,6 +23047,8 @@ export class TillApp extends LitElement {
           .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
           .billPaymentHeld=${this.activeTabId !== undefined && this.#billPaymentHeld(this.activeTabId)}
           .finishRefused=${this.finishRefused}
+          .mealEnd=${this.#mealEndShown()}
+          .canMarkServed=${this.capabilities.includes("hand-over-orders")}
           .nameRefusal=${this.nameRefusal}
           .billNameRefusal=${this.billNameRefusal}
           .revealOtherDrafts=${this.revealOtherDrafts}
@@ -22912,7 +23059,7 @@ export class TillApp extends LitElement {
           .splitRead=${this.splitRead}
           .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
           .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
-          .busy=${this.submitting || this.invoiceRecipientReading}
+          .busy=${this.submitting || this.invoiceRecipientReading || this.mealEndSending}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
           .takesCash=${this.#takesCash()}
@@ -23311,6 +23458,7 @@ export class TillApp extends LitElement {
         @move-dishes=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveDishes(event))}
         @finish-table=${() => void this.#onFinishTable()}
         @record-unpaid-departure=${(event: Event) => this.#onRecordUnpaidDeparture(event)}
+        @end-meal=${(event: Event) => void this.#onEndMeal(event)}
         @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event)}
         @request-bill=${(event: Event) => void this.#onRequestBill(event)}
         @take-payment=${(event: Event) => void this.#onSwitchBill(event)}

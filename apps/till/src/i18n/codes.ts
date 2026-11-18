@@ -585,6 +585,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The bill would owe less than has already been paid on it. Take less off the bill, or refund the difference first",
     es: "La cuenta quedaría por debajo de lo que ya se ha pagado. Quita menos de la cuenta o devuelve antes la diferencia",
   },
+  "meal_end.unserved_dishes": {
+    en: "Some dishes on this bill are not marked served. Mark served what has been served, or print anyway: a dish that never comes is refunded after payment with Correct invoice.",
+    es: "Algunos platos de esta cuenta no están marcados como servidos. Marca como servido lo que se ha servido, o imprime igualmente: un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+  },
+  "meal_end.already_issued": {
+    en: "This bill already has its receipt. Take payment, or print a receipt copy.",
+    es: "Esta cuenta ya tiene su tique. Cóbrala o imprime una copia del tique.",
+  },
+  "meal_end.no_printer": {
+    en: "This device has no receipt printer. Choose one in Equipment, then print the bill.",
+    es: "Este dispositivo no tiene impresora de tiques. Elige una en Equipo y luego imprime la cuenta.",
+  },
+  "meal_end.delivery_unavailable": {
+    en: "This full invoice cannot go where it was chosen to go. Choose another printer or email, then print the bill.",
+    es: "Esta factura completa no puede ir adonde se eligió. Elige otra impresora u otro correo y luego imprime la cuenta.",
+  },
   "bill.nothing_outstanding": {
     en: "Nothing is left to pay on this bill",
     es: "No queda nada por pagar en esta cuenta",

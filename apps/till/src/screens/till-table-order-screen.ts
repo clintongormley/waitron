@@ -472,6 +472,19 @@ export interface ServeLinesDetail {
   items: { lineId: string; quantity: string }[];
 }
 
+/** A dish Print the bill was refused for, as `meal_end.unserved_dishes` lists it: `released` says
+ * the kitchen has it, so it can be marked served. */
+export interface UnservedDish {
+  lineId: string;
+  dishName: string;
+  quantity: string;
+  released: boolean;
+}
+
+/** Print the bill's answer for one bill: printed, or refused for the dishes not yet served. */
+export type MealEndShown =
+  { workingOrderId: string; printed: true } | { workingOrderId: string; unserved: UnservedDish[] };
+
 /** `serve-group`: every row of a fired group, marked served. */
 export interface ServeGroupDetail {
   groupId: string;
@@ -926,6 +939,15 @@ export class TillTableOrderScreen extends LitElement {
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-danger);
         border-radius: var(--wt-radius-md);
+      }
+
+      .meal-end-unserved ul {
+        margin: 0;
+        padding-inline-start: var(--wt-space-4);
+      }
+
+      .bill-printed {
+        margin: var(--wt-space-2) 0 0;
       }
 
       .finish-refusal-actions {
@@ -1440,6 +1462,9 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) billBalance: BillBalance | null = null;
   /** Finish table was refused because a bill is unpaid. */
   @property({ type: Boolean }) finishRefused = false;
+  @property({ attribute: false }) mealEnd: MealEndShown | null = null;
+  /** This device's profile hands over orders, which marking a dish served needs. */
+  @property({ type: Boolean }) canMarkServed = false;
   /** The app's answer to a name the server refused: the name sent, and why, shown beside the field. */
   @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
   /** The app's answer to a bill name the server refused: the bill, the name sent, and why. */
@@ -3131,12 +3156,12 @@ export class TillTableOrderScreen extends LitElement {
 
   #orderSummary(draft: WorkingOrderStore | null): TemplateResult {
     if (!this.#footFixed())
-      return html`${this.#finishRefusal()} ${this.#totals(draft)}
+      return html`${this.#finishRefusal()} ${this.#mealEndOutcome()} ${this.#totals(draft)}
         <div data-bill-actions>
           ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
         </div>`;
     const pays = this.canSettle && this.#chargeable();
-    return html`${this.#finishRefusal()}
+    return html`${this.#finishRefusal()} ${this.#mealEndOutcome()}
       <div data-bill-actions>${pays ? this.#payHeadSection(this.#shownBill) : nothing}</div>`;
   }
 
@@ -5269,8 +5294,79 @@ export class TillTableOrderScreen extends LitElement {
                 >
                   ${t("table.take_payment")}
                 </wt-button>
+                ${
+                  firstUnpaid.invoiceNumber === undefined
+                    ? html`<wt-button
+                        size="sm"
+                        data-print-bill
+                        .disabled=${this.busy}
+                        @click=${() =>
+                          this.#dispatch("end-meal", {
+                            workingOrderId: firstUnpaid.workingOrderId,
+                          })}
+                      >
+                        ${t("bill.print")}
+                      </wt-button>`
+                    : nothing
+                }
                 <span>${t("departure.finish_hint")}</span>`
         }
+      </div>
+    </div>`;
+  }
+
+  /** Print the bill's answer: printed, or the dishes not yet served, with Mark served for those
+   * the kitchen has and Print anyway. */
+  #mealEndOutcome(): TemplateResult | typeof nothing {
+    const shown = this.mealEnd;
+    if (shown === null) return nothing;
+    if ("printed" in shown)
+      return html`<p class="bill-printed" role="status" data-bill-printed>${t("bill.printed")}</p>`;
+    const servable = this.canMarkServed ? shown.unserved.filter((dish) => dish.released) : [];
+    return html`<div class="finish-refusal meal-end-unserved" role="alert" data-meal-end-unserved>
+      <span>${codeMessage("meal_end.unserved_dishes")}</span>
+      <span>${t("meal_end.unserved_heading")}</span>
+      <ul>
+        ${shown.unserved.map(
+          (dish) =>
+            html`<li data-unserved-dish>
+              ${
+                compareDecimal(decimal(dish.quantity), decimal("1")) === 0
+                  ? dish.dishName
+                  : `${quantityText(dish.quantity)} × ${dish.dishName}`
+              }
+            </li>`,
+        )}
+      </ul>
+      <div class="finish-refusal-actions">
+        ${
+          servable.length === 0
+            ? nothing
+            : html`<wt-button
+                size="sm"
+                data-mark-served
+                .disabled=${this.busy || this.groupCommandBusy}
+                @click=${() =>
+                  this.#dispatch("serve-lines", {
+                    items: servable.map((dish) => ({
+                      lineId: dish.lineId,
+                      quantity: trimQuantity(dish.quantity),
+                    })),
+                  } satisfies ServeLinesDetail)}
+              >
+                ${t("meal_end.mark_served")}
+              </wt-button>`
+        }
+        <wt-button
+          size="sm"
+          variant="primary"
+          data-print-anyway
+          .disabled=${this.busy}
+          @click=${() =>
+            this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId, printAnyway: true })}
+        >
+          ${t("meal_end.print_anyway")}
+        </wt-button>
       </div>
     </div>`;
   }
