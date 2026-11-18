@@ -433,7 +433,7 @@ configuración para poner en marcha otro local.
   otro bucket al que envíes copias programadas; quien reciba de ti un archivo de exportación de la
   configuración. Las copias programadas guardadas en **Una carpeta de este servidor** quedan donde esté
   esa carpeta.
-- Plazo de conservación: la copia en el bucket guarda una semana de historial. Cada vez que Waitron
+- Plazo de conservación: lo que se borra de la base de datos suele seguir en la copia en el bucket como mucho unas cuatro semanas. Cada vez que Waitron
   guarda una copia programada en un destino, borra de ese destino las copias que pasen de las 7 más
   recientes y las de más de 30 días, salvo que cambies esos ajustes. Antes de una copia, cuando
   al disco del servidor le quedan menos de unos 2 GB libres, o al arrancar con el disco lleno, también puede borrar sus copias más antiguas de las carpetas

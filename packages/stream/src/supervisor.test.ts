@@ -1824,13 +1824,17 @@ describe("generation housekeeping", () => {
     "ages old generations by the bucket's clock, so a box clock %s deletes only what the bucket dates over a week old",
     async (_label, stepMs) => {
       const h = await streaming();
+      // The bucket's time at the first prune, which the tick after the day's advance runs.
+      const sweepAt = h.clock.trueNow().getTime() + PRUNE_EVERY_MS;
+      const halfHour = 30 * 60_000;
       const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
-      oldGeneration(h, old, Date.parse(START) - 8 * DAY);
-      const recent = generationName(1, "node-recent", new Date(Date.parse(START) - 2 * DAY));
-      oldGeneration(h, recent, Date.parse(START) - DAY);
+      oldGeneration(h, old, sweepAt - 7 * DAY - halfHour);
+      const recent = generationName(1, "node-recent", new Date(Date.parse(START) - 7 * DAY));
+      oldGeneration(h, recent, sweepAt - 7 * DAY + halfHour);
       h.clock.step(stepMs);
       h.clock.advance(PRUNE_EVERY_MS);
       await h.clock.next(); // the streaming tick
+      expect(h.clock.trueNow().getTime()).toBe(sweepAt);
       await vi.waitFor(() => expect(h.store.has(fullCopyOf(old))).toBe(false));
       expect(h.store.has(fullCopyOf(recent))).toBe(true);
       expect(h.store.has(fullCopyOf(h.generation))).toBe(true);

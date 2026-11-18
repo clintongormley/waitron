@@ -388,6 +388,16 @@ describe("the packs to keep", () => {
     expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 7 * DAY).toISOString());
   });
 
+  it("keeps the bucket copy's seven days when the archives should be gone sooner", () => {
+    const change = "2026-10-25T07:00:00.000Z";
+    const answer = status([pack(1, "2026-10-12T10:00:00.000Z")], {
+      current: { ...current, keyChangedAt: change },
+      retention: { count: 5, days: 30 },
+    });
+    // min(5 daily archives, 30 days) plus one interval is 6 days, under the bucket copy's 7.
+    expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 7 * DAY).toISOString());
+  });
+
   it("drops a pack whose keep date has passed", () => {
     const parts = [
       { ...included.bucket, keyChangedAt: "2026-08-01T08:00:00.000Z" },

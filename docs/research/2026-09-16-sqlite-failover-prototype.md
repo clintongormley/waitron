@@ -844,6 +844,9 @@ old; nothing older restores, whatever level files remain. Keeping every level-1 
 about 20,000 files at 30 seconds (arithmetic). The level-0 files had all gone by the end
 (`l0-retention: 2s`), so level-0 granularity was not measured.
 
+**2026-11-18:** production now takes one full copy a week (`interval: 168h`, `retention: 335h`); see
+[the decision](../backlog/box.md#the-bucket-copy-takes-one-full-copy-a-week-2026-11-18).
+
 ### 4 — restore time
 
 **Failing would print:** `VOID` with `verified=false`, when a restored copy's integrity check is not

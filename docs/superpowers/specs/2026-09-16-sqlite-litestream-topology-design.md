@@ -544,6 +544,11 @@ in one place.
 > Litestream's retention is set in hours only. Which older restore points survive the window is
 > measured in the [results note](../../research/2026-09-16-sqlite-failover-prototype.md)'s slice-2 section, measurement 3.
 > Slice 2: #590.
+>
+> **Pointer, 2026-11-18.** Superseded — the bucket copy now takes one full copy a week
+> (`interval: 168h`, `retention: 335h`); how long it keeps them is in
+> [the decision](../../backlog/box.md#the-bucket-copy-takes-one-full-copy-a-week-2026-11-18).
+> Retention also takes seconds and minutes; it takes no unit above hours.
 
 ### 7.2 A second copy stays a user option
 

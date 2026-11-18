@@ -148,7 +148,7 @@ const VERSION_TIMEOUT_MS = 10_000;
 const STOP_WAIT_MS = 1_000;
 /** How often old generations are pruned, at most. */
 export const PRUNE_EVERY_MS = 24 * 60 * 60_000;
-/** A generation untouched for this long, and not the live one, is deleted: the week of history. */
+/** A generation untouched for this long, and not the live one, is deleted. */
 export const PRUNE_WINDOW_MS = 168 * 60 * 60_000;
 /** Level 0's retention as the configuration sets it (`l0-retention: 5m`, `./litestream.ts`). */
 export const L0_RETENTION_MS = 5 * 60_000;
