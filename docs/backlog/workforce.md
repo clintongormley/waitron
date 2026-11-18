@@ -213,6 +213,16 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 - Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). Special days and longer-than-day staffing remain A708/A644.
 
+### A1268 corrections after a backward clock step
+
+The owner chose “Small fix (Recommended)” in the watcher window on 18 November 2026 at 10:13 CET,
+as recorded in Lane I’s questions. A correction can go through when the worker’s record already
+contains a sequence fault. Waitron still refuses a new fault introduced by the correction.
+
+Hours still pair by the recorded times. A shift whose clock-out sorts before its clock-in can be
+missing from hours until you correct the recorded time. The clock step’s existing alerts still apply.
+This is the delivered scope for [A1268 §4](../superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md#4-part-2--readings-that-order-entries-by-time-after-a-backward-clock-step).
+
 ### First and latest staff activity per planned shift (owner, 2026-11-15)
 
 The owner said “all we need to know is the time of the first user action and the latest user action”

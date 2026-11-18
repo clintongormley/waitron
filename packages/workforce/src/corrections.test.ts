@@ -172,6 +172,50 @@ describe("approveCorrection", () => {
     expect(original.rows[0]!.at).toBe("2026-01-05T17:00:00.000Z");
   });
 
+  it("approves a retime of another shift after a backward clock step", async () => {
+    const { personId, outEntryId } = await nineToFive("retime after step");
+    const sup = await supervisor("retime after step supervisor");
+    await run((tx) => backend.clockIn(tx, event(personId, "2026-01-05T21:00:00Z")));
+    await run((tx) => backend.clockOut(tx, event(personId, "2026-01-05T20:30:00Z")));
+
+    const correctionId = await run((tx) =>
+      backend.requestCorrection(tx, {
+        nodeId,
+        correctsEntryId: outEntryId,
+        at: "2026-01-05T18:00:00Z",
+        offsetMinutes: 0,
+        reason: "Clocked out early",
+        actorPersonId: personId,
+        origin: jobOrigin("dashboard"),
+      }),
+    );
+    await run((tx) =>
+      backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: sup }),
+    );
+
+    expect(await workedMinutes(personId)).toBe(540);
+  });
+
+  it("refuses to move an unmatched clock-out fault to another entry", async () => {
+    const { personId, outEntryId } = await nineToFive("new fault after step");
+    await run((tx) => backend.clockIn(tx, event(personId, "2026-01-05T21:00:00Z")));
+    await run((tx) => backend.clockOut(tx, event(personId, "2026-01-05T20:30:00Z")));
+
+    await expect(
+      run((tx) =>
+        backend.requestCorrection(tx, {
+          nodeId,
+          correctsEntryId: outEntryId,
+          at: "2026-01-05T08:50:00Z",
+          offsetMinutes: 0,
+          reason: "Wrong time",
+          actorPersonId: personId,
+          origin: jobOrigin("dashboard"),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "correction.invalid", params: { reason: "unmatched_out" } });
+  });
+
   it("records the request where it was captured and the approval as the dashboard's", async () => {
     const { personId, outEntryId } = await nineToFive("appr-origin");
     const sup = await supervisor("appr-origin-sup");

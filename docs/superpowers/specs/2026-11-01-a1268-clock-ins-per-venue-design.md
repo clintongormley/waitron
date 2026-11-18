@@ -129,6 +129,10 @@ moves it to the venue. No note about chain positions is added.
 
 ## 4. Part 2 — readings that order entries by time after a backward clock step
 
+**Decision, 18 November 2026.** The owner chose the
+[correction-only fix](../../backlog/workforce.md#a1268-corrections-after-a-backward-clock-step).
+The original proposal below records the earlier design.
+
 Slice 9b made the deciding entry the last one written within a chain (`readLatestLiveEntry`, Task
 15a). Three readings still order a person's entries by event time (`compareEvents` in
 `effective-entries.ts`): the hours projection, the end-of-day intervals and the correction sequence

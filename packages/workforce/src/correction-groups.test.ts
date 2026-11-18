@@ -98,6 +98,22 @@ it("requests and approves a historical missing shift before later real events as
   await intact();
 });
 
+it("approves a missing shift when a later clock-out already sorts before its clock-in", async () => {
+  await clock("clockIn", "2026-01-06T17:00:00Z");
+  await clock("clockOut", "2026-01-06T16:00:00Z");
+  const ids = await run((tx) => corrections.requestCorrectionGroup(tx, pair(), "request"));
+
+  await run((tx) =>
+    corrections.decideCorrectionGroup(
+      tx,
+      { nodeId, correctionIds: ids, actorPersonId: manager, origin },
+      "approve",
+    ),
+  );
+
+  expect((await record()).sessions.map((s) => s.workedMinutes)).toEqual([60]);
+});
+
 it("requests and approves a historical missing break before later breaks as one valid sequence", async () => {
   await clock("clockIn", "2026-01-05T08:00:00Z");
   await clock("breakStart", "2026-01-05T12:00:00Z");
