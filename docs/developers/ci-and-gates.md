@@ -3558,8 +3558,8 @@ also reached both deadlines during the restore. The cause of the pauses is unkno
 
 CI jobs that install packages and can run on the disposable server pass `cache: pnpm` to both
 Node setup attempts on GitHub-hosted runners. On disposable runners they pass an empty cache
-input and populate the store during the frozen install. The enclosing job deadline covers the
-single install attempt. A stalled registry download can spend the remaining job time there.
+input and populate the store during the frozen install. CI runs the install once under the
+enclosing job deadline. A registry transfer that stalls can spend the remaining job time there.
 The cache case in `scripts/ci-workflow.test.mjs` evaluates the declared inputs for both runner
 environments. Job logs show which downloads actually ran.
 
@@ -4101,7 +4101,7 @@ space against every other job's entries, and GitHub reclaims by evicting the lea
 
 Docker layers are what filled it: measured 2026-09-12, the total was at GitHub's 10 GB limit and
 image blobs were roughly nine tenths of it, leaving the Playwright browser download and the pnpm
-store caches that the test jobs restore to share the remainder. On 2026-10-08 at 09:26 UTC the total
+store caches that the test jobs restored to share the remainder. On 2026-10-08 at 09:26 UTC the total
 was 11,296 MB, 9,154 MB of it in 941 `buildkit` entries. That was the second reason `publish`
 dropped arm64 (`linux/amd64` alone, ci.yml): an emulated second platform's `mode=max` export put a
 second set of image layers in on every merge to `main`. Since A399 no workflow exports Docker
@@ -4395,8 +4395,8 @@ server jobs. Times are each job's start to finish as GitHub reports them.
 They are not cached. On 2026-09-25 `gh api repos/:owner/:repo/actions/cache/usage` reported
 11,174,362,480 bytes across 1,066 entries, and the plan's grouping of the entries on 2026-09-23 put
 about nine tenths of that day's total in Docker layers; a new entry would compete under least-recently-used eviction
-with the pnpm store and Playwright entries the test jobs restored at the time (see "The GHA cache is a shared
-per-repository budget, evicted least-recently-used" above). Both installers download through
+with the pnpm store and Playwright entries the test jobs restored at the time (see "The GHA cache is
+a shared per-repository budget, evicted least-recently-used" above). Both installers download through
 `scripts/download-release.mjs`: a 5xx answer or a network error is retried, up to three attempts
 with a growing wait between them, a 4xx answer fails at once, and in CI the step passes the job's
 `GITHUB_TOKEN`, which the download sends as a bearer token. The last failure fails the job with a
