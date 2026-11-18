@@ -17,6 +17,7 @@ const spare = keyPair();
 const app = "sha256:" + "a".repeat(64);
 const agent = "sha256:" + "b".repeat(64);
 const source = "c".repeat(40);
+const tunnel = "sha256:" + "d".repeat(64);
 const SPAWN_TIMEOUT_MS = 5_000;
 vi.setConfig({ testTimeout: SPAWN_TIMEOUT_MS + 5_000 });
 
@@ -37,6 +38,7 @@ function run({
     RELEASE_SOURCE_SHA: source,
     RELEASE_APP_DIGEST: appDigest,
     RELEASE_PRINT_AGENT_DIGEST: agent,
+    RELEASE_TUNNEL_DIGEST: tunnel,
     RELEASE_PRERELEASE: "true",
   };
   try {
@@ -121,7 +123,7 @@ describe("sign-release-list.mjs", () => {
     expect(result.bytes).toBeUndefined();
   });
 
-  it("writes a stable release with the given app and print-agent digests in their named roles", () => {
+  it("writes a stable release with the three given image digests in their named roles", () => {
     const result = run({ ...publicKeys, secret: current.privateKey });
     expect(result.status, result.stderr).toBe(0);
     const signed = JSON.parse(result.bytes);
@@ -136,7 +138,7 @@ describe("sign-release-list.mjs", () => {
       prerelease: false,
       sourceSha: source,
       platform: "linux/amd64",
-      images: { app, printAgent: agent },
+      images: { app, printAgent: agent, tunnel },
     });
   });
 

@@ -4,7 +4,7 @@ import { isDashboardAssetPath, isDashboardPath } from "@waitron/shared";
 import { mountSpa } from "./spa-api.js";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { serve } from "@hono/node-server";
+import { createAdaptorServer, serve } from "@hono/node-server";
 import { Server as HttpsServer } from "node:https";
 import {
   buildServeOptions,
@@ -16,7 +16,7 @@ import { closeListener } from "./close-listener.js";
 import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
 import { generateKeyPair, X509Certificate, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { chmodSync, lstatSync, readFileSync, unlinkSync } from "node:fs";
 import { validStaffHostname } from "./cloud-tunnel.js";
 import { lstat, open, readFile, rm, link } from "node:fs/promises";
 import { join } from "node:path";
@@ -201,14 +201,16 @@ export function startStaffListener(
 ): { close(): Promise<void>; isListening(): boolean; checkNow(): void } | undefined {
   const staff = config.staff;
   if (staff === undefined) return undefined;
+  const binding = "socketPath" in staff ? { socketPath: staff.socketPath } : { port: staff.port };
   const failure = (error: unknown) =>
     log("warn", "server.listen_failed", {
       listener: "staff",
-      port: staff.port,
+      ...binding,
       code: (error as NodeJS.ErrnoException)?.code ?? "unknown",
     });
   try {
     if (
+      "port" in staff &&
       [
         config.httpPort,
         config.landingPort,
@@ -226,26 +228,46 @@ export function startStaffListener(
     const key = readFileSync(tls.keyFile),
       cert = readFileSync(tls.certFile);
     validateTlsIdentity(key, cert, certificateHostname(cert));
-    const server = serve(
-      buildServeOptions(
-        {
-          fetch: createStaffApp(
-            app,
-            async () => ((await admitted()) ? `https://${watcher.hostname()}` : undefined),
-            config.dashboardAppDir === undefined
-              ? undefined
-              : { root: config.dashboardAppDir, gates: pageGates },
-            log,
-          ).fetch,
-          hostname: staff.host,
-          port: staff.port,
-        },
-        tls,
-      ),
-      (info) => log("info", "server.listening", { listener: "staff", port: info.port }),
+    const options = buildServeOptions(
+      {
+        fetch: createStaffApp(
+          app,
+          async () => ((await admitted()) ? `https://${watcher.hostname()}` : undefined),
+          config.dashboardAppDir === undefined
+            ? undefined
+            : { root: config.dashboardAppDir, gates: pageGates },
+          log,
+        ).fetch,
+      },
+      tls,
     );
-    server.on("error", failure);
+    const server =
+      "socketPath" in staff
+        ? createAdaptorServer(options)
+        : serve({ ...options, hostname: staff.host, port: staff.port }, (info) =>
+            log("info", "server.listening", { listener: "staff", port: info.port }),
+          );
     if (!(server instanceof HttpsServer)) throw new Error("Staff listener requires HTTPS");
+    server.on("error", failure);
+    if ("socketPath" in staff) {
+      const { socketPath } = staff;
+      const existing = lstatSync(socketPath, { throwIfNoEntry: false });
+      if (existing !== undefined) {
+        if (!existing.isSocket())
+          throw Object.assign(new Error("Staff socket path is occupied"), { code: "EADDRINUSE" });
+        unlinkSync(socketPath);
+      }
+      server.listen(socketPath);
+      try {
+        if (server.listening) chmodSync(socketPath, 0o660);
+      } catch (error) {
+        server.close();
+        throw error;
+      }
+      server.once("listening", () =>
+        log("info", "server.listening", { listener: "staff", socketPath }),
+      );
+    }
     const watcher = watchTlsFiles(server, tls, undefined, () =>
       log("error", "cloud.certificate_reload_failed"),
     );

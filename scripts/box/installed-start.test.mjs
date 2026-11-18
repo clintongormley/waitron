@@ -68,10 +68,10 @@ case "$name" in
   echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"
   [ "\${DOCKER_EXIT:-43}" = 0 ] || exit "\${DOCKER_EXIT:-43}"
   case "$*" in
-   'compose config --format json') echo '{"services":{"app":{"image":"app"},"print-agent":{"image":"agent"},"mailpit":{"image":"mailpit"}}}' ;;
+   'compose config --format json') echo '{"services":{"app":{"image":"app"},"print-agent":{"image":"agent"},"mailpit":{"image":"mailpit"},"tunnel":{"image":"tunnel"}}}' ;;
    'image inspect '*) echo "sha256:$3" ;;
    'compose ps -q') echo containers ;;
-   'inspect '*) echo '[{"Config":{"Labels":{"com.docker.compose.service":"app"}},"State":{"Status":"running"}},{"Config":{"Labels":{"com.docker.compose.service":"print-agent"}},"State":{"Status":"running"}},{"Config":{"Labels":{"com.docker.compose.service":"mailpit"}},"State":{"Status":"running"}}]' ;;
+   'inspect '*) echo '[{"Config":{"Labels":{"com.docker.compose.service":"app"}},"State":{"Status":"running"}},{"Config":{"Labels":{"com.docker.compose.service":"print-agent"}},"State":{"Status":"running"}},{"Config":{"Labels":{"com.docker.compose.service":"mailpit"}},"State":{"Status":"running"}},{"Config":{"Labels":{"com.docker.compose.service":"tunnel"}},"State":{"Status":"running"}}]' ;;
   esac ;;
  sfdisk)
   if [ "$1" = --json ]; then
@@ -489,7 +489,13 @@ it("the USB recipe's emitted environment selects every preloaded service", () =>
     .split("\n")
     .find((line) => line.startsWith("printf 'WAITRON_IMAGE="));
   expect(write).toBeDefined();
-  const env = { ...process.env, root, app: "node:26-slim", agent: "node:26-slim" };
+  const env = {
+    ...process.env,
+    root,
+    app: "node:26-slim",
+    agent: "node:26-slim",
+    tunnel: "tunnel:preloaded",
+  };
   delete env.COMPOSE_PROFILES;
   const emitted = spawnSync("bash", ["-c", write], { env, encoding: "utf8" });
   expect(emitted.status, emitted.stderr).toBe(0);
@@ -502,10 +508,13 @@ it("the USB recipe's emitted environment selects every preloaded service", () =>
       "-f",
       resolve("deploy/compose.yml"),
       "config",
-      "--services",
+      "--format",
+      "json",
     ],
     { env, encoding: "utf8" },
   );
   expect(config.status, config.stderr).toBe(0);
-  expect(config.stdout.trim().split("\n").sort()).toEqual(["app", "mailpit", "print-agent"]);
+  const { services } = JSON.parse(config.stdout);
+  expect(Object.keys(services).sort()).toEqual(["app", "mailpit", "print-agent", "tunnel"]);
+  expect(services.tunnel.image).toBe("tunnel:preloaded");
 });

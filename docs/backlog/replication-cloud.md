@@ -859,6 +859,10 @@ Remote dashboard access, Settings on/off and retirement of the old TCP relay are
 [PR #2543](https://github.com/clintongormley/waitron/pull/2543). Trial details and limits stay in its
 thread.
 
+The box starts the tunnel companion in its default Compose stack and serves staff HTTPS through
+a shared socket. The joint trial with Cloud still has to show that pairing alone assigns and opens
+the address on mobile data and that the Remote access switch closes it.
+
 Translate all returned one editable menu suggestion on the test box. Address completion still
 needs its trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
 

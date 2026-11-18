@@ -36,7 +36,7 @@ export interface ServerConfig {
   /** Lets a Prepare node exercise a configured payment provider with test credentials. */
   paymentTestProviders: boolean;
   httpPort: number;
-  staff?: { host: string; port: number };
+  staff?: { host: string; port: number } | { socketPath: string };
   /**
    * The plain-HTTP trust/landing listener's port; `0` disables it. A phone meets the browser's
    * interstitial for the untrusted self-signed leaf before any page runs, so the CA download is
@@ -460,13 +460,16 @@ export function loadConfig(
       reason: "google_requires_client_id_and_secret",
     });
   }
+  const staffSocket = env.WAITRON_STAFF_SOCKET;
   const staff: ServerConfig["staff"] =
     environment === "production"
       ? undefined
-      : {
-          host: isUnset(env.WAITRON_STAFF_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_STAFF_HOST,
-          port: listeningPort(env, "WAITRON_STAFF_PORT", 8443),
-        };
+      : isUnset(staffSocket)
+        ? {
+            host: isUnset(env.WAITRON_STAFF_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_STAFF_HOST,
+            port: listeningPort(env, "WAITRON_STAFF_PORT", 8443),
+          }
+        : { socketPath: staffSocket };
   return {
     ...(staff === undefined ? {} : { staff }),
     ...(installationOrigin === "usb" ? { installationOrigin } : {}),

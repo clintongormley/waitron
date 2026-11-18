@@ -1,17 +1,17 @@
 #!/bin/sh
 set -eu
 name=waitron-tunnel-smoke-$(date +%s)-$$
-image=$name:local
+image=${1:-$name:local}
 scratch=$(mktemp -d)
-profile() {
-  COMPOSE_PROFILES=staff-tunnel docker compose -f deploy/compose.yml -f "$scratch/override.yml" -p "$name" "$@"
+stack() {
+  COMPOSE_PROFILES= docker compose -f deploy/compose.yml -f "$scratch/override.yml" -p "$name" "$@"
 }
 cleanup() {
-  if [ -f "$scratch/override.yml" ]; then profile down --volumes --remove-orphans >/dev/null 2>&1 || :; fi
+  if [ -f "$scratch/override.yml" ]; then stack down --volumes --remove-orphans >/dev/null 2>&1 || :; fi
   for part in peer gateway staff; do docker rm -f "$name-$part" >/dev/null 2>&1 || :; done
   for part in control keys; do docker volume rm "$name-$part" >/dev/null 2>&1 || :; done
   docker network rm "$name" >/dev/null 2>&1 || :
-  docker image rm "$image" >/dev/null 2>&1 || :
+  if [ "$image" = "$name:local" ]; then docker image rm "$image" >/dev/null 2>&1 || :; fi
   rm -rf "$scratch"
 }
 trap cleanup EXIT
@@ -24,28 +24,30 @@ wait_for() {
   docker logs "$name-peer" >&2
   return 1
 }
-docker build -f deploy/tunnel/Dockerfile -t "$image" .
 COMPOSE_PROFILES= docker compose -f deploy/compose.yml config --format json > "$scratch/default.json"
-docker compose -f deploy/compose.yml --profile staff-tunnel config --format json > "$scratch/profile.json"
-docker run --rm -i --entrypoint jq "$image" -e '.services.tunnel == null' < "$scratch/default.json" >/dev/null
-docker run --rm -i --entrypoint jq "$image" -e '
+jq -e '
   .services as $s | $s.tunnel as $t |
-  $t.profiles == ["staff-tunnel"] and
+  $s.app.environment.WAITRON_STAFF_SOCKET == "/var/lib/waitron/tunnel/staff.sock" and
+  ($t.profiles // [] | length) == 0 and
   $t.cap_add == ["NET_ADMIN"] and $t.cap_drop == ["ALL"] and
+  $t.group_add == ["10001"] and
   $t.read_only == true and $t.security_opt == ["no-new-privileges:true"] and
   $t.sysctls["net.ipv4.ip_forward"] == "0" and
   ($t.ports // [] | length) == 0 and $t.network_mode == null and
   ($t.networks | keys) == ["tunnel"] and
-  $t.extra_hosts == ["host.docker.internal=host-gateway"] and
+  ($t.extra_hosts // [] | length) == 0 and
   ([$t.volumes[].target] | sort) == ["/control", "/keys"] and
+  ([$t.volumes[] | select(.target == "/control") | .source] ==
+   [$s.app.volumes[] | select(.target == "/var/lib/waitron/tunnel") | .source]) and
   all($s.app.volumes[]; .source | endswith("tunnel_keys") | not) and
   ($s.app.cap_add // [] | length) == 0
-' < "$scratch/profile.json" >/dev/null
-printf '%s\n' 'PASS actual Compose profile keeps the default off and isolates privileges, keys and networking'
+' "$scratch/default.json" >/dev/null || {
+  echo 'Default Compose must put the staff socket in the shared control volume and isolate the companion.' >&2
+  exit 1
+}
+printf '%s\n' 'PASS default Compose shares the staff socket and isolates privileges, keys and networking'
+if [ "$image" = "$name:local" ]; then docker build -f deploy/tunnel/Dockerfile -t "$image" .; fi
 docker network create "$name" >/dev/null
-docker run -d --name "$name-staff" --network "$name" --entrypoint socat "$image" \
-  TCP4-LISTEN:8443,reuseaddr,fork 'EXEC:/bin/cat' >/dev/null
-staff_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$name-staff")
 docker run -d --name "$name-gateway" --network "$name" --cap-add NET_ADMIN --entrypoint sh "$image" -c '
   umask 077
   wg genkey > /keys/gateway.key
@@ -57,11 +59,17 @@ wait_for docker exec "$name-gateway" test -s /keys/gateway.pub
 gateway_key=$(docker exec "$name-gateway" cat /keys/gateway.pub)
 cat > "$scratch/override.yml" <<YAML
 services:
+  app:
+    image: "$image"
+    container_name: "$name-staff"
+    user: "10001:10001"
+    healthcheck:
+      disable: true
+    entrypoint: ["sh", "-ec"]
+    command: ['exec socat "UNIX-LISTEN:\$\$WAITRON_STAFF_SOCKET,mode=0660,fork" EXEC:/bin/cat']
   tunnel:
     image: "$image"
     container_name: "$name-peer"
-    extra_hosts: !override
-      - "host.docker.internal:$staff_ip"
 volumes:
   tunnel_control:
     name: "$name-control"
@@ -72,11 +80,10 @@ networks:
     name: "$name"
     external: true
 YAML
-profile config --format json > "$scratch/resolved.json"
-docker run --rm -i --entrypoint jq "$image" -e --arg upstream "host.docker.internal=$staff_ip" \
-  '.services.tunnel.extra_hosts == [$upstream]' < "$scratch/resolved.json" >/dev/null
-profile up -d --no-deps tunnel
+stack up -d --no-deps tunnel
 wait_for docker exec "$name-peer" test -s /control/public-key
+stack up -d --no-deps app
+wait_for docker exec "$name-peer" test -S /control/staff.sock
 peer_key=$(docker exec "$name-peer" cat /control/public-key)
 docker exec --user 10001:10001 "$name-peer" sh -c '
   set -e
@@ -89,7 +96,7 @@ docker exec --user 10001:10001 "$name-peer" sh -c '
 docker exec --user 10001:10001 "$name-peer" rm /control/app-write-probe
 if docker exec "$name-peer" ip link show wg-cloud 2>/dev/null; then exit 1; fi
 [ "$(docker exec "$name-peer" stat -c %a /keys/private-key)" = 600 ]
-docker exec "$name-peer" sh -c 'test "$(ls /control)" = public-key'
+docker exec "$name-peer" test ! -e /control/peer.json
 configure_gateway() {
   docker exec "$name-gateway" sh -ec '
   ip link add wg-cloud type wireguard
@@ -170,6 +177,6 @@ key_search_status=0
 docker exec -i "$name-peer" grep -Fq -f /keys/private-key < "$scratch/peer.log" || key_search_status=$?
 [ "$key_search_status" = 1 ]
 printf '%s\n' 'PASS reconnect and restart retain the box key; image ships system licence notices'
-profile down --remove-orphans
+stack down --remove-orphans
 if docker inspect "$name-peer" >/dev/null 2>&1; then exit 1; fi
-printf '%s\n' 'PASS the reset down command also stops the optional Compose profile'
+printf '%s\n' 'PASS the reset down command stops the companion'

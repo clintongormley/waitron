@@ -404,6 +404,79 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
     await rm(root, { recursive: true, force: true });
   }
 });
+it("serves marked remote requests over a private TLS socket and can reopen it", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const { get } = await import("node:https");
+  const { requestFromBox } = await import("./request-from-box.js");
+  const { mintSelfSignedServerCert } = await import("./self-signed-cert.js");
+  const root = await mkdtemp(join(tmpdir(), "wt-staff-"));
+  const socketPath = join(root, "staff.sock");
+  const hostname = "staff.waitron.local";
+  const cert = mintSelfSignedServerCert({
+    now: new Date(),
+    hostnames: [hostname],
+    ipAddresses: [],
+  });
+  const app = new Hono<{ Bindings: { remoteStaff?: boolean } }>();
+  app.get("/management-api/session", (c) =>
+    c.json({ remote: c.env.remoteStaff === true, onBox: requestFromBox(c) }),
+  );
+  const start = () =>
+    startStaffListener(
+      { staff: { socketPath }, stateDir: root },
+      app,
+      () => {},
+      async () => true,
+    );
+  const ask = () =>
+    new Promise<string>((resolve, reject) => {
+      get(
+        {
+          socketPath,
+          path: "/management-api/session",
+          servername: hostname,
+          ca: cert.caCertPem,
+          headers: { Host: hostname },
+          agent: false,
+        },
+        async (response) => {
+          let body = "";
+          for await (const chunk of response) body += chunk;
+          resolve(body);
+        },
+      ).on("error", reject);
+    });
+
+  let listener: ReturnType<typeof startStaffListener>;
+  try {
+    await mkdir(join(root, "cloud"));
+    await writeFile(join(root, "cloud/staff.key"), cert.serverKeyPem);
+    await writeFile(join(root, "cloud/staff.crt"), cert.serverCertPem);
+    await writeFile(socketPath, "keep this file");
+    expect(start()).toBeUndefined();
+    expect(await readFile(socketPath, "utf8")).toBe("keep this file");
+    await rm(socketPath);
+
+    execFileSync(process.execPath, [
+      "-e",
+      "require('node:net').createServer().listen(process.argv[1], () => process.exit(0))",
+      socketPath,
+    ]);
+    expect((await stat(socketPath)).isSocket()).toBe(true);
+    for (let count = 0; count < 2; count++) {
+      listener = start();
+      await vi.waitFor(() => expect(listener?.isListening()).toBe(true));
+      expect((await stat(socketPath)).mode & 0o777).toBe(0o660);
+      expect(JSON.parse(await ask())).toEqual({ remote: true, onBox: false });
+      await listener?.close();
+      await expect(ask()).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  } finally {
+    await listener?.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it("leaves a missing staff certificate offline without throwing into local sales", async () => {
   const lines: unknown[] = [];
   expect(() =>

@@ -1,4 +1,6 @@
 FROM debian:trixie-slim
+ARG WAITRON_BUILD_ID=development
+LABEL org.opencontainers.image.revision=$WAITRON_BUILD_ID
 RUN set -eu; \
     printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' 'APT::Update::Error-Mode "any";' > /etc/apt/apt.conf.d/99bounded-waits; \
     bounded() { for attempt in 1 2 3; do timeout 300 "$@" && return 0; done; return 1; }; \

@@ -1,81 +1,36 @@
 # Staff tunnel runtime
 
-To reach the staff entrance through Cloud, the box needs an outbound WireGuard peer. This
-container keeps the network permission and private key separate from the app. It forwards TCP
-bytes to `host.docker.internal:8443`, so TLS still ends at the box's staff listener.
+Pair your test box with Cloud. When Cloud supplies the staff address, the box installs its
+public certificate and serves HTTPS through a Unix socket shared with the tunnel companion.
+Use **Remote access** under **System → Cloud services** to turn the connection off or back on.
 
-This is the optional runtime of A951-S. The signed connection submits the public key and writes
-the peer configuration when the Cloud receiver is enabled. On a paired installation, System → Cloud services
-lets you turn remote access off and on without pairing again. Off removes the peer configuration;
-automatic image publication remains to be connected. The default installation does not start it. The
-staff listener from PR #2525 must already be running and reachable from the Docker bridge;
-its loopback-only default is not reachable from this container.
+The normal box Compose file starts the companion. It makes a WireGuard key and waits for the
+signed Cloud connection to write `peer.json` in the `tunnel_control` volume. The companion then
+opens the tunnel and forwards the gateway's connection to the staff socket. Turning remote
+access off removes `peer.json`. On its next poll the companion closes existing connections
+and removes its WireGuard interface. Turning access back on uses the same key and pairing.
 
-From a checkout on a Linux Docker host, build and check it with:
+The companion stays running while access is off. It keeps its private key in `tunnel_keys` and
+its network-admin permission in its own network namespace, including on production boxes.
+The app sees the public key and connection settings through `tunnel_control`. Restarting
+retains the box key. A box reset clears both tunnel volumes.
+
+From a checkout with Docker and jq, run the connection smoke test:
 
 ```sh
-docker build -f deploy/tunnel/Dockerfile -t waitron-tunnel:dev .
 sh scripts/tunnel-container-smoke.sh
 ```
 
-The check renders the real Compose configuration, starts its tunnel profile beside an isolated
-gateway and staff echo service, then removes its own
-containers, volumes, network and tagged image. It checks that an idle peer reopens the staff stream
-within 90 seconds of the gateway losing its WireGuard session at the same address. It also checks
-the fixed staff destination, refusal of another source and port, disconnection, reconnection and a
-container restart. It does not reboot the host, issue a certificate or touch a running Waitron
-installation.
-
-On a connected test installation, turn on remote access. The box takes its staff name from Cloud.
-The certificate worker opens the listener after installing its first valid certificate.
-On a Linux box, bind it to Docker's bridge address so this container can reach it:
-
-```sh
-export WAITRON_STAFF_HOST=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
-cat > /tmp/waitron-staff-listener.yml <<'YAML'
-services:
-  app:
-    environment:
-      WAITRON_STAFF_HOST: ${WAITRON_STAFF_HOST:?Set Docker's bridge address}
-      WAITRON_STAFF_PORT: "8443"
-YAML
-docker compose -f deploy/compose.yml -f /tmp/waitron-staff-listener.yml --profile staff-tunnel up -d app tunnel
-```
-
-The default `127.0.0.1` cannot be reached
-from the peer. Keep the bridge bind: choosing `0.0.0.0` would also listen on the venue interfaces.
-The runtime's configured message reports local configuration, not a successful gateway handshake.
-
-The container stays off until the signed connection supplies its placement: `tunnel.off` in its logs means
-there is no valid `peer.json` in the shared `tunnel_control` volume. The app sees this volume at
-`/var/lib/waitron/tunnel`. The file takes exactly three fields from Cloud's placement:
-
-```json
-{
-  "address": "10.77.17.2",
-  "gatewayPublicKey": "replace with Cloud's gateway public key",
-  "endpoint": "gateway.test.waitron.io:51820"
-}
-```
-
-Replace the example values with the placement assigned to your box. Write the complete file to a
-temporary sibling with mode 0644 and rename it to `peer.json`. These fields are not secrets;
-the directory is restricted to the app (uid 10001) and the peer’s root group. Removing it disconnects
-the tunnel on the next poll. If a gateway probe is in progress, the poll waits up to one extra second.
+The test starts a gateway, the Compose companion and a stand-in for the app socket. It checks
+that the staff stream recovers within 90 seconds after an idle gateway loses its WireGuard session,
+then checks that turning access off closes a held stream and that reconnect and restart retain
+the box key.
 
 While the tunnel is on, the peer sends one byte to the gateway's private UDP port 9 on activation
 and about every 20 seconds. This gives WireGuard traffic to retry when an idle gateway loses its
 session. The gateway needs no listener on that port. If the send fails, the peer logs
-`tunnel.probe_failed` once for that configuration and keeps the staff forwarder running.
+`tunnel.probe_failed` once for that configuration and keeps the staff forwarder running. A probe
+in progress can delay the next configuration poll by up to one second.
 
-Both reset forms stop the profile and clear its connection settings and key, because the box
-will pair with Cloud again. An ordinary container restart retains them.
-
-The peer creates its key in `tunnel_keys`, which the app does not mount, and publishes only
-`public-key` in the control volume. Restarting retains that key. The only tunnel route is to the
-gateway's `10.77.<subnet>.1/32`; incoming tunnel traffic must have that source and destination
-port 443. The container has its own network namespace, no published port and no IP forwarding.
-It uses `NET_ADMIN` there; the app keeps its existing permissions.
-
-The Debian packages' copyright files, shared licence texts and installed versions ship in
+The Debian packages' copyright files, licence texts and versions ship in
 `/app/third-party/system/`.

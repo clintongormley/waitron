@@ -798,6 +798,7 @@ it("configures a test staff listener without a local hostname and excludes produ
     loadConfig(
       {
         WAITRON_ENV: "production",
+        WAITRON_STAFF_SOCKET: "/private/control/staff.sock",
         WAITRON_MANAGEMENT_RP_ID: "box.example.test",
         WAITRON_MANAGEMENT_ORIGIN: "https://box.example.test",
       },
@@ -821,6 +822,16 @@ it("takes the explicit tunnel bind and port without changing the LAN listener", 
   });
   expect([config.httpHost, config.httpPort]).toEqual(["127.0.0.1", 8080]);
 });
+it("selects the staff socket instead of a TCP bind", () => {
+  const config = loadConfig(
+    { WAITRON_STAFF_SOCKET: "/private/control/staff.sock", WAITRON_STAFF_PORT: "8443" },
+    ROOT,
+    STATE_ROOT,
+  );
+  expect(config.staff).toEqual({ socketPath: "/private/control/staff.sock" });
+  expect([config.httpHost, config.httpPort]).toEqual(["127.0.0.1", 8080]);
+});
+
 it.each([
   ["8080", {}],
   ["80", {}],

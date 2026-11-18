@@ -59,7 +59,7 @@ jobs:
           GIT_HTTP_LOW_SPEED_TIME: 20
 
       # deploy/.env is where waitron.sh puts a real box's and it is gitignored, so compose reads it
-      # with no flag. It carries the two tags this job builds, so compose runs those rather than
+      # with no flag. It carries the tags this job builds, so compose runs those rather than
       # resolving the published `:main` images and pulling them, and the AppArmor profile line
       # waitron.sh writes on a box with AppArmor. It is written first so every later step reads the
       # same file, the `if: always()` teardown included.
@@ -69,6 +69,7 @@ jobs:
           {
             echo "WAITRON_IMAGE=waitron:ci"
             echo "WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:ci"
+            echo "WAITRON_TUNNEL_IMAGE=waitron-tunnel:ci"
             echo "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent"
           } > deploy/.env
 
@@ -183,8 +184,23 @@ jobs:
           mkdir -p build
           git show -s --format='%H:%ct' "$GITHUB_SHA" > build/source-metadata
 
-      - name: Check the optional staff tunnel image and Compose profile
-        run: sh scripts/tunnel-container-smoke.sh
+      - name: Build the tunnel companion
+        uses: docker/build-push-action@v7
+        timeout-minutes: 15
+        with:
+          context: .
+          file: deploy/tunnel/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: waitron-tunnel:ci
+          build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
+            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
+
+      - name: Check staff tunnel connections and shutdown
+        run: sh scripts/tunnel-container-smoke.sh waitron-tunnel:ci
 
       - name: Build the image
         uses: docker/build-push-action@v7
@@ -229,14 +245,14 @@ jobs:
               test "$(cat /var/lib/waitron/tunnel/write-probe)" = probe
             '
 
-      - name: Inspect both images' source labels
+      - name: Inspect image source labels
         env:
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_CREATED: ${{ steps.provenance.outputs.created }}
           EXPECTED_REF: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
-          for image in waitron:ci waitron-print-agent:ci; do
+          for image in waitron:ci waitron-print-agent:ci waitron-tunnel:ci; do
             labels=$(docker image inspect --format '{{json .Config.Labels}}' "$image")
             echo "$image: $labels"
             jq -e --arg sha "$EXPECTED_SHA" --arg created "$EXPECTED_CREATED" --arg ref "$EXPECTED_REF" '

@@ -205,13 +205,13 @@ two jobs make the release:
    build renders the version's declaration into `/app/declaration/`, and fails if the committed
    `declarations/v1.0.0.md` is missing, carries a blocker line or disagrees with the code. It runs
    `check-release 1.0.0` inside the built image, refuses a version the registry already holds, and
-   only then pushes the print agent's `:1.0.0` and, last, `ghcr.io/clintongormley/waitron:1.0.0`.
+   only then pushes the print agent and tunnel companion's `:1.0.0` tags. It pushes the app last.
 2. **`release`** pulls the published app image by its digest, copies its declaration's PDF and plain text out of
    it, and attaches them to the GitHub Release `v1.0.0` as `waitron-1.0.0-declaration.pdf` and
    `waitron-1.0.0-declaration.txt`, making the Release if there is none. Because the files come
    out of the published image, they are the same bytes every box running that image serves.
    When signing is configured, it also attaches `waitron-release.json`. The signed
-   payload names the release, the source commit and the digests of the two images.
+   payload names the release, the source commit and the app, print agent and tunnel image digests.
 
 Check the Release once the run is green:
 
@@ -249,7 +249,7 @@ sudo bash /opt/waitron-host/waitron.sh install v1.0.0
 ```
 
 The installer verifies the signed release file with the public keys already on the box and
-pulls the two images it names by digest. For the first upgrade on an existing development box,
+pulls the three images it names by digest. For the first upgrade on an existing development box,
 follow [the deploy guide](../../deploy/README.md#installing-a-release) to install release trust.
 A production box starts only on a numbered release.
 

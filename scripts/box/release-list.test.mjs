@@ -18,7 +18,11 @@ const release = {
   prerelease: false,
   sourceSha: "c".repeat(40),
   platform: "linux/amd64",
-  images: { app: "sha256:" + "a".repeat(64), printAgent: "sha256:" + "b".repeat(64) },
+  images: {
+    app: "sha256:" + "a".repeat(64),
+    printAgent: "sha256:" + "b".repeat(64),
+    tunnel: "sha256:" + "d".repeat(64),
+  },
 };
 
 function envelope(payload, privateKey = current.privateKey) {
@@ -62,7 +66,10 @@ describe("the signed release file", () => {
     const { images, ...rest } = release;
     expect(
       signReleaseList(
-        { images: { printAgent: images.printAgent, app: images.app }, ...rest },
+        {
+          images: { tunnel: images.tunnel, printAgent: images.printAgent, app: images.app },
+          ...rest,
+        },
         current.privateKey,
       ),
     ).toEqual(signReleaseList(release, current.privateKey));
@@ -96,6 +103,9 @@ describe("the signed release file", () => {
     { sourceSha: "main" },
     { platform: "linux/arm64" },
     { images: { app: release.images.app } },
+    { images: { app: release.images.app, printAgent: release.images.printAgent } },
+    { images: { ...release.images, tunnel: "latest" } },
+    { images: { ...release.images, tunnel: release.images.app } },
     { images: { ...release.images, printAgent: "latest" } },
     { images: { ...release.images, printAgent: release.images.app } },
   ])("refuses signed bytes with an invalid release field (%j)", (change) => {

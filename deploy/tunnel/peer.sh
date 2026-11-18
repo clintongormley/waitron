@@ -39,7 +39,7 @@ configure() {
   iptables -P FORWARD DROP || return 1
   ip link set wg-cloud up || return 1
   ip route add "$gateway/32" dev wg-cloud || return 1
-  setsid socat "TCP4-LISTEN:443,bind=$address,reuseaddr,fork" TCP4:host.docker.internal:8443 &
+  setsid socat "TCP4-LISTEN:443,bind=$address,reuseaddr,fork" "UNIX-CONNECT:$control/staff.sock" &
   proxy=$!
 }
 trap 'stop; exit 0' TERM INT

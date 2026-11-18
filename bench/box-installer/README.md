@@ -28,9 +28,12 @@ agent=ghcr.io/clintongormley/waitron-print-agent@sha256:650a9d69b217cb2f713cb620
 docker pull --platform linux/amd64 "$agent"
 docker pull --platform linux/amd64 axllent/mailpit:v1.33.0
 docker tag "$agent" waitron-b3-agent:rehearsal
-docker image inspect --platform linux/amd64 "$app" "$agent" axllent/mailpit:v1.33.0 > "$inputs/sources.json"
+tunnel=waitron-b3-tunnel:rehearsal
+docker build --platform linux/amd64 -f deploy/tunnel/Dockerfile -t "$tunnel" .
+docker image inspect --platform linux/amd64 "$app" "$agent" "$tunnel" axllent/mailpit:v1.33.0 > "$inputs/sources.json"
 docker save --platform linux/amd64 -o "$inputs/app.tar" "$app"
 docker save --platform linux/amd64 -o "$inputs/agent.tar" waitron-b3-agent:rehearsal
+docker save --platform linux/amd64 -o "$inputs/tunnel.tar" "$tunnel"
 docker save --platform linux/amd64 -o "$inputs/mailpit.tar" axllent/mailpit:v1.33.0
 
 docker build -f bench/box-installer/Containerfile -t waitron-b3-tools:rehearsal .

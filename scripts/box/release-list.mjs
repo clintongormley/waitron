@@ -48,12 +48,11 @@ function releasePayload(value) {
     typeof sourceSha !== "string" ||
     !SHA.test(sourceSha) ||
     platform !== "linux/amd64" ||
-    !exactRecord(images, ["app", "printAgent"]) ||
-    typeof images.app !== "string" ||
-    !IMAGE_DIGEST.test(images.app) ||
-    typeof images.printAgent !== "string" ||
-    !IMAGE_DIGEST.test(images.printAgent) ||
-    images.app === images.printAgent
+    !exactRecord(images, ["app", "printAgent", "tunnel"]) ||
+    !Object.values(images).every(
+      (digest) => typeof digest === "string" && IMAGE_DIGEST.test(digest),
+    ) ||
+    new Set(Object.values(images)).size !== 3
   )
     throw new Error("Invalid release payload");
   return {
@@ -63,7 +62,7 @@ function releasePayload(value) {
     prerelease,
     sourceSha,
     platform,
-    images: { app: images.app, printAgent: images.printAgent },
+    images: { app: images.app, printAgent: images.printAgent, tunnel: images.tunnel },
   };
 }
 

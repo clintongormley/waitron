@@ -23,6 +23,7 @@ STATE_VOLUME="${COMPOSE_PROJECT_NAME:-waitron}_state"
 RAW_BASE="https://raw.githubusercontent.com/clintongormley/waitron"
 APP_IMAGE_REPO="ghcr.io/clintongormley/waitron"
 PRINT_AGENT_IMAGE_REPO="ghcr.io/clintongormley/waitron-print-agent"
+TUNNEL_IMAGE_REPO="ghcr.io/clintongormley/waitron-tunnel"
 RELEASE_TRUST="$WAITRON_HOST_DIR/release-trust"
 HOST_NODE="$WAITRON_HOST_DIR/node-v26.7.0/bin/node"
 # One copy of box-name.ts's BOX_HOSTNAME, pinned by scripts/deploy-image-env.test.ts to the image env,
@@ -484,7 +485,7 @@ resolve_source_metadata() {
 }
 
 # 3. main pulls every image in compose.yml and records no override; development refs other than
-#    main build both Waitron images and record their tags or ids.
+#    main build the Waitron images and record their tags or ids.
 select_image() {
   local ref="$1"
   if [ "$ref" = "main" ]; then
@@ -494,16 +495,17 @@ select_image() {
     docker compose -f "$WAITRON_DIR/compose.yml" pull \
       || die "could not pull the box's images for $ref: $why"
   else
-    local safe tag agent_tag sha created source_metadata="${2:-}"
+    local safe tag agent_tag tunnel_tag sha created source_metadata="${2:-}"
     safe="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9._-' '-')"; safe="${safe:0:100}"
-    tag="waitron:${safe}"; agent_tag="waitron-print-agent:${safe}"
+    tag="waitron:${safe}"; agent_tag="waitron-print-agent:${safe}"; tunnel_tag="waitron-tunnel:${safe}"
     [ -n "$source_metadata" ] || source_metadata="$(resolve_source_metadata "$ref")"
     sha="${source_metadata%%:*}"
     created="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-    local -a app_output=(-t "$tag") agent_output=(-t "$agent_tag")
+    local -a app_output=(-t "$tag") agent_output=(-t "$agent_tag") tunnel_output=(-t "$tunnel_tag")
     if [ -n "${3:-}" ]; then
       app_output=(--iidfile "$3/app.id")
       agent_output=(--iidfile "$3/agent.id")
+      tunnel_output=(--iidfile "$3/tunnel.id")
     fi
     docker build "${app_output[@]}" -f deploy/Dockerfile --build-arg "WAITRON_BUILD_ID=$sha" \
       --build-arg "WAITRON_SOURCE_METADATA=$source_metadata" \
@@ -513,16 +515,22 @@ select_image() {
       --build-arg "WAITRON_SOURCE_METADATA=$source_metadata" \
       --build-arg "WAITRON_IMAGE_CREATED=$created" --build-arg "WAITRON_IMAGE_REF=$ref" \
       "https://github.com/clintongormley/waitron.git#${sha}"
+    docker build "${tunnel_output[@]}" -f deploy/tunnel/Dockerfile \
+      --build-arg "WAITRON_BUILD_ID=$sha" \
+      --label "org.opencontainers.image.created=$created" \
+      --label "org.opencontainers.image.ref.name=$ref" \
+      "https://github.com/clintongormley/waitron.git#${sha}"
     if [ -n "${3:-}" ]; then
-      tag="$(cat "$3/app.id")"; agent_tag="$(cat "$3/agent.id")"
+      tag="$(cat "$3/app.id")"; agent_tag="$(cat "$3/agent.id")"; tunnel_tag="$(cat "$3/tunnel.id")"
     fi
     env_set WAITRON_IMAGE "$tag"
     env_set WAITRON_PRINT_AGENT_IMAGE "$agent_tag"
+    env_set WAITRON_TUNNEL_IMAGE "$tunnel_tag"
   fi
 }
 
 # Under --reset the box is wiped before `up`, so any image `up` would pull is fetched first: a branch
-# install builds only Waitron's own two, and a pull that failed after the wipe would leave a wiped box
+# install builds Waitron's images, and a pull that failed after the wipe would leave a wiped box
 # that does not start.
 ensure_images_present() {
   local ref="$1" images img
@@ -600,7 +608,7 @@ EOF
 
 print_image_versions() {
   local service container image labels sha created ref local_time epoch
-  for service in app print-agent; do
+  for service in app print-agent tunnel; do
     if ! container="$(docker compose -f "$WAITRON_DIR/compose.yml" ps -q "$service")"; then
       echo "$service: version unavailable"
       continue
@@ -842,7 +850,7 @@ report_unhealthy() {
 # The image each Waitron container runs now, one id per line; nothing for a service not running.
 running_images() {
   local service container image
-  for service in app print-agent; do
+  for service in app print-agent tunnel; do
     container="$(docker compose -f "$WAITRON_DIR/compose.yml" ps -q "$service" 2>/dev/null)" || continue
     [ -n "$container" ] || continue
     image="$(docker inspect -f '{{.Image}}' "$container" 2>/dev/null)" || continue
@@ -1063,7 +1071,7 @@ immutable_main_image() {
 }
 
 prepare_upgrade_candidate() (
-  local ref="$1" metadata="$2" installed="$3" work app agent revision reference
+  local ref="$1" metadata="$2" installed="$3" work app agent tunnel revision reference
   work="$(mktemp -d "$WAITRON_HOST_DIR/.candidate.XXXXXX")"
   trap 'rm -rf -- "$work"' EXIT
   WAITRON_DIR="$work"
@@ -1080,22 +1088,31 @@ prepare_upgrade_candidate() (
     agent="$(docker image inspect "$reference" --format '{{.Id}}')"
     [ "$(docker image inspect "$agent" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$revision" ] \
       || die 'candidate app and print agent name different source revisions'
+    reference="$(immutable_main_image "$TUNNEL_IMAGE_REPO")"
+    docker pull "$reference" >&2
+    tunnel="$(docker image inspect "$reference" --format '{{.Id}}')"
+    [ "$(docker image inspect "$tunnel" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$revision" ] \
+      || die 'candidate app and tunnel name different source revisions'
   elif is_release_tag "$ref"; then
-    [[ "${4:-}" =~ ^sha256:[a-f0-9]{64}$ && "${5:-}" =~ ^sha256:[a-f0-9]{64}$ ]] \
+    [[ "${4:-}" =~ ^sha256:[a-f0-9]{64}$ && "${5:-}" =~ ^sha256:[a-f0-9]{64}$ && "${6:-}" =~ ^sha256:[a-f0-9]{64}$ ]] \
       || die "signed image digests are required for $ref"
     fetch_box_files "${metadata%%:*}" >&2
-    local app_image="$APP_IMAGE_REPO@$4" agent_image="$PRINT_AGENT_IMAGE_REPO@$5"
+    local app_image="$APP_IMAGE_REPO@$4" agent_image="$PRINT_AGENT_IMAGE_REPO@$5" tunnel_image="$TUNNEL_IMAGE_REPO@$6"
     docker pull "$app_image" >&2
     docker pull "$agent_image" >&2
+    docker pull "$tunnel_image" >&2
     app="$(docker image inspect "$app_image" --format '{{.Id}}')"
     agent="$(docker image inspect "$agent_image" --format '{{.Id}}')"
+    tunnel="$(docker image inspect "$tunnel_image" --format '{{.Id}}')"
   else
     fetch_box_files "${metadata%%:*}" >&2
     select_image "$ref" "$metadata" "$work" >&2
     app="$(docker image inspect "$(sed -n 's/^WAITRON_IMAGE=//p' "$WAITRON_DIR/.env")" --format '{{.Id}}')"
     agent="$(docker image inspect "$(sed -n 's/^WAITRON_PRINT_AGENT_IMAGE=//p' "$WAITRON_DIR/.env")" --format '{{.Id}}')"
+    tunnel="$(docker image inspect "$(sed -n 's/^WAITRON_TUNNEL_IMAGE=//p' "$WAITRON_DIR/.env")" --format '{{.Id}}')"
   fi
-  jq -Rsc --arg app "$app" --arg agent "$agent" '{compose:.,images:{app:$app,"print-agent":$agent}}' "$WAITRON_DIR/compose.yml"
+  jq -Rsc --arg app "$app" --arg agent "$agent" --arg tunnel "$tunnel" \
+    '{compose:.,images:{app:$app,"print-agent":$agent,tunnel:$tunnel}}' "$WAITRON_DIR/compose.yml"
 )
 
 # `docker compose up` creates the state volume, and a first install writes compose.yml well before
@@ -1108,7 +1125,7 @@ box_started() {
 
 cmd_install() (
   local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL" fresh=0 docker_ready=0
-  local verified signed_sha="" app_digest="" agent_digest="" source_ref="$ref"
+  local verified signed_sha="" app_digest="" agent_digest="" tunnel_digest="" source_ref="$ref"
   refuse_pending_upgrade
   if is_release_tag "$ref"; then
     local release_file digest='sha256:[a-f0-9]{64}'
@@ -1116,17 +1133,17 @@ cmd_install() (
     release_file="$(mktemp)"
     trap 'rm -f -- "$release_file"' EXIT
     verified="$(verify_numbered_release "$ref" "$release_file")"
-    [[ "$verified" =~ ^[a-f0-9]{40}\ $digest\ $digest$ ]] || die "unexpected signed image inventory for $ref"
-    read -r signed_sha app_digest agent_digest <<<"$verified"
+    [[ "$verified" =~ ^[a-f0-9]{40}\ $digest\ $digest\ $digest$ ]] || die "unexpected signed image inventory for $ref"
+    read -r signed_sha app_digest agent_digest tunnel_digest <<<"$verified"
     source_ref="$signed_sha"
-    unset WAITRON_IMAGE WAITRON_PRINT_AGENT_IMAGE
+    unset WAITRON_IMAGE WAITRON_PRINT_AGENT_IMAGE WAITRON_TUNNEL_IMAGE
   fi
   if [ "$wipe" -eq 0 ] && [ -f "$WAITRON_DIR/compose.yml" ]; then
     ensure_docker
     docker_ready=1
     if box_started; then
       if [ -n "$signed_sha" ]; then
-        cmd_manual_install "$ref" "$release_file" "$signed_sha" "$app_digest" "$agent_digest"
+        cmd_manual_install "$ref" "$release_file" "$signed_sha" "$app_digest" "$agent_digest" "$tunnel_digest"
       else
         cmd_manual_install "$ref"
       fi
@@ -1163,8 +1180,10 @@ cmd_install() (
   if [ -n "$signed_sha" ]; then
     export WAITRON_IMAGE="$APP_IMAGE_REPO@$app_digest"
     export WAITRON_PRINT_AGENT_IMAGE="$PRINT_AGENT_IMAGE_REPO@$agent_digest"
+    export WAITRON_TUNNEL_IMAGE="$TUNNEL_IMAGE_REPO@$tunnel_digest"
     env_set WAITRON_IMAGE "$WAITRON_IMAGE"
     env_set WAITRON_PRINT_AGENT_IMAGE "$WAITRON_PRINT_AGENT_IMAGE"
+    env_set WAITRON_TUNNEL_IMAGE "$WAITRON_TUNNEL_IMAGE"
     docker compose -f "$WAITRON_DIR/compose.yml" pull \
       || die "could not pull the signed images for $ref — check that the release was published and the registry is reachable"
   else

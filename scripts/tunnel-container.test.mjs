@@ -181,7 +181,7 @@ it("routes only its gateway and fixes the proxy destination to the staff entranc
   expect(await events(run)).toContainEqual([
     "socat",
     "TCP4-LISTEN:443,bind=10.77.17.2,reuseaddr,fork",
-    "TCP4:host.docker.internal:8443",
+    `UNIX-CONNECT:${run.control}/staff.sock`,
   ]);
   expect(await readFile(run.snapshot, "utf8")).toBe(
     `[Interface]\nPrivateKey = ${key}\n\n[Peer]\nPublicKey = ${key}\nEndpoint = gateway.test.waitron.io:51820\nAllowedIPs = 10.77.17.1/32\nPersistentKeepalive = 25\n`,

@@ -37,7 +37,7 @@ function bootFailures(expected, observed) {
   for (const [name, image] of Object.entries(expected.images)) {
     if (observed.images?.[name] !== image) failures.push(`image:${name}`);
   }
-  for (const name of ["app", "print-agent", "mailpit"]) {
+  for (const name of ["app", "print-agent", "mailpit", "tunnel"]) {
     if (observed.services?.[name] !== "running") failures.push(`service:${name}`);
   }
   const status = observed.status;
