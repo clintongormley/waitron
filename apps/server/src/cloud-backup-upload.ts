@@ -5,8 +5,12 @@ import { Agent } from "node:https";
 import { createHash } from "node:crypto";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { AppError } from "@waitron/shared";
+import { MAX_CLOUD_ARCHIVE_BYTES } from "./cloud-backup-limits.js";
 import type { CloudCaptureGrant } from "./cloud-backup.js";
 import "./errors.js";
+
+const MAX_BUFFERED_ARCHIVE_BYTES = 512 * 1024 ** 2;
+
 async function upload(
   grant: CloudCaptureGrant,
   body: Uint8Array | Readable,
@@ -28,7 +32,7 @@ async function upload(
       !Number.isFinite(Date.parse(grant.expiresAt)) ||
       Date.parse(grant.expiresAt) <= Date.now() ||
       size === 0 ||
-      size > 512 * 1024 * 1024
+      size > (body instanceof Uint8Array ? MAX_BUFFERED_ARCHIVE_BYTES : MAX_CLOUD_ARCHIVE_BYTES)
     )
       throw Error();
     client = new S3Client({
@@ -96,7 +100,7 @@ export async function uploadCloudCaptureFile(
         !stat.isFile() ||
         stat.size !== receipt.size ||
         stat.size < 1 ||
-        stat.size > 512 * 1024 * 1024
+        stat.size > MAX_CLOUD_ARCHIVE_BYTES
       )
         throw Error();
       const buffer = Buffer.alloc(65536);

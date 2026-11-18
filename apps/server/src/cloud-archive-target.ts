@@ -9,12 +9,12 @@ import { ARTIFACT_HEADER_BYTES } from "./artifact-cipher.js";
 import { encryptArtifactFile } from "./artifact-cipher-file.js";
 import { compressArchive } from "./backup-compression.js";
 import type { ScheduleClock } from "./backup-schedule.js";
+import { MAX_CLOUD_ARCHIVE_BYTES } from "./cloud-backup-limits.js";
 import type { CloudCaptureGrant, CloudCaptureMetadata } from "./cloud-backup.js";
 import type { CloudConnection, CloudConnectionStatus } from "./cloud-client.js";
 import { digestFile } from "./handover-capture.js";
 import "./errors.js";
 
-const MAX_BYTES = 2 * 1024 ** 3;
 const MAX_EXPANDED_BYTES = 4 * 1024 ** 3;
 interface Pending {
   id: string;
@@ -72,7 +72,7 @@ async function* boundedCompressedArchive(input: CloudArchiveInput) {
   let bytes = ARTIFACT_HEADER_BYTES;
   for await (const chunk of compressArchive(input.entries(), input.signal)) {
     bytes += chunk.byteLength;
-    if (bytes > MAX_BYTES) unavailable();
+    if (bytes > MAX_CLOUD_ARCHIVE_BYTES) unavailable();
     yield chunk;
   }
 }
@@ -113,7 +113,7 @@ async function readState(dir: string): Promise<State | undefined> {
         typeof p.month !== "string" ||
         !Number.isSafeInteger(m.size) ||
         m.size < 1 ||
-        m.size > MAX_BYTES ||
+        m.size > MAX_CLOUD_ARCHIVE_BYTES ||
         !/^([0-9a-f]{64})$/.test(m.digest) ||
         !Number.isFinite(Date.parse(m.capturedAt)) ||
         !["daily", "monthly"].includes(m.retention) ||
@@ -178,7 +178,10 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
     },
     async roomNeeded(plaintextBytes) {
       if (plaintextBytes > MAX_EXPANDED_BYTES) return 0;
-      const ciphertextBytes = Math.min(MAX_BYTES, plaintextBytes + ARTIFACT_HEADER_BYTES);
+      const ciphertextBytes = Math.min(
+        MAX_CLOUD_ARCHIVE_BYTES,
+        plaintextBytes + ARTIFACT_HEADER_BYTES,
+      );
       const status = await deps.connection?.status().catch(() => undefined);
       if (!cloudArchiveAvailable(status)) return 0;
       let waiting = 0;
@@ -264,7 +267,7 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
             );
             allowed();
             const { sha256, bytes } = await digestFile(file, signal);
-            if (bytes <= ARTIFACT_HEADER_BYTES || bytes > MAX_BYTES) unavailable();
+            if (bytes <= ARTIFACT_HEADER_BYTES || bytes > MAX_CLOUD_ARCHIVE_BYTES) unavailable();
             const handle = await open(file, "r+");
             try {
               await handle.sync();
