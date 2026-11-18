@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -505,6 +506,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
 
   it("an explicitly issued unpaid bill keeps 10% when collected after a VAT change without re-pricing; a second issued bill retains its parked VAT too", async () => {
     const v = await setupVenue("ticket_then_pay");
+    await seedPerson(suite.db, { id: OPERATOR, displayName: "Operator" });
     const before = await park(v, one(v, v.products.beer));
     const after = await park(v, one(v, v.products.beer));
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, before, OPERATOR);

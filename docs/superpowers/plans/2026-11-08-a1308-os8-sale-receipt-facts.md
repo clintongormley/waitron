@@ -22,8 +22,9 @@ change, and nothing in `fiscal-verifactu` reads these columns.
 README §5 U9 ("index names … drop the word"), U11. Rules: [slice rules](2026-11-08-a1308-slice-rules.md).
 
 **First line of the PR description:** "Every venue needs a core reset. Older database backups cannot
-be restored." Second line: "Owner lands this change to `sales`." The configuration-transfer test
-imported one encrypted format-49 export made on main at 540d0d47c8 after the rebuild, keeping its
+be restored." Second line: "Owner lands this change to `sales`." In disposable checkouts, the driver
+used `apps/server/src/configuration-transfer.test.ts`'s extras-and-options case to export an
+encrypted format-49 file on main at 540d0d47c8 and import it after the rebuild. The case checked the
 menu, prices, extras and options (watcher, 2026-11-18 14:21).
 
 **Current readers:** Department takings and closed-bill reports also read the saved department
