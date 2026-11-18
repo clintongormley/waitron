@@ -26,7 +26,6 @@ import {
   partyTables,
   parties,
   printJobs,
-  saleReceiptGuests,
   saleSettlements,
   sales,
   taxpayer,
@@ -2204,9 +2203,8 @@ describe("the guests its invoice's receipts print", () => {
   function guestsRowsOf(billId: string) {
     return inTx(venue, (tx) =>
       tx
-        .select({ guests: saleReceiptGuests.guestCount })
-        .from(saleReceiptGuests)
-        .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
+        .select({ guests: sales.receiptGuestCount })
+        .from(sales)
         .where(eq(sales.workingOrderId, billId)),
     );
   }

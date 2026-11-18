@@ -22,7 +22,6 @@ import {
   deleteDepartment,
   departments,
   departmentTransferRequests,
-  saleReceiptHeaders,
   readDepartmentTransfer,
   setProfileServiceScope,
   listSentDepartmentTransfers,
@@ -108,7 +107,6 @@ it("deleted department reprints its original receipt configuration and frozen he
     orders: await tx.select().from(workingOrders),
 
     lineContexts: await tx.select().from(workingOrderLines),
-    headers: await tx.select().from(saleReceiptHeaders),
     receipt: await tx
       .select({
         departmentId: departments.id,
@@ -215,7 +213,6 @@ it("deleted department reprints its original receipt configuration and frozen he
     orders: await tx.select().from(workingOrders),
 
     lineContexts: await tx.select().from(workingOrderLines),
-    headers: await tx.select().from(saleReceiptHeaders),
     receipt: await tx
       .select({
         departmentId: departments.id,

@@ -1,3 +1,4 @@
+import type { RecordSaleInput } from "@waitron/core";
 import { payments } from "@waitron/payments";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
@@ -42,11 +43,7 @@ import {
 import { applyAdjustment } from "./adjustments-apply.js";
 
 import { completeBillPayment } from "./bill-payments.js";
-import {
-  departments,
-  saleReceiptHeaders,
-  setDepartmentSalePolicyField,
-} from "@waitron/venue-service";
+import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
 import { buildReceiptDocument } from "./receipt-document.js";
 import { formatAmount } from "./receipt-money.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
@@ -83,7 +80,12 @@ function none() {
     null,
   ).makeBackend({ db: suite.db, clock, environment: "preproduction" });
 }
-async function issue(backend: FiscalBackend, full = true, locale = "es-ES") {
+async function issue(
+  backend: FiscalBackend,
+  full = true,
+  locale = "es-ES",
+  receipt?: Omit<NonNullable<RecordSaleInput["receipt"]>, "guestCount">,
+) {
   return withTransaction(suite.db, async (tx) => {
     await tx.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
     const [series] = await tx
@@ -91,6 +93,7 @@ async function issue(backend: FiscalBackend, full = true, locale = "es-ES") {
       .from(invoiceSeries)
       .where(eq(invoiceSeries.purpose, full ? "full" : "standard"));
     return recordSale(tx, backend, {
+      ...(receipt === undefined ? {} : { receipt: { ...receipt, guestCount: null } }),
       operationDescription: "Restaurante",
       origin: jobOrigin("operator_script"),
       nodeId: venue.cfg.nodeId,
@@ -545,7 +548,6 @@ describe("stored invoice document projection", () => {
 describe("current department A4 document", () => {
   it("composes a disabled recorded department with live defaults and skips the current address read", async () => {
     const backend = none();
-    const issued = await issue(backend);
     const [department] = await suite.db
       .insert(departments)
       .values({
@@ -554,11 +556,10 @@ describe("current department A4 document", () => {
         active: false,
       })
       .returning();
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: issued.saleId,
+    const issued = await issue(backend, true, "es-ES", {
       departmentId: department!.id,
       tradingName: "Recorded dining",
-      printTradingName: true,
+      printsTradingName: true,
     });
 
     {
@@ -632,16 +633,14 @@ describe("A4 current optional source matrix", () => {
   );
   it("selects an explicit department picture and never substitutes a global picture for a corrupt explicit one", async () => {
     const backend = none();
-    const issued = await issue(backend);
     const [department] = await suite.db
       .insert(departments)
       .values({ name: "A4 explicit", tradingName: "A4 explicit" })
       .returning();
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: issued.saleId,
+    const issued = await issue(backend, true, "es-ES", {
       departmentId: department!.id,
       tradingName: "Saved explicit",
-      printTradingName: true,
+      printsTradingName: true,
     });
 
     const own = { logo: `${"c".repeat(64)}.png` };
@@ -673,16 +672,14 @@ describe("A4 current optional source matrix", () => {
   });
   it("resolves only the printed and current department languages", async () => {
     const backend = none();
-    const issued = await issue(backend, true, "ca-ES");
     const [department] = await suite.db
       .insert(departments)
       .values({ name: "A4 language", tradingName: "A4 language" })
       .returning();
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: issued.saleId,
+    const issued = await issue(backend, true, "ca-ES", {
       departmentId: department!.id,
       tradingName: "Saved language",
-      printTradingName: true,
+      printsTradingName: true,
     });
 
     {
@@ -712,12 +709,10 @@ describe("A4 current optional source matrix", () => {
 describe("A4 recorded null department", () => {
   it("prints no optional decoration or stray trading name in an explicit null header", async () => {
     const backend = none();
-    const issued = await issue(backend);
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: issued.saleId,
+    const issued = await issue(backend, true, "es-ES", {
       departmentId: null,
       tradingName: "Stray department name",
-      printTradingName: true,
+      printsTradingName: true,
     });
     const document = await read(backend, issued.saleId);
     expect(document.receiptHeader).toBeUndefined();
@@ -733,7 +728,6 @@ describe("A4 recorded null department", () => {
 describe("A4 filed language outside the current pack choices", () => {
   it.each(["en-GB", "fr-FR"])("retains filed %s department text", async (printed) => {
     const backend = none();
-    const issued = await issue(backend, true, printed);
     const [department] = await suite.db
       .insert(departments)
       .values({
@@ -741,11 +735,10 @@ describe("A4 filed language outside the current pack choices", () => {
         tradingName: "Filed language",
       })
       .returning();
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: issued.saleId,
+    const issued = await issue(backend, true, printed, {
       departmentId: department!.id,
       tradingName: "Saved language",
-      printTradingName: true,
+      printsTradingName: true,
     });
     await seedDepartmentReceipt(suite.db, department!.id, {
       headerSubtitle: { [printed]: "Printed subtitle", "es-ES": "Current subtitle" },
@@ -846,7 +839,6 @@ describe("A4 invoice of a sale filed in a chosen receipt language", () => {
 describe("A4 department-only decoration", () => {
   it("reads no global receipt table and retains the recorded department after deactivation", async () => {
     const backend = none();
-    const issued = await issue(backend);
     const [department] = await suite.db
       .insert(departments)
       .values({
@@ -854,11 +846,10 @@ describe("A4 department-only decoration", () => {
         tradingName: "Mutable trading name",
       })
       .returning();
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: issued.saleId,
+    const issued = await issue(backend, true, "es-ES", {
       departmentId: department!.id,
       tradingName: "Recorded brand",
-      printTradingName: true,
+      printsTradingName: true,
     });
     await seedPhotoMetadata(suite.db, { filename: `${"d".repeat(64)}.png`, names: {} });
     await seedDepartmentReceipt(
@@ -980,12 +971,10 @@ describe("the theme's logo on the A4 invoice", () => {
   }
 
   async function saleIn(backend: FiscalBackend, departmentId: string | null): Promise<string> {
-    const issued = await issue(backend);
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: issued.saleId,
+    const issued = await issue(backend, true, "es-ES", {
       departmentId,
       tradingName: "Recorded dining",
-      printTradingName: true,
+      printsTradingName: true,
     });
     return issued.saleId;
   }

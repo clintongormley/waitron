@@ -188,7 +188,7 @@ it("a zone moved before capture selects the same current department for descript
   if (result.outcome !== "captured") throw new Error("Expected a captured sale");
   expect(
     venue.db.all<{ departmentId: string }>(
-      sql`select h.department_id as departmentId from sale_receipt_headers h join sales s on s.id = h.sale_id where s.working_order_id = ${id}`,
+      sql`select receipt_department_id as departmentId from sales where working_order_id = ${id}`,
     ),
   ).toEqual([{ departmentId: next }]);
   expect(records(id)).toEqual([{ description: "Terrace drinks" }]);

@@ -488,17 +488,10 @@ Hardware and inbox checks to complete in the owner session.
   this change, is listed: a hidden paired printer is the fault the owner reported, while a listed
   non-printer only adds a row. Show all devices still lists every device.
 
-- **The guest count is `guestCount` (A988, 2026-10-27).** A party's or a receipt's number of
-  guests is `guestCount` in every till request and in the `sale_receipt_guests` drizzle
-  property, and Split a table's two counts are `guestCounts.staying` and
-  `guestCounts.leaving`. The `sale_receipt_guests` column is `guest_count` too (A1164, owner
-  2026-10-28); the frozen Madrid export still says `guests`, so
-  `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` maps that one renamed column
-  (`RENAMED_COLUMNS`) on the export's side before comparing, and refuses an entry it does not
-  use. Route paths
-  (`PUT /api/parties/:id/guests`), file and table names, the printed receipt's guests line
-  (`ReceiptDocument.guests`), and many function, property and event names (for example
-  `readReceiptGuests`, `recordReceiptGuests`) keep the word.
+- **The guest count is `guestCount` (A988, 2026-10-27).** Till requests use `guestCount` and Split a
+  table uses `guestCounts.staying` and `guestCounts.leaving`. An issued sale stores its receipt count
+  in `sales.receipt_guest_count`. The route `PUT /api/parties/:id/guests` and the printed document
+  field `ReceiptDocument.guests` keep their names.
 
 - **Sample wording (owner, 2026-10-28, A965).** The table and product names follow the sample receipt language. English uses “Outside 6” and “Coffee and toast”; Spanish uses “Terraza 6” and “Café y tostada”. The table name does not repeat the table caption. The synthetic number remains.
 
@@ -569,7 +562,7 @@ Hardware and inbox checks to complete in the owner session.
 - **The guests line is read when the receipt is built, not when the sale is recorded (A663 Part
   3a), except on a simplified receipt since Part 3b.** Since Part 3b the count a simplified receipt
   prints is fixed when the sale is recorded: the number chosen on the payment screen, or the
-  default at that moment, stored once per sale (`sale_receipt_guests`, read by `readPrintedGuests`,
+  default at that moment, stored once per sale (`sales.receipt_guest_count`, read by `readPrintedGuests`,
   `apps/server/src/receipt-guests.ts`). Every later copy of that receipt prints the same number;
   the owner, 2026-10-16: «it should remain the same otherwise it isn't a true duplicate». The rule
   below now holds only for a full invoice and for a sale recorded before Part 3b. There, a later

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4f9207c1-3647-457d-894d-3195943ed43d",
+  "id": "4e3cf8f5-6f93-4433-b3bc-b037162cd40e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5875,56 +5875,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "sale_receipt_guests": {
-      "name": "sale_receipt_guests",
-      "columns": {
-        "sale_id": {
-          "name": "sale_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "guest_count": {
-          "name": "guest_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "sale_receipt_guests_sale_fk": {
-          "name": "sale_receipt_guests_sale_fk",
-          "tableFrom": "sale_receipt_guests",
-          "tableTo": "sales",
-          "columnsFrom": [
-            "sale_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "sale_receipt_guests_guest_count_ck": {
-          "name": "sale_receipt_guests_guest_count_ck",
-          "value": "\"sale_receipt_guests\".\"guest_count\" is null or (typeof(\"sale_receipt_guests\".\"guest_count\") = 'integer' and \"sale_receipt_guests\".\"guest_count\" between 1 and 999)"
-        }
-      }
-    },
     "invoice_pdf_downloads": {
       "name": "invoice_pdf_downloads",
       "columns": {
@@ -8925,6 +8875,34 @@
           "notNull": false,
           "autoincrement": false
         },
+        "receipt_guest_count": {
+          "name": "receipt_guest_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "receipt_department_id": {
+          "name": "receipt_department_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "receipt_trading_name": {
+          "name": "receipt_trading_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "receipt_prints_trading_name": {
+          "name": "receipt_prints_trading_name",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "working_order_id": {
           "name": "working_order_id",
           "type": "text",
@@ -8934,8 +8912,8 @@
         }
       },
       "indexes": {
-        "sales_tenant_issued_idx": {
-          "name": "sales_tenant_issued_idx",
+        "sales_issued_idx": {
+          "name": "sales_issued_idx",
           "columns": [
             "issued_at"
           ],
@@ -9044,6 +9022,45 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "sales_authorized_by_fk": {
+          "name": "sales_authorized_by_fk",
+          "tableFrom": "sales",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "authorized_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "sales_operator_id_fk": {
+          "name": "sales_operator_id_fk",
+          "tableFrom": "sales",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "operator_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "sales_receipt_department_fk": {
+          "name": "sales_receipt_department_fk",
+          "tableFrom": "sales",
+          "tableTo": "departments",
+          "columnsFrom": [
+            "receipt_department_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -9080,6 +9097,18 @@
         "sales_fiscal_state_ck": {
           "name": "sales_fiscal_state_ck",
           "value": "\"sales\".\"fiscal_state\" in ('recorded', 'not_applicable')"
+        },
+        "sales_receipt_guest_count_ck": {
+          "name": "sales_receipt_guest_count_ck",
+          "value": "\"sales\".\"receipt_guest_count\" is null or (typeof(\"sales\".\"receipt_guest_count\") = 'integer' and \"sales\".\"receipt_guest_count\" between 1 and 999)"
+        },
+        "sales_receipt_header_ck": {
+          "name": "sales_receipt_header_ck",
+          "value": "(\"sales\".\"receipt_trading_name\" is null) = (\"sales\".\"receipt_prints_trading_name\" is null)\n        and (\"sales\".\"receipt_department_id\" is null or \"sales\".\"receipt_trading_name\" is not null)"
+        },
+        "sales_receipt_guest_count_recorded_ck": {
+          "name": "sales_receipt_guest_count_recorded_ck",
+          "value": "\"sales\".\"receipt_guest_count\" is null or \"sales\".\"receipt_trading_name\" is not null"
         },
         "sales_source_ck": {
           "name": "sales_source_ck",
@@ -9286,6 +9315,19 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "sale_voids_voided_by_fk": {
+          "name": "sale_voids_voided_by_fk",
+          "tableFrom": "sale_voids",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "voided_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -9428,6 +9470,32 @@
           "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "unpaid_departures_recorded_by_fk": {
+          "name": "unpaid_departures_recorded_by_fk",
+          "tableFrom": "unpaid_departures",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "recorded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "unpaid_departures_authorized_by_fk": {
+          "name": "unpaid_departures_authorized_by_fk",
+          "tableFrom": "unpaid_departures",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "authorized_by"
           ],
           "columnsTo": [
             "id"
@@ -15285,71 +15353,6 @@
           "value": "\"departments\".\"dining_starts_as\" in ('eat_in', 'takeaway')"
         }
       }
-    },
-    "sale_receipt_headers": {
-      "name": "sale_receipt_headers",
-      "columns": {
-        "sale_id": {
-          "name": "sale_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "department_id": {
-          "name": "department_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "trading_name": {
-          "name": "trading_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "print_trading_name": {
-          "name": "print_trading_name",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "sale_receipt_headers_sale_fk": {
-          "name": "sale_receipt_headers_sale_fk",
-          "tableFrom": "sale_receipt_headers",
-          "tableTo": "sales",
-          "columnsFrom": [
-            "sale_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "sale_receipt_headers_department_fk": {
-          "name": "sale_receipt_headers_department_fk",
-          "tableFrom": "sale_receipt_headers",
-          "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "kitchen_notices": {
       "name": "kitchen_notices",

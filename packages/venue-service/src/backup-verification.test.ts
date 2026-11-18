@@ -35,16 +35,7 @@ beforeEach(() => {
       sql`insert into nodes (id,name,created_at) values ('source','Source','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into invoice_series (id,node_id,code,next_number) values ('series','source','TEST',2)`,
-    );
-    db.run(
-      sql`insert into sales (id,source,series_id,node_id,invoice_number,issued_at,issued_offset_minutes,total,vat_breakdown,locale,invoice_locales,fiscal_backend,fiscal_state) values ('sale','operator_script','series','source',1,'2026-10-20T08:00:00.000Z',0,100,'[]','en','["en"]','none','not_applicable')`,
-    );
-    db.run(
       sql`insert into departments (id, name, trading_name, created_at) values ('department', 'Current department', 'Current business', '2026-10-20T08:00:00.000Z'),('other','Other department','Other business','2026-10-20T08:00:00.000Z')`,
-    );
-    db.run(
-      sql`insert into sale_receipt_headers (sale_id,department_id,trading_name,print_trading_name) values ('sale','department','Issued business',1)`,
     );
     db.run(
       sql`insert into floor_zones (id,name,department_id,created_at) values ('zone','Room','department','2026-10-20T08:00:00.000Z')`,
@@ -123,7 +114,7 @@ function hideTable(table: string) {
 }
 
 describe("service backup evidence", () => {
-  it("retains issued headers and live and staged service rows", async () => {
+  it("retains live and staged service rows", async () => {
     expect(await run()).toEqual(passed);
   });
   it("declares every service table and no extra obligations", () => {
@@ -131,7 +122,7 @@ describe("service backup evidence", () => {
     expect(owner.data).toEqual({
       kind: "custom",
       tables: VENUE_SERVICE_CLASSIFICATION.map((c) => c.table),
-      immutableTables: ["sale_receipt_headers"],
+      immutableTables: [],
       checks: ["data"],
     });
     expect([
@@ -144,10 +135,6 @@ describe("service backup evidence", () => {
     ]).toEqual([[], [], [], null, "absent_tables_and_entries", "empty_after_migration"]);
   });
   it.each([
-    "update sale_receipt_headers set trading_name='Current business'",
-    "update sale_receipt_headers set print_trading_name=0",
-    "update sale_receipt_headers set department_id='other'",
-    "delete from sale_receipt_headers",
     "update departments set trading_name='Changed business'",
     "update menu_periods set name='Changed period'",
   ])("never replaces historical context with current config: %s", async (statement) => {
@@ -155,32 +142,27 @@ describe("service backup evidence", () => {
     await corrupt(restored.db, statement);
     expect((await run()).status).toBe("invalid");
   });
-  it.each([
-    "update sale_receipt_headers set sale_id='missing'",
-    "update menu_periods set menu_id='missing'",
-  ])("checks live and staged service references on both copies: %s", async (statement) => {
-    expect(await run()).toEqual(passed);
-    for (const db of [original.db, restored.db]) await corrupt(db, statement);
-    expect((await run()).status).toBe("invalid");
-  });
+  it.each(["update menu_periods set menu_id='missing'"])(
+    "checks live and staged service references on both copies: %s",
+    async (statement) => {
+      expect(await run()).toEqual(passed);
+      for (const db of [original.db, restored.db]) await corrupt(db, statement);
+      expect((await run()).status).toBe("invalid");
+    },
+  );
   it("checks source references separately from the migrated copy", async () => {
     expect(await run()).toEqual(passed);
-    expect((await run({ wrap: hideTable("sales") })).status).toBe("invalid");
-  });
-  it("allows a nullable historic department and empty nullable references", async () => {
-    for (const db of [original.db, restored.db])
-      await corrupt(db, "update sale_receipt_headers set department_id=null");
-    expect(await run()).toEqual(passed);
+    expect((await run({ wrap: hideTable("menus") })).status).toBe("invalid");
   });
   it("checks migrated references independently", async () => {
     expect(await run()).toEqual(passed);
-    expect((await run({ wrapAfter: hideTable("sales") })).status).toBe("invalid");
+    expect((await run({ wrapAfter: hideTable("menus") })).status).toBe("invalid");
   });
-  it("zero schema cannot hide issued evidence", async () => {
+  it("zero schema cannot hide service data", async () => {
     expect((await run({ sourceSchema: 0 })).status).toBe("invalid");
   });
   it("accepts empty target-only service but refuses invented state", async () => {
-    for (const table of ["menu_periods", "sale_receipt_headers", "departments"])
+    for (const table of ["menu_periods", "departments"])
       await corrupt(restored.db, `delete from "${table}"`);
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
     restored.db.run(sql`insert into special_days (id,name) values ('invented','Invented day')`);

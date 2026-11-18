@@ -15,7 +15,6 @@ import {
   printJobs,
   receiptReprints,
   saleLines,
-  saleReceiptGuests,
   sales,
   saleSettlements,
   saleSubstitutions,
@@ -216,8 +215,9 @@ it("reprints a duplicate document with an audit row and no drawer or fiscal chan
   expect(await snapshot()).toEqual(before);
 });
 it("shows the saved guests in the preview and on the paper copy", async () => {
-  const id = await billlessSale(venue);
-  await inTx(venue, (tx) => tx.insert(saleReceiptGuests).values({ saleId: id, guestCount: 5 }));
+  const id = await billlessSale(venue, {
+    receipt: { guestCount: 5, departmentId: null, tradingName: "", printsTradingName: false },
+  });
   const answer = await get(id);
   expect(answer.status).toBe(200);
   expect(answer.json).toMatchObject({

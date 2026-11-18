@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, departments, saleReceiptHeaders, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, departments, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedBillPayment,
@@ -38,17 +38,16 @@ it("combines frozen and live nodes without reassigning frozen payments after inv
   );
   const sold = await seedOpenOrder(suite.db, venue, 2);
   const first = await seedSale(suite.db, venue, {
+    receipt: {
+      receiptDepartmentId: department!.id,
+      receiptTradingName: "Dining",
+      receiptPrintsTradingName: true,
+    },
     invoiceNumber: 1,
     workingOrderId: sold.orderId,
     issuedAt: at,
     total: "11.00",
     lines: [{ vatRate: "10.00", lineTotal: "10.00" }],
-  });
-  await suite.db.insert(saleReceiptHeaders).values({
-    saleId: first,
-    departmentId: department!.id,
-    tradingName: "Dining",
-    printTradingName: true,
   });
   await seedTender(
     suite.db,
@@ -67,32 +66,30 @@ it("combines frozen and live nodes without reassigning frozen payments after inv
     }),
   );
 
-  const invoiced = await seedSale(suite.db, venue, {
+  await seedSale(suite.db, venue, {
+    receipt: {
+      receiptDepartmentId: department!.id,
+      receiptTradingName: "Dining",
+      receiptPrintsTradingName: true,
+    },
     invoiceNumber: 2,
     workingOrderId: pending.orderId,
     issuedAt: "2026-08-05T10:00:00.000Z",
     total: "100.00",
     lines: [{ vatRate: "0.00", lineTotal: "100.00" }],
   });
-  await suite.db.insert(saleReceiptHeaders).values({
-    saleId: invoiced,
-    departmentId: department!.id,
-    tradingName: "Dining",
-    printTradingName: true,
-  });
   const otherBill = await seedOpenOrder(suite.db, other, 3);
   const second = await seedSale(suite.db, other, {
+    receipt: {
+      receiptDepartmentId: department!.id,
+      receiptTradingName: "Dining",
+      receiptPrintsTradingName: true,
+    },
     invoiceNumber: 1,
     workingOrderId: otherBill.orderId,
     issuedAt: at,
     total: "22.00",
     lines: [{ vatRate: "10.00", lineTotal: "20.00" }],
-  });
-  await suite.db.insert(saleReceiptHeaders).values({
-    saleId: second,
-    departmentId: department!.id,
-    tradingName: "Dining",
-    printTradingName: true,
   });
   await seedTender(
     suite.db,
@@ -117,16 +114,18 @@ it("combines frozen and live nodes without reassigning frozen payments after inv
     .values({ id: "00000000-0000-4000-8000-000000000001", name: "Bar", tradingName: "Bar" })
     .returning();
   const settledLater = await seedOpenOrder(suite.db, other, 4);
-  const earlier = await seedSale(suite.db, other, {
+  await seedSale(suite.db, other, {
+    receipt: {
+      receiptDepartmentId: bar!.id,
+      receiptTradingName: "Bar",
+      receiptPrintsTradingName: true,
+    },
     invoiceNumber: 3,
     workingOrderId: settledLater.orderId,
     issuedAt: "2026-08-03T10:00:00.000Z",
     total: "1.00",
     lines: [{ vatRate: "0.00", lineTotal: "1.00" }],
   });
-  await suite.db
-    .insert(saleReceiptHeaders)
-    .values({ saleId: earlier, departmentId: bar!.id, tradingName: "Bar", printTradingName: true });
   await settleOrder(suite.db, settledLater.orderId, at);
   const read = () =>
     withTransaction(suite.db, (tx) =>

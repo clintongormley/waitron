@@ -20,10 +20,12 @@ import {
 } from "./columns.js";
 import { billPayments } from "./bill-payments.js";
 import { devices } from "./devices.js";
+import { persons } from "./identity/persons.js";
 import { nodes } from "./nodes.js";
 import { originChecks, saleSourceColumn } from "./origin.js";
 import { workingOrders } from "./orders.js";
 import { invoiceSeries } from "./series.js";
+import { departments } from "./venue-service/service.js";
 
 /**
  * The classification of a sale AT ISSUANCE, written once and never updated.
@@ -113,10 +115,13 @@ export const sales = table(
     counterpartyAddress: label("counterparty_address"),
     taxpayerDomicile: label("taxpayer_domicile"),
     // The person who AUTHORISED this row's creation, recorded on privileged writes and NULL on an
-    // ordinary sale. No key yet.
+    // ordinary sale.
     authorizedBy: id("authorized_by"),
-    // The operator who rang this sale, from their open session. Plain uuid, no FK, as above.
     operatorId: id("operator_id"),
+    receiptGuestCount: count("receipt_guest_count"),
+    receiptDepartmentId: id("receipt_department_id"),
+    receiptTradingName: label("receipt_trading_name"),
+    receiptPrintsTradingName: flag("receipt_prints_trading_name"),
     // The parked working order this sale was FILED from, or NULL for a walk-up sale rung with no
     // draft. This is the SALE-IDEMPOTENCY KEY: `sales_working_order_id_key` below makes it unique,
     // so a retrieved order submitted twice (double-tap, two registers racing) files exactly one
@@ -125,7 +130,7 @@ export const sales = table(
   },
   (t) => [
     unique("sales_series_invoice_number_key").on(t.seriesId, t.invoiceNumber),
-    index("sales_tenant_issued_idx").on(t.issuedAt),
+    index("sales_issued_idx").on(t.issuedAt),
     index("sales_fiscal_state_idx").on(t.fiscalState),
     // NOT unique: a sale may be corrected more than once by successive corrective invoices.
     foreignKey({
@@ -165,6 +170,34 @@ export const sales = table(
     check("sales_locale_member_ck", sql`instr(${t.invoiceLocales}, '"' || ${t.locale} || '"') > 0`),
     check("sales_issued_offset_ck", sql`${t.issuedOffsetMinutes} between -840 and 840`),
     check("sales_fiscal_state_ck", enumCheck(t.fiscalState)),
+    foreignKey({
+      columns: [t.authorizedBy],
+      foreignColumns: [persons.id],
+      name: "sales_authorized_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.operatorId],
+      foreignColumns: [persons.id],
+      name: "sales_operator_id_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.receiptDepartmentId],
+      foreignColumns: [departments.id],
+      name: "sales_receipt_department_fk",
+    }),
+    check(
+      "sales_receipt_guest_count_ck",
+      sql`${t.receiptGuestCount} is null or (typeof(${t.receiptGuestCount}) = 'integer' and ${t.receiptGuestCount} between 1 and 999)`,
+    ),
+    check(
+      "sales_receipt_header_ck",
+      sql`(${t.receiptTradingName} is null) = (${t.receiptPrintsTradingName} is null)
+        and (${t.receiptDepartmentId} is null or ${t.receiptTradingName} is not null)`,
+    ),
+    check(
+      "sales_receipt_guest_count_recorded_ck",
+      sql`${t.receiptGuestCount} is null or ${t.receiptTradingName} is not null`,
+    ),
     ...originChecks("sales", t.source, t.deviceId),
   ],
 );

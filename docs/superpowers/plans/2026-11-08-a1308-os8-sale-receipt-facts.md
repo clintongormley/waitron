@@ -3,7 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **OWNER LANDS THIS PULL REQUEST** (rules §6: it changes `sales`). It holds nothing that does not
-> change `sales` or its two ledger neighbours, so the lane can land other PRs while it waits.
+> change `sales`, its two ledger neighbours or the return of originals that depend on them.
+> The lane can land independent pull requests while this one waits.
 
 **Goal:** Fold `sale_receipt_guests` and `sale_receipt_headers` into `sales` as four columns fixed when
 the sale is written, in `recordSale`'s one insert; give `sales`, `sale_voids` and `unpaid_departures`
@@ -13,7 +14,7 @@ their person keys; drop "tenant" from `sales`' issue-time index.
 `receipt`; `recordSale` writes it through `insertSale` (`packages/core/src/insert-sale.ts:18`). The
 five sale paths compute the receipt facts **before** `recordSale` instead of writing two rows after it.
 The fiscal backend's input (`SaleForFiscalRecord`, `packages/fiscal/src/backend.ts:487`) does not
-change, and nothing in `fiscal-verifactu` reads these columns.
+change. The fiscal handover return uses the new keys to retain the original references.
 
 **Tech stack:** TypeScript, Drizzle ORM on `node:sqlite`, Vitest.
 
@@ -21,10 +22,44 @@ change, and nothing in `fiscal-verifactu` reads these columns.
 (`voided_by` key), §4 (`sale_receipt_guests`, `sale_receipt_headers` → merge into sales), §5 (sales);
 README §5 U9 ("index names … drop the word"), U11. Rules: [slice rules](2026-11-08-a1308-slice-rules.md).
 
-**First line of the PR description:** "Every venue is reset: core; backups and exports from before
-this cannot be restored or imported." Second line: "Owner lands: changes `sales`."
+**First line of the PR description:** "Every venue needs a core reset. Older database backups cannot
+be restored." Second line: "Owner lands this change to `sales`." In disposable checkouts, the driver
+used `apps/server/src/configuration-transfer.test.ts`'s extras-and-options case to export an
+encrypted format-49 file on main at 540d0d47c8 and import it after the rebuild. The case checked the
+menu, prices, extras and options (watcher, 2026-11-18 14:21).
+
+**Current readers:** Department takings and closed-bill reports also read the saved department
+(#2876). Move those two queries to `sales.receipt_department_id` and keep the existing report checks.
 
 ---
+
+
+## Returning fiscal originals
+
+The watcher cleared this repair inside os8 on 18 November at 15:06, after Claude's plan read.
+The same changeset must return fiscal originals when the sending box added staff or departments
+after the receiving box's copy. The owner said “Show them as suspended staff” / “ok” at 14:47,
+recorded by the watcher in Lane H's questions. Recreate staff under their real display names,
+visible under Suspended and All and eligible for the usual reactivation. Keep existing people and
+departments as they are.
+
+Limit this change to `handover-return.ts` and its test in `packages/fiscal-verifactu/src/`.
+Keep the existing transaction, signed batch, row bounds and selection for sales and voids.
+Carry only the ids and names of referenced people (`persons.id`, `display_name`) and departments
+(`departments.id`, `name`). A missing person takes the sent id and display name, folds the name
+with `foldForUniqueness` and starts suspended with no credentials, roles or sessions. A missing
+department takes the sent id and name, the sale's recorded `receipt_trading_name` and inactive,
+non-default flags. Both rows take the receiving time for `created_at`, with other fields at
+their defaults or null. Build those rows only for selected sales and voids that need them.
+Use the existing savepoint pattern for a void so a refused void leaves no new person.
+
+Test the real append, batch and receive path, including the restored names, unchanged original
+hashes, replay and a refused void. Keep the matched main control as a PR receipt. Run a later
+correction on a returned sale whose department had to be restored. The watcher cleared finishing
+os8 at 15:19 on 18 November after the €123.45 correction probe refused at the missing-line check
+on os8 and on main with a department supplied by hand. The missing lines stay with A1342.
+Run the fiscal golden and immutability suites unedited. The watcher cleared about 1,000 handwritten
+added lines for the entire slice, including the return fix and its test.
 
 ## What it builds
 
@@ -134,7 +169,7 @@ immutable (`backup-verification.ts:10`): `sales` is checked as immutable by core
   `packages/provisioning/src/fiscal-readiness-runner.ts:112`, and the demo seed, `apps/server/scripts/demo-seed/seed-sales.ts:300`,
   are the likely places). Fixtures create the person; a product writer that cannot is a stop.
 - Any file under `packages/fiscal*` or `packages/core/src` other than `record-sale.ts` and
-  `insert-sale.ts` needs a change.
+  `insert-sale.ts` needs a change, except the two handover-return files above.
 
 ## Needs
 

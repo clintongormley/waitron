@@ -308,7 +308,7 @@ import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./trading-context.js";
-import { recordSaleReceiptFacts } from "./receipt-guests.js";
+import { saleReceiptFacts } from "./receipt-guests.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket, resolveInvoicePrinter } from "./receipt-print.js";
 import {
@@ -7475,6 +7475,7 @@ export async function issueUnpaidInvoice(
     orderId: id,
   });
   const { saleId, fiscal } = await recordSale(tx, backend, {
+    receipt: await saleReceiptFacts(tx, id, selected.sale.counterparty, undefined),
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     ...selected.sale,
@@ -7490,11 +7491,6 @@ export async function issueUnpaidInvoice(
   });
   await linkSaleDishes(tx, saleId, invoice.identities);
   await linkBillCardPaymentsToSale(tx, id, saleId);
-  await recordSaleReceiptFacts(
-    tx,
-    { saleId, workingOrderId: id, counterparty: selected.sale.counterparty },
-    undefined,
-  );
   const order = await readReceiptOrder(tx, id, { atIssuance: true });
   await tx
     .update(workingOrders)

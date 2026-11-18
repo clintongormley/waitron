@@ -451,6 +451,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
 
   it("an invoice issued on the eve keeps its rate at collection; one issued on New Year's Day takes the new rate", async () => {
     const v = await setupVenue("ticket_then_pay");
+    await seedPerson(suite.db, { id: OPERATOR, displayName: "Operator" });
     at(EVE);
     const before = await park(v, one(v, v.products.beer));
     const after = await park(v, one(v, v.products.beer));

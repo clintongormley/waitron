@@ -13,7 +13,7 @@ import type {
 /** Bill-derived tenders and provider refund evidence are excluded: their payment/refund ledgers already count the movement.
  * Zero method lines stay: a drawer that moved cash still needs counting. */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput) {
-  // Unique working-order, receipt-header and department keys keep these joins from multiplying money.
+  // Unique working-order, sale and department keys keep these joins from multiplying money.
   const { rows } = await tx.execute<{
     source: string;
     device_id: string | null;
@@ -24,14 +24,14 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput) {
     amount: string;
     tip: string;
   }>(sql`
-    select m.source, m.device_id, m.method, h.department_id, d.name as department_name, d.active,
+    select m.source, m.device_id, m.method, h.receipt_department_id as department_id, d.name as department_name, d.active,
       cast(sum(m.amount) as text) as amount, cast(sum(m.tip) as text) as tip
     from (${cashMovements(input)}) m
     left join sales s on s.working_order_id = m.working_order_id
-    left join sale_receipt_headers h on h.sale_id = coalesce(m.sale_id, s.id)
-    left join departments d on d.id = h.department_id
-    group by m.source, m.device_id, m.method, h.department_id
-    order by m.source, m.device_id, m.method, h.department_id
+    left join sales h on h.id = coalesce(m.sale_id, s.id)
+    left join departments d on d.id = h.receipt_department_id
+    group by m.source, m.device_id, m.method, h.receipt_department_id
+    order by m.source, m.device_id, m.method, h.receipt_department_id
   `);
   const origins = new Map<string, Omit<OriginCashUp, "cashTakings">>();
   const departments = new Map<string | null, DepartmentTakings>();

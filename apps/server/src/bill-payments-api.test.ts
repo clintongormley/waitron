@@ -1784,7 +1784,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       department_id: string;
       trading_name: string;
     }>(
-      sql`select department_id, trading_name from sale_receipt_headers where sale_id = ${sale!.id}`,
+      sql`select receipt_department_id as department_id, receipt_trading_name as trading_name from sales where id = ${sale!.id}`,
     );
     expect(snapshot).toEqual({
       department_id: destination.departmentId,
@@ -1861,7 +1861,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const [sale] = await saleOf(billId);
     expect(
       suite.db.all<{ department_id: string }>(sql`
-      select department_id from sale_receipt_headers where sale_id = ${sale!.id}`),
+      select receipt_department_id as department_id from sales where id = ${sale!.id}`),
     ).toEqual([{ department_id: destination.departmentId }]);
   });
 
@@ -1881,7 +1881,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       });
       const [sale] = await saleOf(billId);
       const [snapshot] = suite.db.all<{ trading_name: string }>(sql`
-        select trading_name from sale_receipt_headers where sale_id = ${sale!.id}`);
+        select receipt_trading_name as trading_name from sales where id = ${sale!.id}`);
       expect(snapshot).toEqual({ trading_name: "Blue terrace" });
     } finally {
       await suite.db.execute(sql`
@@ -1916,8 +1916,8 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         department_id: string;
         trading_name: string;
         print_trading_name: number;
-      }>(sql`select department_id, trading_name, print_trading_name
-             from sale_receipt_headers where sale_id = ${sale!.id}`);
+      }>(sql`select receipt_department_id as department_id, receipt_trading_name as trading_name, receipt_prints_trading_name as print_trading_name
+             from sales where id = ${sale!.id}`);
       expect(snapshot).toEqual({
         department_id: department!.id,
         trading_name: "Blue terrace",

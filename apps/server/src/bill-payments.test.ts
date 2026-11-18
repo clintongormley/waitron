@@ -23,7 +23,6 @@ import {
   captureError,
   personStaffRoles,
   printJobs,
-  saleReceiptGuests,
   saleSettlements,
   sales,
   invoiceSeries,
@@ -846,9 +845,8 @@ describe("the guests a manager's confirmation stores", () => {
     expect(
       await inTx((tx) =>
         tx
-          .select({ guests: saleReceiptGuests.guestCount })
-          .from(saleReceiptGuests)
-          .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
+          .select({ guests: sales.receiptGuestCount })
+          .from(sales)
           .where(eq(sales.workingOrderId, billId)),
       ),
     ).toEqual([{ guests: 4 }]);

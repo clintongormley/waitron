@@ -3,6 +3,7 @@ import type { ReturnDiscrepancy } from "@waitron/module";
 import { sql } from "drizzle-orm";
 import {
   COVERAGE_REFUSAL,
+  foldForUniqueness,
   POST_SETTLEMENT_REFUSAL,
   refusalOn,
   triggerRaised,
@@ -22,6 +23,8 @@ export interface ReturnedOriginals {
   records: ReturnRow[];
   sales: ReturnRow[];
   devices: ReturnRow[];
+  staff: ReturnRow[];
+  departments: ReturnRow[];
   heads: ReturnRow[];
   deliveries: ReturnRow[];
   tenders: ReturnRow[];
@@ -31,6 +34,17 @@ export interface ReturnedOriginals {
   settlements: ReturnRow[];
   voids: ReturnRow[];
   substitutions: ReturnRow[];
+}
+
+function staffIds(sales: ReturnRow[], voids: ReturnRow[]) {
+  return new Set([
+    ...sales.flatMap((row) => [row.operator_id, row.authorized_by]),
+    ...voids.map((row) => row.voided_by),
+  ]);
+}
+
+function departmentIds(sales: ReturnRow[]) {
+  return new Set(sales.map((row) => row.receipt_department_id));
 }
 
 export async function readReturnedOriginals(
@@ -82,12 +96,22 @@ export async function readReturnedOriginals(
   const voids = tx.all<ReturnRow>(
     sql`select * from sale_voids where sale_id in ${saleIds} order by id`,
   );
+  const staff = tx.all<ReturnRow>(sql`
+    select id, display_name as displayName from persons
+    where id in (select value from json_each(${JSON.stringify([...staffIds(sales, voids)])}))
+    order by id`);
+  const departments = tx.all<ReturnRow>(sql`
+    select id, name as departmentName from departments
+    where id in (select value from json_each(${JSON.stringify([...departmentIds(sales)])}))
+    order by id`);
   const substitutions = tx.all<ReturnRow>(sql`select * from sale_substitutions
     where substitution_sale_id in ${saleIds} order by id`);
   return {
     records,
     sales,
     devices,
+    staff,
+    departments,
     heads,
     deliveries,
     tenders,
@@ -199,6 +223,25 @@ export async function inspectReturnedPayments(
   return discrepancies;
 }
 
+async function restoreStaff(
+  tx: Transaction,
+  staff: ReturnRow[],
+  id: ReturnRow[string],
+  createdAt: string,
+) {
+  if (id === null || held(tx, "persons", id)) return;
+  const name = staff.find((person) => person.id === id)?.displayName;
+  if (typeof name !== "string" || name.length === 0)
+    throw new AppError("fiscal.return_invalid", { reason: "missing staff metadata" });
+  await insertRow(tx, "persons", {
+    id,
+    display_name: name,
+    display_name_folded: foldForUniqueness(name),
+    status: "suspended",
+    created_at: createdAt,
+  });
+}
+
 export async function receiveReturnedOriginals(
   tx: Transaction,
   sourceNodeId: string,
@@ -282,6 +325,7 @@ export async function receiveReturnedOriginals(
       enrolled_at: now.toISOString(),
     });
   }
+  const inSavepoint = (write: (part: Transaction) => Promise<void>) => tx.transaction(write);
   const acceptedSales = new Set(
     (accepted.length ? await inspectReturnedPayments(tx, sourceNodeId, returned) : [])
       .filter((clash) => clash.eligible && accepted.includes(clash.fingerprint))
@@ -289,8 +333,28 @@ export async function receiveReturnedOriginals(
   );
   let missing = false;
   for (const sale of orderedSales(returned.sales.filter((row) => needed.has(row.id)))) {
-    if (!held(tx, "sales", sale.id))
+    if (!held(tx, "sales", sale.id)) {
+      const createdAt = now.toISOString();
+      await restoreStaff(tx, returned.staff, sale.operator_id, createdAt);
+      await restoreStaff(tx, returned.staff, sale.authorized_by, createdAt);
+      const id = sale.receipt_department_id;
+      if (id !== null && !held(tx, "departments", id)) {
+        const name = returned.departments.find(
+          (department) => department.id === id,
+        )?.departmentName;
+        if (typeof name !== "string" || typeof sale.receipt_trading_name !== "string")
+          throw new AppError("fiscal.return_invalid", { reason: "missing department metadata" });
+        await insertRow(tx, "departments", {
+          id,
+          name,
+          trading_name: sale.receipt_trading_name,
+          active: 0,
+          is_default: 0,
+          created_at: createdAt,
+        });
+      }
       await insertRow(tx, "sales", { ...sale, working_order_id: null });
+    }
     if (acceptedSales.has(String(sale.id))) continue;
     const incomingRefunds = returned.refunds.filter((row) => row.sale_id === sale.id);
     let refundClash = false;
@@ -318,7 +382,7 @@ export async function receiveReturnedOriginals(
       continue;
     }
     try {
-      await tx.transaction(async (paymentTx) => {
+      await inSavepoint(async (paymentTx) => {
         for (const tender of returned.tenders.filter((row) => row.sale_id === sale.id)) {
           if (!held(paymentTx, "tenders", tender.id))
             await insertRow(paymentTx, "tenders", {
@@ -419,7 +483,13 @@ export async function receiveReturnedOriginals(
       let conflict = own !== undefined && canonicalize(own) !== canonicalize(row);
       if (!own) {
         try {
-          await insertRow(tx, table, row);
+          if (table === "sale_voids") {
+            // The author's row is needed only if this void is accepted.
+            await inSavepoint(async (voidTx) => {
+              await restoreStaff(voidTx, returned.staff, row.voided_by, now.toISOString());
+              await insertRow(voidTx, table, row);
+            });
+          } else await insertRow(tx, table, row);
         } catch (error) {
           const key = table === "sale_voids" ? "sale_id" : "substituted_sale_id";
           if (!refusalOn(error, UNIQUE_VIOLATION, { table, columns: [key] })) throw error;
@@ -548,6 +618,8 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
     records: [],
     sales: [],
     devices: [],
+    staff: [],
+    departments: [],
     heads: [],
     deliveries: [],
     tenders: [],
@@ -560,6 +632,8 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
   });
   const sales = new Map(snapshot.sales.map((row) => [row.id, row]));
   const devices = new Map(snapshot.devices.map((row) => [row.id, row]));
+  const staff = new Map(snapshot.staff.map((row) => [row.id, row]));
+  const departments = new Map(snapshot.departments.map((row) => [row.id, row]));
   function indexed(rows: ReturnRow[], key: string) {
     const groups = new Map<ReturnRow[string], ReturnRow[]>();
     for (const row of rows) {
@@ -609,6 +683,12 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
       ...unit.orders.map((row) => row.device_id),
     ]);
     unit.devices = [...deviceIds].filter((id) => devices.has(id)).map((id) => devices.get(id)!);
+    unit.staff = [...staffIds(unit.sales, unit.voids)]
+      .filter((id) => staff.has(id))
+      .map((id) => staff.get(id)!);
+    unit.departments = [...departmentIds(unit.sales)]
+      .filter((id) => departments.has(id))
+      .map((id) => departments.get(id)!);
     unit.heads = snapshot.heads;
     unit.deliveries = deliveries.get(record.id) ?? [];
     if (!returnBatchFits(unit))
@@ -653,6 +733,8 @@ export function readReturnedBatch(raw: CanonicalValue): ReturnedOriginals {
     "records",
     "sales",
     "devices",
+    "staff",
+    "departments",
     "heads",
     "deliveries",
     "tenders",

@@ -226,6 +226,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       operationDescription: "Venta en establecimiento",
     });
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
+    await ensureOperator(tx, OPERATOR);
     const [admin] = await tx
       .select({ id: persons.id })
       .from(persons)

@@ -55,11 +55,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "who requested an F2 page copy and which page job carries it",
   ),
   appendOnly(
-    "sale_receipt_guests",
-    "ledger",
-    "the guest count a sale's simplified receipt prints, fixed when it was recorded; never corrected",
-  ),
-  appendOnly(
     "invoice_pdf_downloads",
     "ledger",
     "who requested an invoice's PDF from the dashboard, and when; an audit row is never corrected",
@@ -314,7 +309,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("service_step_completions", "state", SERVICE_STATE),
   classify("department_transfer_destinations", "state", SERVICE_STATE),
   classify("department_transfer_requests", "state", SERVICE_STATE),
-  appendOnly("sale_receipt_headers", "ledger", "receipt header as issued for a sale"),
   classify("menu_periods", "state", SERVICE_STATE),
   classify("device_zone_selections", "state", SERVICE_STATE),
   classify("device_zone_selection_zones", "state", SERVICE_STATE),

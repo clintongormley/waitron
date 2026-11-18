@@ -88,7 +88,7 @@ import {
   lineContextColumns,
   resolveNewOrderZone,
   resolveSalePolicy,
-  recordSaleReceiptHeader,
+  saleReceiptHeader,
   readSaleReceiptHeader,
   resolveZoneContext,
   retargetOrderServiceContext,
@@ -1880,9 +1880,13 @@ it("keeps the receipt's department heading after the department is renamed and i
       .insert(invoiceSeries)
       .values({ nodeId: venue.nodeId, code: `H${randomUUID().slice(0, 6)}` })
       .returning({ id: invoiceSeries.id });
+    const header = await saleReceiptHeader(tx, venue.barZone);
     const [sale] = await tx
       .insert(sales)
       .values({
+        receiptDepartmentId: header.departmentId,
+        receiptTradingName: header.tradingName,
+        receiptPrintsTradingName: header.printsTradingName,
         source: "readiness_test",
         seriesId: series!.id,
         nodeId: venue.nodeId,
@@ -1897,7 +1901,6 @@ it("keeps the receipt's department heading after the department is renamed and i
         fiscalState: "not_applicable",
       })
       .returning({ id: sales.id });
-    await recordSaleReceiptHeader(tx, sale!.id, venue.barZone);
     return sale!.id;
   });
 
@@ -1923,9 +1926,13 @@ it("records an empty receipt heading for a sale without a service zone", async (
       .insert(invoiceSeries)
       .values({ nodeId: venue.nodeId, code: `H${randomUUID().slice(0, 6)}` })
       .returning({ id: invoiceSeries.id });
+    const header = await saleReceiptHeader(tx, null);
     const [sale] = await tx
       .insert(sales)
       .values({
+        receiptDepartmentId: header.departmentId,
+        receiptTradingName: header.tradingName,
+        receiptPrintsTradingName: header.printsTradingName,
         source: "readiness_test",
         seriesId: series!.id,
         nodeId: venue.nodeId,
@@ -1940,7 +1947,6 @@ it("records an empty receipt heading for a sale without a service zone", async (
         fiscalState: "not_applicable",
       })
       .returning({ id: sales.id });
-    await recordSaleReceiptHeader(tx, sale!.id, null);
     return sale!.id;
   });
   await expect(scoped((tx) => readSaleReceiptHeader(tx, saleId))).resolves.toEqual({

@@ -3,7 +3,7 @@ import {
   mediaImages,
   departments,
   nowIso,
-  saleReceiptHeaders,
+  sales,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
@@ -318,10 +318,9 @@ export async function receiptDepartmentForSale(
   saleId: string,
 ): Promise<string | null> {
   const [row] = await tx
-    .select({ id: departments.id })
-    .from(saleReceiptHeaders)
-    .innerJoin(departments, eq(departments.id, saleReceiptHeaders.departmentId))
-    .where(eq(saleReceiptHeaders.saleId, saleId));
+    .select({ id: sales.receiptDepartmentId })
+    .from(sales)
+    .where(eq(sales.id, saleId));
   return row?.id ?? null;
 }
 export async function receiptDepartmentForOrder(

@@ -334,6 +334,57 @@ describe("core backup source binding", () => {
     },
   );
 
+  function seedReceiptFacts(department: string | null) {
+    seedOrderContext();
+    for (const db of [before.db, after.db]) {
+      db.run(sql`insert into sales
+        (id, source, series_id, node_id, invoice_number, issued_at, issued_offset_minutes, total,
+         vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state,
+         receipt_department_id, receipt_trading_name, receipt_prints_trading_name, receipt_guest_count)
+        values ('sale', 'operator_script', 'live', 'source', 1, '2026-10-20T00:00:00.000Z',
+          0, 100, '[]', 'en', '["en"]', 'fixture', 'not_applicable', ${department}, 'Issued', 1, 4)`);
+    }
+  }
+
+  it.each([
+    "update sales set receipt_trading_name = 'Current'",
+    "update sales set receipt_prints_trading_name = 0",
+    "update sales set receipt_department_id = null",
+    "update sales set receipt_guest_count = 3",
+    "delete from sales",
+  ])("refuses changed or missing sale receipt facts: %s", async (statement) => {
+    seedReceiptFacts("department");
+    expect(await verify()).toBe(true);
+    const restore = dropTriggers(after.db, "sales");
+    try {
+      after.db.run(sql.raw(statement));
+      expect(await verify()).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it("accepts a recorded receipt with no department", async () => {
+    seedReceiptFacts(null);
+    expect(await verify()).toBe(true);
+  });
+
+  it("refuses the same missing receipt department on both copies", async () => {
+    seedReceiptFacts("department");
+    expect(await verify()).toBe(true);
+    for (const db of [before.db, after.db]) {
+      const restore = dropTriggers(db, "sales");
+      db.run(sql`pragma foreign_keys = off`);
+      try {
+        db.run(sql`update sales set receipt_department_id = 'missing'`);
+      } finally {
+        db.run(sql`pragma foreign_keys = on`);
+        restore();
+      }
+    }
+    expect(await verify()).toBe(false);
+  });
+
   it.each(["node_membership", "order_amendments", "purchase_invoice_vat", "purchase_invoices"])(
     "accepts an explicitly empty new target table absent from the source: %s",
     async (table) => {

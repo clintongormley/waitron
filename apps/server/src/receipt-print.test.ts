@@ -44,7 +44,6 @@ import {
   printers,
   printJobs,
   readTaxpayer,
-  saleReceiptGuests,
   sales,
   taxpayer,
   withTransaction,
@@ -53,7 +52,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { departments, saleReceiptHeaders, createDepartment } from "@waitron/venue-service";
+import { departments, createDepartment } from "@waitron/venue-service";
 import {
   assignMenuToVenue,
   createMenu,
@@ -2513,10 +2512,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
             .filter((text) => text.includes("TOTAL")),
         stored: () =>
           inTx(v, (tx) =>
-            tx
-              .select({ guests: saleReceiptGuests.guestCount })
-              .from(saleReceiptGuests)
-              .where(eq(saleReceiptGuests.saleId, saleId)),
+            tx.select({ guests: sales.receiptGuestCount }).from(sales).where(eq(sales.id, saleId)),
           ),
         guestCount: async () => (await partyRow(v, partyId)).guestCount,
         changeCountTo: async (guestCount: number) => {
@@ -2539,7 +2535,13 @@ describe("a party's receipt prints its guests and the amount per person", () => 
       sql`select * from registros_facturacion where sale_id = ${saleId}`,
     );
     return {
-      sale: strip(sale!, ["id", "working_order_id", "invoice_number", "issued_at"]),
+      sale: strip(sale!, [
+        "id",
+        "working_order_id",
+        "invoice_number",
+        "issued_at",
+        "receipt_guest_count",
+      ]),
       fiscalRecord: strip(fiscalRecord!, [
         "id",
         "sale_id",
@@ -2878,6 +2880,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
         saleId: string;
       },
     ) => Promise<void>,
+    receipt?: Parameters<typeof recordSale>[2]["receipt"],
   ) {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter();
@@ -2899,6 +2902,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
         { zoneId },
       );
       const sale = await recordSale(tx, backend, {
+        ...(receipt && { receipt }),
         operationDescription: "On-premises sale",
         origin: cfg.origin,
         nodeId: cfg.nodeId,
@@ -3132,20 +3136,25 @@ describe("automatic F1 receipt delivery enrollment", () => {
   it.each(["absent", "null"] as const)(
     "omits optional decoration with an %s department header",
     async (kind) => {
-      const { cfg, saleId, ticket } = await issued();
+      const { cfg, saleId, ticket } = await issued(
+        true,
+        true,
+        undefined,
+        kind === "null"
+          ? {
+              guestCount: null,
+              departmentId: null,
+              tradingName: "Inconsistent brand",
+              printsTradingName: true,
+            }
+          : undefined,
+      );
 
       const [department] = await suite.db.select().from(departments);
       await storeDepartmentReceipt(department!.id, {
         headerSubtitle: { "es-ES": "Default department text" },
         email: "default@example.test",
       });
-      if (kind === "null")
-        await suite.db.insert(saleReceiptHeaders).values({
-          saleId,
-          departmentId: null,
-          tradingName: "Inconsistent brand",
-          printTradingName: true,
-        });
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
       const jobs = await suite.db.select().from(printJobs);
       expect(jobs).toHaveLength(1);
@@ -3164,14 +3173,19 @@ describe("automatic F1 receipt delivery enrollment", () => {
   it.each(["absent", "null"] as const)(
     "a sale with no department prints the theme's logo: header %s",
     async (kind) => {
-      const { cfg, saleId, ticket } = await issued();
-      if (kind === "null")
-        await suite.db.insert(saleReceiptHeaders).values({
-          saleId,
-          departmentId: null,
-          tradingName: "Inconsistent brand",
-          printTradingName: true,
-        });
+      const { cfg, saleId, ticket } = await issued(
+        true,
+        true,
+        undefined,
+        kind === "null"
+          ? {
+              guestCount: null,
+              departmentId: null,
+              tradingName: "Inconsistent brand",
+              printsTradingName: true,
+            }
+          : undefined,
+      );
       await putThemeInUse(suite.db);
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
       const jobs = await suite.db.select().from(printJobs);
@@ -3593,7 +3607,6 @@ describe("department receipt presentation on thermal jobs", () => {
       await expect(sell()).rejects.toThrow("mandatory drawer refusal");
       expect(await suite.db.select().from(sales)).toEqual([]);
       expect(await suite.db.select().from(tenders)).toEqual([]);
-      expect(await suite.db.select().from(saleReceiptHeaders)).toEqual([]);
       expect(await suite.db.select().from(printJobs)).toEqual([]);
       expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
     } finally {
@@ -3677,7 +3690,7 @@ describe("department receipt presentation on thermal jobs", () => {
       const sold = await suite.db.select().from(sales);
       expect(sold).toHaveLength(1);
       expect(await suite.db.select().from(tenders)).toHaveLength(1);
-      expect(await suite.db.select().from(saleReceiptHeaders)).toHaveLength(1);
+      expect(sold[0]!.receiptTradingName).not.toBeNull();
       expect((await suite.db.select().from(printJobs)).map((job) => job.kind)).toEqual(["drawer"]);
       expect(await drawerOpensFor(cfg)).toHaveLength(1);
       const before = await suite.db

@@ -57,7 +57,7 @@ import {
   reportInvoiceDelivery,
   reserveInvoiceDelivery,
 } from "./invoice-delivery.js";
-import { saleReceiptHeaders, departments, routingCells } from "@waitron/venue-service";
+import { departments, routingCells } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -1232,7 +1232,6 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       sales: suite.db.all(sql`select * from sales order by id`),
       lines: suite.db.all(sql`select * from sale_lines order by id`),
       fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
-      headers: suite.db.all(sql`select * from sale_receipt_headers order by sale_id`),
       series: suite.db.all(sql`select * from invoice_series order by id`),
       versions: suite.db.all(sql`select * from menu_versions order by id`),
       publications: suite.db.all(sql`select * from menu_releases order by menu_id`),
@@ -1326,9 +1325,8 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const cookie = await login(app, cfg, operatorId);
     const orderId = await ringSale(app, cookie, each.menuItemId);
     const [header] = await suite.db
-      .select({ departmentId: saleReceiptHeaders.departmentId })
-      .from(saleReceiptHeaders)
-      .innerJoin(sales, eq(sales.id, saleReceiptHeaders.saleId))
+      .select({ departmentId: sales.receiptDepartmentId })
+      .from(sales)
       .where(eq(sales.workingOrderId, orderId));
     await seedDepartmentReceipt(suite.db, header!.departmentId!, { printAddress: true });
     const reprint = () =>
@@ -1343,7 +1341,6 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const retained = () => ({
       sales: suite.db.all(sql`select * from sales order by id`),
       fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
-      headers: suite.db.all(sql`select * from sale_receipt_headers order by sale_id`),
       drawer: suite.db.all(sql`select * from drawer_opens order by id`),
       series: suite.db.all(sql`select * from invoice_series order by id`),
       departments: suite.db.all(sql`select * from departments order by id`),
@@ -2659,9 +2656,8 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
     sql`update taxpayer set legal_name = 'Changed venue identity' where id = 1`,
   );
   const [header] = await suite.db
-    .select({ departmentId: saleReceiptHeaders.departmentId })
-    .from(saleReceiptHeaders)
-    .innerJoin(sales, eq(sales.id, saleReceiptHeaders.saleId))
+    .select({ departmentId: sales.receiptDepartmentId })
+    .from(sales)
     .where(eq(sales.workingOrderId, id));
   await seedDepartmentReceipt(suite.db, header!.departmentId!, {
     headerSubtitle: { "es-ES": "Current welcome" },

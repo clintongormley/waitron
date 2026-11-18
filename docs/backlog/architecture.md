@@ -105,7 +105,6 @@ That fiscal protection decision remains outside A646's optional-module repair.
 
 A1308 leaves these names with the slices that own their tables:
 
-- `sales_tenant_issued_idx`: os8.
 - `registros_tenant_node_secuencia_uq`: fiscal slice fi1, which the owner lands.
 - `print_agents_tenant_node_key` and `purchase_invoices_tenant_received_idx`: the devices and
   menu areas; no slice plan names their rename yet.

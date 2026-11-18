@@ -15,7 +15,13 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedNode,
+  seedPerson,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { formatInvoiceNumber } from "@waitron/core";
 import type { PersonalDataPart, PersonalDataSubject } from "@waitron/module";
@@ -233,6 +239,8 @@ async function seedDrawerOpen(
 
 // Each refund's id sorts opposite to its time, so a list ordered by id alone comes out reversed.
 async function seedActions(db: Database, at: Place): Promise<void> {
+  await seedPerson(db, { id: MARTHA, displayName: "Martha" });
+  await seedPerson(db, { id: LEWIS, displayName: "Lewis" });
   const marthaVoided = await seedSale(db, at, {
     code: "TA",
     number: 7,

@@ -57,6 +57,13 @@ export interface RecordSaleTender {
   settledAt: Date | null;
 }
 
+export interface SaleReceiptFacts {
+  guestCount: number | null;
+  departmentId: string | null;
+  tradingName: string;
+  printsTradingName: boolean;
+}
+
 export interface RecordSaleInput {
   /** Where the sale came from, written to `sales.source` and `sales.device_id`; its incidents name
    * it too. */
@@ -94,6 +101,7 @@ export interface RecordSaleInput {
   settlement: { kind: "immediate"; tenders: RecordSaleTender[] } | { kind: "deferred" };
   /** The operator who rang the sale, for attribution. */
   operatorId?: string;
+  receipt?: SaleReceiptFacts;
 }
 
 /**
@@ -301,6 +309,10 @@ export async function recordSale(
     counterpartyAddress: counterparty === null ? null : (input.recipientAddress ?? null),
     taxpayerDomicile: taxpayerRow?.domicile ?? null,
     operatorId: input.operatorId ?? null,
+    receiptGuestCount: input.receipt?.guestCount,
+    receiptDepartmentId: input.receipt?.departmentId,
+    receiptTradingName: input.receipt?.tradingName,
+    receiptPrintsTradingName: input.receipt?.printsTradingName,
   });
 
   // On this same transaction, so an incident never commits for a sale that rolls back.

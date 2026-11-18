@@ -7,6 +7,7 @@ import { expect, it } from "vitest";
 import {
   insertInChunks,
   billPayments,
+  departments,
   type Database,
   sales,
   saleSettlements,
@@ -17,7 +18,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { saleId } from "@waitron/shared";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { archiveTo, openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -71,11 +72,16 @@ async function original(
   return appendOriginal(node, label, invoice);
 }
 
-async function appendOriginal(node: SeededNode, label: string, invoice: number) {
+async function appendOriginal(
+  node: SeededNode,
+  label: string,
+  invoice: number,
+  existingSaleId?: ReturnType<typeof saleId>,
+) {
   const [identity] = suite.db.all<{ nif: string; numero_instalacion: string }>(
     sql`select nif, numero_instalacion from registro_sif where id = ${node.sifId}`,
   );
-  const saleId = await seedSale(suite.db, node, invoice);
+  const saleId = existingSaleId ?? (await seedSale(suite.db, node, invoice));
   const pending = altaFor(node, saleId, invoice, invoice);
   pending.input.IDEmisorFactura = identity!.nif;
   pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
@@ -411,6 +417,129 @@ async function copyBase() {
     }
   });
 }
+
+it("returns originals with named staff and a department added after the copy", async () => {
+  const node = await seedNode(suite.db, "Source");
+  await copyBase();
+  const operatorId = await seedPerson(suite.db, { displayName: "Ana Rivera" });
+  const authoriserId = await seedPerson(suite.db, { displayName: "Sam Greene" });
+  await seedPerson(receiver.db, { id: authoriserId, displayName: "Sam at receiver" });
+  const voiderId = await seedPerson(suite.db, { displayName: "Jo Costa" });
+  const [department] = await suite.db
+    .insert(departments)
+    .values({ name: "Terrace", tradingName: "Terrace current" })
+    .returning({ id: departments.id });
+  const [commercial] = await suite.db
+    .insert(sales)
+    .values({
+      source: "device",
+      deviceId: node.deviceId,
+      nodeId: node.nodeId,
+      seriesId: node.seriesId,
+      invoiceNumber: 1,
+      issuedAt: "2026-07-20T19:20:30+02:00",
+      issuedOffsetMinutes: 120,
+      total: 0,
+      vatBreakdown: [],
+      locale: "es",
+      invoiceLocales: ["es"],
+      fiscalBackend: "verifactu",
+      fiscalState: "recorded",
+      operatorId,
+      authorizedBy: authoriserId,
+      receiptDepartmentId: department!.id,
+      receiptTradingName: "Terrace at sale",
+      receiptPrintsTradingName: true,
+    })
+    .returning({ id: sales.id });
+  const source = await appendOriginal(node, "Source", 1, saleId(commercial!.id));
+  await withTransaction(suite.db, async (tx) => {
+    await tx.insert(saleVoids).values({
+      saleId: source.saleId,
+      reason: "Incorrect invoice",
+      voidedAt: "2026-07-20T17:20:03.000Z",
+      voidedBy: voiderId,
+    });
+    const pending = anulacionFor(source, source.saleId, 1, 3);
+    pending.input.IDEmisorFacturaAnulada = source.issuerTaxId;
+    pending.input.SistemaInformatico.NumeroInstalacion = source.installation;
+    pending.input.NumSerieFacturaAnulada = "Source/1";
+    await appendToChain(tx, source.nodeId, pending);
+  });
+  const originals = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  const [batch, ...rest] = makeReturnedBatches(originals);
+  expect(rest).toEqual([]);
+  const received = readReturnedBatch(JSON.parse(JSON.stringify(batch)));
+  const now = new Date("2026-07-20T17:22:00.000Z");
+  const receive = (payload = received) =>
+    withTransaction(receiver.db, (tx) => receiveReturnedOriginals(tx, source.nodeId, payload, now));
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    expect(await receive()).toEqual({ complete: true });
+    expect(
+      receiver.db.all(sql`
+      select id, display_name, display_name_folded, status, email, pin_hash from persons
+      order by display_name
+    `),
+    ).toEqual([
+      {
+        id: operatorId,
+        display_name: "Ana Rivera",
+        display_name_folded: "ana rivera",
+        status: "suspended",
+        email: null,
+        pin_hash: null,
+      },
+      {
+        id: voiderId,
+        display_name: "Jo Costa",
+        display_name_folded: "jo costa",
+        status: "suspended",
+        email: null,
+        pin_hash: null,
+      },
+      {
+        id: authoriserId,
+        display_name: "Sam at receiver",
+        display_name_folded: "sam at receiver",
+        status: "active",
+        email: null,
+        pin_hash: null,
+      },
+    ]);
+    expect(
+      receiver.db.all(sql`select id, name, trading_name, active, is_default from departments`),
+    ).toEqual([
+      {
+        id: department!.id,
+        name: "Terrace",
+        trading_name: "Terrace at sale",
+        active: 0,
+        is_default: 0,
+      },
+    ]);
+    expect(
+      receiver.db.all(sql`select id, huella from registros_facturacion order by secuencia`),
+    ).toEqual(originals.records.map(({ id, huella }) => ({ id, huella })));
+    expect(receiver.db.all(sql`select voided_by from sale_voids`)).toEqual([
+      { voided_by: voiderId },
+    ]);
+  }
+
+  const conflictingPersonId = await seedPerson(suite.db, { displayName: "Conflicting voider" });
+  const conflicting = {
+    ...received,
+    staff: [{ id: conflictingPersonId, displayName: "Conflicting voider" }],
+    voids: [{ ...received.voids[0]!, id: "conflicting-void", voided_by: conflictingPersonId }],
+  };
+  expect(await receive(conflicting)).toEqual({ complete: false });
+  expect(receiver.db.all(sql`select id from persons where id = ${conflictingPersonId}`)).toEqual(
+    [],
+  );
+  expect(receiver.db.all(sql`select voided_by from sale_voids`)).toEqual([{ voided_by: voiderId }]);
+});
 
 it("receives original bytes and delivery evidence once, and advances only the source head", async () => {
   const source = await original("Source", 1, copyBase);

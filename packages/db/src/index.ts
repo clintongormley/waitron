@@ -154,7 +154,6 @@ export {
 } from "./schema/printers.js";
 export { printJobStatus, printJobs } from "./schema/print-jobs.js";
 export { receiptReprints } from "./schema/receipt-reprints.js";
-export { saleReceiptGuests } from "./schema/sale-receipt-guests.js";
 export { invoicePdfDownloads } from "./schema/invoice-pdf-downloads.js";
 export { invoiceCorrections, invoiceCorrectionState } from "./schema/invoice-corrections.js";
 export { invoiceCorrectionRefunds } from "./schema/invoice-correction-refunds.js";
@@ -421,7 +420,6 @@ export {
   partyAllergyGuests,
   routingCellPeriods,
   routingCells,
-  saleReceiptHeaders,
   seasons,
   serviceStepCompletions,
   serviceSteps,

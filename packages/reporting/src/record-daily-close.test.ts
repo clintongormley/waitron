@@ -5,7 +5,6 @@ import {
   CORE_MIGRATIONS,
   dailyCloses,
   departments,
-  saleReceiptHeaders,
   captureError,
   constraintTarget,
   refusalError,
@@ -99,22 +98,21 @@ async function captureCloseError(fn: () => Promise<unknown>): Promise<AppError> 
 
 describe("recordDailyClose — snapshot, reconciliation, chain", () => {
   it("keeps an earlier close frozen when cash is returned next day on another device", async () => {
+    const [department] = await suite.db
+      .insert(departments)
+      .values({ name: "Dining", tradingName: "Dining" })
+      .returning();
     const paid = await seedRefundableSale(suite.db, venue, {
       method: "cash",
       applied: "100.00",
       tip: "0.00",
       at: "2026-08-04T10:00:00.000Z",
+      receipt: {
+        receiptDepartmentId: department!.id,
+        receiptTradingName: "Dining",
+        receiptPrintsTradingName: true,
+      },
       invoiceNumber: 1,
-    });
-    const [department] = await suite.db
-      .insert(departments)
-      .values({ name: "Dining", tradingName: "Dining" })
-      .returning();
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: paid.saleId,
-      departmentId: department!.id,
-      tradingName: "Dining",
-      printTradingName: true,
     });
     const deviceB = await seedVenueDevice(suite.db);
     const first = await record("2026-08-04", [

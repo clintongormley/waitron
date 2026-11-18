@@ -1,5 +1,6 @@
 import { foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import { id, label, newId, table, tsString } from "./columns.js";
+import { persons } from "./identity/persons.js";
 import { sales } from "./sales.js";
 
 /**
@@ -16,7 +17,6 @@ export const saleVoids = table(
     reason: label("reason").notNull(),
     // tsString rather than ts, for the reason given at `sales.issuedAt`.
     voidedAt: tsString("voided_at").notNull(),
-    /** The person who authorised the void. Nullable; no key yet. */
     voidedBy: id("voided_by"),
   },
   (t) => [
@@ -28,6 +28,11 @@ export const saleVoids = table(
       columns: [t.saleId],
       foreignColumns: [sales.id],
       name: "sale_voids_sale_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.voidedBy],
+      foreignColumns: [persons.id],
+      name: "sale_voids_voided_by_fk",
     }).onDelete("restrict"),
     index("sale_voids_voided_at_idx").on(t.voidedAt),
   ],

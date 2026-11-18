@@ -4,7 +4,6 @@ import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { mediaImages } from "../media/images.js";
 import { enumCheck, flag, id, json, label, newId, nowIso, table, tsString } from "../columns.js";
 import { deviceProfiles } from "../device-profiles.js";
-import { sales } from "../sales.js";
 import {
   collectionNumber,
   dining,
@@ -60,27 +59,5 @@ export const departments = table(
     uniqueIndex("departments_one_default_key")
       .on(t.isDefault)
       .where(sql`${t.isDefault}`),
-  ],
-);
-
-export const saleReceiptHeaders = table(
-  "sale_receipt_headers",
-  {
-    saleId: id("sale_id").primaryKey(),
-    departmentId: id("department_id"),
-    tradingName: label("trading_name").notNull(),
-    printTradingName: flag("print_trading_name").notNull(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.saleId],
-      foreignColumns: [sales.id],
-      name: "sale_receipt_headers_sale_fk",
-    }),
-    foreignKey({
-      columns: [t.departmentId],
-      foreignColumns: [departments.id],
-      name: "sale_receipt_headers_department_fk",
-    }),
   ],
 );

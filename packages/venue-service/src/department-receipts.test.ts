@@ -7,7 +7,6 @@ import {
   departments,
   invoiceSeries,
   mediaImages,
-  saleReceiptHeaders,
   sales,
   withTransaction,
   type Transaction,
@@ -508,27 +507,28 @@ describe("receipt department lookups", () => {
     await fixture(false);
     const nodeId = await seedNode(suite.db);
     const [series] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
-    const [sale] = await suite.db
+    const values = {
+      source: "readiness_test",
+      nodeId,
+      seriesId: series!.id,
+      invoiceNumber: 1,
+      issuedAt: "2026-10-10T00:00:00Z",
+      issuedOffsetMinutes: 0,
+      total: 0,
+      vatBreakdown: [],
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      fiscalBackend: "none",
+      fiscalState: "not_applicable",
+    } satisfies typeof sales.$inferInsert;
+    const [absent, sale] = await suite.db
       .insert(sales)
-      .values({
-        source: "readiness_test",
-        nodeId,
-        seriesId: series!.id,
-        invoiceNumber: 1,
-        issuedAt: "2026-10-10T00:00:00Z",
-        issuedOffsetMinutes: 0,
-        total: 0,
-        vatBreakdown: [],
-        locale: "es-ES",
-        invoiceLocales: ["es-ES"],
-        fiscalBackend: "none",
-        fiscalState: "not_applicable",
-      })
+      .values([
+        values,
+        { ...values, invoiceNumber: 2, receiptTradingName: "", receiptPrintsTradingName: false },
+      ])
       .returning();
-    expect(await scoped((tx) => receipts.receiptDepartmentForSale(tx, sale!.id))).toBeNull();
-    await suite.db
-      .insert(saleReceiptHeaders)
-      .values({ saleId: sale!.id, departmentId: null, tradingName: "", printTradingName: false });
+    expect(await scoped((tx) => receipts.receiptDepartmentForSale(tx, absent!.id))).toBeNull();
     const session = (
       suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
     ).session;
@@ -570,14 +570,11 @@ describe("receipt department lookups", () => {
         invoiceLocales: ["es-ES"],
         fiscalBackend: "none",
         fiscalState: "not_applicable",
+        receiptDepartmentId: f.id,
+        receiptTradingName: "Saved name",
+        receiptPrintsTradingName: true,
       })
       .returning();
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: sale!.id,
-      departmentId: f.id,
-      tradingName: "Saved name",
-      printTradingName: true,
-    });
     expect(
       await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForSale(tx, sale!.id)),
     ).toBe(f.id);

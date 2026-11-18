@@ -1,4 +1,4 @@
-import { triggerRaised } from "../constraint-target.js";
+import { checkFailed, triggerRaised } from "../constraint-target.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -13,10 +13,12 @@ import {
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
+import { saleVoids } from "./sale-voids.js";
 import { saleLines, sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
+import { departments } from "./venue-service/service.js";
 
 /**
  * What this file does NOT check:
@@ -185,6 +187,85 @@ describe("sales — the commercial record", () => {
       .from(saleLines)
       .where(and(eq(saleLines.saleId, saleId), eq(saleLines.lineNo, 2)));
     expect(positive.priceQuantity).toBe(1);
+  });
+
+  it.each([0, 1000, 2.5])("refuses a receipt guest count of %s", async (receiptGuestCount) => {
+    const error = await captureError(() =>
+      recordCompleteSale(suite.db, {
+        receiptGuestCount,
+        receiptTradingName: "Dining room",
+        receiptPrintsTradingName: false,
+      }),
+    );
+    expect(checkFailed(error, "sales_receipt_guest_count_ck")).toBe(true);
+  });
+
+  it.each([
+    [{ receiptTradingName: "Dining room" }, "sales_receipt_header_ck"],
+    [{ receiptPrintsTradingName: false }, "sales_receipt_header_ck"],
+    [{ receiptDepartmentId: "missing" }, "sales_receipt_header_ck"],
+    [{ receiptGuestCount: 2 }, "sales_receipt_guest_count_recorded_ck"],
+  ] as const)("refuses incomplete receipt facts %j", async (receipt, constraint) => {
+    const error = await captureError(() => recordCompleteSale(suite.db, receipt));
+    expect(checkFailed(error, constraint)).toBe(true);
+  });
+
+  it.each([
+    { receiptDepartmentId: "missing", receiptTradingName: "", receiptPrintsTradingName: false },
+    { authorizedBy: "missing" },
+    { operatorId: "missing" },
+  ])("refuses a sale naming a missing department or person %j", async (overrides) => {
+    const error = await captureError(() => recordCompleteSale(suite.db, overrides));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it.each([1, 4, 999])(
+    "stores receipt facts with %s guests, or leaves all facts absent",
+    async (receiptGuestCount) => {
+      const operatorId = await seedPerson(suite.db, { displayName: "Operator" });
+      const authorizedBy = await seedPerson(suite.db, { displayName: "Authoriser" });
+      const [{ id: receiptDepartmentId }] = await suite.db
+        .insert(departments)
+        .values({ name: "Dining room", tradingName: "Dining room" })
+        .returning({ id: departments.id });
+      const receipt = {
+        receiptGuestCount,
+        receiptDepartmentId,
+        receiptTradingName: "Dining room",
+        receiptPrintsTradingName: false,
+        operatorId,
+        authorizedBy,
+      };
+      const saleId = await recordCompleteSale(suite.db, receipt);
+      const [stored] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+      expect(stored).toMatchObject(receipt);
+
+      const withoutFacts = await recordCompleteSale(suite.db, { invoiceNumber: 2 });
+      const [plain] = await suite.db.select().from(sales).where(eq(sales.id, withoutFacts));
+      expect(plain).toMatchObject({
+        receiptGuestCount: null,
+        receiptDepartmentId: null,
+        receiptTradingName: null,
+        receiptPrintsTradingName: null,
+        operatorId: null,
+        authorizedBy: null,
+      });
+    },
+  );
+
+  it("requires the person named on a void to exist", async () => {
+    const saleId = await recordCompleteSale(suite.db);
+    const voidedBy = await seedPerson(suite.db);
+    const values = { saleId, reason: "Entered twice", voidedAt: AT };
+    const error = await captureError(() =>
+      suite.db.insert(saleVoids).values({ ...values, voidedBy: "missing" }),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    const [row] = await suite.db
+      .insert(saleVoids)
+      .values({ ...values, voidedBy })
+      .returning();
+    expect(row?.voidedBy).toBe(voidedBy);
   });
 
   it("rejects a duplicate invoice number within a series", async () => {

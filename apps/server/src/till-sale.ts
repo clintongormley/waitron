@@ -128,7 +128,7 @@ import {
   enqueueSaleReceipt,
   printerLookup,
 } from "./receipt-print.js";
-import { recordSaleReceiptFacts, type GuestCountChoice } from "./receipt-guests.js";
+import { saleReceiptFacts, type GuestCountChoice } from "./receipt-guests.js";
 
 export interface TillMoneyOperator {
   personId: string;
@@ -243,7 +243,7 @@ export interface TillSaleRequest {
   deliveryTableId?: string;
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
-  /** The guest count the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
+  /** The guest count the sale's simplified receipts print; absent takes the default (`saleReceiptFacts`). */
   guestCount?: number | null;
   /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
   lateSend?: LateSendConfirmation;
@@ -633,7 +633,7 @@ export interface PayWorkingOrderRequest {
   zoneId?: string;
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
-  /** The guest count the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
+  /** The guest count the sale's simplified receipts print; absent takes the default (`saleReceiptFacts`). */
   guestCount?: number | null;
   /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
   lateSend?: LateSendConfirmation;
@@ -705,7 +705,7 @@ export interface IntegratedPayRequest {
   simulationOutcome?: "captured" | "declined" | "attempting";
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
-  /** The guest count the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
+  /** The guest count the sale's simplified receipts print; absent takes the default (`saleReceiptFacts`). */
   guestCount?: number | null;
   /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
   lateSend?: LateSendConfirmation;
@@ -1123,6 +1123,7 @@ async function fileImmediateSale(
     workingOrderId,
   });
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+    receipt: await saleReceiptFacts(tx, workingOrderId, selected.sale.counterparty, guestCount),
     operationDescription,
     origin: cfg.origin,
     nodeId: cfg.nodeId,
@@ -1152,11 +1153,6 @@ async function fileImmediateSale(
     },
   });
   await linkSaleDishes(tx, saleId, order.identities);
-  await recordSaleReceiptFacts(
-    tx,
-    { saleId, workingOrderId, counterparty: selected.sale.counterparty },
-    guestCount,
-  );
 
   // A manual card also gets a captured `payments` row, linked to the sale in this transaction.
   // `recordManualCardPayment` makes no network call, so it commits inline with the sale.
@@ -1852,6 +1848,7 @@ async function finalizeCapture(
         orderId: req.id,
       });
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+        receipt: await saleReceiptFacts(tx, req.id, selected.sale.counterparty, req.guestCount),
         origin: cfg.origin,
         nodeId: cfg.nodeId,
         ...selected.sale,
@@ -1871,11 +1868,6 @@ async function finalizeCapture(
         },
       });
       await linkSaleDishes(tx, saleId, identities);
-      await recordSaleReceiptFacts(
-        tx,
-        { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
-        req.guestCount,
-      );
 
       // The provider already recorded the payment row; this only points its `sale_id` at the sale.
       await associatePaymentWithSale(tx, {
@@ -2004,6 +1996,7 @@ async function finalizeRecovery(
         orderId: req.id,
       });
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+        receipt: await saleReceiptFacts(tx, req.id, selected.sale.counterparty, req.guestCount),
         origin,
         nodeId: cfg.nodeId,
         ...selected.sale,
@@ -2021,11 +2014,6 @@ async function finalizeRecovery(
         },
       });
       await linkSaleDishes(tx, saleId, order.identities);
-      await recordSaleReceiptFacts(
-        tx,
-        { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
-        req.guestCount,
-      );
 
       await associatePaymentWithSale(tx, {
         provider: deps.provider.provider,

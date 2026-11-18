@@ -13,7 +13,13 @@ import {
   tenders,
   withTransaction,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedNode,
+  seedPerson,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
@@ -223,6 +229,7 @@ describe("settled-tender refundable balances", () => {
 
   it("does not offer a voided invoice", async () => {
     const target = await paid();
+    await seedPerson(store.db, { id: PERSON, displayName: "Approver" });
     await store.db
       .insert(saleVoids)
       .values({ saleId: target.saleId, reason: "Duplicate", voidedBy: PERSON, voidedAt: AT });

@@ -191,9 +191,15 @@ async function fileOneSale(db: Database) {
     tender: { method: "cash", amount: "20.00" },
   });
 
-  const header = db.all<Record<string, unknown>>(
-    sql.raw(`select ${SALE_COLUMNS.join(", ")} from sales`),
+  const zone = db.get<{ departmentId: string }>(
+    sql`select department_id as departmentId from floor_zones where id = ${offers.zoneId}`,
   );
+  const header = db
+    .all<Record<string, unknown>>(sql.raw(`select ${SALE_COLUMNS.join(", ")} from sales`))
+    .map(({ receipt_department_id, ...row }) => {
+      expect(receipt_department_id).toBe(zone!.departmentId);
+      return row;
+    });
   const lines = db.all<Record<string, unknown>>(
     sql.raw(`select ${OTHER_LINE_COLUMNS.map((c) => `l.${c}`).join(", ")},
       p.line_no as parent_line_no, l.list_unit_price_gross
