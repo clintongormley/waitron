@@ -13,8 +13,8 @@ completion run only on the primary. It also serves several HTTP routes on one Ho
 This document is written for whoever deploys this process, not whoever reads its source.
 
 **The one thing worth remembering before anything else:** `drain` carries a legal, hourly submission
-duty under Spain's Veri\*Factu regulation (art. 16.4). A `/health` that reports `200` with a `duties` object is a claim that
-the pass was not wholesale abandoned and each duty had a clean pass within its budget; a parked
+duty under Spain's Veri\*Factu regulation (art. 16.4). On the main box, a `/health` response of `200`
+with a `duties` object means a pass finished and each duty had a clean pass within its budget. A parked
 payment-audit period reaches the status code only when the duty has had no clean pass since this
 process started or within its budget, and the body's `parked` count shows it
 only until the next recorded pass replaces it. The error-level `reconcile.run_parked` log line,
@@ -594,8 +594,11 @@ The box uses those defaults; tests can pass a partial `timings` option as the th
 `GET /health` is unauthenticated — no metrics, no auth, no readiness/liveness split. It is
 one of several routes the process serves (the till API under `/api/*`, the management-dashboard API
 under `/management-api/*`, and the Stripe webhook at `POST /webhooks/stripe` share the same
-Hono app); this endpoint answers `200` when every duty is within its staleness budget, `503`
-otherwise:
+Hono app). On the main box, the full response gives you `200` after the first pass if each duty has
+succeeded within its staleness budget. On a joined spare, the first pass is empty and gives you
+`200` with both duties marked `stale: false`. Follow the spare's copy progress separately.
+
+For example, a main box with stale filing work responds with `503`.
 
 ```json
 {

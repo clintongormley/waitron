@@ -837,6 +837,9 @@ the A1018 plan, not run.
   size. The spare logs both in `spare.first_copy_ready` and shows them on its box status. The
   backlog entry "Adding a mirror while the internet is down" stays open until the measurement is
   recorded (Task 6.11).
+
+  **18 November 2026.** During the join, follow progress at `/api/box/status`. After the spare
+  restarts, read `bytes` and `ms` in its `spare.first_copy_ready` log line.
 - **D15 — The spare tells the main box where its store is.** The joining request gains
   `standbyStoreUrl` beside today's `standbyContactUrl` (`mirror-bundle-fetch.ts`, the request body;
   `mirror-bundle-api.ts:80-113`, the check). Adopt sends `https://<this box's own name>:<its
@@ -3485,6 +3488,9 @@ venue's real data:
 3. On the main box, Servers lists the spare; restart the main box and check it starts without
    waiting (its log line `handover.start_check` lists the spare as answered).
 4. Read both boxes' clocks again (§11's rehearsal note).
+
+**18 November 2026, correction to step 2.** While the spare is joining, use `/api/box/status`
+to follow progress. After the spare restarts, read `bytes` and `ms` in `spare.first_copy_ready`.
 
 **The session running this plan** then records the figures, the box hardware and the database size
 in a dated note in the design (§11's 3b line), and deletes the backlog entry, turning anything the

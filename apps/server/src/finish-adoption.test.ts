@@ -133,7 +133,7 @@ describe("runFinishAdoption — on a migrated venue", () => {
     });
   }
 
-  it("keeps the latch and logs the refusal when venue.db holds no row for this box", async () => {
+  it("keeps the latch and logs an informational wait before the first configured copy", async () => {
     await seedTaxpayer(suite.db);
     await spareNode();
     const dir = await tempDir();
@@ -143,8 +143,8 @@ describe("runFinishAdoption — on a migrated venue", () => {
     await finish(dir, logged, () => (restarts += 1));
     expect(logged).toEqual([
       {
-        level: "error",
-        event: "adoption.establish_failed",
+        level: "info",
+        event: "adoption.waiting_for_copy",
         fields: { code: "mirror.venue_not_copied" },
       },
     ]);
