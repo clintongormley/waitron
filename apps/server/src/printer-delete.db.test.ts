@@ -3,7 +3,8 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
-  deviceProfilePrinters,
+  deviceProfiles,
+  type StoredPrinterLists,
   devices,
   drawerOpens,
   installChangeFeed,
@@ -19,7 +20,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   readPrinterHoldsForTest,
@@ -104,7 +105,6 @@ function afterDelete(
       .map((row) => ({ key: JSON.stringify(row), row }))
       .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
       .map(({ row }) => row);
-  const withoutPrinter = (rows: Rows) => rows.filter((row) => row.printer_id !== printerId);
   return {
     ...before,
     printers: resort(
@@ -157,7 +157,21 @@ function afterDelete(
         invoice_printer_id: row.invoice_printer_id === printerId ? null : row.invoice_printer_id,
       })),
     ),
-    device_profile_printers: withoutPrinter(before.device_profile_printers!),
+    device_profiles: resort(
+      before.device_profiles!.map((row) => {
+        const roles = JSON.parse(String(row.printer_lists)) as StoredPrinterLists;
+        const remaining = Object.fromEntries(
+          Object.entries(roles).map(([role, list]) => [
+            role,
+            {
+              ids: list.ids.filter((id) => id !== printerId),
+              defaultId: list.defaultId === printerId ? null : list.defaultId,
+            },
+          ]),
+        );
+        return { ...row, printer_lists: JSON.stringify(remaining) };
+      }),
+    ),
     kitchen_stations: resort(
       before.kitchen_stations!.map((row) => ({
         ...row,
@@ -248,18 +262,17 @@ async function seedVenueWithPrinters() {
     (await seedDeviceProfiles(suite.db, { name, formFactor: "till" }))[0]!.id;
   const waiters = await profile("Waiters");
   const bar = await profile("Bar");
-  await suite.db.insert(deviceProfilePrinters).values([
-    { deviceProfileId: waiters, printerId: P, role: "receipt", position: 0, isDefault: true },
-    { deviceProfileId: waiters, printerId: Q, role: "receipt", position: 1, isDefault: false },
-    { deviceProfileId: waiters, printerId: P, role: "payment_slip", position: 0, isDefault: true },
-    { deviceProfileId: waiters, printerId: P, role: "cash_drawer", position: 0, isDefault: true },
-    { deviceProfileId: waiters, printerId: Q, role: "cash_drawer", position: 1, isDefault: false },
-    { deviceProfileId: bar, printerId: Q, role: "receipt", position: 0, isDefault: true },
-    { deviceProfileId: bar, printerId: Q, role: "payment_slip", position: 0, isDefault: true },
-    { deviceProfileId: bar, printerId: P, role: "payment_slip", position: 1, isDefault: false },
-    { deviceProfileId: bar, printerId: Q, role: "cash_drawer", position: 0, isDefault: true },
-    { deviceProfileId: bar, printerId: P, role: "invoice", position: 0, isDefault: true },
-  ]);
+  await setPrinterListsForTest(suite.db, waiters, {
+    receipt: { ids: [P, Q], defaultId: P },
+    payment_slip: { ids: [P], defaultId: P },
+    cash_drawer: { ids: [P, Q], defaultId: P },
+  });
+  await setPrinterListsForTest(suite.db, bar, {
+    receipt: { ids: [Q], defaultId: Q },
+    payment_slip: { ids: [Q, P], defaultId: Q },
+    cash_drawer: { ids: [Q], defaultId: Q },
+    invoice: { ids: [P], defaultId: P },
+  });
 
   const device = async (values: {
     label: string;
@@ -622,12 +635,8 @@ describe("the printer delete impact", () => {
       simplifiedInvoiceLimit: null,
     };
     const [deli] = await seedDeviceProfiles(suite.db, { name: "Deli", formFactor: "till" });
-    await suite.db.insert(deviceProfilePrinters).values({
-      deviceProfileId: deli!.id,
-      printerId: v.Z,
-      role: "receipt",
-      position: 0,
-      isDefault: true,
+    await setPrinterListsForTest(suite.db, deli!.id, {
+      receipt: { ids: [v.Z], defaultId: v.Z },
     });
     const deliDevice = async (label: string) => {
       const { deviceId } = await seedDevice(suite.db, { label, profileId: deli!.id });
@@ -695,29 +704,15 @@ describe("deleting a printer", () => {
         { id: v.barTill2, receipt: null, slip: null, drawer: null },
       ]),
     );
-    expect(
-      await suite.db
-        .select({
-          profile: deviceProfilePrinters.deviceProfileId,
-          printer: deviceProfilePrinters.printerId,
-          role: deviceProfilePrinters.role,
-          position: deviceProfilePrinters.position,
-          isDefault: deviceProfilePrinters.isDefault,
-        })
-        .from(deviceProfilePrinters)
-        .where(eq(deviceProfilePrinters.deviceProfileId, v.waiters)),
-    ).toEqual(
-      expect.arrayContaining([
-        { profile: v.waiters, printer: v.Q, role: "receipt", position: 1, isDefault: false },
-        { profile: v.waiters, printer: v.Q, role: "cash_drawer", position: 1, isDefault: false },
-      ]),
-    );
-    expect(
-      await suite.db
-        .select()
-        .from(deviceProfilePrinters)
-        .where(eq(deviceProfilePrinters.deviceProfileId, v.waiters)),
-    ).toHaveLength(2);
+    const [waiters] = await suite.db
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, v.waiters));
+    expect(waiters!.lists).toEqual({
+      receipt: { ids: [v.Q], defaultId: null },
+      payment_slip: { ids: [], defaultId: null },
+      cash_drawer: { ids: [v.Q], defaultId: null },
+    });
     expect(await readPrinterHoldsForTest(suite.db)).toEqual([
       expect.objectContaining({ printerId: v.Q, deviceId: v.barTill2 }),
     ]);
@@ -747,12 +742,8 @@ describe("deleting a printer", () => {
       .update(devices)
       .set({ cashDrawerPrinterId: v.P })
       .where(eq(devices.id, v.barTill2));
-    await suite.db.insert(deviceProfilePrinters).values({
-      deviceProfileId: v.bar,
-      printerId: v.P,
-      role: "receipt",
-      position: 1,
-      isDefault: false,
+    await setPrinterListsForTest(suite.db, v.bar, {
+      receipt: { ids: [v.Q, v.P], defaultId: v.Q },
     });
     const [drinks] = await suite.db
       .select({ id: kitchenStations.id })
@@ -812,16 +803,11 @@ describe("deleting a printer", () => {
     await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));
 
     expect(await drawerOf(v.barTill)).toBeNull();
-    const waitersDrawers = await suite.db
-      .select({
-        printerId: deviceProfilePrinters.printerId,
-        isDefault: deviceProfilePrinters.isDefault,
-      })
-      .from(deviceProfilePrinters)
-      .where(
-        sql`${deviceProfilePrinters.deviceProfileId} = ${v.waiters} and ${deviceProfilePrinters.role} = 'cash_drawer'`,
-      );
-    expect(waitersDrawers).toEqual([{ printerId: v.Q, isDefault: false }]);
+    const [waiters] = await suite.db
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, v.waiters));
+    expect(waiters!.lists.cash_drawer).toEqual({ ids: [v.Q], defaultId: null });
   });
 
   it("deletes a printer nothing refers to and a switched-off one", async () => {

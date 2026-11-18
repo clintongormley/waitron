@@ -50,6 +50,7 @@ export type {
 export {
   emptyPrinterLists,
   readProfilePrinterLists,
+  readProfilesListingPrinter,
   setProfilePrinterLists,
 } from "./device-printers.js";
 export {

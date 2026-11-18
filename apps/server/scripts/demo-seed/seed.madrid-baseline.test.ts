@@ -1460,23 +1460,17 @@ for (const locale of ["en", "es"] as const) {
         },
         { ...draftLineKeys[4]!, id: 5 },
       );
-      for (const [name, previous, current] of [
-        ["devices", "invoice_page_printer_id", "invoice_printer_id"],
-        ["device_profile_printers", "page_printer_id", "printer_id"],
-      ] as const) {
-        const table = expected[phase].tables[name]!;
-        table.columns = table.columns.filter((column) => column.name !== previous);
-        table.foreignKeys = table.foreignKeys
-          .filter((key) => key.from !== previous)
-          .map((key, id) => ({ ...key, id }));
-        for (const row of Object.values(table.rows)) {
-          row[current] ??= row[previous];
-          delete row[previous];
-        }
+      const invoiceChoiceTable = expected[phase].tables.devices!;
+      invoiceChoiceTable.columns = invoiceChoiceTable.columns.filter(
+        ({ name }) => name !== "invoice_page_printer_id",
+      );
+      invoiceChoiceTable.foreignKeys = invoiceChoiceTable.foreignKeys
+        .filter((key) => key.from !== "invoice_page_printer_id")
+        .map((key, id) => ({ ...key, id }));
+      for (const row of Object.values(invoiceChoiceTable.rows)) {
+        row.invoice_printer_id ??= row.invoice_page_printer_id;
+        delete row.invoice_page_printer_id;
       }
-      expected[phase].tables.device_profile_printers!.columns.find(
-        (column) => column.name === "printer_id",
-      )!.notnull = 1;
       const deliveries = expected[phase].tables.invoice_deliveries!;
       deliveries.columns.find(({ name }) => name === "page_printer_id")!.name = "printer_id";
       const deliveryPrinter = deliveries.foreignKeys.find(
@@ -2411,6 +2405,26 @@ for (const locale of ["en", "es"] as const) {
                 defaultId: listed.find((link) => link.is_default === 1)?.reader_id ?? null,
               };
       }
+      profileTable.columns.splice(
+        profileTable.columns.findIndex(({ name }) => name === "card_readers"),
+        0,
+        { name: "printer_lists", type: "TEXT", notnull: 1, dflt_value: "'{}'", pk: 0 },
+      );
+      const printerLinks = Object.values(expected[phase].tables.device_profile_printers!.rows);
+      for (const profile of Object.values(profileTable.rows)) {
+        const lists: Record<string, { ids: unknown[]; defaultId: unknown }> = {};
+        for (const row of printerLinks
+          .filter((row) => row.device_profile_id === profile.id)
+          .sort((a, b) => Number(a.position) - Number(b.position))) {
+          const list = (lists[String(row.role)] ??= { ids: [], defaultId: null });
+          const id = row.printer_id ?? row.page_printer_id;
+          list.ids.push(id);
+          if (row.is_default === 1) list.defaultId = id;
+        }
+        profile.printer_lists = lists;
+      }
+      delete expected[phase].tables.device_profile_printers;
+      delete phases[phase]!.device_profile_printers;
       delete expected[phase].tables.device_profile_card_readers;
       delete phases[phase]!.device_made_here_stations;
       delete phases[phase]!.device_card_readers;

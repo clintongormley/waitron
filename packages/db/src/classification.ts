@@ -127,7 +127,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("devices", "state", STATE),
   classify("device_approved_profiles", "state", STATE),
   classify("device_profiles", "state", STATE),
-  classify("device_profile_printers", "state", STATE),
   classify("invoice_series", "state", STATE),
   classify("menus", "state", STATE),
   classify("categories", "state", STATE),

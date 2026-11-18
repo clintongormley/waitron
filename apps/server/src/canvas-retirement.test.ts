@@ -37,6 +37,7 @@ describe("canvas retirement on a fresh venue", () => {
       "order_department_id",
       "order_starting_zone_id",
       "order_zone_ids",
+      "printer_lists",
       "card_readers",
       "created_at",
       "updated_at",

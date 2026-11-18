@@ -1,3 +1,4 @@
+import { readProfilesListingPrinter } from "@waitron/layouts";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { randomUUID } from "node:crypto";
@@ -5,7 +6,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfilePrinters,
   devices,
   deviceProfiles,
   kitchenStations,
@@ -22,7 +22,7 @@ import {
   CORE_CHANGE_SOURCES,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments } from "@waitron/venue-service";
 import {
@@ -621,13 +621,13 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
       { name: `Kitchen ${randomUUID()}`, formFactor: "kds" },
     ]);
     const [waiters, bar] = profileRows;
-    await suite.db.insert(deviceProfilePrinters).values([
-      { deviceProfileId: bar!.id, printerId: counter, role: "receipt", position: 0 },
-      // The same printer on both of one profile's lists is one offer.
-      { deviceProfileId: bar!.id, printerId: counter, role: "payment_slip", position: 0 },
-      { deviceProfileId: waiters!.id, printerId: portable, role: "payment_slip", position: 0 },
-      { deviceProfileId: waiters!.id, printerId: counter, role: "payment_slip", position: 1 },
-    ]);
+    await setPrinterListsForTest(suite.db, bar!.id, {
+      receipt: { ids: [counter], defaultId: null },
+      payment_slip: { ids: [counter], defaultId: null },
+    });
+    await setPrinterListsForTest(suite.db, waiters!.id, {
+      payment_slip: { ids: [portable, counter], defaultId: null },
+    });
 
     const res = await send(app, "GET", "/management-api/printer-profiles", {
       cookie: managerCookie,
@@ -671,10 +671,9 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
       name: `Invoices ${randomUUID()}`,
       formFactor: "till",
     });
-    await suite.db.insert(deviceProfilePrinters).values([
-      { deviceProfileId: invoices!.id, printerId: officeId, role: "invoice", position: 0 },
-      { deviceProfileId: invoices!.id, printerId: counter, role: "invoice", position: 1 },
-    ]);
+    await setPrinterListsForTest(suite.db, invoices!.id, {
+      invoice: { ids: [officeId, counter], defaultId: null },
+    });
 
     const res = await send(app, "GET", "/management-api/printer-profiles", {
       cookie: managerCookie,
@@ -724,12 +723,13 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
         orderStartingZoneId: zone!.id,
       })
       .where(eq(deviceProfiles.id, till!.id));
-    await suite.db.insert(deviceProfilePrinters).values([
-      // Stored before the receipt row, and before it alphabetically, so neither order gives the list's.
-      { deviceProfileId: till!.id, printerId: printer, role: "cash_drawer", position: 0 },
-      { deviceProfileId: till!.id, printerId: printer, role: "receipt", position: 0 },
-      { deviceProfileId: display!.id, printerId: printer, role: "receipt", position: 0 },
-    ]);
+    await setPrinterListsForTest(suite.db, till!.id, {
+      cash_drawer: { ids: [printer], defaultId: null },
+      receipt: { ids: [printer], defaultId: null },
+    });
+    await setPrinterListsForTest(suite.db, display!.id, {
+      receipt: { ids: [printer], defaultId: null },
+    });
 
     const res = await send(app, "GET", "/management-api/printer-profiles", {
       cookie: managerCookie,
@@ -770,10 +770,12 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
       { name: `Live ${randomUUID()}`, formFactor: "till" },
       { name: `Retired ${randomUUID()}`, formFactor: "till", retiredAt: nowIso() },
     ]);
-    await suite.db.insert(deviceProfilePrinters).values([
-      { deviceProfileId: live!.id, printerId: printer, role: "receipt", position: 0 },
-      { deviceProfileId: retired!.id, printerId: printer, role: "receipt", position: 0 },
-    ]);
+    await setPrinterListsForTest(suite.db, live!.id, {
+      receipt: { ids: [printer], defaultId: null },
+    });
+    await setPrinterListsForTest(suite.db, retired!.id, {
+      receipt: { ids: [printer], defaultId: null },
+    });
 
     const res = await send(app, "GET", "/management-api/printer-profiles", {
       cookie: managerCookie,
@@ -1016,7 +1018,7 @@ describe("printer delete routes (hardware.manage)", () => {
       "print_jobs",
       "invoice_deliveries",
       "devices",
-      "device_profile_printers",
+      "device_profiles",
       "kitchen_stations",
       "drawer_opens",
       "receipt_reprints",
@@ -1045,12 +1047,8 @@ describe("printer delete routes (hardware.manage)", () => {
       name: profileName,
       formFactor: "phone-portrait",
     });
-    await suite.db.insert(deviceProfilePrinters).values({
-      deviceProfileId: profile!.id,
-      printerId,
-      role: "receipt",
-      position: 0,
-      isDefault: true,
+    await setPrinterListsForTest(suite.db, profile!.id, {
+      receipt: { ids: [printerId], defaultId: printerId },
     });
     const deviceLabel = `Handheld ${randomUUID()}`;
     const device = {
@@ -1139,10 +1137,7 @@ describe("printer delete routes (hardware.manage)", () => {
         .where(eq(stationPrinterPairs.printerId, p.printerId)),
     ).toEqual([]);
     expect(
-      await suite.db
-        .select()
-        .from(deviceProfilePrinters)
-        .where(eq(deviceProfilePrinters.printerId, p.printerId)),
+      await withTransaction(suite.db, (tx) => readProfilesListingPrinter(tx, p.printerId)),
     ).toEqual([]);
     expect(
       (await readPrinterHoldsForTest(suite.db)).filter((hold) => hold.printerId === p.printerId),

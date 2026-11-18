@@ -5,7 +5,6 @@ import { and, eq, sql } from "drizzle-orm";
 import {
   billPayments,
   deviceProfiles,
-  deviceProfilePrinters,
   floorZones,
   products,
   devices,
@@ -393,13 +392,9 @@ it("keeps the original Invoice destination through status, retry and handover", 
   });
   await inTx(venue, (tx) =>
     tx
-      .delete(deviceProfilePrinters)
-      .where(
-        and(
-          eq(deviceProfilePrinters.deviceProfileId, profileId),
-          eq(deviceProfilePrinters.role, "invoice"),
-        ),
-      ),
+      .update(deviceProfiles)
+      .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.invoice')` })
+      .where(eq(deviceProfiles.id, profileId)),
   );
   const withdrawn = await send(
     venue.app,

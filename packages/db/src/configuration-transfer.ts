@@ -1,8 +1,7 @@
 import type { Transaction } from "./client.js";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { kitchenStations } from "./schema/kitchen-stations.js";
-import { deviceProfiles } from "./schema/device-profiles.js";
-import { deviceProfilePrinters } from "./schema/device-profile-printers.js";
+import { deviceProfiles, printerListRoles } from "./schema/device-profiles.js";
 import {
   AppError,
   isBumpMode,
@@ -15,6 +14,45 @@ import {
 } from "@waitron/shared";
 import { storeTableShortNameKeys } from "./table-short-names.js";
 import "./errors.js";
+
+function validatePrinterLists(
+  profiles: readonly Record<string, unknown>[],
+  printers: readonly Record<string, unknown>[],
+): void {
+  const kinds = new Map(printers.map(({ id, kind }) => [id, kind]));
+  const roles = new Set<string>(printerListRoles);
+  const invalid = () =>
+    new AppError("setup.request_invalid", { field: "device_profiles.printer_lists" });
+  for (const profile of profiles) {
+    const raw = profile.printer_lists;
+    if (raw === undefined) continue;
+    if (typeof raw !== "string") throw invalid();
+    let lists: unknown;
+    try {
+      lists = JSON.parse(raw) as unknown;
+    } catch {
+      throw invalid();
+    }
+    if (lists === null || typeof lists !== "object" || Array.isArray(lists)) throw invalid();
+    for (const [role, list] of Object.entries(lists) as [string, unknown][]) {
+      if (!roles.has(role) || list === null || typeof list !== "object" || Array.isArray(list))
+        throw invalid();
+      const { ids, defaultId } = list as Record<string, unknown>;
+      if (
+        !Array.isArray(ids) ||
+        ids.some(
+          (id: unknown) =>
+            typeof id !== "string" ||
+            !kinds.has(id) ||
+            (role !== "invoice" && kinds.get(id) === "a4"),
+        ) ||
+        new Set(ids).size !== ids.length ||
+        (defaultId !== null && !ids.includes(defaultId))
+      )
+        throw invalid();
+    }
+  }
+}
 
 export function validateCoreConfiguration(
   tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
@@ -49,6 +87,7 @@ export function validateCoreConfiguration(
         throw new AppError("setup.request_invalid", { field: `printers.${field}` });
     }
   }
+  validatePrinterLists(tables.device_profiles ?? [], tables.printers ?? []);
   // An import makes a new venue, so the file's rows are all of its tables; the plan's tables have
   // no unique index to catch a clash later.
   for (const table of ["dining_tables", "floor_plan_tables"]) {
@@ -93,7 +132,16 @@ export const CORE_CONFIGURATION_TRANSFER = {
       name: "device_profiles",
       omit: ["card_readers"],
       leaveBehindWhenSet: "retired_at",
-      jsonReferences: [{ column: "order_zone_ids", paths: [["*"]] }],
+      jsonReferences: [
+        { column: "order_zone_ids", paths: [["*"]] },
+        {
+          column: "printer_lists",
+          paths: [
+            ["*", "ids", "*"],
+            ["*", "defaultId"],
+          ],
+        },
+      ],
     },
     {
       name: "floor_zones",
@@ -148,22 +196,14 @@ export const CORE_CONFIGURATION_TRANSFER = {
       reconnect: true,
       leaveBehindWhenSet: "deleted_at",
     },
-    { name: "device_profile_printers" },
     { name: "custom_themes" },
   ],
   validate: validateCoreConfiguration,
   afterImport: async (tx: Transaction) => {
     await tx
-      .delete(deviceProfilePrinters)
-      .where(
-        inArray(
-          deviceProfilePrinters.deviceProfileId,
-          tx
-            .select({ id: deviceProfiles.id })
-            .from(deviceProfiles)
-            .where(eq(deviceProfiles.formFactor, "kds")),
-        ),
-      );
+      .update(deviceProfiles)
+      .set({ printerLists: {} })
+      .where(eq(deviceProfiles.formFactor, "kds"));
     await storeTableShortNameKeys(tx);
     for (const station of await tx
       .select({ id: kitchenStations.id, printerIds: kitchenStations.printerIds })

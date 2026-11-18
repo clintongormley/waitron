@@ -1,8 +1,6 @@
 import "./errors.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import {
-  deviceProfilePrinters,
-  deviceProfiles,
   devices,
   invoiceDeliveries,
   isA4Printer,
@@ -10,7 +8,7 @@ import {
   printAgents,
   type Transaction,
 } from "@waitron/db";
-import { clearDeletedPagePrinter } from "@waitron/layouts";
+import { clearDeletedPagePrinter, readProfilesListingPrinter } from "@waitron/layouts";
 import type { OfficePrinterReport } from "@waitron/print-agent";
 import { AppError, type DeleteImpact } from "@waitron/shared";
 import { named } from "./delete-impact.js";
@@ -155,15 +153,13 @@ export async function readPagePrinterDeleteImpact(
     .select({ id: devices.id, name: devices.label })
     .from(devices)
     .where(eq(devices.invoicePrinterId, id));
-  const profiles = await tx
-    .select({
-      id: deviceProfiles.id,
-      name: deviceProfiles.name,
-      isDefault: deviceProfilePrinters.isDefault,
-    })
-    .from(deviceProfilePrinters)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
-    .where(and(eq(deviceProfilePrinters.printerId, id), eq(deviceProfilePrinters.role, "invoice")));
+  const profiles = (await readProfilesListingPrinter(tx, id))
+    .filter(({ lists }) => lists.invoice?.ids.includes(id))
+    .map(({ id: profileId, name, lists }) => ({
+      id: profileId,
+      name,
+      isDefault: lists.invoice?.defaultId === id,
+    }));
   const removes = [
     named("device_invoice", choosing),
     named("profile_invoice", profiles),

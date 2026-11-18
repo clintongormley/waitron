@@ -32,7 +32,6 @@ import {
   billPaymentLines,
   billPaymentRefunds,
   billPayments,
-  deviceProfilePrinters,
   deviceProfiles,
   devices,
   drawerOpens,
@@ -2114,13 +2113,9 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   async function unlistFromTill(): Promise<void> {
     await inTx((tx) =>
       tx
-        .delete(deviceProfilePrinters)
-        .where(
-          and(
-            eq(deviceProfilePrinters.deviceProfileId, venue.profileId),
-            eq(deviceProfilePrinters.role, "invoice"),
-          ),
-        ),
+        .update(deviceProfiles)
+        .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.invoice')` })
+        .where(eq(deviceProfiles.id, venue.profileId)),
     );
   }
 

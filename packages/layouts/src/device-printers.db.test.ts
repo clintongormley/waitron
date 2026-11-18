@@ -1,11 +1,9 @@
 import {
   CORE_MIGRATIONS,
   captureError,
-  deviceProfilePrinters,
   deviceProfiles,
   devices,
   printers,
-  restrictRefused,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -155,12 +153,11 @@ describe("a profile's printer lists and each device's current printers", () => {
       .where(eq(deviceProfiles.id, profileId));
     await inTx((tx) => setProfilePrinterLists(tx, profileId, populated));
     expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(lists({}));
-    expect(
-      await suite.db
-        .select()
-        .from(deviceProfilePrinters)
-        .where(eq(deviceProfilePrinters.deviceProfileId, profileId)),
-    ).toEqual([]);
+    const [stored] = await suite.db
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, profileId));
+    expect(stored!.lists).toEqual({});
     const [device] = await suite.db.select().from(devices).where(eq(devices.id, deviceId));
     expect(device).toMatchObject({
       receiptPrinterId: null,
@@ -585,7 +582,7 @@ describe("a profile's printer lists and each device's current printers", () => {
     }
   });
 
-  it("deletes a profile's list rows with the profile, and refuses deleting a listed printer", async () => {
+  it("deletes a profile together with its printer lists", async () => {
     const [profile] = await seedDeviceProfiles(suite.db, {
       name: "Deletable",
       formFactor: "till",
@@ -603,16 +600,11 @@ describe("a profile's printer lists and each device's current printers", () => {
       ),
     );
 
-    const refusal = await captureError(() =>
-      suite.db.delete(printers).where(eq(printers.id, lonely)),
-    );
-    expect(restrictRefused(refusal)).toBe(true);
-
     await suite.db.delete(deviceProfiles).where(eq(deviceProfiles.id, profile!.id));
     const left = await suite.db
-      .select({ id: deviceProfilePrinters.id })
-      .from(deviceProfilePrinters)
-      .where(eq(deviceProfilePrinters.deviceProfileId, profile!.id));
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, profile!.id));
     expect(left).toEqual([]);
     await suite.db.delete(printers).where(eq(printers.id, lonely));
   });
@@ -766,12 +758,11 @@ describe("a profile's invoice printer list", () => {
     const saved = lists({ invoicePrinterIds: [office, receipt], invoicePrinterDefaultId: office });
     await inTx((tx) => setProfilePrinterLists(tx, profileId, saved));
     expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(saved);
-    const rows = await suite.db
-      .select({ printerId: deviceProfilePrinters.printerId })
-      .from(deviceProfilePrinters)
-      .where(eq(deviceProfilePrinters.deviceProfileId, profileId))
-      .orderBy(deviceProfilePrinters.position);
-    expect(rows).toEqual([{ printerId: office }, { printerId: receipt }]);
+    const [stored] = await suite.db
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, profileId));
+    expect(stored!.lists).toEqual({ invoice: { ids: [office, receipt], defaultId: office } });
   });
 
   it("refuses an unknown printer with printer.not_found, storing nothing", async () => {

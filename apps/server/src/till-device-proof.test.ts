@@ -1,3 +1,4 @@
+import { setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
@@ -5,7 +6,7 @@ import { serve, type ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { deviceProfilePrinters, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
@@ -78,15 +79,12 @@ beforeAll(async () => {
       host: "127.0.0.1",
       hasCashDrawer: true,
     });
-    await tx.insert(deviceProfilePrinters).values(
-      (["receipt", "payment_slip", "cash_drawer"] as const).map((role) => ({
-        deviceProfileId: profile!.id,
-        printerId: printer.id,
-        role,
-        position: 0,
-        isDefault: true,
-      })),
-    );
+    const list = { ids: [printer.id], defaultId: printer.id };
+    await setPrinterListsForTest(tx, profile!.id, {
+      receipt: list,
+      payment_slip: list,
+      cash_drawer: list,
+    });
   });
   const [person] = await seedPersons(suite.db, {
     displayName: "Order administrator",

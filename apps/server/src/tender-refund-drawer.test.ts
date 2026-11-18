@@ -1,9 +1,9 @@
+import { setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  deviceProfilePrinters,
   deviceProfiles,
   devices,
   drawerOpens,
@@ -91,22 +91,10 @@ beforeEach(async () => {
     .returning();
   drawerId = choices[0]!.id;
   receiptId = choices[1]!.id;
-  await db.insert(deviceProfilePrinters).values([
-    {
-      deviceProfileId: profileId,
-      printerId: drawerId,
-      role: "cash_drawer",
-      isDefault: true,
-      position: 0,
-    },
-    {
-      deviceProfileId: profileId,
-      printerId: receiptId,
-      role: "receipt",
-      isDefault: true,
-      position: 0,
-    },
-  ]);
+  await setPrinterListsForTest(db, profileId, {
+    cash_drawer: { ids: [drawerId], defaultId: drawerId },
+    receipt: { ids: [receiptId], defaultId: receiptId },
+  });
 });
 async function refund(patch: Partial<typeof tenderRefunds.$inferInsert> = {}) {
   const [row] = await store.db
@@ -165,12 +153,8 @@ describe("settled-tender refund audited drawer", () => {
     expect([...(await jobs())[0]!.payload]).toEqual([0x1b, 0x70, 0x00, 0x19, 0xfa]);
   });
   it("uses an explicit drawer choice independently of the receipt choice", async () => {
-    await store.db.insert(deviceProfilePrinters).values({
-      deviceProfileId: profileId,
-      printerId: receiptId,
-      role: "cash_drawer",
-      isDefault: false,
-      position: 1,
+    await setPrinterListsForTest(store.db, profileId, {
+      cash_drawer: { ids: [drawerId, receiptId], defaultId: drawerId },
     });
     await store.db
       .update(devices)
@@ -213,8 +197,8 @@ describe("settled-tender refund audited drawer", () => {
           .where(eq(printers.id, drawerId));
       if (why === "no-choice")
         await store.db
-          .delete(deviceProfilePrinters)
-          .where(eq(deviceProfilePrinters.role, "cash_drawer"));
+          .update(deviceProfiles)
+          .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.cash_drawer')` });
       await enqueue(row.id);
       await empty();
     },

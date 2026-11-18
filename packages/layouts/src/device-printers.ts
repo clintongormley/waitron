@@ -1,10 +1,10 @@
 // The registry of `printer.not_found`, which this file throws.
 import "@waitron/printing";
 import "./errors.js";
-import { deviceProfilePrinters, deviceProfiles, isReceiptPrinter, printers } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import { deviceProfiles, isReceiptPrinter, printers } from "@waitron/db";
+import type { PrinterListRole, StoredPrinterLists, Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { settleProfilePrinterDevices } from "./device-equipment.js";
 
 export type PrinterRole = "receipt" | "payment_slip";
@@ -13,7 +13,7 @@ export type PrinterRole = "receipt" | "payment_slip";
  * Every role a profile lists printers for; a cash drawer is never chosen through `PrinterRole`, and
  * only the invoice list may name a page printer.
  */
-export type ProfilePrinterRole = PrinterRole | "cash_drawer" | "invoice";
+export type ProfilePrinterRole = PrinterListRole;
 
 /** Each role's list in display order and its default, which is on that list or `null` for none. */
 export type ProfilePrinterLists = {
@@ -52,45 +52,50 @@ export function emptyPrinterLists(): ProfilePrinterLists {
   };
 }
 
-/**
- * Folds `device_profile_printers` rows, already in position order, into one profile's lists.
- */
-export function foldPrinterLists(
-  rows: {
-    printerId: string;
-    role: ProfilePrinterRole;
-    isDefault: boolean;
-  }[],
-): ProfilePrinterLists {
+export function printerListsFrom(stored: StoredPrinterLists): ProfilePrinterLists {
   const lists = emptyPrinterLists();
-  for (const { printerId, role, isDefault } of rows) {
+  for (const role of PROFILE_PRINTER_ROLES) {
+    const list = stored[role];
+    if (list === undefined) continue;
     const keys = LIST_KEYS[role];
-    lists[keys.ids].push(printerId);
-    if (isDefault) lists[keys.defaultId] = printerId;
+    lists[keys.ids] = [...list.ids];
+    lists[keys.defaultId] = list.defaultId;
   }
   return lists;
+}
+
+function storedPrinterListsFrom(lists: ProfilePrinterLists): StoredPrinterLists {
+  const stored: StoredPrinterLists = {};
+  for (const role of PROFILE_PRINTER_ROLES) {
+    const keys = LIST_KEYS[role];
+    const ids = lists[keys.ids];
+    if (ids.length > 0) stored[role] = { ids, defaultId: lists[keys.defaultId] };
+  }
+  return stored;
+}
+
+export function readProfilesListingPrinter(tx: Transaction, printerId: string) {
+  return tx
+    .select({
+      id: deviceProfiles.id,
+      name: deviceProfiles.name,
+      lists: deviceProfiles.printerLists,
+    })
+    .from(deviceProfiles)
+    .where(
+      sql`exists (select 1 from json_tree(${deviceProfiles.printerLists}) where atom = ${printerId})`,
+    );
 }
 
 export async function readProfilePrinterLists(
   tx: Transaction,
   profileId: string,
 ): Promise<ProfilePrinterLists> {
-  const rows = await tx
-    .select({
-      printerId: deviceProfilePrinters.printerId,
-      role: deviceProfilePrinters.role,
-      isDefault: deviceProfilePrinters.isDefault,
-    })
-    .from(deviceProfilePrinters)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
-    .where(
-      and(
-        eq(deviceProfilePrinters.deviceProfileId, profileId),
-        ne(deviceProfiles.formFactor, "kds"),
-      ),
-    )
-    .orderBy(asc(deviceProfilePrinters.position));
-  return foldPrinterLists(rows);
+  const [profile] = await tx
+    .select({ lists: deviceProfiles.printerLists })
+    .from(deviceProfiles)
+    .where(and(eq(deviceProfiles.id, profileId), ne(deviceProfiles.formFactor, "kds")));
+  return printerListsFrom(profile?.lists ?? {});
 }
 
 /**
@@ -101,8 +106,7 @@ export async function readProfilePrinterLists(
  * added to the drawer list that has no cash drawer, while one already listed keeps its place
  * whatever its drawer flag says now. Refuses an id that names no printer the list may hold — any
  * printer for the invoice list, which also takes a page printer, and a receipt printer for every
- * other — with `printer.not_found`. Delete-then-insert is safe because nothing references
- * `device_profile_printers`.
+ * other — with `printer.not_found`. Each role lists a printer at most once.
  */
 export async function setProfilePrinterLists(
   tx: Transaction,
@@ -110,7 +114,7 @@ export async function setProfilePrinterLists(
   lists: ProfilePrinterLists,
 ): Promise<void> {
   const [profile] = await tx
-    .select({ formFactor: deviceProfiles.formFactor })
+    .select({ formFactor: deviceProfiles.formFactor, lists: deviceProfiles.printerLists })
     .from(deviceProfiles)
     .where(eq(deviceProfiles.id, profileId));
   if (profile?.formFactor === "kds") lists = emptyPrinterLists();
@@ -118,14 +122,21 @@ export async function setProfilePrinterLists(
   for (const role of PROFILE_PRINTER_ROLES) {
     const keys = LIST_KEYS[role];
     const defaultId = lists[keys.defaultId];
-    if (defaultId !== null && !lists[keys.ids].includes(defaultId)) {
+    const ids = lists[keys.ids];
+    if (new Set(ids).size !== ids.length) {
+      throw new AppError("device_profile.invalid", {
+        reason: "duplicate_printer",
+        field: keys.ids,
+      });
+    }
+    if (defaultId !== null && !ids.includes(defaultId)) {
       throw new AppError("device_profile.invalid", {
         reason: "default_not_listed",
         field: keys.defaultId,
       });
     }
   }
-  const stored = await readProfilePrinterLists(tx, profileId);
+  const stored = printerListsFrom(profile?.lists ?? {});
   const added = lists.cashDrawerPrinterIds.filter(
     (id) => !stored.cashDrawerPrinterIds.includes(id),
   );
@@ -144,19 +155,9 @@ export async function setProfilePrinterLists(
     }
   }
   await tx
-    .delete(deviceProfilePrinters)
-    .where(eq(deviceProfilePrinters.deviceProfileId, profileId));
-  const rows = PROFILE_PRINTER_ROLES.flatMap((role) => {
-    const keys = LIST_KEYS[role];
-    return lists[keys.ids].map((id, position) => ({
-      deviceProfileId: profileId,
-      printerId: id,
-      role,
-      position,
-      isDefault: id === lists[keys.defaultId],
-    }));
-  });
-  if (rows.length > 0) await tx.insert(deviceProfilePrinters).values(rows);
+    .update(deviceProfiles)
+    .set({ printerLists: storedPrinterListsFrom(lists) })
+    .where(eq(deviceProfiles.id, profileId));
   await settleProfilePrinterDevices(tx, profileId);
 }
 

@@ -3,7 +3,7 @@ import {
   seedVenueSettings,
   seedDepartmentReceipt,
 } from "@waitron/db/testing/seed.js";
-import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
@@ -11,7 +11,7 @@ import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import {
-  deviceProfilePrinters,
+  deviceProfiles,
   devices,
   printers,
   readTaxpayer,
@@ -402,16 +402,13 @@ describe("POST /management-api/receipt-preview", () => {
     onTestFinished(async () => {
       await suite.db.delete(devices).where(eq(devices.id, deviceId));
       await suite.db
-        .delete(deviceProfilePrinters)
-        .where(eq(deviceProfilePrinters.deviceProfileId, profileId));
+        .update(deviceProfiles)
+        .set({ printerLists: {} })
+        .where(eq(deviceProfiles.id, profileId));
       await suite.db.delete(printers).where(eq(printers.id, office));
     });
-    await suite.db.insert(deviceProfilePrinters).values({
-      deviceProfileId: profileId,
-      printerId: office,
-      role: "receipt",
-      position: 0,
-      isDefault: true,
+    await setPrinterListsForTest(suite.db, profileId, {
+      receipt: { ids: [office], defaultId: office },
     });
     const result = await rendered({});
     expect([result.preview.widthDots, result.preview.columns]).toEqual([512, 42]);
@@ -554,7 +551,7 @@ describe("POST /management-api/receipt-preview", () => {
         expect([result.paperWidths, result.paperWidth]).toEqual([["58mm"], "58mm"]);
       } finally {
         await suite.db.execute(
-          sql`delete from device_profile_printers where device_profile_id = ${profileId}`,
+          sql`update device_profiles set printer_lists = '{}' where id = ${profileId}`,
         );
         await suite.db.execute(sql`delete from devices where id = ${deviceId}`);
         await suite.db.execute(sql`delete from printers where id = ${printer!.id}`);

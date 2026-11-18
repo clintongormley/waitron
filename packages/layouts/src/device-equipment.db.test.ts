@@ -1,14 +1,14 @@
 import {
   CORE_MIGRATIONS,
   captureError,
-  deviceProfilePrinters,
+  removeIdFromJson,
   deviceProfiles,
   devices,
   printers,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   readPrinterHoldsForTest,
@@ -18,7 +18,7 @@ import {
   seedVenue,
 } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
-import { and, asc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDeviceProfileWithPrinters, listDeviceProfiles } from "./device-profile-store.js";
 import {
@@ -200,24 +200,12 @@ describe("which printer each of a device's roles resolves to", () => {
       .update(deviceProfiles)
       .set({ formFactor: "kds" })
       .where(eq(deviceProfiles.id, profile));
-    await suite.db.insert(deviceProfilePrinters).values([
-      { deviceProfileId: profile, printerId: p1, role: "receipt", isDefault: true, position: 0 },
-      {
-        deviceProfileId: profile,
-        printerId: f1,
-        role: "payment_slip",
-        isDefault: true,
-        position: 0,
-      },
-      {
-        deviceProfileId: profile,
-        printerId: drawer,
-        role: "cash_drawer",
-        isDefault: true,
-        position: 0,
-      },
-      { deviceProfileId: profile, printerId: f2, role: "invoice", isDefault: true, position: 0 },
-    ]);
+    await setPrinterListsForTest(suite.db, profile, {
+      receipt: { ids: [p1], defaultId: p1 },
+      payment_slip: { ids: [f1], defaultId: f1 },
+      cash_drawer: { ids: [drawer], defaultId: drawer },
+      invoice: { ids: [f2], defaultId: f2 },
+    });
     await suite.db
       .update(devices)
       .set({
@@ -483,12 +471,8 @@ describe("which printer each of a device's roles resolves to", () => {
   it("does not offer an office printer from a receipt profile link", async () => {
     await inTx(async (tx) => {
       const office = await insertA4Printer(tx);
-      await tx.insert(deviceProfilePrinters).values({
-        deviceProfileId: profile,
-        printerId: office,
-        role: "receipt",
-        position: 0,
-        isDefault: true,
+      await setPrinterListsForTest(tx, profile, {
+        receipt: { ids: [office], defaultId: office },
       });
     });
     expect(await resolve(a, "receipt")).toBeNull();
@@ -698,14 +682,7 @@ describe("which printer each of a device's roles resolves to", () => {
     await choose(a, "receipt", { id: p1 });
     await inTx((tx) => settleDevicePrinters(tx, b, { acquire: true }));
     expect(Object.fromEntries(await holders())).toEqual({ [p1]: a, [p2]: b });
-    await suite.db
-      .delete(deviceProfilePrinters)
-      .where(
-        and(
-          eq(deviceProfilePrinters.deviceProfileId, profile),
-          eq(deviceProfilePrinters.printerId, p1),
-        ),
-      );
+    await inTx((tx) => removeIdFromJson(tx, deviceProfiles.printerLists, p1));
 
     const reads = await inTx(async (tx) => {
       const selects = vi.spyOn(tx, "select");
@@ -899,7 +876,7 @@ describe("which printer each of a device's roles resolves to", () => {
     expect(await resolve(a, "receipt")).toBe(p1);
   });
 
-  it("keeps the profile's rows in list order with one default flag", async () => {
+  it("keeps the profile's list order and default in storage", async () => {
     await inTx((tx) =>
       setProfilePrinterLists(
         tx,
@@ -907,19 +884,11 @@ describe("which printer each of a device's roles resolves to", () => {
         lists({ receiptPrinterIds: [f2, f1], receiptPrinterDefaultId: f1 }),
       ),
     );
-    const rows = await suite.db
-      .select({
-        printerId: deviceProfilePrinters.printerId,
-        position: deviceProfilePrinters.position,
-        isDefault: deviceProfilePrinters.isDefault,
-      })
-      .from(deviceProfilePrinters)
-      .where(eq(deviceProfilePrinters.deviceProfileId, profile))
-      .orderBy(asc(deviceProfilePrinters.position));
-    expect(rows).toEqual([
-      { printerId: f2, position: 0, isDefault: false },
-      { printerId: f1, position: 1, isDefault: true },
-    ]);
+    const [row] = await suite.db
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, profile));
+    expect(row!.lists).toEqual({ receipt: { ids: [f2, f1], defaultId: f1 } });
   });
 });
 
@@ -1337,6 +1306,7 @@ describe("clearDeletedPrinter", () => {
         first.profileId,
         lists({
           receiptPrinterIds: [gone, kept],
+          receiptPrinterDefaultId: gone,
           paymentSlipPrinterIds: [gone, kept],
           cashDrawerPrinterIds: [gone, kept],
           invoicePrinterIds: [gone, kept],
@@ -1377,17 +1347,16 @@ describe("clearDeletedPrinter", () => {
         [c, { receipt: kept, slip: kept, drawer: kept, invoice: kept }],
       ]),
     );
-    const listed = await suite.db
-      .select({ printerId: deviceProfilePrinters.printerId, role: deviceProfilePrinters.role })
-      .from(deviceProfilePrinters)
-      .where(eq(deviceProfilePrinters.deviceProfileId, first.profileId))
-      .orderBy(asc(deviceProfilePrinters.role));
-    expect(listed).toEqual(
-      ["cash_drawer", "invoice", "payment_slip", "receipt"].map((role) => ({
-        printerId: kept,
-        role,
-      })),
-    );
+    const [row] = await suite.db
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, first.profileId));
+    expect(row!.lists).toEqual({
+      receipt: { ids: [kept], defaultId: null },
+      payment_slip: { ids: [kept], defaultId: null },
+      cash_drawer: { ids: [kept], defaultId: null },
+      invoice: { ids: [kept], defaultId: null },
+    });
     expect(await holders()).toEqual([[kept, c]]);
   });
 });
@@ -1420,14 +1389,11 @@ describe("clearDeletedPagePrinter", () => {
     expect(await invoiceChoice(a)).toBe(null);
     expect(await invoiceChoice(b)).toBe(kept);
     expect(await invoiceChoice(c)).toBe(receipt);
-    const listed = await suite.db
-      .select({
-        printerId: deviceProfilePrinters.printerId,
-      })
-      .from(deviceProfilePrinters)
-      .where(eq(deviceProfilePrinters.deviceProfileId, first.profileId))
-      .orderBy(asc(deviceProfilePrinters.position));
-    expect(listed).toEqual([{ printerId: kept }, { printerId: receipt }]);
+    const [row] = await suite.db
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, first.profileId));
+    expect(row!.lists.invoice).toEqual({ ids: [kept, receipt], defaultId: null });
   });
 });
 

@@ -1,3 +1,4 @@
+import { setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { getTableColumns } from "drizzle-orm";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -12,7 +13,6 @@ import {
   billPaymentRefunds,
   incidents,
   withTransaction,
-  deviceProfilePrinters,
   deviceProfiles,
   devices,
   drawerOpens,
@@ -126,12 +126,8 @@ beforeEach(async () => {
     })
     .returning();
   drawerId = printer!.id;
-  await db.insert(deviceProfilePrinters).values({
-    deviceProfileId: profileId,
-    printerId: drawerId,
-    role: "cash_drawer",
-    isDefault: true,
-    position: 0,
+  await setPrinterListsForTest(db, profileId, {
+    cash_drawer: { ids: [drawerId], defaultId: drawerId },
   });
   deps = {
     db,

@@ -357,9 +357,6 @@ export async function canonicalMadridSemantics(
       case "dashboard_sessions":
         key = parts("person_id", "created_at");
         break;
-      case "device_profile_printers":
-        key = parts("device_profile_id", "role", "position");
-        break;
       case "product_modifiers":
         key = parts("product_id", "sort");
         break;

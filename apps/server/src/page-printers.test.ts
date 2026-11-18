@@ -1,10 +1,10 @@
-import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  deviceProfilePrinters,
+  deviceProfiles,
   devices,
   invoiceDeliveries,
   invoiceSeries,
@@ -411,16 +411,9 @@ describe("deleting a page printer", () => {
       .update(devices)
       .set({ invoicePrinterId: office.id })
       .where(eq(devices.id, deviceId));
-    await suite.db.insert(deviceProfilePrinters).values([
-      {
-        deviceProfileId: profile!.id,
-        printerId: office.id,
-        role: "invoice",
-        position: 0,
-        isDefault: true,
-      },
-      { deviceProfileId: profile!.id, printerId: other.id, role: "invoice", position: 1 },
-    ]);
+    await setPrinterListsForTest(suite.db, profile!.id, {
+      invoice: { ids: [office.id, other.id], defaultId: office.id },
+    });
     const impact = await withTransaction(suite.db, (tx) => deletePagePrinter(tx, office.id));
     expect(impact).toMatchObject({
       target: { id: office.id, name: "Back office" },
@@ -438,15 +431,15 @@ describe("deleting a page printer", () => {
     expect(
       (await suite.db.select().from(devices).where(eq(devices.id, deviceId)))[0]!.invoicePrinterId,
     ).toBeNull();
-    expect(await suite.db.select().from(deviceProfilePrinters)).toEqual([
-      expect.objectContaining({ printerId: other.id, isDefault: false }),
-    ]);
-    const afterDelete = await suite.db.select().from(deviceProfilePrinters);
+    const read = () => suite.db.select({ lists: deviceProfiles.printerLists }).from(deviceProfiles);
+    const afterDelete = await read();
+    expect(afterDelete.flatMap(({ lists }) => lists.invoice?.ids ?? [])).toEqual([other.id]);
+    expect(afterDelete.flatMap(({ lists }) => lists.invoice?.defaultId ?? [])).toEqual([]);
     expect(await register(entry(v.agentTwo, { office: urfReport }))).toEqual({
       id: office.id,
       outcome: "enabled",
     });
-    expect(await suite.db.select().from(deviceProfilePrinters)).toEqual(afterDelete);
+    expect(await read()).toEqual(afterDelete);
     expect(
       (await suite.db.select().from(devices).where(eq(devices.id, deviceId)))[0]!.invoicePrinterId,
     ).toBeNull();
