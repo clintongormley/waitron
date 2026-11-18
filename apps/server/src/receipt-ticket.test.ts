@@ -951,12 +951,12 @@ describe("the QR comes first on an invoice that carries one", () => {
   });
 });
 
-/** A line's goods name as the receipt resolves it for an `es-ES` invoice. */
 /** A ticket's printed lines with each run of spaces closed up, so a row reads `caption amount`. */
 function paymentLines(bytes: Uint8Array): string[] {
   return printedLines(bytes).map((line) => line.trim().replace(/\s+/g, " "));
 }
 
+/** A line's goods name as the receipt resolves it for an `es-ES` invoice. */
 function lineName(line: TillSaleResult["lines"][number]): string {
   return resolveSnapshotText(line.descriptions, "es-ES", "es-ES");
 }
@@ -1558,9 +1558,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           method: "card",
           charged: "20.90",
           tip: "0.00",
-          ...{
-            card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
-          },
+          card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
           reference: null,
         },
       },
@@ -1588,9 +1586,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           method: "card",
           charged: "20.90",
           tip: "0.00",
-          ...{
-            card: { scheme: "MASTERCARD", last4: "4291", entryMode: "chip", authCode: "911234" },
-          },
+          card: { scheme: "MASTERCARD", last4: "4291", entryMode: "chip", authCode: "911234" },
           reference: null,
         },
       },
@@ -1615,7 +1611,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           method: "card",
           charged: "20.90",
           tip: "0.00",
-          ...{ card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null } },
+          card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null },
           reference: null,
         },
       },
@@ -1640,9 +1636,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
             method: "card",
             charged: "21.40",
             tip: "0.50",
-            ...{
-              card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
-            },
+            card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
             reference: null,
           },
         },
@@ -1665,7 +1659,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
             method: "card",
             charged: "20.90",
             tip: "0.00",
-            ...{ card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null } },
+            card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null },
             reference: null,
           },
         },
@@ -2204,7 +2198,9 @@ describe("names the card on a card payment", () => {
         printer: PRINTER_58,
       }),
     ))
-      expect(line.length).toBeLessThanOrEqual(30);
+      expect(line.length).toBeLessThanOrEqual(
+        textGrid(PRINTER_58.paperWidth, PRINTER_58.resolution).columns,
+      );
   });
 
   it("names the card on a card payment and keeps a typed reference", () => {

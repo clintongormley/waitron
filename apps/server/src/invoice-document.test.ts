@@ -1235,7 +1235,7 @@ describe("a takeaway sale's A4 invoice", () => {
   });
 });
 
-describe("the A4 page names the card", () => {
+describe("a card payment on the A4 page", () => {
   it("the A4 page names the card", () => {
     const [page] = layoutInvoicePages({
       ...FULL_INVOICE_DOCUMENT_FIXTURE,

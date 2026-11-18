@@ -1040,8 +1040,7 @@ export interface ReceiptAdjustment {
  * How a filed sale was paid, read back from the committed rows: `unpaid` is an invoice issued before
  * collection, `deferred` a bill closed as a deferred payment, `cash` carries the change, and
  * `card` the whole charge (`charged` = total + tip), the `tip` ("0.00" when none) and the operator
- * `reference` (null for an integrated capture). Card-present identity belongs only to the separate
- * payment slip.
+ * `reference` (null for an integrated capture).
  */
 export type TenderBlock =
   | { method: "unpaid" }

@@ -405,10 +405,13 @@ tiene alergias. Anota los detalles para que la estación prepare la comida con s
 - Finalidad: cobrar con tarjeta y poder demostrar cada pago.
 - Interesados: los clientes que pagan con tarjeta.
 - Datos: el tipo de tarjeta, sus cuatro últimas cifras, cómo se presentó la tarjeta, el código de
-  autorización y las referencias del proveedor de pago.
+  autorización y las referencias del proveedor de pago. Cuando el proveedor los envía, el tipo de
+  tarjeta, sus cuatro últimas cifras, cómo se presentó y el código de autorización se imprimen en
+  los recibos y facturas de la venta, también en el PDF que se envía por correo, y en el
+  justificante de tarjeta.
 - Destinatarios: el proveedor de pago con tarjeta que elegiste. Su lector lee la propia tarjeta;
   Waitron envía al proveedor el importe y sus propias referencias del pedido, y ningún dato del
-  cliente.
+  cliente. Tu proveedor de correo, por cada factura que envías.
 - Plazo de conservación: _fijar con tu asesor_.
 - Seguridad: como en todas las entradas.
 
