@@ -1,8 +1,8 @@
 import { t } from "../i18n/t.js";
 
-/** The Disable confirmation's sentence about menus: a count of null means unread or unreadable. */
+/** A null count means the number of menus is still unknown. */
 export function offMenusSentence(
-  subject: "product.off_menus" | "folders.off_menus",
+  subject: "product.off_menus" | "folders.off_menus" | "folders.delete_off_menus",
   count: number | null,
 ): string {
   if (count === null) return t(`${subject}_unknown`);

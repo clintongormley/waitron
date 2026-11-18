@@ -3325,7 +3325,7 @@ it("forgets the last Archive dialog's count while the next one's is still being 
   await el.updateComplete;
   await press(el, "delete");
   expect(el.api.countProductMenus).toHaveBeenLastCalledWith(["bread"]);
-  expect(archiveBody(el)).toBe(`${ARCHIVE_ONE_PRODUCT} It comes off every menu it is on.`);
+  expect(archiveBody(el)).toBe(`${ARCHIVE_PRODUCTS} It comes off every menu it is on.`);
 });
 it("in Spanish, says how many cartas the products come off", async () => {
   setLocale("es");
@@ -3334,81 +3334,97 @@ it("in Spanish, says how many cartas the products come off", async () => {
     "No se puede deshacer. La caja deja de vender los productos, salen de las listas de extras que los ofrecen y no se pueden recuperar. Sus ventas pasadas se conservan. Salen de las 2 cartas en las que están.",
   );
 });
-it("says products a category's deletion archives come off every menu, only once its contents are to be deleted", async () => {
-  const el = await mountBrowser();
-  const sentence = "Products archived by this deletion come off every menu they are on.";
+it("counts menus reached by active products in a category and its nested subfolders", async () => {
+  const el = await mountBrowser({ products: [...PRODUCTS, product("stout", "Stout", "b")] });
+  const unknown = "Products archived by this deletion come off every menu they are on.";
+  const counted = "Products archived by this deletion come off the one menu they are on.";
+  let answer!: (menus: number) => void;
+  vi.mocked(el.api.countProductMenus).mockImplementation(
+    () => new Promise<number>((resolve) => (answer = resolve)),
+  );
+
   await selectKeys(el, ["folder:d"]);
   await press(el, "delete");
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
-  );
-  expect(dialog(el)!.textContent).not.toContain(sentence);
-  expect(dialog(el)!.textContent).not.toContain("This can't be undone.");
-  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
-  await el.updateComplete;
-  expect(dialog(el)!.textContent).toContain(sentence);
-  expect(dialog(el)!.textContent).toContain("This can't be undone.");
-  expect(dialog(el)!.textContent).toContain("they come off the extras lists that offer them");
-  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
-  await el.updateComplete;
-  expect(dialog(el)!.textContent).not.toContain(sentence);
+  await vi.waitFor(() => expect(dialog(el)!.querySelector("input[value=delete]")).not.toBeNull());
+  expect(dialog(el)!.textContent).not.toContain(unknown);
   expect(dialog(el)!.textContent).not.toContain("This can't be undone.");
   expect(el.api.countProductMenus).not.toHaveBeenCalled();
+
+  dialog(el)!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+  await el.updateComplete;
+  expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith(["cola", "stout"]);
+  expect(dialog(el)!.textContent).toContain(unknown);
+  expect(dialog(el)!.textContent).toContain("This can't be undone.");
+  expect(dialog(el)!.textContent).toContain("they come off the extras lists that offer them");
+  answer(1);
+  await vi.waitFor(() => expect(dialog(el)!.textContent).toContain(counted));
+
+  dialog(el)!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
+  await el.updateComplete;
+  expect(dialog(el)!.textContent).not.toContain("Products archived by this deletion");
+  expect(dialog(el)!.textContent).not.toContain("This can't be undone.");
 });
-it("says nothing about menus when a deleted category's contents disable no product", async () => {
-  const el = await mountBrowser();
+it("says nothing about menus when a deleted category's contents archive no product", async () => {
+  const el = await mountBrowser({ products: PRODUCTS.filter(({ id }) => id !== "cola") });
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
     { id: "d", folders: 1, products: 1, activeProducts: 0, routes: 0, ownRoutes: 0 },
   ]);
   await selectKeys(el, ["folder:d"]);
   await press(el, "delete");
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
-  );
-  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+  await vi.waitFor(() => expect(dialog(el)!.querySelector("input[value=delete]")).not.toBeNull());
+  dialog(el)!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
   await el.updateComplete;
   expect(dialog(el)!.textContent).not.toContain("come off every menu");
+  expect(el.api.countProductMenus).not.toHaveBeenCalled();
 });
-const ARCHIVE_ONE_PRODUCT =
-  "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept.";
-it.each([
-  [
-    ["bread"],
-    `${ARCHIVE_ONE_PRODUCT} It comes off every menu it is on.`,
-    `${ARCHIVE_ONE_PRODUCT} It comes off the 2 menus it is on.`,
-  ],
-  [
-    ["bread", "burger"],
-    `${ARCHIVE_PRODUCTS} They come off every menu they are on.`,
-    `${ARCHIVE_PRODUCTS} They come off the 2 menus they are on.`,
-  ],
-] as const)(
-  "counts the menus products %j picked beside a category come off, whichever way its contents go",
-  async (productIds, unknown, counted) => {
-    const el = await mountBrowser();
-    let answer!: (menus: number) => void;
-    vi.mocked(el.api.countProductMenus).mockImplementation(
-      () => new Promise<number>((resolve) => (answer = resolve)),
-    );
-    await toggleCategory(el, "f");
-    await selectKeys(el, [...productIds, "folder:d"]);
-    await press(el, "delete");
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
-    );
-    expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith([...productIds]);
-    expect(archiveBody(el)).toBe(unknown);
-    answer(2);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-    expect(archiveBody(el)).toBe(counted);
-    for (const contents of ["delete", "move_up"]) {
-      el.shadowRoot!.querySelector<HTMLInputElement>(`input[value=${contents}]`)!.click();
-      await el.updateComplete;
-      expect(archiveBody(el)).toBe(counted);
-    }
-  },
-);
+it("counts a directly selected product once and drops a late count after switching back to Keep", async () => {
+  const el = await mountBrowser({ products: [...PRODUCTS, product("stout", "Stout", "b")] });
+  let answerForDelete!: (menus: number) => void;
+  vi.mocked(el.api.countProductMenus).mockImplementation((ids) =>
+    ids.length === 1 ? Promise.resolve(2) : new Promise((resolve) => (answerForDelete = resolve)),
+  );
+
+  await toggleCategory(el, "d");
+  await selectKeys(el, ["cola", "folder:d"]);
+  await press(el, "delete");
+  const keepCount = "It comes off the 2 menus it is on.";
+  await vi.waitFor(() => expect(archiveBody(el)).toContain(keepCount));
+  expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith(["cola"]);
+
+  dialog(el)!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+  await el.updateComplete;
+  expect(el.api.countProductMenus).toHaveBeenLastCalledWith(["cola", "stout"]);
+  expect(dialog(el)!.textContent).toContain(
+    "Products archived by this deletion come off every menu they are on.",
+  );
+  expect(dialog(el)!.textContent).not.toContain(keepCount);
+
+  dialog(el)!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
+  await vi.waitFor(() => expect(archiveBody(el)).toContain(keepCount));
+  answerForDelete(4);
+  await Promise.resolve();
+  await el.updateComplete;
+  expect(archiveBody(el)).toContain(keepCount);
+});
+it("shows one count below Delete contents when the folder holds only empty subfolders", async () => {
+  const el = await mountBrowser({
+    products: PRODUCTS.filter(({ id }) => id !== "cola" && id !== "lager"),
+  });
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "d", folders: 1, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
+  ]);
+  vi.mocked(el.api.countProductMenus).mockResolvedValue(2);
+  await selectKeys(el, ["bread", "folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)!.querySelector("input[value=delete]")).not.toBeNull());
+  dialog(el)!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+  await el.updateComplete;
+  const choice = dialog(el)!.querySelector("fieldset")!;
+  expect(choice.nextElementSibling?.textContent?.trim()).toBe(
+    "Products archived by this deletion come off the 2 menus they are on.",
+  );
+  expect(archiveBody(el)).toBe(ARCHIVE_PRODUCTS);
+});
 it("says products picked beside a category come off every menu when their count cannot be read", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.countProductMenus).mockRejectedValue({ code: "server.internal" });
@@ -3419,7 +3435,7 @@ it("says products picked beside a category come off every menu when their count 
   );
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(archiveBody(el)).toBe(`${ARCHIVE_ONE_PRODUCT} It comes off every menu it is on.`);
+  expect(archiveBody(el)).toBe(`${ARCHIVE_PRODUCTS} It comes off every menu it is on.`);
 });
 it("says Archive for products alone in Spanish, and Delete once a category is selected", async () => {
   setLocale("es");
@@ -3469,7 +3485,12 @@ it("keeps Archive for a selection mixing active and disabled products, and sends
   await showArchived(el);
   await selectKeys(el, ["bread", "old"]);
   expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe("Archive");
+  vi.mocked(el.api.countProductMenus).mockResolvedValue(1);
   await press(el, "delete");
+  await vi.waitFor(() =>
+    expect(archiveBody(el)).toBe(`${ARCHIVE_PRODUCTS} It comes off the one menu it is on.`),
+  );
+  expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith(["bread"]);
   await press(el, "confirm");
   await vi.waitFor(() =>
     expect(el.api.deleteProductItems).toHaveBeenCalledWith(

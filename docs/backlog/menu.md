@@ -454,11 +454,6 @@ categories (#340, [API and integration guide](../developers/product-categories.m
   product back to a menu revives those prices (found in A347's review, believed to predate it).
   Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
   reaches.
-- A bulk Disable of 500 products could not read the count in A347's review (HTTP 431, because
-  the ids go in the URL), so the dialog says "every menu"; the smallest count that fails was not
-  measured. A435-1 (2026-10-09) renames the action Archive; the request still carries ids in the
-  URL. The earlier 500-product failure has not been remeasured.
-- Deleting a category with its contents says its products come off every menu, with no count.
 
 ## The combined end-to-end journey has not been walked
 

@@ -1368,11 +1368,21 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       return c.json(await gated(c, session, (tx) => listProducts(tx)));
     }),
   );
-  app.get("/management-api/products/menus", (c) =>
+  app.post("/management-api/products/menus", (c) =>
     run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const ids = (c.req.queries("id") ?? []).map((id) => requireUuidParam(id, "ProductId"));
-      return c.json({ menus: await gated(c, session, (tx) => menusHolding(tx, ids)) });
+      const managementSessionId = requireManagementSession(c);
+      const body = await readJsonBody<{ productIds?: unknown }>(c);
+      const ids = idList(body.productIds, "productIds", "ProductId");
+      return withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId,
+          permission: MENU_WRITE_PERMISSION,
+          touch: false,
+        });
+        const menus = await menusHolding(tx, ids);
+        c.header("x-waitron-menu-revision", JSON.stringify({ epoch, sequence }));
+        return c.json({ menus });
+      });
     }),
   );
   app.post("/management-api/products/editor", (c) =>

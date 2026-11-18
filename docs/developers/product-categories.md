@@ -417,7 +417,7 @@ requested keeps its captured selection, including while the category summary is 
 With only products selected, the toolbar's action reads **Archive**, and its dialog asks
 "Archive N products?". This cannot be undone. The rows and past sales remain, but the products
 cannot be brought back. The warning names the extras lists they come off. The dialog also reads
-how many menus hold them from `GET /management-api/products/menus` (below); if that read fails,
+how many menus hold them from `POST /management-api/products/menus` (below); if that read fails,
 it says "They come off every menu they are on."
 
 A product or variant cannot be archived while a live or scheduled menu includes it, whether as a
@@ -430,8 +430,9 @@ When every selected product is archived already, the toolbar offers no Archive. 
 archives only its active products. With a category selected the action reads **Delete**, because
 the category itself is deleted. Products selected directly are archived in either case. Products
 inside the category, including its subcategories, are archived only with the dialog's "Also: …"
-answer; the other answer moves them without changing their active state. The archive answer adds
-"Products archived by this deletion come off every menu they are on."
+answer. The other answer moves them without changing their active state. The count includes each
+active menu once across all products that will be archived. While the count is pending or
+unavailable, the dialog says those products come off every menu they are on.
 
 Archiving a product archives its variants, removes its places in menu drafts and extras lists,
 and clears its variants' menu prices in the same transaction (`archiveProducts`,
@@ -524,10 +525,10 @@ category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_
 | `PATCH /management-api/categories/:id` | supplied name, parent or colour fields; 200, saved category |
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents, shown }`; 204 |
-| `GET /management-api/products/menus?id=<id>&id=<id>` | 200, `{ menus }`: how many Active menus' structures reach any of the products, each menu once, a menu that reaches them only through an included menu too; a size counts by its product, and a Device Home Page shortcut alone counts nothing; no id gives `{ menus: 0 }`, and a malformed id is `shared.invalid_id` (400) |
+| `POST /management-api/products/menus` | `{ productIds }` → 200, `{ menus }`. Counts each active menu that reaches at least one product, including through another menu. A size counts by its product. A Device Home Page shortcut alone counts nothing. An empty array returns `{ menus: 0 }`. A malformed UUID returns `shared.invalid_id` (400). |
 | `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes archived products, `activeProducts` leaves them out; `routes` counts the routing cells on the category's row or the row of any category below it, `ownRoutes` those on the category's own row |
 
-Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
+For move and delete, both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
 is `move_up` or `delete`. `shown` is the counts the client read before deleting: one `{ id, folders, products, activeProducts, routes, ownRoutes }` per selected category,
 exactly, with whole numbers of zero or more. It is required when `categoryIds` is not empty and
 ignored when it is. For example, once you have created Cocktails and your products, use their

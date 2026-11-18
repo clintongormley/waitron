@@ -7,6 +7,7 @@ import {
   CORE_MIGRATIONS,
   settings as settingsTable,
   categories,
+  dashboardSessions,
   personRoles,
   products,
   roles,
@@ -539,7 +540,54 @@ describe("folder selection routes", () => {
   );
 });
 
-describe("GET /management-api/products/menus", () => {
+describe("POST /management-api/products/menus", () => {
+  const path = "/management-api/products/menus";
+
+  it("counts menus reached by the first and last products in a selection of 500", async () => {
+    const app = mountApp();
+    const first = await createMenuVia(app, "First menu in large selection");
+    const last = await createMenuVia(app, "Last menu in large selection");
+    const firstProduct = await createNamedProductVia(app, "First product in large selection");
+    const lastProduct = await createNamedProductVia(app, "Last product in large selection");
+    await offerVia(app, first, firstProduct);
+    await offerVia(app, last, lastProduct);
+    const productIds = [
+      firstProduct,
+      ...Array.from({ length: 498 }, () => crypto.randomUUID()),
+      lastProduct,
+    ];
+
+    const response = await send(app, "POST", path, { body: { productIds } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ menus: 2 });
+  });
+
+  it("answers with the current revision without touching the session", async () => {
+    const app = mountApp();
+    await createMenuVia(app, "Menu before count preview");
+    const revisionHeader = "x-waitron-menu-revision";
+    const settingsPath = "/management-api/menu-settings";
+    const before = await send(app, "GET", settingsPath);
+    const revision = before.headers.get(revisionHeader);
+    expect(revision).toEqual(expect.any(String));
+
+    const lastSeenAt = new Date(Date.now() - 60_000).toISOString();
+    await suite.db
+      .update(dashboardSessions)
+      .set({ lastSeenAt })
+      .where(eq(dashboardSessions.personId, managerPersonId));
+
+    const response = await send(app, "POST", path, { body: { productIds: [] } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get(revisionHeader)).toBe(revision);
+    const sessions = await suite.db
+      .select({ lastSeenAt: dashboardSessions.lastSeenAt })
+      .from(dashboardSessions)
+      .where(eq(dashboardSessions.personId, managerPersonId));
+    expect(sessions).toEqual([{ lastSeenAt }]);
+    expect((await send(app, "GET", settingsPath)).headers.get(revisionHeader)).toBe(revision);
+  });
+
   it("counts the menus the products are on, each once", async () => {
     const app = mountApp();
     const first = await createMenuVia(app, `Menus count A ${crypto.randomUUID()}`);
@@ -551,11 +599,7 @@ describe("GET /management-api/products/menus", () => {
     await offerVia(app, second, onBoth);
     await offerVia(app, first, onOne);
     const count = async (ids: string[]) => {
-      const response = await send(
-        app,
-        "GET",
-        `/management-api/products/menus?${ids.map((id) => `id=${id}`).join("&")}`,
-      );
+      const response = await send(app, "POST", path, { body: { productIds: ids } });
       expect(response.status).toBe(200);
       return response.json();
     };
@@ -567,7 +611,9 @@ describe("GET /management-api/products/menus", () => {
   });
 
   it("refuses an id that is not a uuid", async () => {
-    const response = await send(mountApp(), "GET", "/management-api/products/menus?id=invalid");
+    const response = await send(mountApp(), "POST", path, {
+      body: { productIds: ["invalid"] },
+    });
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
   });
@@ -577,12 +623,10 @@ describe("GET /management-api/products/menus", () => {
       [null, 401, "management_session.required"],
       [staffCookie, 403, "authorization.not_permitted"],
     ] as const) {
-      const response = await send(
-        mountApp(),
-        "GET",
-        `/management-api/products/menus?id=${crypto.randomUUID()}`,
-        { cookie },
-      );
+      const response = await send(mountApp(), "POST", path, {
+        body: { productIds: [crypto.randomUUID()] },
+        cookie,
+      });
       expect(response.status).toBe(status);
       expect(await response.json()).toMatchObject({ error: { code } });
     }

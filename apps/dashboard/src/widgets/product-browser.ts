@@ -148,6 +148,7 @@ export class ProductBrowser extends LitElement {
   @state() private summaryFailed = false;
   @state() private archivingMenus: number | null = null;
   #archivingRead = 0;
+  #archivingProductIds: string[] = [];
   @state() private operationBusy = false;
   @state() private operationError = "";
   @state() private routingPreview: ProductItemsRoutingPreview | null = null;
@@ -257,6 +258,12 @@ export class ProductBrowser extends LitElement {
       !this.operationBusy
     )
       void this.#readRoutingPreview();
+    if (
+      ["operation", "operationSelection", "contents", "summaries", "categories", "products"].some(
+        (key) => changed.has(key),
+      )
+    )
+      this.#syncArchivingMenus();
     if (changed.has("nameDraft")) this.nameColor = undefined;
     // Worked out once per change of its inputs, not on every redraw of the browser.
     if (changed.has("routing") || changed.has("categories"))
@@ -427,7 +434,6 @@ export class ProductBrowser extends LitElement {
     this.summaryFailed = false;
     this.operationError = "";
     this.operation = selection.productIds.length ? "delete" : null;
-    if (selection.productIds.length) void this.#readArchivingMenus(selection.productIds);
     if (!selection.categoryIds.length) return;
     this.summaryLoading = true;
     try {
@@ -458,9 +464,34 @@ export class ProductBrowser extends LitElement {
       this.summaryLoading = false;
     }
   }
+  #syncArchivingMenus(): void {
+    const archiving = this.operation === "delete";
+    const active = archiving ? this.products.filter((product) => product.active) : [];
+    const activeIds = new Set(active.map(({ id }) => id));
+    const productIds = new Set(
+      this.operationSelection.productIds.filter((id) => activeIds.has(id)),
+    );
+    if (archiving && this.#contentsChoice() === "delete") {
+      const subtree = new Set(
+        this.operationSelection.categoryIds.flatMap((id) => [
+          ...categoryWithDescendants(id, this.categories),
+        ]),
+      );
+      for (const { id, primaryCategoryId } of active)
+        if (primaryCategoryId !== null && subtree.has(primaryCategoryId)) productIds.add(id);
+    }
+    if (
+      productIds.size === this.#archivingProductIds.length &&
+      this.#archivingProductIds.every((id) => productIds.has(id))
+    )
+      return;
+    this.#archivingProductIds = [...productIds];
+    void this.#readArchivingMenus(this.#archivingProductIds);
+  }
   async #readArchivingMenus(productIds: string[]): Promise<void> {
     const read = ++this.#archivingRead;
     this.archivingMenus = null;
+    if (!productIds.length) return;
     let menus: number | null = null;
     try {
       menus = await (this.api.background ?? this.api).countProductMenus(productIds);
@@ -699,6 +730,18 @@ export class ProductBrowser extends LitElement {
           : "folders.archive_products_heading",
       count,
     );
+    const deletesContents = this.#contentsChoice() === "delete";
+    const archivingCount = this.#archivingProductIds.length;
+    const offMenus = archivingCount
+      ? offMenusSentence(
+          deletesContents
+            ? "folders.delete_off_menus"
+            : archivingCount === 1
+              ? "product.off_menus"
+              : "folders.off_menus",
+          this.archivingMenus,
+        )
+      : "";
     const blocked =
       this.summaryLoading ||
       this.summaryFailed ||
@@ -762,12 +805,7 @@ export class ProductBrowser extends LitElement {
                   selection.productIds.length
                     ? html`<p>
                         ${t("folders.archive_products_body")}
-                        ${offMenusSentence(
-                          selection.productIds.length === 1
-                            ? "product.off_menus"
-                            : "folders.off_menus",
-                          this.archivingMenus,
-                        )}
+                        ${deletesContents ? nothing : offMenus}
                       </p>`
                     : nothing
                 }
@@ -826,9 +864,9 @@ export class ProductBrowser extends LitElement {
                                 >
                               </fieldset>
                               ${
-                                this.contents === "delete" && totals.active
+                                deletesContents && archivingCount
                                   ? html`${!selection.productIds.length ? html`<p>${t("folders.archive_products_body")}</p>` : nothing}
-                                      <p>${t("folders.delete_off_menus")}</p>`
+                                    ${offMenus ? html`<p>${offMenus}</p>` : nothing}`
                                   : nothing
                               }`
                           : nothing
@@ -840,26 +878,7 @@ export class ProductBrowser extends LitElement {
         }
         ${
           this.operation === "delete"
-            ? archiveExtraListWarning(
-                this.products,
-                [
-                  ...selection.productIds,
-                  ...(this.contents === "delete"
-                    ? this.products
-                        .filter(
-                          (product) =>
-                            product.primaryCategoryId !== null &&
-                            selection.categoryIds.some((id) =>
-                              categoryWithDescendants(id, this.categories).has(
-                                product.primaryCategoryId!,
-                              ),
-                            ),
-                        )
-                        .map((product) => product.id)
-                    : []),
-                ],
-                this.extraLists,
-              )
+            ? archiveExtraListWarning(this.products, this.#archivingProductIds, this.extraLists)
             : nothing
         }
         <div data-test="folder-routing-preview">
