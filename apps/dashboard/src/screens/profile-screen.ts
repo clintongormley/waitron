@@ -162,6 +162,7 @@ export class ProfileScreen extends LitElement {
       .action-row .labelled {
         position: relative;
         align-self: flex-start;
+        padding-inline-end: calc(var(--wt-help-badge-target) / 2);
       }
       .field-label {
         font-size: var(--wt-font-size-sm);

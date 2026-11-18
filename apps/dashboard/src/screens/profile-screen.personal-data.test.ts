@@ -1,6 +1,7 @@
 import type { DownloadedFile } from "@waitron/dashboard-kit";
 import { setHelpMode, type WtButton } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -314,27 +315,40 @@ describe("profile-screen copy of your data help", () => {
 });
 
 describe("profile-screen copy of your data help placement", () => {
-  it("hangs the help badge over the label's top trailing corner, inside its row", async () => {
-    setHelpMode(true);
-    try {
-      const { el } = await mount(stubApi());
-      await document.fonts.ready;
-      const help = tooltip(el)!;
-      const badge = help.getBoundingClientRect();
-      const label = row(el).querySelector(".text .field-value")!.getBoundingClientRect();
-      const box = row(el).getBoundingClientRect();
-      const download = button(el).getBoundingClientRect();
-      expect(badge.width).toBeGreaterThan(0);
-      expect(badge.bottom).toBeGreaterThan(box.top);
-      expect(badge.top).toBeLessThan(box.bottom);
-      const [x, y] = [badge.left + badge.width / 2, badge.top + badge.height / 2];
-      expect(Math.abs(x - label.right)).toBeLessThanOrEqual(1);
-      expect(Math.abs(y - label.top)).toBeLessThanOrEqual(1);
-      expect(badge.right).toBeLessThanOrEqual(download.left);
-    } finally {
-      setHelpMode(false);
-    }
-  });
+  it.each([
+    ["en", 1280],
+    ["en", 390],
+    ["es-ES", 1280],
+    ["es-ES", 390],
+  ] as const)(
+    "puts the help badge after the label's last letter, at its top, inside its row (%s, %ipx)",
+    async (locale, width) => {
+      const previous = currentLocale();
+      const [oldWidth, oldHeight] = [window.innerWidth, window.innerHeight];
+      setLocale(locale);
+      setHelpMode(true);
+      try {
+        await page.viewport(width, 800);
+        const { el } = await mount(stubApi());
+        await document.fonts.ready;
+        const help = tooltip(el)!;
+        const badge = help.getBoundingClientRect();
+        const label = row(el).querySelector(".text .field-value")!.getBoundingClientRect();
+        const box = row(el).getBoundingClientRect();
+        const download = button(el).getBoundingClientRect();
+        expect(badge.width).toBeGreaterThan(0);
+        expect(badge.bottom).toBeGreaterThan(box.top);
+        expect(badge.top).toBeLessThan(box.bottom);
+        expect(badge.left).toBeGreaterThanOrEqual(label.right - 0.5);
+        expect(Math.abs(badge.top + badge.height / 2 - label.top)).toBeLessThanOrEqual(1);
+        expect(badge.right).toBeLessThanOrEqual(download.left);
+      } finally {
+        setHelpMode(false);
+        setLocale(previous);
+        await page.viewport(oldWidth, oldHeight);
+      }
+    },
+  );
 });
 
 describe.each(["light", "dark"] as const)(
