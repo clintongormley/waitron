@@ -724,8 +724,8 @@ const PERMANENT_SALE_REFUSALS = new Set([
 /**
  * Print the bill's refusals shown in their code's own words, beside the table refusals
  * (`tableWriteError`). The route's other codes are said as a failed table change on purpose: the
- * till has no sentence for them (`node.read_only`, `series.no_*_for_node`, `chain.append_contention`,
- * `session.person_not_signed_in`), or they mean a fault in the till's request
+ * till has no sentence for them (`node.read_only`, `series.no_*_for_node`, `chain.append_contention`),
+ * or they mean a fault in the till's request
  * (`management.request_invalid`) or in Waitron's own data, which staff cannot act on.
  */
 const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([

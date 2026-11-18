@@ -463,7 +463,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "invoice.choice_locked": {
     en: "This bill's invoice type can no longer change: its receipt has been issued, or it is set to a full invoice and has already taken a payment.",
-    es: "El tipo de factura de esta cuenta ya no se puede cambiar: ya se emitió su tique, o tiene factura completa y ya se ha cobrado un pago.",
+    es: "El tipo de factura de esta cuenta ya no se puede cambiar: ya se emitió su ticket, o tiene factura completa y ya se ha cobrado un pago.",
   },
   "invoice_correction.not_settled": {
     en: "This bill is not fully paid, so its invoice cannot be corrected yet.",
@@ -1015,7 +1015,7 @@ const FIGURES_UNCHECKED = {
 const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
   replaced: {
     en: "This receipt was replaced by a full invoice, so it cannot be corrected.",
-    es: "Este tique se sustituyó por una factura completa, así que no se puede rectificar.",
+    es: "Este ticket se sustituyó por una factura completa, así que no se puede rectificar.",
   },
   unsupported: {
     en: "Invoices cannot be corrected at this venue.",
