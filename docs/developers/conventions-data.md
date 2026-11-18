@@ -6386,6 +6386,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   list and a named type only by its name, sees no spread at a throw site or in a log call, no free
   text and not the watchdog's own line. Limits: [conventions-ui.md](conventions-ui.md#the-unauthenticated-recovery-page-curated-title-and-action-the-failed-starts-report-and-the-logs-last-lines).
 
+2026-11-18: `PERSONAL_LOG_PATHS` no longer exists; a SumUp merchant's name travels as
+`merchantName`, a key on `PERSONAL_LOG_KEYS`.
+
 ### Configuration preview field guard
 
 - **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the

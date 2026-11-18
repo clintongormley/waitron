@@ -5,8 +5,8 @@ import { ambiguousMerchants, SumUpPaymentsClient } from "./client.js";
 describe("ambiguousMerchants", () => {
   it("reads the pickable merchants off a payment.provider_merchant_ambiguous rejection", () => {
     const merchants = [
-      { code: "M1", name: "One" },
-      { code: "M2", name: "Two" },
+      { code: "M1", merchantName: "One" },
+      { code: "M2", merchantName: "Two" },
     ];
     expect(
       ambiguousMerchants({ code: "payment.provider_merchant_ambiguous", params: { merchants } }),

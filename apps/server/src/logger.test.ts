@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  maskPersonalData,
-  PERSONAL_LOG_KEYS,
-  PERSONAL_LOG_PATHS,
-  stringifyMasked,
-} from "./log-personal-data.js";
+import { maskPersonalData, PERSONAL_LOG_KEYS, stringifyMasked } from "./log-personal-data.js";
 import { createLogger, LOG_LEVELS, type LogLevel } from "./logger.js";
 
 const AT = new Date("2026-07-26T09:14:02.000Z");
@@ -162,47 +157,23 @@ describe("createLogger personal data", () => {
     expect(JSON.parse(writeLine({}, "email"))).toEqual({ at, level: "warn", event: "email" });
   });
 
-  it("masks a merchant's name under merchants and only there", () => {
-    const first = writeLine({
+  it("masks each merchant's merchantName in a merchants list", () => {
+    const line = writeLine({
       merchants: [
-        { code: "MC1", name: "Jamie King Foster" },
-        { code: "MC2", name: null },
+        { code: "MC1", merchantName: "Jamie King Foster" },
+        { code: "MC2", merchantName: null },
       ],
-      name: "Patio",
-      other: { merchants: "Jamie King Foster" },
     });
-    expect(JSON.parse(first)).toEqual({
+    expect(JSON.parse(line)).toEqual({
       merchants: [
-        { code: "MC1", name: "J***e K***g F***r" },
-        { code: "MC2", name: null },
+        { code: "MC1", merchantName: "J***e K***g F***r" },
+        { code: "MC2", merchantName: null },
       ],
-      name: "Patio",
-      other: { merchants: "Jamie King Foster" },
       at,
       level: "warn",
       event: "x",
     });
-
-    const second = writeLine({
-      merchants: [{ code: "MC1", name: "Jamie King Foster", email: "jamie.king@example.test" }],
-    });
-    expect(JSON.parse(second)).toEqual({
-      merchants: [{ code: "MC1", name: "J***e K***g F***r", email: "j***g@e***e.test" }],
-      at,
-      level: "warn",
-      event: "x",
-    });
-    expect(second).not.toContain("Jamie King");
-    expect(second).not.toContain("jamie.king@example.test");
-  });
-
-  it("keeps a merchants element that is not an object as it is", () => {
-    expect(JSON.parse(writeLine({ merchants: ["Jamie King Foster", null, ["MC1"]] }))).toEqual({
-      merchants: ["Jamie King Foster", null, ["MC1"]],
-      at,
-      level: "warn",
-      event: "x",
-    });
+    expect(line).not.toContain("Jamie King");
   });
 });
 
@@ -225,11 +196,6 @@ describe("stringifyMasked", () => {
     ["a listed key at the top", { email: "martha.spencer@example.test", id: 1 }],
     ["a listed key nested", { edit: { editorName: "Martha Spencer", editorVersion: 3 } }],
     ["a listed key inside an array", { conflicts: [{ editorName: "Jamie King" }, { id: 2 }] }],
-    [
-      "the merchants path",
-      { merchants: [{ code: "MC1", name: "Jamie King Foster" }, "MC2", null] },
-    ],
-    ["merchants that is not a list", { merchants: "Jamie King Foster", name: "Patio" }],
     ["a string value carrying a listed key's text", { note: '{"email":"x"}', other: '"person":' }],
     ["null and undefined under listed keys", { email: null, person: undefined, taxId: null }],
     ["a BigInt under a listed key", { email: 12n, id: "p1" }],
@@ -250,7 +216,6 @@ describe("stringifyMasked", () => {
   it.each([
     ["a BigInt under no listed key", { id: 12n }],
     ["a cyclic object under no listed key", { holder: cyclic }],
-    ["a BigInt under merchants", { merchants: [{ name: "x", code: 1n }] }],
   ] as [string, unknown][])("throws what the replacer throws for %s", (_label, value) => {
     let expected: unknown;
     try {
@@ -275,22 +240,13 @@ describe("stringifyMasked", () => {
     taxId: "M***r",
     idEmisorFactura: "M***r",
     todayName: "M***a S***r",
+    merchantName: "M***a S***r",
   };
 
   it.each([...PERSONAL_LOG_KEYS])("masks the listed key %s", (key) => {
     expect(MARTHA_SPENCER_UNDER[key]).toBeDefined();
     expect(stringifyMasked({ [key]: "Martha Spencer" })).toBe(
       `{"${key}":"${MARTHA_SPENCER_UNDER[key]}"}`,
-    );
-  });
-
-  it.each(
-    [...PERSONAL_LOG_PATHS].flatMap(([parent, children]) =>
-      [...children].map((child) => [parent, child]),
-    ),
-  )("masks %s[].%s", (parent, child) => {
-    expect(stringifyMasked({ [parent]: [{ [child]: "Martha Spencer" }] })).toBe(
-      `{"${parent}":[{"${child}":"M***a S***r"}]}`,
     );
   });
 
@@ -387,21 +343,7 @@ describe("maskPersonalData keeps the first and last character of each piece", ()
     expect(maskPersonalData("person", sym)).toBe(sym);
   });
 
-  it("writes a merchant's name by the name rule, and any other value there as ***", () => {
-    expect(
-      maskPersonalData("merchants", [
-        { code: "MC1", name: "Jamie King Foster" },
-        { code: "MC2", name: 7 },
-        { code: "MC3", name: { first: "Martha" } },
-      ]),
-    ).toEqual([
-      { code: "MC1", name: "J***e K***g F***r" },
-      { code: "MC2", name: "***" },
-      { code: "MC3", name: "***" },
-    ]);
-  });
-
-  it("leaves a key on neither list as it is", () => {
+  it("leaves a key not on the list as it is", () => {
     expect(maskPersonalData("venueName", "Bar del Port")).toBe("Bar del Port");
   });
 });

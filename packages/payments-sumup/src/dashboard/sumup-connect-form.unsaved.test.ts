@@ -236,8 +236,8 @@ it("an ambiguous merchant choice is dirty and Discard restores the visible empty
       code: "payment.provider_merchant_ambiguous",
       params: {
         merchants: [
-          { code: "A", name: "One" },
-          { code: "B", name: "Two" },
+          { code: "A", merchantName: "One" },
+          { code: "B", merchantName: "Two" },
         ],
       },
     };

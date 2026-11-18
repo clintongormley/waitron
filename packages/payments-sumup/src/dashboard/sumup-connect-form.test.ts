@@ -69,7 +69,9 @@ type MerchantField = HTMLElement & {
   options: { value: string; label: string }[];
 };
 
-function ambiguousThenPending(merchants: { code: string; name: string }[]): DashboardRequest {
+function ambiguousThenPending(
+  merchants: { code: string; merchantName: string }[],
+): DashboardRequest {
   return vi
     .fn()
     .mockImplementationOnce(async () => {
@@ -149,8 +151,8 @@ describe("sumup-connect-form", () => {
 
   it("offers a merchant picker on an ambiguous key and re-submits with the chosen merchantCode", async () => {
     const merchants = [
-      { code: "M1", name: "Deli One" },
-      { code: "M2", name: "Deli Two" },
+      { code: "M1", merchantName: "Deli One" },
+      { code: "M2", merchantName: "Deli Two" },
     ];
     const request = vi
       .fn()
@@ -172,6 +174,10 @@ describe("sumup-connect-form", () => {
     // The picker is shown, no error message yet.
     const select = q(el, "[data-test=merchant]") as MerchantField | null;
     expect(select).not.toBeNull();
+    expect(select!.options).toEqual([
+      { value: "M1", label: "Deli One" },
+      { value: "M2", label: "Deli Two" },
+    ]);
     expect(await bottomOf(el)).toBe("");
     expect(fieldError(el, "merchant")).toBe("");
 
@@ -235,7 +241,7 @@ describe("sumup-connect-form", () => {
     const request = vi.fn(async () => {
       throw {
         code: "payment.provider_merchant_ambiguous",
-        params: { merchants: [{ code: "M1", name: "Deli One" }] },
+        params: { merchants: [{ code: "M1", merchantName: "Deli One" }] },
       };
     }) as unknown as DashboardRequest;
     const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
@@ -422,8 +428,8 @@ describe("sumup-connect-form", () => {
 
   it("marks an unpicked merchant on a press, focuses the picker, and clears once one is chosen", async () => {
     const request = ambiguousThenPending([
-      { code: "M1", name: "Deli One" },
-      { code: "M2", name: "Deli Two" },
+      { code: "M1", merchantName: "Deli One" },
+      { code: "M2", merchantName: "Deli Two" },
     ]);
     const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
 
@@ -475,8 +481,8 @@ describe("sumup-connect-form", () => {
       setLocale(locale);
       try {
         const request = ambiguousThenPending([
-          { code: "M1", name: "Deli One" },
-          { code: "M2", name: "Deli Two" },
+          { code: "M1", merchantName: "Deli One" },
+          { code: "M2", merchantName: "Deli Two" },
         ]);
         const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
         await setInput(el, "api-key", "spans_two_merchants");
@@ -501,7 +507,7 @@ describe("sumup-connect-form", () => {
   );
 
   it("keeps a merchant's change inside the form", async () => {
-    const request = ambiguousThenPending([{ code: "M1", name: "Deli One" }]);
+    const request = ambiguousThenPending([{ code: "M1", merchantName: "Deli One" }]);
     const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
     await setInput(el, "api-key", "spans_two_merchants");
     await connect(el);

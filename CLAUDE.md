@@ -411,12 +411,12 @@ called weaker than its name, the topic file lists what it does not see.
   copies and keep external readers accepting both names until both sides deploy. Stored-copy and
   prefix-matcher locations: [conventions-data.md](docs/developers/conventions-data.md).
 - **A detail or log field holding a person's name, email or tax number uses a name on
-  `PERSONAL_LOG_KEYS` or a path on `PERSONAL_LOG_PATHS` (`apps/server/src/log-personal-data.ts`),
-  which the server's logger masks in every line it writes; the answer keeps it. Name it for whose
-  it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is
-  the venue's own): the list is flat across every code.** Cost: staff names and
-  emails reached the sign-in-free recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name:
-  reads text. [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
+  `PERSONAL_LOG_KEYS` (`apps/server/src/log-personal-data.ts`), which the server's logger masks in
+  every line it writes; the answer keeps it. Name it for whose it is (`guestName`,
+  `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is the venue's own):
+  the list is flat across every code.** Cost: staff names and emails reached the sign-in-free
+  recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name: reads text.
+  [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
 - **General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,

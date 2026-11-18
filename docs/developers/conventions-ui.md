@@ -1519,10 +1519,9 @@ saw, such as the trading watch's append-only refusal.
 **People's names, emails and tax numbers in the tail are partly masked.** Every line the server's
 logger writes (`createLogger`, `apps/server/src/logger.ts`) is serialised by `stringifyMasked`
 (`apps/server/src/log-personal-data.ts`), which applies `maskPersonalData` only to a line holding a
-key on `PERSONAL_LOG_KEYS` or `merchants` (or one plain JSON cannot serialise). `maskPersonalData`
-masks the value of any key on `PERSONAL_LOG_KEYS`, at any depth, and each `name` inside an array
-under `merchants`, keeping the first and last character of each piece around a fixed `***` (owner
-decision 2026-10-26, the S10 plan's decision 14): an email keeps them for the part before the `@`
+key on `PERSONAL_LOG_KEYS` (or one plain JSON cannot serialise). `maskPersonalData` masks the
+value of any key on `PERSONAL_LOG_KEYS`, at any depth, keeping the first and last character of each
+piece around a fixed `***` (owner decision 2026-10-26, the S10 plan's decision 14): an email keeps them for the part before the `@`
 and for the domain name, with the ending after the last dot (`m***r@e***e.test`); a name keeps them
 for each word (`J***i P***g F***r`); a tax number keeps them for the whole value (`1***Z`). A piece
 of three characters or fewer, and any value that is not a string, is `***` alone. A `null` or
