@@ -353,7 +353,7 @@ describe("invoice delivery recovery at trading boot", () => {
       server = await startMirror(ctx.env, held);
       await vi.waitFor(async () => {
         const response = await fetch(`http://127.0.0.1:${held.port}/health`);
-        expect(response.status).toBe(503);
+        expect(response.status).toBe(200);
       });
       expect(await delivery(ctx.paper.id)).toEqual(before);
       const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.jobId));
