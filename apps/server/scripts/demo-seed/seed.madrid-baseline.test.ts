@@ -271,7 +271,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   kitchen_courses: ["location_id"],
   print_agents: ["location_id"],
   printers: ["location_id", "ticket_scope", "pickup_roles"],
-  print_jobs: ["location_id"],
+  print_jobs: ["location_id", "receipt_handover"],
   department_sale_policies: ["receipt_print_mode"],
   zone_sale_policies: ["receipt_print_mode"],
   departments: ["location_id"],
@@ -433,7 +433,7 @@ const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
     ["email_verified_at", "pending_email_folded"],
   ],
   print_agents: [["node_id", "setup_url", "setup_port"]],
-  print_jobs: [["status", "receipt_copy", "receipt_handover"]],
+  print_jobs: [["status", "receipt_copy"]],
   printers: [["active", "portable"]],
   products: [
     ["customer_name", "name_key"],
@@ -2704,6 +2704,29 @@ for (const locale of ["en", "es"] as const) {
       });
       deliveriesTable.foreignKeys = deliveriesTable.foreignKeys.map((key, id) => ({ ...key, id }));
       const printJobsTable = expected[phase].tables.print_jobs!;
+      for (const [anchor, names] of [
+        ["receipt_copy", ["handed_over_by", "handed_over_at"]],
+        ["last_error", ["next_attempt_at"]],
+      ] as const) {
+        const index = printJobsTable.columns.findIndex((column) => column.name === anchor);
+        expect(index, `${phase}/print_jobs/${anchor} anchor`).toBeGreaterThanOrEqual(0);
+        printJobsTable.columns.splice(
+          index + 1,
+          0,
+          ...names.map((name) => ({
+            name,
+            type: "TEXT",
+            notnull: 0,
+            dflt_value: null,
+            pk: 0,
+          })),
+        );
+        for (const row of Object.values(printJobsTable.rows)) {
+          for (const name of names) row[name] = null;
+        }
+      }
+      printJobsTable.foreignKeys.splice(2, 0, personKey("handed_over_by", 2));
+      printJobsTable.foreignKeys = printJobsTable.foreignKeys.map((key, id) => ({ ...key, id }));
       printJobsTable.columns.push({
         name: "tender_refund_id",
         type: "TEXT",

@@ -11,7 +11,7 @@ import { createPageTestPages, type PageTestPages } from "./page-test-pages.js";
 import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { AppError, steadyNow } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import type { ReceiptQrText } from "@waitron/fiscal";
@@ -41,6 +41,7 @@ import {
   enqueuePrintJob,
   listPrinters,
   MAX_DELIVERY_ATTEMPTS,
+  PRINT_RETRY_MAX_WAIT_MS,
   updatePrinter,
   esc,
   jobWidthDots,
@@ -633,12 +634,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     pullWakes.add(wakeAgent);
     signal.addEventListener("abort", end, { once: true });
     deps.stopping?.addEventListener("abort", end, { once: true });
-    const claim = () =>
-      withTransaction(deps.db, (tx) =>
+    let lastClaimAt: number;
+    const claim = () => {
+      lastClaimAt = Date.now();
+      return withTransaction(deps.db, (tx) =>
         ended
           ? Promise.resolve([])
           : claimInvoicePrintJobs(tx, agentId, { visibleKeys }, deps.now?.()),
       );
+    };
     try {
       // Subscribe before rechecking so work arriving after the first claim cannot be missed.
       let claimed = await claim();
@@ -652,20 +656,49 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         }
         let remaining = deadline - performance.now();
         if (remaining <= 0) break;
-        // Idle connections hold no write turn. Drawer expiry and claim leases still settle on time.
+        // A retry can become due between the last claim and this read.
+        const lastClaim = new Date(lastClaimAt!).toISOString();
+        const retryAhead = new Date(lastClaimAt! + PRINT_RETRY_MAX_WAIT_MS).toISOString();
         const pending = await deps.db
           .select({
             status: printJobs.status,
             kind: printJobs.kind,
             createdAt: printJobs.createdAt,
             claimedAt: printJobs.claimedAt,
+            nextAttemptAt: printJobs.nextAttemptAt,
           })
           .from(printJobs)
           .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
           .where(
-            and(isNull(printers.deletedAt), inArray(printJobs.status, ["printing", "queued"])),
+            and(
+              isNull(printers.deletedAt),
+              or(
+                inArray(printJobs.status, ["printing", "queued"]),
+                and(
+                  eq(printJobs.status, "failed"),
+                  eq(printJobs.kind, "document"),
+                  lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
+                  gt(printJobs.nextAttemptAt, lastClaim),
+                  lte(printJobs.nextAttemptAt, retryAhead),
+                  eq(printers.active, true),
+                  or(
+                    eq(printers.transport, "network_tcp"),
+                    visibleKeys.length === 0
+                      ? undefined
+                      : and(
+                          inArray(printers.transport, ["usb", "bluetooth"]),
+                          inArray(printers.localKey, visibleKeys),
+                        ),
+                  ),
+                ),
+              ),
+            ),
           );
         for (const job of pending) {
+          if (job.status === "failed") {
+            remaining = Math.min(remaining, Date.parse(job.nextAttemptAt!) - Date.now());
+            continue;
+          }
           if (job.status === "queued" && job.kind === "document") {
             remaining = Math.min(remaining, 2_000);
             continue;

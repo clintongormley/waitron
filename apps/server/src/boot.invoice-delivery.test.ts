@@ -255,7 +255,6 @@ describe("invoice delivery recovery at trading boot", () => {
         status: "failed",
         attempts: MAX_DELIVERY_ATTEMPTS,
         lastError: "restart",
-        receiptHandover: null,
       });
       await vi.waitFor(async () => {
         const [control] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ordinary));

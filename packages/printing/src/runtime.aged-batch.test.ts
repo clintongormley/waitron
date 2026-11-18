@@ -47,6 +47,7 @@ async function fixture(kind: "document" | "drawer", separatePrinter = false) {
 }
 
 describe("aged print batches", () => {
+  afterEach(() => vi.useRealTimers());
   it.each(["document", "drawer"] as const)(
     "does not give two agents the unsent %s tail",
     async (kind) => {
@@ -211,6 +212,7 @@ describe("aged print batches", () => {
             visibleKeys: [],
           }),
         );
+      vi.useFakeTimers({ toFake: ["Date"] });
       expect((await pull()).map((job) => job.id)).toEqual([ctx.first]);
       await withTransaction(suite.db, (tx) =>
         reportPrintJob(tx, {
@@ -219,6 +221,7 @@ describe("aged print batches", () => {
           outcome: { status: "failed", error: "paper out" },
         }),
       );
+      vi.setSystemTime(Date.now() + 5_000);
       expect((await pull()).map((job) => job.id)).toEqual([ctx.first]);
       await withTransaction(suite.db, (tx) =>
         reportPrintJob(tx, {

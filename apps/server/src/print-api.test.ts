@@ -656,6 +656,10 @@ describe("remote agents with an aged print queue", () => {
         },
       }),
     });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     await failed.runOnce();
     expect(await jobRow(first)).toMatchObject({
       status: "failed",
@@ -682,7 +686,10 @@ describe("remote agents with an aged print queue", () => {
         transport: sink,
       }),
     });
-    for (let tick = 0; tick < 3; tick += 1) await recovered.runOnce();
+    await recovered.runOnce();
+    vi.setSystemTime(Date.now() + 5_000);
+    await recovered.runOnce();
+    await recovered.runOnce();
     expect(sink.written.map((entry) => [...entry.bytes])).toEqual([[9], [1], [2]]);
     expect(await jobRow(first)).toMatchObject({ status: "done", attempts: 1 });
     expect((await jobRow(tail)).status).toBe("done");
@@ -6491,6 +6498,28 @@ describe("held print pulls", () => {
       clock.mockRestore();
       steady.mockRestore();
     }
+  });
+
+  it("wakes a held pull when a reachable document is due to retry", async () => {
+    const r = await rig();
+    const printer = await createNetworkPrinter(r.app, "192.0.2.15", 9100);
+    const id = await enqueue(printer, new Uint8Array([1]));
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    expect((await pull(r.app, r.token)).jobs).toMatchObject([{ id }]);
+    const report = await send(r.app, "POST", `/print-api/agent/jobs/${id}/result`, {
+      bearer: r.token,
+      body: { status: "failed", error: "printer offline" },
+    });
+    expect(report.status).toBe(204);
+    const dueAt = Date.now() + 5_000;
+    const pending = r.request();
+    await held(r.bus);
+    await vi.advanceTimersByTimeAsync(dueAt - Date.now() - 1);
+    expect(r.bus.subscriberCount).toBe(1);
+    expect((await jobRow(id)).status).toBe("failed");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(r.bus.subscriberCount).toBe(0);
+    expect((await (await pending).json()).jobs).toMatchObject([{ id }]);
   });
 
   it("answers empty at the requested deadline", async () => {

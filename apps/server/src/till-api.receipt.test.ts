@@ -719,7 +719,13 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
       ).json(),
     ).toEqual(confirmed);
     const jobsAfter = await suite.db.select().from(printJobs);
-    expect(jobsAfter).toEqual([{ ...jobsBefore[0], receiptHandover: confirmed.handover }]);
+    expect(jobsAfter).toEqual([
+      {
+        ...jobsBefore[0],
+        handedOverBy: confirmed.handover.personId,
+        handedOverAt: confirmed.handover.confirmedAt,
+      },
+    ]);
     expect(await suite.db.select().from(sales)).toEqual(salesBefore);
     expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscalBefore);
   });
@@ -763,7 +769,9 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
       await refused();
     }
     expect(
-      (await suite.db.select().from(printJobs)).every((job) => job.receiptHandover === null),
+      (await suite.db.select().from(printJobs)).every(
+        (job) => job.handedOverBy === null && job.handedOverAt === null,
+      ),
     ).toBe(true);
   });
 
@@ -788,7 +796,9 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
       expect(await res.json()).toMatchObject({ error: { code: "working_order.not_found" } });
     }
     expect(
-      (await suite.db.select().from(printJobs)).every((job) => job.receiptHandover === null),
+      (await suite.db.select().from(printJobs)).every(
+        (job) => job.handedOverBy === null && job.handedOverAt === null,
+      ),
     ).toBe(true);
   });
 });
@@ -1816,7 +1826,9 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
           "createdAt",
           "deliveredAt",
           "claimedBy",
-          "receiptHandover",
+          "handedOverBy",
+          "handedOverAt",
+          "nextAttemptAt",
           "tenderRefundId",
         ].sort(),
       );
