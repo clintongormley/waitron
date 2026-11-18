@@ -149,9 +149,8 @@ second amendment are marked **my call (plan writer)**:
     version with `createdAt: at` (`packages/menu/src/menu-publication.ts:770-777`) that carries the
     full menu's OLD copy unchanged, which would make an older price newest again. The copy's stamp
     contributes to the working hash, and a correction carries it over unchanged. A direct draft
-    request that saves the same value can still move the stamp. The editor's Save action stays
-    disabled until the draft changes. A tie happens only when two copies differ by something changed on a product's
-    own page (a name, a course), never by a price or surcharge, which are the set menu's own
+    request that saves the same value can still move the stamp. A tie happens only when two copies
+    differ by something changed on a product's own page (a name, a course), never by a price or surcharge, which are the set menu's own
     writes.
     Serving also reads a copy from a version that is no longer live (Task 6b), so piece 2 can draw
     and price a bill's recorded copy after a republish.
@@ -975,7 +974,7 @@ export interface PublishedSetMenu {
     line includes → `buildMenuDocument(Lunch).setMenuProblems` names Daily menu with
     `dish_not_included`, and `publishMenu(Lunch)` refuses `set_menu.not_publishable`
     `{ menuId: dailyMenu, count: 1 }`.
-  - `"the copy carries the set menu's change stamp, and it moves only when the set menu changes"`:
+  - `"copies the set menu's stored change stamp rather than the time of the build"`:
     `changedAt` equals Daily menu's `updated_at`; building Lunch twice gives the same working hash;
     a surcharge change moves `changedAt` and the working hash.
   - Publish a surcharge on a dish at a different rate. A null takeaway override resolves to

@@ -407,6 +407,9 @@ it("uses the dish surcharge for a variant without its own and drops a dish with 
   await publish();
   const copy = await fromLive();
   expect(copy?.offers).not.toHaveProperty(f.wineItem);
+  expect(Object.values(copy!.offers)).toContainEqual(
+    expect.objectContaining({ productId: f.bravas, countsAsCourseId: f.drinks }),
+  );
   expect(copy?.root.members).not.toContainEqual(
     expect.objectContaining({ menuItemId: f.wineItem }),
   );
