@@ -1,11 +1,45 @@
 # Till receipt matches paper
 
-**Goal.** Open a recorded sale in Find a bill and see the same receipt content and order as on paper, including the full invoice and corrective layouts. Use the receipt layout's 80 mm setting and let the browser wrap to the screen. The scope is the till receipt article and the reads that open it. Lane L owns paper and fiscal output.
+**Finish line.** Open a paid bill awaiting handover or a recorded transaction in Find a bill and see
+the receipt's contents in paper order, including full and corrective invoices. The screen uses the
+compact 80 mm layout. A 58 mm print can format its date differently and an A4 print uses page
+layout. The browser's text wraps and stays readable in either theme. The scope ends at the receipt
+article and its signed-in reads. Lane L owns paper and fiscal output.
 
-**Source.** [The till's on-screen receipt is a second copy of the layout](../../backlog/printers.md#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout). The two entries to the article are the paid bill awaiting handover and a recorded transaction. They already load the ticket in `till-app.ts` through `getFiledTicket` and `getTransactionReceipt`. Immediate payment opens the separate document-choice dialog.
+**Ask.** [Bring the till receipt into line with paper](../../backlog/printers.md#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout).
+The server's `buildReceiptDocument` supplies the content. Its existing structured elements let
+the browser render text and table headings for people using assistive technology.
 
-1. **Return the layout on the two existing authenticated reads.** Add a server helper in `till-receipt-preview.ts` that calls `buildReceiptDocument` for the ticket those handlers already read. In `till-api.ts` and `transaction-receipt-api.ts`, call it after the existing session and zone checks, alongside the ticket read. Use the ticket's stored names, language, issuer and offset, the existing address flag and trim, and `readPrintedGuests` for the same saved count and fallback as paper. Fall back to `readTaxpayer` for an unfiled issuer, as receipt printing does. Expose the ordered elements as `receiptPreview`; share the wire types in `packages/shared/src/receipt-document.ts` and type the two client reads in `apps/till/src/api/client.ts`. The payment, filing, printer, refund acknowledgment and delivery paths keep their current contracts.
-2. **Draw those elements in the till.** In `till-ticket-view.ts`, replace the receipt article's own date, line, discount, tax and total rules with a Lit renderer of the elements, using native tables with scoped headers for table data. Reuse its QR and followed-server logo display, and keep the operator controls below the article. Use the existing theme tokens and let long descriptions wrap on phones. Leave the settlement choice dialog alone. Update the English and Spanish table-service guide, the receipt naming explanation in `docs/developers/products.md` and only this item's entry and pointers in the printers backlog bundle.
-3. **Prove the change test-first.** In `till-api.receipt.test.ts` assert preview content on the existing reopen case with its no-write snapshot. In `transaction-receipt-api.test.ts` assert stored details and layout for a mixed-rate simplified sale with a guest count and a full invoice with both dish and bill discounts. Keep the session and source-zone refusal assertions. In `till-ticket-view.test.ts` prove that rendered element order, prices, accessible table headers, logo and QR follow the supplied document and that actions remain outside it. Keep action coverage and exact recorded-data behaviour. Where layout assertions change, cite the paper rule and retain the check at the layer that owns it. Run the two route files, `receipt-document.test.ts`, `receipt-ticket.test.ts` and the focused till receipt/entry tests. Inspect receipt screens at phone and desktop widths in English and Spanish UI, in both themes.
+1. **Serve the document.** In `till-api.ts` build `receiptPreview` only for
+   `GET /api/sales/:id?receiptPreview=1`, requested by the existing paid-bill opening in
+   `till-app.ts` through an opt-in in `api/client.ts`. Add it to
+   `GET /api/transactions/:saleId/receipt` in `transaction-receipt-api.ts`. Keep the session
+   and zone checks ahead of both. In `till-receipt-preview.ts`, pass the existing ticket, its
+   receipt language and naming language, date offset, trim and address flag to
+   `buildReceiptDocument` with the 80 mm setting. Use `readPrintedGuests` for the saved count
+   and `readTaxpayer` only when the ticket lacks a filed issuer. Pass the server's practice-mode
+   and simulated-card flags. Put the existing element and table **types** in
+   `packages/shared/src/receipt-document.ts` and re-export them from their current server files.
+2. **Render the document.** In `till-ticket-view.ts` use a Lit renderer that handles every
+   element kind. Carry forward alignment and indentation and render native tables with scoped
+   headings, reusing headings on a continued item table. Use the existing QR and followed-server
+   display logo. Draw the practice wording once from the document. Keep the exported `lineName`
+   for the correction dialog, and the inherited delivery controls for the settlement dialog.
+   Lane D's #3703 removes the same set-lunch formatting from both screen and paper. Reconcile
+   that patch if it lands first. Update both table-service guides and the stale references in
+   `docs/developers/products.md`, `docs/developers/conventions-ui.md`, `layout.ts` and
+   `receipt-lines.ts`. Remove the completed item and correct the printers backlog bundle count.
+3. **Verify test-first.** In `till-api.receipt.test.ts`, reopen the same sale with and without the
+   flag, checking preview presence, the existing no-write snapshot and refusals. In
+   `transaction-receipt-api.test.ts`, check a mixed-rate simplified document with saved guests
+   and a discounted full invoice. In `till-app.test.ts` make the server preview disagree with
+   the basket and check what opens in both entry paths. In the `till-ticket-view` main,
+   presentation, kitchen-note and accessibility suites keep the assertions about what the browser
+   renders, including literal text, table semantics, QR, logo replacement, language and controls.
+   Use `receipt-document.test.ts` for layout rules and `receipt-ticket.test.ts` for paper checks.
+   Keep each existing assertion at the layer that owns it, using an existing equivalent check
+   where one already pins that behaviour. Record changed checks in the PR. Run every changed test
+   file plus both paper suites. Look at phone and desktop in English and Spanish UI and both themes.
 
-**Expected size.** About 250 production lines added and 450 removed, with roughly 180 test lines added or changed. Count the deleted layout and any tests whose assertions move before finish-branch.
+**Expected size.** Production about +250/−450 lines. Tests about +300/−1,500, mostly removing
+fixtures and checks duplicated by the paper suite. Keep the route and rendering tests in this PR.
