@@ -4,6 +4,7 @@
 
 > **OWNER LANDS THIS PULL REQUEST** (rules §6: it changes `sales`). It holds nothing that does not
 > change `sales`, its two ledger neighbours or the return of originals that depend on them.
+> The lane can land independent pull requests while this one waits.
 
 **Goal:** Fold `sale_receipt_guests` and `sale_receipt_headers` into `sales` as four columns fixed when
 the sale is written, in `recordSale`'s one insert; give `sales`, `sale_voids` and `unpaid_departures`
@@ -54,9 +55,11 @@ Use the existing savepoint pattern for a void so a refused void leaves no new pe
 
 Test the real append, batch and receive path, including the restored names, unchanged original
 hashes, replay and a refused void. Keep the matched main control as a PR receipt. Run a later
-correction on a returned sale whose department had to be restored, and stop if it refuses or
-files unexpectedly. Run the fiscal golden and immutability suites unedited. The watcher cleared
-about 1,000 handwritten added lines for the entire slice, including the return fix and its test.
+correction on a returned sale whose department had to be restored. The watcher cleared finishing
+os8 at 15:19 on 18 November after the €123.45 correction probe refused at the missing-line check
+on os8 and on main with a department supplied by hand. The missing lines stay with A1342.
+Run the fiscal golden and immutability suites unedited. The watcher cleared about 1,000 handwritten
+added lines for the entire slice, including the return fix and its test.
 
 ## What it builds
 

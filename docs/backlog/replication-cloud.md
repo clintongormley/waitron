@@ -429,7 +429,7 @@ their original capture and its settled-order anchor, without order lines; the ne
 existing recovery worker to check the provider outcome without sending another refund. Reset deletes the old box's venue data, including the sale lines
 and local backups that this return does not carry. Correction
 is an internal authenticated API; it appends a corrective record on the main box’s own chain.
-The correction refuses a returned sale whose invoice lines did not travel (the whole-credit probe reported `sale.correction_lines_mismatch` on main at `febf58a351` with the department restored, and on the A1308 os8 candidate).
+The correction refuses a returned sale whose invoice lines did not travel (the whole-credit probe reported `sale.correction_lines_mismatch` on main at `febf58a351` after the probe supplied the department by hand, and on the A1308 os8 candidate).
 Sale lines, reprints and real-box qualification remain outside this cut. Reset-to-clean-setup is qualified; completed current-contract rejoin remains
 with A947 3b-6. The return compares stored row shapes without negotiating software versions;
 complete the return before upgrading either box to a different table layout.
