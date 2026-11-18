@@ -26,6 +26,10 @@ describe("bounded certificate opening", () => {
     expect(
       await openCertificate(Buffer.alloc(CERTIFICATE_MAX_BYTES + 1), candidate.passphrase),
     ).toEqual({ ok: false, reason: "too_large" });
+    expect(await openCertificate(candidate.pfx, "x".repeat(256 * 1024))).toEqual({
+      ok: false,
+      reason: "unreadable",
+    });
   });
 
   it("ends hostile-cost opening while other work keeps running", async () => {

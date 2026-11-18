@@ -3585,7 +3585,8 @@ that bundle under Node's `--permission` mode without worker, child-process or ne
 grants reads to the checkout and its private fixture folder, and writes to its scratch and ordinary-open
 probe directories. It checks every installed owner, compares the source and migrated rows, and
 keeps the original archive bytes unchanged. A direct worker control and an ordinary venue open
-must both refuse with `WorkerThreads`; a permitted ordinary open must create a real watchdog.
+must both refuse with `WorkerThreads`. A direct program start must refuse with `ChildProcess`. A
+permitted ordinary open must create a real watchdog.
 
 The scratch placement runs migrations, so describe it as a check of a disposable copy rather than
 a read-only operation throughout. The store's `verification-venue-copy.test.ts` separately tests

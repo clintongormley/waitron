@@ -5569,10 +5569,13 @@ versioned archive key, an owned private scratch parent and cancellation signal. 
 measures the ciphertext it consumes, authenticates the archive, migrates a separate private copy,
 and checks every declared owner through query-only handles. A passing result requires its owned
 handles to close and scratch to be removed; uncertain cleanup returns `unavailable`.
-You can run this entry with worker threads denied. Certificate checks require child-process
-permission and the shipped sibling `certificate-open.js`; the permission test retains the refused
-worker and ordinary-open controls while allowing that child. Placement restores the database copy and
-state files inside the verification's scratch folder; migrations write that copy. Module checks use
+You can run this entry with programs and worker threads denied: it opens a sealed certificate
+in-process with no deadline of its own, so it relies on the outside deadline below, and the
+permission test runs it with both refused. Start it without OpenSSL's legacy provider, which
+`--openssl-legacy-provider` (on the command line or in `NODE_OPTIONS`) or an OpenSSL configuration
+file (`OPENSSL_CONF`, `--openssl-config`) can load: with it, the in-process open accepts an
+RC2-encrypted certificate that it otherwise refuses as old encryption. Placement restores the
+database copy and state files inside the verification's scratch folder; migrations write that copy. Module checks use
 query-only handles. Venue-store opens on the copy take the exclusive venue lock without creating
 a holder heartbeat or watchdog thread. Normal server and restore opens
 retain monitoring. Keep an independent deadline on the verifier process: its cooperative checks
@@ -7046,8 +7049,9 @@ returning certificate details, a local file refusal, or an unavailable check. Pa
 arguments and logs; the parent waits for child closure after a forced stop. The ordinary and
 hostile-MAC-cost cases in `certificate-open.test.ts` exercise the source entry;
 `fiscal-certificate-diagnosis-bundle.test.ts` opens through the built host and sibling child.
-A launch failure, deadline or unusable child reply leaves backup verification unavailable, rather than invalid, and
-refuses sealing before its transaction; setup and renewal offer a retry without marking a bad field.
+A launch failure, deadline or unusable child reply refuses sealing before its transaction; setup
+and renewal offer a retry without marking a bad field. Backup verification does not use the child:
+it opens in-process after the same size checks (`certificateSizeRefusal`).
 This bounds admission only. Accepted PFX material still reaches the existing parent mTLS path
 in `certificate-install.ts` and `aeat-transport.ts`; diagnosis and filing transport are unchanged.
 
