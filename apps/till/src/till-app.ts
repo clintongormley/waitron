@@ -726,7 +726,6 @@ const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
   "bill.unsent_dishes",
   "bill.nothing_outstanding",
   "authorization.not_permitted",
-  "draft.taken_over",
   "device.forbidden_action",
 ]);
 
@@ -20113,7 +20112,8 @@ export class TillApp extends LitElement {
     live: () => boolean,
     sent: Sent,
   ): Promise<void> {
-    const refusal = error as { code?: unknown; dishes?: unknown } | undefined;
+    const refusal = error as
+      { code?: unknown; dishes?: unknown; ownerName?: string | null } | undefined;
     if (refusal?.code === "meal_end.unserved_dishes" && Array.isArray(refusal.dishes)) {
       this.mealEnd = {
         partyId,
@@ -20127,9 +20127,14 @@ export class TillApp extends LitElement {
       return;
     }
     this.errorKey =
-      typeof refusal?.code === "string" && MEAL_END_REFUSALS.has(refusal.code)
-        ? { code: refusal.code }
-        : tableWriteError(error);
+      refusal?.code === "draft.taken_over"
+        ? draftRefusalError(
+            { refused: refusal.code, ownerName: refusal.ownerName ?? undefined },
+            true,
+          )
+        : typeof refusal?.code === "string" && MEAL_END_REFUSALS.has(refusal.code)
+          ? { code: refusal.code }
+          : tableWriteError(error);
     if (!this.#hasLeftParty(partyId, sent)) await this.#loadPartyBills();
   }
 

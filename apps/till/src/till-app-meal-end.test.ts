@@ -248,7 +248,6 @@ describe("till-app: Print the bill", () => {
     "meal_end.already_issued",
     "bill.unsent_dishes",
     "bill.nothing_outstanding",
-    "draft.taken_over",
     "device.forbidden_action",
     "authorization.not_permitted",
   ])("shows %s's own sentence and reads the bills again", async (code) => {
@@ -263,6 +262,32 @@ describe("till-app: Print the bill", () => {
     expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
     expect(printedNotice(el)).toBeNull();
   });
+
+  it.each([
+    ["Marta", t("table.draft_taken_over_unsent").replace("{name}", "Marta")],
+    [null, t("table.draft_taken_over_unsent_unnamed")],
+  ])(
+    "names the person whose unsent order holds the bill (%s) and reads the bills again",
+    async (ownerName, said) => {
+      const { el } = await openBill({
+        endMeal: vi.fn().mockRejectedValue({
+          code: "draft.taken_over",
+          status: 409,
+          billId: "wo-4",
+          ownerId: "p-9",
+          ownerName,
+        }),
+      });
+      const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+      await printBill(el);
+
+      expect(banner(el)!.textContent).toContain(said);
+      expect(banner(el)!.textContent).not.toContain(codeMessage("draft.taken_over"));
+      expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
+      expect(printedNotice(el)).toBeNull();
+    },
+  );
 
   it("when another device changed the table first, reloads it, says what changed, and sends the new revision when pressed again", async () => {
     let moved = false;
