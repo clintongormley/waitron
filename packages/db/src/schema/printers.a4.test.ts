@@ -1,5 +1,8 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
+import { isRefusal } from "../unique-violation.js";
+import { printAgents } from "./print-agents.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
@@ -55,6 +58,23 @@ describe("office printer storage", () => {
       paper_width: null,
       resolution: null,
     });
+  });
+
+  it("records an existing agent and refuses an unknown agent id", async () => {
+    const [agent] = await suite.db
+      .insert(printAgents)
+      .values({ name: "Back office", tokenHash: "hash" })
+      .returning({ id: printAgents.id });
+    await expect(insertOffice({ agent_id: agent!.id })).resolves.toMatchObject({
+      agent_id: agent!.id,
+    });
+    const error = await captureError(() =>
+      insertOffice({ id: "other", host: "192.0.2.11", agent_id: "unknown-agent" }),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect((await suite.db.execute(sql`select id from printers where id = 'other'`)).rows).toEqual(
+      [],
+    );
   });
 
   it.each([
