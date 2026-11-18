@@ -604,6 +604,19 @@ describe("till-table-order-screen: Print the bill's outcome", () => {
     expect(served).toEqual([{ items: [{ lineId: "line-1", quantity: "2" }] }]);
   });
 
+  it("Mark served sends nothing while the dishes on the table are unread, as every other Serve", async () => {
+    const el = await mountScreen({
+      mealEnd: unserved,
+      canMarkServed: true,
+      currentOrdersUnread: true,
+    });
+    const served = capture(el, "serve-lines");
+
+    warning(el)!.querySelector<HTMLElement>("[data-mark-served]")!.click();
+
+    expect(served).toEqual([]);
+  });
+
   it("offers no Mark served on a device whose profile does not hand over orders", async () => {
     const el = await mountScreen({ mealEnd: unserved, canMarkServed: false });
 

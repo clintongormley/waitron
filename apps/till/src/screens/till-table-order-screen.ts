@@ -5350,14 +5350,8 @@ export class TillTableOrderScreen extends LitElement {
             : html`<wt-button
                 size="sm"
                 data-mark-served
-                .disabled=${this.busy || this.groupCommandBusy}
-                @click=${() =>
-                  this.#dispatch("serve-lines", {
-                    items: servable.map((dish) => ({
-                      lineId: dish.lineId,
-                      quantity: trimQuantity(dish.quantity),
-                    })),
-                  } satisfies ServeLinesDetail)}
+                .disabled=${this.busy || this.groupCommandBusy || this.currentOrdersUnread}
+                @click=${() => this.#markListedServed(servable)}
               >
                 ${t("meal_end.mark_served")}
               </wt-button>`
@@ -5451,7 +5445,7 @@ export class TillTableOrderScreen extends LitElement {
   /** More than one whole unit, a grouped row's portions included, asks how many; anything else, a
    * weighed dish included, goes whole. */
   #requestServe(row: CurrentOrderRow, undo: boolean, members?: readonly CurrentOrderRow[]): void {
-    if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
+    if (this.#serveRefused()) return;
     if (undo && !this.#sentBillOpen(row)) return;
     this.#takeServeAuthority();
     const most =
@@ -5466,6 +5460,19 @@ export class TillTableOrderScreen extends LitElement {
       return;
     }
     this.#sendServe(row, undo, most);
+  }
+
+  /** No serve is sent while another command is out or the dishes on the table are unread. */
+  #serveRefused(): boolean {
+    return !this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread;
+  }
+
+  /** Mark served in Print the bill's not-served list: the listed dishes the kitchen has, as listed. */
+  #markListedServed(dishes: readonly UnservedDish[]): void {
+    if (this.#serveRefused()) return;
+    this.#dispatch("serve-lines", {
+      items: dishes.map((dish) => ({ lineId: dish.lineId, quantity: trimQuantity(dish.quantity) })),
+    } satisfies ServeLinesDetail);
   }
 
   /** Remembers what the count dialog's answer may act on: this api, party, bill and visit. */

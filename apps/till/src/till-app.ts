@@ -85,6 +85,7 @@ import {
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
+  QUANTITY_SCALE,
   cancelRefundShare,
   subtractDecimal,
   compareDecimal,
@@ -4266,8 +4267,10 @@ export class TillApp extends LitElement {
     return out !== undefined && out.dialogId !== dialogId;
   }
   @state() private departing: Departing | null = null;
-  /** Print the bill's last answer, for the party it was sent for. */
-  @state() private mealEnd: (MealEndShown & { partyId: string }) | null = null;
+  /** Print the bill's last answer, for the party it was sent for. A not-served list holds the party
+   * revision it describes: once the party moves past it, the list is taken down, and Print anyway
+   * sends that revision, so the server refuses it for a table changed since. */
+  @state() private mealEnd: (MealEndShown & { partyId: string; revision?: number }) | null = null;
   /** A Print the bill request is out; the table screen takes no other action meanwhile. */
   @state() private mealEndSending = false;
   #departings = 0;
@@ -15428,7 +15431,7 @@ export class TillApp extends LitElement {
     });
     await this.#onServiceRequest(async (party, command) => {
       const answer = await api.markServed(party.id, items, command);
-      this.#dropServedFromMealEnd(party.id, items);
+      this.#takeServedFromMealEnd(party.id, items, command.expectedPartyRevision, answer.revision);
       if (
         this.isConnected &&
         api === this.api &&
@@ -15459,19 +15462,33 @@ export class TillApp extends LitElement {
     });
   }
 
-  /** Drops from the not-served list a dish this serve marked served in full. */
-  #dropServedFromMealEnd(partyId: string, items: { lineId: string; quantity: string }[]): void {
+  /** A serve sent from the revision the not-served list describes, and so the only change since,
+   * takes what it served off the list, which then describes the serve's revision. A serve from any
+   * other revision takes the list down. */
+  #takeServedFromMealEnd(
+    partyId: string,
+    items: { lineId: string; quantity: string }[],
+    sentRevision: number,
+    answerRevision: number,
+  ): void {
     const shown = this.mealEnd;
     if (shown?.partyId !== partyId || !("unserved" in shown)) return;
-    const unserved = shown.unserved.filter(
-      (dish) =>
-        !items.some(
-          (item) =>
-            item.lineId === dish.lineId &&
-            compareDecimal(decimal(item.quantity), decimal(dish.quantity)) >= 0,
-        ),
-    );
-    this.mealEnd = unserved.length === 0 ? null : { ...shown, unserved };
+    if (shown.revision !== sentRevision) {
+      this.mealEnd = null;
+      return;
+    }
+    const unserved = shown.unserved.flatMap((dish) => {
+      const left = items
+        .filter((item) => item.lineId === dish.lineId)
+        .reduce(
+          (rest, item) => subtractDecimal(rest, decimal(item.quantity)),
+          decimal(dish.quantity),
+        );
+      return compareDecimal(left, decimal("0")) > 0
+        ? [{ ...dish, quantity: toScale(left, QUANTITY_SCALE) }]
+        : [];
+    });
+    this.mealEnd = unserved.length === 0 ? null : { ...shown, unserved, revision: answerRevision };
   }
 
   #currentServedCommand(): ServedCommand | null {
@@ -20030,6 +20047,7 @@ export class TillApp extends LitElement {
     }
     const party = this.orderParty;
     const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
+    const warned = this.#mealEndShown();
     if (
       party === null ||
       this.mealEndSending ||
@@ -20040,19 +20058,18 @@ export class TillApp extends LitElement {
       !owing(bill)
     )
       return;
-    if (
-      printAnyway === true &&
-      (this.mealEnd?.partyId !== party.id ||
-        this.mealEnd.workingOrderId !== workingOrderId ||
-        !("unserved" in this.mealEnd))
-    )
-      return;
+    const listed =
+      warned !== null && warned.workingOrderId === workingOrderId && "unserved" in warned
+        ? this.mealEnd!.revision
+        : undefined;
+    if (printAnyway === true && listed === undefined) return;
     this.errorKey = undefined;
     const asked = this.#billComposition(this.partyBills.map((row) => row.workingOrderId));
     if (asked === null || !this.#billCompositionUnchanged(asked)) return;
     const request: EndMealRequest = {
       billId: workingOrderId,
-      expectedPartyRevision: asked.revisions.expectedPartyRevision!,
+      expectedPartyRevision:
+        printAnyway === true ? listed! : asked.revisions.expectedPartyRevision!,
       expectedEdits: asked.expectedEdits,
       submissionId: crypto.randomUUID(),
       ...(printAnyway === true ? { printAnyway: true } : {}),
@@ -20086,7 +20103,7 @@ export class TillApp extends LitElement {
         this.errorKey = "meal_end.unconfirmed";
         return;
       }
-      await this.#onMealEndRefused(party.id, workingOrderId, error, live, sent);
+      await this.#onMealEndRefused(party.id, request, error, live, sent, visit);
       return;
     } finally {
       limit.done();
@@ -20107,18 +20124,21 @@ export class TillApp extends LitElement {
    * other refusal is said, and the party's bills are read again. */
   async #onMealEndRefused(
     partyId: string,
-    workingOrderId: string,
+    request: EndMealRequest,
     error: unknown,
     live: () => boolean,
     sent: Sent,
+    visit: number,
   ): Promise<void> {
     const refusal = error as
       { code?: unknown; dishes?: unknown; ownerName?: string | null } | undefined;
     if (refusal?.code === "meal_end.unserved_dishes" && Array.isArray(refusal.dishes)) {
+      if (visit !== this.#orderVisit) return;
       this.mealEnd = {
         partyId,
-        workingOrderId,
+        workingOrderId: request.billId,
         unserved: refusal.dishes as Extract<MealEndShown, { unserved: unknown }>["unserved"],
+        revision: request.expectedPartyRevision,
       };
       return;
     }
@@ -20138,12 +20158,16 @@ export class TillApp extends LitElement {
     if (!this.#hasLeftParty(partyId, sent)) await this.#loadPartyBills();
   }
 
-  /** Print the bill's answer, while the party it was sent for is on screen. */
+  /** Print the bill's answer, while the party it was sent for is on screen, and a not-served list
+   * while that party has not moved past the revision the list describes. */
   #mealEndShown(): MealEndShown | null {
-    return this.mealEnd !== null &&
-      this.mealEnd.partyId === this.orderParty?.id &&
-      this.mealEnd.workingOrderId === this.activeTabId
-      ? this.mealEnd
+    const shown = this.mealEnd;
+    const party = this.orderParty;
+    return shown !== null &&
+      shown.partyId === party?.id &&
+      shown.workingOrderId === this.activeTabId &&
+      !("unserved" in shown && party.revision > shown.revision!)
+      ? shown
       : null;
   }
 

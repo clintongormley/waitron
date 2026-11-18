@@ -62,6 +62,15 @@ async function openBill(
     getTill: vi.fn().mockResolvedValue({ ...till, capabilities }),
     getPartyBills: vi.fn(async () => [printed ? printedBill : billOf()]),
     markServed: vi.fn().mockResolvedValue({ revision: 4 }),
+    readCurrentOrders: vi.fn().mockResolvedValue({
+      revision: 3,
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
+      groups: [],
+      ungrouped: [],
+      reminder: null,
+    }),
     ...overrides,
     endMeal: vi.fn(async (...args: unknown[]) => {
       const answer = (await endMeal(...args)) as EndedMeal;
@@ -358,6 +367,115 @@ describe("till-app: Print the bill with dishes not served", () => {
 
     expect(api.markServed).toHaveBeenCalledOnce();
     expect(text(warning(el))).toContain("Paella");
+  });
+
+  it("Mark served after an ordinary Serve took part of a dish serves only what is left of it", async () => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({
+        ...unservedRefusal,
+        dishes: [{ lineId: "line-1", dishName: "Paella", quantity: "1.500", released: true }],
+      }),
+    });
+    await printBill(el);
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+
+    warning(el)!.querySelector<HTMLElement>("[data-mark-served]")!.click();
+    await flush(el, 6);
+
+    expect(vi.mocked(api.markServed).mock.calls.map((call) => call[1])).toEqual([
+      [{ lineId: "line-1", quantity: "1" }],
+      [{ lineId: "line-1", quantity: "0.5" }],
+    ]);
+  });
+
+  it("takes the list down once the table changes after it, so Print anyway is never sent over dishes it did not list", async () => {
+    let revision = 3;
+    const endMeal = vi.fn().mockRejectedValueOnce(unservedRefusal).mockResolvedValue(ended);
+    const { el } = await openBill({
+      endMeal,
+      getTablesState: vi.fn(async () => [heldTable({ revision })]),
+      unmarkServed: vi.fn(async () => ({ revision: ++revision })),
+    });
+    await printBill(el);
+    expect(warning(el)).not.toBeNull();
+
+    emit(tableOrder(el), "unserve-lines", { items: [{ lineId: "line-3", quantity: "1" }] });
+    await flush(el, 6);
+    expect(tableOrder(el).party!.revision).toBe(4);
+    warning(el)?.querySelector<HTMLElement>("[data-print-anyway]")?.click();
+    await flush(el, 6);
+
+    expect(warning(el)).toBeNull();
+    expect(sentBodies(endMeal)).toHaveLength(1);
+  });
+
+  it("Print anyway after Mark served sends the revision Mark served moved the table to", async () => {
+    const endMeal = vi.fn().mockRejectedValueOnce(unservedRefusal).mockResolvedValue(ended);
+    const { el } = await openBill({ endMeal });
+    await printBill(el);
+
+    warning(el)!.querySelector<HTMLElement>("[data-mark-served]")!.click();
+    await flush(el, 6);
+    expect(text(warning(el))).toContain("Chuletón");
+    expect(text(warning(el))).not.toContain("Paella");
+    warning(el)!.querySelector<HTMLElement>("[data-print-anyway]")!.click();
+    await flush(el, 6);
+
+    expect(sentBodies(endMeal)[1]).toEqual(
+      expect.objectContaining({ expectedPartyRevision: 4, printAnyway: true }),
+    );
+  });
+
+  it("when the table changed elsewhere before Print anyway, takes the list down, says the table changed, and the next press asks again without printing anyway", async () => {
+    let moved = false;
+    const endMeal = vi
+      .fn()
+      .mockRejectedValueOnce(unservedRefusal)
+      .mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1", revision: 5 })
+      .mockRejectedValue(unservedRefusal);
+    const { el } = await openBill({
+      endMeal,
+      getTablesState: vi.fn(async () => [heldTable(moved ? { revision: 5 } : {})]),
+    });
+    await printBill(el);
+    moved = true;
+
+    warning(el)!.querySelector<HTMLElement>("[data-print-anyway]")!.click();
+    await flush(el, 6);
+
+    expect(sentBodies(endMeal)[1]).toEqual(
+      expect.objectContaining({ expectedPartyRevision: 3, printAnyway: true }),
+    );
+    expect(warning(el)).toBeNull();
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
+
+    await printBill(el);
+    expect(sentBodies(endMeal)[2]!.printAnyway).toBeUndefined();
+    expect(sentBodies(endMeal)[2]!.expectedPartyRevision).toBe(5);
+    expect(warning(el)).not.toBeNull();
+  });
+
+  it("does not bring back a list answered after the table was left and opened again", async () => {
+    let refuse: (reason: unknown) => void = () => {};
+    const { el, endMeal } = await openBill({
+      endMeal: () =>
+        new Promise<EndedMeal>((_resolve, reject) => {
+          refuse = reject;
+        }),
+    });
+    await printBill(el);
+    expect(endMeal).toHaveBeenCalledOnce();
+
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el, 6);
+    expect(tableOrder(el).orderId).toBe("wo-4");
+    refuse(unservedRefusal);
+    await flush(el, 6);
+
+    expect(warning(el)).toBeNull();
   });
 
   it("offers no Mark served on a device whose profile does not hand over orders", async () => {
