@@ -282,10 +282,9 @@ second amendment are marked **my call (plan writer)**:
   backup verification, `backup-verification.ts:17`) and `packages/menu/src/configuration-transfer.ts`
   (`MENU_CONFIGURATION_TRANSFER`, `:215-227`, beside `menu_item_variant_overrides`), so an exported
   set menu imports with its lines and left-out variants.
-  The watcher cleared the PR 1 review correction at 14:17 on 18 November: the menu validator
-  refuses out-of-range prices and set-menu rows owned by an ordinary menu. The venue-service
-  configuration validator checks that both kinds of service-period choice point to ordinary menus.
-  Each refusal names its bundle field.
+  The menu validator refuses out-of-range prices and set-menu rows owned by an ordinary menu.
+  The venue-service configuration validator checks that both kinds of service-period choice
+  point to ordinary menus. These checks report the affected bundle field.
 - Regenerate: `packages/db/drizzle/0000_baseline.sql` and its snapshot (never by hand)
 - Modify: `apps/server/src/course-delete.ts`, `apps/server/src/kitchen.ts` (wherever
   `COURSE_REFERENCES` is exported from; the test imports it from `./kitchen.js`)
