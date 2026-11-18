@@ -768,11 +768,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   when the till's void screen is designed.
   [Detail](backlog/till.md#cash-handed-back-for-a-voided-cash-sale-is-recorded-nowhere)
 
-- **Loose ends left by A429 slice 5.** Tighten the till's `TableState.today` type: slice 5 keeps it
-  nullable for now (`apps/till/src/api/client.ts`), even though the floor's in-service read requires
-  today's row.
-  [Detail](backlog/till.md#loose-ends-left-by-a429-slice-5)
-
 - **One rule for a booking when the evening's layout changes** (bundle of 2, size S, needs the owner). Holds A550, A857. [Detail](backlog/till.md#bundle-one-rule-for-a-booking-when-the-evenings-layout-changes)
 
 - **A474 — today's floor changes on the till: follow-ups (2026-10-11).** The map's drag works out

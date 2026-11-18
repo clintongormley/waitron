@@ -978,13 +978,6 @@ dialog has (`apps/till/src/widgets/find-bill-dialog.ts`), would widen it to abou
 decision for the whole dialog. Left open by A231q.
 
 
-## Loose ends left by A429 slice 5.
-
-- Tighten the till's `TableState.today` type: slice 5 keeps it nullable for now
-  (`apps/till/src/api/client.ts`), even though the floor's in-service read requires today's row.
-  Check all consumers and fixtures before making it required.
-
-
 ## A857. A booking can take a table the evening's layout puts away (2026-10-18).
 
 Bookings refuse
@@ -1611,6 +1604,14 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
 
 ## Decisions and deliberate limits
+
+- **The till's `TableState.today` stays nullable, wider than what the server sends (watcher,
+  2026-11-18, lane A, not the owner; the owner may overrule).** `/api/tables/state` lists only
+  on-floor tables in switched-on zones (`packages/db/src/table-in-service.ts`), and
+  `readTodayTables` (`apps/server/src/working-order.ts`) reads a row for every one, so the server
+  never sends a table without today's row. Making the till's type required would rewrite 69
+  fixtures in 55 till test files, most of which would need a placed row rather than a plain swap,
+  for no change a venue would see.
 
 - **A sent dish keeps the options answer it was sent with on a whole-order save (owner, 2026-11-17,
   A1416: "Keep what was sent").** `updateHeldOrder` neither checks it against today's menu nor
