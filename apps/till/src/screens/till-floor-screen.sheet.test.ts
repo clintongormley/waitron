@@ -377,6 +377,32 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     expect(refreshes.count).toBe(0);
   });
 
+  it.each(["a new api", "another operator", "another selected zone", "leaving the page"] as const)(
+    "%s while Change seats is open retires it, and a late confirm sends nothing",
+    async (change) => {
+      const api = stubApi();
+      const next = stubApi();
+      const el = await mount([planned("t1", 2, { seats: 6 })], api);
+      const parent = el.parentElement!;
+      await press(el, "t1", "seats");
+      const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
+
+      if (change === "a new api") el.api = next as unknown as TillApi;
+      if (change === "another operator") el.operatorSession = 2;
+      if (change === "another selected zone") el.selectedZoneId = "z2";
+      if (change === "leaving the page") el.remove();
+      await settle(el);
+      send(dialog, "today-seats-confirm", { seats: 8 });
+      await settle(el);
+      if (change === "leaving the page") parent.append(el);
+      await settle(el);
+
+      expect(api.setSeatsToday).not.toHaveBeenCalled();
+      expect(next.setSeatsToday).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
+    },
+  );
+
   it("a refused action is said on the floor", async () => {
     const api = stubApi();
     api.takeOffToday.mockRejectedValueOnce({ code: "tab.already_open", status: 409 });

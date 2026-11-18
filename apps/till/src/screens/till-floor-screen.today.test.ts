@@ -256,6 +256,54 @@ describe("till-floor-screen: dragging on today's plan", () => {
     expect(api.moveToday).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "a new api",
+    "another operator",
+    "another selected zone",
+    "a zone tab",
+    "leaving the page",
+  ] as const)(
+    "%s while the seats are asked retires the merge, and a late confirm sends nothing",
+    async (change) => {
+      const api = stubApi();
+      const next = stubApi();
+      const el = await mount([planned("t1", 2), planned("t2", 20)], api, [
+        zone(),
+        zone({ id: "z2", name: "Terraza", displayOrder: 1 }),
+      ]);
+      const parent = el.parentElement!;
+      await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
+      const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
+      expect(drawnAt(el, "t2")).toBe(4);
+
+      if (change === "a new api") el.api = next as unknown as TillApi;
+      if (change === "another operator") el.operatorSession = 2;
+      if (change === "another selected zone") el.selectedZoneId = "z2";
+      if (change === "a zone tab")
+        el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z2"]')!.click();
+      if (change === "leaving the page") el.remove();
+      await settle(el);
+      dialog.dispatchEvent(
+        new CustomEvent("today-seats-confirm", {
+          detail: { seats: 10 },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await settle(el);
+      if (change === "another selected zone") el.selectedZoneId = "z1";
+      if (change === "a zone tab")
+        el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z1"]')!.click();
+      if (change === "leaving the page") parent.append(el);
+      await settle(el);
+
+      expect(api.mergeToday).not.toHaveBeenCalled();
+      expect(next.mergeToday).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
+      expect(drawnAt(el, "t2")).toBe(20);
+    },
+  );
+
   it("a merge refused for another reason says why only after the seats are typed", async () => {
     const api = stubApi();
     api.mergeToday.mockRejectedValueOnce({ code: "table.merged", status: 409 });
