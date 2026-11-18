@@ -714,7 +714,7 @@ export interface PublishedSetMenu {
 **Files:**
 - Modify: `packages/venue-service/src/operations.ts` (`ServiceZoneOffers` `:827`, `listZoneOffers`
   `:835-896`, `menuState` `:937-987`), `packages/menu/src/menu-document.ts` (`readLiveState`,
-  `applyLiveFields`, `documentOffers`, `:624-760`)
+  `applyLiveFields`, a new `documentSetMenuOffers` beside `documentOffers` `:496`, `:624-760`)
 - Modify: `packages/shared/src/menu-document/menu-document-types.ts` (`ServedSetMenu`)
 - Modify: `apps/till/src/api/client.ts` (`ZoneOffers`, `:446-461`: add the field, read nothing yet)
 - Test: `packages/venue-service/src/zone-offers.set-menus.test.ts`
@@ -758,10 +758,16 @@ export interface ServedSetMenu {
   `orderable: false` unless an orderable menu holds the same copy.
 - **One fingerprint for both reads.** The till reloads when `menuState`'s fingerprint differs from
   the offers read's (`apps/till/src/till-app.ts:6883,6909`). `readLiveState` and `applyLiveFields`
-  take whole documents and read offers through `documentOffers`, keyed by `document.menuId`; make
-  `documentOffers` (or an option on both functions) include every `setMenus[*].offers` entry, keyed
-  by menu-item id, so both reads fold the copies' dishes into the same fingerprint, and never wrap a
-  copy as a document of its own (two copies of one set menu would overwrite each other). A dish
+  take whole documents and read offers through `documentOffers`, keyed by `document.menuId`.
+  Leave `documentOffers` as it is: its other callers (`productsOfferedIn` and the empty-menu check,
+  `operations.ts:349,925`; `routing-store.ts:764`; `shapeOf`'s diff, `menu-document.ts:816`) must
+  not see set-menu dishes, or a surcharge would stand in for the full menu's price. Add
+  `documentSetMenuOffers(document): SetMenuFrozenOffer[]` beside it, and an option on
+  `readLiveState` and `applyLiveFields` only, under which both also read those offers, keyed by
+  menu-item id. Both reads then fold the copies' dishes into the same fingerprint. Never wrap a copy
+  as a document of its own: two copies of one set menu would overwrite each other. (Task 5's
+  `routing-store` reader reads the copies through `documentSetMenuOffers`, not through
+  `documentOffers`.) A dish
   only a set menu lists then changes the state when it sells out. A changed copy reaches the till
   as a new full-menu version, which the state already carries.
 - When `listZoneOffers` is called with `menuItemIds` (every draft and line write does,
@@ -778,6 +784,9 @@ export interface ServedSetMenu {
   - `"a copy held only by a menu not selling now is served as not orderable"`.
   - `"the menu state's fingerprint equals the offers read's while a copy is served"`, and both
     change when a dish only the set menu lists sells out.
+  - `"productsOfferedIn and the full menu's diff never see a set-menu dish"`: a dish only the set
+    menu lists is not offered by the zone's ordinary products, and Lunch's diff keeps Sirloin at
+    `"18.00"`.
   - `"a set menu changed but not yet published in Lunch is served as it was"`: change €14 → €15 →
     still `"14.00"`; publish Lunch → `"15.00"` with Lunch's new version in `versionIds`.
   - `"one copy held by two served menus is served once with both versions, and two different
