@@ -1080,6 +1080,13 @@ it("a card bill payment names its card when charged, even if voided later, and n
     },
     { method: "card", amount: "2.00", tip: "0.00", reference: null, refunds: [] },
   ]);
+  expect(answer.json).toMatchObject({
+    receiptPreview: expect.arrayContaining([
+      expect.objectContaining({ kind: "amount", caption: "Visa ****4034" }),
+      expect.objectContaining({ kind: "text", text: "Autorización 354739" }),
+    ]),
+  });
+  expect(JSON.stringify(answer.json.receiptPreview)).not.toContain("****1111");
 });
 async function correctiveOf(
   originalId: string,

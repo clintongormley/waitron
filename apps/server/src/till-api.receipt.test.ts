@@ -3528,11 +3528,11 @@ describe("card details on the receipt", () => {
       await withTransaction(suite.db, (tx) => readSettledTicket(backend, tx, cfg, workingOrderId)),
       await withTransaction(suite.db, (tx) => readTransactionReceipt(backend, tx, cfg, sale!.id)),
     ];
-    return { sold, workingOrderId, tickets };
+    return { app, cookie, saleId: sale!.id, sold, workingOrderId, tickets };
   }
 
   it("a connected-reader card payment's brand and last four reach the reprint", async () => {
-    const { workingOrderId, tickets } = await cardSale();
+    const { app, cookie, saleId, workingOrderId, tickets } = await cardSale();
     await liftPaymentGuard(suite.db, () =>
       suite.db.execute(
         sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = 'contactless', card_auth_code = '354739' where working_order_id = ${workingOrderId}`,
@@ -3546,6 +3546,16 @@ describe("card details on the receipt", () => {
         reference: null,
         card: { scheme: "VISA", last4: "4034", entryMode: "contactless", authCode: "354739" },
       });
+    }
+    for (const path of [
+      `/api/sales/${workingOrderId}?receiptPreview=1`,
+      `/api/transactions/${saleId}/receipt`,
+    ]) {
+      const res = await app.request(path, { headers: { cookie } });
+      expect(res.status).toBe(200);
+      const preview = JSON.stringify(((await res.json()) as TillSaleResult).receiptPreview);
+      expect(preview).toContain("Visa ****4034");
+      expect(preview).toContain("354739");
     }
   });
 

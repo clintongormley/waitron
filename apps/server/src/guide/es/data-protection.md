@@ -408,7 +408,8 @@ tiene alergias. Anota los detalles para que la estación prepare la comida con s
   autorización y las referencias del proveedor de pago. Cuando el proveedor los envía, el tipo de
   tarjeta, sus cuatro últimas cifras, cómo se presentó y el código de autorización se imprimen en
   los recibos y facturas de la venta, también en el PDF que se envía por correo, y en el
-  justificante de tarjeta.
+  justificante de tarjeta. La caja también los muestra cuando el personal abre la venta en
+  **Buscar cuenta**.
 - Destinatarios: el proveedor de pago con tarjeta que elegiste. Su lector lee la propia tarjeta;
   Waitron envía al proveedor el importe y sus propias referencias del pedido, y ningún dato del
   cliente. Tu proveedor de correo, por cada factura que envías por correo.

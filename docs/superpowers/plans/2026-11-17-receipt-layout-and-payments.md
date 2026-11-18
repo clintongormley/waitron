@@ -43,6 +43,10 @@ Task 7 Step 1's and Task 9 Step 1's surveys against the code as it is then.
   every file `grep -rln "Base imponible\|Taxable base" apps packages --include='*.test.ts'` lists
   after Task 3, and every file naming `paymentRemaining`/`remaining` after Tasks 8–9.
 - The till's on-screen receipt view (`apps/till/src/screens/till-ticket-view.ts`) is out of scope.
+  _2026-11-18: #3740 then made that view, opened from Find a bill, draw the receipt builder's
+  output, so the card details this design prints, like the rest of that output, show there too.
+  It is now a third renderer beside the two named under Architecture, so a new element kind needs
+  a case in its `renderReceipt`._
 - New words go in every language block of `packages/country-es/src/receipt-labels.ts`
   (`en-GB`, `es-ES`, `ca-ES`, `gl-ES`, `eu-ES`) and every key in `RECEIPT_LABEL_KEYS`
   (`packages/country/src/country.ts:60`). Pre-live: rename freely.
