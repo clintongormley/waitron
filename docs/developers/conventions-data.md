@@ -5744,7 +5744,9 @@ read-only open of a cleanly stopped database failed there and worked at 64 KiB.
 
 Backup, restore and setup working copies live below `scratch/`, with `backup/` and `restore/` children.
 A Cloud-enabled run writes the shared backup copy in a private directory under `scratch/`. Cloud
-removes that copy after reading it. It writes ciphertext to scratch, then flushes and renames it into
+removes that copy after reading it. When the run first retries an earlier pending capture, the new
+copy stays in scratch until it is read or the run ends. Cloud writes ciphertext to scratch, then
+flushes and renames it into
 `cloud/snapshots/` before saving its publication record there for retries. A start deletes
 scratch entries, never the root itself. Each maker holds the venue folder before creating its
 working directory; Box status's Free still touches only backup dumps and `backup-encrypt-*`

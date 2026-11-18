@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm, readdir, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, readdir, stat } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { createServer } from "node:https";
@@ -37,7 +37,8 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
   await mkdir(join(root, "cloud-tls"));
   await writeFile(join(root, "cloud-tls/staff.key"), "private staff key");
   const at = new Date("2026-09-24T12:00:00Z");
-  const result = await captureCloudArchive(
+  let ciphertext: Buffer | undefined;
+  const result = await runCloudArchive(
     {
       db: db.db,
       node: db.node,
@@ -49,9 +50,13 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
     "recovery key",
     at,
     new AbortController().signal,
+    async (_, file) => {
+      expect(await readdir(join(root, "scratch"))).toEqual(["backup"]);
+      ciphertext = await readFile(file);
+    },
   );
   const entries = new Map(
-    unpackArchive(gunzipSync(decryptArtifact(result.bytes, "recovery key"))).map((e) => [
+    unpackArchive(gunzipSync(decryptArtifact(ciphertext!, "recovery key"))).map((e) => [
       e.name,
       Buffer.from(e.bytes),
     ]),
@@ -68,10 +73,10 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
     [...entries.keys()].some((k) => k.includes("cloud-connection") || k.includes("cloud-tls")),
   ).toBe(false);
   expect(await readdir(join(root, "cloud/snapshots"))).toEqual(["state.json"]);
-  expect(await readdir(join(root, BACKUP_STAGING_DIR))).toEqual([]);
+  expect(await readdir(join(root, "scratch"))).toEqual(["backup"]);
 });
 
-it("refuses an oversized SQLite copy and removes its plaintext staging", async () => {
+it("refuses an oversized SQLite copy and removes its private scratch copy", async () => {
   const root = await mkdtemp(join(tmpdir(), "snapshot-oversize-"));
   dirs.push(root);
   for (const path of RECOVERY_FILES) {
@@ -103,7 +108,7 @@ it("refuses an oversized SQLite copy and removes its plaintext staging", async (
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ code: "cloud.unavailable" });
-    expect(await readdir(join(root, BACKUP_STAGING_DIR))).toEqual([]);
+    expect(await readdir(join(root, "scratch"))).toEqual(["backup"]);
   } finally {
     archive.mockRestore();
   }
@@ -145,7 +150,7 @@ it("lets a node copy still writing into staging finish before it clears staging 
       ),
     ).rejects.toMatchObject({ code: "EISDIR" });
     expect(copyFinished).toBe(true);
-    expect(await readdir(join(root, BACKUP_STAGING_DIR)).catch(() => [])).toEqual([]);
+    expect(await readdir(join(root, "scratch"))).toEqual([]);
   } finally {
     copy.mockRestore();
   }

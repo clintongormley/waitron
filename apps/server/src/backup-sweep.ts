@@ -83,7 +83,7 @@ export interface BackupSweepDeps {
   stateDir: string;
   venueDir?: string;
   recoveryKey: string;
-  /** Created each tick; the plaintext copy staged here is removed before the tick returns. */
+  /** Shared working directory for local backups. Cloud-enabled runs keep the database copy in private scratch. */
   stagingDir: string;
   schedule: BackupSchedule;
   /** How many of the newest artifacts each destination keeps. */
@@ -126,9 +126,9 @@ export interface BackupSweepDeps {
   buildManifest?: ManifestBuilder;
   now?: () => Date;
   /**
-   * The venue database's current size. Before the copy, a tick needs twice this in `stagingDir` (the
-   * staged copy and its ciphertext) plus this once more for each local destination counted as on
-   * the same disk (each folder copy's working file). When free space there is short, it first
+   * The venue database's current size. Before the copy, the tick budgets for the shared database copy,
+   * Cloud ciphertext when enabled, and the box's ciphertext when it has other destinations.
+   * Each local destination on the same disk also needs room for its working file. When free space there is short, it first
    * deletes old backups, oldest first (those a clock step holds last) and only those
    * `installationStartedAt` allows, and refuses
    * only when that cannot bring free space to the need plus `spaceFloorBytes`. After the copy it
