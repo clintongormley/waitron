@@ -75,6 +75,7 @@ describe("local browser report", () => {
       event({ screen: "private" }, "nav"),
       event({ name: "TypeError", message: "private", stack: "private" }, "window.error"),
       event({ code: "storage.disk_full" }, "disk_stop.load_failed"),
+      event({ code: "storage.disk_full", message: "private" }, "tax_office_download.load_failed"),
       event({ token: "secret" }, "arbitrary"),
     ]);
     expect(base.trail.map((row) => [row.event, row.fields])).toEqual([
@@ -92,6 +93,7 @@ describe("local browser report", () => {
       ["nav", {}],
       ["window.error", { name: "TypeError" }],
       ["disk_stop.load_failed", { code: "storage.disk_full" }],
+      ["tax_office_download.load_failed", { code: "storage.disk_full" }],
     ]);
     expect(JSON.stringify(base)).not.toMatch(/john\.smith|secret|private/);
   });
@@ -104,6 +106,38 @@ describe("local browser report", () => {
         level: "warn",
         event: "api",
         fields: { status: 403, code: "node.operation_page_required" },
+      },
+    ]);
+  });
+  it("keeps popover load failures in the exported problem report, naming only standard errors", () => {
+    const failure = (errorType: string, ago: number): TrailEvent => ({
+      ...event({ errorType, message: "secret", stack: "at secret" }, "ui.popover_load_failed", ago),
+      level: "error",
+    });
+    const snapshot = capture([
+      failure("TypeError", 3000),
+      failure("Unknown", 2000),
+      failure("john.smith", 1000),
+    ]);
+    const report = diagnostics.renderClientReport!(snapshot, "The help bubble never opened.")!;
+    expect(parsed(report.text).trail).toEqual([
+      {
+        at: new Date(+NOW - 3000).toISOString(),
+        level: "error",
+        event: "ui.popover_load_failed",
+        fields: { errorType: "TypeError" },
+      },
+      {
+        at: new Date(+NOW - 2000).toISOString(),
+        level: "error",
+        event: "ui.popover_load_failed",
+        fields: { errorType: "Unknown" },
+      },
+      {
+        at: new Date(+NOW - 1000).toISOString(),
+        level: "error",
+        event: "ui.popover_load_failed",
+        fields: {},
       },
     ]);
   });
