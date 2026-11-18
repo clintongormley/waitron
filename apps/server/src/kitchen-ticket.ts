@@ -474,7 +474,7 @@ export function formatKitchenTicket(
   text(
     ticket.scope === "station"
       ? ticket.stationName
-      : ticket.stations.map((station) => station.stationName).join(" · "),
+      : [...new Set(ticket.stations.map((station) => station.stationName))].join(" · "),
   );
   text(ticket.tableLabel);
   if (ticket.party === undefined) text(ticket.orderNumber);

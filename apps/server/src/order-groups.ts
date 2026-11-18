@@ -1409,6 +1409,7 @@ export async function moveLinesToGroup(
       }
       const taken: HeldChange[] = [];
       const given: HeldChange[] = [];
+      const movedTicketLines: string[] = [];
       for (const { lineId, quantity } of moves) {
         const line = lineById.get(lineId)!;
         const items = heldItems.get(lineId);
@@ -1417,6 +1418,8 @@ export async function moveLinesToGroup(
         for (const item of items) {
           // A partial move has no split-off extras; a whole move uses each record's own line.
           const moved = split === undefined ? item.lineQuantity : stringToThousandths(quantity);
+          const movedLineId = split ?? item.workingOrderLineId;
+          movedTicketLines.push(movedLineId);
           const change = {
             workingOrderId: line.workingOrderId,
             stationId: item.stationId,
@@ -1435,7 +1438,7 @@ export async function moveLinesToGroup(
           if (to !== undefined) {
             given.push({
               ...change,
-              workingOrderLineId: split ?? item.workingOrderLineId,
+              workingOrderLineId: movedLineId,
               groupId: targetId,
               group: to,
               numberPartyLabel: numberLabels.get(targetId),
@@ -1444,6 +1447,11 @@ export async function moveLinesToGroup(
         }
       }
       await correctHoldTickets(tx, cfg, taken, { kind: "HOLD CHANGED", direction: "removed" });
+      if (movedTicketLines.length > 0)
+        await tx
+          .update(ticketItems)
+          .set({ holdPaperQueued: false })
+          .where(inIds(ticketItems.workingOrderLineId, movedTicketLines));
       await recordJoiningStations(tx, given);
       await correctHoldTickets(tx, cfg, given, { kind: "HOLD CHANGED", direction: "added" });
       if (target === "new") await printHoldTickets(tx, cfg, [targetId]);

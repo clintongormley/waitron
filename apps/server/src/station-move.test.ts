@@ -1549,10 +1549,10 @@ describe("moveDishesToStation", () => {
         .where(eq(kitchenStations.id, downstairs.id));
       await setStationToday(tx, bar, "closed", at, await seedActivityActor(tx));
       const [held] = await tx
-        .select({ stationChosenAt: ticketItems.stationChosenAt, stationId: ticketItems.stationId })
+        .select()
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderLineId, group.lineId));
-      expect(held).toMatchObject({ stationId: bar, stationChosenAt: null });
+      expect(held).toMatchObject({ stationId: bar, stationChosenAt: null, holdPaperQueued: true });
       expect((await VENUE_SERVICE.stationStates(tx, at)).get(bar)?.open).toBe(false);
     });
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -1574,6 +1574,10 @@ describe("moveDishesToStation", () => {
       });
       await detachStationPrinters(printerIds.map((id, i) => [id, listed[i]!] as const));
     }
+    const [rerouted] = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, group.lineId)),
+    );
+    expect(rerouted).toMatchObject({ stationId: downstairs.id, holdPaperQueued: false });
     const added = await Promise.all(
       printerIds.map(async (id, i) => (await jobs(id)).slice(before[i])),
     );
@@ -3258,7 +3262,20 @@ describe("moveDishesToStation", () => {
         const kitchenBefore = (await jobs(kitchenPrinter)).length;
         const barBefore = (await jobs(barPrinter)).length;
 
+        const dishTicket = async () =>
+          (
+            await inTx(venue, (tx) =>
+              tx
+                .select()
+                .from(ticketItems)
+                .where(eq(ticketItems.workingOrderLineId, held.mainLineId)),
+            )
+          )[0];
+        expect(await dishTicket()).toMatchObject({ holdPaperQueued: true });
+
         await held.move(held.mainLineId, bar);
+
+        expect(await dishTicket()).toMatchObject({ stationId: bar, holdPaperQueued: false });
 
         const kitchenPaper = await paperSince(kitchenPrinter, kitchenBefore);
         expect(kitchenPaper).toHaveLength(1);

@@ -2699,6 +2699,16 @@ for (const locale of ["en", "es"] as const) {
       ];
       paymentTable.foreignKeys.sort((a, b) => a.id - b.id);
 
+      const ticketTable = expected[phase].tables.ticket_items!;
+      ticketTable.columns.push({
+        name: "hold_paper_queued",
+        type: "INTEGER",
+        notnull: 1,
+        dflt_value: "false",
+        pk: 0,
+      });
+      for (const row of Object.values(ticketTable.rows)) row.hold_paper_queued = 0;
+
       const deliveriesTable = expected[phase].tables.invoice_deliveries!;
       deliveriesTable.foreignKeys.splice(2, 0, {
         ...personKey("person_id", 2),

@@ -704,6 +704,7 @@ CREATE TABLE `ticket_items` (
 	`quantity` integer,
 	`made_here` integer DEFAULT false NOT NULL,
 	`sent_order_number` integer,
+	`hold_paper_queued` integer DEFAULT false NOT NULL,
 	FOREIGN KEY (`working_order_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,

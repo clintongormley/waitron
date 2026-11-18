@@ -682,6 +682,10 @@ Names are today's; the appendices give each table's new name.
 | `payments` | Settle the remaining delete refusal | Payments and adjustments; the owner lands this part (watcher, 6 November) | An A805 follow-up |
 | `envio_flujo`, `envios`, `invoice_series`, `registro_sif` | Settle the remaining delete or update refusal | Fiscal, landed by the owner | Four A805 follow-ups |
 
+**A1368 as built, 2026-11-18.** The group keeps its station record for later corrections.
+The dish's existing ticket item records its HOLD paper. See the
+[os10 implementation note](../../plans/2026-11-08-a1308-os10-hold-paper-per-dish.md).
+
 A1308 slice 0's bench found three slow reads on a year of trading, placed the same way:
 
 | Today's table | Addition | Lands in | Backlog entry |

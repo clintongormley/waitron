@@ -112,29 +112,6 @@ bug). Decide whether "started first" should hold across the whole save
   when it became Ready, or is it enough that a cook can collapse Ready to a strip that draws no
   cards (slice 9)? Seen in A797 slice 8's LOOK.
 
-## A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark
-
-**A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327, #2502).** The dish is one whose HOLD ticket has printed, which
-the waiter then fired at a station that waits for the pass, and which the pass has not yet
-released. When its bill goes to another table or another bill, the MOVED slip lists it and its
-release is marked FIRE; moving the bill to the counter does neither:
-
-- `moveBill`'s counter branch and `moveSettledBillToCounter` (`apps/server/src/move-bill.ts`) leave
-  the bill's dishes with no group;
-- the pass then releases the dish by its bill, not a group (`apps/server/src/pass-card.ts`);
-- the record of which stations have a group's HOLD paper is per group (`order_group_hold_stations`).
-
-The fix proposed is a per-dish record of HOLD paper, which is a schema change, held by A1308 until
-A760 lands.
-
-The two "A1368" cases in `apps/server/src/waiting-course-copy.test.ts` pin both counter paths. The
-kitchen screen differs between them: `moveBill`'s counter branch gives it a `moved` notice for the
-burger only, while `moveSettledBillToCounter` gives one for the tarta as well, with the slip still
-listing only the burger.
-
-The owner chose to fix it (2026-11-06): a cook is not left with two tickets for one dish. It lands
-in A1308's orders and sales slice, which rebuilds the table anyway.
-
 ## Bundle: Held paper followups
 
 1 entry, size M.

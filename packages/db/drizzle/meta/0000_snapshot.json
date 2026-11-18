@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "59b94b80-49ac-4b0f-aff8-7362ea20f1f2",
+  "id": "38048fe7-fe3a-4207-a381-acf341195eb7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4737,6 +4737,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "hold_paper_queued": {
+          "name": "hold_paper_queued",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {

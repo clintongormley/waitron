@@ -10,7 +10,7 @@ import { requestedItem } from "./kitchen-phase.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readPassCardRows, type PassScope } from "./pass-board.js";
 import { passCardRelease, type PassRow, type PassTarget } from "./pass-card.js";
-import { enqueueKitchenTickets, type FiredItem } from "./kitchen-print.js";
+import { enqueueKitchenTickets, inIds, type FiredItem } from "./kitchen-print.js";
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { heldPaperStations } from "./order-groups.js";
 import type { TradingContext } from "./trading-context.js";
@@ -137,8 +137,7 @@ async function release(
   return { releasedTicketItemIds: offered.ticketItemIds };
 }
 
-/** D50, D52: one ticket per bill at each output, FIRE where the group's HOLD paper printed, then
- *  the allergy notice, read after the stamp so a released dish's slip carries no HOLD label. */
+/** One ticket per bill at each output (D50). Read after the release stamp so allergy notices lose HOLD. */
 async function printRelease(
   tx: Transaction,
   cfg: TradingContext,
@@ -147,10 +146,25 @@ async function printRelease(
   releasedIds: readonly string[],
 ): Promise<void> {
   const ids = new Set(releasedIds);
-  const heldPaper =
+  const fire =
     target.kind === "group"
-      ? ((await heldPaperStations(tx, [target.groupId])).get(target.groupId) ?? new Set<string>())
-      : new Set<string>();
+      ? {
+          heldPaper:
+            (await heldPaperStations(tx, [target.groupId])).get(target.groupId) ??
+            new Set<string>(),
+        }
+      : {
+          heldLines: new Set(
+            (
+              await tx
+                .select({ lineId: ticketItems.workingOrderLineId })
+                .from(ticketItems)
+                .where(
+                  and(inIds(ticketItems.id, releasedIds), eq(ticketItems.holdPaperQueued, true)),
+                )
+            ).map((item) => item.lineId),
+          ),
+        };
   const byOrder = new Map<string, FiredItem[]>();
   for (const row of cardRows) {
     if (!ids.has(row.item.id)) continue;
@@ -163,7 +177,7 @@ async function printRelease(
     byOrder.set(row.orderId, items);
   }
   for (const [orderId, items] of byOrder)
-    await enqueueKitchenTickets(tx, cfg, orderId, items, { fire: { heldPaper } });
+    await enqueueKitchenTickets(tx, cfg, orderId, items, { fire });
   await notifyKitchenAllergyDestination(tx, cfg, releasedIds);
 }
 

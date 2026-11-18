@@ -1,5 +1,21 @@
 # A1308 orders and sales, PR 10: HOLD paper is recorded per dish (A1368) — implementation plan
 
+> **As built, 2026-11-18 (watcher decisions at 21:04, 21:40, 21:50 and 22:02).**
+> The implementation keeps `order_group_hold_stations` and its existing key so the original
+> group's stations still receive removal slips and later additions. Each dish's current station
+> records its HOLD paper on the existing ticket item in `hold_paper_queued`. A split keeps the
+> mark on both portions. Moving to another station or held group clears the moved ticket's mark
+> before the destination queues any HOLD paper.
+>
+> A waiting dish with HOLD paper stays on the MOVED slip when its bill goes to the counter.
+> A dish without a group appears on the main list. A counter bill release prints one ticket
+> at each output, with ordinary lines and a FIRE section for the dishes that had HOLD paper
+> when both kinds are present. The protection comparison adds the ticket column, its place
+> in the column order, and its comparison in the change-feed update trigger.
+>
+> This note supersedes the group-table re-key, migration differences, and counter rendering
+> described in the original plan below.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Record which stations hold a dish's HOLD paper per dish line instead of per group, so a dish
