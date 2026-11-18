@@ -107,6 +107,38 @@ describe("local browser report", () => {
       },
     ]);
   });
+  it("keeps popover load failures in the exported problem report, naming only standard errors", () => {
+    const failure = (errorType: string, ago: number): TrailEvent => ({
+      ...event({ errorType, message: "secret", stack: "at secret" }, "ui.popover_load_failed", ago),
+      level: "error",
+    });
+    const snapshot = capture([
+      failure("TypeError", 3000),
+      failure("Unknown", 2000),
+      failure("john.smith", 1000),
+    ]);
+    const report = diagnostics.renderClientReport!(snapshot, "The help bubble never opened.")!;
+    expect(parsed(report.text).trail).toEqual([
+      {
+        at: new Date(+NOW - 3000).toISOString(),
+        level: "error",
+        event: "ui.popover_load_failed",
+        fields: { errorType: "TypeError" },
+      },
+      {
+        at: new Date(+NOW - 2000).toISOString(),
+        level: "error",
+        event: "ui.popover_load_failed",
+        fields: { errorType: "Unknown" },
+      },
+      {
+        at: new Date(+NOW - 1000).toISOString(),
+        level: "error",
+        event: "ui.popover_load_failed",
+        fields: {},
+      },
+    ]);
+  });
   it("normalizes report metadata without copying extra client fields", () => {
     const client = Object.assign(
       { ...CLIENT },

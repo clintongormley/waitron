@@ -29,6 +29,7 @@ const KEYS: Record<string, readonly string[]> = {
   "alerts.load_failed": ["code"],
   "disk_stop.load_failed": ["code"],
   "theme.load_failed": ["code"],
+  "ui.popover_load_failed": ["errorType"],
   "server-switch": [],
 };
 const METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
@@ -64,6 +65,10 @@ function field(key: string, value: TrailField | undefined): TrailField | undefin
       return value === "network" ? value : undefined;
     case "name":
       return typeof value === "string" && NAMES.has(value) ? value : undefined;
+    case "errorType":
+      return value === "Unknown" || (typeof value === "string" && NAMES.has(value))
+        ? value
+        : undefined;
     default:
       return undefined;
   }
