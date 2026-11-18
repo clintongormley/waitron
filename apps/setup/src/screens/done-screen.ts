@@ -426,14 +426,7 @@ export class SetupDoneScreen extends LitElement {
   }
 
   #breakGlass(): TemplateResult | null {
-    if (this.breakGlassSecret === undefined) {
-      return this.breakGlassKeyInBackups
-        ? html`<wt-card data-test="break-glass-replacement">
-            <p>${t("done.break_glass.replacement")}</p>
-            <a href=${BACKUP_SETUP_URL}>${t("done.break_glass.open_backups")}</a>
-          </wt-card>`
-        : null;
-    }
+    if (this.breakGlassSecret === undefined) return null;
     const preparation = this.onboardingIntent === "prepare" && !this.mirrorJoin;
     return html`<div class="break-glass" data-test="break-glass">
       <h2>${t("done.break_glass.heading")}</h2>
@@ -454,6 +447,7 @@ export class SetupDoneScreen extends LitElement {
   }
 
   #renderTrading(): TemplateResult {
+    const needsReplacement = this.breakGlassKeyInBackups && this.breakGlassSecret === undefined;
     return html`
       <h1>${t(HEADINGS[this.restored ?? "none"])}</h1>
       ${
@@ -480,8 +474,10 @@ export class SetupDoneScreen extends LitElement {
         this.onboardingIntent === "demo" || this.restored === "bucket" || this.startFailed
           ? nothing
           : html`<wt-card data-test="backup-nudge">
-              <p>${t("done.backup_nudge")}</p>
-              <a href=${BACKUP_SETUP_URL}>${t("done.backup_link")}</a>
+              <p>${t(needsReplacement ? "done.break_glass.replacement" : "done.backup_nudge")}</p>
+              <a href=${BACKUP_SETUP_URL}
+                >${t(needsReplacement ? "done.break_glass.open_backups" : "done.backup_link")}</a
+              >
             </wt-card>`
       }
     `;

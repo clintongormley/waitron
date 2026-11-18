@@ -1448,7 +1448,8 @@ describe("setup-app", () => {
     await flush(el);
     const done = await screenHost(el, "done");
     expect(done.shadowRoot!.querySelector("[data-test=break-glass-secret]")).toBeNull();
-    const link = done.shadowRoot!.querySelector("[data-test=break-glass-replacement] a");
+    expect(done.shadowRoot!.querySelectorAll('a[href="/backup"]')).toHaveLength(1);
+    const link = done.shadowRoot!.querySelector("[data-test=backup-nudge] a");
     expect(link?.textContent).toBe("Open Backups");
     expect(link?.getAttribute("href")).toBe("/backup");
   });
