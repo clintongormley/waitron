@@ -5,9 +5,6 @@ their full text.
 
 ## Loose ends left by A429 slice 1 (#1493).
 
-- Nothing at boot level tests that the till API receives the table-removal seats (each enabled
-  module's part in removing a table); `apps/server/src/boot.test.ts` tests only the management
-  API's wiring.
 - Small floor-plan refusals still missing: `dining_tables.plan_table_id` has no unique index (no
   writer makes two live tables follow one master table today); the delivery-release trigger
   accepts an empty label.
