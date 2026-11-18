@@ -3258,7 +3258,20 @@ describe("moveDishesToStation", () => {
         const kitchenBefore = (await jobs(kitchenPrinter)).length;
         const barBefore = (await jobs(barPrinter)).length;
 
+        const dishTicket = async () =>
+          (
+            await inTx(venue, (tx) =>
+              tx
+                .select()
+                .from(ticketItems)
+                .where(eq(ticketItems.workingOrderLineId, held.mainLineId)),
+            )
+          )[0];
+        expect(await dishTicket()).toMatchObject({ holdPaperQueued: true });
+
         await held.move(held.mainLineId, bar);
+
+        expect(await dishTicket()).toMatchObject({ stationId: bar, holdPaperQueued: false });
 
         const kitchenPaper = await paperSince(kitchenPrinter, kitchenBefore);
         expect(kitchenPaper).toHaveLength(1);

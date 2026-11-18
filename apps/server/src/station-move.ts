@@ -179,7 +179,11 @@ export async function rerouteHeldAtRelease(
       if (!old) throw new Error("held ticket has no old station in this venue");
       await tx
         .update(ticketItems)
-        .set({ stationId: destinationId, queuedAt: routing.at.toISOString() })
+        .set({
+          stationId: destinationId,
+          queuedAt: routing.at.toISOString(),
+          holdPaperQueued: false,
+        })
         .where(eq(ticketItems.id, row.id));
       rerouted.set(row.lineId, { stationId: row.stationId, stationName: old.name });
     }
@@ -461,6 +465,7 @@ export async function moveDishesToStation(
           queuedAt: at.toISOString(),
           stationChosenAt: at.toISOString(),
           stationRetainedAtRelease: false,
+          holdPaperQueued: false,
         })
         .where(
           and(

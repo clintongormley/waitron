@@ -71,6 +71,8 @@ export const ticketItems = table(
     // The number of the order this kitchen work was first sent under, once it has moved to another
     // order; null on a made-here item.
     sentOrderNumber: count("sent_order_number"),
+    // Stays with the dish when it leaves its group. A station move clears it before printing there.
+    holdPaperQueued: flag("hold_paper_queued").notNull().default(false),
   },
   (t) => [
     // One ticket item per line — also the guard that makes a concurrent double-fire collide rather

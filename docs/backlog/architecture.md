@@ -934,11 +934,6 @@ Size M.
 Where each lands: the A1308 slice named in the design's "Lands in" column
 ([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
 
-- **A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327, #2502).** At the counter the dish
-  leaves its group, and the record of HOLD paper is kept per group. The fix proposed is a per-dish
-  record: a schema change, held by A1308 until A760 lands. The owner chose to fix it there
-  (2026-11-06): a cook is not left with two tickets for one dish.
-  [Detail](kitchen.md#a1368-a-dish-waiting-for-the-pass-whose-hold-ticket-printed-moved-to-the-counter-still-gets-no-moved-line-and-no-fire-mark)
 - **`envio_flujo`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`envios`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`invoice_series`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**

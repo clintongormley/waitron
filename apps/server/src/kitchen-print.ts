@@ -904,7 +904,24 @@ export async function enqueueKitchenTickets(
     from,
   });
   await enqueueKitchenJobs(tx, orderId, jobs, false);
-  return new Set(jobs.flatMap((job) => job.stationIds));
+  const carried = new Set(jobs.flatMap((job) => job.stationIds));
+  if (mark === "HOLD") await markHoldPaper(tx, firedItems, carried);
+  return carried;
+}
+
+async function markHoldPaper(
+  tx: Transaction,
+  items: readonly FiredItem[],
+  receiving: ReadonlySet<string>,
+): Promise<void> {
+  const lines = items
+    .filter((item) => receiving.has(item.stationId))
+    .map((item) => item.workingOrderLineId);
+  if (lines.length === 0) return;
+  await tx
+    .update(ticketItems)
+    .set({ holdPaperQueued: true })
+    .where(inIds(ticketItems.workingOrderLineId, lines));
 }
 
 /** Record which bill and stations a kitchen ticket's job carried. */
@@ -1604,6 +1621,7 @@ async function printCorrectionSlips(
       orderId,
       items.filter((item) => receiving.has(item.stationId)),
     );
+    await markHoldPaper(tx, items, receiving);
   }
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
@@ -1732,12 +1750,26 @@ async function readSentItems(
   tx: Transaction,
   orderIds: readonly string[],
 ): Promise<Map<string, { ticketItemIds: Set<string>; heldItemIds: Set<string> }>> {
-  const fired = await tx
-    .select({ id: ticketItems.id, workingOrderId: workingOrderLines.workingOrderId })
+  const firedOrUngrouped = await tx
+    .select({
+      id: ticketItems.id,
+      workingOrderId: workingOrderLines.workingOrderId,
+      firedAt: ticketItems.firedAt,
+    })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(
-      and(inArray(workingOrderLines.workingOrderId, [...orderIds]), isNotNull(ticketItems.firedAt)),
+      and(
+        inArray(workingOrderLines.workingOrderId, [...orderIds]),
+        or(
+          isNotNull(ticketItems.firedAt),
+          and(
+            isNull(workingOrderLines.groupId),
+            isNotNull(ticketItems.requestedAt),
+            eq(ticketItems.holdPaperQueued, true),
+          ),
+        ),
+      ),
     );
   const held = [
     ...(await readOnHoldTickets(tx, orderIds)),
@@ -1749,7 +1781,11 @@ async function readSentItems(
     sent.set(orderId, known);
     return known;
   };
-  for (const item of fired) entry(item.workingOrderId).ticketItemIds.add(item.id);
+  for (const item of firedOrUngrouped) {
+    const order = entry(item.workingOrderId);
+    order.ticketItemIds.add(item.id);
+    if (item.firedAt === null) order.heldItemIds.add(item.id);
+  }
   for (const item of held) {
     const known = entry(item.workingOrderId);
     known.ticketItemIds.add(item.id);
@@ -1758,36 +1794,38 @@ async function readSentItems(
   return sent;
 }
 
-/**
- * Whether each of the held `items` is at a station recorded for its line's group
- * ({@link heldPaperStations}): the held work whose HOLD paper that station has.
- */
+/** A dish that left its group still has HOLD paper at the station that received it. */
 async function onHeldPaper(
   tx: Transaction,
   items: readonly { workingOrderLineId: string; stationId: string | null }[],
 ): Promise<(item: { workingOrderLineId: string; stationId: string | null }) => boolean> {
   if (items.length === 0) return () => false;
   const lines = await tx
-    .select({ id: workingOrderLines.id, groupId: workingOrderLines.groupId })
+    .select({
+      id: workingOrderLines.id,
+      groupId: workingOrderLines.groupId,
+      stationId: ticketItems.stationId,
+      holdPaperQueued: ticketItems.holdPaperQueued,
+    })
     .from(workingOrderLines)
+    .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(
       inIds(
         workingOrderLines.id,
         items.map((item) => item.workingOrderLineId),
       ),
     );
-  const groupOf = new Map(lines.map((line) => [line.id, line.groupId]));
+  const byId = new Map(lines.map((line) => [line.id, line]));
   const recorded = await heldPaperStations(
     tx,
     lines.flatMap((line) => line.groupId ?? []),
   );
   return (item) => {
-    const groupId = groupOf.get(item.workingOrderLineId);
-    return (
-      groupId != null &&
-      item.stationId !== null &&
-      recorded.get(groupId)?.has(item.stationId) === true
-    );
+    const line = byId.get(item.workingOrderLineId);
+    if (line === undefined || item.stationId === null) return false;
+    return line.groupId === null
+      ? line.holdPaperQueued && line.stationId === item.stationId
+      : recorded.get(line.groupId)?.has(item.stationId) === true;
   };
 }
 
@@ -2121,7 +2159,7 @@ async function printMovedSlips(
         const entry = itemsByLine.get(target.workingOrderLineId)!;
         const item = changeItem(entry.item, target);
         return {
-          held: target.held,
+          held: target.held && entry.group !== null,
           lineNo: entry.lineNo,
           position: entry.position,
           item: entry.group === null ? item : { ...item, group: entry.group },
@@ -2141,7 +2179,7 @@ async function printMovedSlips(
       else held.push({ group: item.group!, items: [item] });
     }
     for (const group of held) group.items = arrangeTicketItems(group.items, ticketGrouping);
-    const fired = arrangeTicketItems(
+    const mainItems = arrangeTicketItems(
       listed.filter((entry) => !entry.held).map((entry) => entry.item),
       ticketGrouping,
     );
@@ -2151,7 +2189,7 @@ async function printMovedSlips(
           ...slip,
           stationName: stationNames.get(stationId)!.name,
           at,
-          items: fired,
+          items: mainItems,
           held,
           locale: language,
         },

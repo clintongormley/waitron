@@ -5957,6 +5957,30 @@ describe("splitting a held line into units", () => {
       copy.mockRestore();
     }
   });
+  it("keeps a dish on HOLD paper when part of its quantity is split", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await inTx((tx) => setStationPrinting(tx, { printHeldWork: true }, [v.stationId]));
+    await submitGrouped(v, s, [{ release: "hold", lines: [line(v, "steak", "2")] }]);
+    const [source] = await linesOf(s.partyId);
+
+    const split = await inTx((tx) =>
+      splitLinesWithinOrder(tx, v.cfg, s.tabId, [{ lineNo: source!.lineNo, quantity: "1" }]),
+    );
+    const copied = split.get(source!.id)!;
+    expect(
+      await db
+        .select()
+        .from(ticketItems)
+        .where(inArray(ticketItems.workingOrderLineId, [source!.id, copied.id])),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ workingOrderLineId: source!.id, holdPaperQueued: true }),
+        expect.objectContaining({ workingOrderLineId: copied.id, holdPaperQueued: true }),
+      ]),
+    );
+  });
+
   it("the original partial splitter makes one row, retaining the other four units", async () => {
     const v = await setupVenue();
     const s = await seated(v);

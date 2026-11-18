@@ -25,6 +25,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { readContentLanguages, writeContentLanguages } from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import type { AttendanceRecorder } from "./attendance-capture.js";
@@ -2390,7 +2391,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect(burger[0]![0]).not.toMatch(/\*\*\*/);
     });
 
-    it("A1368: moved to the counter, the waiting tarta gets no moved notice, is left off the slip and is released with no FIRE mark", async () => {
+    it("A1368: moving an open bill to the counter lists the waiting tarta and marks its release FIRE", async () => {
       const t = await waitingTable();
       const mark = (await printed(t.grill.printer)).length;
       const noticesBefore = new Set((await movedNotices([t.bill2])).map((notice) => notice.id));
@@ -2398,13 +2399,20 @@ describe("A803 waiting copy: kitchen paper", () => {
       await moveWholeBill(t.bill2, t.partyId, { counter: { zoneId: null } });
 
       expect((await printed(t.grill.printer)).slice(mark)).toEqual([
-        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, words.counter, ["1 x BURG"]),
+        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, words.counter, [
+          "1 x BURG",
+          "1 x TARTA",
+        ]),
       ]);
       expect(
         (await movedNotices([t.bill2])).filter((notice) => !noticesBefore.has(notice.id)),
-      ).toEqual([{ id: expect.any(String), lineName: "BURG", stationId: t.grill.id }]);
+      ).toEqual([
+        { id: expect.any(String), lineName: "BURG", stationId: t.grill.id },
+        { id: expect.any(String), lineName: "TARTA", stationId: t.grill.id },
+      ]);
       expect(await releaseCake(t)).toEqual([
         [
+          `*** ${words.fire} ***`,
           t.grill.name,
           t.label,
           await orderNumberOf(t.bill2),
@@ -2415,7 +2423,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       ]);
     });
 
-    it("A1368: a paid bill moved to the counter gives the waiting tarta a moved notice but leaves it off the slip and releases it with no FIRE mark", async () => {
+    it("A1368: moving a paid bill to the counter lists the waiting tarta and marks its release FIRE", async () => {
       const t = await waitingTable();
       await payWorkingOrder(
         { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
@@ -2436,7 +2444,10 @@ describe("A803 waiting copy: kitchen paper", () => {
       );
 
       expect((await printed(t.grill.printer)).slice(mark)).toEqual([
-        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, words.counter, ["1 x BURG"]),
+        movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, words.counter, [
+          "1 x BURG",
+          "1 x TARTA",
+        ]),
       ]);
       expect(
         (await movedNotices([t.bill2])).filter((notice) => !noticesBefore.has(notice.id)),
@@ -2446,6 +2457,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       ]);
       expect(await releaseCake(t)).toEqual([
         [
+          `*** ${words.fire} ***`,
           t.grill.name,
           t.label,
           await orderNumberOf(t.bill2),
@@ -2455,6 +2467,31 @@ describe("A803 waiting copy: kitchen paper", () => {
         ],
       ]);
     });
+
+    it.each([
+      ["es", "*** MOVIDO ***"],
+      ["en", "*** MOVED ***"],
+    ])(
+      "A1368: the %s counter slip lists the dish without an undefined group",
+      async (language, heading) => {
+        const previous = await inTx(v, (tx) => readContentLanguages(tx, v.cfg.locale));
+        try {
+          await inTx(v, (tx) =>
+            writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] }),
+          );
+          const t = await waitingTable();
+          const mark = (await printed(t.grill.printer)).length;
+
+          await moveWholeBill(t.bill2, t.partyId, { counter: { zoneId: null } });
+
+          const slips = (await printed(t.grill.printer)).slice(mark);
+          expect(slips).toEqual([expect.arrayContaining([heading, "1 x TARTA"])]);
+          expect(slips.flat().join("\n")).not.toContain("undefined");
+        } finally {
+          await inTx(v, (tx) => writeContentLanguages(tx, previous));
+        }
+      },
+    );
 
     /**
      * {@link paperTable} with only Grill printing held work and Flan moved to Bill 2 beside the

@@ -10,7 +10,7 @@ import { requestedItem } from "./kitchen-phase.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readPassCardRows, type PassScope } from "./pass-board.js";
 import { passCardRelease, type PassRow, type PassTarget } from "./pass-card.js";
-import { enqueueKitchenTickets, type FiredItem } from "./kitchen-print.js";
+import { enqueueKitchenTickets, inIds, type FiredItem } from "./kitchen-print.js";
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { heldPaperStations } from "./order-groups.js";
 import type { TradingContext } from "./trading-context.js";
@@ -150,7 +150,14 @@ async function printRelease(
   const heldPaper =
     target.kind === "group"
       ? ((await heldPaperStations(tx, [target.groupId])).get(target.groupId) ?? new Set<string>())
-      : new Set<string>();
+      : new Set(
+          (
+            await tx
+              .selectDistinct({ stationId: ticketItems.stationId })
+              .from(ticketItems)
+              .where(and(inIds(ticketItems.id, releasedIds), eq(ticketItems.holdPaperQueued, true)))
+          ).map((item) => item.stationId),
+        );
   const byOrder = new Map<string, FiredItem[]>();
   for (const row of cardRows) {
     if (!ids.has(row.item.id)) continue;
