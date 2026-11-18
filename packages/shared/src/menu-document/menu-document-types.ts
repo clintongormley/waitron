@@ -311,6 +311,7 @@ export type MenuChangeBody = {
   | {
       kind: "set_menu_changed";
       setMenu: { id: string; name: string };
+      /** Empty when saving again changed only the copy's stamp. */
       fields: SetMenuChangeField[];
     }
   | { kind: "section_changed"; sectionId: string; name: string; fields: SectionChangeField[] }

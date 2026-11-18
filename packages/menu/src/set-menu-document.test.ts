@@ -35,7 +35,6 @@ import {
   saveSetMenuLines,
   saveSetMenuVariantChoices,
 } from "./set-menus.js";
-
 import { createUnit, updateUnit } from "./units.js";
 
 const suite = useMenuDb();

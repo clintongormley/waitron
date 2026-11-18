@@ -1022,8 +1022,8 @@ export interface PublishedSetMenu {
 - `diffEntries` emits one `set_menu_changed` per set menu whose copy differs between the live and
   proposed documents, naming the fields that differ (`"dishes"` covers dishes added, removed,
   re-priced, re-coursed or with variants changed). The change carries `source: "set_menu"`,
-  `setMenu: { id, name }`, `alsoOn` naming the other published full menus that hold the set menu,
-  and the target `navigateMenuChanges` (`menu-navigation.ts`) gives the set-menu member. It has no
+  `setMenu: { id, name }`, `alsoOn` naming the other published full menus with the same field change
+  or with a save that changed only the stamp in both menus, and the target `navigateMenuChanges` (`menu-navigation.ts`) gives the set-menu member. It has no
   undo: `menu-undo.ts` treats it as not undoable. Task 8a adds the editor link when that tab exists.
   If only the saved time differs, show that the set menu was saved again. Compare set-menu members
   in each list and show their placement or removal in Preview here. The ordinary member diff handles products and
@@ -1047,8 +1047,8 @@ export interface PublishedSetMenu {
     `previewMenu(Lunch)` has exactly one `set_menu_changed` naming Daily menu with
     `fields: ["dishes"]`.
   - `"a price change shows as set_menu_changed with fields price"`: €14 → €15.
-  - `"the change names the other menus that hold the set menu"`: Daily menu also placed in a
-    published "Weekend" menu → `alsoOn` names Weekend.
+  - The same surcharge change or save with no field difference also appears against the published
+    "Weekend" menu → `alsoOn` names Weekend. Different changed fields do not match.
   - `"the change leads to the set-menu member and cannot be undone"`: `navigateMenuChanges` gives
     the member's target, and the undo read reports it as not undoable.
 - [ ] **Step 2: Run; they fail.** `pnpm --filter @waitron/menu exec vitest run src/set-menu-document.changes.test.ts`

@@ -994,7 +994,8 @@ The live correction dialog starts from the full menu's own dishes and modifiers.
 modifier corrections also reach matching dishes and modifiers in the copies. A dish offered only
 by a set menu can be corrected through the API. Extras usage and routing include set-menu dishes.
 The dashboard editor and placement controls, the Preview editor link and draft problems on screen,
-serving the copies, till ordering and payment, bill documents, and the demo and guides remain open.
+and selecting copy-only dishes in the live correction dialog remain open. Serving the copies, till
+ordering and payment, bill documents, and the demo and guides also remain open.
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer
 (owner, 2026-11-18, question 4 of the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md);
