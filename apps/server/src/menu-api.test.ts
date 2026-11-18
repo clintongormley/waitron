@@ -18,7 +18,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
-import { menuReleases, menuVersions, sectionMembers } from "@waitron/menu";
+import { createMenu, menuReleases, menuVersions, sectionMembers } from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
 import { type ContentLanguageRules } from "@waitron/shared";
@@ -1479,6 +1479,27 @@ describe("mountMenuApi — the venue's menus", () => {
       sql`select id as menu_id from menus where is_default = 1`,
     );
     expect(rows.rows).toEqual([{ menu_id: day }]);
+  });
+
+  it("answers 409 when a set menu is named as the default or in ordinary Prices", async () => {
+    const app = mountApp();
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createMenu(tx, {
+        name: "Lunch set",
+        kind: "set_menu",
+        setPrice: "14.00",
+        setVatClass: "reduced",
+      }),
+    );
+    for (const response of [
+      await send(app, "PUT", defaultPath(), { body: { menuId: id } }),
+      await send(app, "GET", `/management-api/menus/${id}/prices`),
+    ]) {
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "set_menu.wrong_place", params: { menuId: id } },
+      });
+    }
   });
 
   it("PUT default-menu with a missing/non-string menuId → management.request_invalid 400", async () => {

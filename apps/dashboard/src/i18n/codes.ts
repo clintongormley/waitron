@@ -561,6 +561,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That menu could not be found",
     es: "No se ha encontrado esa carta",
   },
+  "set_menu.wrong_place": {
+    en: "A set menu is sold by placing it in a menu. Open that menu's Structure and add the set menu there.",
+    es: "Un menú a precio fijo se vende colocándolo dentro de una carta. Abre la Estructura de esa carta y añádelo allí.",
+  },
   "node.operation_page_required": {
     en: "This operation needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
     es: "Esta operación necesita una conexión cifrada desde la página del propio servidor. Abre la dirección HTTPS del servidor y vuelve a intentarlo.",

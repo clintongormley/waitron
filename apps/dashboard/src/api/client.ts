@@ -13,7 +13,12 @@ export type { MenuDefaults };
 export type MenuSettingsAnswer = MenuDefaults & { takeawayVat: boolean };
 import type { Setting, CombinedOffer, ValueSource, Place } from "@waitron/shared";
 export type { Setting, CombinedOffer, ValueSource, Place };
-import type { ContentLanguageRules, ContentLanguages, DeleteImpact } from "@waitron/shared";
+import type {
+  ContentLanguageRules,
+  ContentLanguages,
+  DeleteImpact,
+  MenuKind,
+} from "@waitron/shared";
 
 import type { FreshSignInGate } from "./fresh-sign-in.js";
 
@@ -569,6 +574,9 @@ export interface MenuSummary {
   id: string;
   name: string;
   active: boolean;
+  kind: MenuKind;
+  setPrice: string | null;
+  setVatClass: VatClass | null;
 }
 
 export interface CategorySummary {

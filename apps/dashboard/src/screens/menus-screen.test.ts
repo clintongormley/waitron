@@ -150,8 +150,22 @@ const categories: CategorySummary[] = [
 ];
 
 const menus: MenuSummary[] = [
-  { id: "menu-lunch", name: "Lunch Menu", active: true },
-  { id: "menu-dinner", name: "Dinner Menu", active: true },
+  {
+    id: "menu-lunch",
+    name: "Lunch Menu",
+    active: true,
+    kind: "menu",
+    setPrice: null,
+    setVatClass: null,
+  },
+  {
+    id: "menu-dinner",
+    name: "Dinner Menu",
+    active: true,
+    kind: "menu",
+    setPrice: null,
+    setVatClass: null,
+  },
 ];
 
 const productMember = (id: string, position: number, productId: string): SectionMember => ({
@@ -1500,6 +1514,9 @@ describe("the menus list's Changes column", () => {
     id: "menu-brunch",
     name: "Brunch Menu",
     active: true,
+    kind: "menu",
+    setPrice: null,
+    setVatClass: null,
   };
 
   /** Lunch has changes on its live version 2, Dinner is current, Brunch was never published. */
@@ -2338,6 +2355,9 @@ describe("copying a menu from the list", () => {
     id: "menu-copy",
     name: "Weekday lunch",
     active: true,
+    kind: "menu",
+    setPrice: null,
+    setVatClass: null,
   };
   const form = (el: MenusScreen) =>
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-menu-copy-dialog"]>(
@@ -11657,6 +11677,9 @@ describe("the menus list just wider than its narrow layout", () => {
           id: "menu-lunch",
           name: "Weekday-lunch-menu-with-starters-main-and-cakes",
           active: true,
+          kind: "menu",
+          setPrice: null,
+          setVatClass: null,
         },
         menus[1]!,
       ];

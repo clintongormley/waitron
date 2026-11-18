@@ -1364,9 +1364,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   `apps/server/src/boot.management-origin.test.ts` must still pass.
 - [ ] **Step 2: Run; they fail.**
 - [ ] **Step 3: Implement the routes, the status entries, the client methods, and the English and
-  Spanish wording in `codes.ts` for the codes below.** The two dish refusals
-  (`set_menu.vat_class_differs`, `set_menu.dish_sold_by_measure`) are worded in Task 9, beside the
-  screen that shows them. Wording, **my call**, each saying what to do:
+  Spanish wording in `codes.ts` for the codes below.** Task 8b words the class-change refusal. Task 9 words the two refusals
+  when adding dishes (`set_menu.vat_class_differs` and `set_menu.dish_sold_by_measure`). Wording, **my call**, each saying what to do:
   - `set_menu.wrong_place`: "A set menu is sold by placing it in a menu. Open that menu's
     Structure and add the set menu there." / «Un menú a precio fijo se vende colocándolo dentro de
     un menú. Abre la Estructura de ese menú y añádelo allí.»
@@ -1391,7 +1390,7 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 
 **Files:**
 - Modify: `apps/dashboard/src/screens/menus-screen.ts` (`TABS` `:92`, list columns,
-  `#renderEditor` `:3910-3965`, the Preview tab)
+  `#renderEditor` `:3910-3965`)
 - Create: `apps/dashboard/src/widgets/set-menu-editor.ts` (the one page: Task 8b draws its terms,
   Task 9 its dishes, Task 10 its lines)
 - Modify: `apps/dashboard/src/i18n/strings.ts`
@@ -1407,8 +1406,6 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   where its changes go: "Changes reach the tills when you publish a menu that holds this set menu:
   Lunch, Dinner", each name linking to that menu's Preview, or "Place it in a menu to sell it" when
   no menu holds it (from `SetMenuDetails.heldBy`; **my call** on wording).
-- A full menu's **Preview** lists `setMenuProblems` above the publish button, each set menu's name
-  linking to its page, and shows each `set_menu_changed` entry with that link instead of an undo.
 
 - [ ] **Step 1: Write the failing tests** in `menus-screen.set-menu.test.ts`:
   `"the list shows a set menu's kind and price"`;
@@ -1533,7 +1530,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   the draft changes. Errors follow the refusal's `field`.
 - Under the lines, the editor lists `problems` in plain words ("Bottle (Wine) counts as Desserts,
   which no line includes. Add Desserts to a line, or leave Bottle out."), each with the control
-  that fixes it where there is one (a link to the product, the variants dialog). The two kinds a
+  that fixes it where there is one (a link to the product). Task 9 adds and tests the Variants
+  control. The two kinds a
   product's own page can cause (Task 4b): "Sirloin is now taxed at General (21%), and this set menu
   at Reduced (10%). Leave it out, or correct its VAT class on the product." and "Turbot is now sold
   by weight. Leave it out, or sell it by the portion on the product.", each linking to the product

@@ -465,6 +465,12 @@ export type {
   HomeTile,
   MenuHome,
 } from "./menu-document/section-types.js";
+export type {
+  MenuKind,
+  SetMenuLine,
+  SetMenuProblem,
+  SetMenuTerms,
+} from "./menu-document/set-menu-types.js";
 export {
   vatRateOn,
   vatRatesOn,
