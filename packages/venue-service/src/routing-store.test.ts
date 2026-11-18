@@ -2742,12 +2742,12 @@ describe("routing on repeating special days", () => {
         await seedBusinessDay(tx, { dayCutover: "06:00:00" });
       })();
       await setCategoryCell(tx, f.cocktails, station(f.terraceBar));
-      const [navidad] = await tx
+      const [christmas] = await tx
         .insert(specialDays)
-        .values({ name: "Navidad", repeatsYearly: true })
+        .values({ name: "Christmas", repeatsYearly: true })
         .returning({ id: specialDays.id });
       await tx.insert(specialDayDates).values({
-        specialDayId: navidad!.id,
+        specialDayId: christmas!.id,
         date: "2026-12-25",
         closedAllDay: true,
       });
@@ -3749,9 +3749,9 @@ describe("saving a cell's period choices", () => {
         .insert(sectionMembers)
         .values({ sectionId: root!.id, position: 9, productId: f.variant });
       const [rootless] = await tx.insert(menus).values({ name: "No root" }).returning();
-      const aperitivo = (
+      const aperitif = (
         await saveMenuPeriod(tx, f.department, {
-          name: "Aperitivo",
+          name: "Aperitif",
           menuId: rootless!.id,
           staffMenuIds: [],
           colour: "blue",
@@ -3777,7 +3777,7 @@ describe("saving a cell's period choices", () => {
           colour: "blue",
           productIds: [f.bread, f.mojito],
         },
-        { id: aperitivo, ...dining, name: "Aperitivo", colour: "blue", productIds: [] },
+        { id: aperitif, ...dining, name: "Aperitif", colour: "blue", productIds: [] },
       ]);
       expect(periods.find((period) => period.id === f.barLunch)).toEqual({
         id: f.barLunch,
