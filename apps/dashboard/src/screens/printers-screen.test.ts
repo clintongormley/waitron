@@ -1921,7 +1921,6 @@ describe("printers-screen", () => {
     expect(text(el, "[data-test=join-origin]")).toBe(window.location.origin);
   });
 
-  // Design §1.2 rule 1: the list must never show the answer beside the question.
   it("never renders the request's verification number in the pending list", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

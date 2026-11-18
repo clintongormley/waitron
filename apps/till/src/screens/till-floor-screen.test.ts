@@ -126,7 +126,7 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-to-serve]")!.textContent).toContain("2");
   });
 
-  it("shows the ready-to-serve badge with the readyToServe count (KDS-1 §3d, 'N listos')", async () => {
+  it("shows the ready-to-serve badge with the readyToServe count ('N listos')", async () => {
     const { el } = await mount({
       zones: [zone({ id: "z1", name: "Comedor" })],
       tables: [

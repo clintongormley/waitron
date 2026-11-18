@@ -109,7 +109,7 @@ it("defaults to the module locale when none is passed (shipped default en-GB)", 
   expect(codeMessage("swap.not_found")).toBe("No se ha encontrado ese cambio de turno");
 });
 
-it("resolves a shut pairing window to its own actionable copy, in both locales (device-join-and-accept §2)", () => {
+it("resolves a shut pairing window to its own actionable copy, in both locales", () => {
   expect(codeMessage("device.pairing_closed", "en")).toBe(
     "New devices aren't being accepted right now. Open “Add a device” in the dashboard, under Devices, then try again.",
   );

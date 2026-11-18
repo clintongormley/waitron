@@ -935,7 +935,7 @@ describe("working_order_lines", () => {
     expect(changed).toEqual({ sentAt: AT, extraListId: listId });
   });
 
-  it("carries a nullable note column (KDS-only, NON-FISCAL — spec §2/§3)", async () => {
+  it("carries a nullable note column (KDS-only, NON-FISCAL)", async () => {
     // `lower(type)`: the pragma reports `TEXT` in upper case where the DDL declares `text`.
     const meta = await rows<{ name: string; type: string; notnull: number }>(
       db,

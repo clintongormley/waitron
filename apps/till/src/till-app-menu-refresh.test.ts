@@ -2375,7 +2375,7 @@ describe("the menu's Device Home Page", () => {
   });
 });
 
-describe("a device behind the live version (§9)", () => {
+describe("a device behind the live version (menus spec §9)", () => {
   const drinks = {
     kind: "section" as const,
     sectionId: "sec-drinks",

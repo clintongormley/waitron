@@ -822,7 +822,7 @@ describe("till-station-screen", () => {
   });
 });
 
-describe("till-station-screen device mode (device-identity-1 §5a)", () => {
+describe("till-station-screen device mode", () => {
   const boundStation = {
     id: "st-dev",
     name: "Cocina",
@@ -865,7 +865,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
-  it("cold boot adopts initialDeviceStation and does NOT re-fetch getDeviceStationScreen (fast-path, §5a)", async () => {
+  it("cold boot adopts initialDeviceStation and does NOT re-fetch getDeviceStationScreen (fast-path)", async () => {
     // getDeviceStationScreen returns a DISTINCT queue, so losing the fast path would both re-fetch AND render
     // the wrong queue.
     const api = deviceApi({
@@ -1039,7 +1039,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(queueWidget(el)!.advanceOnly).toBe(true);
   });
 
-  it("device mode hides the Collect button on a settled order (no device collect route, §3d)", async () => {
+  it("device mode hides the Collect button on a settled order (no device collect route)", async () => {
     // boundStation's kitchenQueue is a SETTLED Mode-P order → collectable on the OPERATOR path; in device
     // mode the advance-only widget must not render the handover button.
     const api = deviceApi();

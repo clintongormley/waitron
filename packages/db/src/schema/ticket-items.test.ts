@@ -236,7 +236,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     expect(columns).toEqual([]);
   });
 
-  it("carries a nullable note column (spec §2/§3, NON-FISCAL)", async () => {
+  it("carries a nullable note column (NON-FISCAL)", async () => {
     const meta = suite.db
       .all<{ name: string; type: string; notnull: number }>(
         sql`select name, type, "notnull" from pragma_table_info('ticket_items') where name = 'note'`,
