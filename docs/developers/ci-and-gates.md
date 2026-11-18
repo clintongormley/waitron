@@ -3553,11 +3553,13 @@ action-repository download or add a separate limit to post-job cache saving.
 On 18 November 2026, a 177,466,126-byte pnpm archive paused during download to
 disposable runners. In [server shard 4](https://github.com/clintongormley/waitron/actions/runs/44368424650/job/135029629291),
 both attempts reported zero bytes for about 30 seconds before receiving data and later
-reached their deadlines. The cause of the pauses is unknown.
+reached their deadlines. [A later main lint job](https://github.com/clintongormley/waitron/actions/runs/44370591985/job/135036381086)
+also reached both deadlines during the restore. The cause of the pauses is unknown.
 
-CI jobs that can run on the disposable server pass `cache: pnpm` to both Node setup attempts
-on GitHub-hosted runners. On disposable runners they pass an empty cache input and populate
-the store during the frozen install. The enclosing job deadline still covers the install.
+CI jobs that install packages and can run on the disposable server pass `cache: pnpm` to both
+Node setup attempts on GitHub-hosted runners. On disposable runners they pass an empty cache
+input and populate the store during the frozen install. The enclosing job deadline covers the
+single install attempt. A stalled registry download can spend the remaining job time there.
 The cache case in `scripts/ci-workflow.test.mjs` evaluates the declared inputs for both runner
 environments. Job logs show which downloads actually ran.
 
@@ -4393,7 +4395,7 @@ server jobs. Times are each job's start to finish as GitHub reports them.
 They are not cached. On 2026-09-25 `gh api repos/:owner/:repo/actions/cache/usage` reported
 11,174,362,480 bytes across 1,066 entries, and the plan's grouping of the entries on 2026-09-23 put
 about nine tenths of that day's total in Docker layers; a new entry would compete under least-recently-used eviction
-with the pnpm store and Playwright entries the test jobs restore (see "The GHA cache is a shared
+with the pnpm store and Playwright entries the test jobs restored at the time (see "The GHA cache is a shared
 per-repository budget, evicted least-recently-used" above). Both installers download through
 `scripts/download-release.mjs`: a 5xx answer or a network error is retried, up to three attempts
 with a growing wait between them, a 4xx answer fails at once, and in CI the step passes the job's

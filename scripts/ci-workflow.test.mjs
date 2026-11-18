@@ -6584,9 +6584,7 @@ describe("the workflows' Node setups", () => {
     const routedInstalls = jobBlocks(lines.join("\n"))
       .filter((job) => job.lines.some((line) => /^ {4}runs-on:.*"self-hosted"/.test(line)))
       .map((job) => ({ id: job.id, steps: workflowSteps(job.lines.join("\n")) }))
-      .filter(({ steps }) =>
-        steps.some((step) => step.command === "pnpm install --frozen-lockfile"),
-      );
+      .filter(({ steps }) => steps.some((step) => /^\s*pnpm install\b/m.test(step.command)));
     expect(routedInstalls.length).toBeGreaterThan(0);
 
     for (const { id, steps } of routedInstalls) {
