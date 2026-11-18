@@ -343,7 +343,7 @@ describe("maskPersonalData keeps the first and last character of each piece", ()
     expect(maskPersonalData("person", sym)).toBe(sym);
   });
 
-  it("leaves a key on neither list as it is", () => {
+  it("leaves a key not on the list as it is", () => {
     expect(maskPersonalData("venueName", "Bar del Port")).toBe("Bar del Port");
   });
 });

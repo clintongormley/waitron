@@ -608,6 +608,16 @@ describe("log calls' fields that name a person are masked", () => {
     expect(refusedLogFields(fields, new Map())).toEqual([]);
   });
 
+  it("refuses a merchant's bare name inside a list, and accepts its merchantName", () => {
+    const text = [
+      `log("warn", "x.n", { merchants: [{ code: c, name: n }] });`,
+      `log("warn", "x.m", { merchants: [{ code: c, merchantName: n }] });`,
+    ].join("\n");
+    const fields = logFields("x/merchants.ts", text);
+    expect(fields).toContainEqual({ event: "x.m", key: "merchantName" });
+    expect(refusedLogFields(fields, new Map())).toEqual(["x.n.name"]);
+  });
+
   it("keys a field of an event that is not a literal by the file's path", () => {
     const text = `log("warn", eventFor(code), { guestName: g });`;
     expect(refusedLogFields(logFields("x/mail.ts", text), new Map())).toEqual([
