@@ -23,7 +23,7 @@ import { hashDeviceToken, persons, startManagementSession } from "@waitron/ident
 import { createClient } from "@waitron/print-agent";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { ReceiptQrText, TrustedClock } from "@waitron/fiscal";
@@ -72,6 +72,7 @@ type Render = (
 type Venue = Awaited<ReturnType<typeof venue>>;
 
 async function venue(opts: { render?: Render } = {}) {
+  await seedPerson(suite.db, { id: "staff-one" });
   await seedTaxpayer(suite.db);
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   await seedVenue(suite.db, {

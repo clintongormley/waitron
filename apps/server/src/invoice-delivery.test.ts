@@ -20,7 +20,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createPrinter,
   enqueuePrintJob,
@@ -79,6 +79,7 @@ const email = () => ({
 });
 
 async function issue(full = true) {
+  await seedPerson(suite.db, { id: "staff-one" });
   await seedTaxpayer(suite.db);
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   const saved = await readSettings(suite.db, VENUE_SETTINGS);

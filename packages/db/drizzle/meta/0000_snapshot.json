@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d9ead682-c133-4bcb-aee8-226ec23d41d6",
+  "id": "1e662249-f67c-4a8c-b187-c55c97353785",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5723,6 +5723,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "tender_refund_id": {
+          "name": "tender_refund_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -5803,6 +5810,19 @@
           "tableTo": "sales",
           "columnsFrom": [
             "sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "print_jobs_tender_refund_id_tender_refunds_id_fk": {
+          "name": "print_jobs_tender_refund_id_tender_refunds_id_fk",
+          "tableFrom": "print_jobs",
+          "tableTo": "tender_refunds",
+          "columnsFrom": [
+            "tender_refund_id"
           ],
           "columnsTo": [
             "id"
@@ -10528,6 +10548,19 @@
             "id"
           ],
           "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "invoice_deliveries_person_id_persons_id_fk": {
+          "name": "invoice_deliveries_person_id_persons_id_fk",
+          "tableFrom": "invoice_deliveries",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "invoice_deliveries_claimed_agent_id_print_agents_id_fk": {

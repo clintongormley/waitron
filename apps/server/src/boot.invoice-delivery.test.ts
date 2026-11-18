@@ -25,6 +25,7 @@ import { departments } from "@waitron/venue-service";
 import {
   seedDevice,
   seedNode,
+  seedPerson,
   seedTaxpayer,
   seedVenue,
   seedWorkingOrder,
@@ -104,6 +105,7 @@ afterAll(async () => {
 
 async function fixture(environment: "preproduction" | "production" = "preproduction") {
   beforeServerStarts();
+  await seedPerson(suite.db, { id: "staff-one" });
   await seedTaxpayer(suite.db);
   await stampDeployment(suite.db, environment);
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved issuer address" });

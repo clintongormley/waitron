@@ -1784,6 +1784,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
       expect([...jobs[0]!.payload]).toEqual([...DRAWER_KICK]);
       expect(audits).toHaveLength(1);
       expect(audits[0]!.tenderRefundId).toBeNull();
+      expect(jobs[0]!.tenderRefundId).toBeNull();
       expect(Object.keys(audits[0]!).sort()).toEqual(
         [
           "id",
@@ -1816,6 +1817,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
           "deliveredAt",
           "claimedBy",
           "receiptHandover",
+          "tenderRefundId",
         ].sort(),
       );
     },

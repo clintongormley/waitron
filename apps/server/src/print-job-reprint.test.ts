@@ -8,12 +8,13 @@ import {
   parties,
   printJobs,
   printers,
-  receiptReprints,
   sales,
+  tenders,
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedCompletedCashRefund } from "@waitron/db/testing/seed.js";
 import {
   MAX_DELIVERY_ATTEMPTS,
   createPrinter,
@@ -197,12 +198,22 @@ async function kitchenTicket(setting: EscSetting): Promise<string> {
   return link!.jobId;
 }
 
-/** A printed document job with no sale, recorded only in `receipt_reprints`, as a refund receipt is. */
 async function refundReceipt(payload: Uint8Array): Promise<string> {
   const saleId = await billlessSale(venue);
   return inTx(venue, async (tx) => {
-    const { jobId } = await enqueuePrintJob(tx, venue.printerId, payload, "document");
-    await tx.insert(receiptReprints).values({ saleId, printJobId: jobId, personId: venue.adminId });
+    const [tender] = await tx
+      .select({ id: tenders.id })
+      .from(tenders)
+      .where(eq(tenders.saleId, saleId));
+    const tenderRefundId = await seedCompletedCashRefund(tx, {
+      saleId,
+      tenderId: tender!.id,
+      nodeId: venue.cfg.nodeId,
+      personId: venue.operatorId,
+    });
+    const { jobId } = await enqueuePrintJob(tx, venue.printerId, payload, "document", {
+      tenderRefundId,
+    });
     await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, jobId));
     return jobId;
   });
@@ -301,7 +312,7 @@ describe("reprintJobOn", () => {
     });
   });
 
-  it("centres a refund receipt, recorded only in receipt_reprints, on a wider printer", async () => {
+  it("centres a refund receipt with no history entry on a wider printer", async () => {
     const stored = ticketAt(at58);
     const refund = await refundReceipt(stored);
     const target = await printerAt(at80);

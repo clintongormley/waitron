@@ -18,6 +18,7 @@ import {
   seedDevice,
   seedDeviceProfiles,
   seedNode,
+  seedPerson,
   seedTaxpayer,
   seedVenue,
 } from "@waitron/db/testing/seed.js";
@@ -79,6 +80,7 @@ const urfReport: OfficePrinterReport = {
 };
 
 async function venue() {
+  await seedPerson(suite.db, { id: "staff-one" });
   await seedTaxpayer(suite.db);
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   await seedVenue(suite.db, {

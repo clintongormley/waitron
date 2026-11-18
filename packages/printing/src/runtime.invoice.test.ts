@@ -11,7 +11,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import { claimPrintJobs, reportPrintJob } from "./runtime.js";
@@ -24,6 +24,7 @@ async function setup() {
     invoiceLocales: ["en-GB"],
   });
   const nodeId = await seedNode(suite.db);
+  const personId = await seedPerson(suite.db, { id: "staff" });
   const [agent] = await suite.db
     .insert(printAgents)
     .values({ name: "Agent", tokenHash: "fixture" })
@@ -67,7 +68,7 @@ async function setup() {
         saleId: sale!.id,
         printJobId: managed.jobId,
         requestKey: randomUUID(),
-        personId: "staff",
+        personId,
         medium: "receipt",
         designation: "original",
         generation: 1,

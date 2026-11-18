@@ -13,7 +13,14 @@ import {
 import type { Transaction } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedCashSale,
+  seedCompletedCashRefund,
+  seedDevice,
+  seedNode,
+  seedPerson,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import { createPrinter, updatePrinter } from "./printers.js";
 import {
   PRINT_JOB_MOVED,
@@ -350,6 +357,34 @@ describe("resendPrintJob", () => {
       expect(await saleId(first.jobId)).toBe(sale!.id);
       expect(await saleId(second.jobId)).toBe(sale!.id);
       expect(await saleId(unlinked.jobId)).toBeNull();
+    });
+  });
+
+  it("carries the refund id when resending the original job and its retry", async () => {
+    await setup();
+    await withTransaction(suite.db, async (tx) => {
+      const sale = await seedCashSale(tx);
+      const personId = await seedPerson(tx);
+      const tenderRefundId = await seedCompletedCashRefund(tx, { ...sale, personId });
+      const printer = await createPrinter(tx, {
+        name: "Receipts",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const original = await enqueuePrintJob(tx, printer.id, Uint8Array.of(1), "document", {
+        tenderRefundId,
+      });
+      const resend = async (jobId: string) => {
+        await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, jobId));
+        return resendPrintJob(tx, jobId);
+      };
+      const first = await resend(original.jobId);
+      const second = await resend(first.jobId);
+      const retries = await tx
+        .select()
+        .from(printJobs)
+        .where(inArray(printJobs.id, [first.jobId, second.jobId]));
+      expect(retries).toMatchObject([{ tenderRefundId }, { tenderRefundId }]);
     });
   });
 

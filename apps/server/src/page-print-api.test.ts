@@ -22,7 +22,7 @@ import { hashDeviceToken } from "@waitron/identity";
 import { createClient, PAGE_FORMATS, PAGE_HOLDS, PAGE_MEDIA } from "@waitron/print-agent";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -75,6 +75,7 @@ type Render = (
 type Venue = Awaited<ReturnType<typeof venue>>;
 
 async function venue(opts: { render?: Render; realClock?: true; bus?: LiveEvents } = {}) {
+  await seedPerson(suite.db, { id: "staff-one" });
   await seedTaxpayer(suite.db);
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   await seedVenue(suite.db, {

@@ -13,7 +13,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createPrinter,
   endDeletedPrinterJobs,
@@ -76,6 +76,7 @@ type Medium = "receipt" | "a4" | "email";
 type Status = "queued" | "sending" | "sent" | "failed" | "unknown";
 
 async function venue() {
+  await seedPerson(suite.db, { id: "staff-one" });
   await seedTaxpayer(suite.db);
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   await seedNamedVenue("Bar");

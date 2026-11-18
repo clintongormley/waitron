@@ -895,10 +895,12 @@ CREATE TABLE `print_jobs` (
 	`delivered_at` text,
 	`resend_of` text,
 	`sale_id` text,
+	`tender_refund_id` text,
 	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`claimed_by`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`resend_of`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`tender_refund_id`) REFERENCES `tender_refunds`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "print_jobs_kind_ck" CHECK("print_jobs"."kind" in ('document', 'drawer')),
 	CONSTRAINT "print_jobs_status_ck" CHECK("print_jobs"."status" in ('queued', 'printing', 'done', 'failed'))
 );
@@ -1599,6 +1601,7 @@ CREATE TABLE `invoice_deliveries` (
 	`printer_hold` text,
 	FOREIGN KEY (`print_job_id`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`claimed_agent_id`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "invoice_deliveries_medium_ck" CHECK("invoice_deliveries"."medium" in ('email', 'a4', 'receipt')),

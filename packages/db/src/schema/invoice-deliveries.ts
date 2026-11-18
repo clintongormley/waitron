@@ -12,6 +12,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { persons } from "./identity/persons.js";
 import { printAgents } from "./print-agents.js";
 import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
@@ -77,8 +78,8 @@ export const invoiceDeliveries = table(
     // A print request chose this receipt row's printer. A resend's row stays false: the row of its
     // chain's first job holds the mark (`receiptPrinterWithdrawn`, apps/server).
     printerChosen: flag("printer_chosen").notNull().default(false),
-    // Identity owns persons; request actions carry their operator, automatic receipts may lack one.
-    personId: id("person_id"),
+    // Automatic receipts may lack an operator.
+    personId: id("person_id").references(() => persons.id),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     nextAttemptAt: tsString("next_attempt_at").notNull().$defaultFn(nowIso),
     completedAt: tsString("completed_at"),

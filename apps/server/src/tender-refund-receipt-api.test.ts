@@ -206,7 +206,12 @@ it("prints one audited payment document without invoice delivery, fiscal QR or d
   expect(after.jobs).toHaveLength(existing.jobs.length + 1);
   expect(after.audits).toHaveLength(1);
   const job = after.jobs.at(-1)!;
-  expect(job).toMatchObject({ kind: "document", saleId: null, receiptCopy: null });
+  expect(job).toMatchObject({
+    kind: "document",
+    saleId: null,
+    receiptCopy: null,
+    tenderRefundId: row.id,
+  });
   expect(after.audits[0]).toMatchObject({
     saleId: row.saleId,
     printJobId: job.id,

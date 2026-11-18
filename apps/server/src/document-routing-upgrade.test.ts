@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, runMigrations, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 
 async function migratePredecessor(db: Database) {
   const folder = mkdtempSync(join(tmpdir(), "waitron-routing-upgrade-"));
@@ -38,7 +38,7 @@ it("routing upgrade preserves populated predecessor rows", async () => {
   const job = randomUUID();
   const delivery = randomUUID();
   const copy = randomUUID();
-  const person = randomUUID();
+  const person = await seedPerson(db);
   await db.execute(
     sql`insert into invoice_series (id, node_id, code) values (${series}, ${node}, 'A')`,
   );
