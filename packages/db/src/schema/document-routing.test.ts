@@ -104,19 +104,30 @@ describe("document routing schema", () => {
       invoiceLocales: ["es"],
     });
     const { deviceId } = await seedDevice(suite.db);
-    for (const bad of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
-      const error = await captureError(() =>
-        suite.db.execute(
-          sql`insert into device_invoice_revisions (device_id, revision) values (${deviceId}, ${bad})`,
-        ),
+    const read = () =>
+      suite.db.all(sql`select invoice_revision from devices where id = ${deviceId}`);
+    const write = (revision: number) =>
+      suite.db.execute(
+        sql`update devices set invoice_revision = ${revision} where id = ${deviceId}`,
       );
+    for (const bad of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const error = await captureError(() => write(bad));
       expect(CHECK_VIOLATION).toContain((error as { errcode: number }).errcode);
+      expect(engineErrorMessage(error)).toBe(
+        "CHECK constraint failed: devices_invoice_revision_ck",
+      );
     }
-    await suite.db.execute(
-      sql`insert into device_invoice_revisions (device_id, revision) values (${deviceId}, 0)`,
-    );
-    expect(suite.db.all(sql`select revision from device_invoice_revisions`)).toEqual([
-      { revision: 0 },
+    for (const revision of [Number.MAX_SAFE_INTEGER, 0]) {
+      await write(revision);
+      expect(read()).toEqual([{ invoice_revision: revision }]);
+    }
+  });
+
+  it("defaults the invoice printer choice revision to zero", async () => {
+    await seedVenue(suite.db);
+    const { deviceId } = await seedDevice(suite.db);
+    expect(suite.db.all(sql`select invoice_revision from devices where id = ${deviceId}`)).toEqual([
+      { invoice_revision: 0 },
     ]);
   });
 

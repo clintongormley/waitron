@@ -1,7 +1,7 @@
 import { departments, withFoldedPersonChanges } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
@@ -13,7 +13,6 @@ import {
   printerHolders,
   printers,
   withTransaction,
-  deviceInvoiceRevisions,
   taxpayer,
   products,
   floorZones,
@@ -173,7 +172,7 @@ it("device Invoice uses mixed paper and eligible choice before the default", asy
     .update(devices)
     .set({ invoicePrinterId: terrace })
     .where(eq(devices.id, venue.deviceId));
-  await suite.db.insert(deviceInvoiceRevisions).values({ deviceId: venue.deviceId, revision: 7 });
+  await suite.db.execute(sql`update devices set invoice_revision = 7 where id = ${venue.deviceId}`);
   expect(await offers(till, "invoice", id)).toMatchObject({
     chosenPrinterId: terrace,
     defaultPrinterId: office,

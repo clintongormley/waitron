@@ -49,7 +49,6 @@
   "src/schema/deferred-closures.ts": 64.1,
   "src/schema/deployment.ts": 12.8,
   "src/schema/device-approved-profiles.ts": 35.1,
-  "src/schema/device-invoice-revisions.ts": 20.1,
   "src/schema/device-invoice-save-operations.ts": 57.9,
   "src/schema/device-made-here-stations.ts": 29.5,
   "src/schema/device-profile-printers.ts": 40.1,

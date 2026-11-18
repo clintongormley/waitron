@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
-import { deviceInvoiceRevisions, invoiceSeries, pagePrinters, printers, sales } from "@waitron/db";
+import { devices, invoiceSeries, pagePrinters, printers, sales } from "@waitron/db";
 import { persons, tillSessions, resolveManagementSession, holds } from "@waitron/identity";
 import { readPrinterEquipment } from "@waitron/layouts";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -172,9 +172,9 @@ export async function readDocumentOffers(
     defaultPrinterId =
       role === "receipt" && state.chosenId !== null ? null : eligible(state.defaultId);
     const [revision] = await tx
-      .select({ value: deviceInvoiceRevisions.revision })
-      .from(deviceInvoiceRevisions)
-      .where(eq(deviceInvoiceRevisions.deviceId, deviceId));
+      .select({ value: devices.invoiceRevision })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
     invoiceRevision = revision?.value ?? 0;
   }
   offered.sort((a, b) =>

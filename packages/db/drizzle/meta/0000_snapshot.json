@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ebe35a24-bd61-4cca-8058-2ee21257a0cd",
+  "id": "ff87e590-7654-46ff-87cd-5a3b6c3c9e34",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4892,6 +4892,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "invoice_revision": {
+          "name": "invoice_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         }
       },
       "indexes": {
@@ -4994,6 +5002,10 @@
         "devices_deleted_ck": {
           "name": "devices_deleted_ck",
           "value": "\"devices\".\"deleted_at\" is null or \"devices\".\"active\" = 0"
+        },
+        "devices_invoice_revision_ck": {
+          "name": "devices_invoice_revision_ck",
+          "value": "\"devices\".\"invoice_revision\" between 0 and 9007199254740991 and \"devices\".\"invoice_revision\" = cast(\"devices\".\"invoice_revision\" as integer)"
         }
       }
     },
@@ -18168,49 +18180,6 @@
         "device_invoice_save_operations_revision_ck": {
           "name": "device_invoice_save_operations_revision_ck",
           "value": "\"device_invoice_save_operations\".\"expected_revision\" between 0 and 9007199254740991 and \"device_invoice_save_operations\".\"expected_revision\" = cast(\"device_invoice_save_operations\".\"expected_revision\" as integer)"
-        }
-      }
-    },
-    "device_invoice_revisions": {
-      "name": "device_invoice_revisions",
-      "columns": {
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "revision": {
-          "name": "revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "device_invoice_revisions_device_id_devices_id_fk": {
-          "name": "device_invoice_revisions_device_id_devices_id_fk",
-          "tableFrom": "device_invoice_revisions",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "device_invoice_revisions_revision_ck": {
-          "name": "device_invoice_revisions_revision_ck",
-          "value": "\"device_invoice_revisions\".\"revision\" between 0 and 9007199254740991 and \"device_invoice_revisions\".\"revision\" = cast(\"device_invoice_revisions\".\"revision\" as integer)"
         }
       }
     },

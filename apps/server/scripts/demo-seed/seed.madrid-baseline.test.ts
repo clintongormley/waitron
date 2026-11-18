@@ -301,7 +301,6 @@ const ADDED_TABLES = [
   "returned_invoice_records",
   "outgoing_mail",
   "adjustment_lines",
-  "device_invoice_revisions",
   "device_invoice_save_operations",
   "document_delivery_requests",
   "document_delivery_sequences",
@@ -2198,6 +2197,14 @@ for (const locale of ["en", "es"] as const) {
         0,
         choiceColumn,
       );
+      deviceTable.columns.push({
+        name: "invoice_revision",
+        type: "INTEGER",
+        notnull: 1,
+        dflt_value: "0",
+        pk: 0,
+      });
+      for (const row of Object.values(deviceTable.rows)) row.invoice_revision = 0;
       deviceTable.foreignKeys = deviceTable.foreignKeys
         .filter((key) => key.from !== "card_reader_id")
         .map((key) => ({ ...key, id: key.id - 1 }));

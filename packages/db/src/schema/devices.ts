@@ -1,6 +1,6 @@
 import { isNull, sql, type SQL } from "drizzle-orm";
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { flag, id, label, newId, nowIso, smallCount, table, tsString } from "./columns.js";
+import { count, flag, id, label, newId, nowIso, smallCount, table, tsString } from "./columns.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
@@ -57,6 +57,7 @@ export const devices = table(
     batteryCharging: flag("battery_charging"),
     batteryReportedAt: tsString("battery_reported_at"),
     enrolledAt: tsString("enrolled_at").notNull().$defaultFn(nowIso),
+    invoiceRevision: count("invoice_revision").notNull().default(0),
   },
   (t) => [
     check(
@@ -64,6 +65,10 @@ export const devices = table(
       sql`${t.batteryLevel} is null or ${t.batteryLevel} between 0 and 100`,
     ),
     check("devices_deleted_ck", sql`${t.deletedAt} is null or ${t.active} = 0`),
+    check(
+      "devices_invoice_revision_ck",
+      sql`${t.invoiceRevision} between 0 and 9007199254740991 and ${t.invoiceRevision} = cast(${t.invoiceRevision} as integer)`,
+    ),
     uniqueIndex("devices_label_active_key")
       .on(t.label)
       .where(sql`${t.active} = 1`),

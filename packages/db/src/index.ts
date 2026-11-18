@@ -452,8 +452,6 @@ export * from "./schema/document-delivery-requests.js";
 
 export * from "./schema/device-invoice-save-operations.js";
 
-export * from "./schema/device-invoice-revisions.js";
-
 export * from "./schema/document-page-jobs.js";
 
 export { settings } from "./schema/settings.js";
