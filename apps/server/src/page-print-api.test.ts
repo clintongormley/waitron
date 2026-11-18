@@ -1017,13 +1017,17 @@ describe("rendering a page", () => {
   });
 });
 
-it("an A4 invoice queued during a held receipt pull wakes its agent", async () => {
+it.each(["queued", "reassigned"])("wakes a held pull for A4 work %s", async (action) => {
   const bus = new LiveEvents();
   onTestFinished(() => bus.close());
   const v = await venue({ bus });
-  const office = await printer(v.agentOne);
+  const office = await printer(action === "queued" ? v.agentOne : v.agentTwo);
   const sale = await fullInvoice(v);
-  await installChangeFeed(suite.db, [{ table: "invoice_deliveries", type: "invoice_deliveries" }]);
+  const queued = action === "reassigned" ? await queueA4(sale, office) : undefined;
+  await installChangeFeed(suite.db, [
+    { table: "invoice_deliveries", type: "invoice_deliveries" },
+    { table: "printers", type: "printers" },
+  ]);
   const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
   onTestFinished(unsubscribe);
   const pending = post(v, "/print-api/agent/jobs?wait=25", v.tokenOne, {
@@ -1031,7 +1035,12 @@ it("an A4 invoice queued during a held receipt pull wakes its agent", async () =
     scanned: [],
   });
   await vi.waitFor(() => expect(bus.subscriberCount).toBe(1));
-  const delivery = await queueA4(sale, office);
+  const delivery = queued ?? (await queueA4(sale, office));
+  if (queued !== undefined) {
+    await withTransaction(suite.db, (tx) =>
+      tx.update(printers).set({ agentId: v.agentOne }).where(eq(printers.id, office)),
+    );
+  }
   let answered = false;
   void Promise.resolve(pending).then(() => {
     answered = true;
