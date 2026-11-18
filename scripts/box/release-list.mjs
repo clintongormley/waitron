@@ -36,7 +36,8 @@ function releasePayload(value) {
     typeof images.app !== "string" ||
     !IMAGE_DIGEST.test(images.app) ||
     typeof images.printAgent !== "string" ||
-    !IMAGE_DIGEST.test(images.printAgent)
+    !IMAGE_DIGEST.test(images.printAgent) ||
+    images.app === images.printAgent
   )
     throw new Error("Invalid release payload");
   return {
@@ -86,6 +87,11 @@ export function verifyReleaseList(bytes, trustedPublicKeys) {
       throw new Error("Expected an Ed25519 release public key");
     return key;
   });
+  const encodings = keys.map((key) =>
+    key.export({ type: "spki", format: "der" }).toString("base64"),
+  );
+  if (new Set(encodings).size !== keys.length)
+    throw new Error("Expected distinct release public keys");
   if (!keys.some((key) => verify(null, payload, key, signature)))
     throw new Error("Invalid release signature");
   return releasePayload(JSON.parse(utf8.decode(payload)));

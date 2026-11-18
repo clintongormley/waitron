@@ -74,20 +74,51 @@ describe("sign-release-list.mjs", () => {
   });
 
   it.each([
-    ["missing secret", publicKeys],
-    ["missing both keys", { secret: current.privateKey }],
-    ["missing spare key", { secret: current.privateKey, currentPem: current.publicKey }],
-    ["wrong secret", { ...publicKeys, secret: keyPair().privateKey }],
-    ["unreadable secret", { ...publicKeys, secret: "invalid-secret-that-must-stay-private" }],
+    ["missing secret", publicKeys, /set the signing secret and both public keys/i],
+    [
+      "missing both keys",
+      { secret: current.privateKey },
+      /set the signing secret and both public keys/i,
+    ],
+    [
+      "missing spare key",
+      { secret: current.privateKey, currentPem: current.publicKey },
+      /set the signing secret and both public keys/i,
+    ],
+    [
+      "wrong secret",
+      { ...publicKeys, secret: keyPair().privateKey },
+      /verify with the trusted public keys/i,
+    ],
+    [
+      "unreadable secret",
+      { ...publicKeys, secret: "invalid-secret-that-must-stay-private" },
+      /check the key format or release inputs/i,
+    ],
     [
       "invalid public key",
       { ...publicKeys, currentPem: current.privateKey, secret: current.privateKey },
+      /verify with the trusted public keys/i,
     ],
-    ["missing app digest", { ...publicKeys, secret: current.privateKey, appDigest: "" }],
-  ])("refuses to publish with %s", (_reason, settings) => {
+    [
+      "duplicate public key",
+      {
+        ...publicKeys,
+        sparePem: current.publicKey.replaceAll("\n", "\r\n"),
+        secret: current.privateKey,
+      },
+      /verify with the trusted public keys/i,
+    ],
+    [
+      "missing app digest",
+      { ...publicKeys, secret: current.privateKey, appDigest: "" },
+      /check the key format or release inputs/i,
+    ],
+  ])("refuses to publish with %s", (_reason, settings, message) => {
     const result = run(settings);
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/^Could not sign the release/);
+    expect(result.stderr).toMatch(message);
     if (settings.secret) expect(result.stdout + result.stderr).not.toContain(settings.secret);
     expect(result.bytes).toBeUndefined();
   });

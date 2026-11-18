@@ -155,6 +155,13 @@ describe("github-release.sh", () => {
 });
 
 describe("attaching the signed release file", () => {
+  it("refuses an incomplete signed-file command without touching Docker or GitHub", () => {
+    const result = run({ args: ["--signed-file", "1.2.3"] });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("usage");
+    expect(result.calls).toEqual([]);
+  });
+
   it("uploads the asset once without replacing any file", () => {
     const result = run({ signedAsset: "absent" });
     expect(result.status, result.stderr).toBe(0);

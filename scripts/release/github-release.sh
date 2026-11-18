@@ -3,7 +3,11 @@
 # Release when there is none. Usage: github-release.sh <version> <image>
 set -euo pipefail
 
-if [ "$#" -eq 3 ] && [ "$1" = "--signed-file" ]; then
+if [ "${1-}" = "--signed-file" ]; then
+  if [ "$#" -ne 3 ]; then
+    echo "usage: github-release.sh --signed-file <version> <file>" >&2
+    exit 2
+  fi
   tag="v$2"
   file=$3
   asset=waitron-release.json

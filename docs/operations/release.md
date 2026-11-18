@@ -57,8 +57,8 @@ includes both trusted public keys.
    Cut the signed release from main after the keys land.
 
 The release job skips signing while both public keys and the secret are absent.
-After setup, a missing key or a secret that matches neither public key fails the
-release job.
+A missing key or a secret that matches neither public key fails signing after the
+job has attached the declaration. The two public keys must be distinct.
 
 ## 1. Make the release worktree
 

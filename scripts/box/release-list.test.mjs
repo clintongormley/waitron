@@ -74,6 +74,7 @@ describe("the signed release file", () => {
     { platform: "linux/arm64" },
     { images: { app: release.images.app } },
     { images: { ...release.images, printAgent: "latest" } },
+    { images: { ...release.images, printAgent: release.images.app } },
   ])("refuses signed bytes with an invalid release field (%j)", (change) => {
     const invalid = { ...release, ...change };
     const signed = envelope(JSON.stringify(invalid));
