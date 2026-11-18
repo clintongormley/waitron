@@ -411,7 +411,7 @@ tiene alergias. Anota los detalles para que la estación prepare la comida con s
   justificante de tarjeta.
 - Destinatarios: el proveedor de pago con tarjeta que elegiste. Su lector lee la propia tarjeta;
   Waitron envía al proveedor el importe y sus propias referencias del pedido, y ningún dato del
-  cliente. Tu proveedor de correo, por cada factura que envías.
+  cliente. Tu proveedor de correo, por cada factura que envías por correo.
 - Plazo de conservación: _fijar con tu asesor_.
 - Seguridad: como en todas las entradas.
 
