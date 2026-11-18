@@ -325,6 +325,7 @@ export async function receiveReturnedOriginals(
       enrolled_at: now.toISOString(),
     });
   }
+  const inSavepoint = (write: (part: Transaction) => Promise<void>) => tx.transaction(write);
   const acceptedSales = new Set(
     (accepted.length ? await inspectReturnedPayments(tx, sourceNodeId, returned) : [])
       .filter((clash) => clash.eligible && accepted.includes(clash.fingerprint))
@@ -381,7 +382,7 @@ export async function receiveReturnedOriginals(
       continue;
     }
     try {
-      await tx.transaction(async (paymentTx) => {
+      await inSavepoint(async (paymentTx) => {
         for (const tender of returned.tenders.filter((row) => row.sale_id === sale.id)) {
           if (!held(paymentTx, "tenders", tender.id))
             await insertRow(paymentTx, "tenders", {
@@ -484,7 +485,7 @@ export async function receiveReturnedOriginals(
         try {
           if (table === "sale_voids") {
             // The author's row is needed only if this void is accepted.
-            await tx.transaction(async (voidTx) => {
+            await inSavepoint(async (voidTx) => {
               await restoreStaff(voidTx, returned.staff, row.voided_by, now.toISOString());
               await insertRow(voidTx, table, row);
             });

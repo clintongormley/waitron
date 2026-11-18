@@ -186,6 +186,7 @@ async function fileFullComps(db: Database) {
       },
       venue.cfg,
       { id: billId, tender: { method: "cash", amount: "2.00" }, lines: [] },
+      venue.staffId,
     );
     const printed = printedLines(
       formatReceipt({
@@ -196,9 +197,16 @@ async function fileFullComps(db: Database) {
         printer: { paperWidth: "80mm", resolution: "180dpi" },
       }),
     );
-    const header = db.all<Record<string, unknown>>(
-      sql.raw(`select ${SALE_COLUMNS.join(", ")} from sales`),
+    const zone = db.get<{ departmentId: string }>(
+      sql`select department_id as departmentId from floor_zones where id = ${venue.tables.zoneId}`,
     );
+    const header = db
+      .all<Record<string, unknown>>(sql.raw(`select ${SALE_COLUMNS.join(", ")} from sales`))
+      .map(({ operator_id, receipt_department_id, ...row }) => {
+        expect(operator_id).toBe(venue.staffId);
+        expect(receipt_department_id).toBe(zone!.departmentId);
+        return row;
+      });
     const registros = db.all<Record<string, unknown>>(sql`
       select ${sql.raw(REGISTRO_COLUMNS.join(", "))} from registros_facturacion`);
     const lines = db
