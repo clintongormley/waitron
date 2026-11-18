@@ -503,7 +503,7 @@ describe("Print the bill's own sentences", () => {
   it.each([
     [
       "en-GB",
-      "This device's profile no longer lets you work on it, so it cannot print the bill for you. Sign in on a device whose profile admits you.",
+      "This device's profile no longer lets you work on it, so it cannot print the bill for you. Log in on a device whose profile allows it.",
     ],
     [
       "es-ES",

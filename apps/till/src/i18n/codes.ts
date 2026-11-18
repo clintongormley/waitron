@@ -546,8 +546,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es una factura completa a nombre de un cliente y la caja no puede presentar una factura rectificativa para ella.",
   },
   "bill.presented": {
-    en: "This bill has been presented, so it cannot be changed. Put anything more on a new bill.",
-    es: "Esta cuenta ya se ha presentado, así que no se puede cambiar. Pon lo que pidan después en una cuenta nueva.",
+    en: "This bill has been printed, so it cannot be changed.",
+    es: "Esta cuenta ya se ha impreso, así que no se puede cambiar.",
   },
   "working_order.not_open": {
     en: "This bill is no longer open: it has been presented, paid or discarded",
@@ -586,8 +586,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La cuenta quedaría por debajo de lo que ya se ha pagado. Quita menos de la cuenta o devuelve antes la diferencia",
   },
   "meal_end.unserved_dishes": {
-    en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Correct invoice.",
-    es: "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+    en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway.",
+    es: "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente.",
   },
   "meal_end.already_issued": {
     en: "This bill already has its receipt. Take payment, or print a receipt copy.",

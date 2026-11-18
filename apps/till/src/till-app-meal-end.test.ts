@@ -445,8 +445,8 @@ describe("till-app: Print the bill", () => {
   );
 
   it.each([
-    ["Marta", t("table.draft_taken_over_unsent").replace("{name}", "Marta")],
-    [null, t("table.draft_taken_over_unsent_unnamed")],
+    ["Marta", "Marta has taken over this order, so the bill was not printed."],
+    [null, "Someone else has taken over this order, so the bill was not printed."],
   ])(
     "names the person whose unsent order holds the bill (%s) and reads the bills again",
     async (ownerName, said) => {

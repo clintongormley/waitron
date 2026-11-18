@@ -1783,6 +1783,8 @@ type CounterError =
   | { takenOver: string; unsent?: true }
   /** Renaming a bill refused because another person's unsent dishes hold it: their name. */
   | { billNameTakenOver: string }
+  /** Print the bill refused because another person's unsent order holds the bill: their name. */
+  | { printTakenOver: string }
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
   | { lateChange: LateChange; also?: StringKey | { code: string } }
@@ -1897,6 +1899,12 @@ function errorText(
       error.billNameTakenOver,
       t("table.bill_name_taken_over"),
       t("table.bill_name_taken_over_unnamed"),
+    );
+  if ("printTakenOver" in error)
+    return named(
+      error.printTakenOver,
+      t("table.print_taken_over"),
+      t("table.print_taken_over_unnamed"),
     );
   if ("takenOver" in error)
     return error.unsent === true
@@ -20193,10 +20201,7 @@ export class TillApp extends LitElement {
     }
     this.errorKey =
       refusal?.code === "draft.taken_over"
-        ? draftRefusalError(
-            { refused: refusal.code, ownerName: refusal.ownerName ?? undefined },
-            true,
-          )
+        ? { printTakenOver: refusal.ownerName ?? "" }
         : mealEndError(error);
     if (!this.#hasLeftParty(partyId, sent)) await this.#loadPartyBills();
   }

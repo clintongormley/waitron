@@ -1579,6 +1579,9 @@ export const en = {
   "table.draft_taken_over_unsent": "{name} has taken over this order, so nothing was sent.",
   "table.draft_taken_over_unsent_unnamed":
     "Someone else has taken over this order, so nothing was sent.",
+  "table.print_taken_over": "{name} has taken over this order, so the bill was not printed.",
+  "table.print_taken_over_unnamed":
+    "Someone else has taken over this order, so the bill was not printed.",
   "table.taking_over": "Taking over the order…",
   "table.take_over_sent": "This order has just been sent. Here is the table as it is now.",
   "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
@@ -1753,7 +1756,7 @@ export const en = {
   "meal_end.mark_served": "Mark served",
   "meal_end.print_anyway": "Print anyway",
   "meal_end.not_admitted":
-    "This device's profile no longer lets you work on it, so it cannot print the bill for you. Sign in on a device whose profile admits you.",
+    "This device's profile no longer lets you work on it, so it cannot print the bill for you. Log in on a device whose profile allows it.",
   "meal_end.unserved_no_mark":
     "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
   "meal_end.unconfirmed":
@@ -3717,6 +3720,9 @@ export const es: Record<StringKey, string> = {
   "table.draft_taken_over_unsent": "{name} ha tomado este pedido, así que no se ha enviado nada.",
   "table.draft_taken_over_unsent_unnamed":
     "Otra persona ha tomado este pedido, así que no se ha enviado nada.",
+  "table.print_taken_over": "{name} ha tomado este pedido, así que la cuenta no se imprimió.",
+  "table.print_taken_over_unnamed":
+    "Otra persona ha tomado este pedido, así que la cuenta no se imprimió.",
   "table.taking_over": "Tomando el pedido…",
   "table.take_over_sent": "Este pedido se acaba de enviar. Así está ahora la mesa.",
   "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",

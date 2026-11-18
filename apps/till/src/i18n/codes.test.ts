@@ -328,10 +328,10 @@ it("explains each refusal about a table's party, in both languages", () => {
 
 it("words the presented, paid and other-party refusals of an order sent to a bill it cannot go on, in both languages", () => {
   expect(codeMessage("bill.presented", "en")).toBe(
-    "This bill has been presented, so it cannot be changed. Put anything more on a new bill.",
+    "This bill has been printed, so it cannot be changed.",
   );
   expect(codeMessage("bill.presented", "es")).toBe(
-    "Esta cuenta ya se ha presentado, así que no se puede cambiar. Pon lo que pidan después en una cuenta nueva.",
+    "Esta cuenta ya se ha impreso, así que no se puede cambiar.",
   );
   expect(codeMessage("bill.paid", "en")).toBe("This bill is closed");
   expect(codeMessage("bill.paid", "es")).toBe("Esta cuenta ya está cerrada");
@@ -1149,10 +1149,10 @@ it("names the set menu whose removal depends on the dishes", () => {
 
 it("words Print the bill's not-served refusal as a choice for the whole list, in both languages", () => {
   expect(codeMessage("meal_end.unserved_dishes", "en")).toBe(
-    "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Correct invoice.",
+    "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway.",
   );
   expect(codeMessage("meal_end.unserved_dishes", "es")).toBe(
-    "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+    "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente.",
   );
 });
 
