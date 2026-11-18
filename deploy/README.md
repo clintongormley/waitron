@@ -69,7 +69,7 @@ reports its own commit below. Finally it pulls the box's images, the two Waitron
 mail catcher from Docker Hub, stopping with an error if any of them fails to download, and starts the
 containers.
 
-For a fresh installation or `--reset install`, unless the copy you ran is inside a git checkout, `install` fetches
+For a fresh development installation or a development `--reset install`, unless the copy you ran is inside a git checkout, `install` fetches
 `deploy/waitron.sh` itself from the ref you are installing and compares it with the copy you ran.
 When there is a `.git` in the copy's folder or a folder above it, `install` says so on stderr and
 uses that copy as it is. If the fetched script differs, `install` moves it into place over the copy you ran, keeping that
@@ -461,22 +461,36 @@ disk is full.
 
 ### Installing a release
 
-A box in production runs only a release: a build of a `v*` tag, which carries its version's
-declaration. Every other image is a test build, and its production start refuses with
-`server.unreleased_build`. To install release `1.2.3`, give `install` its tag:
+A production box needs a numbered release that carries its declaration. To install one, run the
+installer already on the box.
 
 ```bash
-sudo bash waitron.sh install v1.2.3
+sudo bash /opt/waitron-host/waitron.sh install v1.2.3
 ```
 
-It takes `compose.yml` from that tag, pulls the published `ghcr.io/clintongormley/waitron:1.2.3`
-and `ghcr.io/clintongormley/waitron-print-agent:1.2.3`, and writes both into `.env` as
-`WAITRON_IMAGE` and `WAITRON_PRINT_AGENT_IMAGE`, so the box stays on that release across reboots
-and a bare `docker compose pull`. If the pull fails, check that the tag's CI run published the
-release ([Cut a release](../docs/operations/release.md)). Install the next release the same way.
-Running `install` with no ref moves the box to `:main`, which is a test build, so a production box
-then refuses to start. A release can carry a database migration too, and what is said below about
-migrating one way applies to it.
+The installer checks the release file against the two public keys in
+`/opt/waitron-host/release-trust` before downloading the release's files. The file names the
+commit and identifies both images by digest, a fingerprint of the exact image. If the box has
+venue data, the checked manual upgrade uses those images for the trial and for restart. You
+can reinstall the same version or move forward. An install that keeps the data refuses an
+older release. A confirmed reset can install an older signed release because it wipes the data.
+
+The USB recipe seeds release trust when built with both keys. On an existing development box,
+wait for a published main image that includes the verifier and keys. Download a new copy of
+the main installer and use that copy for the first checked upgrade to main. The old retained
+installer cannot seed the keys.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/waitron.sh -o waitron.sh
+sudo bash ./waitron.sh install main
+```
+
+On plain Debian, first [install main](#setting-up-a-box). Then run the checked upgrade to main
+as shown above. Use the retained installer for numbered releases after the upgrade.
+
+If verification fails, check that the release includes `waitron-release.json` and that the
+box has both public keys. A release may carry a database migration. Keep the installation on
+numbered releases when the box holds production data.
 
 ### Trying a branch before it merges
 
@@ -908,8 +922,7 @@ docker build -f deploy/Dockerfile -t waitron:pinned \
 
 CI prepares the same metadata in its build context. `waitron.sh install <ref>` supplies it for
 both image targets and needs `jq` to read the commit response; it installs `jq` through apt when
-absent. On a host without apt, install `jq` before using a branch or commit ref. A release install
-(`install v1.2.3`) builds nothing, so it needs neither.
+absent. On a host without apt, install `jq` before using a branch or commit ref. A checked upgrade to a release also needs `jq` to read the metadata for the signed commit.
 
 An image you build yourself names you as the software's producer: pass
 `--build-arg WAITRON_PRODUCER_NAME=…`, `--build-arg WAITRON_PRODUCER_TAX_ID=…` and

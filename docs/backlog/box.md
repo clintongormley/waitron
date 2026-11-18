@@ -161,7 +161,7 @@ Three parts:
 
 **2026-11-09:** A950 is go-live work again. The [two-group plan](../superpowers/plans/2026-11-09-a950-shorter-upgrades.md) is approved (owner, 22:04); Lane F builds its first group after A739 and A840/A842/A848. The owner chose steps 2/3/4/8 first, with no other-project dependency: copy/restore, readiness and a real sale on a disposable copy, online trial migration (A799), and safe manual install-fix-now from current data. Later: signed releases (A940/B3), timer/window, status/email, then pairs needing a new A947 upgrade-hold decision. No btrfs requirement. First-group host status/logs do not promise email; the owner accepts no email when neither version starts. Any copy-sale refusal fails readiness. Manual failure offers restore/keep; automatic failure restores by itself. Cloud hold, password-checked manual go-back, proof-of-close and backup-stream handoff are after-first-venue work. Full venue upgrade qualification remains UNVERIFIED / NOT RUN.
 
-**14 November update:** the manual path includes an online migration trial before stopping a running app. A failed trial aborts before downtime; a pass still requires the stopped checks and mandatory sale. An already-stopped app uses those final checks directly. The manual command now connects the stopped-tree controller, readiness/copy-sale checks and retained host runtime to the installed oneshot boot gate and recovery before Docker, with Docker retaining ordinary restart policies; its host-console choices are Restore and Keep. Later work still includes automatic windows, status/email, signed release activation and pairs. The current-build synthetic Linux rehearsal is separate from historical releases and physical-box qualification. The whole shell `install` entry on an existing box remains runtime-unqualified: driver fetch/bootstrap, unit and Docker drop-in installation on non-recipe boxes, host refresh and candidate download/build/pull; see [checked manual upgrades](../../deploy/README.md#checked-manual-upgrades).
+**14 November update:** the manual path includes an online migration trial before stopping a running app. A failed trial aborts before downtime; a pass still requires the stopped checks and mandatory sale. An already-stopped app uses those final checks directly. The manual command now connects the stopped-tree controller, readiness/copy-sale checks and retained host runtime to the installed oneshot boot gate and recovery before Docker, with Docker retaining ordinary restart policies; its host-console choices are Restore and Keep. Later work still includes automatic windows, status/email, staged release offers and pairs. The current-build synthetic Linux rehearsal is separate from historical releases and physical-box qualification. The whole shell `install` entry on an existing box remains runtime-unqualified: driver fetch/bootstrap, unit and Docker drop-in installation on non-recipe boxes, host refresh and candidate download/build/pull; see [checked manual upgrades](../../deploy/README.md#checked-manual-upgrades).
 
 **Historical design summary, 2026-10-29; retained receipts, superseded delivery requirements.**
 The [approved design](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the
@@ -1281,6 +1281,14 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   `#apply`'s `scope.commit` and `#applyAction`; not run.
 
 ## Decisions and deliberate limits
+
+- **A950, step 1b (watcher, 2026-11-18 22:47, open to the owner).** A numbered install that
+  keeps venue data refuses an older release. A confirmed reset may choose an older signed
+  release because the wipe discards that data. Boxes taking only numbered releases keep
+  the verifier and keys originally loaded onto the box. The offer-file slice must deliver
+  updated keys and verifier code to those boxes. The case “uses both signed digests in the
+  environment file and during Compose pull and startup” in `scripts/waitron-sh.test.mjs`
+  owns the mapping from the two signed digests to the two Compose image variables.
 
 <a id="a1268-part-2-pair-a-persons-entries-by-write-order-after-a-backward-clock-step"></a>
 
