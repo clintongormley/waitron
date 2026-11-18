@@ -200,5 +200,4 @@ describe("Dish sale links and events", () => {
     );
     expect(checkFailed(kind, "order_portion_events_kind_ck")).toBe(true);
   });
-
 });
