@@ -5,7 +5,6 @@ import { kitchenCourses } from "../kitchen-courses.js";
 import { menus, products } from "../menus.js";
 import { menuItems } from "./menu.js";
 
-// The menu write paths ensure lines and dish settings belong to a set menu.
 export const setMenuLines = table(
   "set_menu_lines",
   {
