@@ -2975,9 +2975,11 @@ neither a speed comparison nor whole-run qualification.
 **18 November 2026.** The server refresh uses the 24 passing, coverage-on server shards in
 each of three nightly attempts. The slowest checkouts took 10, 9 and 10 seconds. The shard logs
 showed no download HTTP 5xx, and GitHub's incident history showed no overlapping incident
-affecting the checked services. The refresh keeps previously measured rows for files still
-in the tree and drops rows for files that have gone. Vitest discovered 1,456 files with
-the ordinary CI shard exclusions, and 119 still use the fallback, down from 213.
+affecting the checked services. To reproduce this refresh, run the generator into a temporary
+file. Use the fresh measurements first, then copy previous rows for files still in the tree
+that received no new measurement. Drop rows for deleted files and sort by path. Vitest
+discovered 1,456 files with the ordinary CI shard exclusions, and 119 still use the fallback,
+down from 213.
 [Nightly 43350911465](https://github.com/clintongormley/waitron/actions/runs/43350911465/attempts/1),
 [nightly 43140303337](https://github.com/clintongormley/waitron/actions/runs/43140303337/attempts/1),
 [nightly 42944859790](https://github.com/clintongormley/waitron/actions/runs/42944859790/attempts/1),
@@ -2986,9 +2988,10 @@ the ordinary CI shard exclusions, and 119 still use the fallback, down from 213.
 The bench's `scripts/bench/build-year.test.ts` gets a 37.1-second weight from 35.1, 81.5 and
 37.1 seconds in those nightlies. A replay using four workers and each held-out night's
 largest observed setup and teardown overhead put the slowest shard at 185 to 206 seconds
-across the three samples. The triggering PR shard's 286.0-second reading came from a
-cancelled coverage-off job with a 13-second checkout. A nearby coverage-off run with the same
-shard layout reported 43.3 seconds for the suite. Keep the file together on this evidence.
+across the three samples. The triggering PR shard reported 286.0 seconds for the suite.
+Both jobs used the same layout with coverage off. The nearby passing job reported 43.3 seconds.
+Among the 15 files that finished in both logs, the median time ratio was 4.30. This points
+to a broader slowdown in the triggering job. Keep the file together on this evidence.
 If it repeatedly takes most of a shard's budget, check which cases account for the time
 before splitting it. [Triggering shard](https://github.com/clintongormley/waitron/actions/runs/44240361296/job/134586881982),
 [passing shard](https://github.com/clintongormley/waitron/actions/runs/44241139118/job/134589297275).
