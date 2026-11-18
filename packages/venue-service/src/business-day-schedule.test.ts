@@ -721,6 +721,7 @@ describe("a waiting change checks the hours written while it waits", () => {
             weekday: 6,
             startsAt: "21:00",
             endsAt: "02:30",
+            reason: "range",
           }),
         ],
       },
