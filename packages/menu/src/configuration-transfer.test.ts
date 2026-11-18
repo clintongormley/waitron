@@ -573,6 +573,40 @@ describe("set menus in a configuration bundle", () => {
   });
 
   it.each([
+    ["menu_items.gross_price", { gross_price: 1_000_001 }, []],
+    [
+      "menu_item_variant_overrides.price",
+      { gross_price: null },
+      [{ menu_item_id: "dish", variant_id: "large", price: 1_000_001 }],
+    ],
+  ] as const)("refuses an over-limit surcharge at %s", (field, values, overrides) => {
+    expect(() =>
+      validateMenuConfiguration({
+        menus: [setMenu],
+        menu_items: [{ id: "dish", menu_id: "set", ...values }],
+        menu_item_variant_overrides: [...overrides],
+      }),
+    ).toThrow(invalid(field));
+  });
+
+  it("accepts null and boundary set-menu surcharges and higher ordinary prices", () => {
+    expect(() =>
+      validateMenuConfiguration({
+        menus: [setMenu, menu],
+        menu_items: [
+          { id: "dish", menu_id: "set", gross_price: null },
+          { id: "fish", menu_id: "set", gross_price: 1_000_000 },
+          { id: "ordinary-item", menu_id: "ordinary", gross_price: 1_000_001 },
+        ],
+        menu_item_variant_overrides: [
+          { menu_item_id: "dish", variant_id: "large", price: 1_000_000 },
+          { menu_item_id: "ordinary-item", variant_id: "small", price: 1_000_001 },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it.each([
     ["set_menu_lines", "menu_id", "ordinary"],
     ["set_menu_dish_courses", "menu_item_id", "ordinary-item"],
     ["set_menu_variant_exclusions", "menu_item_id", "ordinary-item"],

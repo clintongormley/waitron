@@ -247,3 +247,12 @@ it("caps a kept variant surcharge at 10,000.00", async () => {
   ).rejects.toMatchObject(surchargeRefusal);
   expect((await reading()).dishes[0]!.variants[0]!.surcharge).toBe("10000.00");
 });
+
+it("keeps an existing member when replacing it with the same product after its class changed", async () => {
+  const ref = { kind: "product", productId: f.soup } as const;
+  const member = await app((tx) => addMember(tx, f.root, ref));
+  await app((tx) => updateProduct(tx, f.soup, { vatClass: "general" }));
+  const before = await reading();
+  expect(await app((tx) => replaceMember(tx, f.root, member.id, ref))).toEqual(member);
+  expect(await reading()).toEqual(before);
+});

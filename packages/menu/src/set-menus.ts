@@ -349,16 +349,12 @@ function includedDishChoices(dish: SetMenuDishSetting): {
 }
 
 function dishVatClasses(dish: SetMenuDishSetting) {
+  const choices = includedDishChoices(dish);
+  if (dish.variants.length === 0) return choices;
+  // The listed product must match the menu's class even when only its variants are sold.
   return [
     { id: dish.productId, name: dish.name, parentName: null, vatClass: dish.vatClass },
-    ...dish.variants
-      .filter(({ included }) => included)
-      .map(({ id, name, vatClass }) => ({
-        id,
-        name,
-        parentName: dish.name,
-        vatClass,
-      })),
+    ...choices,
   ];
 }
 
@@ -431,24 +427,23 @@ export async function addLinesForCourses(
   const lines = await storedLines(tx, menuId);
   const dishes = await dishSettings(tx, menuId, root, courses);
   const added = new Set(productIds);
-  return appendLinesForDishes(
-    tx,
-    menuId,
-    courses,
-    lines,
-    dishes.filter(({ productId }) => added.has(productId)),
+  const wanted = new Set(
+    dishes
+      .filter(({ productId }) => added.has(productId))
+      .flatMap(includedDishChoices)
+      .map(({ courseId }) => courseId),
   );
+  return appendMissingCourseLines(tx, menuId, courses, lines, wanted);
 }
 
-function appendLinesForDishes(
+function appendMissingCourseLines(
   tx: Transaction,
   menuId: string,
   courses: SetMenuDetails["courses"],
   lines: StoredLine[],
-  dishes: SetMenuDishSetting[],
+  wanted: ReadonlySet<string | null>,
 ): Promise<SetMenuLine[]> {
   const accepted = new Set(lines.flatMap(({ courseIds }) => courseIds));
-  const wanted = new Set(dishes.flatMap(includedDishChoices).map(({ courseId }) => courseId));
   return insertLines(
     tx,
     menuId,
@@ -474,19 +469,32 @@ export async function saveSetMenuDishCourse(
   if (courseId !== null && !courses.some(({ id }) => id === courseId))
     throw new AppError("set_menu.invalid", { field: "courseId" });
 
-  if (courseId === null || courseId === dish.productCourseId)
+  const override = courseId === dish.productCourseId ? null : courseId;
+  if (override === dish.courseOverrideId) return { addedLines: [], removedLines: [] };
+
+  if (override === null)
     await tx.delete(setMenuDishCourses).where(eq(setMenuDishCourses.menuItemId, menuItemId));
   else
     await tx
       .insert(setMenuDishCourses)
-      .values({ menuItemId, courseId })
-      .onConflictDoUpdate({ target: setMenuDishCourses.menuItemId, set: { courseId } });
+      .values({ menuItemId, courseId: override })
+      .onConflictDoUpdate({
+        target: setMenuDishCourses.menuItemId,
+        set: { courseId: override },
+      });
 
   const lines = await storedLines(tx, menuId);
   const after = await dishSettings(tx, menuId, root, courses);
   const changedDish = after.find((candidate) => candidate.menuItemId === menuItemId)!;
-  const addedLines = await appendLinesForDishes(tx, menuId, courses, lines, [changedDish]);
-  const previous = new Set(includedDishChoices(dish).map((choice) => choice.courseId));
+  const previousByChoice = new Map(
+    includedDishChoices(dish).map(({ id, courseId }) => [id, courseId]),
+  );
+  const changed = includedDishChoices(changedDish).filter(
+    ({ id, courseId }) => previousByChoice.get(id) !== courseId,
+  );
+  const wanted = new Set(changed.map(({ courseId }) => courseId));
+  const addedLines = await appendMissingCourseLines(tx, menuId, courses, lines, wanted);
+  const previous = new Set(previousByChoice.values());
   const remaining = new Set(after.flatMap(includedDishChoices).map((choice) => choice.courseId));
   const removedLines = lines
     .filter(

@@ -74,27 +74,34 @@ function checkActiveOnMenus(
       });
 }
 
+function isSetMenuAmount(cents: unknown): boolean {
+  return (
+    typeof cents === "number" &&
+    Number.isInteger(cents) &&
+    cents >= 0 &&
+    cents <= MAX_SET_MENU_AMOUNT_CENTS
+  );
+}
+
 function checkSetMenus(tables: Readonly<Record<string, Rows>>): void {
   const setMenus = (tables.menus ?? []).filter((row) => row.kind === "set_menu");
-  for (const row of setMenus) {
-    const price = row.set_price;
-    if (
-      typeof price !== "number" ||
-      !Number.isInteger(price) ||
-      price < 0 ||
-      price > MAX_SET_MENU_AMOUNT_CENTS
-    )
+  for (const row of setMenus)
+    if (!isSetMenuAmount(row.set_price))
       throw new AppError("setup.request_invalid", { field: "menus.set_price" });
-  }
 
   const setMenuIds = new Set(setMenus.map((row) => row.id));
   for (const row of tables.set_menu_lines ?? [])
     if (!setMenuIds.has(row.menu_id))
       throw new AppError("setup.request_invalid", { field: "set_menu_lines.menu_id" });
 
-  const setMenuItemIds = new Set(
-    (tables.menu_items ?? []).filter((row) => setMenuIds.has(row.menu_id)).map((row) => row.id),
-  );
+  const setMenuItems = (tables.menu_items ?? []).filter((row) => setMenuIds.has(row.menu_id));
+  const setMenuItemIds = new Set(setMenuItems.map((row) => row.id));
+  for (const row of setMenuItems)
+    if (row.gross_price != null && !isSetMenuAmount(row.gross_price))
+      throw new AppError("setup.request_invalid", { field: "menu_items.gross_price" });
+  for (const row of tables.menu_item_variant_overrides ?? [])
+    if (setMenuItemIds.has(row.menu_item_id) && !isSetMenuAmount(row.price))
+      throw new AppError("setup.request_invalid", { field: "menu_item_variant_overrides.price" });
   for (const table of ["set_menu_dish_courses", "set_menu_variant_exclusions"] as const)
     for (const row of tables[table] ?? [])
       if (!setMenuItemIds.has(row.menu_item_id))

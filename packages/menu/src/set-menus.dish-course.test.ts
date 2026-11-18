@@ -223,3 +223,43 @@ it("keeps the override when copying or duplicating a set menu's dish", async () 
     expect(result.problems).toEqual([]);
   }
 });
+
+it("leaves a removed line alone when the dish's course stays the same", async () => {
+  await add(f.soup);
+  const itemId = (await read()).dishes[0]!.menuItemId;
+  await app((tx) => saveSetMenuLines(tx, f.menuId, []));
+  expect(await change(itemId, f.starters)).toEqual({ addedLines: [], removedLines: [] });
+  expect((await read()).lines).toEqual([]);
+});
+
+it("follows each variant's own course when the dish returns to its product's course", async () => {
+  await app((tx) =>
+    tx.update(products).set({ courseId: f.desserts }).where(eq(products.id, f.large)),
+  );
+  await add(f.bravas);
+  const itemId = (await read()).dishes[0]!.menuItemId;
+  await change(itemId, f.starters);
+  await change(itemId, f.sharing);
+  expect((await read()).dishes[0]).toMatchObject({
+    courseId: f.sharing,
+    courseOverrideId: null,
+    variants: [
+      { id: f.small, courseId: f.sharing },
+      { id: f.large, courseId: f.desserts },
+    ],
+  });
+});
+
+it("can clear an override that now matches the product without restoring a removed line", async () => {
+  await add(f.soup);
+  const itemId = (await read()).dishes[0]!.menuItemId;
+  await change(itemId, f.desserts);
+  await app(async (tx) => {
+    await tx.update(products).set({ courseId: f.desserts }).where(eq(products.id, f.soup));
+    await saveSetMenuLines(tx, f.menuId, []);
+  });
+  expect(await change(itemId, f.desserts)).toEqual({ addedLines: [], removedLines: [] });
+  const draft = await read();
+  expect(draft.lines).toEqual([]);
+  expect(draft.dishes[0]!.courseOverrideId).toBeNull();
+});
