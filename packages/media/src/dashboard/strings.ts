@@ -13,6 +13,7 @@ const en = {
   "image.photo_loading": "Loading photo…",
   "image.photo_load_error": "The photo could not be loaded.",
   "image.reload_photo": "Discard changes and reload photo",
+  "image.reload_error": "The photo could not be reloaded.",
 
   "nav.images": "Image library",
   "image.upload": "Upload photo",
@@ -99,6 +100,7 @@ const es: Record<keyof typeof en, string> = {
   "image.photo_loading": "Cargando foto…",
   "image.photo_load_error": "No se pudo cargar la foto.",
   "image.reload_photo": "Descartar cambios y volver a cargar la foto",
+  "image.reload_error": "No se pudo volver a cargar la foto.",
 
   "nav.images": "Biblioteca de imágenes",
   "image.upload": "Subir foto",
@@ -202,6 +204,10 @@ registerCodeMessages({
   "image.changed": {
     en: "This photo has changed. Reload it before saving again.",
     es: "Esta foto ha cambiado. Vuelve a cargarla antes de guardar de nuevo.",
+  },
+  "image.not_found": {
+    en: "This photo has been deleted. Cancel to close this editor.",
+    es: "Esta foto se ha eliminado. Pulsa Cancelar para cerrar este editor.",
   },
   "image.reference_conflict": {
     en: "This photo's original file already belongs to another library entry. Edit that photo or choose another file.",
