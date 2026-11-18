@@ -1520,7 +1520,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 
 For package distribution and the four-minute target, use the
-[CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling). For db, ui-core and ui mutation
+[CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling) and the
+[duration-table refresh instructions](developers/ci-and-gates.md#package-duration-tables).
+For db, ui-core and ui mutation
 packing, use their [cost-table refresh instructions](developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
 
 
