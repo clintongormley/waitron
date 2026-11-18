@@ -5134,6 +5134,10 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       name: "Terrace",
       departmentId: restaurant.id,
     });
+    const inactiveZone = await createServiceZone(tx, {
+      name: "Former dining room",
+      departmentId: restaurant.id,
+    });
     const [grill, inactive] = await tx
       .insert(kitchenStations)
       .values([{ name: "Grill" }, { name: "Old station" }])
@@ -5145,7 +5149,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       { name: "Old till", formFactor: "till" },
     ]);
     await VENUE_SERVICE.setProfileKitchenScreens(tx, till!.id, {
-      pass: { stationIds: [grill!.id, inactive!.id], zoneIds: [terrace.id] },
+      pass: { stationIds: [grill!.id, inactive!.id], zoneIds: [terrace.id, inactiveZone.id] },
     });
     await VENUE_SERVICE.setProfileKitchenScreens(tx, wall!.id, {
       pass_monitor: { stationIds: null, zoneIds: null },
@@ -5157,6 +5161,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       .update(kitchenStations)
       .set({ active: false })
       .where(eq(kitchenStations.id, inactive!.id));
+    await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, inactiveZone.id));
     await VENUE_SERVICE.setProfileKitchenScreens(tx, retired!.id, {
       station: { stationIds: [grill!.id], zoneIds: null },
     });

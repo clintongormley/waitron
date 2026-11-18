@@ -1012,3 +1012,45 @@ describe("department policy columns", () => {
     ).toEqual([{ name: "Deli", transfer_desk_profile_id: null }]);
   });
 });
+
+describe("single-venue defaults", () => {
+  const single = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  it("allows one default department and multiple ordinary departments", async () => {
+    await seedVenue(single.db, {
+      name: "Venue",
+      invoiceLocales: ["en"],
+    });
+    async function add(name: string, isDefault: boolean) {
+      return single.db.insert(departments).values({ name, tradingName: name, isDefault });
+    }
+    await add("Main", true);
+    const error = await captureError(() => add("Other default", true));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("departments.is_default");
+    await add("Ordinary one", false);
+    await add("Ordinary two", false);
+    expect(await single.db.select().from(departments)).toHaveLength(3);
+  });
+  it("allows one counter-default zone and multiple ordinary zones", async () => {
+    await seedVenue(single.db, {
+      name: "Venue",
+      invoiceLocales: ["en"],
+    });
+    const [department] = await single.db
+      .insert(departments)
+      .values({ name: "Main", tradingName: "Main" })
+      .returning();
+    async function add(name: string, isCounterDefault: boolean) {
+      return single.db
+        .insert(floorZones)
+        .values({ name, departmentId: department!.id, isCounterDefault });
+    }
+    await add("Counter", true);
+    const error = await captureError(() => add("Other counter", true));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("floor_zones.is_counter_default");
+    await add("Ordinary one", false);
+    await add("Ordinary two", false);
+    expect(await single.db.select().from(floorZones)).toHaveLength(3);
+  });
+});

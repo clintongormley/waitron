@@ -92,6 +92,10 @@ describe("validateCoreConfiguration", () => {
       ["a zone from the wrong table", JSON.stringify({ pass: { ...pass, zoneIds: ["grill"] } })],
       ["a repeated station", JSON.stringify({ pass: { ...pass, stationIds: ["grill", "grill"] } })],
       ["a null display choice", JSON.stringify({ pass: { ...pass, showNonPassStations: null } })],
+      [
+        "a display choice on a station view",
+        JSON.stringify({ station: { ...station, showNonPassStations: false } }),
+      ],
     ])("refuses %s", (_label, views) => {
       expect(() => validateViews(views)).toThrowError(
         expect.objectContaining({

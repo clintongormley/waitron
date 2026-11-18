@@ -87,11 +87,12 @@ function validateKitchenViews(
     if (entries.length > 1) throw invalid();
     for (const [kind, view] of entries) {
       if (!kinds.has(kind) || !isObject(view)) throw invalid();
+      const display = view.showNonPassStations;
       if (
         !isBound(view.stationIds, stationIds) ||
         !isBound(view.zoneIds, zoneIds) ||
         (kind === "station" && view.zoneIds !== null) ||
-        (view.showNonPassStations !== undefined && typeof view.showNonPassStations !== "boolean")
+        (display !== undefined && (kind === "station" || typeof display !== "boolean"))
       )
         throw invalid();
     }
