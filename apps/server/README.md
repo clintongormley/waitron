@@ -594,10 +594,11 @@ The box uses those defaults; tests can pass a partial `timings` option as the th
 `GET /health` is unauthenticated — no metrics, no auth, no readiness/liveness split. It is
 one of several routes the process serves (the till API under `/api/*`, the management-dashboard API
 under `/management-api/*`, and the Stripe webhook at `POST /webhooks/stripe` share the same
-Hono app). On the main box, the full response gives you `200` after the first pass if each duty has
-succeeded within its staleness budget. On a joined spare, the full response gives you `200` with
-both duties marked `stale: false` after its first pass, which is empty. Follow the spare's copy
-progress separately.
+Hono app). If the response contains `duties`, the main box returns `200` after the first pass if
+each duty has succeeded within its staleness budget. A joined spare completes an empty first pass,
+then returns `200` with both duties marked `stale: false` in that response. During the join, follow
+copy progress at `/api/box/status`. After restart, read the copy's size and time in the
+`spare.first_copy_ready` log line.
 
 For example, a main box with stale filing work responds with `503`.
 
