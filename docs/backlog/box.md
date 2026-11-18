@@ -290,8 +290,7 @@ carry none.
 
 ## Server comment pruning notes
 
-- No production
-  caller sets `skipSecrets` any more, so whether the option should go is open. **Decided (owner,
+- **Decided (owner,
   2026-09-25): leave `keyFingerprint` as it is** — the first 8 hex characters of the recovery
   key's SHA-256 (`backup-supervisor.ts`), shown in the backup status, so anyone who can read the
   status can test a guessed key against it.
