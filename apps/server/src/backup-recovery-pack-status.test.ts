@@ -60,7 +60,7 @@ const current: CurrentChecks = {
 const base: PackStatusInput = {
   records: [],
   current,
-  retention: { count: 7, days: 30 },
+  retention: { count: 14, days: 30 },
   schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
   backupsUseOlderKey: false,
   now: new Date("2026-10-30T09:00:00.000Z"),
@@ -322,13 +322,13 @@ describe("the packs to keep", () => {
         current: { ...current, keyChangedAt: change },
       },
     );
-    // min(7 daily archives, 30 days) after the change, plus one interval: 7 + 1 days, over the
-    // bucket copy's 7.
+    // min(14 daily archives, 30 days) after the change, plus one interval: 14 + 1 days, over the
+    // bucket copy's 14.
     expect(answer.keep).toEqual([
       {
         number: 2,
         madeAt: "2026-10-12T10:00:00.000Z",
-        until: new Date(Date.parse(change) + 8 * DAY).toISOString(),
+        until: new Date(Date.parse(change) + 15 * DAY).toISOString(),
         why: "backup_key",
       },
     ]);
@@ -352,7 +352,7 @@ describe("the packs to keep", () => {
       {
         number: 2,
         madeAt: "2026-10-12T10:00:00.000Z",
-        until: new Date(Date.parse(change) + 8 * DAY).toISOString(),
+        until: new Date(Date.parse(change) + 15 * DAY).toISOString(),
         why: "backup_key",
       },
     ]);
@@ -364,7 +364,7 @@ describe("the packs to keep", () => {
       current: { ...current, keyChangedAt: change },
       schedule: { kind: "wall-clock", days: [1, 3], at: { hour: 3, minute: 0 } },
     });
-    // Monday and Wednesday: the longest gap is Wednesday to Monday, 5 days; min(7 × 5, 30) + 5 = 35.
+    // Monday and Wednesday: the longest gap is Wednesday to Monday, 5 days; min(14 × 5, 30) + 5 = 35.
     expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 35 * DAY).toISOString());
   });
 
@@ -373,19 +373,19 @@ describe("the packs to keep", () => {
     const answer = status([pack(1, "2026-10-12T10:00:00.000Z")], {
       current: { ...current, keyChangedAt: change },
       schedule: { kind: "interval", ms: 2 * DAY },
-      retention: { count: 50, days: 10 },
+      retention: { count: 50, days: 20 },
     });
-    expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 12 * DAY).toISOString());
+    expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 22 * DAY).toISOString());
   });
 
-  it("keeps the bucket copy's seven days when the box keeps no archives", () => {
+  it("keeps the bucket copy's fourteen days when the box keeps no archives", () => {
     const change = "2026-10-25T07:00:00.000Z";
     const answer = status([pack(1, "2026-10-12T10:00:00.000Z")], {
       current: { ...current, keyChangedAt: change },
       schedule: undefined,
       retention: undefined,
     });
-    expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 7 * DAY).toISOString());
+    expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 14 * DAY).toISOString());
   });
 
   it("drops a pack whose keep date has passed", () => {
@@ -395,7 +395,7 @@ describe("the packs to keep", () => {
       included.serverKey(KEY_1, false),
     ];
     const made = pack(1, "2026-08-12T10:00:00.000Z", { parts });
-    // A change on 1 September: kept until 9 September, long before now.
+    // A change on 1 September: kept until 16 September, long before now.
     expect(
       status([made], { current: { ...current, keyChangedAt: "2026-09-01T07:00:00.000Z" } }).keep,
     ).toEqual([]);
@@ -421,7 +421,7 @@ describe("the packs to keep", () => {
       {
         number: 1,
         madeAt: "2026-10-01T10:00:00.000Z",
-        until: new Date(Date.parse("2026-10-25T10:00:00.000Z") + 8 * DAY).toISOString(),
+        until: new Date(Date.parse("2026-10-25T10:00:00.000Z") + 15 * DAY).toISOString(),
         why: "replaced_server_key",
       },
       { number: 2, madeAt: "2026-10-25T10:00:00.000Z", until: null, why: "server_key" },
@@ -445,7 +445,7 @@ describe("the packs to keep", () => {
       { current: { ...current, serverKeyName: KEY_2 } },
     );
     expect(answer.keep.find((k) => k.number === 1)!.until).toBe(
-      new Date(Date.parse("2026-10-24T10:00:00.000Z") + 8 * DAY).toISOString(),
+      new Date(Date.parse("2026-10-24T10:00:00.000Z") + 15 * DAY).toISOString(),
     );
   });
 
@@ -462,7 +462,7 @@ describe("the packs to keep", () => {
       {
         number: 1,
         madeAt: "2026-10-01T10:00:00.000Z",
-        until: new Date(Date.parse("2026-10-28T00:00:00.000Z") + 8 * DAY).toISOString(),
+        until: new Date(Date.parse("2026-10-28T00:00:00.000Z") + 15 * DAY).toISOString(),
         why: "replaced_server_key",
       },
     ]);

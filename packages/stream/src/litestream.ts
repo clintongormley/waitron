@@ -69,7 +69,10 @@ export function litestreamEnv(
  *   characters are parsed as YAML after substitution; {@link litestreamEnv} refuses what a quote
  *   cannot hold. A `$` inside a value the environment supplies is not expanded again
  *   (`bench/sqlite-failover/src/litestream.ts`, on `ENV_ACCESS_KEY_ID`).
- * - One full copy a day and a week of history; `retention` takes hours only.
+ * - One full copy a week, the previous one kept; `retention` takes hours only. Retention must exceed
+ *   the interval, because Litestream applies it just after a new full copy lands and keeps at least
+ *   one (`db.go:3096-3108`, `store.go:617-620` at the pinned tag). 335h, not 336h, so the copy from
+ *   two weeks before is always gone when the third lands, whatever the uploads took.
  * - `l0-retention` is Litestream's default, written out because the freshness reader relies on a
  *   level-0 file staying listed at least that long after it is created.
  * - `shutdown-timeout` replaces Litestream's 30 seconds (`cmd/litestream/main.go:361` at the pinned
@@ -87,8 +90,8 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
     `access-key-id: '\${${ENV_ACCESS_KEY_ID}}'`,
     `secret-access-key: '\${${ENV_SECRET_ACCESS_KEY}}'`,
     "snapshot:",
-    "  interval: 24h",
-    "  retention: 168h",
+    "  interval: 168h",
+    "  retention: 335h",
     "l0-retention: 5m",
     "l0-retention-check-interval: 5m",
     `shutdown-timeout: ${LITESTREAM_SHUTDOWN_TIMEOUT_MS}ms`,

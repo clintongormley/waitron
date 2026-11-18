@@ -41,8 +41,8 @@ import {
 
 const PROBE = "m4-restore-time";
 const PREFIX = "venues/v1/gen-1-box-a-20260923T000000Z";
-/** Slice 2's production snapshot settings, so the restore replays onto a daily full copy. */
-const PRODUCTION_SNAPSHOT = [`snapshot:`, `  interval: 24h`, `  retention: 168h`];
+/** Production's snapshot settings, so the restore replays onto a weekly full copy. */
+const PRODUCTION_SNAPSHOT = [`snapshot:`, `  interval: 168h`, `  retention: 335h`];
 /** A generous bound on one restore or upload of a gigabyte-scale database against a local store. */
 const LONG_CHILD_MS = 15 * 60_000;
 /** Source + side file + store copy + one restore at a time, with margin. */

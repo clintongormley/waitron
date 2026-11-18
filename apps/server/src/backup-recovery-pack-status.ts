@@ -3,7 +3,7 @@ import type { BackupSchedule } from "./backup-config.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 /** How long the bucket copy keeps what it sent under an older key. */
-const BUCKET_COPY_KEEP = 7 * DAY;
+const BUCKET_COPY_KEEP = 14 * DAY;
 
 export type StatusRecord = RecoveryPackRecord & { madeByName: string | null };
 

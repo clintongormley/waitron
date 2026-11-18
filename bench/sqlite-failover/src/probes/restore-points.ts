@@ -1,6 +1,6 @@
 // Measurement 3 (#540): which restore points survive the history window.
 //
-// Slice 2 ships L1 30s, L2 5m, L3 1h, one full copy a day, 168 hours kept. A week cannot
+// Production ships L1 30s, L2 5m, L3 1h, one full copy a week, 335 hours kept. Two weeks cannot
 // be run, so this runs a COMPRESSED schedule that keeps the ORDER of every interval but not their
 // ratios, for three and a half windows, and reports which kind of file survives which boundary. The
 // step from here to "hours" is an extrapolation and is labelled as one where it is recorded.

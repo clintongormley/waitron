@@ -398,7 +398,7 @@ own, can also make scheduled backups, and can export your setup to start another
 - Who receives it: your backup storage provider, and the provider of any other bucket you send
   scheduled backups to; whoever you give a configuration export file to. Scheduled backups saved to
   **A folder on this box** stay wherever that folder is.
-- How long: the bucket copy keeps a week of history. Each time Waitron stores a scheduled backup in
+- How long: the bucket copy keeps up to two weeks of history. Each time Waitron stores a scheduled backup in
   a place, it deletes from that place any backup beyond the newest 7 and any older than 30 days,
   unless you change those settings. Before a backup, whenever the box's disk falls under about 2 GB free, or as the box starts with
   its disk full, the box can also delete its oldest backups in folders on that disk, never the newest in each. For a
