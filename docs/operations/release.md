@@ -249,13 +249,13 @@ sudo bash /opt/waitron-host/waitron.sh install v1.0.0
 ```
 
 The installer verifies the signed release file with the public keys already on the box and
-pulls the three images it names by digest. Before installing the first release that includes the
-tunnel companion, use the checked main upgrade in the deploy guide to update the retained verifier
-and keys. [Install a release](../../deploy/README.md#installing-a-release)
+pulls the three images it names by digest. If your box has an earlier verifier, use the checked
+main upgrade in the deploy guide to update the retained verifier and keys. [Install a release](../../deploy/README.md#installing-a-release)
 
-For the first publication of the tunnel companion on main, check that a box without registry
-credentials can pull `ghcr.io/clintongormley/waitron-tunnel:main` before using the new Compose file
-for a fresh main install.
+For the first publication of the tunnel companion, run full verification on main after merging.
+Before a fresh `install main`, check that a box without registry credentials can pull
+`ghcr.io/clintongormley/waitron-tunnel:main`. If GHCR refuses the pull because the package is
+private, make the companion package public and check the pull again.
 A production box starts only on a numbered release.
 
 ## Offer a release to a group

@@ -482,9 +482,8 @@ keeps the installed trust and stops before applying the upgrade. If the upgrade 
 **Restore** or **Keep**, either choice keeps the verified driver and trust files. Restore
 returns your venue to the previous app and data.
 
-The USB recipe seeds release trust when built with both keys. Before a box's first numbered release
-that includes the tunnel, use the checked upgrade to a published main image that includes the
-three-image verifier and both keys. A box already using that verifier can install the release directly. Download a new copy of
+The USB recipe seeds release trust when built with both keys. Numbered releases require the verifier that reads all three image digests. If your box has an
+earlier verifier, upgrade it to the published main image before you install the release. Download a new copy of
 the main installer and use that copy for the first checked upgrade to main. The old retained
 installer cannot seed the keys. The checked upgrade reports whether it loaded the verifier and
 keys.

@@ -1994,6 +1994,15 @@ describe("waitron.sh install of a release", () => {
     },
   );
 
+  it("clears the saved tunnel image on a fresh install of a source with an optional companion", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_TUNNEL_IMAGE=waitron-tunnel:newer\n");
+    const r = run(sb, ["install", "my-branch"], { WT_LEGACY_TUNNEL: "optional" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).not.toContain("WAITRON_TUNNEL_IMAGE");
+    expect(loggedCalls(sb).filter((line) => line.startsWith("docker build "))).toHaveLength(2);
+  });
+
   it("install main still pulls compose.yml's own images and records no image override", () => {
     const sb = sandbox();
     writeFileSync(

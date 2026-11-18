@@ -533,6 +533,8 @@ select_image() {
         "https://github.com/clintongormley/waitron.git#${sha}"
       if [ -n "${3:-}" ]; then tunnel_tag="$(cat "$3/tunnel.id")"; fi
       env_set WAITRON_TUNNEL_IMAGE "$tunnel_tag"
+    else
+      env_unset WAITRON_TUNNEL_IMAGE
     fi
     if [ -n "${3:-}" ]; then
       tag="$(cat "$3/app.id")"; agent_tag="$(cat "$3/agent.id")"
