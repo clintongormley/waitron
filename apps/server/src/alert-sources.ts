@@ -492,7 +492,6 @@ export function printingAlertSource(): AlertSource {
 /** An A4 attempt still queued this long after it was due has been taken by no agent. */
 export const A4_UNCLAIMED_AFTER_MS = 2 * 60_000;
 
-/** Why a full invoice's original has not reached its customer. */
 export type UndeliveredInvoice = { since: string } & (
   | { kind: "failed" | "uncertain" }
   | { kind: "office_printer_unclaimed" | "uncertain_held"; printer: string }
@@ -524,7 +523,11 @@ export function undeliveredInvoice(
   const officePrinter = () => context.officePrinters.get(current.id!)!;
   if (current.status === "failed" || current.status === "unknown") {
     const since = current.at ?? current.requestedAt;
-    if (current.status === "failed") return { kind: "failed", since };
+    if (current.status === "failed") {
+      // A late success does not complete the original, but the customer may have the document.
+      const mayHaveArrived = status.history.some((attempt) => attempt.lateSuccess);
+      return { kind: mayHaveArrived ? "uncertain" : "failed", since };
+    }
     // `rowAttempt` keeps a hold on A4 rows only.
     return current.printerHold === null
       ? { kind: "uncertain", since }
@@ -668,10 +671,7 @@ async function undeliveredCandidates(tx: Transaction) {
   return [...tracked, ...untracked];
 }
 
-/**
- * One alert per full invoice whose original has not reached its customer. Its params name the
- * invoice by number and never its customer.
- */
+/** An alert's params name the invoice by number and never its customer. */
 export function invoiceDeliveryAlertSource(deps: {
   testPages: Pick<PageTestPages, "holdOn">;
 }): AlertSource {

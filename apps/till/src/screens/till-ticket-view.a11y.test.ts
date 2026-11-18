@@ -198,6 +198,20 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     false,
   ],
   [
+    "email failed, an earlier attempt delivered after all",
+    {
+      current: attempt({ id: "d2", medium: "email", status: "failed" }),
+      originalCompleted: false,
+      originalPrinterId: null,
+      actions: { ...none, retryOriginal: { medium: "email" }, email: { designation: "original" } },
+      history: [
+        attempt({ id: "d2", medium: "email", status: "failed" }),
+        attempt({ medium: "email", status: "unknown", lateSuccess: true }),
+      ],
+    },
+    false,
+  ],
+  [
     "email sent, a copy by email offered",
     {
       current: attempt({ medium: "email", status: "sent" }),
@@ -390,7 +404,7 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     "has no violations with F1 delivery state: %s (read failed %s, %s)",
     async (_name, deliveries, readFailed, locale) => {
       setLocale(locale);
-      const { host } = await mountWidget<TillTicketView>(
+      const { el, host } = await mountWidget<TillTicketView>(
         "till-ticket-view",
         {
           result: { ...result, invoiceType: "F1" },
@@ -400,6 +414,10 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
         },
         theme,
       );
+      if (deliveries.history.some((attempt) => attempt.lateSuccess)) {
+        expect(el.shadowRoot!.querySelector("[data-test=delivery-late-success]")).not.toBeNull();
+        expect(el.shadowRoot!.querySelector("[data-test=delivery-late-check]")).not.toBeNull();
+      }
       await expectNoA11yViolations(host);
     },
   );

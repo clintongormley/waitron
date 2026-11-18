@@ -104,17 +104,6 @@ point 1 of the [A231q plan](../superpowers/plans/2026-10-12-a231q-invoice-delive
 it is answered none does: the delivery status the till and the dashboard read carries no address,
 and both email forms open empty. Left open by A231q.
 
-## A557. A success reported after an attempt had ended is not shown
-
-The delivery status marks
-such an attempt `lateSuccess` (`apps/server/src/invoice-delivery-status.ts`), but neither the till
-nor the dashboard shows it, so staff see only the attempt's earlier outcome. Left open by A231q.
-
-## A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop
-
-A wording decision left open by A231q, in the till and the dashboard, in English and Spanish
-(`apps/till/src/i18n/codes.ts`, `apps/dashboard/src/i18n/codes.ts`).
-
 ## The reconcile sweep may raise a second "accepted with errors" warning
 
 This can happen when it corrects a record the drain is still sending
@@ -1031,16 +1020,12 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   an earlier one is refused; the owner suggests asking AEAT's developer channel first. No change until then.
   [Detail](fiscal.md#re-examine-the-hold-behind-an-unknown-outcome-once-aeats-developer-channel-answers)
 
-## Bundle: Show a late success, decide the address, fix those strings
+## Bundle: Decide whether any screen shows an invoice email's address
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S, needs the owner. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
 - **A554. Should any screen show the address an invoice email went to?** An owner question, open.
   [Detail](fiscal.md#a554-should-any-screen-show-the-address-an-invoice-email-went-to).
-- **A557. A success reported after an attempt had ended is not shown.**
-  [Detail](fiscal.md#a557-a-success-reported-after-an-attempt-had-ended-is-not-shown).
-- **A558. The `invoice_delivery.*` refusals other than `.active` end without a full stop.**
-  [Detail](fiscal.md#a558-the-invoice_delivery-refusals-other-than-active-end-without-a-full-stop).
 
 ## Bundle: One authorised edit of a protected test, plus its neighbours
 

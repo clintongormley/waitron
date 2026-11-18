@@ -1336,6 +1336,301 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       expect(label(el, "email-invoice")).toBe("Enviar a otra dirección");
     });
 
+    describe("an earlier attempt that was delivered after all", () => {
+      const FACT = "A delivery attempt succeeded after all.";
+      const CHECK = "Check before trying again: it may already have been delivered.";
+      const fact = (el: TillTicketView) => button(el, "delivery-late-success");
+      const check = (el: TillTicketView) => button(el, "delivery-late-check");
+      const words = (line: HTMLElement | null) => line?.textContent?.trim();
+      const delivered = attempt({
+        id: "d1",
+        medium: "email",
+        status: "unknown",
+        lateSuccess: true,
+      });
+      const failedAgain = attempt({ id: "d2", medium: "email", status: "failed" });
+      const behind = (
+        current: InvoiceDeliveryAttempt,
+        earlier: InvoiceDeliveryAttempt = delivered,
+      ): InvoiceDeliveryStatus => ({ ...statusOf(current), history: [current, earlier] });
+
+      it("says so beneath a newer failure, which keeps its send-again action", async () => {
+        const { el } = await mountF1({
+          deliveries: {
+            ...behind(failedAgain),
+            actions: { ...noActions, retryOriginal: { medium: "email" }, email: emailOffer },
+          },
+        });
+        expect(line(el)).toBe("May not have been delivered.");
+        expect(words(fact(el))).toBe(FACT);
+        expect(fact(el)!.getAttribute("role")).toBe("status");
+        expect(fact(el)!.previousElementSibling).toBe(button(el, "delivery-status"));
+        expect(words(check(el))).toBe(CHECK);
+        expect(check(el)!.getAttribute("role")).toBe("status");
+        expect(check(el)!.previousElementSibling).toBe(fact(el));
+        expect(label(el, "email-again")).toBe("Send the email again");
+        expect(label(el, "email-invoice")).toBe("Send to another address");
+      });
+
+      describe("while the original is not recorded as delivered", () => {
+        const heading = (el: TillTicketView) =>
+          button(el, "original-delivery")!.querySelector("strong")!.textContent!.trim();
+
+        it.each(["failed", "unknown"] as const)(
+          "says it may not have arrived when the newest attempt is %s",
+          async (status) => {
+            const { el } = await mountF1({
+              deliveries: behind(attempt({ id: "d2", medium: "email", status })),
+            });
+            expect(heading(el)).toBe("Full invoice may not have been delivered");
+            expect(line(el)).toBe("May not have been delivered.");
+            expect(button(el, "original-delivery")!.textContent).not.toContain("Not delivered.");
+          },
+        );
+
+        it("says it in Spanish", async () => {
+          setLocale("es-ES");
+          const { el } = await mountF1({ deliveries: behind(failedAgain) });
+          expect(heading(el)).toBe("Puede que la factura completa no se haya entregado");
+          expect(line(el)).toBe("Puede que no se haya entregado.");
+        });
+
+        it.each([
+          ["queued", "Sending the invoice."],
+          ["sending", "Sending the invoice."],
+        ] as const)(
+          "heads a newer %s attempt the same way, which keeps its own line",
+          async (status, own) => {
+            const { el } = await mountF1({
+              deliveries: behind(attempt({ id: "d2", medium: "email", status })),
+            });
+            expect(heading(el)).toBe("Full invoice may not have been delivered");
+            expect(line(el)).toBe(own);
+          },
+        );
+
+        it("does not ask for a receipt to be retried without checking", async () => {
+          const { el } = await mountF1({
+            deliveries: behind(attempt({ id: "d2", medium: "receipt", status: "failed" })),
+            originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true },
+          });
+          const section = button(el, "original-delivery")!.textContent!;
+          expect(section).toContain("Printing failed. Check before printing again.");
+          expect(section).not.toContain("Retry the original.");
+          setLocale("es-ES");
+          el.requestUpdate();
+          await el.updateComplete;
+          expect(button(el, "original-delivery")!.textContent).toContain(
+            "La impresión falló. Compruébalo antes de volver a imprimir.",
+          );
+        });
+
+        it("keeps today's words when no attempt was delivered late", async () => {
+          const { el } = await mountF1({
+            deliveries: behind(failedAgain, { ...delivered, lateSuccess: false }),
+          });
+          expect(heading(el)).toBe("Full invoice not delivered");
+          expect(line(el)).toBe("Not delivered.");
+        });
+
+        it("keeps today's receipt failure line when no attempt was delivered late", async () => {
+          const { el } = await mountF1({
+            deliveries: behind(attempt({ id: "d2", medium: "receipt", status: "failed" }), {
+              ...delivered,
+              lateSuccess: false,
+            }),
+            originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true },
+          });
+          expect(button(el, "original-delivery")!.textContent).toContain(
+            "Printing failed. Retry the original.",
+          );
+        });
+
+        it("warns of nothing once the original was delivered", async () => {
+          const copy = attempt({
+            id: "d3",
+            medium: "email",
+            designation: "duplicate",
+            status: "failed",
+          });
+          const original = attempt({ id: "d2", medium: "email", status: "sent" });
+          const { el } = await mountF1({
+            deliveries: {
+              ...statusOf(copy),
+              originalCompleted: true,
+              history: [copy, original, delivered],
+            },
+          });
+          expect(heading(el)).toBe("Full invoice delivered");
+          expect(line(el)).toBe("Not delivered.");
+        });
+      });
+
+      it.each([
+        ["failed", true],
+        ["unknown", true],
+        ["queued", false],
+        ["sending", false],
+        ["sent", false],
+      ] as const)("behind a newer %s attempt, asks for a check: %s", async (status, asks) => {
+        const current = attempt({ id: "d2", medium: "email", status });
+        const { el } = await mountF1({ deliveries: behind(current) });
+        expect(words(fact(el))).toBe(FACT);
+        expect(words(check(el))).toBe(asks ? CHECK : undefined);
+      });
+
+      describe("behind a newer queued attempt, with a receipt offered instead", () => {
+        const offering = (medium: InvoiceDeliveryAttempt["medium"]): InvoiceDeliveryStatus => ({
+          ...behind(attempt({ id: "d2", medium, status: "queued" })),
+          actions: { ...noActions, receiptInstead: { deliveryId: "d2" } },
+        });
+
+        it.each(["email", "a4"] as const)("asks for a check (%s)", async (medium) => {
+          const { el } = await mountF1({ deliveries: offering(medium) });
+          expect(button(el, "receipt-instead")).not.toBeNull();
+          expect(words(fact(el))).toBe(FACT);
+          expect(words(check(el))).toBe(CHECK);
+        });
+
+        it("asks for none on a till that cannot print receipts", async () => {
+          const { el } = await mountF1({ deliveries: offering("a4"), canPrintReceipt: false });
+          expect(button(el, "receipt-instead")).toBeNull();
+          expect(words(fact(el))).toBe(FACT);
+          expect(check(el)).toBeNull();
+        });
+      });
+
+      it("asks for no check when a copy failed after the original was delivered", async () => {
+        const copy = attempt({
+          id: "d3",
+          medium: "email",
+          designation: "duplicate",
+          status: "failed",
+        });
+        const original = attempt({ id: "d2", medium: "email", status: "sent" });
+        const { el } = await mountF1({
+          deliveries: {
+            ...statusOf(copy),
+            originalCompleted: true,
+            history: [copy, original, delivered],
+          },
+        });
+        expect(words(fact(el))).toBe(FACT);
+        expect(check(el)).toBeNull();
+      });
+
+      it("gives the same two lines for a late A4 attempt, whose page is at the printer", async () => {
+        const page = attempt({ id: "d1", medium: "a4", status: "unknown", lateSuccess: true });
+        const { el } = await mountF1({
+          deliveries: behind(attempt({ id: "d2", medium: "a4", status: "failed" }), page),
+        });
+        expect(words(fact(el))).toBe(FACT);
+        expect(words(check(el))).toBe(CHECK);
+      });
+
+      it("says both lines in Spanish", async () => {
+        setLocale("es-ES");
+        const { el } = await mountF1({ deliveries: behind(failedAgain) });
+        expect(words(fact(el))).toBe("Un intento de entrega se completó al final.");
+        expect(words(check(el))).toBe(
+          "Compruébalo antes de intentarlo de nuevo: puede que ya se haya entregado.",
+        );
+      });
+
+      it("says nothing when no attempt was delivered late", async () => {
+        const { el } = await mountF1({
+          deliveries: behind(failedAgain, { ...delivered, lateSuccess: false }),
+        });
+        expect(line(el)).toBe("Not delivered.");
+        expect(fact(el)).toBeNull();
+        expect(check(el)).toBeNull();
+      });
+
+      it("says both for a late receipt alone, which has no delivery words of its own", async () => {
+        const receipt = attempt({ medium: "receipt", status: "unknown", lateSuccess: true });
+        const { el } = await mountF1({
+          deliveries: statusOf(receipt),
+          originalReceiptPrint: {
+            status: "failed",
+            jobId: "original",
+            canRetry: false,
+            failureCode: "printer.deleted",
+          },
+        });
+        expect(button(el, "delivery-status")).toBeNull();
+        expect(words(fact(el))).toBe(FACT);
+        expect(words(check(el))).toBe(CHECK);
+        expect(check(el)!.previousElementSibling).toBe(fact(el));
+      });
+
+      // The server counts a printed receipt as a completed original, so a confirmed handover beside
+      // `originalCompleted: false` is a delivery status read before the receipt finished.
+      it("asks for no check under a confirmed customer handover", async () => {
+        const printed = { status: "done", jobId: "original", canRetry: false } as const;
+        const { el } = await mountF1({
+          deliveries: behind(failedAgain),
+          originalReceiptPrint: printed,
+        });
+        expect(words(check(el))).toBe(CHECK);
+        el.originalReceiptPrint = {
+          ...printed,
+          handover: { personId: "staff", confirmedAt: "2026-08-05T12:40:00.000Z" },
+        };
+        await el.updateComplete;
+        expect(button(el, "original-delivery")!.textContent).toContain(
+          "Customer handover confirmed",
+        );
+        expect(words(fact(el))).toBe(FACT);
+        expect(check(el)).toBeNull();
+      });
+
+      describe("under a confirmed customer handover", () => {
+        const handedOver = {
+          status: "done",
+          jobId: "original",
+          canRetry: false,
+          handover: { personId: "staff", confirmedAt: "2026-08-05T12:40:00.000Z" },
+        } as const;
+
+        it.each(["failed", "unknown"] as const)(
+          "drops the doubt about a %s attempt, keeping the fact",
+          async (status) => {
+            const { el } = await mountF1({
+              deliveries: behind(attempt({ id: "d2", medium: "email", status })),
+              originalReceiptPrint: handedOver,
+            });
+            const section = button(el, "original-delivery")!.textContent!;
+            expect(section).toContain("Customer handover confirmed");
+            expect(button(el, "delivery-status")).toBeNull();
+            expect(section).not.toContain("Not delivered.");
+            expect(words(fact(el))).toBe(FACT);
+          },
+        );
+
+        it("keeps saying a held page may still print", async () => {
+          const held = attempt({
+            id: "d2",
+            medium: "a4",
+            status: "unknown",
+            printerHold: "paper_jam",
+          });
+          const { el } = await mountF1({
+            deliveries: behind(held),
+            originalReceiptPrint: handedOver,
+          });
+          expect(line(el)).toBe("May still print: check the printer first.");
+        });
+
+        it("keeps a failure's words when nothing was delivered late", async () => {
+          const { el } = await mountF1({
+            deliveries: behind(failedAgain, { ...delivered, lateSuccess: false }),
+            originalReceiptPrint: handedOver,
+          });
+          expect(line(el)).toBe("Not delivered.");
+        });
+      });
+    });
+
     it("offers no email again when the retry offered is on paper", async () => {
       const { el } = await mountF1({
         deliveries: statusOf(attempt({ status: "failed" }), {

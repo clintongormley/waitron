@@ -496,8 +496,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La factura completa {invoice} está esperando en la impresora de oficina «{printer}». {hold:printer_hold} Después la factura se imprimirá sola: no la vuelvas a imprimir.",
   },
   "invoice_delivery.uncertain_held": {
-    en: "Full invoice {invoice} may still print on office printer “{printer}”: the printer was holding it when Waitron lost track of it. Check the printer first; only if it did not print, send it again from the order, on the till or on the Orders page.",
-    es: "Puede que la factura completa {invoice} aún se imprima en la impresora de oficina «{printer}»: la impresora la tenía retenida cuando Waitron perdió su rastro. Comprueba primero la impresora; solo si no se ha imprimido, vuelve a enviarla desde el pedido, en el TPV o en la página de Pedidos.",
+    en: "Full invoice {invoice} may still print on office printer “{printer}”: the printer was holding it when Waitron lost track of it. Check the printer first. If it did not print, check that the customer does not already have it before sending it again from the order, on the till or on the Orders page.",
+    es: "Puede que la factura completa {invoice} aún se imprima en la impresora de oficina «{printer}»: la impresora la tenía retenida cuando Waitron perdió su rastro. Comprueba primero la impresora. Si no se ha imprimido, comprueba que el cliente no la tenga ya antes de volver a enviarla desde el pedido, en el TPV o en la página de Pedidos.",
   },
   "invoice_delivery.queued_behind_hold": {
     en: "Full invoice {invoice} is waiting for office printer “{printer}”, which is holding an earlier job. {hold:printer_hold} The invoice will then print after it. To give the customer the invoice on the receipt printer instead, open the order on the till.",

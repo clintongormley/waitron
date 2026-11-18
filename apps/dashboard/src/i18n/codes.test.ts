@@ -772,11 +772,22 @@ it("ends the already-waiting delivery refusal with a full stop, like the deliver
 // `requestEmailDelivery` and `retryEmailDelivery` throw).
 it("says what to check when invoice email is unavailable, in English and Spanish", () => {
   expect(codeMessage("invoice_delivery.email_unavailable", "en")).toBe(
-    "Invoice email is unavailable. Check the mail server and the Email field on the department's Receipts tab in Departments and zones",
+    "Invoice email is unavailable. Check the mail server and the Email field on the department's Receipts tab in Departments and zones.",
   );
   expect(codeMessage("invoice_delivery.email_unavailable", "es")).toBe(
-    "No se puede enviar la factura por correo. Revisa el servidor de correo y el campo Correo electrónico de la pestaña Recibos del departamento en Departamentos y zonas",
+    "No se puede enviar la factura por correo. Revisa el servidor de correo y el campo Correo electrónico de la pestaña Recibos del departamento en Departamentos y zonas.",
   );
+});
+
+it.each([
+  "invoice_delivery.active",
+  "invoice_delivery.printer_invalid",
+  "invoice_delivery.email_unavailable",
+  "invoice_delivery.full_invoice_required",
+  "invoice_delivery.not_found",
+])("ends %s with a full stop in English and Spanish", (code) => {
+  expect(codeMessage(code, "en")).toMatch(/[^.]\.$/);
+  expect(codeMessage(code, "es")).toMatch(/[^.]\.$/);
 });
 
 // The order detail's Print invoice and Download PDF routes (`STATUS` in apps/server/src/orders-api.ts,

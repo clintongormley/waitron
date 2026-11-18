@@ -74,8 +74,10 @@ nombre el destino y púlsalo. Una factura completa conserva el cliente registrad
 
 Cuando se ofrece **Enviar por correo electrónico**, puedes enviar un recibo o una factura completa en PDF.
 Introduce el correo del cliente y pulsa **Enviar**. Imprimir y enviar por correo son acciones
-independientes; cuando una entrega el original, la siguiente entrega es una copia. Si falla el
-envío, pulsa **Volver a enviar el correo** para repetirlo a la misma dirección o elige otra dirección.
+independientes. Si la caja dice **Compruébalo antes de intentarlo de nuevo**, puede que el documento
+ya se haya entregado: pregunta al cliente o mira la impresora antes. Si falla el envío, o el cliente
+no lo tiene, pulsa **Volver a enviar el correo** para repetirlo a la misma dirección o elige otra
+dirección.
 
 Elige **Ninguno** o cierra la ventana para continuar sin imprimir. Cierras la mesa por separado.
 Si necesitas un documento más tarde, abre la venta y elige **Imprimir/Reimprimir**.

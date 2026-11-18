@@ -1029,7 +1029,7 @@ describe("printing a full invoice", () => {
     await chooseListed(el, OFFICE_PRINTER.id);
     printButton(el).click();
     await vi.waitFor(() =>
-      expect(chooser(el)?.error).toBe("That printer is unavailable. Choose another printer"),
+      expect(chooser(el)?.error).toBe("That printer is unavailable. Choose another printer."),
     );
     expect((await errorMessage(el))?.textContent).toBe(
       "Correct the highlighted fields to continue.",

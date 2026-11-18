@@ -297,7 +297,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   An unpaid departure that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A deferred-payment close (`closeBillDeferredTx`, `apps/server/src/deferred-close.ts`) now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
   [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)
 
-- **Show a late success, decide the address, fix those strings** (bundle of 3, 1 important, size S). Holds A554, A557, A558. [Detail](backlog/fiscal.md#bundle-show-a-late-success-decide-the-address-fix-those-strings)
+- **Decide whether any screen shows an invoice email's address** (bundle of 1, size S, needs the owner). Holds A554. [Detail](backlog/fiscal.md#bundle-decide-whether-any-screen-shows-an-invoice-emails-address)
 
 - **A556. A full invoice that later replaces a bill's simplified one would not be delivered through
   the bill.** Nothing issues an F3 today: no route calls `recordSubstitution`.

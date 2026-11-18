@@ -153,7 +153,10 @@ function printLabel(
 }
 
 /** The current attempt in words; a receipt attempt is worded by the original's print status. */
-function deliveryWords(attempt: InvoiceDeliveryAttempt): string | undefined {
+function deliveryWords(
+  attempt: InvoiceDeliveryAttempt,
+  mayHaveArrived: boolean,
+): string | undefined {
   if (attempt.medium === "receipt") return undefined;
   const hold = attempt.printerHold;
   switch (attempt.status) {
@@ -174,7 +177,7 @@ function deliveryWords(attempt: InvoiceDeliveryAttempt): string | undefined {
         attempt.medium === "a4" ? "invoice.delivery_sent_a4" : "invoice.delivery_sent_email",
       );
     case "failed":
-      return t("invoice.delivery_failed");
+      return t(mayHaveArrived ? "invoice.delivery_unknown" : "invoice.delivery_failed");
     case "unknown":
       return t(hold === null ? "invoice.delivery_unknown" : "invoice.delivery_unknown_held");
   }
@@ -704,11 +707,40 @@ export class TillTicketView extends LitElement {
       : this.originalReceiptPrint?.printerName;
   }
 
+  get #handoverConfirmed(): boolean {
+    return (
+      this.originalReceiptPrint?.status !== "not_queued" &&
+      Boolean(this.originalReceiptPrint?.handover)
+    );
+  }
+
+  /** A late success does not complete the original, but the customer may have the document. */
+  get #mayHaveArrived(): boolean {
+    return (
+      this.deliveries?.originalCompleted === false &&
+      this.deliveries.history.some((attempt) => attempt.lateSuccess)
+    );
+  }
+
   protected renderDelivery() {
     const status = this.deliveries;
-    const words = status?.current ? deliveryWords(status.current) : undefined;
-    const busy = this.deliveryBusy || this.originalReceiptBusy;
+    const mayHaveArrived = this.#mayHaveArrived;
+    const words = status?.current ? deliveryWords(status.current, mayHaveArrived) : undefined;
+    const lateAttempt = status?.history.some((attempt) => attempt.lateSuccess) === true;
+    const currentStatus = status?.current?.status;
+    // The receipt and the delivery status are read separately, so a confirmed handover can sit
+    // beside an attempt read before it; the handover answers the doubt.
+    const doubtAnswered =
+      mayHaveArrived &&
+      this.#handoverConfirmed &&
+      (currentStatus === "failed" ||
+        (currentStatus === "unknown" && status?.current?.printerHold === null));
     const instead = this.canPrintReceipt ? status?.actions.receiptInstead : null;
+    const askToCheck =
+      mayHaveArrived &&
+      (currentStatus === "failed" || currentStatus === "unknown" || instead != null) &&
+      !this.#handoverConfirmed;
+    const busy = this.deliveryBusy || this.originalReceiptBusy;
     const retainedPrinter = this.#retainedReceiptPrinterName();
     const insteadPrinter =
       retainedPrinter ?? this.receiptEquipment?.resolved?.name ?? t("equipment.none");
@@ -718,7 +750,21 @@ export class TillTicketView extends LitElement {
         ? status.current?.id
         : null;
     return html`
-      ${words === undefined ? nothing : html`<p role="status" data-test="delivery-status">${words}</p>`}
+      ${words === undefined || doubtAnswered ? nothing : html`<p role="status" data-test="delivery-status">${words}</p>`}
+      ${
+        lateAttempt
+          ? html`<p role="status" data-test="delivery-late-success">
+              ${t("invoice.delivery_late_success")}
+            </p>`
+          : nothing
+      }
+      ${
+        askToCheck
+          ? html`<p role="status" data-test="delivery-late-check">
+              ${t("invoice.delivery_late_check")}
+            </p>`
+          : nothing
+      }
       ${
         this.deliveriesReadFailed
           ? html`<p role="status" data-test="delivery-read-failed">
@@ -839,7 +885,7 @@ export class TillTicketView extends LitElement {
                 this.result.invoiceType === "F1"
                   ? html`<p role="status">
                       <strong
-                        >${t(this.originalReceiptPrint?.status !== "not_queued" && this.originalReceiptPrint?.handover ? "invoice.handover_confirmed" : (notQueued && this.deliveries?.originalCompleted) || failedButDelivered ? "invoice.delivered" : "invoice.not_delivered")}</strong
+                        >${t(this.#handoverConfirmed ? "invoice.handover_confirmed" : (notQueued && this.deliveries?.originalCompleted) || failedButDelivered ? "invoice.delivered" : this.#mayHaveArrived ? "invoice.may_not_be_delivered" : "invoice.not_delivered")}</strong
                       >
                     </p>`
                   : nothing
@@ -852,7 +898,7 @@ export class TillTicketView extends LitElement {
                   failedButSuperseded)
                   ? nothing
                   : html`<p>
-                      ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.printerWithdrawn ? "invoice.print_failed_withdrawn" : this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
+                      ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.printerWithdrawn ? "invoice.print_failed_withdrawn" : this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "failed" && this.#mayHaveArrived ? "invoice.print_failed_check" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
                     </p>`
               }
               ${this.renderDelivery()}
