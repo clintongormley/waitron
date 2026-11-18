@@ -30,6 +30,7 @@ export const setMenuLineCourses = table(
     primaryKey({ columns: [t.lineId, t.courseId] }),
     foreignKey({ columns: [t.lineId], foreignColumns: [setMenuLines.id] }).onDelete("cascade"),
     foreignKey({ columns: [t.courseId], foreignColumns: [kitchenCourses.id] }),
+    index("set_menu_line_courses_course_idx").on(t.courseId),
   ],
 );
 
@@ -64,5 +65,6 @@ export const setMenuDishCourses = table(
   (t) => [
     foreignKey({ columns: [t.menuItemId], foreignColumns: [menuItems.id] }).onDelete("cascade"),
     foreignKey({ columns: [t.courseId], foreignColumns: [kitchenCourses.id] }),
+    index("set_menu_dish_courses_course_idx").on(t.courseId),
   ],
 );

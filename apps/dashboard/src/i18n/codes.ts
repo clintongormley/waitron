@@ -563,7 +563,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "set_menu.wrong_place": {
     en: "A set menu is sold by placing it in a menu. Open that menu's Structure and add the set menu there.",
-    es: "Un menú a precio fijo se vende colocándolo dentro de una carta. Abre la Estructura de esa carta y añádelo allí.",
+    es: "Para vender una carta a precio fijo, abre la Estructura de la carta que quieres publicar y añádela allí.",
   },
   "node.operation_page_required": {
     en: "This operation needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",

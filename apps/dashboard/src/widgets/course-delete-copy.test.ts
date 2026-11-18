@@ -69,7 +69,7 @@ it.each([
   ["en-GB", "1 set-menu line loses this course.", "2 dishes return to their product's course."],
   [
     "es-ES",
-    "1 línea de menú a precio fijo pierde este curso.",
+    "1 línea de una carta a precio fijo pierde este curso.",
     "2 platos vuelven al curso de su producto.",
   ],
 ])("explains removed set-menu course choices in %s", (locale, line, dishes) => {

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c400e375-dbb6-47aa-997c-7b92d2894765",
+  "id": "a3f09da1-ac0d-4355-bfad-8946caa38dd6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -14328,7 +14328,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "set_menu_dish_courses_course_idx": {
+          "name": "set_menu_dish_courses_course_idx",
+          "columns": [
+            "course_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "set_menu_dish_courses_menu_item_id_menu_items_id_fk": {
           "name": "set_menu_dish_courses_menu_item_id_menu_items_id_fk",
@@ -14379,7 +14387,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "set_menu_line_courses_course_idx": {
+          "name": "set_menu_line_courses_course_idx",
+          "columns": [
+            "course_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "set_menu_line_courses_line_id_set_menu_lines_id_fk": {
           "name": "set_menu_line_courses_line_id_set_menu_lines_id_fk",

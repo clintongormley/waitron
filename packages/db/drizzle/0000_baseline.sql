@@ -2197,6 +2197,7 @@ CREATE TABLE `set_menu_dish_courses` (
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE INDEX `set_menu_dish_courses_course_idx` ON `set_menu_dish_courses` (`course_id`);--> statement-breakpoint
 CREATE TABLE `set_menu_line_courses` (
 	`line_id` text NOT NULL,
 	`course_id` text NOT NULL,
@@ -2205,6 +2206,7 @@ CREATE TABLE `set_menu_line_courses` (
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE INDEX `set_menu_line_courses_course_idx` ON `set_menu_line_courses` (`course_id`);--> statement-breakpoint
 CREATE TABLE `set_menu_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`menu_id` text NOT NULL,

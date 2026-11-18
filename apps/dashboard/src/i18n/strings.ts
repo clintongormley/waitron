@@ -6374,8 +6374,9 @@ export const es: Record<StringKey, string> = {
   "kitchen.delete_course_products": "{count} productos se preparan primero.",
   "kitchen.delete_course_products_one": "1 producto se prepara primero.",
   "kitchen.delete_course_set_menu_lines":
-    "{count} líneas de menú a precio fijo pierden este curso.",
-  "kitchen.delete_course_set_menu_lines_one": "1 línea de menú a precio fijo pierde este curso.",
+    "{count} líneas de cartas a precio fijo pierden este curso.",
+  "kitchen.delete_course_set_menu_lines_one":
+    "1 línea de una carta a precio fijo pierde este curso.",
   "kitchen.delete_course_set_menu_dishes": "{count} platos vuelven al curso de su producto.",
   "kitchen.delete_course_set_menu_dishes_one": "1 plato vuelve al curso de su producto.",
   "kitchen.delete_course_service_steps":

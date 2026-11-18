@@ -340,7 +340,8 @@ second amendment are marked **my call (plan writer)**:
   `pnpm --filter @waitron/db db:generate`.** Add `setMenuLineCourses.courseId` and
   `setMenuDishCourses.courseId` to `COURSE_REFERENCES` (the guard
   `apps/server/src/in-use-references.test.ts` requires every foreign key into `kitchen_courses`
-  there), delete their rows for the course in `deleteCourse`, and add the `course_set_menu_lines`
+  there). Index both references by course as the course-removal suite expects. Delete their rows
+  in `deleteCourse` and add the `course_set_menu_lines`
   removal (count of distinct lines) and the `course_set_menu_dishes` removal to
   `courseDeleteRules`' impact. Add its
   English and Spanish impact wording wherever the existing `course_products` key is worded on the

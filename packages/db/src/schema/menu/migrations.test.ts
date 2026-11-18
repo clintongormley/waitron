@@ -543,6 +543,8 @@ describe("the menu tables carry no taxpayer column", () => {
       sections_one_root_per_menu_uq: { unique: true, columns: "owner_menu_id, role" },
       menus_one_default_uq: { unique: true, columns: "is_default" },
       set_menu_lines_position_idx: { unique: false, columns: "menu_id, position" },
+      set_menu_line_courses_course_idx: { unique: false, columns: "course_id" },
+      set_menu_dish_courses_course_idx: { unique: false, columns: "course_id" },
       menu_items_id_product_key: { unique: true, columns: "id, product_id" },
       menu_items_menu_product_key: { unique: true, columns: "menu_id, product_id" },
       option_labels_list_sort_idx: { unique: false, columns: "list_id, sort" },
