@@ -95,6 +95,24 @@ describe("placeFor: the first order", () => {
     expect(placeFor(id, context())).toEqual({ place: { kind: "fire" } });
   });
 
+  it("fires a course that is Fire now in this zone even beside held courses", () => {
+    const drinks = (fireNowZoneIds: string[]): PlaceContext["courses"] => [
+      { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
+      { id: "drinks", name: "Drinks", displayOrder: 2, fireNowZoneIds },
+    ];
+    const mainsPlaced = [{ courseId: "mains", place: { kind: "new", slot: 1 } } as const];
+
+    expect(
+      placeFor("drinks", context({ courses: drinks(["dining"]), placed: mainsPlaced })),
+    ).toEqual({ place: { kind: "fire" } });
+    expect(placeFor("drinks", context({ courses: drinks(["dining"]) }))).toEqual({
+      place: { kind: "fire" },
+    });
+    expect(placeFor("drinks", context({ courses: drinks([]), placed: mainsPlaced }))).toEqual({
+      place: { kind: "new", slot: 2 },
+    });
+  });
+
   it("starts a held Mains group", () => {
     expect(placeFor("mains", context())).toEqual({ place: { kind: "new", slot: 1 } });
   });
