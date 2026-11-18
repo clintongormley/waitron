@@ -391,6 +391,10 @@ export const en = {
   "orders.detail.delivery_sent_receipt": "Printed on the receipt printer.",
   "orders.detail.delivery_sent_email": "Sent by email.",
   "orders.detail.delivery_failed": "Not delivered.",
+  "orders.detail.delivery_late_success": "Delivered after all.",
+  "orders.detail.delivery_late_success_earlier": "A delivery attempt succeeded after all.",
+  "orders.detail.delivery_late_check":
+    "Check before trying again: it may already have been delivered.",
   "orders.detail.delivery_unknown": "May not have been delivered.",
   "orders.detail.delivery_unknown_held": "May still print: check the printer first.",
   "orders.detail.medium_a4": "A4",
@@ -404,6 +408,7 @@ export const en = {
   "orders.detail.outcome_sent": "Delivered",
   "orders.detail.outcome_failed": "Not delivered",
   "orders.detail.outcome_unknown": "Uncertain",
+  "orders.detail.outcome_late_success": "Delivered after all",
   "orders.detail.requested_by": "Requested by {name}",
   "orders.detail.pdf_line": "{date}: PDF downloaded by {name}",
   "orders.download_pdf": "Download PDF",
@@ -4838,6 +4843,10 @@ export const es: Record<StringKey, string> = {
   "orders.detail.delivery_sent_receipt": "Impresa en la impresora de tickets.",
   "orders.detail.delivery_sent_email": "Enviada por correo electrónico.",
   "orders.detail.delivery_failed": "No entregada.",
+  "orders.detail.delivery_late_success": "Entregada al final.",
+  "orders.detail.delivery_late_success_earlier": "Un intento de entrega se completó al final.",
+  "orders.detail.delivery_late_check":
+    "Compruébalo antes de intentarlo de nuevo: puede que ya se haya entregado.",
   "orders.detail.delivery_unknown": "Puede que no se haya entregado.",
   "orders.detail.delivery_unknown_held":
     "Puede que aún se imprima: comprueba primero la impresora.",
@@ -4852,6 +4861,7 @@ export const es: Record<StringKey, string> = {
   "orders.detail.outcome_sent": "Entregada",
   "orders.detail.outcome_failed": "No entregada",
   "orders.detail.outcome_unknown": "Sin confirmar",
+  "orders.detail.outcome_late_success": "Entregada al final",
   "orders.detail.requested_by": "Pedida por {name}",
   "orders.detail.pdf_line": "{date}: PDF descargado por {name}",
   "orders.download_pdf": "Descargar PDF",

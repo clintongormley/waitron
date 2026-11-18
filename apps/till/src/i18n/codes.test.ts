@@ -585,20 +585,33 @@ it("explains a pending invoice delivery and a refused original instead of the ge
     "Esta factura ya está pendiente de entrega. Comprueba su estado antes de intentarlo de nuevo.",
   );
   expect(codeMessage("invoice_delivery.receipt_invalid", "en")).toBe(
-    "That original receipt cannot be printed. Check the invoice's delivery status or ask a manager",
+    "That original receipt cannot be printed. Check the invoice's delivery status or ask a manager.",
   );
   expect(codeMessage("invoice_delivery.receipt_invalid", "es")).toBe(
-    "No se puede imprimir ese recibo original. Comprueba el estado de entrega de la factura o avisa a un responsable",
+    "No se puede imprimir ese recibo original. Comprueba el estado de entrega de la factura o avisa a un responsable.",
   );
 });
 
 it("says invoice email is unavailable and names no paper choice, which the email form lacks, in both languages", () => {
   expect(codeMessage("invoice_delivery.email_unavailable", "en")).toBe(
-    "Invoice email is unavailable. Ask a manager",
+    "Invoice email is unavailable. Ask a manager.",
   );
   expect(codeMessage("invoice_delivery.email_unavailable", "es")).toBe(
-    "No se puede enviar la factura por correo. Avisa a un responsable",
+    "No se puede enviar la factura por correo. Avisa a un responsable.",
   );
+});
+
+it.each([
+  "invoice_delivery.active",
+  "invoice_delivery.receipt_invalid",
+  "invoice_delivery.printer_invalid",
+  "invoice_delivery.not_found",
+  "invoice_delivery.full_invoice_required",
+  "invoice_delivery.receipt_unavailable",
+  "invoice_delivery.email_unavailable",
+])("ends %s with a full stop in English and Spanish", (code) => {
+  expect(codeMessage(code, "en")).toMatch(/[^.]\.$/);
+  expect(codeMessage(code, "es")).toMatch(/[^.]\.$/);
 });
 
 it("explains the closed-zone refusal while preserving payment and move choices in both languages", () => {

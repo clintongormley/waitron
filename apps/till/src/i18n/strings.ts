@@ -482,6 +482,8 @@ export const en = {
   "invoice.delivery_failed": "Not delivered.",
   "invoice.delivery_unknown": "May not have been delivered.",
   "invoice.delivery_unknown_held": "May still print: check the printer first.",
+  "invoice.delivery_late_success": "A delivery attempt succeeded after all.",
+  "invoice.delivery_late_check": "Check before trying again: it may already have been delivered.",
   "invoice.delivery_held": "Waiting at the office printer: {reason}.",
   "invoice.delivery_held_no_reason": "Waiting at the office printer.",
   "invoice.delivery_hold_paper_out": "out of paper",
@@ -2607,6 +2609,9 @@ export const es: Record<StringKey, string> = {
   "invoice.delivery_failed": "No entregada.",
   "invoice.delivery_unknown": "Puede que no se haya entregado.",
   "invoice.delivery_unknown_held": "Puede que aún se imprima: comprueba primero la impresora.",
+  "invoice.delivery_late_success": "Un intento de entrega se completó al final.",
+  "invoice.delivery_late_check":
+    "Compruébalo antes de intentarlo de nuevo: puede que ya se haya entregado.",
   "invoice.delivery_held": "Esperando en la impresora de oficina: {reason}.",
   "invoice.delivery_held_no_reason": "Esperando en la impresora de oficina.",
   "invoice.delivery_hold_paper_out": "sin papel",

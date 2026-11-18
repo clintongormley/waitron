@@ -361,6 +361,149 @@ describe("the full invoice's delivery status", () => {
     },
   );
 
+  describe("an attempt delivered after it had been given up on", () => {
+    const FACT = "A delivery attempt succeeded after all.";
+    const CHECK = "Check before trying again: it may already have been delivered.";
+    const delivered = attempt({ status: "unknown", lateSuccess: true });
+    const lateEmail = { ...delivered, medium: "email" as const };
+    const failed = attempt({ id: "delivery-2", status: "failed" });
+    const behind = (current: OrderDeliveryAttempt, earlier: OrderDeliveryAttempt) =>
+      f1(
+        deliveries(current, {
+          originalCompleted: current.status === "sent",
+          history: [current, earlier],
+        }),
+      );
+    const behindFailure = (earlier: OrderDeliveryAttempt) => behind(failed, earlier);
+    const lines = (el: OrderDetailDialog) =>
+      [...el.shadowRoot!.querySelectorAll("[data-test=delivery-history] li")].map(
+        (item) => item.textContent!,
+      );
+
+    it("says so in the history, in English and Spanish", async () => {
+      setLocale("en-GB");
+      const el = await open(stubApi(behindFailure(delivered)));
+      expect(lines(el)[1]).toMatch(
+        /^12 Oct 2026, \d\d:00 · A4 · Original · Delivered after all · Requested by Ana$/,
+      );
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(lines(el)[1]).toContain("A4 · Original · Entregada al final · Pedida por Ana");
+    });
+
+    it("says so in the history for an attempt the office printer had been holding", async () => {
+      setLocale("en-GB");
+      const held = attempt({ status: "unknown", printerHold: "paper_jam", lateSuccess: true });
+      const el = await open(stubApi(behindFailure(held)));
+      expect(lines(el)[1]).toContain("A4 · Original · Delivered after all ·");
+    });
+
+    it("heads the section with the delivery for a receipt", async () => {
+      setLocale("en-GB");
+      const receipt = attempt({ medium: "receipt", status: "unknown", lateSuccess: true });
+      const el = await open(stubApi(f1(deliveries(receipt))));
+      expect(text(el, "delivery-status")).toBe("Delivered after all.");
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(text(el, "delivery-status")).toBe("Entregada al final.");
+    });
+
+    it("leaves a newer failed attempt's own headline and history line", async () => {
+      setLocale("en-GB");
+      const el = await open(stubApi(behindFailure(delivered)));
+      expect(text(el, "delivery-status")).toBe("Not delivered.");
+      expect(lines(el)).toHaveLength(2);
+      expect(lines(el)[0]).toContain("· Not delivered ·");
+      expect(lines(el)[1]).toContain("· Delivered after all ·");
+    });
+
+    it("states the fact and the check, in that order after a newer failure's status line", async () => {
+      setLocale("en-GB");
+      const el = await open(stubApi(behindFailure(lateEmail)));
+      expect(text(el, "delivery-late-success")).toBe(FACT);
+      expect(find(el, "delivery-late-success")!.previousElementSibling).toBe(
+        find(el, "delivery-status"),
+      );
+      expect(text(el, "delivery-late-check")).toBe(CHECK);
+      expect(find(el, "delivery-late-check")!.previousElementSibling).toBe(
+        find(el, "delivery-late-success"),
+      );
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(text(el, "delivery-late-success")).toBe("Un intento de entrega se completó al final.");
+      expect(text(el, "delivery-late-check")).toBe(
+        "Compruébalo antes de intentarlo de nuevo: puede que ya se haya entregado.",
+      );
+    });
+
+    it.each([
+      ["failed", true],
+      ["unknown", true],
+      ["queued", false],
+      ["sending", false],
+      ["sent", false],
+    ] as const)("behind a newer %s attempt, asks for a check: %s", async (status, asks) => {
+      setLocale("en-GB");
+      const current = attempt({ id: "delivery-2", medium: "email", status });
+      const el = await open(stubApi(behind(current, lateEmail)));
+      expect(text(el, "delivery-late-success")).toBe(FACT);
+      expect(find(el, "delivery-late-check")?.textContent?.trim()).toBe(asks ? CHECK : undefined);
+    });
+
+    it("asks for no check when a copy failed after the original was delivered", async () => {
+      setLocale("en-GB");
+      const copy = attempt({
+        id: "delivery-3",
+        medium: "email",
+        designation: "duplicate",
+        status: "failed",
+      });
+      const original = attempt({ id: "delivery-2", medium: "email", status: "sent" });
+      const el = await open(
+        stubApi(
+          f1(
+            deliveries(copy, {
+              originalCompleted: true,
+              history: [copy, original, lateEmail],
+            }),
+          ),
+        ),
+      );
+      expect(text(el, "delivery-late-success")).toBe(FACT);
+      expect(find(el, "delivery-late-check")).toBeNull();
+    });
+
+    it("gives the same two lines for a late A4 attempt, whose page is at the printer", async () => {
+      setLocale("en-GB");
+      const el = await open(stubApi(behindFailure(delivered)));
+      expect(text(el, "delivery-late-success")).toBe(FACT);
+      expect(text(el, "delivery-late-check")).toBe(CHECK);
+    });
+
+    it("adds neither line when no attempt was delivered late", async () => {
+      setLocale("en-GB");
+      const el = await open(stubApi(behindFailure({ ...delivered, lateSuccess: false })));
+      expect(text(el, "delivery-status")).toBe("Not delivered.");
+      expect(find(el, "delivery-late-success")).toBeNull();
+      expect(find(el, "delivery-late-check")).toBeNull();
+    });
+
+    it("leaves the fact to the headline, and still asks for a check, when the current attempt is the late one", async () => {
+      setLocale("en-GB");
+      const receipt = attempt({ medium: "receipt", status: "unknown", lateSuccess: true });
+      const el = await open(stubApi(f1(deliveries(receipt))));
+      expect(text(el, "delivery-status")).toBe("Delivered after all.");
+      expect(find(el, "delivery-late-success")).toBeNull();
+      expect(text(el, "delivery-late-check")).toBe(CHECK);
+      expect(find(el, "delivery-late-check")!.previousElementSibling).toBe(
+        find(el, "delivery-status"),
+      );
+    });
+  });
+
   it("words the history in Spanish", async () => {
     setLocale("es-ES");
     const current = attempt({ status: "unknown", designation: "duplicate" });
@@ -1084,6 +1227,19 @@ describe("accessibility", () => {
       f1(deliveries(emailFailed, { actions: emailOffer })),
       { emailRefused: true },
     ],
+    [
+      "an email that failed, an earlier attempt delivered after all",
+      f1(
+        deliveries(emailFailed, {
+          actions: emailOffer,
+          history: [
+            emailFailed,
+            attempt({ id: "delivery-0", medium: "email", status: "unknown", lateSuccess: true }),
+          ],
+        }),
+      ),
+      { lateNote: true },
+    ],
   ];
   for (const locale of ["en-GB", "es-ES"])
     for (const theme of ["light", "dark"] as const)
@@ -1104,6 +1260,10 @@ describe("accessibility", () => {
             theme,
           );
           await vi.waitFor(() => expect(find(el, "delivery-status")).not.toBeNull());
+          if (flags?.lateNote) {
+            expect(find(el, "delivery-late-success")).not.toBeNull();
+            expect(find(el, "delivery-late-check")).not.toBeNull();
+          }
           if (flags?.refused) {
             find(el, "download-pdf")!.click();
             await vi.waitFor(() => expect(find(el, "delivery-refused")).not.toBeNull());

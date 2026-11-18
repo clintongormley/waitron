@@ -390,24 +390,24 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta factura ya está pendiente de entrega. Comprueba su estado antes de intentarlo de nuevo.",
   },
   "invoice_delivery.receipt_invalid": {
-    en: "That original receipt cannot be printed. Check the invoice's delivery status or ask a manager",
-    es: "No se puede imprimir ese recibo original. Comprueba el estado de entrega de la factura o avisa a un responsable",
+    en: "That original receipt cannot be printed. Check the invoice's delivery status or ask a manager.",
+    es: "No se puede imprimir ese recibo original. Comprueba el estado de entrega de la factura o avisa a un responsable.",
   },
   "invoice_delivery.printer_invalid": {
-    en: "That invoice printer is unavailable. Choose another printer or ask a manager",
-    es: "Esa impresora de facturas no está disponible. Elige otra o avisa a un responsable",
+    en: "That invoice printer is unavailable. Choose another printer or ask a manager.",
+    es: "Esa impresora de facturas no está disponible. Elige otra o avisa a un responsable.",
   },
   "invoice_delivery.not_found": {
-    en: "That delivery is no longer on this invoice. Check its status again",
-    es: "Esa entrega ya no figura en esta factura. Vuelve a comprobar su estado",
+    en: "That delivery is no longer on this invoice. Check its status again.",
+    es: "Esa entrega ya no figura en esta factura. Vuelve a comprobar su estado.",
   },
   "invoice_delivery.full_invoice_required": {
-    en: "Only a full invoice can be sent this way",
-    es: "Solo una factura completa se puede enviar así",
+    en: "Only a full invoice can be sent this way.",
+    es: "Solo una factura completa se puede enviar así.",
   },
   "invoice_delivery.receipt_unavailable": {
-    en: "This till has no receipt printer to print the invoice on. Ask a manager",
-    es: "Este TPV no tiene impresora de tickets para imprimir la factura. Avisa a un responsable",
+    en: "This till has no receipt printer to print the invoice on. Ask a manager.",
+    es: "Este TPV no tiene impresora de tickets para imprimir la factura. Avisa a un responsable.",
   },
   "print_job.sale_payload_expired": {
     en: "Saved print data is removed after a week. Reprint this receipt or invoice from Orders in the dashboard.",
@@ -418,8 +418,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ahora no se puede volver a imprimir el recibo original. Comprueba su estado",
   },
   "invoice_delivery.email_unavailable": {
-    en: "Invoice email is unavailable. Ask a manager",
-    es: "No se puede enviar la factura por correo. Avisa a un responsable",
+    en: "Invoice email is unavailable. Ask a manager.",
+    es: "No se puede enviar la factura por correo. Avisa a un responsable.",
   },
   "invoice.choice_locked": {
     en: "This bill has received a payment. Its full invoice choice cannot be removed",

@@ -704,11 +704,25 @@ export class TillTicketView extends LitElement {
       : this.originalReceiptPrint?.printerName;
   }
 
+  get #handoverConfirmed(): boolean {
+    return (
+      this.originalReceiptPrint?.status !== "not_queued" &&
+      Boolean(this.originalReceiptPrint?.handover)
+    );
+  }
+
   protected renderDelivery() {
     const status = this.deliveries;
     const words = status?.current ? deliveryWords(status.current) : undefined;
-    const busy = this.deliveryBusy || this.originalReceiptBusy;
+    const lateAttempt = status?.history.some((attempt) => attempt.lateSuccess) === true;
+    const currentStatus = status?.current?.status;
     const instead = this.canPrintReceipt ? status?.actions.receiptInstead : null;
+    const askToCheck =
+      lateAttempt &&
+      !status?.originalCompleted &&
+      (currentStatus === "failed" || currentStatus === "unknown" || instead != null) &&
+      !this.#handoverConfirmed;
+    const busy = this.deliveryBusy || this.originalReceiptBusy;
     const retainedPrinter = this.#retainedReceiptPrinterName();
     const insteadPrinter =
       retainedPrinter ?? this.receiptEquipment?.resolved?.name ?? t("equipment.none");
@@ -719,6 +733,20 @@ export class TillTicketView extends LitElement {
         : null;
     return html`
       ${words === undefined ? nothing : html`<p role="status" data-test="delivery-status">${words}</p>`}
+      ${
+        lateAttempt
+          ? html`<p role="status" data-test="delivery-late-success">
+              ${t("invoice.delivery_late_success")}
+            </p>`
+          : nothing
+      }
+      ${
+        askToCheck
+          ? html`<p role="status" data-test="delivery-late-check">
+              ${t("invoice.delivery_late_check")}
+            </p>`
+          : nothing
+      }
       ${
         this.deliveriesReadFailed
           ? html`<p role="status" data-test="delivery-read-failed">
@@ -839,7 +867,7 @@ export class TillTicketView extends LitElement {
                 this.result.invoiceType === "F1"
                   ? html`<p role="status">
                       <strong
-                        >${t(this.originalReceiptPrint?.status !== "not_queued" && this.originalReceiptPrint?.handover ? "invoice.handover_confirmed" : (notQueued && this.deliveries?.originalCompleted) || failedButDelivered ? "invoice.delivered" : "invoice.not_delivered")}</strong
+                        >${t(this.#handoverConfirmed ? "invoice.handover_confirmed" : (notQueued && this.deliveries?.originalCompleted) || failedButDelivered ? "invoice.delivered" : "invoice.not_delivered")}</strong
                       >
                     </p>`
                   : nothing

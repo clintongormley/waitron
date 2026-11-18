@@ -207,6 +207,54 @@ it("waits for an F2 email original before offering a paper copy", async () => {
   expect(el.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
 });
 
+it.each(["F1", "F2"] as const)(
+  "says an earlier %s attempt was delivered after all, beneath a newer failure",
+  async (invoiceType) => {
+    const earlier = {
+      id: "email-first",
+      medium: "email" as const,
+      designation: "original" as const,
+      status: "unknown" as const,
+      failureCode: null,
+      requestedAt: "2026-11-11T12:00:00.000Z",
+      at: "2026-11-11T12:05:00.000Z",
+      personId: "p1",
+      printerHold: null,
+      lateSuccess: true,
+    };
+    const current = {
+      ...earlier,
+      id: "email-second",
+      status: "failed" as const,
+      requestedAt: "2026-11-11T12:06:00.000Z",
+      lateSuccess: false,
+    };
+    const { el } = await mountWidget<TillSettlementDocumentDialog>(
+      "till-settlement-document-dialog",
+      {
+        result: { ...invoiceOf("30.00"), invoiceType },
+        originalReceiptPrint: { status: "not_queued" },
+        deliveries: {
+          current,
+          history: [current, earlier],
+          originalCompleted: false,
+          originalPrinterId: null,
+          actions: { print: null, receiptInstead: null, retryOriginal: null, email: null },
+        },
+      },
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=delivery-status]")?.textContent).toContain(
+      "Not delivered.",
+    );
+    expect(
+      el.shadowRoot!.querySelector("[data-test=delivery-late-success]")?.textContent?.trim(),
+    ).toBe("A delivery attempt succeeded after all.");
+    expect(
+      el.shadowRoot!.querySelector("[data-test=delivery-late-check]")?.textContent?.trim(),
+    ).toBe("Check before trying again: it may already have been delivered.");
+  },
+);
+
 it.each(["cash", "card"] as const)(
   "shows the completion’s cash change for %s despite an earlier cash tender",
   async (method) => {

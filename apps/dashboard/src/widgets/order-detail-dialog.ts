@@ -60,6 +60,7 @@ const DELIVERY_REREAD_MS = 5_000;
 
 function deliveryWords(attempt: OrderDeliveryAttempt | null): string {
   if (attempt === null) return t("orders.detail.delivery_none");
+  if (attempt.lateSuccess) return t("orders.detail.delivery_late_success");
   const hold = attempt.printerHold;
   switch (attempt.status) {
     case "queued":
@@ -94,9 +95,11 @@ function attemptLine(attempt: OrderDeliveryAttempt): string {
     t(`orders.detail.medium_${attempt.medium}`),
     t(`orders.detail.designation_${attempt.designation}`),
     t(
-      attempt.status === "sending" && attempt.printerHold !== null
-        ? "orders.detail.outcome_held"
-        : `orders.detail.outcome_${attempt.status}`,
+      attempt.lateSuccess
+        ? "orders.detail.outcome_late_success"
+        : attempt.status === "sending" && attempt.printerHold !== null
+          ? "orders.detail.outcome_held"
+          : `orders.detail.outcome_${attempt.status}`,
     ),
   ];
   if (attempt.personId !== null)
@@ -292,9 +295,27 @@ export class OrderDetailDialog extends LitElement {
   }
 
   #renderDeliveries(status: OrderDeliveries, downloads: OrderDetailDto["invoicePdfDownloads"]) {
+    const lateAttempt = status.history.some((attempt) => attempt.lateSuccess);
+    const currentStatus = status.current?.status;
+    const askToCheck =
+      lateAttempt &&
+      !status.originalCompleted &&
+      (currentStatus === "failed" || currentStatus === "unknown");
     return html`<section>
       <h3>${t("orders.detail.delivery")}</h3>
       <p data-test="delivery-status">${deliveryWords(status.current)}</p>
+      ${
+        lateAttempt && !status.current?.lateSuccess
+          ? html`<p data-test="delivery-late-success">
+              ${t("orders.detail.delivery_late_success_earlier")}
+            </p>`
+          : nothing
+      }
+      ${
+        askToCheck
+          ? html`<p data-test="delivery-late-check">${t("orders.detail.delivery_late_check")}</p>`
+          : nothing
+      }
       ${
         status.history.length + downloads.length > 0
           ? html`<ul data-test="delivery-history">

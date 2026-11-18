@@ -76,6 +76,8 @@ Cuando se ofrece **Enviar por correo electrónico**, puedes enviar un recibo o u
 Introduce el correo del cliente y pulsa **Enviar**. Imprimir y enviar por correo son acciones
 independientes; cuando una entrega el original, la siguiente entrega es una copia. Si falla el
 envío, pulsa **Volver a enviar el correo** para repetirlo a la misma dirección o elige otra dirección.
+Si la caja dice **Compruébalo antes de intentarlo de nuevo**, puede que el documento ya se haya
+entregado: pregunta al cliente o mira la impresora antes.
 
 Elige **Ninguno** o cierra la ventana para continuar sin imprimir. Cierras la mesa por separado.
 Si necesitas un documento más tarde, abre la venta y elige **Imprimir/Reimprimir**.
