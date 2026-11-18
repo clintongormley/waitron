@@ -469,6 +469,110 @@ describe("runOnce (fan-out)", () => {
     expect(outcomes.runStopped?.sizes).toEqual({ neededBytes: 549, availableBytes: 548 });
   });
 
+  it("waits for the node copy when the backup manifest fails", async () => {
+    let startedCopy!: () => void;
+    const copying = new Promise<void>((resolve) => {
+      startedCopy = resolve;
+    });
+    let finishCopy!: () => void;
+    const copyCanFinish = new Promise<void>((resolve) => {
+      finishCopy = resolve;
+    });
+    const failure = new Error("manifest refused");
+    const attempt = runOnce({
+      ...deps([]),
+      buildManifest: async () => {
+        await copying;
+        throw failure;
+      },
+      node: {
+        archiveTo: async (path: string) => {
+          startedCopy();
+          await copyCanFinish;
+          await writeFile(path, "NODE");
+        },
+      } as NodeDatabase,
+    });
+    const completed = vi.fn();
+    void attempt.catch(completed);
+    try {
+      await copying;
+      // Both rejection and the caller's observer run before this macrotask if collection is skipped.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(completed).not.toHaveBeenCalled();
+    } finally {
+      finishCopy();
+      await expect(attempt).rejects.toBe(failure);
+    }
+    expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
+  });
+
+  it("releases the staging turn before Cloud uses the private copy", async () => {
+    const turn = createStagingTurn();
+    const archive = vi.fn(async (path: string) => {
+      expect(turn.backupRunning()).toBe(true);
+      await writeFile(path, "DUMP-BYTES");
+    });
+    const store = vi.fn<CloudArchiveTarget["store"]>(async (input) => {
+      const freed = await turn.ifNoBackup(async () => readdir(staging));
+      expect(freed).toEqual({ ran: true, value: [] });
+      const chunks = [];
+      for await (const chunk of input.entries()) chunks.push(chunk);
+      expect(
+        unpackArchive(Buffer.concat(chunks)).find((entry) => entry.name === "db.dump")?.bytes,
+      ).toEqual(Buffer.from("DUMP-BYTES"));
+      return { stored: true, errorCode: null };
+    });
+    const onDestinationResult = vi.fn();
+    const schedule = createBackupSchedule({
+      ...deps([]),
+      archive,
+      stagingTurn: turn,
+      schedule: { kind: "interval", ms: 3_600_000 },
+      readClock: async () => cloudClock,
+      jitterSeed: "box",
+      cloud: {
+        target: { id: "cloud", roomNeeded: async () => 0, store },
+        readClock: async () => cloudClock,
+      },
+      onDestinationResult,
+    });
+    await schedule.pass(new Date("2026-09-05T00:00:00Z"), new AbortController().signal);
+    expect(onDestinationResult).toHaveBeenCalledWith({
+      id: "cloud",
+      stored: true,
+      uploadErrorCode: null,
+      pruneErrorCode: null,
+    });
+    expect(dirname(dirname(archive.mock.calls[0]![0]))).toBe(join(stateDir, "scratch"));
+    expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
+  });
+
+  it("checks room again before packing when the staged copy outgrows its estimate", async () => {
+    const store = vi.fn(async () => ({ stored: true, errorCode: null }));
+    const onDestinationResult = vi.fn();
+    const statfs = vi.fn(async () => ({ bavail: 100, frsize: 1 }));
+    await runOnce({
+      ...deps([]),
+      stagingEstimateBytes: async () => 1,
+      spaceFloorBytes: 0,
+      spaceAimBytes: 0,
+      statfs,
+      cloud: {
+        target: { id: "cloud", roomNeeded: async (size) => size, store },
+        readClock: async () => cloudClock,
+      },
+      onDestinationResult,
+    });
+    expect(store).not.toHaveBeenCalled();
+    expect(onDestinationResult).toHaveBeenCalledWith({
+      id: "cloud",
+      stored: false,
+      uploadErrorCode: "backup.staging_space_low",
+      pruneErrorCode: null,
+    });
+  });
+
   it("stores the local backup and reports the refused Cloud destination on every run", async () => {
     const dir = join(stateDir, "local-backups");
     const local = new LocalFsBackend("local", dir);

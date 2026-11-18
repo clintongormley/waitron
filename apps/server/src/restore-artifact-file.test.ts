@@ -1,3 +1,4 @@
+import { gunzipSync } from "node:zlib";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
@@ -322,7 +323,7 @@ it("default staged archive keeps its payload on a real busy lock, then restores 
   );
 });
 
-it("accepts the Cloud destination's raw artifact through staged upload validation", async () => {
+it("accepts a raw Cloud archive through staged upload validation", async () => {
   const f = await fixture();
   for (const rel of RECOVERY_FILES) {
     await mkdir(join(f.stateDir, rel, ".."), { recursive: true });
@@ -339,15 +340,16 @@ it("accepts the Cloud destination's raw artifact through staged upload validatio
     new Date("2026-11-14T00:00:00Z"),
     new AbortController().signal,
   );
-  const raw = decryptArtifact(captured.bytes, f.recoveryKey);
+  const raw = gunzipSync(decryptArtifact(captured.bytes, f.recoveryKey));
   expect(Buffer.from(raw.subarray(0, 4)).toString()).toBe("WBA1");
   const { unpackArchive } = await import("./backup-archive.js");
-  const copy = await validateArtifact({ ...f, artifact: captured.bytes });
+  const legacy = encryptArtifact(raw, f.recoveryKey);
+  const copy = await validateArtifact({ ...f, artifact: legacy });
   try {
     expect(await readFile(copy.databasePath)).toEqual(
       unpackArchive(raw).find((e) => e.name === "db.dump")!.bytes,
     );
-    expect(copy.sourceId).toBe(createHash("sha256").update(captured.bytes).digest("hex"));
+    expect(copy.sourceId).toBe(createHash("sha256").update(legacy).digest("hex"));
   } finally {
     await copy.discard();
   }

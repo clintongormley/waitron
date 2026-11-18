@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -138,6 +138,40 @@ it("publication checks the exact metadata and reports pending verification", asy
       });
     }
   } finally {
+    await f.close();
+  }
+});
+it("lets publication use the retained-copy budget while reserve keeps its shorter budget", async () => {
+  const f = await installationFixture(async (v, s, _req, res) => {
+    const m = JSON.parse(String(v[7]));
+    res.end(JSON.stringify({ ...grant(v, s), ...m, verification: "pending" }));
+  });
+  await f.client.refresh();
+  const state = JSON.parse(
+    await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"),
+  ) as SavedCloudState;
+  const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+  const deadline = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    if (ms === 8000) return AbortSignal.abort();
+    return realTimeout(ms);
+  });
+  const id = randomUUID();
+  const metadata = {
+    digest: "a".repeat(64),
+    size: 7,
+    capturedAt: new Date().toISOString(),
+    retention: "daily" as const,
+    sourceNodeId: randomUUID(),
+    modules: { core: 1 },
+  };
+  try {
+    await expect(publishCloudCapture(state, id, metadata)).resolves.toMatchObject(metadata);
+    expect(deadline).toHaveBeenCalledWith(50_000);
+    await expect(reserveCloudCapture(state, id)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  } finally {
+    deadline.mockRestore();
     await f.close();
   }
 });

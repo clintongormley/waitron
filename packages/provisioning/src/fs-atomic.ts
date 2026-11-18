@@ -85,6 +85,18 @@ export async function stageFileDurable(
   return tmp;
 }
 
+/** Publishes an owned, completed file whose bytes were written incrementally. */
+export async function publishFileDurable(source: string, target: string): Promise<void> {
+  const file = await open(source, "r+");
+  try {
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+  await rename(source, target);
+  await syncFolderHolding(target);
+}
+
 /** Publishes flushed bytes by replacement, or exclusively by hard link, then syncs the folder. */
 export async function writeFileDurable(
   path: string,

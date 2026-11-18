@@ -105,6 +105,7 @@ export { inTurn, keysInTurn } from "./attempt-turns.js";
 export {
   failedAtFolderSync,
   mkdirDurable,
+  publishFileDurable,
   stagedPath,
   stageFileDurable,
   syncFolderHolding,

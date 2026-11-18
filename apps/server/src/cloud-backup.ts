@@ -64,6 +64,7 @@ async function exchange(
       lease: JSON.stringify(state.lifecycle.lease),
       body: encoded,
     });
+    const timeout = AbortSignal.timeout(action === "backup-publish" ? 50_000 : 8_000);
     const response = await fetch(state.origin + "/api/installations/" + action, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -72,9 +73,7 @@ async function exchange(
         signature: signCloudPayload(payload, state.privateKey),
       }),
       redirect: "error",
-      signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
-        : AbortSignal.timeout(8000),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
     if (!response.ok) {
       await response.body?.cancel();

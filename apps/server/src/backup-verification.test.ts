@@ -505,16 +505,16 @@ describe("complete backup verification", () => {
       modules: [],
     });
   });
-  it("checks the real 256 MiB scratch bound while copying", async () => {
+  it("refuses a sealed file past 2 GiB before copying it", async () => {
     const f = await fixture();
     await seal(f);
     const handle = await fs.open(f.deps.artifactPath, "r+");
     try {
-      await handle.truncate(256 * 1024 * 1024 + 1);
+      await handle.truncate(2 * 1024 ** 3 + 1);
     } finally {
       await handle.close();
     }
-    f.request.archive.bytes = 256 * 1024 * 1024 + 1;
+    f.request.archive.bytes = 2 * 1024 ** 3;
     expect(await verify(f)).toMatchObject({
       status: "unavailable",
       reason: "resource_limit",
@@ -809,16 +809,16 @@ insert into bookings
       modules: [],
     });
   });
-  it("applies the monotonic 30-second watchdog even with a fixed supplied clock", async () => {
+  it.each([
+    [30_001, { status: "passed", reason: "none" }],
+    [300_000, { status: "unavailable", reason: "deadline", measuredArchive: null, modules: [] }],
+  ])("checks elapsed %i ms independently of the signed clock", async (elapsed, expected) => {
     const f = await fixture();
     await seal(f);
-    vi.spyOn(performance, "now").mockReturnValueOnce(1).mockReturnValue(30_002);
-    expect(await verify(f)).toMatchObject({
-      status: "unavailable",
-      reason: "deadline",
-      measuredArchive: null,
-      modules: [],
-    });
+    vi.spyOn(performance, "now")
+      .mockReturnValueOnce(1)
+      .mockReturnValue(1 + elapsed);
+    expect(await verify(f)).toMatchObject(expected);
   });
   it("an owner cannot read another owner's private archive entry", async () => {
     const f = await fixture();

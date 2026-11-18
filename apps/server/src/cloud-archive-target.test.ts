@@ -1,8 +1,9 @@
-import { afterEach, expect, it } from "vitest";
+import { gunzipSync } from "node:zlib";
+import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { CloudConnectionStatus } from "./cloud-client.js";
 import type { CloudCaptureGrant, CloudCaptureMetadata, CloudCapturePoint } from "./cloud-backup.js";
 import type { ScheduleClock } from "./backup-schedule.js";
@@ -177,7 +178,7 @@ it("keeps exact encrypted bytes across a failed upload and restart, without pers
   const [old, fresh] = [...f.points.keys()];
   expect(f.reservations).toEqual([old, old, fresh]);
   expect(f.uploads).toEqual([old, fresh]);
-  expect(await decryptArtifactAsync(f.uploaded.get(fresh!)!, "secret-key")).toEqual(
+  expect(gunzipSync(await decryptArtifactAsync(f.uploaded.get(fresh!)!, "secret-key"))).toEqual(
     Buffer.from("staged archive 2026-09-24T12:01:00.000Z"),
   );
   expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual(["state.json"]);
@@ -229,12 +230,12 @@ it("refuses a connection that is not a test connection, as an outcome", async ()
   expect(f.reservations).toEqual([]);
 });
 
-it("refuses an archive whose plaintext plus overhead is over 512 MiB before reserving", async () => {
+it("refuses an archive whose expanded size is over 4 GiB before reserving", async () => {
   const f = await fixture();
   await expect(
     createCloudArchiveTarget(f.deps).store({
       ...f.input(),
-      plaintextBytes: 536_870_864,
+      plaintextBytes: 4_294_967_297,
     }),
   ).resolves.toEqual({ stored: false, errorCode: "cloud.unavailable" });
   expect(f.captures()).toBe(0);
@@ -255,10 +256,10 @@ it("counts the fixed overhead and a waiting ciphertext in the space needed", asy
     throw Error("offline");
   };
   const target = createCloudArchiveTarget(f.deps);
-  await expect(target.roomNeeded(10)).resolves.toBe(59);
+  await expect(target.roomNeeded(10)).resolves.toBe(92);
   await target.store(f.input());
   const waiting = await readFile(join(f.root, "cloud/snapshots/archive.enc"));
-  await expect(target.roomNeeded(10)).resolves.toBe(59 + waiting.length);
+  await expect(target.roomNeeded(10)).resolves.toBe(92 + waiting.length);
 });
 
 it("labels the first capture of a month monthly and later captures daily", async () => {
@@ -454,6 +455,81 @@ it("makes reused temporary files private and removes abandoned plaintext staging
   expect((await stat(join(f.root, "cloud/snapshots/state.json"))).mode & 0o777).toBe(0o600);
   expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual(["state.json"]);
 });
+it("writes temporary ciphertext in scratch and leaves no partial archive on failure", async () => {
+  const f = await fixture();
+  const input = f.input();
+  let scratchEntries: string[] = [];
+  let spoolEntries: string[] = [];
+  await expect(
+    createCloudArchiveTarget(f.deps).store({
+      ...input,
+      async *entries() {
+        scratchEntries = await readdir(join(f.root, "scratch")).catch(() => []);
+        spoolEntries = await readdir(join(f.root, "cloud/snapshots"));
+        yield* input.entries();
+        throw Error("copy interrupted");
+      },
+    }),
+  ).resolves.toEqual(failed);
+  expect(scratchEntries).toHaveLength(1);
+  expect(spoolEntries).toEqual(["state.json"]);
+  expect(await readdir(join(f.root, "scratch"))).toEqual([]);
+  expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual(["state.json"]);
+});
+
+it("stops packing when the ciphertext reaches its byte limit and removes the partial file", async () => {
+  const f = await fixture();
+  const input = f.input();
+  vi.resetModules();
+  vi.doMock("./cloud-backup-limits.js", async (original) => ({
+    ...(await original<typeof import("./cloud-backup-limits.js")>()),
+    MAX_CLOUD_ARCHIVE_BYTES: 65_536,
+  }));
+  try {
+    const { createCloudArchiveTarget } = await import("./cloud-archive-target.js");
+    let entireSourceRead = false;
+    await expect(
+      createCloudArchiveTarget(f.deps).store({
+        ...input,
+        plaintextBytes: 4 * 1024 ** 2,
+        async *entries() {
+          for (let i = 0; i < 64; i++) yield randomBytes(65_536);
+          entireSourceRead = true;
+        },
+      }),
+    ).resolves.toEqual(unavailable);
+    expect(entireSourceRead).toBe(false);
+    expect(f.uploads).toEqual([]);
+    expect(await readdir(join(f.root, "scratch"))).toEqual([]);
+    expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual(["state.json"]);
+  } finally {
+    vi.doUnmock("./cloud-backup-limits.js");
+    vi.resetModules();
+  }
+});
+
+it.each([1, 2])("renews a grant after packing, with key version %i", async (keyVersion) => {
+  const f = await fixture();
+  const input = f.input();
+  const reserve = f.deps.connection.reserveCapture;
+  f.deps.connection.reserveCapture = async (id) => {
+    const grant = await reserve(id);
+    return f.reservations.length === 1 ? grant : { ...grant, keyVersion };
+  };
+  await expect(
+    createCloudArchiveTarget(f.deps).store({
+      ...input,
+      async *entries() {
+        f.advance(120_000);
+        yield* input.entries();
+      },
+    }),
+  ).resolves.toEqual(keyVersion === 1 ? { stored: true, errorCode: null } : unavailable);
+  expect(f.reservations).toEqual([f.reservations[0], f.reservations[0]]);
+  expect(f.captures()).toBe(1);
+  expect(f.uploads).toEqual(keyVersion === 1 ? [f.reservations[0]] : []);
+});
+
 it("refuses oversized state files and invalid pending identifiers", async () => {
   const f = await fixture();
   await createCloudArchiveTarget(f.deps).store(f.input());

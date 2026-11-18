@@ -161,7 +161,7 @@ describe("private backup request", () => {
   });
   it.each([
     ["archive.bytes", 0],
-    ["archive.bytes", 536870913],
+    ["archive.bytes", 2147483649],
     ["archive.bytes", 1.5],
     ["archive.bytes", Number.MAX_SAFE_INTEGER + 1],
     ["archive.manifestVersion", 0],
@@ -275,6 +275,19 @@ describe("private backup request", () => {
 });
 
 describe("private backup result admission", () => {
+  it("binds a 2 GiB archive to a matching measured result", () => {
+    const input = request();
+    input.archive.bytes = 2147483648;
+    const admitted = readBackupVerificationRequest(JSON.stringify(input));
+    const output = {
+      ...result(),
+      requestDigest: backupVerificationRequestDigest(admitted),
+      measuredArchive: { sha256: input.archive.sha256, bytes: 2147483648 },
+    };
+    expect(readBackupVerificationResult(JSON.stringify(output), admitted)).toEqual(output);
+    output.measuredArchive.bytes += 1;
+    refused(() => readBackupVerificationResult(JSON.stringify(output), admitted));
+  });
   it("admits only complete measured passed output", () => {
     const output = result();
     const admitted = readBackupVerificationResult(JSON.stringify(output), request());

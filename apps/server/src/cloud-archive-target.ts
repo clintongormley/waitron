@@ -1,19 +1,25 @@
-import { mkdirDurable, syncFolderHolding, writeFileDurable } from "@waitron/provisioning";
+import { mkdirDurable, publishFileDurable, writeFileDurable } from "@waitron/provisioning";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { CLOUD_SNAPSHOTS_DIR } from "@waitron/store";
+import { CLOUD_SNAPSHOTS_DIR, SCRATCH_DIR } from "@waitron/store";
 import { randomUUID } from "node:crypto";
-import { chmod, lstat, open, readFile, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { ARTIFACT_HEADER_BYTES } from "./artifact-cipher.js";
 import { encryptArtifactFile } from "./artifact-cipher-file.js";
+import { compressArchive } from "./backup-compression.js";
 import type { ScheduleClock } from "./backup-schedule.js";
+import {
+  CLOUD_GRANT_MARGIN_MS,
+  MAX_CLOUD_ARCHIVE_BYTES,
+  MAX_CLOUD_EXPANDED_BYTES,
+  MAX_CLOUD_TRANSFER_MS,
+} from "./cloud-backup-limits.js";
 import type { CloudCaptureGrant, CloudCaptureMetadata } from "./cloud-backup.js";
 import type { CloudConnection, CloudConnectionStatus } from "./cloud-client.js";
 import { digestFile } from "./handover-capture.js";
 import "./errors.js";
 
-const MAX_BYTES = 512 * 1024 * 1024;
 interface Pending {
   id: string;
   createdAt: number;
@@ -66,6 +72,15 @@ function unavailable(): never {
   throw new AppError("cloud.unavailable", {});
 }
 
+async function* boundedCompressedArchive(input: CloudArchiveInput) {
+  let bytes = ARTIFACT_HEADER_BYTES;
+  for await (const chunk of compressArchive(input.entries(), input.signal)) {
+    bytes += chunk.byteLength;
+    if (bytes > MAX_CLOUD_ARCHIVE_BYTES) unavailable();
+    yield chunk;
+  }
+}
+
 const uuid = (v: unknown) =>
   typeof v === "string" && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 async function readState(dir: string): Promise<State | undefined> {
@@ -102,7 +117,7 @@ async function readState(dir: string): Promise<State | undefined> {
         typeof p.month !== "string" ||
         !Number.isSafeInteger(m.size) ||
         m.size < 1 ||
-        m.size > MAX_BYTES ||
+        m.size > MAX_CLOUD_ARCHIVE_BYTES ||
         !/^([0-9a-f]{64})$/.test(m.digest) ||
         !Number.isFinite(Date.parse(m.capturedAt)) ||
         !["daily", "monthly"].includes(m.retention) ||
@@ -166,8 +181,12 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
       return { storedAt: saved.storedAt ?? null, pending: saved.pending !== undefined };
     },
     async roomNeeded(plaintextBytes) {
-      const ciphertextBytes = plaintextBytes + ARTIFACT_HEADER_BYTES;
-      if (ciphertextBytes > MAX_BYTES) return 0;
+      if (plaintextBytes > MAX_CLOUD_EXPANDED_BYTES) return 0;
+      const gzipOverhead = 32 + Math.ceil(plaintextBytes / 1024);
+      const ciphertextBytes = Math.min(
+        MAX_CLOUD_ARCHIVE_BYTES,
+        plaintextBytes + gzipOverhead + ARTIFACT_HEADER_BYTES,
+      );
       const status = await deps.connection?.status().catch(() => undefined);
       if (!cloudArchiveAvailable(status)) return 0;
       let waiting = 0;
@@ -228,7 +247,7 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
           state.storedAt = Date.parse(metadata.capturedAt);
           await clearPending();
         };
-        const deliver = async (pending: Pending) => {
+        const reserve = async (pending: Pending) => {
           allowed();
           const grant = await connection.reserveCapture(pending.id, signal);
           allowed();
@@ -239,23 +258,33 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
             (pending.keyVersion !== undefined && grant.keyVersion !== pending.keyVersion)
           )
             unavailable();
-
+          return grant;
+        };
+        const deliver = async (pending: Pending) => {
+          let grant = await reserve(pending);
           let metadata = pending.metadata;
           if (!metadata) {
-            // Only the saved metadata makes this ciphertext eligible for retry. A crash before
-            // that save can leave a partial file, which the next attempt replaces.
             await rm(file, { force: true });
-            await encryptArtifactFile(input.entries(), file, grant.recoveryKey, signal);
-            allowed();
-            const { sha256, bytes } = await digestFile(file, signal);
-            if (bytes <= ARTIFACT_HEADER_BYTES || bytes > MAX_BYTES) unavailable();
-            const handle = await open(file, "r+");
+            const scratch = join(deps.stateDir, SCRATCH_DIR);
+            await mkdir(scratch, { recursive: true, mode: 0o700 });
+            const working = await mkdtemp(join(scratch, "cloud-capture-"));
+            let sha256: string;
+            let bytes: number;
             try {
-              await handle.sync();
+              const temporary = join(working, "archive.enc");
+              await encryptArtifactFile(
+                boundedCompressedArchive(input),
+                temporary,
+                grant.recoveryKey,
+                signal,
+              );
+              allowed();
+              ({ sha256, bytes } = await digestFile(temporary, signal));
+              if (bytes <= ARTIFACT_HEADER_BYTES || bytes > MAX_CLOUD_ARCHIVE_BYTES) unavailable();
+              await publishFileDurable(temporary, file);
             } finally {
-              await handle.close();
+              await rm(working, { recursive: true, force: true });
             }
-            await syncFolderHolding(file);
             const month = monthAt(input.at, input.clock);
             pending.month = month;
             pending.keyVersion = grant.keyVersion;
@@ -269,6 +298,11 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
             };
             pending.metadata = metadata;
             await save();
+            if (
+              Date.parse(grant.expiresAt) - now().getTime() <
+              MAX_CLOUD_TRANSFER_MS + CLOUD_GRANT_MARGIN_MS
+            )
+              grant = await reserve(pending);
           }
           allowed();
           await deps.upload(grant, file, metadata, signal);
@@ -297,7 +331,8 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
         } else if (previous && pendingExpired(previous, now().getTime())) {
           await clearPending();
         }
-        if (input.plaintextBytes + ARTIFACT_HEADER_BYTES > MAX_BYTES) unavailable();
+        if (input.plaintextBytes < 1 || input.plaintextBytes > MAX_CLOUD_EXPANDED_BYTES)
+          unavailable();
         let pending = state.pending;
         if (!pending) {
           pending = { id: randomUUID(), createdAt: now().getTime() };

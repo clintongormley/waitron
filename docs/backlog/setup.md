@@ -271,19 +271,30 @@ whole-file reads are separate work:
   Configuration transfer retains its separate buffer.
   These are transfer limits and buffers, not ordinary-start database admission.
 
-**Cloud capture and verification remain open.** Box recovery downloads approved Cloud objects to a
-file and refuses a point over 2 GiB. Larger Cloud captures, Cloud's receiving and verifier work,
-and paired year-sized qualification follow the
-[Cloud transfer plan](../superpowers/plans/2026-11-17-cloud-snapshot-stream.md).
+## Qualify year-sized Cloud backups and revisit incremental copies with venue measurements
+
+Pair the box and Cloud release candidates on near-cap publication and on capture, verification,
+preview and staging of the representative year. Check an older raw archive on the same pair. The
+box refuses ciphertext above 2 GiB or expanded archives above 4 GiB with `cloud.unavailable`.
+A timed-out upload keeps its pending ciphertext for retries during the capture's first day.
+In the paired run, check grant renewal, publication within the trial deadline and the verifier's
+measured time and scratch.
+See the [Cloud transfer plan](../superpowers/plans/2026-11-17-cloud-snapshot-stream.md).
+
+Revisit content-named pieces, a read-only archive database and continuous Cloud copies after
+time-ordered IDs and real venue measurements (owner, 17 November 2026, 23:16 and 23:19).
+Lane M's LEAN-BACKUPS investigation, `lean-backups-and-live-db.md`, found that one day touched
+11,126 of 11,926 fixed 1 MiB pieces (M1). Consecutive compacted copies shared 29.6% of their
+pages by content (M2). With the shipped print-payload retention, the representative year's
+database was 3,305,828,352 bytes compacted and 1,001,932,236 bytes after gzip (M6).
 
 The earlier limits were measured on 16 November 2026. At that point, Cloud revision `45cfc4eb6e35291ab0c5e161ab0871c8f97a0b40` caps encrypted objects at
 512 MiB (`packages/backups/src/object-transfer.ts`, `MAX_OBJECT_BYTES`, and the metadata check
 in `catalogue.ts`). Its bound verification container allows at most 256 MiB for the whole
 scratch folder (`bound-container-verifier.ts`), including extracted database files. The verifier
 child separately caps its encrypted input at 256 MiB (`waitron-data-verify-child.mjs`).
-Waitron's current verification bundle decodes gzip before extraction
-(`apps/server/src/backup-verification-archive.ts`); compressed transfer alone does not remove
-Cloud's scratch limit. The deployed verifier image was not exercised by this probe.
+Waitron's verification bundle already decoded gzip before extraction
+(`apps/server/src/backup-verification-archive.ts`). The Cloud scratch limit was separate. The deployed verifier image was not exercised by this probe.
 
 Run from that Cloud checkout with Node 26.13.0:
 

@@ -80,6 +80,20 @@ it.each([0, 16, null])(
     expect(await readdir(f.root)).toEqual(["input"]);
   },
 );
+it.each([false, true])(
+  "limits expanded archive bytes including raw input (gzip %s)",
+  async (gzip) => {
+    const bytes = Buffer.from("WBA1".repeat(10));
+    const exact = await fixture(gzip ? gzipSync(bytes) : bytes);
+    const path = await decodeArchiveFile(exact.input, exact.output, { maxBytes: 40 });
+    expect(await readFile(path)).toEqual(bytes);
+    const long = await fixture(gzip ? gzipSync(bytes) : bytes);
+    await expect(
+      decodeArchiveFile(long.input, long.output, { maxBytes: 39 }),
+    ).rejects.toMatchObject({ code: "restore.archive_resource_limit" });
+    expect(await readdir(long.root)).toEqual(["input"]);
+  },
+);
 it("honours cancellation during decoding and compression", async () => {
   const f = await fixture(gzipSync(Buffer.alloc(1_000_000)));
   const controller = new AbortController();

@@ -3319,7 +3319,9 @@ has already thrown (inferred, not isolated).
 #### Backup staging is touched only inside the staging turn
 
 The turn is `apps/server/src/backup-staging-turn.ts`. A backup run holds the turn from its first
-step to the end of its own clean-up (`runBackup`, taken by the sweep's `tick` in `backup-sweep.ts`); a free-space deletion takes it through `ifNoBackup`,
+step to the end of its shared staging clean-up (`runBackup` in `backup-sweep.ts`). A Cloud-enabled
+run writes its shared database copy in private scratch. Cloud packs and uploads outside the turn.
+A free-space deletion takes the turn through `ifNoBackup`,
 which answers `{ ran: false }` at once, and the deletion skips staging and says
 `backupRunning: true`, while a run holds the turn or waits for it — a deletion never waits for a
 run. A page's survey takes no turn: it measures staging best-effort and leaves it out while a run
@@ -5492,9 +5494,10 @@ src/local-fs-backend.test.ts`.
 
 Sparse 2147487744-byte placement and codec tests check size, offsets and edge bytes. They do not
 measure integrity checks or cryptographic throughput over a valid SQLite database that large.
-Managed Cloud capture and the verifier's wire parser keep their 512 MiB limits. Box-side Cloud
-recovery accepts an approved object up to 2 GiB. It checks the start reserve before downloading the
-ciphertext to a private file under `scratch/restore`. The browser's preview, recovery stage and
+Box-side Cloud capture, the verifier's wire parser and approved Cloud recovery accept ciphertext
+up to 2 GiB. Capture and verification allow up to 4 GiB before compression. The buffer-only upload
+helper retains its 512 MiB limit. Recovery checks the start reserve before downloading ciphertext to
+a private file under `scratch/restore`. The browser's preview, recovery stage and
 restore routes stream ciphertext into a private 0700 folder and 0600 file under `scratch/restore`, with a
 4 GiB input ceiling, a counted multipart overhead budget and the start's free-space reserve.
 They share the provisioning latch through receipt and validation; a restore keeps it until restart.
@@ -5740,8 +5743,11 @@ read-only open of a cleanly stopped database failed there and worked at 64 KiB.
 ## One state-folder layout
 
 Backup, restore and setup working copies live below `scratch/`, with `backup/` and `restore/` children.
-Cloud shares the backup copy in `scratch/backup/`. Its encrypted archive and publication record live
-under `cloud/snapshots/` so the next run can finish an interrupted capture. A start deletes
+A Cloud-enabled run writes the shared backup copy in a private directory under `scratch/`. Cloud
+removes that copy after reading it. When the run first retries an earlier pending capture, the new
+copy stays in scratch until it is read or the run ends. Cloud writes ciphertext to scratch, then
+flushes and renames it into
+`cloud/snapshots/` before saving its publication record there for retries. A start deletes
 scratch entries, never the root itself. Each maker holds the venue folder before creating its
 working directory; Box status's Free still touches only backup dumps and `backup-encrypt-*`
 folders, inside the staging turn. Old crash reports are pruned on every start.

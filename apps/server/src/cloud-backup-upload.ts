@@ -5,8 +5,16 @@ import { Agent } from "node:https";
 import { createHash } from "node:crypto";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { AppError } from "@waitron/shared";
+import {
+  CLOUD_GRANT_MARGIN_MS,
+  MAX_CLOUD_ARCHIVE_BYTES,
+  MAX_CLOUD_TRANSFER_MS,
+} from "./cloud-backup-limits.js";
 import type { CloudCaptureGrant } from "./cloud-backup.js";
 import "./errors.js";
+
+const MAX_BUFFERED_ARCHIVE_BYTES = 512 * 1024 ** 2;
+
 async function upload(
   grant: CloudCaptureGrant,
   body: Uint8Array | Readable,
@@ -28,7 +36,7 @@ async function upload(
       !Number.isFinite(Date.parse(grant.expiresAt)) ||
       Date.parse(grant.expiresAt) <= Date.now() ||
       size === 0 ||
-      size > 512 * 1024 * 1024
+      size > (body instanceof Uint8Array ? MAX_BUFFERED_ARCHIVE_BYTES : MAX_CLOUD_ARCHIVE_BYTES)
     )
       throw Error();
     client = new S3Client({
@@ -96,7 +104,7 @@ export async function uploadCloudCaptureFile(
         !stat.isFile() ||
         stat.size !== receipt.size ||
         stat.size < 1 ||
-        stat.size > 512 * 1024 * 1024
+        stat.size > MAX_CLOUD_ARCHIVE_BYTES
       )
         throw Error();
       const buffer = Buffer.alloc(65536);
@@ -118,7 +126,10 @@ export async function uploadCloudCaptureFile(
       await handle.close();
     }
     // A retry opens a fresh stream with renewed credentials. The SDK never replays a consumed stream.
-    const timeout = Math.min(14 * 60000, Date.parse(grant.expiresAt) - Date.now() - 5000);
+    const timeout = Math.min(
+      MAX_CLOUD_TRANSFER_MS,
+      Date.parse(grant.expiresAt) - Date.now() - CLOUD_GRANT_MARGIN_MS,
+    );
     if (!Number.isFinite(timeout) || timeout <= 0) throw Error();
     const source = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const body = source.createReadStream();

@@ -20,22 +20,26 @@ export async function* compressArchive(
 export async function decodeArchiveFile(
   inputPath: string,
   outputPath: string,
-  options: { signal?: AbortSignal; statfs?: Statfs } = {},
+  options: { signal?: AbortSignal; statfs?: Statfs; maxBytes?: number } = {},
 ): Promise<string> {
   options.signal?.throwIfAborted();
   const input = await open(inputPath, "r");
+  const maxBytes = options.maxBytes ?? Infinity;
   let gzip: boolean;
   try {
     const magic = Buffer.alloc(2);
     const { bytesRead } = await input.read(magic, 0, 2, 0);
     gzip = bytesRead === 2 && magic[0] === 0x1f && magic[1] === 0x8b;
+    if (!gzip && Number.isFinite(maxBytes) && (await input.stat()).size > maxBytes)
+      throw new AppError("restore.archive_resource_limit", {});
   } finally {
     await input.close();
   }
   if (!gzip) return inputPath;
   const free = await freeBytes(dirname(inputPath), options.statfs);
   // Both the decoded archive and its extracted database occupy scratch during unpacking.
-  const budget = free === null ? 0 : Math.floor((free - START_FREE_SPACE_FLOOR) / 2);
+  const budget =
+    free === null ? 0 : Math.min(maxBytes, Math.floor((free - START_FREE_SPACE_FLOOR) / 2));
   if (budget <= 0) throw new AppError("restore.archive_resource_limit", {});
   const output = await open(outputPath, "wx", 0o600);
   try {

@@ -178,8 +178,9 @@ it("refuses HTTP before sending upload credentials to a listening server", async
     await new Promise<void>((r, j) => server.close((e) => (e ? j(e) : r())));
   }
 });
-it("streams a durable archive, checks its receipt, and aborts a stalled transfer", async () => {
-  const { mkdtemp, writeFile, rm } = await import("node:fs/promises"),
+const fileSizesMiB = process.env.WAITRON_LARGE_CLOUD_BACKUP_TEST === "1" ? [1, 513] : [1];
+it.each(fileSizesMiB)("streams a %i MiB file", { timeout: 60_000 }, async (sizeMiB) => {
+  const { mkdtemp, writeFile, truncate, rm } = await import("node:fs/promises"),
     { tmpdir } = await import("node:os"),
     { join } = await import("node:path");
   const { uploadCloudCaptureFile } = await import("./cloud-backup-upload.js");
@@ -187,7 +188,12 @@ it("streams a durable archive, checks its receipt, and aborts a stalled transfer
     path = join(root, "archive.enc"),
     bytes = randomBytes(1024 * 1024);
   await writeFile(path, bytes);
-  const receipt = { size: bytes.length, digest: createHash("sha256").update(bytes).digest("hex") };
+  const size = sizeMiB * bytes.length;
+  await truncate(path, size);
+  const hash = createHash("sha256").update(bytes);
+  const zero = Buffer.alloc(bytes.length);
+  for (let i = 1; i < sizeMiB; i++) hash.update(zero);
+  const receipt = { size, digest: hash.digest("hex") };
   const tls = mintSelfSignedServerCert({
     hostnames: ["localhost"],
     ipAddresses: ["127.0.0.1"],
@@ -195,14 +201,18 @@ it("streams a durable archive, checks its receipt, and aborts a stalled transfer
   });
   let requests = 0,
     stall = false;
-  const bodies: Buffer[] = [];
+  const bodies: { size: number; digest: string }[] = [];
   const server = createServer(
     { key: tls.serverKeyPem, cert: tls.serverCertPem },
     async (req, res) => {
       requests++;
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(Buffer.from(chunk));
-      bodies.push(Buffer.concat(chunks));
+      const received = createHash("sha256");
+      let size = 0;
+      for await (const chunk of req) {
+        received.update(chunk);
+        size += chunk.length;
+      }
+      bodies.push({ size, digest: received.digest("hex") });
       if (!stall) res.end();
     },
   );
@@ -227,7 +237,7 @@ it("streams a durable archive, checks its receipt, and aborts a stalled transfer
     expect(await uploadCloudCaptureFile(grant, path, receipt, { ca: tls.caCertPem })).toEqual(
       receipt,
     );
-    expect(bodies[0]).toEqual(bytes);
+    expect(bodies[0]).toEqual(receipt);
     await expect(
       uploadCloudCaptureFile(
         grant,

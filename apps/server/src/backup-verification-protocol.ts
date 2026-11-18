@@ -1,3 +1,4 @@
+import { MAX_CLOUD_ARCHIVE_BYTES } from "./cloud-backup-limits.js";
 import { createHash } from "node:crypto";
 import type { BackupModuleStatus, BackupModuleCheck } from "@waitron/module";
 type Environment = "preproduction" | "production";
@@ -455,7 +456,7 @@ export function readBackupVerificationRequest(raw: string): BackupVerificationRe
     capturedAt: timestamp(request.capturedAt),
     archive: Object.freeze({
       sha256: hash(archive.sha256),
-      bytes: integer(archive.bytes, 1, 536870912),
+      bytes: integer(archive.bytes, 1, MAX_CLOUD_ARCHIVE_BYTES),
       manifestVersion: integer(archive.manifestVersion, 1),
       environment: choice(archive.environment, ["preproduction", "production"]),
       modules: map(archive.modules, (v) => integer(v), 1),
@@ -582,7 +583,7 @@ export function readBackupVerificationResult(
     const measured = object(result.measuredArchive, ["sha256", "bytes"]);
     measuredArchive = Object.freeze({
       sha256: hash(measured.sha256),
-      bytes: integer(measured.bytes, 1, 536870912),
+      bytes: integer(measured.bytes, 1, MAX_CLOUD_ARCHIVE_BYTES),
     });
   }
   if (
