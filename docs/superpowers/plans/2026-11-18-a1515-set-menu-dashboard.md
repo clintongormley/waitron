@@ -1393,6 +1393,9 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
     `menu_section.*` entries. For `setPrice` and `surcharge` the words name the limit: "A set
     menu's price (or a surcharge) can be from 0.00 to 10,000.00." / «El precio de un menú (o un
     suplemento) puede ir de 0,00 a 10.000,00.» (**my call (plan writer)**, decision 13).
+    For `lines`: "A set menu can have up to 20 inclusion lines. Combine courses in one line or
+    remove a line." / «Un menú a precio fijo puede tener hasta 20 líneas. Combina varios cursos
+    en una línea o elimina una.»
   Use the dashboard's existing Spanish words for "course" and "set menu" if `strings.ts` already
   has them (grep `course` and `menú`); the Spanish above is a starting point, not a fixed text.
 - [ ] **Step 4: Run the route file, `apps/server/src/menu-api.test.ts` and the management-origin sweep.**
