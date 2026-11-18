@@ -822,7 +822,7 @@ export class DepartmentSettings extends LitElement {
         const field = match![2] === "courseId" ? "start" : (match![2] as ServiceStepField);
         rows[key] = { [field]: t("venue.field_refused") };
       } else if (named === "serviceSteps" || named.startsWith("serviceSteps."))
-        list = t("venue.field_refused");
+        list = t("venue.service_steps_refused");
     } else if (code === "service_step.not_found") list = t("venue.service_step_changed_elsewhere");
     else if (code === "course.not_found")
       for (const step of this.draft!.serviceSteps)
@@ -1040,7 +1040,11 @@ export class DepartmentSettings extends LitElement {
     return html`<wt-form-actions
       slot=${slot ?? nothing}
       .showError=${slot !== "footer"}
-      .error=${bottomMessage(this.failure, highlighted ? t("venue.fix_fields") : "")}
+      .error=${bottomMessage(
+        this.failure,
+        this.refused.serviceSteps ?? "",
+        highlighted ? t("venue.fix_fields") : "",
+      )}
       ><wt-button
         slot="cancel"
         variant="secondary"
@@ -1207,7 +1211,6 @@ export class DepartmentSettings extends LitElement {
               .steps=${draft.serviceSteps}
               .courses=${this.model!.courses}
               .errors=${this.shownStepErrors}
-              .listError=${errors.serviceSteps ?? ""}
               ?disabled=${disabled}
               @steps-change=${(e: CustomEvent<{ steps: ServiceStepDraft[] }>) => {
                 e.stopPropagation();

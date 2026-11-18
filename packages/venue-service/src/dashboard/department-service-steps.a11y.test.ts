@@ -34,7 +34,6 @@ describe.each(["light", "dark"] as const)("service step list accessibility (%s)"
         s2: { name: "This field is required.", minutes: "Whole minutes, 0 to 120." },
         s3: { start: "That course was deleted. Choose another start." },
       };
-      el.listError = "A step was changed elsewhere. Cancel and open it again to see the latest.";
     }
     await el.updateComplete;
     await Promise.all(

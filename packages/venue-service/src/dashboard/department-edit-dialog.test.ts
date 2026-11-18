@@ -13,6 +13,8 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -39,6 +41,48 @@ it("puts the selected tab's sole action row in the modal footer", async () => {
     expect(form.shadowRoot!.querySelector("wt-form-actions")).toBeNull();
   }
 });
+it.each(["light", "dark"] as const)(
+  "shows a list refusal directly above Save in the modal footer (%s)",
+  async (theme) => {
+    const { app, form, modal } = await mount(
+      (async (path, method) => {
+        if (method === "GET")
+          return path.endsWith("/profiles")
+            ? []
+            : { receivingProfileId: null, destinationDepartmentIds: [], profiles: [] };
+        throw { code: "management.request_invalid", params: { field: "serviceSteps" } };
+      }) as DashboardRequest,
+      theme,
+    );
+    await selectDepartmentTab(form, "tables");
+    const steps = form.shadowRoot!.querySelector("department-service-steps")!;
+    await steps.updateComplete;
+    steps.shadowRoot!.querySelector<HTMLElement>("[data-test=add-service-step]")!.click();
+    await steps.updateComplete;
+    const name = steps.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "tbody tr:last-child [name=serviceStepName]",
+    )!;
+    await name.updateComplete;
+    await userEvent.fill(
+      page.elementLocator(name.shadowRoot!.querySelector("input")!),
+      "Check table",
+    );
+    await form.updateComplete;
+    departmentSave(form).click();
+    await expect
+      .poll(async () => (await formMessageOf(departmentActions(form)))?.textContent?.trim())
+      .toBe("The service steps were not accepted. Change them and save again.");
+    const message = (await formMessageOf(departmentActions(form)))!;
+    expect(message.checkVisibility()).toBe(true);
+    expect(message.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      departmentSave(form).getBoundingClientRect().top,
+    );
+    expect(modal.open).toBe(true);
+    expect(departmentSave(form).disabled).toBe(false);
+    await expectNoA11yViolations(app);
+  },
+);
+
 it("opens a protected department dialog with the narrowed fields in order", async () => {
   const { el, writes } = await mount();
   const modal = el.shadowRoot?.querySelector("wt-modal");

@@ -561,6 +561,7 @@ const en = {
   "venue.service_step_course_gone": "That course was deleted. Choose another start.",
   "venue.service_step_changed_elsewhere":
     "A step was changed elsewhere. Cancel and open it again to see the latest.",
+  "venue.service_steps_refused": "The service steps were not accepted. Change them and save again.",
   "venue.field_refused": "This value was not accepted. Change it and save again.",
   "venue.day.0": "Sunday",
   "venue.day.1": "Monday",
@@ -1501,6 +1502,8 @@ const es: Record<keyof typeof en, string> = {
   "venue.service_step_course_gone": "Ese curso se ha eliminado. Elige otro inicio.",
   "venue.service_step_changed_elsewhere":
     "Un paso se ha cambiado en otra pantalla. Cancela y vuelve a abrirlo para ver lo último.",
+  "venue.service_steps_refused":
+    "No se han aceptado los pasos de servicio. Cámbialos y vuelve a guardar.",
   "venue.field_refused": "No se ha aceptado este valor. Cámbialo y vuelve a guardar.",
   "venue.day.0": "Domingo",
   "venue.day.1": "Lunes",
