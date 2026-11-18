@@ -2131,6 +2131,10 @@ stay within 1–999; if any contributing count is unknown, the field stays empty
 suggestion keeps your value when the table selection changes. Accepting a suggestion leaves no
 unsaved draft.
 
+A floor join where neither side is a fixed table asks for the seat count before it sends the join,
+then sends it once; the server's refusals (table not free, already grouped, different area) show
+only after the seats are typed (owner, 2026-10-17; A666).
+
 ### Touch gestures in the floor plan editor (owner, 2026-10-14; A673)
 
 On a touch screen, tap a table to select it before dragging it. A finger on an unselected table

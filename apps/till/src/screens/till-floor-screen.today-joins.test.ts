@@ -931,7 +931,7 @@ describe("floor join ownership observations", () => {
     },
   );
 
-  it("an old join refusal cannot open seats or overwrite the replacement screen", async () => {
+  it("an old join refusal cannot overwrite the replacement screen", async () => {
     const api = stubApi();
     let reject!: (reason: unknown) => void;
     api.joinTables.mockImplementationOnce(
