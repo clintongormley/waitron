@@ -12,6 +12,10 @@ replace the adviser sheet's question 3 (17:52); and the owner asked that "once a
 (its invoice issued), neither invoice switch may happen" (17:59, lane L `queue.md`), which Task 3a
 builds.
 
+**Corrected 2026-11-18** after PR B's Task 10 review: §2.2, Task 6 Step 1 and §6 Q7 now say what
+the code does after the last payment of a printed bill (commit `8613b6b952`, pinned by
+`till-app-bill-payments.test.ts`'s "the payment that settles a bill %s shows the change").
+
 **Authority.** Owner decision D1, 16 November (`docs/compliance/2026-11-15-adviser-answers.md`,
 Part B1): "yes. The ticket is issued when the meal ends, even if the bill is paid much later"; the
 meal ends when staff close the table (commit `7fccbf470e`). Owner, 17 November, in the watcher's
@@ -237,8 +241,9 @@ payments, and the one that completes the amount due settles the existing sale wi
 a tender, under the same invoice number. A card part payment that completes later goes through the
 same `issueWhenFullyPaid` from `completeBillPayment` (`bill-payments.ts:1499`).
 
-After the last payment the till shows the change and no **Receipt / Full invoice / Email / None**
-choice: the guests already have their receipt (Q7). **Receipt copy** is offered on a printed bill
+After the last payment the till opens the same document window as for any bill, showing the
+change; its print button offers a copy, not the original, since the guests already have their
+receipt (Q7). **Receipt copy** is offered on a printed bill
 before payment too. Today's whole-amount sheet stays for a presented bill with no ticket (a Counter
 order moved to a table).
 
@@ -621,8 +626,8 @@ Before each till run, check memory (`memory_pressure | grep free`; CLAUDE.md §2
   - "a printed bill's Pay asks for the bill Pay window" (placed, with `invoiceNumber`: `bill-pay`
     dispatched, `pay-presented` not). The existing "draws one Pay for a presented bill, which asks
     for the presented bill's sheet" (`:320-331`) keeps passing: its bill has no `invoiceNumber`.
-  - after the payment that settles a bill printed before it, no document choice opens and the change
-    shows (`#showPaidTicket`, `till-app.ts:21754-21767`, passing `invoiceIssuedNow` `false`, as
+  - after the payment that settles a bill printed before it, the document window opens showing the
+    change and offering a copy, not the original (`#showPaidTicket`, `till-app.ts:21754-21767`, passing `invoiceIssuedNow` `false`, as
     `#payWholeTab` already does for an invoiced bill, `:20694`).
   - `stillOwed`: a printed €30 bill holding €5 owes 25.00; a credited presented bill (total 18.00,
     `amountDue` 15.58, nothing received) owes 15.58; an unprinted bill owes `outstanding`. The
@@ -771,7 +776,8 @@ place…"), both languages, anchors shared:
    printing before payment makes this more common, so it may deserve its own item.
 6. **A device whose receipts resolve to no printer.** Refuse before issuing, naming **Equipment** as
    the fix. A full invoice staged for email or A4 needs no printer.
-7. **After the last payment of a printed bill.** Show the change; no document choice. The
+7. **After the last payment of a printed bill.** The document window opens, showing the change and
+   offering a copy rather than the original receipt. The
    receipt-layout plan's Task 9 later prints a payment slip there.
 8. **The "Bill requested" mark.** Unchanged (clears when paid).
 9. **A bill paid in full before anyone prints** keeps today's behaviour: the paying payment issues the
