@@ -24191,6 +24191,10 @@ describe("closed floor zone refusals", () => {
       const listZones = vi.fn().mockResolvedValue([{ ...floorZone, closed: true }]);
       const { el } = await mountApp({
         listZones,
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          capabilities: [...till.capabilities, "take-orders"],
+        }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
       });
       await toCounter(el);
@@ -24317,6 +24321,10 @@ describe("closed floor zone refusals", () => {
     const listZones = vi.fn().mockResolvedValue([{ ...floorZone, closed: true }]);
     const { el } = await mountApp({
       listZones,
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: [...till.capabilities, "take-orders"],
+      }),
       getTablesState: vi.fn().mockResolvedValue([freeTable]),
     });
     await toCounter(el);

@@ -190,7 +190,7 @@ describe("till-floor-screen on the new map", () => {
   });
 
   it("a tap on a free table asks for its guests, and goes no further", async () => {
-    const el = await mount();
+    const el = await mount({ canChangeToday: true });
     const outside = vi.fn();
     el.addEventListener("wt-table-tap", outside);
     await tap(el, "t1");
@@ -215,7 +215,7 @@ describe("till-floor-screen on the new map", () => {
   });
 
   it("a closed zone refuses the map's free table", async () => {
-    const el = await mount({ zones: [zone({ closed: true })] });
+    const el = await mount({ zones: [zone({ closed: true })], canChangeToday: true });
     await tap(el, "t1");
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
@@ -467,7 +467,10 @@ for (const locale of ["en", "es"])
       const previous = currentLocale();
       try {
         setLocale(locale);
-        const el = await mount({ tables: [planned("t1", { today: today({ seats }) })] });
+        const el = await mount({
+          tables: [planned("t1", { today: today({ seats }) })],
+          canChangeToday: true,
+        });
         await tap(el, "t1");
         const dialog = el.shadowRoot!.querySelector("till-seat-dialog")!;
         await dialog.updateComplete;

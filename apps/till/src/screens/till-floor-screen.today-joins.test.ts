@@ -400,6 +400,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       [planned("F1", 2, { fixed: true }, "Bar 1"), planned("F2", 20, { fixed: true }, "Bar 2")],
       api,
     );
+    el.canChangeToday = true;
     const opened: unknown[] = [];
     el.addEventListener("open-table", (event) => opened.push((event as CustomEvent).detail));
 
@@ -472,6 +473,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       [planned("t4", 2, { joinId: "j1" }), planned("t5", 4, { joinId: "j1" }), planned("t6", 20)],
       api,
     );
+    el.canChangeToday = true;
     const map = mapOf(el);
     send(map, "wt-table-tap", { tableId: "t5" });
     await el.updateComplete;
@@ -556,6 +558,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       api,
       [zone({ closed: true })],
     );
+    el.canChangeToday = true;
     await drop(el, { tableId: "F1", x: 17, y: 3, targetId: "F2" });
 
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
@@ -607,6 +610,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
         api,
         prepay,
       );
+      el.canChangeToday = true;
       send(mapOf(el), "wt-table-tap", { tableId: "F1" });
       await el.updateComplete;
       expect(lines(el)).toEqual([noSeating]);

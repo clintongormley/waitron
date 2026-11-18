@@ -558,7 +558,14 @@ describe("till-app: seating a party", () => {
       .fn()
       .mockResolvedValueOnce([table4, table7, table9])
       .mockResolvedValue([table4, table7, seatedTable9]);
-    const { el } = await mountApp({ getTablesState, getPartyBills: onlyNewPartyBills() });
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: [...till.capabilities, "take-orders"],
+      }),
+      getTablesState,
+      getPartyBills: onlyNewPartyBills(),
+    });
     const screen = await toFloor(el);
 
     screen.shadowRoot!.querySelector<HTMLElement>('[data-table="t9"]')!.click();

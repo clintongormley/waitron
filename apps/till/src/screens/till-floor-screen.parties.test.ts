@@ -114,6 +114,7 @@ afterEach(cleanupWidgets);
 describe("till-floor-screen: seating a party", () => {
   it("opens the seat dialog for a free table instead of opening a tab at once", async () => {
     const el = await mountFloor([table()]);
+    el.canChangeToday = true;
     const opened = capture(el, "open-table");
 
     card(el, "t4").click();
@@ -125,6 +126,7 @@ describe("till-floor-screen: seating a party", () => {
 
   it("seats the table with the guest count the dialog confirms, and closes it", async () => {
     const el = await mountFloor([table()]);
+    el.canChangeToday = true;
     const opened = capture(el, "open-table");
     card(el, "t4").click();
     await el.updateComplete;
@@ -140,6 +142,7 @@ describe("till-floor-screen: seating a party", () => {
 
   it("seats nobody when the dialog is cancelled", async () => {
     const el = await mountFloor([table()]);
+    el.canChangeToday = true;
     const opened = capture(el, "open-table");
     card(el, "t4").click();
     await el.updateComplete;

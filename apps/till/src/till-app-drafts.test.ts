@@ -5763,7 +5763,10 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
   it("asks nothing while another card on the order's tab has a dialog open, and asks at the next poll once it is closed", async () => {
     const withFloor: FormFactor = "till";
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue(till(withFloor)),
+      getTill: vi.fn().mockResolvedValue({
+        ...till(withFloor),
+        capabilities: [...till(withFloor).capabilities, "take-orders"],
+      }),
       getTablesState: vi.fn().mockResolvedValue([table4, table7, table("t9", "9", null)]),
       menuState: vi.fn().mockResolvedValue(state("v1")),
     });
