@@ -29,6 +29,45 @@ test("renders nothing inside its regions while closed", async () => {
   expect(el.shadowRoot!.querySelectorAll('[role="status"], [role="alert"]')).toHaveLength(2);
 });
 
+test("a held toast waits without announcing, then gets its full countdown", async () => {
+  vi.useFakeTimers();
+  const el = (await mount(
+    '<wt-toast held open message="New alert" duration="1000"></wt-toast>',
+  )) as WtToast;
+  const closed = vi.fn();
+  el.addEventListener("wt-close", closed);
+  expect(part(el, '[role="status"]')!.textContent).toBe("");
+  expect(part(el, '[role="alert"]')!.textContent).toBe("");
+  vi.advanceTimersByTime(5_000);
+  expect(closed).not.toHaveBeenCalled();
+
+  el.removeAttribute("held");
+  await el.updateComplete;
+  expect(part(el, '[role="status"] .message')!.textContent).toBe("New alert");
+  vi.advanceTimersByTime(999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(closed).toHaveBeenCalledOnce();
+});
+
+test("holding a hovered toast restarts its countdown on release", async () => {
+  vi.useFakeTimers();
+  const el = (await mount(
+    '<wt-toast open message="New alert" duration="1000"></wt-toast>',
+  )) as WtToast;
+  part(el, ".toast")!.dispatchEvent(new MouseEvent("mouseenter"));
+  el.setAttribute("held", "");
+  await el.updateComplete;
+  expect(part(el, ".toast")).toBeNull();
+  vi.advanceTimersByTime(5_000);
+  expect(el.open).toBe(true);
+
+  el.removeAttribute("held");
+  await el.updateComplete;
+  vi.advanceTimersByTime(1000);
+  expect(el.open).toBe(false);
+});
+
 test("closes itself after its duration and says so", async () => {
   vi.useFakeTimers();
   const el = (await mount('<wt-toast open message="Hi" duration="8000"></wt-toast>')) as WtToast;

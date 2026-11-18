@@ -61,6 +61,7 @@ export class WtToast extends LitElement {
   ];
 
   @property({ type: Boolean, reflect: true }) open = false;
+  @property({ type: Boolean, reflect: true }) held = false;
   @property({ reflect: true }) tone: WtToastTone = "info";
   @property() message = "";
   @property({ attribute: "close-label" }) closeLabel = "";
@@ -68,15 +69,15 @@ export class WtToast extends LitElement {
 
   #timer: ReturnType<typeof setTimeout> | undefined;
   #hovered = false;
-  #held = false;
+  #underModal = false;
   #stopWatchingModals: (() => void) | undefined;
 
   readonly #onModalChange = (): void => {
-    const held = underModal(this);
-    if (held === this.#held) return;
-    this.#held = held;
+    const under = underModal(this);
+    if (under === this.#underModal) return;
+    this.#underModal = under;
     // Being held removes the hovered element without a mouseleave, so the flag would stay set.
-    if (held) this.#hovered = false;
+    if (under) this.#hovered = false;
     this.requestUpdate();
     this.#schedule();
   };
@@ -89,15 +90,21 @@ export class WtToast extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>): void {
-    // Closing removes the hovered element without a mouseleave, so the flag would stay set.
-    if (!this.open) this.#hovered = false;
-    if (changed.has("open") || changed.has("message") || changed.has("duration")) this.#schedule();
+    // Removing the hovered element sends no mouseleave, so the flag would stay set.
+    if (!this.open || this.held) this.#hovered = false;
+    if (
+      changed.has("open") ||
+      changed.has("message") ||
+      changed.has("duration") ||
+      changed.has("held")
+    )
+      this.#schedule();
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.#stopWatchingModals = onModalChange(this.#onModalChange);
-    this.#held = underModal(this);
+    this.#underModal = underModal(this);
     this.#schedule();
   }
 
@@ -110,12 +117,12 @@ export class WtToast extends LitElement {
   }
 
   /** The one place a countdown starts: never off the page, where an update already queued still
-   * runs, nor while it is held under a modal window, nor while the pointer or keyboard focus is on
-   * it. */
+   * runs, while held, or while the pointer or keyboard focus is on it. */
   #schedule(): void {
     clearTimeout(this.#timer);
     this.#timer = undefined;
-    if (!this.isConnected || !this.open || this.#held || this.duration <= 0) return;
+    if (!this.isConnected || !this.open || this.held || this.#underModal || this.duration <= 0)
+      return;
     if (this.#hovered || this.matches(":focus-within")) return;
     this.#timer = setTimeout(() => this.#close(), this.duration);
   }
@@ -155,7 +162,7 @@ export class WtToast extends LitElement {
   }
 
   override render() {
-    const shown = this.open && !this.#held;
+    const shown = this.open && !this.held && !this.#underModal;
     const toast = shown
       ? html`<div
           class="toast"

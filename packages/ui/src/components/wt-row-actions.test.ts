@@ -1344,11 +1344,21 @@ describe("a link entry", () => {
 
 test("reinserted after removal while open reports closed and opens normally again", async () => {
   const { el, trigger, popup } = await mountActions();
+  const reportedOpened = vi.fn();
+  const states: boolean[] = [];
+  host.addEventListener("wt-row-actions-toggle", reportedOpened, { once: true });
+  el.addEventListener("wt-row-actions-toggle", (event) => {
+    states.push((event as CustomEvent<{ open: boolean }>).detail.open);
+  });
   await userEvent.click(trigger);
   await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
   expect(popup.matches(":popover-open")).toBe(true);
+  expect(reportedOpened).toHaveBeenCalledOnce();
+  expect(reportedOpened.mock.calls[0]![0]).toMatchObject({ bubbles: true, composed: true });
+  expect(states).toEqual([true]);
 
   el.remove();
+  expect(states).toEqual([true, false]);
   host.append(el);
   await el.updateComplete;
   expect(popup.matches(":popover-open")).toBe(false);
@@ -1360,6 +1370,7 @@ test("reinserted after removal while open reports closed and opens normally agai
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
   expect(popup.matches(":popover-open")).toBe(false);
+  expect(states).toEqual([true, false, true, false]);
 });
 
 test("removal during opening does not let a pending toggle report a closed popup as open", async () => {

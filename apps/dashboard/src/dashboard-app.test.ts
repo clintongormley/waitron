@@ -6733,6 +6733,47 @@ describe("alerts in the shell", () => {
     (bell(el)!.shadowRoot!.querySelector("wt-count-badge") as HTMLElement & { count: number })
       .count;
 
+  it.each([
+    [390, "menu first"],
+    [390, "alert first"],
+    [1280, "menu first"],
+    [1280, "alert first"],
+  ] as const)("holds an alert behind the account menu at %i px (%s)", async (width, order) => {
+    history.replaceState(null, "", "/overview");
+    const liveData = new LiveData();
+    const listAlerts = vi
+      .fn()
+      .mockResolvedValueOnce({ visible: true, alerts: [alert("1")] })
+      .mockResolvedValue({ visible: true, alerts: [alert("1"), alert("2")] });
+    const { el, unmount } = await mountInRealPage(alertsApi({ listAlerts, liveData }), width, 844);
+    try {
+      await expect.poll(() => bell(el) && countOf(el)).toBe(1);
+      const menu = el.shadowRoot!.querySelector("[data-test=account-menu]")!;
+      const trigger = menu.shadowRoot!.querySelector("button")!;
+      const openMenu = async () => {
+        await userEvent.click(trigger);
+        await expect.poll(() => trigger.getAttribute("aria-expanded")).toBe("true");
+      };
+
+      if (order === "menu first") await openMenu();
+      liveData.invalidate([{ type: "incidents", id: "new" }]);
+      await expect.poll(() => countOf(el)).toBe(2);
+      if (order === "alert first") {
+        await expect.poll(() => toastButton(el, "message")).toBeVisible();
+        await openMenu();
+      }
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      expect(toastButton(el, "message")).toBeNull();
+      expect(countOf(el)).toBe(2);
+
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => trigger.getAttribute("aria-expanded")).toBe("false");
+      await expect.poll(() => toastButton(el, "message")).toBeVisible();
+    } finally {
+      await unmount();
+    }
+  });
+
   /** Mounts a manager whose first alerts read holds one alert, then raises one more so the pop-up
    * opens. Returns the element and its live data so a test can raise more. */
   async function mountWithPopup() {
