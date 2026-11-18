@@ -10,7 +10,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { updateMenuDetails } from "@waitron/menu";
+import { createMenu, updateMenuDetails } from "@waitron/menu";
 import { listZoneOffers } from "./operations.js";
 import { serveRecordedSetMenus } from "./set-menu-copies.js";
 import { setMenuFixture } from "./testing/set-menu-fixtures.js";
@@ -78,12 +78,25 @@ it("applies the same live availability and course rule to a recorded copy", () =
     });
   }));
 
-it.each(["without copies", "with another copy"] as const)(
+it.each(["without copies", "with another copy", "missing altogether"] as const)(
   "refuses a set menu missing from a version %s",
   (fixture) =>
     scenario(async (tx, f) => {
-      const { versionId } = await f.publish(fixture === "without copies" ? f.dinner : f.lunch);
-      const menuId = fixture === "without copies" ? f.daily : f.dinner;
+      const versionId =
+        fixture === "missing altogether"
+          ? crypto.randomUUID()
+          : (await f.publish(fixture === "without copies" ? f.dinner : f.lunch)).versionId;
+      const menuId =
+        fixture === "with another copy"
+          ? (
+              await createMenu(tx, {
+                kind: "set_menu",
+                name: "Special",
+                setPrice: "20.00",
+                setVatClass: "reduced",
+              })
+            ).id
+          : f.daily;
       await expect(serveRecordedSetMenus(tx, [{ versionId, menuId }])).rejects.toMatchObject({
         code: "set_menu.not_found",
         params: { menuId },

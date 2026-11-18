@@ -1178,8 +1178,9 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   menu-item id. Both reads then fold the copies' dishes into the same fingerprint. Never wrap a copy
   as a document of its own: two copies of one set menu would overwrite each other. The fingerprint
   includes availability for its dishes and variants, including dishes also sold on their own. If
-  one sells out, the till reloads the copies (watcher, 19 November 2026, 00:41 in Lane D's
-  questions.md). The poll reports unavailable extras and option labels for the copies too.
+  one sells out, the till reloads the copies. The till applies polled availability to ordinary
+  offers and refreshes copies through the full offers read (watcher, 19 November 2026, 00:41 in
+  Lane D's questions.md). The poll reports unavailable extras and option labels for the copies too.
   A changed copy reaches the till as a new full-menu version, which the state already carries.
 - When `listZoneOffers` is called with `menuItemIds` (every draft and line write does,
   `order-drafts.ts:1434`, `working-order.ts:558,570`), it serves no copies and answers

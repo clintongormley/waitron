@@ -102,6 +102,22 @@ it("polls copy-only availability and keeps the copy key when the dish sells out"
     expect(after.liveFields).not.toBe(before.liveFields);
   }));
 
+it.each(["sirloin", "largeBravas"] as const)(
+  "refreshes the copied availability after selling out %s",
+  (dish) =>
+    scenario(async (tx, f) => {
+      await f.publish();
+      const before = await served(tx, f);
+      const productId = f[dish];
+      await tx.update(products).set({ available: false }).where(eq(products.id, productId));
+      const after = await served(tx, f);
+      const state = await menuState(tx, f.zoneId, f.midday);
+      expect(state.unavailable.products).toContain(productId);
+      expect(state.liveFields).toBe(after.liveFields);
+      expect(after.liveFields).not.toBe(before.liveFields);
+    }),
+);
+
 it("keeps copy-only dishes out of ordinary product eligibility and keeps the ordinary price in Preview", () =>
   scenario(async (tx, f) => {
     await f.publish();
