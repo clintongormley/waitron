@@ -735,6 +735,68 @@ describe("till-app: a print's answer arriving after staff moved on", () => {
   });
 });
 
+describe("till-app: unsent orders after a refused print", () => {
+  /** The server's record of who is editing bill `wo-4`, at a version the test moves. */
+  function billEdits() {
+    const edits = { version: 0 };
+    const listDrafts = vi.fn(async () => ({
+      drafts: [],
+      billEdits: ["wo-4", "wo-9"].map((billId) => ({
+        billId,
+        editorId: null,
+        editorName: null,
+        editorVersion: billId === "wo-4" ? edits.version : 0,
+        draftId: null,
+        draftRevision: null,
+      })),
+    }));
+    return { edits, listDrafts };
+  }
+  const sentVersion = (body: Record<string, unknown> | undefined) =>
+    (body!.expectedEdits as { billId: string; editorVersion: number }[]).find(
+      (edit) => edit.billId === "wo-4",
+    )!.editorVersion;
+
+  it.each(["draft.out_of_date", "draft.taken_over"])(
+    "reads them again after %s, so the next press sends what they are now",
+    async (code) => {
+      const { edits, listDrafts } = billEdits();
+      const endMeal = vi
+        .fn()
+        .mockRejectedValueOnce({ code, status: 409, billId: "wo-4" })
+        .mockResolvedValue(ended);
+      const { el } = await openBill({ endMeal, listDrafts });
+      const reads = listDrafts.mock.calls.length;
+      edits.version = 1;
+
+      await printBill(el);
+      expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
+
+      await printBill(el);
+      expect(sentBodies(endMeal).map(sentVersion)).toEqual([0, 1]);
+    },
+  );
+
+  it("does not read them for a refusal arriving after staff moved to another bill", async () => {
+    const { listDrafts } = billEdits();
+    const answer = heldAnswer<EndedMeal>();
+    const { el } = await openBill({
+      endMeal: () => answer.promise,
+      getPartyBills: twoBills(),
+      listDrafts,
+    });
+    await printBill(el);
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    const reads = listDrafts.mock.calls.length;
+
+    answer.reject({ code: "draft.out_of_date", status: 409, billId: "wo-4" });
+    await flush(el, 6);
+
+    expect(listDrafts.mock.calls.length).toBe(reads);
+  });
+});
+
 describe("till-app: Print the bill with dishes not served", () => {
   it("shows the dishes by name, and Mark served serves those the kitchen has; Print the bill then prints", async () => {
     const endMeal = vi.fn().mockRejectedValueOnce(unservedRefusal).mockResolvedValue(ended);

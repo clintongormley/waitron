@@ -20170,7 +20170,7 @@ export class TillApp extends LitElement {
         if (stillOnBill()) this.errorKey = "meal_end.unconfirmed";
         return;
       }
-      await this.#onMealEndRefused(party.id, request, error, stillOnBill, sent, visit);
+      await this.#onMealEndRefused(asked, request, error, stillOnBill);
       return;
     } finally {
       limit.done();
@@ -20188,22 +20188,21 @@ export class TillApp extends LitElement {
   }
 
   /** Not served lists the dishes; a changed party reloads the table and a closed one is said, as
-   * Finish does; any other refusal is said, and the party's bills are read again. Words appear only
-   * while `stillOnBill`: under another bill or a later visit they would describe the wrong thing. */
+   * Finish does; any other refusal is said, and the party's bills and unsent orders are read again.
+   * Words appear only while `stillOnBill`: under another bill or a later visit they would describe
+   * the wrong thing. */
   async #onMealEndRefused(
-    partyId: string,
+    asked: BillComposition,
     request: EndMealRequest,
     error: unknown,
     stillOnBill: () => boolean,
-    sent: Sent,
-    visit: number,
   ): Promise<void> {
     const refusal = error as
       { code?: unknown; dishes?: unknown; ownerName?: string | null } | undefined;
     if (refusal?.code === "meal_end.unserved_dishes" && Array.isArray(refusal.dishes)) {
-      if (visit !== this.#orderVisit) return;
+      if (asked.visit !== this.#orderVisit) return;
       this.mealEnd = {
-        partyId,
+        partyId: asked.partyId,
         workingOrderId: request.billId,
         unserved: refusal.dishes as MealEndUnservedDish[],
         revision: request.expectedPartyRevision,
@@ -20223,7 +20222,10 @@ export class TillApp extends LitElement {
         refusal?.code === "draft.taken_over"
           ? { printTakenOver: refusal.ownerName ?? "" }
           : mealEndError(error);
-    if (!this.#hasLeftParty(partyId, sent)) await this.#loadPartyBills();
+    if (!this.#hasLeftParty(asked.partyId, asked.sent)) {
+      await this.#loadPartyBills();
+      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
+    }
   }
 
   /** Print the bill's answer, while the party it was sent for is on screen, and a not-served list
