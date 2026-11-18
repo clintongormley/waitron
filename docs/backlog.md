@@ -1595,6 +1595,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Privacy details now live in venue settings, and legal-name and credential changes keep activity history.
   Ended dashboard sessions are deleted; sign-in history comes from activity records. Email-change
   proofs use the pending address without copying it into the proof row.
+  Invoice email uses the shared mail queue. A4 printing still uses the invoice delivery row.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 

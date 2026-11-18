@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   type A4HoldCode,
+  CORE_CHANGE_SOURCES,
   CORE_MIGRATIONS,
+  installChangeFeed,
   invoiceDeliveries,
   printAgents,
   printJobs,
@@ -25,7 +27,10 @@ import {
 } from "./invoice-delivery.js";
 import type { InvoiceDeliveryAttempt } from "./invoice-delivery-status.js";
 import { renewInvoicePagePrint } from "./invoice-page-print.js";
-import { runInvoiceEmailPass } from "./invoice-email-worker.js";
+import { invoiceMail } from "./invoice-mail.js";
+import { createJobRunner } from "./job-runner.js";
+import { realSleep } from "./loop.js";
+import { mailSendJob, runMailPass } from "./mail-sender.js";
 import { createPageTestPages, type PageTestPages } from "./page-test-pages.js";
 import { invoiceDeliveryAlertSource, undeliveredInvoice } from "./alert-sources.js";
 import { recordSyntheticInvoice, SYNTHETIC_CUSTOMER } from "./testing/synthetic-invoice.js";
@@ -820,12 +825,19 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
     const sale = await invoice(v);
     const claim = await heldA4(v, sale.saleId, "paper_out");
     const pass = (now: Date) =>
-      runInvoiceEmailPass({
+      runMailPass({
         db: suite.db,
-        holder: "server-one",
+        owners: [
+          invoiceMail({
+            db: suite.db,
+            readDocument: () => Promise.reject(new Error("No email is due")),
+          }),
+        ],
         now: () => now,
-        readDocument: () => Promise.reject(new Error("No email is due")),
-        send: () => Promise.reject(new Error("No email is due")),
+        signal: new AbortController().signal,
+        isPrimary: () => true,
+        resolveDelivery: async () => ({ mode: "unconfigured" }),
+        log: () => {},
       });
     const row = async () =>
       (
@@ -858,5 +870,61 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
         screen: "orders",
       },
     ]);
+  });
+
+  it("wakes for a new print claim and expires it with SMTP unconfigured", async () => {
+    const v = await venue();
+    const paper = await invoice(v);
+    const email = await invoice(v);
+    await attempt(v, email.saleId, "email", "queued");
+    await installChangeFeed(
+      suite.db,
+      CORE_CHANGE_SOURCES.filter(({ table }) => table === "invoice_deliveries"),
+    );
+    const clockBase = performance.now();
+    const now = () => new Date(START.getTime() + 58_000 + performance.now() - clockBase);
+    let waiting!: () => void;
+    const asleep = new Promise<void>((resolve) => (waiting = resolve));
+    const log = () => {};
+    const runner = createJobRunner({
+      now,
+      log,
+      delay: (ms, signal) => {
+        waiting();
+        return realSleep(ms, signal);
+      },
+    });
+    runner.add(
+      mailSendJob({
+        db: suite.db,
+        owners: [
+          invoiceMail({
+            db: suite.db,
+            readDocument: () => Promise.reject(new Error("SMTP is missing")),
+          }),
+        ],
+        now,
+        isPrimary: () => true,
+        resolveDelivery: async () => ({ mode: "unconfigured" }),
+        log,
+        maxSleepMs: 60_000,
+      }),
+    );
+    try {
+      await asleep;
+      const claim = await heldA4(v, paper.saleId, "paper_out");
+      await vi.waitFor(
+        async () => {
+          const [row] = await suite.db
+            .select()
+            .from(invoiceDeliveries)
+            .where(eq(invoiceDeliveries.id, claim.deliveryId));
+          expect(row).toMatchObject({ status: "unknown", failureCode: "timeout" });
+        },
+        { timeout: 4_000 },
+      );
+    } finally {
+      await runner.stopJobs();
+    }
   });
 });

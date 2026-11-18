@@ -1,18 +1,13 @@
-import type { SmtpConnection } from "./smtp-send.js";
-import nodemailer from "nodemailer";
-import { Socket } from "node:net";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import { printsAsFullInvoice } from "./invoice-typing.js";
 import type { InvoiceDeliveryOutcome } from "./invoice-delivery.js";
-import type { Database, Transaction } from "@waitron/db";
+import type { MailMessage, MailSettlement } from "./mail-sender.js";
+import type { Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { readPrivacyContact } from "@waitron/provisioning";
 import { saleId as brandSaleId } from "@waitron/shared";
-import type { KeyRing } from "@waitron/credentials";
-import type { OnboardingIntent } from "./trading-config.js";
-import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
 
 export interface InvoiceEmailPrivacy {
@@ -21,12 +16,6 @@ export interface InvoiceEmailPrivacy {
   /** The sale has a filed tax record, which the box sends to the tax authority. */
   taxRecord: boolean;
 }
-
-export type InvoiceEmailSender = (message: {
-  recipient: string;
-  document: ReceiptDocumentInput;
-  privacy?: InvoiceEmailPrivacy;
-}) => Promise<InvoiceDeliveryOutcome>;
 
 export async function readInvoiceEmailPrivacy(
   backend: FiscalBackend,
@@ -57,83 +46,49 @@ function privacyNotice(document: ReceiptDocumentInput, privacy: InvoiceEmailPriv
   ].join("\n");
 }
 
-export function createRoutedInvoiceEmailSender(deps: {
-  db: Database;
-  ring: KeyRing;
-  config: { onboardingIntent: OnboardingIntent | undefined; devMode: boolean };
-}): InvoiceEmailSender {
-  return async (message) => {
-    const delivery = await resolveInvoiceEmailDelivery(deps.db, deps.ring, deps.config);
-    if (delivery.mode === "unconfigured") {
-      return { status: "failed", failureCode: "transport_failed" };
-    }
-    return createInvoiceEmailSender(delivery.smtp)(message);
+export async function composeInvoiceEmail({
+  document,
+  privacy,
+}: {
+  document: ReceiptDocumentInput;
+  privacy?: InvoiceEmailPrivacy;
+}): Promise<MailMessage> {
+  const pdf = await renderInvoicePdf(document);
+  const labels = receiptLabelsFor(document.invoiceLocale);
+  const { invoiceType } = document.result;
+  const simplified = !printsAsFullInvoice(invoiceType);
+  const title =
+    invoiceType === "R4" || invoiceType === "R5"
+      ? labels.correctiveInvoice
+      : simplified
+        ? labels.simplifiedInvoice
+        : labels.invoice;
+  const caption = `${title} ${document.result.invoiceNumber}`;
+  const notice = privacyNotice(document, privacy);
+  const marked = document.duplicate === true ? `${caption} — ${labels.duplicate}` : caption;
+  const text = notice === undefined ? marked : `${marked}\n\n${notice}`;
+  return {
+    subject: caption,
+    text,
+    attachments: [
+      {
+        filename: simplified ? "receipt.pdf" : "invoice.pdf",
+        contentType: "application/pdf",
+        content: pdf,
+      },
+    ],
   };
 }
 
-export function createInvoiceEmailSender(config: SmtpConnection): InvoiceEmailSender {
-  return async ({ recipient, document, privacy }) => {
-    const pdf = await renderInvoicePdf(document);
-    const labels = receiptLabelsFor(document.invoiceLocale);
-    const { invoiceType } = document.result;
-    const simplified = !printsAsFullInvoice(invoiceType);
-    const title =
-      invoiceType === "R4" || invoiceType === "R5"
-        ? labels.correctiveInvoice
-        : simplified
-          ? labels.simplifiedInvoice
-          : labels.invoice;
-    const caption = `${title} ${document.result.invoiceNumber}`;
-    const notice = privacyNotice(document, privacy);
-    const marked = document.duplicate === true ? `${caption} — ${labels.duplicate}` : caption;
-    const text = notice === undefined ? marked : `${marked}\n\n${notice}`;
-    // Own the socket so the deadline can cancel an in-flight SMTP exchange.
-    const socket = new Socket();
-    const transport = nodemailer.createTransport({ url: config.url, socket });
-    let timer: ReturnType<typeof setTimeout>;
-    const timeout = new Promise<InvoiceDeliveryOutcome>((resolve) => {
-      timer = setTimeout(() => {
-        resolve({ status: "unknown", failureCode: "timeout" });
-        socket.destroy();
-        transport.close();
-      }, 30_000);
-    });
-    const sending = transport
-      .sendMail({
-        from: config.from,
-        to: recipient,
-        subject: caption,
-        text,
-        attachments: [
-          {
-            filename: simplified ? "receipt.pdf" : "invoice.pdf",
-            contentType: "application/pdf",
-            content: pdf,
-          },
-        ],
-      })
-      .then<InvoiceDeliveryOutcome, InvoiceDeliveryOutcome>(
-        () => ({ status: "sent" }),
-        (error: unknown) => {
-          const response =
-            typeof error === "object" && error !== null && "responseCode" in error
-              ? error.responseCode
-              : undefined;
-          return {
-            status:
-              typeof response === "number" && response >= 400 && response <= 599
-                ? "failed"
-                : "unknown",
-            failureCode: "transport_failed",
-          };
-        },
-      );
-    try {
-      return await Promise.race([sending, timeout]);
-    } finally {
-      clearTimeout(timer!);
-      socket.destroy();
-      transport.close();
-    }
+export function invoiceOutcome(
+  outcome: Exclude<MailSettlement, { status: "expired" }>,
+): InvoiceDeliveryOutcome {
+  if (outcome.status === "sent") return outcome;
+  if (outcome.status === "rejected" && outcome.serverRefused) {
+    return { status: "failed", failureCode: "transport_failed" };
+  }
+  return {
+    status: "unknown",
+    failureCode: outcome.failureCode === "email.test_timeout" ? "timeout" : "transport_failed",
   };
 }

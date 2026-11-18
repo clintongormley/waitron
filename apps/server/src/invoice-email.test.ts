@@ -9,11 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import nodemailer from "nodemailer";
 import { receiptLabelsFor } from "@waitron/country-packs";
-import {
-  createInvoiceEmailSender,
-  createRoutedInvoiceEmailSender,
-  readInvoiceEmailPrivacy,
-} from "./invoice-email.js";
+import { composeInvoiceEmail, invoiceOutcome, readInvoiceEmailPrivacy } from "./invoice-email.js";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import type { FiledReceipt, FiscalBackend } from "@waitron/fiscal";
 import { savePrivacyContact } from "@waitron/provisioning";
@@ -23,6 +19,31 @@ import { loadKeyRing, deleteCredential } from "@waitron/credentials";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
 import { receiptDateTime } from "./receipt-dates.js";
+import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
+import { smtpMailOutcome } from "./mail-sender.js";
+import { sendSmtpMessage, type SmtpConnection } from "./smtp-send.js";
+
+type InvoiceMessage = Parameters<typeof composeInvoiceEmail>[0] & { recipient: string };
+
+function sendInvoiceThrough(config: SmtpConnection, ca?: string) {
+  return async ({ recipient, ...document }: InvoiceMessage) => {
+    const message = await composeInvoiceEmail(document);
+    const outcome = await sendSmtpMessage(
+      config,
+      { ...message, to: recipient },
+      ca === undefined ? {} : { ca },
+    );
+    return invoiceOutcome(smtpMailOutcome(outcome));
+  };
+}
+
+async function sendWithSavedSettings(message: InvoiceMessage) {
+  const delivery = await resolveInvoiceEmailDelivery(suite.db, ring, {
+    onboardingIntent: "live",
+    devMode: false,
+  });
+  return delivery.mode === "unconfigured" ? delivery : sendInvoiceThrough(delivery.smtp)(message);
+}
 
 type Reply =
   | "accepted"
@@ -178,7 +199,7 @@ describe("invoice SMTP transport", () => {
       document.result.issuer = { venueName: "Dining Room Ltd", nif: "B12345678" };
       delete document.result.recipient;
       expect(
-        await createInvoiceEmailSender(rig.config)({
+        await sendInvoiceThrough(rig.config)({
           recipient: "guest@example.test",
           document,
           privacy: {
@@ -211,7 +232,7 @@ describe("invoice SMTP transport", () => {
         const labels = receiptLabelsFor(locale);
         const caption = `${labels.simplifiedInvoice} S/1`;
         expect(
-          await createInvoiceEmailSender(rig.config)({ recipient: "guest@example.test", document }),
+          await sendInvoiceThrough(rig.config)({ recipient: "guest@example.test", document }),
         ).toEqual({ status: "sent" });
         expect(rig.messages).toHaveLength(1);
         const message = rig.messages[0]!;
@@ -243,7 +264,7 @@ describe("invoice SMTP transport", () => {
         delete document.result.recipient;
         const caption = `${receiptLabelsFor(locale).correctiveInvoice} R/7`;
         expect(
-          await createInvoiceEmailSender(rig.config)({ recipient: "guest@example.test", document }),
+          await sendInvoiceThrough(rig.config)({ recipient: "guest@example.test", document }),
         ).toEqual({ status: "sent" });
         expect(rig.messages[0]).toContain(`Subject: ${caption}`);
         expect(textPart(rig.messages[0]!)).toBe(caption);
@@ -264,7 +285,7 @@ describe("invoice SMTP transport", () => {
         document.result.invoiceNumber = "R/8";
         const caption = `${receiptLabelsFor(locale).correctiveInvoice} R/8`;
         expect(
-          await createInvoiceEmailSender(rig.config)({ recipient: "guest@example.test", document }),
+          await sendInvoiceThrough(rig.config)({ recipient: "guest@example.test", document }),
         ).toEqual({ status: "sent" });
         expect(rig.messages[0]).toContain(`Subject: ${caption}`);
         expect(textPart(rig.messages[0]!)).toBe(caption);
@@ -277,7 +298,7 @@ describe("invoice SMTP transport", () => {
   it("A965 labels sends English subject, body and PDF from the document language", async () => {
     const rig = await smtpRig("accepted");
     try {
-      const send = createInvoiceEmailSender(rig.config);
+      const send = sendInvoiceThrough(rig.config);
       expect(
         await send({
           recipient: "customer@example.test",
@@ -302,11 +323,7 @@ describe("invoice SMTP transport", () => {
     const first = await smtpRig("accepted");
     const second = await smtpRig("accepted");
     try {
-      const send = createRoutedInvoiceEmailSender({
-        db: suite.db,
-        ring,
-        config: { onboardingIntent: "live", devMode: false },
-      });
+      const send = sendWithSavedSettings;
       await withTransaction(suite.db, (tx) => saveSmtpForTest(tx, ring, first.config));
       expect(await send({ recipient: "first@example.test", document: fixture })).toEqual({
         status: "sent",
@@ -327,8 +344,7 @@ describe("invoice SMTP transport", () => {
         deleteCredential(tx, { personId: null, purpose: "email.smtp" }),
       );
       expect(await send({ recipient: "third@example.test", document: fixture })).toEqual({
-        status: "failed",
-        failureCode: "transport_failed",
+        mode: "unconfigured",
       });
       expect(first.messages).toHaveLength(1);
       expect(second.messages).toHaveLength(1);
@@ -343,15 +359,9 @@ describe("invoice SMTP transport", () => {
     const rig = await smtpRig("accepted");
     try {
       const message = { recipient: "customer@example.test", document: fixture };
-      expect(await createInvoiceEmailSender(rig.config)(message)).toEqual({ status: "sent" });
+      expect(await sendInvoiceThrough(rig.config)(message)).toEqual({ status: "sent" });
       await withTransaction(suite.db, (tx) => saveSmtpForTest(tx, ring, rig.config));
-      expect(
-        await createRoutedInvoiceEmailSender({
-          db: suite.db,
-          ring,
-          config: { onboardingIntent: "live", devMode: false },
-        })(message),
-      ).toEqual({ status: "sent" });
+      expect(await sendWithSavedSettings(message)).toEqual({ status: "sent" });
       const [plain, named] = rig.messages as [string, string];
       expect(named).toContain("From: Dining Room <venue@example.test>");
       expect(/^Subject: (.*)$/m.exec(named)?.[1]).toBe("Factura FF/1");
@@ -374,29 +384,16 @@ describe("invoice SMTP transport", () => {
     }
   });
 
-  it("reports a live invoice with no SMTP configuration as a certain failure", async () => {
-    await seedTaxpayer(suite.db);
-    const send = createRoutedInvoiceEmailSender({
-      db: suite.db,
-      ring,
-      config: { onboardingIntent: "live", devMode: false },
-    });
-    expect(await send({ recipient: "customer@example.test", document: fixture })).toEqual({
-      status: "failed",
-      failureCode: "transport_failed",
-    });
-  });
   it.each([false, true])(
     "implicit TLS validates certificates with test trust override=%s",
     async (trustTestCertificate) => {
       const rig = await smtpRig("accepted", true);
       try {
-        const config = {
-          ...rig.config,
-          url: rig.config.url + (trustTestCertificate ? "?tls.rejectUnauthorized=false" : ""),
-        };
         expect(
-          await createInvoiceEmailSender(config)({
+          await sendInvoiceThrough(
+            rig.config,
+            trustTestCertificate ? tls.caCertPem : undefined,
+          )({
             recipient: "customer@example.test",
             document: fixture,
           }),
@@ -421,7 +418,7 @@ describe("invoice SMTP transport", () => {
     async (invoiceLocale, duplicate, subject, caption, marker) => {
       const rig = await smtpRig("accepted");
       try {
-        const send = createInvoiceEmailSender(rig.config);
+        const send = sendInvoiceThrough(rig.config);
         expect(
           await send({
             recipient: "customer@example.test",
@@ -473,7 +470,7 @@ describe("invoice SMTP transport", () => {
           },
         };
         expect(
-          await createInvoiceEmailSender(rig.config)({
+          await sendInvoiceThrough(rig.config)({
             recipient: "customer@example.test",
             document,
           }),
@@ -497,7 +494,7 @@ describe("invoice SMTP transport", () => {
       const rig = await smtpRig(reply);
       try {
         expect(
-          await createInvoiceEmailSender(rig.config)({
+          await sendInvoiceThrough(rig.config)({
             recipient: "customer@example.test",
             document: fixture,
           }),
@@ -513,7 +510,7 @@ describe("invoice SMTP transport", () => {
     const rig = await smtpRig("lost-ack");
     try {
       expect(
-        await createInvoiceEmailSender(rig.config)({
+        await sendInvoiceThrough(rig.config)({
           recipient: "customer@example.test",
           document: fixture,
         }),
@@ -528,7 +525,7 @@ describe("invoice SMTP transport", () => {
     const rig = await smtpRig("silent");
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
-      const sending = createInvoiceEmailSender(rig.config)({
+      const sending = sendInvoiceThrough(rig.config)({
         recipient: "customer@example.test",
         document: fixture,
       });
@@ -562,7 +559,7 @@ it.each(["temporary-recipient-refused", "temporary-data-refused"] as const)(
   async (reply) => {
     const rig = await smtpRig(reply);
     try {
-      const outcome = await createInvoiceEmailSender(rig.config)({
+      const outcome = await sendInvoiceThrough(rig.config)({
         recipient: "customer@example.test",
         document: fixture,
       });
@@ -594,7 +591,7 @@ describe("invoice email privacy notice", () => {
     const rig = await smtpRig("accepted");
     try {
       expect(
-        await createInvoiceEmailSender(rig.config)({
+        await sendInvoiceThrough(rig.config)({
           recipient: "customer@example.test",
           ...message,
         }),

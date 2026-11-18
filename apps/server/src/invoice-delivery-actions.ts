@@ -1,8 +1,10 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
 import {
+  cancelMail,
   receiptRollColumns,
   invoiceDeliveries,
+  outgoingMail,
   printJobs,
   isReceiptPrinter,
   printers,
@@ -18,6 +20,7 @@ import {
 } from "./invoice-delivery.js";
 import {
   invoiceDeliveryAttemptColumns,
+  invoiceDeliveryMailJoin,
   readInvoiceDeliveryState,
   readReceiptEmailDeliveries,
   rowAttempt,
@@ -44,6 +47,7 @@ async function replayed(
     .select(invoiceDeliveryAttemptColumns)
     .from(invoiceDeliveries)
     .leftJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
+    .leftJoin(outgoingMail, invoiceDeliveryMailJoin)
     .where(and(eq(invoiceDeliveries.saleId, saleId), eq(invoiceDeliveries.requestKey, requestKey)));
   if (row !== undefined && !(await sameRequest(row))) {
     throw new AppError("submission.id_reused", { submissionId: requestKey });
@@ -239,6 +243,7 @@ export async function switchToReceipt(
     )
     .returning({ id: invoiceDeliveries.id });
   if (switched.length === 0) throw new AppError("invoice_delivery.active", {});
+  if (attempt.medium === "email") await cancelMail(tx, `invoice:${deliveryId}`);
   if (receipt.status === "not_queued") {
     const ticket =
       sale.workingOrderId === null

@@ -64,11 +64,26 @@ export interface MailKindOwner<Prepared = unknown> {
     now: Date,
     prepared?: Prepared,
   ): Promise<void>;
+  sweep?: {
+    due(db: Transaction, now: Date): Promise<{ now: boolean; nextAt: Date | null }>;
+    run(tx: Transaction, now: Date): Promise<void>;
+  };
 }
 export type MailTransport = (
   smtp: SmtpConnection,
   message: Omit<SendMailOptions, "from">,
 ) => Promise<SmtpSendOutcome>;
+
+export function smtpMailOutcome(
+  sent: SmtpSendOutcome,
+): Exclude<MailSettlement, { status: "expired" }> {
+  if (sent.status === "sent") return sent;
+  if (sent.status === "rejected") {
+    return { status: "rejected", failureCode: sent.reason, serverRefused: sent.serverRefused };
+  }
+  return { status: "unknown", failureCode: sent.reason };
+}
+
 export interface MailSenderDeps {
   bus?: LiveEvents;
   db: Database;
@@ -110,6 +125,21 @@ const due = (row: OutgoingMail, owner: MailKindOwner, now: number) =>
   waiting(row) &&
   (Date.parse(row.nextAttemptAt) <= now ||
     Date.parse(row.nextAttemptAt) > now + owner.longestWaitMs);
+
+async function readSweeps(
+  { db, owners }: Pick<MailSenderDeps, "db" | "owners">,
+  now: Date,
+): Promise<{ now: boolean; nextAt: Date | null }> {
+  let next: Date | null = null;
+  for (const { sweep } of owners) {
+    if (!sweep) continue;
+    const due = await sweep.due(db, now);
+    if (due.now) return { now: true, nextAt: now };
+    if (due.nextAt && (!next || due.nextAt < next)) next = due.nextAt;
+  }
+  return { now: false, nextAt: next };
+}
+
 function liveRows(tx: Transaction, owners: readonly MailKindOwner[]) {
   return tx
     .select()
@@ -179,7 +209,8 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
   const allowed = () => !deps.signal.aborted && deps.isPrimary();
   if (!allowed()) return { processed: false };
   const owners = new Map(deps.owners.map((o) => [o.kind, o]));
-  const firstNow = deps.now().getTime();
+  const firstTime = deps.now();
+  const firstNow = firstTime.getTime();
   const first = await liveRows(deps.db, deps.owners);
   if (
     !first.some(
@@ -187,7 +218,8 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
         (waiting(r) && Date.parse(r.notAfter) <= firstNow) ||
         lapsed(r, firstNow) ||
         due(r, owners.get(r.kind)!, firstNow),
-    )
+    ) &&
+    !(await readSweeps(deps, firstTime)).now
   )
     return { processed: false };
   await deps.beforeClaim?.();
@@ -229,6 +261,9 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
       if (!allowed()) return { processed: false } as MailPassResult;
       const now = deps.now();
       const stamp = now.toISOString();
+      for (const { sweep } of deps.owners) {
+        if (sweep && (await sweep.due(tx, now)).now) await sweep.run(tx, now);
+      }
       let changed = false;
       let expired = 0;
       const rows = await liveRows(tx, deps.owners);
@@ -323,14 +358,20 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     if (failed === undefined) throw error;
     const mail = failed;
     const owner = owners.get(mail.kind)!;
+    const now = deps.now();
     // The owner’s writes rolled back; a fresh transaction retains only the failed attempt’s back-off.
     await withTransaction(deps.db, (tx) =>
       tx
         .update(outgoingMail)
-        .set({
-          ...retryPatch(mail, owner, deps.now(), "mail.claim_failed"),
-          attempts: mail.attempts,
-        })
+        .set(
+          // An invoice whose claim rolled back still holds the sale's active delivery slot.
+          mail.kind === "invoice"
+            ? { nextAttemptAt: new Date(now.getTime() + 5_000).toISOString() }
+            : {
+                ...retryPatch(mail, owner, now, "mail.claim_failed"),
+                attempts: mail.attempts,
+              },
+        )
         .where(
           and(
             eq(outgoingMail.id, mail.id),
@@ -399,12 +440,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     } catch {
       sent = { status: "unknown", reason: "email.test_refused" };
     }
-    outcome =
-      sent.status === "sent"
-        ? sent
-        : sent.status === "rejected"
-          ? { status: "rejected", failureCode: sent.reason, serverRefused: sent.serverRefused }
-          : { status: "unknown", failureCode: sent.reason };
+    outcome = smtpMailOutcome(sent);
   }
   const settled = outcome!;
   if (settled.status === "sent" && delivery.mode === "local_capture" && deps.bus)
@@ -430,7 +466,23 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
         ),
       )
       .returning({ id: outgoingMail.id });
-    if (saved) await owner.settle(tx, mail, settled, now, prepared);
+    if (saved) {
+      await owner.settle(tx, mail, settled, now, prepared);
+    } else if (mail.kind === "invoice") {
+      const [abandoned] = await tx
+        .select({ id: outgoingMail.id })
+        .from(outgoingMail)
+        .where(
+          and(
+            eq(outgoingMail.id, mail.id),
+            eq(outgoingMail.status, "unknown"),
+            eq(outgoingMail.failureCode, "mail.claim_abandoned"),
+            eq(outgoingMail.claimToken, mail.claimToken!),
+          ),
+        );
+      // The invoice delivery keeps this report as history if another generation started.
+      if (abandoned) await owner.settle(tx, mail, settled, now, prepared);
+    }
   });
   if (settled.status !== "sent")
     deps.log("error", "mail.send_failed", {
@@ -496,7 +548,9 @@ export function mailSendJob(
   return {
     name: "mail.send",
     applies: deps.isPrimary,
-    wakeOn: ["outgoing_mail"],
+    wakeOn: deps.owners.some((owner) => owner.kind === "invoice" && owner.sweep)
+      ? ["outgoing_mail", "invoice_deliveries", "print_jobs"]
+      : ["outgoing_mail"],
     minSleepMs: 500,
     maxSleepMs: deps.maxSleepMs,
     backoff: { firstMs: 5_000, maxMs: 60_000 },
@@ -505,11 +559,13 @@ export function mailSendJob(
       if (!result.processed && result.emailUnconfigured) {
         if (!waitingForSetup) deps.log("info", "mail.waiting_for_email_setup");
         waitingForSetup = true;
-        return { nextDueAt: null };
+        return { nextDueAt: (await readSweeps(deps, deps.now())).nextAt };
       }
       if (result.processed && result.mailId !== null) waitingForSetup = false;
       if (result.processed) return { nextDueAt: deps.now() };
-      return { nextDueAt: await nextMailDueAt(deps) };
+      const mailAt = await nextMailDueAt(deps);
+      const { nextAt: sweepAt } = await readSweeps(deps, deps.now());
+      return { nextDueAt: mailAt && (!sweepAt || mailAt < sweepAt) ? mailAt : sweepAt };
     },
   };
 }

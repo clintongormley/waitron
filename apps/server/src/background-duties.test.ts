@@ -6,20 +6,13 @@ import {
 } from "./background-duties.js";
 import { createJobRunner } from "./job-runner.js";
 
-const ABORTS = [
-  "controller",
-  "pendingCardController",
-  "invoiceEmailController",
-  "tenderRefundController",
-  "jobRunner",
-];
+const ABORTS = ["controller", "pendingCardController", "tenderRefundController", "jobRunner"];
 
 const CLOSERS = [
   "jobRunner",
   "pendingCardLoop",
   "tenderRefundLoop",
   "certificateDiagnosis",
-  "invoiceEmailLoop",
   "unsubscribeFromChanges",
   "spareSettings",
   "liveEvents",
@@ -47,12 +40,10 @@ function recordingHandles(
   return {
     controller: aborter("controller"),
     pendingCardController: aborter("pendingCardController"),
-    invoiceEmailController: aborter("invoiceEmailController"),
     tenderRefundController: aborter("tenderRefundController"),
     pendingCardLoop: awaited("pendingCardLoop"),
     tenderRefundLoop: awaited("tenderRefundLoop"),
     certificateDiagnosis: stopper("certificateDiagnosis"),
-    invoiceEmailLoop: awaited("invoiceEmailLoop"),
     unsubscribeFromChanges: () => void calls.push("call unsubscribeFromChanges"),
     jobRunner: {
       signalStepdown: () => void calls.push("abort jobRunner"),
@@ -116,7 +107,6 @@ describe("background duties", () => {
       "await pendingCardLoop",
       "await tenderRefundLoop",
       "stop certificateDiagnosis",
-      "await invoiceEmailLoop",
       "call unsubscribeFromChanges",
       "stop spareSettings",
       "close liveEvents",
@@ -234,9 +224,10 @@ describe("background duties", () => {
           throw first;
         },
       },
-      invoiceEmailController: {
+      tenderRefundController: {
         abort: () => {
-          throw new Error("attendance abort failed");
+          calls.push("abort tenderRefundController");
+          throw new Error("refund abort failed");
         },
       },
       loop: running,

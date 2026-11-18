@@ -26,7 +26,7 @@ export const invoiceDeliveryStatus = enumType(["queued", "sending", "sent", "fai
  * Why an A4 delivery ended without a confirmed print. `printer_disabled`: its office printer was
  * disabled (a waiting delivery fails, one being sent becomes uncertain). `switched`: a waiting one
  * was replaced by paper before any agent took it; an email original is switched the same way, before
- * the email worker takes it. `printer_refused` and `printer_unreachable`: it
+ * the mail job takes it. `printer_refused` and `printer_unreachable`: it
  * did not print (failed). `printer_aborted` (stopped after the printer accepted it) and `timeout`:
  * it may have printed (uncertain). `document_unavailable`: the agent could not get the invoice's pages, so
  * nothing was sent to the printer (failed).

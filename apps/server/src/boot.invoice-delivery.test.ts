@@ -13,6 +13,7 @@ import {
   invoiceSeries,
   nodes,
   printJobs,
+  readMail,
   stampDeployment,
   taxpayer,
   withTransaction,
@@ -52,10 +53,13 @@ import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { configureDemoPrinter, DEMO_PRINTER_KEY } from "./demo-printer.js";
 import {
-  claimInvoiceDelivery,
   reserveInvoiceDelivery,
   reportInvoiceDelivery,
+  startInvoiceEmail,
 } from "./invoice-delivery.js";
+import { invoiceMail } from "./invoice-mail.js";
+import { runMailPass } from "./mail-sender.js";
+import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { claimInvoicePrintJobs } from "./invoice-print.js";
 import { writeModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -285,12 +289,39 @@ describe("invoice delivery recovery at trading boot", () => {
           recipient: "customer@example.test",
         }),
       );
-      const claim = (await withTransaction(suite.db, (tx) =>
-        claimInvoiceDelivery(tx, email.id, "previous-server", new Date(Date.now() + 1000)),
-      ))!;
-      expect(claim).toBeDefined();
+      let release!: () => void;
+      const sending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let reachedTransport = false;
+      const pass = runMailPass({
+        db: suite.db,
+        owners: [
+          invoiceMail({
+            db: suite.db,
+            readDocument: async () => FULL_INVOICE_DOCUMENT_FIXTURE,
+            render: async () => ({ subject: "Invoice", text: "Invoice attached" }),
+          }),
+        ],
+        now: () => new Date(),
+        signal: new AbortController().signal,
+        isPrimary: () => true,
+        resolveDelivery: async () => ({
+          mode: "smtp",
+          smtp: { url: "smtp://mail.example.test", from: "sender@example.test" },
+        }),
+        log: () => {},
+        send: async () => {
+          reachedTransport = true;
+          await sending;
+          return outcome === "sent"
+            ? { status: "sent" }
+            : { status: "rejected", reason: "email.test_refused", serverRefused: true };
+        },
+      });
       let server: StartedServer | undefined;
       try {
+        await vi.waitFor(() => expect(reachedTransport).toBe(true));
         server = await startServer(ctx.env);
         await vi.waitFor(async () => {
           const response = await fetch(`http://127.0.0.1:${httpPort()}/health`);
@@ -298,7 +329,7 @@ describe("invoice delivery recovery at trading boot", () => {
         });
         expect(await delivery(email.id)).toMatchObject({
           status: "unknown",
-          failureCode: "restart",
+          failureCode: "timeout",
           attempts: 1,
           designation: "original",
           recipient: "customer@example.test",
@@ -306,24 +337,17 @@ describe("invoice delivery recovery at trading boot", () => {
         });
         await server.close();
         beforeServerStarts();
-        expect(
-          await withTransaction(suite.db, (tx) => claimInvoiceDelivery(tx, email.id, "new-server")),
-        ).toBeUndefined();
-        expect(
-          await withTransaction(suite.db, (tx) =>
-            reportInvoiceDelivery(
-              tx,
-              claim,
-              outcome === "sent"
-                ? { status: "sent" }
-                : { status: "failed", failureCode: "transport_failed" },
-            ),
-          ),
-        ).toEqual({ updated: true, historical: false });
+        expect(await readMail(suite.db, `invoice:${email.id}`)).toMatchObject({
+          status: "unknown",
+          failureCode: "mail.claim_abandoned",
+          attempts: 1,
+        });
+        release();
+        await pass;
         expect(await delivery(email.id)).toMatchObject({
           status: outcome === "sent" ? "sent" : "unknown",
           reportedOutcome: outcome,
-          failureCode: outcome === "sent" ? null : "restart",
+          failureCode: outcome === "sent" ? null : "timeout",
         });
         expect(await delivery(ctx.paper.id)).toMatchObject({
           status: "failed",
@@ -331,6 +355,8 @@ describe("invoice delivery recovery at trading boot", () => {
         });
       } finally {
         await server?.close();
+        release();
+        await pass;
       }
     },
   );
@@ -482,8 +508,34 @@ function textPart(message: string) {
     );
 }
 
-describe("invoice email worker at trading boot", () => {
-  it("sends a queued simplified receipt through the real boot worker", async () => {
+describe("invoice mail at trading boot", () => {
+  it("sends after restart when shutdown released the mail before transport began", async () => {
+    const ctx = await fixture();
+    const smtp = await smtpFixture();
+    let server: StartedServer | undefined;
+    try {
+      const email = await queuedEmail(ctx, smtp.smtp);
+      await withTransaction(suite.db, (tx) => startInvoiceEmail(tx, email.id));
+      expect(await readMail(suite.db, `invoice:${email.id}`)).toMatchObject({
+        status: "pending",
+        claimToken: null,
+        attempts: 0,
+      });
+      server = await startServer(ctx.env);
+      await vi.waitFor(
+        async () => {
+          expect(await delivery(email.id)).toMatchObject({ status: "sent", attempts: 1 });
+        },
+        { timeout: 4_000 },
+      );
+      expect(smtp.messages).toHaveLength(1);
+    } finally {
+      await server?.close();
+      await smtp.close();
+    }
+  });
+
+  it("sends a queued simplified receipt through the real mail job", async () => {
     const ctx = await fixture();
     const smtp = await smtpFixture();
     let server: StartedServer | undefined;
@@ -530,6 +582,12 @@ describe("invoice email worker at trading boot", () => {
         { timeout: 5_000 },
       );
       expect(smtp.messages).toHaveLength(1);
+      expect(await readMail(suite.db, `invoice:${email.id}`)).toMatchObject({
+        kind: "invoice",
+        subjectId: email.id,
+        status: "sent",
+        attempts: 1,
+      });
       expect(textPart(smtp.messages[0]!)).toBe(
         `${receiptLabelsFor("es-ES").simplifiedInvoice} S/1`,
       );
@@ -647,7 +705,11 @@ describe("invoice email worker at trading boot", () => {
       const email = await queuedEmail(ctx, smtp.smtp);
       server = await startServer(ctx.env);
       await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 5_000 });
-      expect(await delivery(email.id)).toMatchObject({ status: "sending", attempts: 1 });
+      expect(await delivery(email.id)).toMatchObject({ status: "sending", attempts: 0 });
+      expect(await readMail(suite.db, `invoice:${email.id}`)).toMatchObject({
+        status: "sending",
+        attempts: 1,
+      });
       let closed = false;
       closing = server.close().then(() => {
         closed = true;

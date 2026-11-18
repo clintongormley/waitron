@@ -30,13 +30,11 @@ interface Stopper {
 export interface BackgroundDutyHandles {
   controller: Aborter;
   pendingCardController: Aborter;
-  invoiceEmailController: Aborter;
   tenderRefundController: Aborter;
   pendingCardLoop: unknown;
   tenderRefundLoop: unknown;
   certificateDiagnosis: Stopper | undefined;
   fiscalReconciliation?: Stopper;
-  invoiceEmailLoop: unknown;
   unsubscribeFromChanges: () => unknown;
   jobRunner: Pick<JobRunner, "signalStepdown" | "stopJobs" | "stopServices">;
   liveEvents: { close(): unknown };
@@ -66,8 +64,6 @@ function once(close: () => unknown): () => unknown {
   };
 }
 
-const LOOP_WAIT =
-  "waits for a loop the aborts already signalled; a pass already running continues until it ends";
 const SIGNALLED_LOOP_WAIT =
   "waits for a loop the aborts already signalled; its running pass stops at its next check of the signal";
 
@@ -91,11 +87,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       reason: SIGNALLED_LOOP_WAIT,
     },
     { name: "certificateDiagnosis", close: () => h.certificateDiagnosis?.stop(), atStepdown: true },
-    {
-      name: "invoiceEmailLoop",
-      close: () => h.invoiceEmailLoop,
-      reason: LOOP_WAIT,
-    },
     {
       name: "unsubscribeFromChanges",
       close: h.unsubscribeFromChanges,
@@ -163,7 +154,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     aborts: [
       { name: "controller", abort: () => h.controller.abort() },
       { name: "pendingCardController", abort: () => h.pendingCardController.abort() },
-      { name: "invoiceEmailController", abort: () => h.invoiceEmailController.abort() },
       { name: "tenderRefundController", abort: () => h.tenderRefundController.abort() },
       { name: "jobRunner", abort: () => h.jobRunner.signalStepdown() },
     ],
