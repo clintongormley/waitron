@@ -736,7 +736,7 @@ export class ProductBrowser extends LitElement {
       ? offMenusSentence(
           deletesContents
             ? "folders.delete_off_menus"
-            : archivingCount === 1
+            : selection.productIds.length === 1
               ? "product.off_menus"
               : "folders.off_menus",
           this.archivingMenus,

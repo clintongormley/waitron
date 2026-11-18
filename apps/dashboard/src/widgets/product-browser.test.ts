@@ -3488,7 +3488,7 @@ it("keeps Archive for a selection mixing active and disabled products, and sends
   vi.mocked(el.api.countProductMenus).mockResolvedValue(1);
   await press(el, "delete");
   await vi.waitFor(() =>
-    expect(archiveBody(el)).toBe(`${ARCHIVE_PRODUCTS} It comes off the one menu it is on.`),
+    expect(archiveBody(el)).toBe(`${ARCHIVE_PRODUCTS} They come off the one menu they are on.`),
   );
   expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith(["bread"]);
   await press(el, "confirm");

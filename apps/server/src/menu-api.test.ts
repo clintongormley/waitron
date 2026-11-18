@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import { getRequestListener } from "@hono/node-server";
 import { storedMenuParts } from "@waitron/menu/test/menu-parts.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
@@ -30,6 +32,7 @@ import { createCourse } from "./kitchen.js";
 
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
 import "./errors.js";
 
 // The menu ROUTES end to end in-process: the body and id screens and the permission gate. The
@@ -557,9 +560,18 @@ describe("POST /management-api/products/menus", () => {
       lastProduct,
     ];
 
-    const response = await send(app, "POST", path, { body: { productIds } });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ menus: 2 });
+    const held = await retainHttpListener("127.0.0.1", createServer(getRequestListener(app.fetch)));
+    try {
+      const response = await fetch(`http://${held.host}:${held.port}${path}`, {
+        method: "POST",
+        body: JSON.stringify({ productIds }),
+        headers: { "content-type": "application/json", cookie: managerCookie, connection: "close" },
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ menus: 2 });
+    } finally {
+      await held.close();
+    }
   });
 
   it("answers with the current revision without touching the session", async () => {

@@ -525,7 +525,7 @@ category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_
 | `PATCH /management-api/categories/:id` | supplied name, parent or colour fields; 200, saved category |
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents, shown }`; 204 |
-| `POST /management-api/products/menus` | `{ productIds }` → 200, `{ menus }`. Counts each active menu that reaches at least one product, including through another menu. A size counts by its product. A Device Home Page shortcut alone counts nothing. An empty array returns `{ menus: 0 }`. A malformed UUID returns `shared.invalid_id` (400). |
+| `POST /management-api/products/menus` | `{ productIds }` → 200, `{ menus }`. Counts each active menu that reaches at least one product, including through another menu. A size counts by its product. A Device Home Page shortcut alone counts nothing. Repeated IDs are allowed. An empty array returns `{ menus: 0 }`. If `productIds` is missing or is not an array of strings, the route returns `management.request_invalid` (400). A malformed UUID returns `shared.invalid_id` (400). |
 | `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes archived products, `activeProducts` leaves them out; `routes` counts the routing cells on the category's row or the row of any category below it, `ownRoutes` those on the category's own row |
 
 For move and delete, both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
