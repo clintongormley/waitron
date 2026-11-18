@@ -304,10 +304,10 @@ describe("an invoice the office printer is holding", () => {
   it("says an invoice that ended while held may still print, and to check the printer first", () => {
     const params = { invoice: "F1A/7", printer: "Back office" };
     expect(alertMessage("invoice_delivery.uncertain_held", params, "en")).toBe(
-      "Full invoice F1A/7 may still print on office printer “Back office”: the printer was holding it when Waitron lost track of it. Check the printer first; only if it did not print, send it again from the order, on the till or on the Orders page.",
+      "Full invoice F1A/7 may still print on office printer “Back office”: the printer was holding it when Waitron lost track of it. Check the printer first. If it did not print, check that the customer does not already have it before sending it again from the order, on the till or on the Orders page.",
     );
     expect(alertMessage("invoice_delivery.uncertain_held", params, "es")).toBe(
-      "Puede que la factura completa F1A/7 aún se imprima en la impresora de oficina «Back office»: la impresora la tenía retenida cuando Waitron perdió su rastro. Comprueba primero la impresora; solo si no se ha imprimido, vuelve a enviarla desde el pedido, en el TPV o en la página de Pedidos.",
+      "Puede que la factura completa F1A/7 aún se imprima en la impresora de oficina «Back office»: la impresora la tenía retenida cuando Waitron perdió su rastro. Comprueba primero la impresora. Si no se ha imprimido, comprueba que el cliente no la tenga ya antes de volver a enviarla desde el pedido, en el TPV o en la página de Pedidos.",
     );
   });
 });

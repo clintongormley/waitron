@@ -492,7 +492,6 @@ export function printingAlertSource(): AlertSource {
 /** An A4 attempt still queued this long after it was due has been taken by no agent. */
 export const A4_UNCLAIMED_AFTER_MS = 2 * 60_000;
 
-/** Why a full invoice's original has not reached its customer. */
 export type UndeliveredInvoice = { since: string } & (
   | { kind: "failed" | "uncertain" }
   | { kind: "office_printer_unclaimed" | "uncertain_held"; printer: string }
@@ -672,10 +671,7 @@ async function undeliveredCandidates(tx: Transaction) {
   return [...tracked, ...untracked];
 }
 
-/**
- * One alert per full invoice whose original has not reached its customer. Its params name the
- * invoice by number and never its customer.
- */
+/** An alert's params name the invoice by number and never its customer. */
 export function invoiceDeliveryAlertSource(deps: {
   testPages: Pick<PageTestPages, "holdOn">;
 }): AlertSource {

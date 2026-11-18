@@ -1583,6 +1583,52 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
         expect(words(fact(el))).toBe(FACT);
         expect(check(el)).toBeNull();
       });
+
+      describe("under a confirmed customer handover", () => {
+        const handedOver = {
+          status: "done",
+          jobId: "original",
+          canRetry: false,
+          handover: { personId: "staff", confirmedAt: "2026-08-05T12:40:00.000Z" },
+        } as const;
+
+        it.each(["failed", "unknown"] as const)(
+          "drops the doubt about a %s attempt, keeping the fact",
+          async (status) => {
+            const { el } = await mountF1({
+              deliveries: behind(attempt({ id: "d2", medium: "email", status })),
+              originalReceiptPrint: handedOver,
+            });
+            const section = button(el, "original-delivery")!.textContent!;
+            expect(section).toContain("Customer handover confirmed");
+            expect(button(el, "delivery-status")).toBeNull();
+            expect(section).not.toContain("Not delivered.");
+            expect(words(fact(el))).toBe(FACT);
+          },
+        );
+
+        it("keeps saying a held page may still print", async () => {
+          const held = attempt({
+            id: "d2",
+            medium: "a4",
+            status: "unknown",
+            printerHold: "paper_jam",
+          });
+          const { el } = await mountF1({
+            deliveries: behind(held),
+            originalReceiptPrint: handedOver,
+          });
+          expect(line(el)).toBe("May still print: check the printer first.");
+        });
+
+        it("keeps a failure's words when nothing was delivered late", async () => {
+          const { el } = await mountF1({
+            deliveries: behind(failedAgain, { ...delivered, lateSuccess: false }),
+            originalReceiptPrint: handedOver,
+          });
+          expect(line(el)).toBe("Not delivered.");
+        });
+      });
     });
 
     it("offers no email again when the retry offered is on paper", async () => {

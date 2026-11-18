@@ -399,15 +399,46 @@ describe("the full invoice's delivery status", () => {
       expect(lines(el)[1]).toContain("A4 · Original · Delivered after all ·");
     });
 
-    it("heads the section with the delivery for a receipt", async () => {
+    it("heads a late receipt as possibly delivered while the original is not recorded as delivered", async () => {
       setLocale("en-GB");
       const receipt = attempt({ medium: "receipt", status: "unknown", lateSuccess: true });
       const el = await open(stubApi(f1(deliveries(receipt))));
+      expect(text(el, "delivery-status")).toBe("May not have been delivered.");
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(text(el, "delivery-status")).toBe("Puede que no se haya entregado.");
+    });
+
+    it("heads a late copy as delivered, with no second line, once the original was delivered", async () => {
+      setLocale("en-GB");
+      const copy = attempt({
+        id: "delivery-3",
+        medium: "receipt",
+        designation: "duplicate",
+        status: "unknown",
+        lateSuccess: true,
+      });
+      const original = attempt({ id: "delivery-2", medium: "email", status: "sent" });
+      const el = await open(
+        stubApi(f1(deliveries(copy, { originalCompleted: true, history: [copy, original] }))),
+      );
       expect(text(el, "delivery-status")).toBe("Delivered after all.");
+      expect(find(el, "delivery-late-success")).toBeNull();
+      expect(find(el, "delivery-late-check")).toBeNull();
       setLocale("es-ES");
       el.requestUpdate();
       await el.updateComplete;
       expect(text(el, "delivery-status")).toBe("Entregada al final.");
+    });
+
+    it("keeps the held wording when the newest attempt ended at a holding printer", async () => {
+      setLocale("en-GB");
+      const held = attempt({ id: "delivery-2", status: "unknown", printerHold: "paper_jam" });
+      const el = await open(stubApi(behind(held, lateEmail)));
+      expect(text(el, "delivery-status")).toBe("May still print: check the printer first.");
+      expect(text(el, "delivery-late-success")).toBe(FACT);
+      expect(text(el, "delivery-late-check")).toBe(CHECK);
     });
 
     it("heads a newer failure as possibly delivered, leaving its history line", async () => {
@@ -515,15 +546,18 @@ describe("the full invoice's delivery status", () => {
       expect(find(el, "delivery-late-check")).toBeNull();
     });
 
-    it("leaves the fact to the headline, and still asks for a check, when the current attempt is the late one", async () => {
+    it("states the fact and asks for a check when the current attempt is the late one", async () => {
       setLocale("en-GB");
       const receipt = attempt({ medium: "receipt", status: "unknown", lateSuccess: true });
       const el = await open(stubApi(f1(deliveries(receipt))));
-      expect(text(el, "delivery-status")).toBe("Delivered after all.");
-      expect(find(el, "delivery-late-success")).toBeNull();
+      expect(text(el, "delivery-status")).toBe("May not have been delivered.");
+      expect(text(el, "delivery-late-success")).toBe(FACT);
+      expect(find(el, "delivery-late-success")!.previousElementSibling).toBe(
+        find(el, "delivery-status"),
+      );
       expect(text(el, "delivery-late-check")).toBe(CHECK);
       expect(find(el, "delivery-late-check")!.previousElementSibling).toBe(
-        find(el, "delivery-status"),
+        find(el, "delivery-late-success"),
       );
     });
   });

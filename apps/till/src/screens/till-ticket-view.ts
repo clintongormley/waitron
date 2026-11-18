@@ -728,6 +728,13 @@ export class TillTicketView extends LitElement {
     const words = status?.current ? deliveryWords(status.current, mayHaveArrived) : undefined;
     const lateAttempt = status?.history.some((attempt) => attempt.lateSuccess) === true;
     const currentStatus = status?.current?.status;
+    // The receipt and the delivery status are read separately, so a confirmed handover can sit
+    // beside an attempt read before it; the handover answers the doubt.
+    const doubtAnswered =
+      mayHaveArrived &&
+      this.#handoverConfirmed &&
+      (currentStatus === "failed" ||
+        (currentStatus === "unknown" && status?.current?.printerHold === null));
     const instead = this.canPrintReceipt ? status?.actions.receiptInstead : null;
     const askToCheck =
       mayHaveArrived &&
@@ -743,7 +750,7 @@ export class TillTicketView extends LitElement {
         ? status.current?.id
         : null;
     return html`
-      ${words === undefined ? nothing : html`<p role="status" data-test="delivery-status">${words}</p>`}
+      ${words === undefined || doubtAnswered ? nothing : html`<p role="status" data-test="delivery-status">${words}</p>`}
       ${
         lateAttempt
           ? html`<p role="status" data-test="delivery-late-success">

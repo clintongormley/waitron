@@ -68,10 +68,10 @@ paying the bill offers the same choice. To print, wait for **Print on {printer}*
 destination, then press it. A full invoice keeps its recorded customer.
 
 When **Send by email** is offered, you can send a receipt or full invoice as a PDF. Enter the customer's
-email address and press **Send**. Printing and email are separate actions; after either delivers
-the original, the next delivery is a copy. If sending fails, use **Send the email again** to retry the
-same address, or choose another address. If the till says **Check before trying again**, the
-document may already have been delivered: ask the customer or look at the printer first.
+email address and press **Send**. Printing and email are separate actions. If the till says
+**Check before trying again**, the document may already have been delivered: ask the customer or
+look at the printer first. If sending fails, or the customer does not have it, use **Send the email
+again** to retry the same address, or choose another address.
 
 Choose **None** or close the window to carry on without printing. You close the table separately.
 For a document later, open the sale and choose **Print/Reprint**.

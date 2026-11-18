@@ -60,7 +60,7 @@ const DELIVERY_REREAD_MS = 5_000;
 
 function deliveryWords(attempt: OrderDeliveryAttempt | null, mayHaveArrived: boolean): string {
   if (attempt === null) return t("orders.detail.delivery_none");
-  if (attempt.lateSuccess) return t("orders.detail.delivery_late_success");
+  if (attempt.lateSuccess && !mayHaveArrived) return t("orders.detail.delivery_late_success");
   const hold = attempt.printerHold;
   switch (attempt.status) {
     case "queued":
@@ -305,7 +305,7 @@ export class OrderDetailDialog extends LitElement {
       <h3>${t("orders.detail.delivery")}</h3>
       <p data-test="delivery-status">${deliveryWords(status.current, mayHaveArrived)}</p>
       ${
-        lateAttempt && !status.current?.lateSuccess
+        lateAttempt && (mayHaveArrived || !status.current?.lateSuccess)
           ? html`<p data-test="delivery-late-success">
               ${t("orders.detail.delivery_late_success_earlier")}
             </p>`
