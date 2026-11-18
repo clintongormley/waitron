@@ -101,7 +101,7 @@ describe("releaseBlockers", () => {
   it("answers each blocker line's text in the real template", () => {
     const blockers = releaseBlockers(template);
     expect(blockers).toHaveLength(1);
-    expect(blockers[0]).toMatch(/^Item 1\.d\) is the draft the asesor is asked about in question 9 /);
+    expect(blockers[0]).toMatch(/^Item 1\.d\) is Q53's draft\. Question 9 /);
   });
 
   it("answers nothing for a text with none", () => {

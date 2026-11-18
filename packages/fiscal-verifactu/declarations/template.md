@@ -1,4 +1,4 @@
-<!-- release-blocker: Item 1.d) is the draft the asesor is asked about in question 9 of docs/compliance/2026-11-19-adviser-meeting.md (Q53 before it). Replace it with the answered wording, keeping the cloud-server phrase and the spare-server sentence only if this version can do them, then delete this line. -->
+<!-- release-blocker: Item 1.d) is Q53's draft. Question 9 of docs/compliance/2026-11-19-adviser-meeting.md asks the asesor about a later one, which drops the cloud-server phrase and the spare-server sentence and says what the terminal applications and the print agent do. Replace item 1.d) with the answered wording, keeping the cloud-server phrase and the spare-server sentence only if this version can do them, then delete this line. -->
 **DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN**
 
 **1.a) Nombre del sistema informático a que se refiere esta declaración responsable:**
