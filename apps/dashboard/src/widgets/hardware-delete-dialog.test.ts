@@ -84,8 +84,8 @@ it("keeps the send refusal through a failed live read and a successful Retry", a
   expect(button("confirm").disabled).toBe(false);
 });
 
-it("does not close the new target when an earlier send succeeds", async () => {
-  const { el, dialog, open, button, send } = await mount();
+it("does not start the earlier send’s success step after the target changes", async () => {
+  const { el, dialog, open, button, send, beforeDeleted } = await mount();
   const answer = gate();
   send.mockReturnValueOnce(answer.promise);
   await open("first");
@@ -97,6 +97,7 @@ it("does not close the new target when an earlier send succeeds", async () => {
   answer.release();
   await answer.promise;
   await el.updateComplete;
+  expect(beforeDeleted).not.toHaveBeenCalled();
   expect(dialog.open).toBe(true);
   expect(button("confirm").disabled).toBe(false);
 });
