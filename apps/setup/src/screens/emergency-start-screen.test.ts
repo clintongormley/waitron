@@ -259,7 +259,7 @@ it("shows the source contact and reason after retrying an unavailable status rea
     expect(time?.getAttribute("datetime")).toBe(contact);
     expect(time?.textContent?.trim()).toBeTruthy();
     expect(el.shadowRoot!.textContent).toContain(
-      "Cloud heard from the old box within two minutes of this check.",
+      "Cloud reported recent contact with the old box. Reload this page to check again.",
     );
   });
   expect(el.shadowRoot!.textContent).toContain("Nora");
@@ -274,7 +274,7 @@ it("shows an unknown source contact and a known closure in Spanish", async () =>
     expect(el.shadowRoot!.textContent).toContain(
       "Se desconoce el último contacto con el servidor anterior.",
     );
-    expect(el.shadowRoot!.textContent).toContain("Añádelo en la cuenta de Cloud.");
+    expect(el.shadowRoot!.textContent).toContain("Añádelo en la cuenta del propietario en Cloud.");
   });
 });
 

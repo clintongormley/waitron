@@ -335,8 +335,8 @@ it.each([
   );
 });
 
-it("refuses a status read whose as-of time predates the exchange window", () => {
-  const sentAt = Date.parse(asOf) + 60001;
+it.each([60001, -60001])("refuses a reply outside the exchange window by %i ms", (offset) => {
+  const sentAt = Date.parse(asOf) + offset;
   expect(() =>
     readEmergencyCopyStatus(copyStatus, copy, { sentAt, receivedAt: sentAt }),
   ).toThrowError(expect.objectContaining({ code: "cloud.unavailable" }));
