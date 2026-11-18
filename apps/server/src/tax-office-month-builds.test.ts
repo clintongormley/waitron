@@ -10,8 +10,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Readable } from "node:stream";
 import { strFromU8, unzipSync } from "fflate";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { SPACE_LOW_BYTES } from "./free-space-watch.js";
 import type { TaxOfficeMonth } from "./tax-office-export.js";
@@ -21,6 +22,14 @@ import {
   type TaxOfficeMonthBuilds,
 } from "./tax-office-month-builds.js";
 
+/** While armed, a build file's open is held until a removal returns, or until 50 ms after its
+ * own stream is destroyed; `events` records the order of opening, closing and removal. */
+const slowOpen = vi.hoisted(() => ({
+  armed: false,
+  release: null as (() => Promise<void>) | null,
+  timers: [] as ReturnType<typeof setTimeout>[],
+  events: [] as string[],
+}));
 const measuring = vi.hoisted(() => ({
   /** Runs once, while the next `stat` is under way. */
   during: null as (() => void) | null,
@@ -29,6 +38,12 @@ vi.mock("node:fs/promises", async (original) => {
   const real = await original<typeof import("node:fs/promises")>();
   return {
     ...real,
+    rm: async (...args: Parameters<typeof real.rm>) => {
+      slowOpen.events.push("remove started");
+      await real.rm(...args);
+      slowOpen.events.push("remove returned");
+      await slowOpen.release?.();
+    },
     stat: vi.fn(async (...args: Parameters<typeof real.stat>) => {
       const during = measuring.during;
       measuring.during = null;
@@ -39,8 +54,60 @@ vi.mock("node:fs/promises", async (original) => {
   };
 });
 
+vi.mock("node:fs", async (original) => {
+  const real = await original<typeof import("node:fs")>();
+  return {
+    ...real,
+    createWriteStream(...args: Parameters<typeof real.createWriteStream>) {
+      if (!slowOpen.armed) return real.createWriteStream(...args);
+      const [path, options] = args;
+      let release: (() => Promise<void>) | null = null;
+      let fallback: ReturnType<typeof setTimeout> | null = null;
+      const stream = real.createWriteStream(path, {
+        ...(typeof options === "string" ? { encoding: options } : options),
+        fs: {
+          ...real,
+          open(file: string, flags: string, mode: number, done: (...a: unknown[]) => void) {
+            slowOpen.events.push("open requested");
+            let opened: Promise<void> | null = null;
+            const own = () => {
+              if (slowOpen.release === own) slowOpen.release = null;
+              if (fallback !== null) clearTimeout(fallback);
+              opened ??= new Promise<void>((resolve) => {
+                real.open(file, flags, mode, (error, fd) => {
+                  slowOpen.events.push(error ? `open failed ${error.code}` : "opened");
+                  done(error, fd);
+                  resolve();
+                });
+              });
+              return opened;
+            };
+            release = own;
+            slowOpen.release = own;
+          },
+        },
+      });
+      stream.once("close", () => slowOpen.events.push("closed"));
+      const destroy = stream.destroy.bind(stream);
+      stream.destroy = (error?: Error) => {
+        slowOpen.events.push("destroyed");
+        if (fallback === null) {
+          fallback = setTimeout(() => void release?.(), 50);
+          slowOpen.timers.push(fallback);
+        }
+        return destroy(error);
+      };
+      return stream;
+    },
+  };
+});
+
 const folders: string[] = [];
 afterEach(() => {
+  slowOpen.armed = false;
+  slowOpen.release = null;
+  for (const timer of slowOpen.timers.splice(0)) clearTimeout(timer);
+  slowOpen.events = [];
   for (const folder of folders.splice(0)) {
     chmodSync(folder, 0o700);
     if (existsSync(join(folder, "tax-office"))) chmodSync(join(folder, "tax-office"), 0o700);
@@ -115,6 +182,16 @@ function idOf(builds: TaxOfficeMonthBuilds, person: string): string {
   const view = builds.view(person);
   if (view.status === "none") throw new Error("no record");
   return view.id;
+}
+
+/** The slow-opening file was closed before its removal began. */
+function expectClosedBeforeRemoval() {
+  const { events } = slowOpen;
+  expect(events).toContain("remove started");
+  expect(events.indexOf("closed"), JSON.stringify(events)).toBeGreaterThanOrEqual(0);
+  expect(events.indexOf("closed"), JSON.stringify(events)).toBeLessThan(
+    events.indexOf("remove started"),
+  );
 }
 
 /** The person's ready file, asked for by the id their view shows. */
@@ -199,47 +276,85 @@ it("forgets a sent file and its record, but not a newer record than the one sent
   expect(t.builds.view(ANA)).toMatchObject({ status: "ready", id: secondId });
 });
 
-it("records a build whose entries throw as failed, logs once, and accepts the next claim", async () => {
-  const t = setup(async function* () {
-    yield { name: "README.txt", content: "hello" };
-    throw new AppError("storage.disk_full", {});
+it.each([
+  { open: "quick", slow: false },
+  { open: "slow", slow: true },
+])(
+  "records a build whose entries throw as failed, logs once, and accepts the next claim (file open: $open)",
+  async ({ slow }) => {
+    slowOpen.armed = slow;
+    const t = setup(async function* () {
+      yield { name: "README.txt", content: "hello" };
+      throw new AppError("storage.disk_full", {});
+    });
+    t.builds.claim(ANA, "2026-01");
+    const id = idOf(t.builds, ANA);
+    t.builds.begin(ANA, input("2026-01"));
+    await expect(t.pass()).resolves.toEqual({
+      nextDueAt: new Date(Date.parse("2026-02-01T10:00:00.000Z") + TAX_OFFICE_KEEP_MS),
+    });
+    expect(t.changed).toHaveBeenCalledTimes(2);
+    expect(t.builds.view(ANA)).toEqual({ status: "failed", id, month: "2026-01", refusal: null });
+    expect(t.builds.file(ANA, id)).toBeNull();
+    expect(t.files(), JSON.stringify(slowOpen.events)).toEqual([]);
+    if (slow) expectClosedBeforeRemoval();
+    expect(t.log.mock.calls).toEqual([
+      [
+        "error",
+        "tax_office.build_failed",
+        { errorCode: "storage.disk_full", errorClass: "AppError", errno: null },
+      ],
+    ]);
+    expect(t.builds.claim(BEA, "2026-01").claimed).toBe(true);
+  },
+);
+
+it("records a build as failed and leaves no file when its archive cannot be made into a stream", async () => {
+  const fromWeb = vi.spyOn(Readable, "fromWeb").mockImplementationOnce(() => {
+    throw new TypeError("unreadable");
   });
+  onTestFinished(() => fromWeb.mockRestore());
+  const t = setup();
   t.builds.claim(ANA, "2026-01");
   const id = idOf(t.builds, ANA);
   t.builds.begin(ANA, input("2026-01"));
-  await expect(t.pass()).resolves.toEqual({
-    nextDueAt: new Date(Date.parse("2026-02-01T10:00:00.000Z") + TAX_OFFICE_KEEP_MS),
-  });
-  expect(t.changed).toHaveBeenCalledTimes(2);
+  await t.pass();
+  expect(fromWeb).toHaveBeenCalledTimes(1);
   expect(t.builds.view(ANA)).toEqual({ status: "failed", id, month: "2026-01", refusal: null });
-  expect(t.builds.file(ANA, id)).toBeNull();
   expect(t.files()).toEqual([]);
   expect(t.log.mock.calls).toEqual([
     [
       "error",
       "tax_office.build_failed",
-      { errorCode: "storage.disk_full", errorClass: "AppError", errno: null },
+      { errorCode: "unknown", errorClass: "TypeError", errno: null },
     ],
   ]);
-  expect(t.builds.claim(BEA, "2026-01").claimed).toBe(true);
-});
+}, 2_000);
 
-it("leaves no record and no file when the job is stopped mid-build", async () => {
-  const controller = new AbortController();
-  const t = setup(async function* (_month, stopIfAsked) {
-    yield { name: "README.txt", content: "hello" };
-    controller.abort();
-    stopIfAsked();
-    yield { name: "invoices.csv", content: "never" };
-  }, controller);
-  t.builds.claim(ANA, "2026-01");
-  t.builds.begin(ANA, input("2026-01"));
-  await t.pass();
-  expect(t.builds.view(ANA)).toEqual({ status: "none" });
-  expect(t.files()).toEqual([]);
-  expect(t.changed).toHaveBeenCalledTimes(2);
-  expect(t.log).not.toHaveBeenCalledWith("error", "tax_office.build_failed", expect.anything());
-});
+it.each([
+  { open: "quick", slow: false },
+  { open: "slow", slow: true },
+])(
+  "leaves no record and no file when the job is stopped mid-build (file open: $open)",
+  async ({ slow }) => {
+    slowOpen.armed = slow;
+    const controller = new AbortController();
+    const t = setup(async function* (_month, stopIfAsked) {
+      yield { name: "README.txt", content: "hello" };
+      controller.abort();
+      stopIfAsked();
+      yield { name: "invoices.csv", content: "never" };
+    }, controller);
+    t.builds.claim(ANA, "2026-01");
+    t.builds.begin(ANA, input("2026-01"));
+    await t.pass();
+    expect(t.builds.view(ANA)).toEqual({ status: "none" });
+    expect(t.files(), JSON.stringify(slowOpen.events)).toEqual([]);
+    if (slow) expectClosedBeforeRemoval();
+    expect(t.changed).toHaveBeenCalledTimes(2);
+    expect(t.log).not.toHaveBeenCalledWith("error", "tax_office.build_failed", expect.anything());
+  },
+);
 
 it("deletes an unsaved file and its record once it has been kept long enough", async () => {
   const t = setup();
