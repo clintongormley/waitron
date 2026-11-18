@@ -81,7 +81,7 @@ export const QUERY_DEPENDENCIES = {
   getContentSuggestions: ["content_suggestions", "content_suggestion_jobs", ...TRANSLATION_READS],
   getContentTranslationTargets: [...TRANSLATION_READS, "content_suggestions"],
   getContentTranslationCells: TRANSLATION_READS,
-  listPrinters: ["printers", "print_jobs", "printer_holders"],
+  listPrinters: ["printers", "print_jobs"],
   listPrinterProfiles: [
     "device_profile_printers",
     "device_profiles",
@@ -101,7 +101,6 @@ export const QUERY_DEPENDENCIES = {
     "printers",
     "print_jobs",
     "invoice_deliveries",
-    "printer_holders",
     // The impact names devices by their printer choices.
     "devices",
     "device_profiles",
@@ -115,7 +114,6 @@ export const QUERY_DEPENDENCIES = {
     "bill_payment_refunds",
     "working_orders",
     // Not `till_sessions`, which no module declares as a live resource.
-    "printer_holders",
     "printers",
     "card_readers",
     "join_requests",
@@ -384,7 +382,6 @@ export const QUERY_DEPENDENCIES = {
     "kitchen_stations",
     "device_approved_profiles",
     // Each device's equipment (`readDevicesEquipment`, apps/server/src/device-equipment.ts).
-    "printer_holders",
     "device_profile_printers",
     "printers",
     "page_printers",
@@ -452,13 +449,7 @@ export const QUERY_DEPENDENCIES = {
   listPurchaseInvoices: ["purchase_invoices", "purchase_invoice_vat"],
   getDepartmentReceipt: ["departments", "settings.business_day", "settings.venue"],
   // Each active device's resolved receipt printer (`activeReceiptSettings` in receipt-preview-api.ts).
-  getReceiptPaperWidths: [
-    "printers",
-    "printer_holders",
-    "devices",
-    "device_profiles",
-    "device_profile_printers",
-  ],
+  getReceiptPaperWidths: ["printers", "devices", "device_profiles", "device_profile_printers"],
   getVenueDetails: [
     "settings.business_day",
     "settings.venue",

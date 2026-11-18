@@ -1625,7 +1625,7 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/to-receipt (paper instead)"
     const a4 = (await printInvoice(v, orderId)).body!.id as string;
     await suite.db
       .update(printers)
-      .set({ deletedAt: new Date().toISOString() })
+      .set({ active: false, deletedAt: new Date().toISOString() })
       .where(eq(printers.id, v.receiptPrinterId));
     expect(await toReceipt(v, orderId, a4)).toEqual({
       status: 409,

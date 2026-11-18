@@ -1,5 +1,9 @@
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
-import { seedPerson } from "@waitron/db/testing/seed.js";
+import {
+  readPrinterHoldsForTest,
+  holdPrinterForTest,
+  seedPerson,
+} from "@waitron/db/testing/seed.js";
 import { columnsFromOverrides, overridesFromRow } from "@waitron/menu";
 import { STARTER_STEP_NAMES } from "@waitron/venue-service";
 import { departmentCourses, withFoldedPersonChanges } from "@waitron/db";
@@ -100,7 +104,6 @@ import {
   settings as businessDaySettingsTable,
   printAgents,
   printers,
-  printerHolders,
   printJobs,
   pagePrinters,
   deviceProfilePrinters,
@@ -475,7 +478,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 45,
+  version: 46,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -3416,18 +3419,25 @@ it("transfers a printer on two stations in configuration export", async () => {
   ]);
 });
 
-it("transfers a printer's pick-up set and refuses a drawer role in the uploaded set", async () => {
+it("transfers a printer's pick-up flags, leaves the holder behind and refuses an invalid flag", async () => {
   const source = await applyVenue(planVenue(venue("B31415920"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    await tx.insert(printers).values({
-      name: "Slip pickup",
-      transport: "network_tcp",
-      host: "10.0.0.90",
-      pickupRoles: ["payment_slip"],
-    });
+    const { deviceId } = await seedDevice(tx, {});
+    const [printer] = await tx
+      .insert(printers)
+      .values({
+        name: "Slip pickup",
+        transport: "network_tcp",
+        host: "10.0.0.90",
+        portable: true,
+        picksUpReceipts: false,
+        picksUpPaymentSlips: true,
+      })
+      .returning({ id: printers.id });
+    await holdPrinterForTest(tx, printer!.id, deviceId);
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -3437,21 +3447,24 @@ it("transfers a printer's pick-up set and refuses a drawer role in the uploaded 
     new Date("2026-10-13T10:00:00Z"),
     versions,
   );
-  expect(transferred.tables.printers![0]!.pickup_roles).toBe('["payment_slip"]');
+  const exportedPrinter = transferred.tables.printers![0]!;
+  expect(exportedPrinter).toMatchObject({ picks_up_receipts: 0, picks_up_payment_slips: 1 });
+  expect(exportedPrinter).not.toHaveProperty("held_by_device_id");
+  expect(exportedPrinter).not.toHaveProperty("held_at");
   const malformed = {
     ...transferred,
     tables: {
       ...transferred.tables,
       printers: transferred.tables.printers!.map((row) => ({
         ...row,
-        pickup_roles: '["cash_drawer"]',
+        picks_up_payment_slips: 2,
       })),
     },
   };
   expect(() => validateConfigurationBundle(malformed, ALL_MODULES, versions)).toThrowError(
     expect.objectContaining({
       code: "setup.request_invalid",
-      params: { field: "printers.pickup_roles" },
+      params: { field: "printers.picks_up_payment_slips" },
     }),
   );
   await applyVenue(planVenue(venue("B27182810"), ALL_MODULES), {
@@ -3460,10 +3473,24 @@ it("transfers a printer's pick-up set and refuses a drawer role in the uploaded 
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
-    .select({ name: printers.name, pickupRoles: printers.pickupRoles })
+    .select({
+      name: printers.name,
+      picksUpReceipts: printers.picksUpReceipts,
+      picksUpPaymentSlips: printers.picksUpPaymentSlips,
+      heldByDeviceId: printers.heldByDeviceId,
+      heldAt: printers.heldAt,
+    })
     .from(printers)
     .where(eq(printers.name, "Slip pickup"));
-  expect(imported).toEqual([{ name: "Slip pickup", pickupRoles: ["payment_slip"] }]);
+  expect(imported).toEqual([
+    {
+      name: "Slip pickup",
+      picksUpReceipts: false,
+      picksUpPaymentSlips: true,
+      heldByDeviceId: null,
+      heldAt: null,
+    },
+  ]);
 });
 
 it("transfers a device profile's receipt and payment-slip printer lists, in order", async () => {
@@ -5580,7 +5607,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(45);
+  expect(exported.version).toBe(46);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -6929,7 +6956,7 @@ describe("a deleted printer in a configuration transfer", () => {
       };
     });
     const { deviceId } = await seedDevice(suite.db, {});
-    await suite.db.insert(printerHolders).values({ printerId: ids.old, deviceId });
+    await holdPrinterForTest(suite.db, ids.old, deviceId);
     await suite.db.insert(printJobs).values([
       { printerId: ids.old, payload: new Uint8Array([1]) },
       {
@@ -6985,7 +7012,7 @@ describe("a deleted printer in a configuration transfer", () => {
         row.printer_id,
       ]),
     ).toEqual([[ids.profile, ids.live]]);
-    for (const table of ["print_jobs", "printer_holders", "drawer_opens"])
+    for (const table of ["print_jobs", "drawer_opens"])
       expect(transferred.tables).not.toHaveProperty(table);
     expect(transferred.reconnect).toContain("printers");
 
@@ -7038,7 +7065,7 @@ describe("a deleted printer in a configuration transfer", () => {
       ).map((row) => row.printerId),
     ).toEqual([live.id]);
     expect(await targetSuite.db.select().from(printJobs)).toEqual([]);
-    expect(await targetSuite.db.select().from(printerHolders)).toEqual([]);
+    expect(await readPrinterHoldsForTest(targetSuite.db)).toEqual([]);
     expect(await targetSuite.db.select().from(drawerOpens)).toEqual([]);
   });
 

@@ -6466,10 +6466,10 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     );
 
     vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
-    api.liveData.invalidate([{ type: "printer_holders" }]);
+    api.liveData.invalidate([{ type: "printers" }]);
     await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(api.listRecentJobs).toHaveBeenCalledTimes(1);
+    expect(api.listRecentJobs).toHaveBeenCalledTimes(2);
     expect(q(el, "[data-test=printers-table]")).toBeNull();
     expect(timesShown(el, t("printers.no_printers"))).toBe(0);
     expect(timesShown(el, t("printers.refresh_failed"))).toBe(1);

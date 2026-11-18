@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "05841f19-799a-46fc-8800-eb8b1608277b",
+  "id": "a0bba500-2220-473c-a88d-c8e20a3a12aa",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5501,14 +5501,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "ticket_scope": {
-          "name": "ticket_scope",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'station'"
-        },
         "paper_width": {
           "name": "paper_width",
           "type": "text",
@@ -5541,13 +5533,35 @@
           "autoincrement": false,
           "default": false
         },
-        "pickup_roles": {
-          "name": "pickup_roles",
+        "held_by_device_id": {
+          "name": "held_by_device_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "held_at": {
+          "name": "held_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "picks_up_receipts": {
+          "name": "picks_up_receipts",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'[\"receipt\",\"payment_slip\"]'"
+          "default": true
+        },
+        "picks_up_payment_slips": {
+          "name": "picks_up_payment_slips",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
         },
         "active": {
           "name": "active",
@@ -5575,17 +5589,27 @@
           "where": "\"printers\".\"local_key\" is not null and \"printers\".\"deleted_at\" is null"
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "printers_held_by_device_id_devices_id_fk": {
+          "name": "printers_held_by_device_id_devices_id_fk",
+          "tableFrom": "printers",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "held_by_device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
         "printers_transport_ck": {
           "name": "printers_transport_ck",
           "value": "\"printers\".\"transport\" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll')"
-        },
-        "printers_ticket_scope_ck": {
-          "name": "printers_ticket_scope_ck",
-          "value": "\"printers\".\"ticket_scope\" in ('station', 'order')"
         },
         "printers_paper_width_ck": {
           "name": "printers_paper_width_ck",
@@ -5594,6 +5618,18 @@
         "printers_resolution_ck": {
           "name": "printers_resolution_ck",
           "value": "\"printers\".\"resolution\" in ('180dpi', '203dpi')"
+        },
+        "printers_held_pair_ck": {
+          "name": "printers_held_pair_ck",
+          "value": "(\"printers\".\"held_by_device_id\" is null) = (\"printers\".\"held_at\" is null)"
+        },
+        "printers_held_portable_ck": {
+          "name": "printers_held_portable_ck",
+          "value": "\"printers\".\"held_by_device_id\" is null or \"printers\".\"portable\" = 1"
+        },
+        "printers_deleted_ck": {
+          "name": "printers_deleted_ck",
+          "value": "\"printers\".\"deleted_at\" is null or \"printers\".\"active\" = 0"
         },
         "printers_transport_fields_ck": {
           "name": "printers_transport_fields_ck",
@@ -7762,64 +7798,6 @@
           "value": "(\"device_profile_printers\".\"printer_id\" is null) <> (\"device_profile_printers\".\"page_printer_id\" is null) and (\"device_profile_printers\".\"page_printer_id\" is null or \"device_profile_printers\".\"role\" = 'invoice')"
         }
       }
-    },
-    "printer_holders": {
-      "name": "printer_holders",
-      "columns": {
-        "printer_id": {
-          "name": "printer_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "held_at": {
-          "name": "held_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "printer_holders_printer_fk": {
-          "name": "printer_holders_printer_fk",
-          "tableFrom": "printer_holders",
-          "tableTo": "printers",
-          "columnsFrom": [
-            "printer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "printer_holders_device_fk": {
-          "name": "printer_holders_device_fk",
-          "tableFrom": "printer_holders",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "custom_themes": {
       "name": "custom_themes",

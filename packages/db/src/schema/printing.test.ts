@@ -136,7 +136,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
 
   // ---- printers -----------------------------------------------------------------------------
 
-  it("printers: exposes every column through the Drizzle export, with the port and ticket_scope defaults", async () => {
+  it("printers: exposes every column through the Drizzle export, with the port and pickup defaults", async () => {
     const id = await seedPrinter("Kitchen printer");
     await inTx((tx) => tx.update(printers).set({ active: false }).where(eq(printers.id, id)));
     const [row] = await inTx((tx) => tx.select().from(printers).where(eq(printers.id, id)));
@@ -145,7 +145,8 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(row!.localKey).toBeNull();
     expect(row!.host).toBe("10.0.0.5");
     expect(row!.port).toBe(9100);
-    expect(row!.ticketScope).toBe("station");
+    expect(row!.picksUpReceipts).toBe(true);
+    expect(row!.picksUpPaymentSlips).toBe(true);
     expect(row!.paperWidth).toBe("80mm");
     expect(row!.resolution).toBe("180dpi");
     expect(row!.active).toBe(false);
@@ -252,7 +253,10 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     const [fresh] = await inTx((tx) => tx.select().from(printers).where(eq(printers.id, id)));
     expect(fresh!.deletedAt).toBeNull();
     await inTx((tx) =>
-      tx.update(printers).set({ deletedAt: "2026-10-09T10:00:00.000Z" }).where(eq(printers.id, id)),
+      tx
+        .update(printers)
+        .set({ active: false, deletedAt: "2026-10-09T10:00:00.000Z" })
+        .where(eq(printers.id, id)),
     );
     const [marked] = await inTx((tx) => tx.select().from(printers).where(eq(printers.id, id)));
     expect(marked!.deletedAt).toBe("2026-10-09T10:00:00.000Z");

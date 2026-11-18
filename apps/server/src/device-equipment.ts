@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { EquipmentField } from "./errors.js";
 import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
-import { devices, deviceProfilePrinters, printerHolders, printers } from "@waitron/db";
+import { devices, deviceProfilePrinters, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons, tillSessions } from "@waitron/identity";
 import {
@@ -23,6 +23,7 @@ import {
   settleDeviceReader,
 } from "@waitron/payments";
 import type { ReaderEquipment, ReaderRoleState } from "@waitron/payments";
+import { printerPickupRoles } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 
 export type EquipmentRole = ProfilePrinterRole | "card_terminal";
@@ -89,9 +90,13 @@ export async function settleDevice(
 /** Each portable printer some device holds, by printer, with who holds it. */
 export async function readPrinterHolders(tx: Transaction): Promise<Map<string, Holder>> {
   const held = await tx
-    .select({ itemId: printerHolders.printerId, deviceId: printerHolders.deviceId })
-    .from(printerHolders);
-  return namedHolders(tx, held);
+    .select({ itemId: printers.id, deviceId: printers.heldByDeviceId })
+    .from(printers)
+    .where(isNotNull(printers.heldByDeviceId));
+  return namedHolders(
+    tx,
+    held.map((row) => ({ itemId: row.itemId, deviceId: row.deviceId! })),
+  );
 }
 
 /** Each card reader some device holds, by reader, with who holds it. */
@@ -362,7 +367,8 @@ export async function selectDeviceEquipment(
     }
     const [printer] = await tx
       .select({
-        pickupRoles: printers.pickupRoles,
+        picksUpReceipts: printers.picksUpReceipts,
+        picksUpPaymentSlips: printers.picksUpPaymentSlips,
         active: printers.active,
       })
       .from(printers)
@@ -372,11 +378,12 @@ export async function selectDeviceEquipment(
       .select({ profileId: devices.deviceProfileId })
       .from(devices)
       .where(eq(devices.id, input.deviceId));
-    const field = FIELD[printer.pickupRoles[0] ?? "receipt"];
+    const pickupRoles = printerPickupRoles(printer.picksUpReceipts, printer.picksUpPaymentSlips);
+    const field = FIELD[pickupRoles[0] ?? "receipt"];
     if (!printer.active || device === undefined) {
       throw new AppError("device.binding_invalid", { field });
     }
-    if (printer.pickupRoles.length === 0) {
+    if (pickupRoles.length === 0) {
       const [listed] = await tx
         .select({ id: deviceProfilePrinters.printerId })
         .from(deviceProfilePrinters)
@@ -390,7 +397,7 @@ export async function selectDeviceEquipment(
       if (listed === undefined) throw new AppError("device.binding_invalid", { field });
     }
 
-    for (const role of printer.pickupRoles) {
+    for (const role of pickupRoles) {
       await selectDeviceEquipment(tx, { ...input, role });
     }
     return;

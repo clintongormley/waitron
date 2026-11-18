@@ -36,7 +36,6 @@ export * from "./menus.js";
 export * from "./purchase-invoices.js";
 export * from "./device-profiles.js";
 export * from "./device-profile-printers.js";
-export * from "./printer-holders.js";
 export * from "./custom-themes.js";
 export * from "./bill-payments.js";
 export * from "./sales.js";

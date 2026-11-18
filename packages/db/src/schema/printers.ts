@@ -1,26 +1,13 @@
 import { sql } from "drizzle-orm";
-import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
-import {
-  count,
-  enumCheck,
-  enumType,
-  flag,
-  id,
-  json,
-  label,
-  newId,
-  table,
-  tsString,
-} from "./columns.js";
+import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { count, enumCheck, enumType, flag, id, label, newId, table, tsString } from "./columns.js";
+import { devices } from "./devices.js";
 
 /**
  * How a printer is reached. `local_key` is the USB serial or the Bluetooth MAC; `cloud_poll` is a
  * printer whose firmware dials out and polls for jobs.
  */
 export const printTransport = enumType(["usb", "network_tcp", "bluetooth", "cloud_poll"]);
-
-/** Existing printer rows retain this unused column until the planned venue reset (`docs/backlog.md`). */
-export const printTicketScope = enumType(["station", "order"]);
 
 /** The paper roll's width: 30 columns of text on 58mm, 42 on 80mm. */
 export const printPaperWidth = enumType(["58mm", "80mm"]);
@@ -44,16 +31,15 @@ export const printers = table(
     port: count("port").default(9100),
     pollId: label("poll_id"),
     pollTokenHash: label("poll_token_hash"),
-    ticketScope: printTicketScope("ticket_scope").notNull().default("station"),
     // Defaults match the TM-T88III: 80mm, 180 dpi.
     paperWidth: printPaperWidth("paper_width").notNull().default("80mm"),
     resolution: printResolution("resolution").notNull().default("180dpi"),
     hasCashDrawer: flag("has_cash_drawer").notNull().default(false),
-    // A portable printer is used by one device at a time, its holder in `printer_holders`.
     portable: flag("portable").notNull().default(false),
-    pickupRoles: json<("receipt" | "payment_slip")[]>("pickup_roles")
-      .notNull()
-      .default(["receipt", "payment_slip"]),
+    heldByDeviceId: id("held_by_device_id").references((): AnySQLiteColumn => devices.id),
+    heldAt: tsString("held_at"),
+    picksUpReceipts: flag("picks_up_receipts").notNull().default(true),
+    picksUpPaymentSlips: flag("picks_up_payment_slips").notNull().default(true),
     // System switch-offs clear `active`; Delete also sets `deleted_at`; jobs keep the row.
     active: flag("active").notNull().default(true),
     deletedAt: tsString("deleted_at"),
@@ -64,9 +50,11 @@ export const printers = table(
       .on(t.localKey)
       .where(sql`${t.localKey} is not null and ${t.deletedAt} is null`),
     check("printers_transport_ck", enumCheck(t.transport)),
-    check("printers_ticket_scope_ck", enumCheck(t.ticketScope)),
     check("printers_paper_width_ck", enumCheck(t.paperWidth)),
     check("printers_resolution_ck", enumCheck(t.resolution)),
+    check("printers_held_pair_ck", sql`(${t.heldByDeviceId} is null) = (${t.heldAt} is null)`),
+    check("printers_held_portable_ck", sql`${t.heldByDeviceId} is null or ${t.portable} = 1`),
+    check("printers_deleted_ck", sql`${t.deletedAt} is null or ${t.active} = 0`),
     check(
       "printers_transport_fields_ck",
       sql`(${t.transport} = 'usb' and ${t.localKey} is not null)

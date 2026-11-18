@@ -270,7 +270,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   kitchen_stations: ["location_id"],
   kitchen_courses: ["location_id"],
   print_agents: ["location_id"],
-  printers: ["location_id"],
+  printers: ["location_id", "ticket_scope", "pickup_roles"],
   print_jobs: ["location_id"],
   page_printers: ["location_id"],
   department_sale_policies: ["receipt_print_mode"],
@@ -324,6 +324,7 @@ const ADDED_TABLES = [
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
   "working_line_contexts",
+  "printer_holders",
   "order_service_contexts",
   "bill_edit_states",
   "working_order_counters",
@@ -422,7 +423,7 @@ const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
   ],
   print_agents: [["node_id", "setup_url", "setup_port"]],
   print_jobs: [["status", "receipt_copy", "receipt_handover"]],
-  printers: [["active", "portable", "pickup_roles"]],
+  printers: [["active", "portable"]],
   products: [
     ["customer_name", "name_key"],
     ["allergens", "color"],
@@ -1431,6 +1432,34 @@ for (const locale of ["en", "es"] as const) {
         table.foreignKeys = order.flatMap((capturedId, id) =>
           table.foreignKeys.filter((key) => key.id === capturedId).map((key) => ({ ...key, id })),
         );
+      }
+      const printerTable = expected[phase].tables.printers!;
+      const afterPortable =
+        printerTable.columns.findIndex((column) => column.name === "portable") + 1;
+      printerTable.columns.splice(
+        afterPortable,
+        0,
+        { name: "held_by_device_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+        { name: "held_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+        { name: "picks_up_receipts", type: "INTEGER", notnull: 1, dflt_value: "true", pk: 0 },
+        { name: "picks_up_payment_slips", type: "INTEGER", notnull: 1, dflt_value: "true", pk: 0 },
+      );
+      printerTable.foreignKeys.push({
+        id: 0,
+        seq: 0,
+        table: "devices",
+        from: "held_by_device_id",
+        to: "id",
+        on_update: "NO ACTION",
+        on_delete: "NO ACTION",
+        match: "NONE",
+      });
+      for (const row of Object.values(printerTable.rows)) {
+        expect(row.pickup_roles).toEqual(["receipt", "payment_slip"]);
+        row.held_by_device_id = null;
+        row.held_at = null;
+        row.picks_up_receipts = 1;
+        row.picks_up_payment_slips = 1;
       }
       expected[phase] = madridWithDroppedColumns(expected[phase], DROPPED_COLUMNS);
       for (const name of ["attendance_days", "attendance_questions", "attendance_answers"]) {

@@ -6,13 +6,17 @@ import {
   devices,
   pagePrinters,
   printers,
-  printerHolders,
   restrictRefused,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  readPrinterHoldsForTest,
+  seedDevice,
+  seedDeviceProfiles,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -141,9 +145,9 @@ describe("a profile's printer lists and each device's current printers", () => {
       await inTx((tx) =>
         selectDevicePrinter(tx, { deviceId, role, selection: { id: p1 }, via: "manage" }),
       );
-    expect(
-      await suite.db.select({ deviceId: printerHolders.deviceId }).from(printerHolders),
-    ).toEqual([{ deviceId }]);
+    expect((await readPrinterHoldsForTest(suite.db)).map(({ deviceId }) => ({ deviceId }))).toEqual(
+      [{ deviceId }],
+    );
     await suite.db
       .update(devices)
       .set({ active: false })
@@ -168,7 +172,7 @@ describe("a profile's printer lists and each device's current printers", () => {
       invoicePrinterId: null,
       invoicePagePrinterId: null,
     });
-    expect(await suite.db.select().from(printerHolders)).toEqual([]);
+    expect(await readPrinterHoldsForTest(suite.db)).toEqual([]);
   });
 
   it("replaces the lists rather than adding to them", async () => {

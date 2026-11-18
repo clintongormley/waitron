@@ -1778,27 +1778,47 @@ function parentsFirst(shapes: Shape[]): Shape[] {
   const done = new Set<string>();
   const ordered: Shape[] = [];
   let remaining = shapes;
-  let relaxed = false;
-  while (remaining.length > 0) {
-    const ready = remaining.filter((shape) =>
-      shape.foreignKeys.every(
-        (fk) =>
-          fk.parent === shape.name ||
-          done.has(fk.parent) ||
-          !present.has(fk.parent) ||
-          (relaxed && fk.from.some((name) => !shape.columns.find((c) => c.name === name)?.notnull)),
-      ),
+  const broken = new Set<ForeignKey>();
+  const waiting = (shape: Shape) =>
+    shape.foreignKeys.filter(
+      (fk) =>
+        fk.parent !== shape.name &&
+        present.has(fk.parent) &&
+        !done.has(fk.parent) &&
+        !broken.has(fk),
     );
+  while (remaining.length > 0) {
+    const ready = remaining.filter((shape) => waiting(shape).length === 0);
     if (ready.length === 0) {
-      if (relaxed) {
+      const parents = new Map(remaining.map((shape) => [shape.name, waiting(shape)]));
+      function reaches(from: string, target: string, visited = new Set<string>()): boolean {
+        if (from === target) return true;
+        if (visited.has(from)) return false;
+        visited.add(from);
+        return parents.get(from)!.some((fk) => reaches(fk.parent, target, visited));
+      }
+
+      // A nullable key outside the cycle may still need a populated parent to satisfy a CHECK.
+      const edge = remaining
+        .flatMap((shape) =>
+          parents
+            .get(shape.name)!
+            .filter(
+              (fk) =>
+                fk.from.some(
+                  (name) => !shape.columns.find((column) => column.name === name)?.notnull,
+                ) && reaches(fk.parent, shape.name),
+            ),
+        )
+        .at(0);
+      if (edge === undefined) {
         throw new Error(
           `Foreign keys with no nullable column form a cycle: ${remaining.map((s) => s.name).join(", ")}`,
         );
       }
-      relaxed = true;
+      broken.add(edge);
       continue;
     }
-    relaxed = false;
     for (const shape of ready) {
       ordered.push(shape);
       done.add(shape.name);

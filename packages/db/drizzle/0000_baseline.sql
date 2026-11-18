@@ -839,18 +839,23 @@ CREATE TABLE `printers` (
 	`port` integer DEFAULT 9100,
 	`poll_id` text,
 	`poll_token_hash` text,
-	`ticket_scope` text DEFAULT 'station' NOT NULL,
 	`paper_width` text DEFAULT '80mm' NOT NULL,
 	`resolution` text DEFAULT '180dpi' NOT NULL,
 	`has_cash_drawer` integer DEFAULT false NOT NULL,
 	`portable` integer DEFAULT false NOT NULL,
-	`pickup_roles` text DEFAULT '["receipt","payment_slip"]' NOT NULL,
+	`held_by_device_id` text,
+	`held_at` text,
+	`picks_up_receipts` integer DEFAULT true NOT NULL,
+	`picks_up_payment_slips` integer DEFAULT true NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
 	`deleted_at` text,
+	FOREIGN KEY (`held_by_device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "printers_transport_ck" CHECK("printers"."transport" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll')),
-	CONSTRAINT "printers_ticket_scope_ck" CHECK("printers"."ticket_scope" in ('station', 'order')),
 	CONSTRAINT "printers_paper_width_ck" CHECK("printers"."paper_width" in ('58mm', '80mm')),
 	CONSTRAINT "printers_resolution_ck" CHECK("printers"."resolution" in ('180dpi', '203dpi')),
+	CONSTRAINT "printers_held_pair_ck" CHECK(("printers"."held_by_device_id" is null) = ("printers"."held_at" is null)),
+	CONSTRAINT "printers_held_portable_ck" CHECK("printers"."held_by_device_id" is null or "printers"."portable" = 1),
+	CONSTRAINT "printers_deleted_ck" CHECK("printers"."deleted_at" is null or "printers"."active" = 0),
 	CONSTRAINT "printers_transport_fields_ck" CHECK(("printers"."transport" = 'usb' and "printers"."local_key" is not null)
           or ("printers"."transport" = 'bluetooth' and "printers"."local_key" is not null)
           or ("printers"."transport" = 'network_tcp' and "printers"."host" is not null)
@@ -1173,14 +1178,6 @@ CREATE TABLE `device_profile_printers` (
 CREATE UNIQUE INDEX `device_profile_printers_profile_role_default_key` ON `device_profile_printers` (`device_profile_id`,`role`) WHERE "device_profile_printers"."is_default" = 1;--> statement-breakpoint
 CREATE UNIQUE INDEX `device_profile_printers_profile_role_page_printer_key` ON `device_profile_printers` (`device_profile_id`,`role`,`page_printer_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `device_profile_printers_profile_role_printer_key` ON `device_profile_printers` (`device_profile_id`,`role`,`printer_id`);--> statement-breakpoint
-CREATE TABLE `printer_holders` (
-	`printer_id` text PRIMARY KEY NOT NULL,
-	`device_id` text NOT NULL,
-	`held_at` text NOT NULL,
-	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
 CREATE TABLE `custom_themes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,

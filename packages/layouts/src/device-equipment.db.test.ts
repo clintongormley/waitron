@@ -5,13 +5,18 @@ import {
   deviceProfiles,
   devices,
   pagePrinters,
-  printerHolders,
   printers,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  readPrinterHoldsForTest,
+  holdPrinterForTest,
+  seedDevice,
+  seedDeviceProfiles,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -118,11 +123,8 @@ async function columns(deviceId: string) {
 }
 
 async function holders(): Promise<[string, string][]> {
-  const rows = await suite.db
-    .select({ printerId: printerHolders.printerId, deviceId: printerHolders.deviceId })
-    .from(printerHolders)
-    .orderBy(asc(printerHolders.printerId));
-  return rows.map((r) => [r.printerId, r.deviceId]);
+  const rows = await readPrinterHoldsForTest(suite.db);
+  return rows.map((r) => [r.printerId, r.deviceId!]);
 }
 
 async function setActive(printerId: string, active: boolean): Promise<void> {
@@ -182,10 +184,8 @@ describe("which printer each of a device's roles resolves to", () => {
       .update(devices)
       .set({ receiptPrinterId: p1, paymentSlipPrinterId: second })
       .where(eq(devices.id, a));
-    await suite.db.insert(printerHolders).values([
-      { printerId: p1, deviceId: a },
-      { printerId: second, deviceId: a },
-    ]);
+    await holdPrinterForTest(suite.db, p1, a);
+    await holdPrinterForTest(suite.db, second, a);
     const [ordering] = await seedDeviceProfiles(suite.db, {
       name: "Replacement till",
       formFactor: "till",
@@ -265,7 +265,7 @@ describe("which printer each of a device's roles resolves to", () => {
       expect((await inTx((tx) => resolveDevicePrinterIds(tx, [a], role))).get(a)).toBeNull();
       expect(await choose(a, role, { id: p1 })).toEqual({ ok: false, refusal: "not_permitted" });
     }
-    await suite.db.insert(printerHolders).values({ printerId: p1, deviceId: a });
+    await holdPrinterForTest(suite.db, p1, a);
     await inTx((tx) => clearUnlistedPrinterChoices(tx, a));
     expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
     await inTx((tx) => settleDevicePrinters(tx, a, { acquire: true }));
@@ -444,7 +444,7 @@ describe("which printer each of a device's roles resolves to", () => {
 
   it("an explicit portable choice this device does not hold resolves None", async () => {
     await suite.db.update(devices).set({ receiptPrinterId: p1 }).where(eq(devices.id, a));
-    await suite.db.insert(printerHolders).values({ printerId: p1, deviceId: b });
+    await holdPrinterForTest(suite.db, p1, b);
     expect(await resolve(a, "receipt")).toBeNull();
     const roles = await inTx((tx) => readPrinterRoles(tx, a));
     expect(roles.find((r) => r.role === "receipt")).toMatchObject({
@@ -1356,10 +1356,8 @@ describe("clearDeletedPrinter", () => {
       .set({ receiptPrinterId: gone, cashDrawerPrinterId: kept })
       .where(eq(devices.id, b));
     await suite.db.update(devices).set(every(kept)).where(eq(devices.id, c));
-    await suite.db.insert(printerHolders).values([
-      { printerId: gone, deviceId: a },
-      { printerId: kept, deviceId: c },
-    ]);
+    await holdPrinterForTest(suite.db, gone, a);
+    await holdPrinterForTest(suite.db, kept, c);
 
     await inTx((tx) => clearDeletedPrinter(tx, gone));
 

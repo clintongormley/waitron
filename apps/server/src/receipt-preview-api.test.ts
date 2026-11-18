@@ -1,18 +1,15 @@
-import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import {
+  holdPrinterForTest,
+  seedVenueSettings,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
-import {
-  devices,
-  printerHolders,
-  printers,
-  readTaxpayer,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { devices, printers, readTaxpayer, withTransaction, type Database } from "@waitron/db";
 import { mediaImages, uploadImage, prepareImage, saveImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -1289,19 +1286,20 @@ describe("GET /management-api/receipt-preview/paper-widths", () => {
           .set({ portable: true })
           .where(eq(printers.id, portable!.id));
         try {
-          await suite.db
-            .insert(printerHolders)
-            .values({ printerId: portable!.id, deviceId: byLabel.get("Bar")! });
+          await holdPrinterForTest(suite.db, portable!.id, byLabel.get("Bar")!);
           const elsewhere = { paperWidths: ["80mm"] };
           expect(await bothWidths()).toEqual([elsewhere, elsewhere]);
           await suite.db
-            .update(printerHolders)
-            .set({ deviceId: byLabel.get("Till 1")! })
-            .where(eq(printerHolders.printerId, portable!.id));
+            .update(printers)
+            .set({ heldByDeviceId: byLabel.get("Till 1")! })
+            .where(eq(printers.id, portable!.id));
           const held = { paperWidths: ["58mm", "80mm"] };
           expect(await bothWidths()).toEqual([held, held]);
         } finally {
-          await suite.db.delete(printerHolders).where(eq(printerHolders.printerId, portable!.id));
+          await suite.db
+            .update(printers)
+            .set({ heldByDeviceId: null, heldAt: null })
+            .where(eq(printers.id, portable!.id));
         }
       },
     );

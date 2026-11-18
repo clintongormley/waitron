@@ -110,7 +110,6 @@
   "src/schema/parties.ts": 112.9,
   "src/schema/print-agents.ts": 24.4,
   "src/schema/print-jobs.ts": 44.2,
-  "src/schema/printer-holders.ts": 43.4,
   "src/schema/printers.ts": 59.8,
   "src/schema/purchase-invoices.ts": 61.9,
   "src/schema/receipt-reprints.ts": 34.1,

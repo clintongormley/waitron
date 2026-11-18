@@ -858,7 +858,7 @@ also qualifies the historical operation-description references in this section.
   bills because they have no closing timestamp.
   The remaining jobs still need moving onto the runner.
   Devices hold their assigned station and invoice printer choice revision on the device row.
-  The devices and printing work continues with printer holders.
+  Printers now store the device holding them and which documents they pick up on the printer row.
   Kitchen tickets now read their bill through the order line, with no copied bill id to update on a move.
   Each order line now carries its recorded offer and first-send facts, which stay with the line when it is split or moved.
   Floor splits now check the parties the till read, separately from the room layout revision;
@@ -985,9 +985,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
 - **Left open by #1261's review (W111):** database enforcement of theme-logo retention remains open, as do the receipt editor's copied phone and email limits. [Detail](printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05).
 
-- **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** — left open by the product
-  folders work. Printing no longer reads the column. Dropping it rebuilds `printers`, so leave it
-  until the venue reset that permits the rebuild.
 - **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, when
   A1308 rewrites the starting migrations.**
   [Detail](box.md#clock_stop_restarts-is-written-by-nothing-drop-it-and-its-two-backup-check-links-when-a1308-rewrites-the-starting-migrations)

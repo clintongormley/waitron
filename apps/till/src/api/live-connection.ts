@@ -85,7 +85,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "outgoing_mail",
     "printers",
     "page_printers",
-    "printer_holders",
     "device_profile_printers",
     "settings.venue",
   ],
@@ -135,7 +134,7 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "custom_themes",
     "media_images",
   ],
-  equipment: [...DEVICE_TYPES, "printers", "printer_holders", "device_profile_printers", "persons"],
+  equipment: [...DEVICE_TYPES, "printers", "device_profile_printers", "persons"],
   floor: [
     ...DEVICE_TYPES,
     ...ORDER_TYPES,

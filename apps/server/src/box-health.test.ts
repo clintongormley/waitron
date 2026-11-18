@@ -175,7 +175,7 @@ describe("collectBoxHealth", () => {
     await seedFixtureVenue();
     const active = await seedPrinter("Bar");
     await seedPrinter("Off", { active: false });
-    await seedPrinter("Gone", { active: true, deletedAt: "2026-10-01T00:00:00.000Z" });
+    await seedPrinter("Gone", { active: false, deletedAt: "2026-10-01T00:00:00.000Z" });
     const health = await collectBoxHealth(suite.db, stubReaders());
     expect(health.printers).toEqual([{ id: active, name: "Bar" }]);
   });

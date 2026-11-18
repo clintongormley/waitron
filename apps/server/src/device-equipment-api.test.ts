@@ -1,4 +1,8 @@
-import { seedDeviceProfiles, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
+import {
+  readPrinterHoldsForTest,
+  seedDeviceProfiles,
+  attachStationPrinterForTest,
+} from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { expectWriteRunsWhileHostHeld, heldClockStatus } from "./testing/held-clock-status.js";
 import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
@@ -15,7 +19,6 @@ import {
   drawerOpens,
   kitchenStations,
   pagePrinters,
-  printerHolders,
   printers,
   printJobs,
   printAgents,
@@ -233,9 +236,9 @@ async function readerChoices(): Promise<Record<string, string>> {
 
 async function printerHolder(printerId: string): Promise<string | null> {
   const [row] = await suite.db
-    .select({ deviceId: printerHolders.deviceId })
-    .from(printerHolders)
-    .where(eq(printerHolders.printerId, printerId));
+    .select({ deviceId: printers.heldByDeviceId })
+    .from(printers)
+    .where(eq(printers.id, printerId));
   return row?.deviceId ?? null;
 }
 
@@ -675,9 +678,9 @@ describe("what a device may newly choose", () => {
     return {
       columns: await columns(a),
       printerHolds: await suite.db
-        .select({ printerId: printerHolders.printerId })
-        .from(printerHolders)
-        .where(eq(printerHolders.deviceId, a)),
+        .select({ printerId: printers.id })
+        .from(printers)
+        .where(eq(printers.heldByDeviceId, a)),
       readerHolds: await suite.db
         .select({ readerId: cardReaders.id })
         .from(cardReaders)
@@ -1120,7 +1123,7 @@ describe("a deleted printer named by a stale choice", () => {
       })
       .from(devices)
       .where(eq(devices.id, deviceId));
-    return { ...row!, holders: await suite.db.select().from(printerHolders) };
+    return { ...row!, holders: await readPrinterHoldsForTest(suite.db) };
   }
 
   it.each(

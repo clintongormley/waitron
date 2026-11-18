@@ -12,7 +12,6 @@ import {
   devices,
   invoiceDeliveries,
   kitchenStations,
-  printerHolders,
   printers,
   printJobs,
   stationPrinterPairs,
@@ -49,9 +48,9 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
   const invoiceJobIds = deliveries.map((row) => row.printJobId);
   const holders = await tx
     .select({ id: devices.id, name: devices.label })
-    .from(printerHolders)
-    .innerJoin(devices, eq(devices.id, printerHolders.deviceId))
-    .where(eq(printerHolders.printerId, id));
+    .from(printers)
+    .innerJoin(devices, eq(devices.id, printers.heldByDeviceId))
+    .where(eq(printers.id, id));
 
   const choosing = await tx
     .select({

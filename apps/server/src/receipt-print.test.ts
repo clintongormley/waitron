@@ -1,6 +1,7 @@
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { ensureOperator } from "./testing/cancel-line.js";
+import { holdPrinterForTest } from "@waitron/db/testing/seed.js";
 import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import {
   seedDeviceProfiles,
@@ -42,7 +43,6 @@ import {
   workingOrders,
   nowIso,
   partyTables,
-  printerHolders,
   printers,
   printJobs,
   readTaxpayer,
@@ -1777,9 +1777,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     const portable = await makePrinter({ hasCashDrawer: false });
     await withTransaction(suite.db, async (tx) => {
       await tx.update(printers).set({ portable: true }).where(eq(printers.id, portable));
-      await tx
-        .insert(printerHolders)
-        .values({ printerId: portable, deviceId: cfg.origin.deviceId });
+      await holdPrinterForTest(tx, portable, cfg.origin.deviceId);
       await tx
         .update(devices)
         .set({ receiptPrinterId: portable })

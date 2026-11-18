@@ -238,13 +238,11 @@ describe("a deleted printer's late work", () => {
     expect(await rows([oldJob, newJob])).toEqual(before);
   });
 
-  it("never claims a deleted printer's job, even one left waiting on a row still marked active", async () => {
+  it("never claims a job left waiting on a deleted printer", async () => {
     await setup();
     const agent = await seedAgent("Box");
     const printerId = await printer();
     await deletePrinterRow(printerId);
-    // Neither state is one the delete leaves; each isolates the deleted-row predicate.
-    await suite.db.update(printers).set({ active: true }).where(eq(printers.id, printerId));
     const [seeded] = await suite.db
       .insert(printJobs)
       .values({ printerId, payload: new Uint8Array([0x41]) })
@@ -263,7 +261,6 @@ describe("a deleted printer's late work", () => {
     const agent = await seedAgent("Box");
     const oldPrinter = await printer(MAC, "bluetooth");
     await deletePrinterRow(oldPrinter);
-    await suite.db.update(printers).set({ active: true }).where(eq(printers.id, oldPrinter));
     const [seeded] = await suite.db
       .insert(printJobs)
       .values({

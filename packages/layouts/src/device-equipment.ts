@@ -6,7 +6,6 @@ import {
   devices,
   nowIso,
   pagePrinters,
-  printerHolders,
   printers,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -33,6 +32,7 @@ export const PRINTER_ROLE_COLUMNS: readonly {
 
 /** The roles whose portable printers have one holder; a cash drawer and invoices ignore holding. */
 const HELD_ROLES = ["receipt", "payment_slip"] as const;
+const NO_HOLDER = { heldByDeviceId: null, heldAt: null };
 
 function isHeld(role: ProfilePrinterRole): boolean {
   return (HELD_ROLES as readonly ProfilePrinterRole[]).includes(role);
@@ -219,10 +219,9 @@ async function readStatesWith(
             name: printers.name,
             portable: printers.portable,
             active: printers.active,
-            holderDeviceId: printerHolders.deviceId,
+            holderDeviceId: printers.heldByDeviceId,
           })
           .from(printers)
-          .leftJoin(printerHolders, eq(printerHolders.printerId, printers.id))
           .where(inArray(printers.id, ids));
   const found = new Set(printerRows.map((row) => row.id));
   const unfound = ids.filter((id) => !found.has(id));
@@ -401,6 +400,7 @@ export async function checkDevicePrinterChoice(
       printerId: deviceProfilePrinters.printerId,
       pagePrinterId: deviceProfilePrinters.pagePrinterId,
       portable: printers.portable,
+      holderDeviceId: printers.heldByDeviceId,
     })
     .from(deviceProfilePrinters)
     .leftJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
@@ -420,16 +420,13 @@ export async function checkDevicePrinterChoice(
   if (listed.portable !== true || !isHeld(role)) {
     return { ok: true, columns, heldPrinterId: null, previousHolderDeviceId: null };
   }
-  const [holder] = await tx
-    .select({ deviceId: printerHolders.deviceId })
-    .from(printerHolders)
-    .where(eq(printerHolders.printerId, selection.id));
+  const { holderDeviceId } = listed;
   let previousHolderDeviceId: string | null = null;
-  if (holder !== undefined && holder.deviceId !== deviceId) {
+  if (holderDeviceId !== null && holderDeviceId !== deviceId) {
     if (!mayTakeOver(input.via, input.takeOver)) {
-      return { ok: false, refusal: "held", holderDeviceId: holder.deviceId };
+      return { ok: false, refusal: "held", holderDeviceId };
     }
-    previousHolderDeviceId = holder.deviceId;
+    previousHolderDeviceId = holderDeviceId;
   }
   return { ok: true, columns, heldPrinterId: selection.id, previousHolderDeviceId };
 }
@@ -460,12 +457,9 @@ export async function selectDevicePrinter(
   const { heldPrinterId, previousHolderDeviceId } = check;
   if (heldPrinterId !== null) {
     await tx
-      .insert(printerHolders)
-      .values({ printerId: heldPrinterId, deviceId })
-      .onConflictDoUpdate({
-        target: printerHolders.printerId,
-        set: { deviceId, heldAt: nowIso() },
-      });
+      .update(printers)
+      .set({ heldByDeviceId: deviceId, heldAt: nowIso() })
+      .where(eq(printers.id, heldPrinterId));
     if (previousHolderDeviceId !== null) {
       for (const held of HELD_ROLES) {
         await tx
@@ -511,7 +505,10 @@ export async function settleDevicePrinters(
         continue;
       }
       if (holder === undefined) {
-        await tx.insert(printerHolders).values({ printerId: chosenId, deviceId });
+        await tx
+          .update(printers)
+          .set({ heldByDeviceId: deviceId, heldAt: nowIso() })
+          .where(eq(printers.id, chosenId));
         state.holderOf.set(chosenId, deviceId);
         used.push(chosenId);
         continue;
@@ -526,18 +523,19 @@ export async function settleDevicePrinters(
     used.push(defaultId);
     if (options.acquire && state.portable.has(defaultId) && !state.holderOf.has(defaultId)) {
       await tx
-        .insert(printerHolders)
-        .values({ printerId: defaultId, deviceId })
-        .onConflictDoNothing({ target: printerHolders.printerId });
+        .update(printers)
+        .set({ heldByDeviceId: deviceId, heldAt: nowIso() })
+        .where(and(eq(printers.id, defaultId), isNull(printers.heldByDeviceId)));
       state.holderOf.set(defaultId, deviceId);
     }
   }
   await tx
-    .delete(printerHolders)
+    .update(printers)
+    .set(NO_HOLDER)
     .where(
       used.length === 0
-        ? eq(printerHolders.deviceId, deviceId)
-        : and(eq(printerHolders.deviceId, deviceId), notInArray(printerHolders.printerId, used)),
+        ? eq(printers.heldByDeviceId, deviceId)
+        : and(eq(printers.heldByDeviceId, deviceId), notInArray(printers.id, used)),
     );
 }
 
@@ -559,7 +557,7 @@ async function clearPrinterChoices(
 export async function clearDeletedPrinter(tx: Transaction, printerId: string): Promise<void> {
   await clearPrinterChoices(tx, printerId, ROLES);
   await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.printerId, printerId));
-  await tx.delete(printerHolders).where(eq(printerHolders.printerId, printerId));
+  await tx.update(printers).set(NO_HOLDER).where(eq(printers.id, printerId));
 }
 
 /** Clears a deleted page printer from every device's invoice choice and every profile's lists. */
@@ -578,7 +576,7 @@ export async function clearDeletedPagePrinter(
 
 /** Lets go of every printer the device holds; keeps its choices. */
 export async function releaseDevicePrinters(tx: Transaction, deviceId: string): Promise<void> {
-  await tx.delete(printerHolders).where(eq(printerHolders.deviceId, deviceId));
+  await tx.update(printers).set(NO_HOLDER).where(eq(printers.heldByDeviceId, deviceId));
 }
 
 type ChoiceRow = Choices & { id: string };
@@ -698,14 +696,14 @@ export async function settleProfilePrinterDevices(
     );
   }
   const held = await tx
-    .select({ printerId: printerHolders.printerId, deviceId: printerHolders.deviceId })
-    .from(printerHolders)
-    .where(inArray(printerHolders.deviceId, [...usedBy.keys()]));
+    .select({ printerId: printers.id, deviceId: printers.heldByDeviceId })
+    .from(printers)
+    .where(inArray(printers.heldByDeviceId, [...usedBy.keys()]));
   const released = held
-    .filter((row) => !usedBy.get(row.deviceId)!.includes(row.printerId))
+    .filter((row) => !usedBy.get(row.deviceId!)!.includes(row.printerId))
     .map((row) => row.printerId);
   if (released.length > 0) {
-    await tx.delete(printerHolders).where(inArray(printerHolders.printerId, released));
+    await tx.update(printers).set(NO_HOLDER).where(inArray(printers.id, released));
   }
 }
 
@@ -725,10 +723,9 @@ export async function setPrinterPortable(
     .where(and(eq(printers.id, printerId), isNull(printers.deletedAt)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
   if (printer.portable === portable) return;
-  await tx.update(printers).set({ portable }).where(eq(printers.id, printerId));
-  if (portable) {
-    await clearPrinterChoices(tx, printerId, HELD_ROLES);
-  } else {
-    await tx.delete(printerHolders).where(eq(printerHolders.printerId, printerId));
-  }
+  await tx
+    .update(printers)
+    .set(portable ? { portable } : { portable, ...NO_HOLDER })
+    .where(eq(printers.id, printerId));
+  if (portable) await clearPrinterChoices(tx, printerId, HELD_ROLES);
 }

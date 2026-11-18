@@ -104,7 +104,7 @@ export async function createPrinter(
         resolution: input.resolution,
         hasCashDrawer: input.hasCashDrawer,
         portable: input.portable,
-        pickupRoles: input.pickupRoles,
+        ...pickupFlags(input.pickupRoles),
       })
       .returning({ id: printers.id });
     return { id: row!.id };
@@ -144,15 +144,30 @@ export interface PrinterRow {
   active: boolean;
 }
 
+function pickupFlags(roles: CreatePrinterInput["pickupRoles"]) {
+  return {
+    picksUpReceipts: roles?.includes("receipt"),
+    picksUpPaymentSlips: roles?.includes("payment_slip"),
+  };
+}
+
+export function printerPickupRoles(receipts: boolean, slips: boolean): PrinterRow["pickupRoles"] {
+  const roles: PrinterRow["pickupRoles"] = [];
+  if (receipts) roles.push("receipt");
+  if (slips) roles.push("payment_slip");
+  return roles;
+}
+
 export async function updatePrinter(
   tx: Transaction,
   id: string,
   patch: UpdatePrinterInput,
 ): Promise<void> {
   const liveId = and(eq(printers.id, id), isNull(printers.deletedAt));
+  const { pickupRoles, ...fields } = patch;
   // Undefined keys are dropped here so a `{ name: undefined }` patch still takes the empty-patch path.
   const set: Record<string, unknown> = Object.fromEntries(
-    Object.entries(patch).filter(([, v]) => v !== undefined),
+    Object.entries({ ...fields, ...pickupFlags(pickupRoles) }).filter(([, v]) => v !== undefined),
   );
 
   // drizzle's `.set({})` throws ("No values to set"), so an empty patch is an existence check.
@@ -186,13 +201,17 @@ export async function listPrinters(tx: Transaction): Promise<PrinterRow[]> {
       resolution: printers.resolution,
       hasCashDrawer: printers.hasCashDrawer,
       portable: printers.portable,
-      pickupRoles: printers.pickupRoles,
+      picksUpReceipts: printers.picksUpReceipts,
+      picksUpPaymentSlips: printers.picksUpPaymentSlips,
       active: printers.active,
     })
     .from(printers)
     .where(isNull(printers.deletedAt))
     .orderBy(printers.name);
-  return rows.map((row) => ({ ...row, pickupRoles: [...new Set(row.pickupRoles)] }));
+  return rows.map(({ picksUpReceipts, picksUpPaymentSlips, ...row }) => ({
+    ...row,
+    pickupRoles: printerPickupRoles(picksUpReceipts, picksUpPaymentSlips),
+  }));
 }
 
 /**

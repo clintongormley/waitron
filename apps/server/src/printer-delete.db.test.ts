@@ -11,7 +11,6 @@ import {
   invoiceSeries,
   kitchenPrintJobs,
   kitchenStations,
-  printerHolders,
   printers,
   printJobs,
   receiptReprints,
@@ -22,6 +21,8 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  readPrinterHoldsForTest,
+  holdPrinterForTest,
   seedDevice,
   seedDeviceProfiles,
   seedNode,
@@ -107,7 +108,15 @@ function afterDelete(
     ...before,
     printers: resort(
       before.printers!.map((row) =>
-        row.id === printerId ? { ...row, active: 0, deleted_at: now.toISOString() } : row,
+        row.id === printerId
+          ? {
+              ...row,
+              active: 0,
+              deleted_at: now.toISOString(),
+              held_by_device_id: null,
+              held_at: null,
+            }
+          : row,
       ),
     ),
     print_jobs: resort(
@@ -156,7 +165,6 @@ function afterDelete(
         ),
       })),
     ),
-    printer_holders: withoutPrinter(before.printer_holders!),
   };
 }
 
@@ -294,10 +302,8 @@ async function seedVenueWithPrinters() {
   const barTill = await device({ label: "Bar till", profileId: waiters });
   const barTill2 = await device({ label: "Bar till 2", profileId: bar, slip: P });
   const barTill3 = await device({ label: "Bar till 3", profileId: bar, invoice: P });
-  await suite.db.insert(printerHolders).values([
-    { printerId: P, deviceId: anna },
-    { printerId: Q, deviceId: barTill2 },
-  ]);
+  await holdPrinterForTest(suite.db, P, anna);
+  await holdPrinterForTest(suite.db, Q, barTill2);
 
   const [grill] = await suite.db
     .insert(kitchenStations)
@@ -711,7 +717,7 @@ describe("deleting a printer", () => {
         .from(deviceProfilePrinters)
         .where(eq(deviceProfilePrinters.deviceProfileId, v.waiters)),
     ).toHaveLength(2);
-    expect(await suite.db.select().from(printerHolders)).toEqual([
+    expect(await readPrinterHoldsForTest(suite.db)).toEqual([
       expect.objectContaining({ printerId: v.Q, deviceId: v.barTill2 }),
     ]);
   });
@@ -735,10 +741,7 @@ describe("deleting a printer", () => {
         .returning({ id: printJobs.id });
       added.push(row!.id);
     }
-    await suite.db
-      .update(printerHolders)
-      .set({ deviceId: v.barTill })
-      .where(eq(printerHolders.printerId, v.P));
+    await suite.db.update(printers).set({ heldByDeviceId: v.barTill }).where(eq(printers.id, v.P));
     await suite.db
       .update(devices)
       .set({ cashDrawerPrinterId: v.P })
