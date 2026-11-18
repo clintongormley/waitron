@@ -1752,6 +1752,8 @@ export const en = {
   "meal_end.unserved_heading": "Not served yet:",
   "meal_end.mark_served": "Mark served",
   "meal_end.print_anyway": "Print anyway",
+  "meal_end.unconfirmed":
+    "Print the bill got no answer, so the bill may have been printed. Check this bill before trying again.",
   // The confirmation before closing a whole bill as a deferred payment.
   "deferred_close.title": "Close as deferred payment",
   "deferred_close.bill": "Bill",
@@ -3873,6 +3875,8 @@ export const es: Record<StringKey, string> = {
   "meal_end.unserved_heading": "Aún sin servir:",
   "meal_end.mark_served": "Marcar como servidos",
   "meal_end.print_anyway": "Imprimir igualmente",
+  "meal_end.unconfirmed":
+    "Imprimir la cuenta no obtuvo respuesta, así que puede que se haya impreso. Revisa esta cuenta antes de volver a intentarlo.",
   "deferred_close.title": "Cerrar como pago aplazado",
   "deferred_close.bill": "Cuenta",
   "deferred_close.invoice": "Factura",

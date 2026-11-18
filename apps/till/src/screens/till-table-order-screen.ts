@@ -5303,6 +5303,7 @@ export class TillTableOrderScreen extends LitElement {
                         @click=${() =>
                           this.#dispatch("end-meal", {
                             workingOrderId: firstUnpaid.workingOrderId,
+                            showFirst: true,
                           })}
                       >
                         ${t("bill.print")}

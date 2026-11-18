@@ -726,6 +726,8 @@ const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
   "bill.unsent_dishes",
   "bill.nothing_outstanding",
   "authorization.not_permitted",
+  "draft.taken_over",
+  "device.forbidden_action",
 ]);
 
 /** Table refusals shown in their code's own words. */
@@ -13112,6 +13114,7 @@ export class TillApp extends LitElement {
       this.#rememberFloorReturnZone();
       this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
       this.finishRefused = false;
+      this.mealEnd = null;
       this.nameRefusal = null;
       this.billNameRefusal = null;
       this.guestsRefusal = null;
@@ -15457,11 +15460,17 @@ export class TillApp extends LitElement {
     });
   }
 
-  #dropServedFromMealEnd(partyId: string, items: { lineId: string }[]): void {
+  /** Drops from the not-served list a dish this serve marked served in full. */
+  #dropServedFromMealEnd(partyId: string, items: { lineId: string; quantity: string }[]): void {
     const shown = this.mealEnd;
     if (shown?.partyId !== partyId || !("unserved" in shown)) return;
     const unserved = shown.unserved.filter(
-      (dish) => !items.some((item) => item.lineId === dish.lineId),
+      (dish) =>
+        !items.some(
+          (item) =>
+            item.lineId === dish.lineId &&
+            compareDecimal(decimal(item.quantity), decimal(dish.quantity)) >= 0,
+        ),
     );
     this.mealEnd = unserved.length === 0 ? null : { ...shown, unserved };
   }
@@ -20013,14 +20022,19 @@ export class TillApp extends LitElement {
    * submission id; a lost answer is sent again under the same one.
    */
   async #onEndMeal(event: Event): Promise<void> {
-    const { workingOrderId, printAnyway } = (
-      event as CustomEvent<{ workingOrderId: string; printAnyway?: boolean }>
+    const { workingOrderId, printAnyway, showFirst } = (
+      event as CustomEvent<{ workingOrderId: string; printAnyway?: boolean; showFirst?: boolean }>
     ).detail;
+    if (showFirst === true && !this.mealEndSending && this.activeTabId !== workingOrderId) {
+      if (!(await this.#switchToBill(workingOrderId))) return;
+      await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
+    }
     const party = this.orderParty;
     const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
     if (
       party === null ||
       this.mealEndSending ||
+      this.activeTabId !== workingOrderId ||
       bill === undefined ||
       bill.invoiceNumber !== undefined ||
       bill.leftUnpaid ||
@@ -20070,6 +20084,8 @@ export class TillApp extends LitElement {
           await this.#onMealEnded(party.id, workingOrderId, visit, sent);
           return;
         }
+        this.errorKey = "meal_end.unconfirmed";
+        return;
       }
       await this.#onMealEndRefused(party.id, workingOrderId, error, live, sent);
       return;
@@ -20119,7 +20135,9 @@ export class TillApp extends LitElement {
 
   /** Print the bill's answer, while the party it was sent for is on screen. */
   #mealEndShown(): MealEndShown | null {
-    return this.mealEnd !== null && this.mealEnd.partyId === this.orderParty?.id
+    return this.mealEnd !== null &&
+      this.mealEnd.partyId === this.orderParty?.id &&
+      this.mealEnd.workingOrderId === this.activeTabId
       ? this.mealEnd
       : null;
   }
@@ -20418,6 +20436,7 @@ export class TillApp extends LitElement {
   #showBill(workingOrderId: string): void {
     this.errorKey = undefined;
     this.finishRefused = false;
+    this.mealEnd = null;
     this.billGone = null;
     this.#chooseBill(workingOrderId);
     void this.#refreshFloor();

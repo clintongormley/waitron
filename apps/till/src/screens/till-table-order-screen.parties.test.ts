@@ -514,7 +514,7 @@ describe("till-table-order-screen: Finish table", () => {
 });
 
 describe("till-table-order-screen: Print the bill beside Finish table's refusal", () => {
-  it("offers Print the bill for the bill the refusal names, which sends end-meal for it", async () => {
+  it("offers Print the bill for the bill the refusal names, which asks to show that bill and print it", async () => {
     const el = await mountScreen({ finishRefused: true });
     const asked = capture(el, "end-meal");
 
@@ -522,7 +522,7 @@ describe("till-table-order-screen: Print the bill beside Finish table's refusal"
     expect(print.textContent!.trim()).toBe(t("bill.print"));
     print.click();
 
-    expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
+    expect(asked).toEqual([{ workingOrderId: "wo-check", showFirst: true }]);
   });
 
   it("offers no Print the bill when the bill it names already has its receipt", async () => {
