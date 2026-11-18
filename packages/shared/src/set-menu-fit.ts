@@ -12,6 +12,7 @@ export const MAX_SET_MENU_AMOUNT_CENTS = 1_000_000;
 export interface SetMenuOfferDish {
   readonly productId: string;
   readonly variantId: string | null;
+  readonly countsAsCourseId: string;
   readonly surchargeCents: number;
 }
 
@@ -41,7 +42,6 @@ export interface SetMenuDish {
   readonly id: string;
   readonly productId: string;
   readonly variantId: string | null;
-  readonly countsAsCourseId: string;
   readonly pinnedTo: SetMenuPlace | null;
 }
 
@@ -229,18 +229,18 @@ export function fitSetMenus(input: SetMenuFitInput): SetMenuFit {
   const offerIndex = new Map(offers.map(({ id }, index) => [id, index]));
   let maxPrice = 0;
   let maxSurcharge = 0;
-  const surcharges = offers.map((offer) => {
+  const listings = offers.map((offer) => {
     checkAmount(offer.priceCents, offer.id);
     maxPrice = Math.max(maxPrice, offer.priceCents);
-    const prices = new Map<string, number>();
+    const listed = new Map<string, SetMenuOfferDish>();
     for (const dish of offer.dishes) {
       const key = matchKey(dish);
-      if (prices.has(key)) invalid("duplicate_id", offer.id);
+      if (listed.has(key)) invalid("duplicate_id", offer.id);
       checkAmount(dish.surchargeCents, offer.id);
       maxSurcharge = Math.max(maxSurcharge, dish.surchargeCents);
-      prices.set(key, dish.surchargeCents);
+      listed.set(key, dish);
     }
-    return prices;
+    return listed;
   });
 
   const pairs = offers.flatMap((offer, index) =>
@@ -289,8 +289,8 @@ export function fitSetMenus(input: SetMenuFitInput): SetMenuFit {
     if (offer === undefined) invalid("pinned_to_unfixed", dish.id);
     const pair = findPair(offer, place.lineIndex);
     const line = pairs[pair];
-    const surchargeCents = surcharges[offer]!.get(matchKey(dish));
-    if (!line || surchargeCents === undefined || !line.courseIds.includes(dish.countsAsCourseId)) {
+    const listed = listings[offer]!.get(matchKey(dish));
+    if (!line || !listed || !line.courseIds.includes(listed.countsAsCourseId)) {
       invalid("pinned_place_invalid", dish.id);
     }
     const filled = occupied[pair]!;
@@ -298,7 +298,11 @@ export function fitSetMenus(input: SetMenuFitInput): SetMenuFit {
     if (count > line.count) invalid("pinned_place_invalid", dish.id);
     filled.set(place.setMenuId, count);
     pinnedCounts[pair]!++;
-    placed.set(dish.id, { id: dish.id, place: { ...place }, surchargeCents });
+    placed.set(dish.id, {
+      id: dish.id,
+      place: { ...place },
+      surchargeCents: listed.surchargeCents,
+    });
   }
 
   if (menus.length === 0 && dishes.length === 0) {
@@ -319,17 +323,17 @@ export function fitSetMenus(input: SetMenuFitInput): SetMenuFit {
     const oldIndex = oldOffer === undefined ? undefined : offerIndex.get(oldOffer);
     const previousPair = oldIndex === undefined ? -1 : findPair(oldIndex, oldPlace!.lineIndex);
     const item = matchKey(dish);
-    const key = JSON.stringify([item, dish.countsAsCourseId, previousPair]);
+    const key = JSON.stringify([item, previousPair]);
     const group = classesByKey.get(key);
     if (group) {
       group.dishes.push(dish);
       continue;
     }
     const arcs = pairs.flatMap((line, pair) => {
-      const surcharge = surcharges[line.offer]!.get(item);
-      if (surcharge === undefined || !line.courseIds.includes(dish.countsAsCourseId)) return [];
+      const listed = listings[line.offer]!.get(item);
+      if (!listed || !line.courseIds.includes(listed.countsAsCourseId)) return [];
       const moved = previousPair >= 0 && previousPair !== pair ? 1 : 0;
-      return [{ pair, cost: surcharge * moneyWeight + moved }];
+      return [{ pair, cost: listed.surchargeCents * moneyWeight + moved }];
     });
     if (arcs.length === 0) return { kind: "uncovered", setMenusNeeded: null };
     classesByKey.set(key, { dishes: [dish], previousPair, arcs });

@@ -288,8 +288,8 @@ refusal names its dishes and says what to do: cancel them, or move them to anoth
 With every type fixed there is one mix to consider, so the size bound the calculation was built
 for is not reached. Keeping it leaves the door open to the owner's "we may yet come back to
 automatically reassigning plates". What a dish counts as comes from the set menu, so each offered
-dish in the calculation carries its own counts-as course; this is a small change to the landed
-function.
+dish in the calculation carries its own counts-as course; this was a small change to the landed
+function, made on 18 November 2026 (`countsAsCourseId` is on `SetMenuOfferDish`).
 
 **Which set menus a bill may use.** A bill records one copy of each set menu: the newest on sale
 in its zone when that set menu is first added to the bill (**owner**, 18 November, "ok", after the
@@ -409,7 +409,8 @@ line with no course is sent straight away. So:
    summary, removing set menus, and moves between bills. Until piece 4 lands, a bill holding set
    menus cannot be paid, comped or discounted.
 3. **The calculation:** landed (#3730). It needs one change: what a dish counts as comes from each
-   offered set menu, not from the dish (section 2, "What a dish counts as").
+   offered set menu, not from the dish (section 2, "What a dish counts as"). (18 November 2026:
+   that change is made; `countsAsCourseId` is on `SetMenuOfferDish`, not on `SetMenuDish`.)
 4. **Bill, receipt and invoice:** letting such a bill be paid, comped and discounted, the receipt
    and invoice layout, VAT on the set-menu line and on covered dishes, and sales reports. Passes
    lane L; the owner lands it.

@@ -10,10 +10,18 @@ import {
   type SetMenuOnBill,
 } from "./index.js";
 
+const COURSE: Record<string, string> = {
+  soup: "starter",
+  hake: "main",
+  sirloin: "main",
+  "sea bass": "main",
+  lobster: "main",
+};
+
 function offer(
   id: string,
   priceCents: number,
-  items: readonly (string | readonly [string, number])[],
+  items: readonly (string | readonly [string, number, string?])[],
   lines: SetMenuOffer["lines"] = [
     { count: 1, courseIds: ["starter"] },
     { count: 1, courseIds: ["main"] },
@@ -23,16 +31,21 @@ function offer(
     id,
     priceCents,
     lines,
-    dishes: items.map((item) =>
-      typeof item === "string"
-        ? { productId: item, variantId: null, surchargeCents: 0 }
-        : { productId: item[0], variantId: null, surchargeCents: item[1] },
-    ),
+    dishes: items.map((item) => {
+      const [productId, surchargeCents = 0, course]: readonly [string, number?, string?] =
+        typeof item === "string" ? [item] : item;
+      return {
+        productId,
+        variantId: null,
+        countsAsCourseId: course ?? COURSE[productId] ?? "starter",
+        surchargeCents,
+      };
+    }),
   };
 }
 
-function dish(id: string, productId: string, countsAsCourseId = "starter"): SetMenuDish {
-  return { id, productId, countsAsCourseId, variantId: null, pinnedTo: null };
+function dish(id: string, productId: string): SetMenuDish {
+  return { id, productId, variantId: null, pinnedTo: null };
 }
 
 function menus(count: number, fixedOfferId: string | null = null): SetMenuOnBill[] {
@@ -47,10 +60,10 @@ const worked: SetMenuFitInput = {
   previous: null,
   dishes: [
     ...menus(4).map(({ id }) => dish(`soup-${id}`, "soup")),
-    dish("hake", "hake", "main"),
-    dish("sirloin-a", "sirloin", "main"),
-    dish("sirloin-b", "sirloin", "main"),
-    dish("bass", "sea bass", "main"),
+    dish("hake", "hake"),
+    dish("sirloin-a", "sirloin"),
+    dish("sirloin-b", "sirloin"),
+    dish("bass", "sea bass"),
   ],
 };
 
@@ -91,7 +104,7 @@ function checkPlacement(
         productId === original.productId && variantId === original.variantId,
     );
     expect(placed.surchargeCents).toBe(listed?.surchargeCents);
-    expect(line.courseIds).toContain(original.countsAsCourseId);
+    expect(line.courseIds).toContain(listed?.countsAsCourseId);
     const key = JSON.stringify(placed.place);
     const count = (occupied.get(key) ?? 0) + 1;
     expect(count).toBeLessThanOrEqual(line.count);
@@ -135,12 +148,7 @@ describe("fitSetMenus", () => {
         offer("daily", 1400, ["soup", "hake"], lines),
         offer("special", 2000, ["soup", "oysters", "hake", "lobster"], lines),
       ],
-      dishes: [
-        dish("a", "soup"),
-        dish("b", "oysters"),
-        dish("c", "soup"),
-        dish("d", "lobster", "main"),
-      ],
+      dishes: [dish("a", "soup"), dish("b", "oysters"), dish("c", "soup"), dish("d", "lobster")],
     });
     const fit = fitSetMenus(input);
     expect(fit).toMatchObject({ kind: "fitted", totalCents: 3400 });
@@ -180,7 +188,14 @@ describe("fitSetMenus", () => {
       offers: [
         {
           ...daily,
-          dishes: [{ productId: "wine", variantId: "glass", surchargeCents: 100 }],
+          dishes: [
+            {
+              productId: "wine",
+              variantId: "glass",
+              countsAsCourseId: "starter",
+              surchargeCents: 100,
+            },
+          ],
         },
       ],
     });
@@ -193,7 +208,8 @@ describe("fitSetMenus", () => {
   });
 
   it("cannot cover a course that no line accepts", () => {
-    expectNeeded(smallBill({ dishes: [dish("a", "soup", "drink")] }), null);
+    const offers = [offer("daily", 1400, [["soup", 0, "drink"]])];
+    expectNeeded(smallBill({ offers, dishes: [dish("a", "soup")] }), null);
   });
 
   it("cannot price menus without offers", () => {
@@ -254,7 +270,9 @@ describe("fitSetMenus", () => {
   });
 
   it("matches an exhaustive fit and returns a valid placement", () => {
-    for (const [sample, input] of smallTables(300).entries()) {
+    const samples = smallTables(300);
+    expect(samples.some(listsOneProductUnderTwoCourses)).toBe(true);
+    for (const [sample, input] of samples.entries()) {
       const fit = fitSetMenus(input);
       const expected = exhaustiveFit(input);
       expect(fit.kind, `sample ${sample}`).toBe(Number.isFinite(expected) ? "fitted" : "uncovered");
@@ -278,7 +296,11 @@ function smallTables(count: number): SetMenuFitInput[] {
       offer(
         `offer-${i}`,
         1000 + 100 * next(9),
-        items.flatMap((item): [string, number][] => (next(3) === 0 ? [] : [[item, next(6) * 100]])),
+        items.flatMap((item, product): [string, number, string][] => {
+          if (next(3) === 0) return [];
+          const course = Math.floor(product / 2) + (next(4) === 0 ? 1 : 0);
+          return [[item, next(6) * 100, courses[course % courses.length]!]];
+        }),
         courses.map((course, j) => ({
           count: 1 + next(2),
           courseIds: next(4) ? [course] : [course, courses[(j + 1) % courses.length]!],
@@ -292,11 +314,22 @@ function smallTables(count: number): SetMenuFitInput[] {
           ? { ...menu, fixedOfferId: offers[next(offers.length)]!.id }
           : menu,
       ),
-      dishes: Array.from({ length: next(7) }, (_, i) => {
-        const product = next(items.length);
-        return dish(`dish-${i}`, items[product]!, courses[Math.floor(product / 2)]!);
-      }),
+      dishes: Array.from({ length: next(7) }, (_, i) =>
+        dish(`dish-${i}`, items[next(items.length)]!),
+      ),
     });
+  });
+}
+
+function listsOneProductUnderTwoCourses({ offers, setMenus, dishes }: SetMenuFitInput): boolean {
+  if (setMenus.length === 0) return false;
+  return dishes.some(({ productId }) => {
+    const courses = offers.flatMap((entry) =>
+      entry.dishes
+        .filter((listed) => listed.productId === productId)
+        .map(({ countsAsCourseId }) => countsAsCourseId),
+    );
+    return new Set(courses).size > 1;
   });
 }
 
@@ -321,11 +354,11 @@ function exhaustiveFit(input: SetMenuFitInput): number {
       if (!item) return 0;
       let best = Infinity;
       for (const pair of pairs) {
-        if (pair.count === 0 || !pair.courseIds.includes(item.countsAsCourseId)) continue;
+        if (pair.count === 0) continue;
         const listed = pair.offer.dishes.find(
           (entry) => entry.productId === item.productId && entry.variantId === item.variantId,
         );
-        if (!listed) continue;
+        if (!listed || !pair.courseIds.includes(listed.countsAsCourseId)) continue;
         pair.count--;
         best = Math.min(best, listed.surchargeCents + place(index + 1));
         pair.count++;
@@ -336,6 +369,81 @@ function exhaustiveFit(input: SetMenuFitInput): number {
   }
   return tryOffers([]);
 }
+
+describe("what a dish counts as", () => {
+  const lines = [
+    { count: 1, courseIds: ["starter"] },
+    { count: 1, courseIds: ["main"] },
+  ];
+  const dailyBravas = offer(
+    "daily",
+    1400,
+    ["soup", "hake", ["bravas", 0, "sharing"]],
+    [...lines, { count: 1, courseIds: ["sharing"] }],
+  );
+  const specialBravas = offer("special", 2000, ["soup", "hake", ["bravas", 0, "starter"]], lines);
+  const offers = [dailyBravas, specialBravas];
+  const mixed = [
+    { id: "s1", fixedOfferId: "daily" },
+    { id: "s2", fixedOfferId: "special" },
+  ];
+  const twoBravas = [
+    dish("soup", "soup"),
+    dish("hake", "hake"),
+    dish("bravas-a", "bravas"),
+    dish("bravas-b", "bravas"),
+  ];
+
+  it("takes a dish's course from the set menu it is placed in", () => {
+    const dishes = [dish("soup", "soup"), dish("hake", "hake"), dish("bravas", "bravas")];
+    const input = smallBill({ offers, setMenus: menus(1, "daily"), dishes });
+    const fit = fitSetMenus(input);
+    expect(fit).toMatchObject({ kind: "fitted", totalCents: 1400 });
+    if (fit.kind !== "fitted") return;
+    expect(fit.dishes.find(({ id }) => id === "bravas")?.place.lineIndex).toBe(2);
+    checkPlacement(input, fit);
+    expectNeeded({ ...input, setMenus: menus(1, "special") }, 2);
+  });
+
+  it("needs a second set menu for two bravas on one Daily", () => {
+    const input = smallBill({ offers, setMenus: menus(1, "daily"), dishes: twoBravas });
+    expectNeeded(input, 2);
+    expect(fitSetMenus({ ...input, setMenus: menus(2, "daily") })).toMatchObject({
+      kind: "fitted",
+      totalCents: 2800,
+    });
+  });
+
+  it("places the same product by each set menu's own course on one bill", () => {
+    const input = smallBill({ offers, setMenus: mixed, dishes: twoBravas });
+    const fit = fitSetMenus(input);
+    expect(fit).toMatchObject({ kind: "fitted", totalCents: 3400 });
+    if (fit.kind !== "fitted") return;
+    expect(fit.dishes.find(({ id }) => id === "soup")?.place).toEqual({
+      setMenuId: "s1",
+      lineIndex: 0,
+    });
+    const bravasPlaces = fit.dishes
+      .filter(({ id }) => id.startsWith("bravas"))
+      .map(({ place }) => place);
+    expect(bravasPlaces).toHaveLength(2);
+    expect(bravasPlaces).toContainEqual({ setMenuId: "s1", lineIndex: 2 });
+    expect(bravasPlaces).toContainEqual({ setMenuId: "s2", lineIndex: 0 });
+    checkPlacement(input, fit);
+  });
+
+  it("checks a pinned dish against the course its set menu gives it", () => {
+    const pinnedTo = { setMenuId: "s1", lineIndex: 0 };
+    const dishes = [{ ...dish("bravas", "bravas"), pinnedTo }];
+    const input = smallBill({ offers, setMenus: menus(1, "special"), dishes });
+    expect(fitSetMenus(input)).toMatchObject({
+      kind: "fitted",
+      totalCents: 2000,
+      dishes: [{ id: "bravas", place: pinnedTo }],
+    });
+    expectInvalid({ ...input, setMenus: menus(1, "daily") }, "pinned_place_invalid", "bravas");
+  });
+});
 
 function previousFrom(fit: Extract<SetMenuFit, { kind: "fitted" }>) {
   return {
@@ -413,7 +521,7 @@ describe("refitting set menus", () => {
     );
     const dishes = worked.dishes
       .filter(({ id }) => id !== "hake")
-      .concat(dish("bass-new", "sea bass", "main"));
+      .concat(dish("bass-new", "sea bass"));
     const fit = fitSetMenus({ ...worked, dishes, previous: { offerBySetMenu, placeByDish } });
     expect(fit).toMatchObject({ kind: "fitted", totalCents: 7800 });
     if (fit.kind !== "fitted") return;
@@ -432,7 +540,7 @@ describe("refitting set menus", () => {
 
   it("charges pinned surcharges and places a newcomer around the pins", () => {
     const pinnedTo = { setMenuId: "s1", lineIndex: 1 };
-    const sirloin = { ...dish("sirloin", "sirloin", "main"), pinnedTo };
+    const sirloin = { ...dish("sirloin", "sirloin"), pinnedTo };
     const dishes = [...frozen.dishes, sirloin, dish("new", "soup")];
     expectNeeded({ ...frozen, dishes }, 2);
     expect(fitSetMenus({ ...frozen, setMenus: menus(2, "daily"), dishes })).toMatchObject({
@@ -503,9 +611,7 @@ describe("additional set menus", () => {
     "finds the total for %i menus and %i dishes",
     (menuCount, dishCount, fixed, product, needed) => {
       const offers = [daily, special, ...["a", "b", "c"].map((id) => ({ ...daily, id }))];
-      const dishes = menus(dishCount).map(({ id }) =>
-        dish(id, product, product === "soup" ? "starter" : "main"),
-      );
+      const dishes = menus(dishCount).map(({ id }) => dish(id, product));
       expectNeeded(smallBill({ offers, setMenus: menus(menuCount, fixed), dishes }), needed);
     },
   );

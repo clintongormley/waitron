@@ -22,9 +22,10 @@ export function boundTable(seed: number, menus = 40, capped = false): SetMenuFit
     priceCents: capped ? MAX_SET_MENU_AMOUNT_CENTS : 1400 + index * 100,
     dishes: products
       .filter((_, item) => item < 6 || next(10) < 6)
-      .map(({ productId, variantId }) => ({
+      .map(({ productId, variantId, course }) => ({
         productId,
         variantId,
+        countsAsCourseId: course,
         surchargeCents: capped ? MAX_SET_MENU_AMOUNT_CENTS : next(2) * next(801),
       })),
     lines,
@@ -45,7 +46,6 @@ export function boundTable(seed: number, menus = 40, capped = false): SetMenuFit
         id: `${menu.id}-${position}`,
         productId: item.productId,
         variantId: null,
-        countsAsCourseId: item.course,
         pinnedTo: null,
       };
     }),
