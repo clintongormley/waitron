@@ -414,11 +414,13 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       provision = (req: ProvisionRequest) => provisionVenue(provisionDeps(), req),
       persistTrading = async () => {},
       operations = createSetupOperationStore(stateDir),
+      requestRestart = () => {},
     }: {
       fiscalGate?: "box" | "passed";
       provision?: (req: ProvisionRequest) => Promise<VenueResult>;
       persistTrading?: SetupDeps["persistTrading"];
       operations?: SetupOperationStore;
+      requestRestart?: SetupDeps["requestRestart"];
     } = {},
   ) {
     const app = new Hono();
@@ -437,7 +439,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
         establishIdentity: async () => {},
         seedMembership: async () => {},
         persistTrading,
-        requestRestart: () => {},
+        requestRestart,
         assertFiscalReady:
           fiscalGate === "passed"
             ? async () => {}
@@ -579,7 +581,9 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
   it("keeps the published key when the operation completion write fails", async () => {
     const request = body("prepare");
     const store = createSetupOperationStore(stateDir);
+    const requestRestart = vi.fn();
     const post = realApp(PREPRODUCTION_BOX, {
+      requestRestart,
       operations: {
         ...store,
         run(kind, hash, body, hold) {
@@ -600,6 +604,8 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     const refused = await post(request);
     expect(refused.status).toBe(500);
     expect(await refused.json()).not.toHaveProperty("breakGlassSecret");
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(requestRestart).not.toHaveBeenCalled();
     expect((await store.read())?.phase).toBe("publishing");
     const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
     const key = await readRecoveryKeyName(venueDb.node, id);
