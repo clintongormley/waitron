@@ -1243,8 +1243,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Automatic upgrades with rollback until a clean, running restart (A950).** The checked manual
   path retains a stopped copy, requires a successful disposable-copy sale and offers Restore/Keep.
-  The release job can publish a signed file once its keys are configured. Still open are
-  signed manual installs, prereleases, staged offers, the test-box upgrade, automatic
+  The release job can publish a signed file once its keys are configured. The retained
+  installer checks it before downloading a numbered release. Still open are prerelease
+  publishing, staged offers with key and verifier updates, the test-box upgrade, automatic
   windows, status/email and pairs. After the first venue come the Cloud release check,
   password-checked go-back, proof-of-close and backup-stream handoff. Current-build synthetic Linux
   rehearsal does not qualify historical releases, a physical box or the whole shell `install` entry

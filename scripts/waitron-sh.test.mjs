@@ -1,5 +1,6 @@
 import { VENUE_DIR_NAME, VENUE_FILE } from "../packages/store/src/state-layout.js";
 import { spawnSync } from "node:child_process";
+import { generateKeyPairSync } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
@@ -20,6 +21,7 @@ import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { signReleaseList } from "./box/release-list.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, "..", "deploy", "waitron.sh");
@@ -93,7 +95,7 @@ function stub(name, body) {
   const p = join(STUB_BIN, name);
   writeFileSync(
     p,
-    `#!/usr/bin/env bash\nnl=$'\\n'; esc='\\n'\nprintf '%s ' "${name}" >> "$WT_LOG"; printf '%s\\n' "\${*//$nl/$esc}" >> "$WT_LOG"\n${body}\n`,
+    `#!/usr/bin/env bash\nnl=$'\\n'; esc='\\n'\nprintf '%s %s\\n' "${name}" "\${*//$nl/$esc}" >> "$WT_LOG"\n${body}\n`,
   );
   chmodSync(p, 0o755);
 }
@@ -123,10 +125,14 @@ case "$1" in
         # and the pull-failure test fails.
         case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
         printf '%s\\n' "$profiles" >> "\${WT_LOG}.pull-profiles"
+        if [ "\${WT_OBSERVE_RELEASE_IMAGES:-0}" = 1 ]; then
+          printf '%s\\n' "\${WAITRON_IMAGE:-}" "\${WAITRON_PRINT_AGENT_IMAGE:-}" > "\${WT_LOG}.pull-images"
+        fi
         [ "\${WT_PULL_FAIL}" = "1" ] && exit 1 ;;
       ps)
         case "$args" in
           *"-q app"|*"-q print-agent")
+            if [ "\${WT_STOPPED_APP:-0}" = 1 ] && [ "$args" = "ps -q app" ]; then exit 0; fi
             [ "\${WT_NO_CONTAINERS}" = 1 ] && exit 0
             [ "\${WT_NO_CONTAINERS}" = before ] && [ ! -e "\${WT_LOG}.up" ] && exit 0
             { [ ! -e "\${WT_LOG}.down" ] || [ -e "\${WT_LOG}.up" ]; } || exit 0
@@ -166,6 +172,7 @@ case "$1" in
       config)
         # Compose lists the active profiles' images, one per line.
         case "$args" in
+          *"--format json") printf '{"services":{"app":{"image":"%s"}}}\\n' "\${WAITRON_IMAGE:-waitron:configured}" ;;
           *--environment*) printf 'COMPOSE_PROFILES=%s\\n' "\${WT_COMPOSE_ENV_PROFILES-$profiles}" ;;
           *--images*)
             printf '%s\\n' "$profiles" >> "\${WT_LOG}.images-profiles"
@@ -174,7 +181,11 @@ case "$1" in
           *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
         esac ;;
       rm) exit 0 ;;
-      up) printf '%s\\n' "$profiles" >> "\${WT_LOG}.up-profiles"; : > "\${WT_LOG}.up" ;;
+      up)
+        printf '%s\\n' "$profiles" >> "\${WT_LOG}.up-profiles"; : > "\${WT_LOG}.up"
+        if [ "\${WT_OBSERVE_RELEASE_IMAGES:-0}" = 1 ]; then
+          printf '%s\\n' "\${WAITRON_IMAGE:-}" "\${WAITRON_PRINT_AGENT_IMAGE:-}" > "\${WT_LOG}.up-images"
+        fi ;;
       down) printf '%s\\n' "\${COMPOSE_PROFILES:-}" >> "\${WT_LOG}.profiles"; : > "\${WT_LOG}.down" ;;
       *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
     esac ;;
@@ -199,6 +210,13 @@ case "$1" in
   image)
     [ "\${WT_LOOKUP_FAIL}" = labels ] && [ "\${@: -1}" = sha256:running-app ] && exit 1
     case "$args" in
+      *'--format {{index .Config.Labels "org.opencontainers.image.ref.name"}}'*)
+        case "$args" in
+          *sha256:running-app*|*waitron:configured*) printf '%s\\n' "\${WT_INSTALLED_RELEASE_REF-<no value>}" ;;
+          *override:app*) printf 'main\\n' ;;
+          *) exit 97 ;;
+        esac
+        exit 0 ;;
       *'--format {{index .Config.Labels "org.opencontainers.image.revision"}}'*) printf '%s\\n' "\${WT_CANDIDATE_REVISION:-0123456789abcdef0123456789abcdef01234567}"; exit 0 ;;
       *'{{.Id}}'*) case "$args" in *print-agent*) echo sha256:candidate-agent ;; *) echo sha256:candidate-app ;; esac; exit 0 ;;
       *--format*waitron:newer-tag*|*--format*waitron-print-agent:newer-tag*) echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|2026-10-12T12:00:00Z|newer-tag'; exit 0 ;;
@@ -250,6 +268,12 @@ stub(
   `
 out=""; url=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
 case "$url" in
+  */releases/download/*/waitron-release.json)
+    [ -n "\${WT_RELEASE_ASSET:-}" ] || exit 22
+    cat "$WT_RELEASE_ASSET"; exit 0 ;;
+  */deploy/box/release-keys/*|*/scripts/box/verify-release.mjs|*/scripts/box/release-list.mjs|*/scripts/box/upgrades/contracts.mjs)
+    [ -n "\${WT_RELEASE_TRUST_SOURCE:-}" ] || exit 22
+    cp "$WT_RELEASE_TRUST_SOURCE/\${url##*/}" "$out"; exit $? ;;
   https://api.github.com/repos/clintongormley/waitron/commits/*)
     [ "\${WT_REF_FAIL}" = 1 ] && exit 22
     printf '{"sha":"%s","commit":{"committer":{"date":"%s"}}}\\n' "\${WT_REF_SHA:-0123456789abcdef0123456789abcdef01234567}" "\${WT_REF_TIME-2026-10-15T11:00:00Z}"; exit 0 ;;
@@ -388,7 +412,15 @@ writeFileSync(
   `#!/bin/bash
 printf 'host:%s\\n' "$*" >> "$WT_LOG"
 if [ "\${WT_HOST_ERROR:-0}" = 1 ]; then echo 'unreadable attempt' >&2; exit 1; fi
+case "$1" in
+  */release-trust/verify-release.mjs) exec "$WT_REAL_NODE" "$@" ;;
+esac
 case "$2" in
+  apply)
+    if [ "\${WT_RUN_CANDIDATE:-0}" = 1 ]; then
+      shift 3
+      "$@" > "\${WT_LOG}.candidate" || exit $?
+    fi ;;
   restore|keep)
     if [ ! -d "\${WAITRON_DIR}.upgrades" ]; then printf 'null\\n'; exit 0; fi
     rm -rf "\${WAITRON_DIR}.upgrades" ;;
@@ -595,6 +627,7 @@ function run(sb, args, extraEnv = {}, { timeoutMs = RUN_TIMEOUT_MS } = {}) {
       WAITRON_DIR: sb.boxDir,
       WAITRON_HOST_DIR: join(sb.root, "host"),
       WT_HOST_NODE: HOST_NODE_STUB,
+      WT_REAL_NODE: process.execPath,
       WT_BOOTSTRAP: BOOTSTRAP_STUB,
       // The child's whole health-retry budget, shrunk from ~175s to ~2s.
       WAITRON_TEST_HEALTH_DELAY: "0.05",
@@ -1358,20 +1391,96 @@ describe("waitron.sh install <ref>", () => {
   });
 });
 
+const signedSource = "fedcba9876543210fedcba9876543210fedcba98";
+const appDigest = `sha256:${"a".repeat(64)}`;
+const agentDigest = `sha256:${"b".repeat(64)}`;
+const signedApp = `ghcr.io/clintongormley/waitron@${appDigest}`;
+const signedAgent = `ghcr.io/clintongormley/waitron-print-agent@${agentDigest}`;
+const releaseKey = () =>
+  generateKeyPairSync("ed25519", {
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+const releaseKeys = [releaseKey(), releaseKey()];
+
+function signedRelease(
+  sb,
+  { version = "1.2.3", key = releaseKeys[1], retain = true, prerelease = false } = {},
+) {
+  const source = join(sb.root, "trust-source");
+  mkdirSync(source);
+  for (const [file, name] of [
+    ["box/verify-release.mjs", "verify-release.mjs"],
+    ["box/release-list.mjs", "release-list.mjs"],
+    ["box/upgrades/contracts.mjs", "contracts.mjs"],
+  ]) {
+    copyFileSync(join(HERE, file), join(source, name));
+  }
+  writeFileSync(join(source, "current.pem"), releaseKeys[0].publicKey);
+  writeFileSync(join(source, "spare.pem"), releaseKeys[1].publicKey);
+  const asset = join(sb.root, "waitron-release.json");
+  writeFileSync(
+    asset,
+    signReleaseList(
+      {
+        format: 1,
+        kind: "release",
+        sourceSha: signedSource,
+        platform: "linux/amd64",
+        version,
+        prerelease,
+        images: { app: appDigest, printAgent: agentDigest },
+      },
+      key.privateKey,
+    ),
+  );
+  const host = join(sb.root, "host");
+  if (retain) {
+    const trust = join(host, "release-trust");
+    mkdirSync(join(trust, "upgrades"), { recursive: true });
+    for (const file of readdirSync(source)) {
+      const target = file === "contracts.mjs" ? join(trust, "upgrades", file) : join(trust, file);
+      copyFileSync(join(source, file), target);
+    }
+    const runtime = join(host, "node-v26.7.0/bin");
+    mkdirSync(runtime, { recursive: true });
+    copyFileSync(HOST_NODE_STUB, join(runtime, "node"));
+    copyFileSync(sb.script, join(host, "waitron.sh"));
+    sb.entry = join(host, "waitron.sh");
+  }
+  return {
+    WT_RELEASE_ASSET: asset,
+    WT_RELEASE_TRUST_SOURCE: source,
+    WT_REF_SHA: signedSource,
+    WT_OBSERVE_RELEASE_IMAGES: "1",
+  };
+}
+
 describe("waitron.sh install of a release", () => {
   it.each(["1.2.3", `1.2.${"1".repeat(46)}`])(
-    "pulls the published %s images, records them in .env, and builds nothing",
+    "uses both signed %s digests in the environment file and during Compose pull and startup",
     (version) => {
       const sb = sandbox();
-      const r = run(sb, ["install", `v${version}`]);
+      const release = signedRelease(sb, { version });
+      const r = run(sb, ["install", `v${version}`], {
+        ...release,
+        WT_STATE_VOLUME_ABSENT: "1",
+        WAITRON_IMAGE: "override:app",
+        WAITRON_PRINT_AGENT_IMAGE: "override:agent",
+      });
       expect(r.status, r.stderr).toBe(0);
       const env = readFileSync(join(sb.boxDir, ".env"), "utf8").split("\n");
-      expect(env).toContain(`WAITRON_IMAGE=ghcr.io/clintongormley/waitron:${version}`);
-      expect(env).toContain(
-        `WAITRON_PRINT_AGENT_IMAGE=ghcr.io/clintongormley/waitron-print-agent:${version}`,
-      );
+      expect(env).toContain(`WAITRON_IMAGE=${signedApp}`);
+      expect(env).toContain(`WAITRON_PRINT_AGENT_IMAGE=${signedAgent}`);
       expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^pull\b/));
+      for (const phase of ["pull", "up"]) {
+        expect(readFileSync(`${sb.log}.${phase}-images`, "utf8")).toBe(
+          `${signedApp}\n${signedAgent}\n`,
+        );
+      }
       const calls = readFileSync(sb.log, "utf8");
+      expect(calls).toContain(`/${signedSource}/deploy/compose.yml`);
+      expect(calls).not.toContain(`/v${version}/deploy/waitron.sh`);
       expect(calls).not.toContain("docker build");
       expect(calls).not.toContain("api.github.com");
     },
@@ -1379,11 +1488,226 @@ describe("waitron.sh install of a release", () => {
 
   it("names the release and suggests checking it was published when the pull fails", () => {
     const sb = sandbox({ pullFail: true });
-    const r = run(sb, ["install", "v1.2.3"]);
+    const r = run(sb, ["install", "v1.2.3"], {
+      ...signedRelease(sb),
+      WT_STATE_VOLUME_ABSENT: "1",
+    });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain("v1.2.3");
     expect(r.stderr).toContain("published");
     expect(composeCalls(sb).filter((call) => call.split(/\s+/).includes("up"))).toEqual([]);
+  });
+
+  it.each([
+    [false, ["install", "v1.2.3"]],
+    [true, ["install", "v1.2.3"]],
+    [true, ["--reset", "install", "v1.2.3"]],
+  ])(
+    "rejects an untrusted file before downloads or reset (installed %s, %j)",
+    (installed, args) => {
+      const sb = sandbox({ systemd: installed });
+      if (installed) installedBox(sb);
+      const r = run(sb, args, signedRelease(sb, { key: releaseKey() }));
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain("Invalid release signature");
+      expect(r.stderr).not.toContain("needs confirmation");
+      const calls = loggedCalls(sb);
+      expect(calls).toHaveLength(2);
+      expect(calls).toContainEqual(
+        expect.stringMatching(
+          /^curl .*--max-time 60 --max-filesize 16384 .*\/v1\.2\.3\/waitron-release\.json/,
+        ),
+      );
+      expect(calls).toContainEqual(
+        expect.stringMatching(/^host:.*\/release-trust\/verify-release\.mjs v1\.2\.3$/),
+      );
+    },
+  );
+
+  it("requires the retained script for numbered installs", () => {
+    const sb = sandbox();
+    const release = signedRelease(sb);
+    sb.entry = sb.script;
+    writeFileSync(sb.log, "");
+    const r = run(sb, ["install", "v1.2.3"], release);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(join(sb.root, "host/waitron.sh"));
+    expect(loggedCalls(sb)).toEqual([""]);
+  });
+
+  it("explains how to load release trust when the retained verifier is missing", () => {
+    const sb = sandbox();
+    const release = signedRelease(sb);
+    rmSync(join(sb.root, "host/release-trust/verify-release.mjs"));
+    writeFileSync(sb.log, "");
+    const r = run(sb, ["install", "v1.2.3"], release);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(
+      "use a published main image with the verifier and both release keys",
+    );
+    expect(loggedCalls(sb)).toEqual([""]);
+  });
+
+  it("checks a release on a provisioned development box and passes the signed digests into its upgrade", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const args = { ...signedRelease(sb, { prerelease: true }), WT_RUN_CANDIDATE: "1" };
+    const r = run(sb, ["install", "v1.2.3"], { ...args, WT_INSTALLED_RELEASE_REF: "main" });
+    expect(r.status, r.stderr).toBe(0);
+    const calls = loggedCalls(sb);
+    const manifest = calls.findIndex((call) => call.includes("/v1.2.3/waitron-release.json"));
+    const metadata = calls.findIndex((call) =>
+      call.includes(`api.github.com/repos/clintongormley/waitron/commits/${signedSource}`),
+    );
+    expect(manifest).toBeGreaterThanOrEqual(0);
+    expect(metadata).toBeGreaterThan(manifest);
+    expect(calls).toContainEqual(
+      expect.stringContaining(`/${signedSource}/scripts/box/upgrades/bootstrap.sh`),
+    );
+    const versionCheck = calls.findIndex(
+      (call) =>
+        call.includes("--check-version") || call.includes('"org.opencontainers.image.ref.name"'),
+    );
+    expect(versionCheck).toBeGreaterThan(calls.indexOf("flock -n 9"));
+    expect(calls).toContainEqual(
+      expect.stringContaining(
+        ` __candidate v1.2.3 ${signedSource}:1792062000 ${sb.boxDir} ${appDigest} ${agentDigest}`,
+      ),
+    );
+    expect(calls.filter((call) => call.startsWith("docker pull "))).toEqual([
+      `docker pull ${signedApp}`,
+      `docker pull ${signedAgent}`,
+    ]);
+    expect(JSON.parse(readFileSync(`${sb.log}.candidate`, "utf8")).images).toEqual({
+      app: "sha256:candidate-app",
+      "print-agent": "sha256:candidate-agent",
+    });
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toMatch(
+      /^WAITRON_IMAGE=waitron:pinned$/m,
+    );
+    expect(calls.some((call) => /\/v1\.2\.3\/deploy\//.test(call))).toBe(false);
+  });
+
+  it.each([
+    ["stopped", { WT_STOPPED_APP: "1" }, "sha256:running-app"],
+    ["removed", { WT_NO_CONTAINERS: "1", WAITRON_IMAGE: "override:app" }, "waitron:configured"],
+  ])("refuses a lower release when the app container is %s", (_, state, image) => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const release = signedRelease(sb, { version: "1.9.3" });
+    const r = run(sb, ["install", "v1.9.3"], {
+      ...release,
+      ...state,
+      WT_INSTALLED_RELEASE_REF: "v1.10.3",
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("older than installed release v1.10.3");
+    const calls = loggedCalls(sb);
+    expect(calls).toContainEqual(expect.stringMatching(`^docker image inspect .*${image}.*$`));
+    expect(calls.some((call) => /\b(apply|pull)\b/.test(call))).toBe(false);
+    expect(calls.some((call) => call.startsWith("install "))).toBe(false);
+  });
+
+  it("refuses release metadata for a commit other than the signed commit", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const r = run(sb, ["install", "v1.2.3"], {
+      ...signedRelease(sb),
+      WT_REF_SHA: "0123456789abcdef0123456789abcdef01234567",
+      WT_INSTALLED_RELEASE_REF: "main",
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("source metadata did not match signed release");
+    expect(loggedCalls(sb).some((call) => /\/deploy\/|\/scripts\/box\//.test(call))).toBe(false);
+  });
+
+  it("refuses an unreadable installed version on a box with venue data", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const r = run(sb, ["install", "v1.2.3"], signedRelease(sb));
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("could not read the installed app version");
+    expect(loggedCalls(sb).some((call) => /\b(apply|pull)\b/.test(call))).toBe(false);
+  });
+
+  it("keeps the venue untouched when its volume remains but its Compose file is missing", () => {
+    const sb = sandbox({ systemd: true });
+    const r = run(sb, ["install", "v1.2.3"], signedRelease(sb));
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("the state volume exists but compose.yml is missing");
+    expect(existsSync(join(sb.boxDir, "compose.yml"))).toBe(false);
+    expect(loggedCalls(sb).some((call) => /\/deploy\/|^compose (pull|up)\b/.test(call))).toBe(
+      false,
+    );
+  });
+
+  it("accepts an older signed release when resetting a development box", () => {
+    const sb = sandbox({ tradingEnv: "preproduction" });
+    installedBox(sb);
+    const args = { ...signedRelease(sb), WT_INSTALLED_RELEASE_REF: "v2.0.0" };
+    const r = run(sb, ["--reset", "--yes", "install", "v1.2.3"], args);
+    expect(r.status, r.stderr).toBe(0);
+    const calls = loggedCalls(sb);
+    const pull = calls.indexOf("compose pull");
+    const wipe = calls.findIndex((call) =>
+      /^compose run .*--entrypoint sh app -c find .* -exec rm -rf/.test(call),
+    );
+    expect(pull).toBeGreaterThanOrEqual(0);
+    expect(wipe).toBeGreaterThan(pull);
+    expect(calls.findIndex((call) => call.startsWith("compose up "))).toBeGreaterThan(wipe);
+    expect(readFileSync(`${sb.log}.up-images`, "utf8")).toBe(`${signedApp}\n${signedAgent}\n`);
+  });
+
+  it(
+    "seeds release trust on a checked main upgrade using the downloaded installer",
+    () => {
+      const sb = sandbox({ systemd: true });
+      installedBox(sb);
+      const release = signedRelease(sb, { retain: false });
+      const host = join(sb.root, "host");
+      mkdirSync(host);
+      writeFileSync(join(host, "waitron.sh"), "# old installer without release trust\n");
+      const upgraded = run(sb, ["install", "main"], {
+        ...release,
+        WT_REGISTRY_REVISION: signedSource,
+      });
+      expect(upgraded.status, upgraded.stderr).toBe(0);
+      expect(upgraded.stderr).toContain("loaded the release verifier and both public keys");
+      expect(readFileSync(join(host, "release-trust/current.pem"), "utf8")).toBe(
+        releaseKeys[0].publicKey,
+      );
+      expect(readFileSync(join(host, "release-trust/spare.pem"), "utf8")).toBe(
+        releaseKeys[1].publicKey,
+      );
+      expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toMatch(
+        /^WAITRON_IMAGE=waitron:pinned$/m,
+      );
+      sb.entry = join(host, "waitron.sh");
+      const installed = run(sb, ["install", "v1.2.3"], {
+        ...release,
+        WT_INSTALLED_RELEASE_REF: "main",
+      });
+      expect(installed.status, installed.stderr).toBe(0);
+      expect(loggedCalls(sb).some((call) => call.startsWith("docker volume rm "))).toBe(false);
+    },
+    2 * RUN_TIMEOUT_MS + 5_000,
+  );
+
+  it("keeps the installed trust when main cannot supply both keys", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const release = signedRelease(sb);
+    writeFileSync(join(release.WT_RELEASE_TRUST_SOURCE, "current.pem"), releaseKey().publicKey);
+    rmSync(join(release.WT_RELEASE_TRUST_SOURCE, "spare.pem"));
+    const result = run(sb, ["install", "main"], { ...release, WT_REGISTRY_REVISION: signedSource });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain("could not load release trust files");
+    const trust = join(sb.root, "host/release-trust");
+    expect(readFileSync(join(trust, "current.pem"), "utf8")).toBe(releaseKeys[0].publicKey);
+    expect(readFileSync(join(trust, "spare.pem"), "utf8")).toBe(releaseKeys[1].publicKey);
+    expect(loggedCalls(sb)).toContainEqual(
+      expect.stringContaining("/deploy/box/release-keys/spare.pem"),
+    );
   });
 
   it.each(["v1.2", "feat/x", "v01.2.3", "v1.2.3-rc1", `v1.2.${"1".repeat(47)}`])(

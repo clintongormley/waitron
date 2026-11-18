@@ -59,6 +59,14 @@ for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag 
   install -m 0644 "$repo/scripts/box/$module.mjs" "$root/opt/waitron-host/box/"
 done
 install -D -m 0644 "$repo/scripts/box/upgrades/contracts.mjs" "$root/opt/waitron-host/box/upgrades/contracts.mjs"
+trust="$root/opt/waitron-host/release-trust"
+for file in verify-release.mjs release-list.mjs upgrades/contracts.mjs; do
+  install -D -m 0644 "$repo/scripts/box/$file" "$trust/$file"
+done
+keys="$repo/deploy/box/release-keys"
+if [ -s "$keys/current.pem" ] && [ -s "$keys/spare.pem" ]; then
+  for file in current.pem spare.pem; do install -m 0644 "$keys/$file" "$trust/$file"; done
+fi
 install -D -m 0755 "$repo/deploy/box/waitron-box.sh" "$root/usr/local/lib/waitron/waitron-box.sh"
 for unit in waitron-box.socket waitron-box@.service waitron-network-change.service waitron-network-monitor.service; do
   install -m 0644 "$repo/deploy/box/$unit" "$root/etc/systemd/system/"

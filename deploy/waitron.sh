@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/waitron.sh -o waitron.sh
 #   sudo bash waitron.sh install            # published main image
 #   sudo bash waitron.sh install <ref>      # build and run a branch or commit on the box
-#   sudo bash waitron.sh install v1.2.3     # pull and run a published release
+#   sudo bash /opt/waitron-host/waitron.sh install v1.2.3  # check and run a signed release
 #   sudo bash waitron.sh reset [--all]      # wipe back to a clean box (keeps the certificate unless the box joined another, the start-again records and the files a Move set aside)
 #   sudo bash waitron.sh --reset install [ref]   # build or pull the ref's images, wipe the box, start it on them
 #
@@ -21,6 +21,10 @@ STATE_VOLUME="${COMPOSE_PROJECT_NAME:-waitron}_state"
 # The public repo, written out in full (not via a variable) so scripts/deploy-image-env.test.ts can
 # pin the literal URL as text — a typo in the org/repo then fails the guard loudly.
 RAW_BASE="https://raw.githubusercontent.com/clintongormley/waitron"
+APP_IMAGE_REPO="ghcr.io/clintongormley/waitron"
+PRINT_AGENT_IMAGE_REPO="ghcr.io/clintongormley/waitron-print-agent"
+RELEASE_TRUST="$WAITRON_HOST_DIR/release-trust"
+HOST_NODE="$WAITRON_HOST_DIR/node-v26.7.0/bin/node"
 # One copy of box-name.ts's BOX_HOSTNAME, pinned by scripts/deploy-image-env.test.ts to the image env,
 # compose's defaults and the QR the restaurant scans.
 BOX_URL="https://waitron.local"
@@ -410,6 +414,43 @@ is_release_tag() {
     && [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 }
 
+verify_numbered_release() {
+  local ref="$1"
+  [ "${BASH_SOURCE[0]}" -ef "$WAITRON_HOST_DIR/waitron.sh" ] \
+    || die "run numbered installs from $WAITRON_HOST_DIR/waitron.sh"
+  [ -x "$HOST_NODE" ] && [ -r "$RELEASE_TRUST/verify-release.mjs" ] \
+    || die 'release verification is unavailable — use a published main image with the verifier and both release keys, then follow the checked upgrade instructions'
+  command -v curl >/dev/null 2>&1 || die 'install curl to download the signed release file'
+  curl -q -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 15 \
+    --max-time 60 --max-filesize 16384 \
+    "https://github.com/clintongormley/waitron/releases/download/$ref/waitron-release.json" \
+    | "$HOST_NODE" "$RELEASE_TRUST/verify-release.mjs" "$ref" \
+    || die "could not verify signed release $ref — check that it was published and that the box has its release keys"
+}
+
+installed_app_ref() (
+  local container image config
+  cd "$WAITRON_DIR" || return 1
+  container="$(docker compose -f "$WAITRON_DIR/compose.yml" ps -a -q app)" || return 1
+  if [ -n "$container" ]; then
+    image="$(docker inspect -f '{{.Image}}' "$container")" || return 1
+  else
+    config="$(docker compose -f "$WAITRON_DIR/compose.yml" config --format json)" || return 1
+    image="$(printf '%s' "$config" | jq -er '.services.app.image')" || return 1
+  fi
+  [ -n "$image" ] || return 1
+  docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.ref.name"}}' "$image"
+)
+
+require_current_or_newer_release() {
+  local current
+  current="$(installed_app_ref)" && [[ "$current" =~ ^[^[:space:]]+$ && "$current" != "<nil>" ]] \
+    || die 'could not read the installed app version — keep the existing installation and check its app image'
+  if is_release_tag "$current"; then
+    "$HOST_NODE" "$RELEASE_TRUST/verify-release.mjs" --check-version "$1" "$current"
+  fi
+}
+
 resolve_source_metadata() {
   local ref="$1" url metadata source_metadata
   if ! command -v jq >/dev/null 2>&1; then
@@ -432,21 +473,14 @@ resolve_source_metadata() {
   printf '%s\n' "$source_metadata"
 }
 
-# 3. main pulls every image in compose.yml and records no override; a release vX.Y.Z pulls its
-#    published images and records them in .env; any other branch/commit builds both Waitron images
-#    on the box from the git context and records the tags in .env so the box stays on them.
+# 3. main pulls every image in compose.yml and records no override; development refs other than
+#    main build both Waitron images and record their tags or ids.
 select_image() {
   local ref="$1"
-  if [ "$ref" = "main" ] || is_release_tag "$ref"; then
+  if [ "$ref" = "main" ]; then
     local why="check the network and that the image registries (GHCR, Docker Hub) are reachable, or whether an image is published for this machine's architecture ($(uname -m))"
-    if [ "$ref" = "main" ]; then
-      env_unset WAITRON_IMAGE
-      env_unset WAITRON_PRINT_AGENT_IMAGE
-    else
-      env_set WAITRON_IMAGE "ghcr.io/clintongormley/waitron:${ref#v}"
-      env_set WAITRON_PRINT_AGENT_IMAGE "ghcr.io/clintongormley/waitron-print-agent:${ref#v}"
-      why="check that release $ref was published (its images are ghcr.io/clintongormley/waitron:${ref#v} and waitron-print-agent:${ref#v}), and $why"
-    fi
+    env_unset WAITRON_IMAGE
+    env_unset WAITRON_PRINT_AGENT_IMAGE
     docker compose -f "$WAITRON_DIR/compose.yml" pull \
       || die "could not pull the box's images for $ref: $why"
   else
@@ -852,10 +886,9 @@ lock_managed_box() {
 }
 
 upgrade_cli() {
-  local node="$WAITRON_HOST_DIR/node-v26.7.0/bin/node"
-  [ -x "$node" ] || die "the retained host runtime is unavailable — retain the upgrade copy and runtime; do not reset"
+  [ -x "$HOST_NODE" ] || die "the retained host runtime is unavailable — retain the upgrade copy and runtime; do not reset"
   local verb="$1"; shift
-  "$node" "$WAITRON_HOST_DIR/box/upgrades/cli.mjs" "$verb" "$WAITRON_DIR" "$@"
+  "$HOST_NODE" "$WAITRON_HOST_DIR/box/upgrades/cli.mjs" "$verb" "$WAITRON_DIR" "$@"
 }
 
 cmd_upgrade_choice() (
@@ -880,6 +913,17 @@ fetch_upgrade_driver() {
   for file in upgrade-restart.sh waitron-app.service waitron-upgrade-recovery.service; do
     fetch "$RAW_BASE/$sha/deploy/box/$file" "$stage/$file" || return 1
   done
+}
+
+fetch_release_trust() {
+  local sha="$1" stage="$2" key
+  mkdir -p "$stage/upgrades" || return 1
+  for key in current.pem spare.pem; do
+    fetch "$RAW_BASE/$sha/deploy/box/release-keys/$key" "$stage/$key" && [ -s "$stage/$key" ] || return 1
+  done
+  fetch "$RAW_BASE/$sha/scripts/box/verify-release.mjs" "$stage/verify-release.mjs" \
+    && fetch "$RAW_BASE/$sha/scripts/box/release-list.mjs" "$stage/release-list.mjs" \
+    && fetch "$RAW_BASE/$sha/scripts/box/upgrades/contracts.mjs" "$stage/upgrades/contracts.mjs"
 }
 
 install_upgrade_driver() {
@@ -916,10 +960,13 @@ ensure_host_node_libraries() {
 }
 
 cmd_manual_install() (
-  local ref="$1" metadata sha preferred="" source="resolved Git SHA" stage result
+  local ref="$1" signed_sha="$2" metadata sha preferred="" source="resolved Git SHA" stage result
+  shift 2
+  local trust_ready=0
   [ -d "$SYSTEMD_RUN_DIR" ] || die 'safe manual upgrades require a Linux host running systemd'
-  metadata="$(resolve_source_metadata "$ref")"
+  metadata="$(resolve_source_metadata "${signed_sha:-$ref}")"
   sha="${metadata%%:*}"
+  [ -z "$signed_sha" ] || [ "$sha" = "$signed_sha" ] || die "source metadata did not match signed release $ref"
   mkdir -p "$WAITRON_HOST_DIR"
   stage="$(mktemp -d "$WAITRON_HOST_DIR/.driver.XXXXXX")"
   trap 'rm -rf -- "$stage"' EXIT
@@ -933,6 +980,7 @@ cmd_manual_install() (
       source="resolved Git fallback"
       fetch_upgrade_driver "$sha" "$stage" || die 'could not download one complete upgrade driver'
     fi
+    if fetch_release_trust "$sha" "$stage/release-trust" 2>/dev/null; then trust_ready=1; fi
   else
     fetch_upgrade_driver "$sha" "$stage" || die 'could not download one complete upgrade driver'
   fi
@@ -941,13 +989,20 @@ cmd_manual_install() (
   exec 9>"${WAITRON_DIR}.upgrade.lock"
   flock -n 9 || die 'another host operation is running'
   refuse_pending_upgrade
+  if [ -n "$signed_sha" ]; then require_current_or_newer_release "$ref"; fi
   install_upgrade_driver "$stage"
+  if [ "$trust_ready" -eq 1 ]; then
+    cp -R "$stage/release-trust" "$WAITRON_HOST_DIR/"
+    echo 'waitron.sh: loaded the release verifier and both public keys' >&2
+  elif [ "$ref" = main ]; then
+    echo 'waitron.sh: could not load release trust files — use a published main image with both release keys and check that the files can be downloaded' >&2
+  fi
   load_print_agent_apparmor "$sha"
   disable_bluetooth_autopair
   enable_time_sync
   install_box_service "$sha"
   echo "waitron.sh: retained upgrade driver $sha ($source)" >&2
-  result="$(upgrade_cli apply bash "$WAITRON_HOST_DIR/waitron.sh" __candidate "$ref" "$metadata" "$WAITRON_DIR")"
+  result="$(upgrade_cli apply bash "$WAITRON_HOST_DIR/waitron.sh" __candidate "$ref" "$metadata" "$WAITRON_DIR" "$@")"
   printf '%s\n' "$result"
   if upgrade_pending; then
     die "upgrade held — run 'waitron.sh status', then choose restore or keep"
@@ -983,6 +1038,15 @@ prepare_upgrade_candidate() (
     agent="$(docker image inspect "$reference" --format '{{.Id}}')"
     [ "$(docker image inspect "$agent" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$revision" ] \
       || die 'candidate app and print agent name different source revisions'
+  elif is_release_tag "$ref"; then
+    [[ "${4:-}" =~ ^sha256:[a-f0-9]{64}$ && "${5:-}" =~ ^sha256:[a-f0-9]{64}$ ]] \
+      || die "signed image digests are required for $ref"
+    fetch_box_files "${metadata%%:*}" >&2
+    local app_image="$APP_IMAGE_REPO@$4" agent_image="$PRINT_AGENT_IMAGE_REPO@$5"
+    docker pull "$app_image" >&2
+    docker pull "$agent_image" >&2
+    app="$(docker image inspect "$app_image" --format '{{.Id}}')"
+    agent="$(docker image inspect "$agent_image" --format '{{.Id}}')"
   else
     fetch_box_files "${metadata%%:*}" >&2
     select_image "$ref" "$metadata" "$work" >&2
@@ -1002,19 +1066,33 @@ box_started() {
 
 cmd_install() {
   local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL" fresh=0 docker_ready=0
+  local verified signed_sha="" app_digest="" agent_digest="" source_ref="$ref"
   refuse_pending_upgrade
+  if is_release_tag "$ref"; then
+    verified="$(verify_numbered_release "$ref")"
+    read -r signed_sha app_digest agent_digest <<<"$verified"
+    source_ref="$signed_sha"
+    unset WAITRON_IMAGE WAITRON_PRINT_AGENT_IMAGE
+  fi
   if [ "$wipe" -eq 0 ] && [ -f "$WAITRON_DIR/compose.yml" ]; then
     ensure_docker
     docker_ready=1
     if box_started; then
-      cmd_manual_install "$ref"
+      if [ -n "$signed_sha" ]; then
+        cmd_manual_install "$ref" "$signed_sha" "$app_digest" "$agent_digest"
+      else
+        cmd_manual_install "$ref" ""
+      fi
       return
     fi
   fi
   lock_managed_box
-  refresh_self "$ref"
+  if [ -z "$signed_sha" ]; then refresh_self "$ref"; fi
   [ "$docker_ready" -eq 1 ] || ensure_docker
   box_started || fresh=1
+  if [ -n "$signed_sha" ] && [ "$fresh" -eq 0 ] && [ ! -f "$WAITRON_DIR/compose.yml" ]; then
+    die "cannot install $ref: the state volume exists but compose.yml is missing — recover the box's configuration first"
+  fi
   if [ "$wipe" -eq 1 ]; then
     if [ ! -f "$WAITRON_DIR/compose.yml" ]; then
       echo "waitron.sh: no box at $WAITRON_DIR, so nothing to reset — installing" >&2
@@ -1029,13 +1107,22 @@ cmd_install() {
     echo "waitron.sh: $WAITRON_DIR has a compose.yml but Docker has no $STATE_VOLUME volume, so this is treated as a first install" >&2
   fi
   mkdir -p "$WAITRON_DIR" || die "cannot create $WAITRON_DIR — run as root, or set WAITRON_DIR to a writable path"
-  fetch_box_files "$ref"
-  load_print_agent_apparmor "$ref"
+  fetch_box_files "$source_ref"
+  load_print_agent_apparmor "$source_ref"
   disable_bluetooth_autopair
   enable_time_sync
-  install_box_service "$ref"
+  install_box_service "$source_ref"
   if [ "$wipe" -eq 1 ] || [ "$fresh" -eq 1 ]; then select_practice_inbox on; fi
-  select_image "$ref"
+  if [ -n "$signed_sha" ]; then
+    export WAITRON_IMAGE="$APP_IMAGE_REPO@$app_digest"
+    export WAITRON_PRINT_AGENT_IMAGE="$PRINT_AGENT_IMAGE_REPO@$agent_digest"
+    env_set WAITRON_IMAGE "$WAITRON_IMAGE"
+    env_set WAITRON_PRINT_AGENT_IMAGE "$WAITRON_PRINT_AGENT_IMAGE"
+    docker compose -f "$WAITRON_DIR/compose.yml" pull \
+      || die "could not pull the signed images for $ref — check that the release was published and the registry is reachable"
+  else
+    select_image "$ref"
+  fi
   if [ "$wipe" -eq 0 ] && [ "$fresh" -eq 0 ]; then select_practice_inbox decide; fi
   cd "$WAITRON_DIR"
   local before

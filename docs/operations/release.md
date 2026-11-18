@@ -228,16 +228,16 @@ pushes both images.
 
 ## 8. Install the release on a box
 
-On the box, give `waitron.sh install` the tag:
+On the box, give the retained installer the release tag.
 
 ```sh
-sudo bash waitron.sh install v1.0.0
+sudo bash /opt/waitron-host/waitron.sh install v1.0.0
 ```
 
-It pulls the published images for `1.0.0` rather than building anything, and pins them in the
-box's `.env`, so the box stays on that release. A production box starts only on a release: on any
-other build its start stops on the recovery page with `server.unreleased_build`. The box's own
-steps are in [the deploy guide](../../deploy/README.md#installing-a-release).
+The installer verifies the signed release file with the public keys already on the box and
+pulls the two images it names by digest. For the first upgrade on an existing development box,
+follow [the deploy guide](../../deploy/README.md#installing-a-release) to install release trust.
+A production box starts only on a numbered release.
 
 ## Read the draft before the blockers go
 
