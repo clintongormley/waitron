@@ -5,7 +5,7 @@ import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { floorZones } from "./floor-zones.js";
 
-/** The active profile counts as approved by itself. Its row holds its saved zone choice. */
+/** A device's active profile counts as approved even without a row. A row for it stores its saved zones. */
 export const deviceApprovedProfiles = table(
   "device_approved_profiles",
   {

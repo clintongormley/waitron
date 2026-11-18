@@ -319,7 +319,7 @@ describe("a device's saved zones under approved profiles", () => {
   }
 
   it.each([true, false])(
-    "keeps an alternative's saved zones only while its approval remains (retained=%s)",
+    "keeps active zones and remembers an alternative's zones while approved (retained=%s)",
     async (retained) => {
       const { active, alternative, deviceId, zoneId } = await fixture();
       await withTransaction(suite.db, async (tx) => {
