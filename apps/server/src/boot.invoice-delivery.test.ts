@@ -213,7 +213,7 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     identity,
     env,
     node,
-    claim: { ...job!.invoiceClaim!, holder: identity.agentId },
+    claim: { ...job!.invoiceClaim!, holder: identity.agentId, printJobId: jobId },
   };
 }
 

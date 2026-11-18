@@ -187,7 +187,7 @@ export const PRINTER_UNPAIRED = "printer.unpaired";
  * while it reports the unpairing (`tick`, `packages/print-agent/src/agent.ts`, pushes and reports
  * each pulled job before the next pull; ticks run one at a time). Drawer kicks end too, since one
  * left waiting would open the drawer on the re-add; `drawer_opens` holds no job id, so its audit
- * row is unchanged. The pull that carries an
+ * row is unchanged. An invoice receipt retains its claim so the agent that took it can still report. The pull that carries an
  * Unpair's outcome acts on it once, so no later pull would end the rest (`accept`,
  * `apps/server/src/printer-bluetooth-commands.ts`, drops the command once its outcome arrives).
  */
@@ -201,7 +201,9 @@ export async function endUnpairedPrinterJobs(
   const ended = await tx.execute<{ id: string }>(sql`
     update print_jobs as j
     set status = 'failed', last_error = ${PRINTER_UNPAIRED}, attempts = ${MAX_DELIVERY_ATTEMPTS},
-      claimed_at = ${claimedAt}, claimed_by = ${agentId}, next_attempt_at = null
+      claimed_at = case when claim_token_hash is null then ${claimedAt} else claimed_at end,
+      claimed_by = case when claim_token_hash is null then ${agentId} else claimed_by end,
+      next_attempt_at = null
     where j.printer_id in (
         select p.id from printers p
         where p.kind = 'receipt' and p.transport = 'bluetooth' and p.local_key in ${addresses}

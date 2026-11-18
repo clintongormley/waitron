@@ -1,6 +1,6 @@
 import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, lte, isNull, gt, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, isNull, gt, ne, or, sql, type SQL } from "drizzle-orm";
 import {
   invoiceDeliveries,
   printJobs,
@@ -175,6 +175,8 @@ export type InvoiceDeliveryClaim = {
   token: string;
   holder: string;
 };
+type InvoiceReceiptClaim = { printJobId: string; token: string; holder: string };
+
 export type InvoiceDeliveryOutcome =
   | { status: "sent" }
   | { status: "failed" | "unknown"; failureCode: "transport_failed" | A4FailureCode };
@@ -202,10 +204,14 @@ export function deliveryDue(now: Date): SQL {
 
 /** A claim has lapsed once its lease has run out, or when it was taken further ahead than its lease:
  * before the clock stepped back. */
-export function claimLapsed(now: Date): SQL {
+export function claimLapsed(
+  now: Date,
+  claimedAt:
+    typeof invoiceDeliveries.claimedAt | typeof printJobs.claimedAt = invoiceDeliveries.claimedAt,
+): SQL {
   return or(
-    lte(invoiceDeliveries.claimedAt, shifted(now, -INVOICE_DELIVERY_LEASE_MS)),
-    gt(invoiceDeliveries.claimedAt, shifted(now, INVOICE_DELIVERY_LEASE_MS)),
+    lte(claimedAt, shifted(now, -INVOICE_DELIVERY_LEASE_MS)),
+    gt(claimedAt, shifted(now, INVOICE_DELIVERY_LEASE_MS)),
   )!;
 }
 
@@ -223,22 +229,7 @@ export async function claimInvoiceDelivery(
     .select()
     .from(invoiceDeliveries)
     .where(eq(invoiceDeliveries.id, deliveryId));
-  if (delivery === undefined) return undefined;
-  if (delivery.medium === "receipt") {
-    const [job] = await tx
-      .select({ id: printJobs.id })
-      .from(printJobs)
-      .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
-      .where(
-        and(
-          eq(printJobs.id, delivery.printJobId!),
-          eq(printJobs.status, "printing"),
-          eq(printJobs.claimedBy, holder),
-          isNull(printers.deletedAt),
-        ),
-      );
-    if (job === undefined) return undefined;
-  }
+  if (delivery === undefined || delivery.medium === "receipt") return undefined;
   const token = randomUUID();
   const [row] = await tx
     .update(invoiceDeliveries)
@@ -262,7 +253,20 @@ export async function claimInvoiceDelivery(
 }
 
 function expiringClaims(now: Date, restart = false) {
-  return and(eq(invoiceDeliveries.status, "sending"), restart ? undefined : claimLapsed(now));
+  return and(
+    eq(invoiceDeliveries.status, "sending"),
+    restart
+      ? undefined
+      : or(
+          and(ne(invoiceDeliveries.medium, "receipt"), claimLapsed(now)),
+          and(
+            eq(invoiceDeliveries.medium, "receipt"),
+            sql`exists (select 1 from ${printJobs}
+              where ${printJobs.id} = ${invoiceDeliveries.printJobId}
+                and ${claimLapsed(now, printJobs.claimedAt)})`,
+          ),
+        ),
+  );
 }
 
 export async function invoiceDeliveryClaimsDue(tx: Transaction, now: Date): Promise<boolean> {
@@ -321,19 +325,32 @@ function reportedFacts(outcome: InvoiceDeliveryOutcome, now: Date) {
 
 export async function reportInvoiceDelivery(
   tx: Transaction,
-  claim: InvoiceDeliveryClaim,
+  claim: InvoiceDeliveryClaim | InvoiceReceiptClaim,
   outcome: InvoiceDeliveryOutcome,
   now = new Date(),
 ): Promise<{ updated: boolean; historical: boolean }> {
+  const hash = tokenHash(claim.token);
+  const identity =
+    "printJobId" in claim
+      ? and(
+          eq(invoiceDeliveries.medium, "receipt"),
+          eq(invoiceDeliveries.printJobId, claim.printJobId),
+          sql`exists (select 1 from ${printJobs} where ${printJobs.id} = ${claim.printJobId}
+            and ${printJobs.claimedBy} = ${claim.holder} and ${printJobs.claimTokenHash} = ${hash})`,
+        )
+      : and(
+          ne(invoiceDeliveries.medium, "receipt"),
+          eq(invoiceDeliveries.id, claim.deliveryId),
+          eq(invoiceDeliveries.generation, claim.generation),
+          eq(invoiceDeliveries.claimTokenHash, hash),
+          eq(invoiceDeliveries.claimedBy, claim.holder),
+        );
   const [delivery] = await tx
     .select()
     .from(invoiceDeliveries)
     .where(
       and(
-        eq(invoiceDeliveries.id, claim.deliveryId),
-        eq(invoiceDeliveries.generation, claim.generation),
-        eq(invoiceDeliveries.claimTokenHash, tokenHash(claim.token)),
-        eq(invoiceDeliveries.claimedBy, claim.holder),
+        identity,
         isNull(invoiceDeliveries.reportedAt),
         inArray(invoiceDeliveries.status, ["sending", "unknown"]),
       ),
@@ -364,7 +381,6 @@ export async function reportInvoiceDelivery(
       return { updated: false, historical };
     }
   }
-  // Retain the expired token's hash for authenticated late reports; its state ends claim eligibility.
   const status = historical
     ? delivery.status
     : delivery.status === "unknown" && outcome.status !== "sent"

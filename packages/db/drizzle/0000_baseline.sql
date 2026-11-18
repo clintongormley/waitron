@@ -895,6 +895,7 @@ CREATE TABLE `print_jobs` (
 	`next_attempt_at` text,
 	`created_at` text NOT NULL,
 	`claimed_at` text,
+	`claim_token_hash` text,
 	`delivered_at` text,
 	`resend_of` text,
 	`sale_id` text,

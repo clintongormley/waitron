@@ -35,8 +35,8 @@ export const printJobs = table(
       /* v8 ignore start */
       .references(() => printers.id),
     /* v8 ignore stop */
-    // The agent holding the latest claim, which alone may report the job, or the agent whose pull
-    // ended it through `endUnpairedPrinterJobs` (runtime.ts).
+    // The agent holding the latest claim. For jobs without an invoice receipt claim, unpairing
+    // stamps the agent whose pull ended the job.
     /* v8 ignore start */
     claimedBy: id("claimed_by").references(() => printAgents.id),
     /* v8 ignore stop */
@@ -59,6 +59,8 @@ export const printJobs = table(
     // `printing` document whose lease has expired, or whose `claimed_at` is NULL, is re-claimed.
     // Drawer claims are not recovered: an uncertain pulse must not repeat.
     claimedAt: tsString("claimed_at"),
+    // An invoice receipt retains its hashed token so a late report can still be authenticated.
+    claimTokenHash: label("claim_token_hash"),
     deliveredAt: tsString("delivered_at"),
     // The job a resend copies, always the first of its chain: a resend of a resend names the same
     // job (`resendPrintJob`, packages/printing/src/outbox.ts).

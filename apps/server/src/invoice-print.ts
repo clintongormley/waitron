@@ -1,6 +1,14 @@
 import "./errors.js";
-import { and, eq, inArray, sql } from "drizzle-orm";
-import { invoiceDeliveries, printJobs, sales, type Transaction } from "@waitron/db";
+import { randomUUID } from "node:crypto";
+import { and, eq, exists, inArray, isNull, sql } from "drizzle-orm";
+import {
+  invoiceDeliveries,
+  isReceiptPrinter,
+  printers,
+  printJobs,
+  sales,
+  type Transaction,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import {
   claimPrintJobs,
@@ -12,11 +20,12 @@ import {
 import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { deliversAsFullInvoice } from "./invoice-selection.js";
 import {
-  claimInvoiceDelivery,
+  deliveryDue,
   expireInvoiceDeliveryClaims,
   latestNextAttempt,
   reportInvoiceDelivery,
   reserveInvoiceDelivery,
+  tokenHash,
 } from "./invoice-delivery.js";
 
 export type InvoicePrintJob = ClaimedJob & { invoiceClaim?: InvoicePrintClaim };
@@ -96,6 +105,46 @@ export async function resendInvoicePrintJob(
   return retry;
 }
 
+export async function claimInvoiceReceipt(
+  tx: Transaction,
+  printJobId: string,
+  agentId: string,
+  now: Date,
+): Promise<InvoicePrintClaim | undefined> {
+  const claimedJob = tx
+    .select({ id: printJobs.id })
+    .from(printJobs)
+    .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
+    .where(
+      and(
+        eq(printJobs.id, printJobId),
+        eq(printJobs.status, "printing"),
+        eq(printJobs.claimedBy, agentId),
+        isNull(printers.deletedAt),
+      ),
+    );
+  const [delivery] = await tx
+    .update(invoiceDeliveries)
+    .set({ status: "sending", attempts: sql`${invoiceDeliveries.attempts} + 1` })
+    .where(
+      and(
+        eq(invoiceDeliveries.printJobId, printJobId),
+        eq(invoiceDeliveries.medium, "receipt"),
+        eq(invoiceDeliveries.status, "queued"),
+        deliveryDue(now),
+        exists(claimedJob),
+      ),
+    )
+    .returning({ id: invoiceDeliveries.id });
+  if (delivery === undefined) return undefined;
+  const token = randomUUID();
+  await tx
+    .update(printJobs)
+    .set({ claimTokenHash: tokenHash(token), claimedAt: now.toISOString() })
+    .where(eq(printJobs.id, printJobId));
+  return { token };
+}
+
 export async function claimInvoicePrintJobs(
   tx: Transaction,
   agentId: string,
@@ -110,7 +159,7 @@ export async function claimInvoicePrintJobs(
   });
   if (jobs.length === 0) return [];
   const deliveries = await tx
-    .select()
+    .select({ printJobId: invoiceDeliveries.printJobId })
     .from(invoiceDeliveries)
     .where(
       inArray(
@@ -125,17 +174,10 @@ export async function claimInvoicePrintJobs(
       out.push(job);
       continue;
     }
-    const claim = await claimInvoiceDelivery(tx, delivery.id, agentId, now);
+    const claim = await claimInvoiceReceipt(tx, job.id, agentId, now);
     // The print claim and its token must commit together; a refused token rolls the batch back.
     if (claim === undefined) throw new AppError("invoice_delivery.receipt_invalid", {});
-    out.push({
-      ...job,
-      invoiceClaim: {
-        deliveryId: claim.deliveryId,
-        generation: claim.generation,
-        token: claim.token,
-      },
-    });
+    out.push({ ...job, invoiceClaim: claim });
   }
   return out;
 }
@@ -153,11 +195,11 @@ export async function reportInvoicePrintJob(
     if (input.invoiceClaim === undefined) await reportPrintJob(tx, input);
     return;
   }
-  if (input.invoiceClaim === undefined || input.invoiceClaim.deliveryId !== delivery.id) return;
+  if (input.invoiceClaim === undefined) return;
   await expireInvoiceDeliveryClaims(tx, now);
   await reportInvoiceDelivery(
     tx,
-    { ...input.invoiceClaim, holder: input.agentId },
+    { printJobId: input.jobId, token: input.invoiceClaim.token, holder: input.agentId },
     input.outcome.status === "done"
       ? { status: "sent" }
       : { status: "failed", failureCode: "transport_failed" },

@@ -78,6 +78,7 @@ import {
 import { DEVICE_COOKIE } from "./device-session.js";
 import { departments } from "@waitron/venue-service";
 import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
+import { claimInvoiceReceipt } from "./invoice-print.js";
 import { runInvoiceEmailPass } from "./invoice-email-worker.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
@@ -1069,6 +1070,30 @@ describe("a receipt printer as the till's invoice printer", () => {
     const first = await printInvoice(v, orderId, key, undefined, counter);
     expect(first.status).toBe(200);
     expect(await printInvoice(v, orderId, key, undefined, counter)).toEqual(first);
+    expect(await jobsOf(saleId)).toHaveLength(1);
+    expect(await deliveryRows(saleId)).toHaveLength(1);
+  });
+
+  it("replays a sending receipt with the claim time from its print job", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const counter = await invoiceReceiptPrinter();
+    const key = randomUUID();
+    const first = await printInvoice(v, orderId, key, undefined, counter);
+    expect(first.status).toBe(200);
+    const [job] = await jobsOf(saleId);
+    const now = new Date();
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(printJobs)
+        .set({ status: "printing", claimedBy: v.agentId })
+        .where(eq(printJobs.id, job!.id));
+      expect(await claimInvoiceReceipt(tx, job!.id, v.agentId, now)).toBeDefined();
+    });
+    expect(await printInvoice(v, orderId, key, undefined, counter)).toEqual({
+      status: 200,
+      body: { ...first.body, status: "sending", at: now.toISOString() },
+    });
     expect(await jobsOf(saleId)).toHaveLength(1);
     expect(await deliveryRows(saleId)).toHaveLength(1);
   });

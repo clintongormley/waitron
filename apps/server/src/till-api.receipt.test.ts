@@ -865,7 +865,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
           });
           await tx
             .update(invoiceDeliveries)
-            .set({ status: "sending", claimedAt: new Date(Date.now() - 61000).toISOString() })
+            .set({ status: "sending" })
             .where(eq(invoiceDeliveries.id, delivery.id));
         }
         await tx
@@ -873,6 +873,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
           .set({
             status: status === "failed" ? "failed" : "printing",
             attempts: status === "failed" ? 5 : 1,
+            claimedAt: status === "unknown" ? new Date(Date.now() - 61_000).toISOString() : null,
           })
           .where(eq(printJobs.id, job.jobId));
         return { ...job, saleId: sale.saleId };
@@ -1810,6 +1811,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
           "openedAt",
         ].sort(),
       );
+      expect(jobs[0]!.claimTokenHash).toBeNull();
       expect(Object.keys(jobs[0]!).sort()).toEqual(
         [
           "id",
@@ -1821,6 +1823,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
           "resendOf",
           "status",
           "attempts",
+          "claimTokenHash",
           "claimedAt",
           "lastError",
           "createdAt",

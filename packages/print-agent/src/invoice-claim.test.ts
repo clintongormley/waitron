@@ -35,33 +35,22 @@ describe("invoice claim wire validation", () => {
     [],
     1,
     {},
-    { deliveryId: id, generation: 1 },
-    { deliveryId: "", generation: 1, token },
-    { deliveryId: "bad", generation: 1, token },
-    { deliveryId: id, generation: 1, token: "bad" },
-    { deliveryId: id, generation: 1, token: null },
-    { deliveryId: id, generation: 0, token },
-    { deliveryId: id, generation: -1, token },
-    { deliveryId: id, generation: 1.1, token },
-    { deliveryId: id, generation: "1", token },
-    { deliveryId: id, generation: Number.MAX_SAFE_INTEGER + 1, token },
+    { token: "bad" },
+    { token: null },
+    { deliveryId: id, generation: 1, token },
   ])("refuses malformed invoice identity before delivering bytes (%j)", async (invoiceClaim) => {
     expect(await client(invoiceClaim).pullJobs("http://box.test", "auth", inventory)).toMatchObject(
       { ok: false, failure: { kind: "bad_reply" } },
     );
   });
   it("preserves the valid identity alongside its decoded bytes", async () => {
-    const result = await client({ deliveryId: id, generation: 2, token }).pullJobs(
-      "http://box.test",
-      "auth",
-      inventory,
-    );
+    const result = await client({ token }).pullJobs("http://box.test", "auth", inventory);
     expect(result).toMatchObject({
       ok: true,
       value: {
         jobs: [
           {
-            invoiceClaim: { deliveryId: id, generation: 2, token },
+            invoiceClaim: { token },
             payload: new Uint8Array([27, 64]),
           },
         ],

@@ -11,7 +11,13 @@ comparison. At 20:40 the watcher cleared waking a held pull at the next retry, m
 tests' clocks to the retry boundary, and pointing exact handover tests at the two new columns.
 At 21:04 the watcher cleared removing the retry time when a job is moved or its printer is deleted.
 Part B keeps the tested receipt delivery due-time check until dv14 and uses one expiry predicate
-for the job's claim and the till's read-only checks. M1 was recorded separately in the
+for the job's claim and the till's read-only checks. At 21:33 the watcher confirmed that the two
+existing due-time inputs stay until dv14 and that the existing receipt claim checks move with the
+writer. The wire check applies to receipt claims. At 21:41 the watcher cleared keeping the claim
+holder and time when Bluetooth unpairing ends a claimed invoice receipt, so its original holder can
+still report the outcome. The till and dashboard keep the sending time by reading the linked job,
+as the watcher confirmed at 21:43. At 22:18 the watcher confirmed keeping the writer's due check
+and the exact drawer row test, including an empty claim hash on drawer jobs. M1 was recorded separately in the
 [printers backlog](../../backlog/printers.md#the-virtual-pdf-printer).
 
 **Original plan: one pull request, two parts** (merged on 2026-11-08 from two smaller plans to keep the area's PR

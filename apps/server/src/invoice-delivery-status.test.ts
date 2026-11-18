@@ -33,7 +33,6 @@ import {
   reportInvoiceDelivery,
   reserveInvoiceDelivery,
   type InvoiceDelivery,
-  type InvoiceDeliveryClaim,
   type InvoiceDeliveryOutcome,
 } from "./invoice-delivery.js";
 import {
@@ -43,7 +42,7 @@ import {
   type InvoiceDeliverySale,
   type OfferedPrinter,
 } from "./invoice-delivery-status.js";
-import { endInvoicePrintDeliveries } from "./invoice-print.js";
+import { claimInvoiceReceipt, endInvoicePrintDeliveries } from "./invoice-print.js";
 import { renewInvoicePagePrint } from "./invoice-page-print.js";
 import { readOriginalReceiptPrint } from "./receipt-print.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
@@ -214,20 +213,29 @@ async function reserve(
   )[0]!;
 }
 
-async function claim(v: Venue, delivery: InvoiceDelivery): Promise<InvoiceDeliveryClaim> {
+async function claim(v: Venue, delivery: InvoiceDelivery) {
   const holder = delivery.medium === "email" ? "server-one" : v.agentId;
   if (delivery.medium === "receipt") {
+    const printJobId = delivery.printJobId!;
     await suite.db
       .update(printJobs)
-      .set({ status: "printing", claimedBy: v.agentId })
-      .where(eq(printJobs.id, delivery.printJobId!));
+      .set({ status: "printing", claimedBy: holder })
+      .where(eq(printJobs.id, printJobId));
+    const claim = await withTransaction(suite.db, (tx) =>
+      claimInvoiceReceipt(tx, printJobId, holder, START),
+    );
+    return { ...claim!, printJobId, holder };
   }
   return (await withTransaction(suite.db, (tx) =>
     claimInvoiceDelivery(tx, delivery.id, holder, START),
   ))!;
 }
 
-function report(held: InvoiceDeliveryClaim, outcome: InvoiceDeliveryOutcome, now = REPORTED) {
+function report(
+  held: Awaited<ReturnType<typeof claim>>,
+  outcome: InvoiceDeliveryOutcome,
+  now = REPORTED,
+) {
   return withTransaction(suite.db, (tx) => reportInvoiceDelivery(tx, held, outcome, now));
 }
 
@@ -361,7 +369,9 @@ describe("readInvoiceDeliveries", () => {
     /** An A4 original whose agent renewed its claim reporting `paper_out`, then taken to `status`. */
     async function heldA4(v: Venue, saleId: string, status: Status, office: string) {
       const delivery = await reserve(saleId, "a4", office);
-      const held = await claim(v, delivery);
+      const held = (await withTransaction(suite.db, (tx) =>
+        claimInvoiceDelivery(tx, delivery.id, v.agentId, START),
+      ))!;
       expect(
         await withTransaction(suite.db, (tx) =>
           renewInvoicePagePrint(tx, held, "paper_out", START),
