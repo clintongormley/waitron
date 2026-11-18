@@ -343,7 +343,7 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
   it("leaves deleted printers, poll credentials and portable holds behind", () => {
     expect(CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "printers")).toEqual({
       name: "printers",
-      omit: ["poll_token_hash", "held_by_device_id", "held_at"],
+      omit: ["poll_token_hash", "held_by_device_id", "held_at", "kind"],
       reconnect: true,
       leaveBehindWhenSet: "deleted_at",
     });
