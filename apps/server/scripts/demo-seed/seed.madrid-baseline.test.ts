@@ -1434,6 +1434,13 @@ for (const locale of ["en", "es"] as const) {
         );
       }
       const printerTable = expected[phase].tables.printers!;
+      printerTable.columns.splice(1, 0, {
+        name: "kind",
+        type: "TEXT",
+        notnull: 1,
+        dflt_value: "'receipt'",
+        pk: 0,
+      });
       const afterPortable =
         printerTable.columns.findIndex((column) => column.name === "portable") + 1;
       printerTable.columns.splice(
@@ -1456,6 +1463,7 @@ for (const locale of ["en", "es"] as const) {
       });
       for (const row of Object.values(printerTable.rows)) {
         expect(row.pickup_roles).toEqual(["receipt", "payment_slip"]);
+        row.kind = "receipt";
         row.held_by_device_id = null;
         row.held_at = null;
         row.picks_up_receipts = 1;
