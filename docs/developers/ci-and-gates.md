@@ -477,6 +477,26 @@ from a busy-server choice. To inspect assignments, read
 and check each job's `labels`, `runner_id` and `runner_name`; the watcher's
 `gh run view --json jobs` inspection omitted those assignment details.
 
+Browser workload and failure diagnostics were qualified across two natural runs on
+disposable runners. Both used runner `2.338.2` and Playwright `1.65.0`. The venue-service
+job definitions were byte-identical. The runs tested different product heads. Whether
+they used the same disposable guest image build remains unverified.
+
+- PR #3720 passed all 24 server shards, six dashboard shards, seven till shards, four
+  venue-service shards and the hosted aggregate (job `134515230935`, runner `1000363776`).
+  The browser logs show the Playwright cache restore, Chromium installation and the
+  deadline wrapper. The venue-service logs show the process sampler starting with
+  `TMPDIR=/dev/shm`. Source `463135199de67104307957e2092042d1090a77f9`, workflow
+  `aec7cb1890a02a018db42358cd98282a67c41e0e`. [Passing attempt and browser jobs](https://github.com/clintongormley/waitron/actions/runs/44216844211/attempts/1)
+- Two failed venue-service shards uploaded process and `/dev/shm` samples and 80 lines
+  of kernel output each. Shards 1 and 4 ran as jobs `133124850544` and `133124850417`
+  on runners `23676` and `23673`. The workflow captures and uploads these diagnostics
+  on failure or cancellation. Source `3590f601a1f973031cba323bf5bd2d66ec0bbb47`,
+  workflow `c372682257905b58c74e16e97e7d87a7041743c4`. [Failure attempt and artifacts](https://github.com/clintongormley/waitron/actions/runs/43814730492/attempts/1)
+
+An earlier stream job passed all 13 files after setting loopback MTU to 1500 and
+`TMPDIR=/dev/shm`. [Stream job 128812851413](https://github.com/clintongormley/waitron/actions/runs/42506794616/job/128812851413)
+
 Server coverage remains open. Successful nightly
 [43545365252](https://github.com/clintongormley/waitron/actions/runs/43545365252) ran its seven
 coverage merges and aggregate on GitHub. Three executed idle checks in six scheduled health
