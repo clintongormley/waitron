@@ -545,6 +545,18 @@ no desktop, dashboard/till choice and separate later maintenance feature remain 
 The local-screen marker only displays the till card; a foreign browser lacks it. Even a forged
 marker still needs `hardware.manage` and manager acceptance.
 
+**Seen in the two-box test, 2026-11-18 (owner: "yes" to recording it here): a box with Windows on
+its disk does not start the stick on its own.** The spare, a Lenovo ThinkCentre M710q Tiny bought
+refurbished with Windows 11 on its disk, started Windows at every power-on with the stick in. Its
+firmware offered the stick only from the F12 menu ("Please select boot device": the M.2 drive's
+"UEFI: Windows Boot Manager" first, "USB HDD: UEFI OS" last), which needs a keyboard and a screen.
+The design already expects this ("A mini PC that came with Windows may start Windows rather than
+the stick, so the card names the boot-menu key", design §2), which conflicts with its goal 1, "no
+screen, no keyboard". **Owner decision before B3 finishes:** boxes arrive with an empty disk, or
+with USB first in the firmware's start order, or the card's promise drops "no keyboard". Not
+measured: whether an M710q with an empty disk starts the stick by itself (a QEMU UEFI machine with
+a blank disk did).
+
 Every first/later recovery sheet includes the correct disk key and LUKS UUID; restore/spare add a
 separate page for the actual destination disk. Proposed storage is a host-root-only `0600` file
 under `/var/lib/waitron-host/disk-recovery/` on separate encrypted `@host-state`, outside OS/venue rollback, the database, backups,
