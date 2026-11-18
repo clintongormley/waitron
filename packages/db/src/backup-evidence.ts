@@ -37,6 +37,7 @@ function same(a: BackupValue | undefined, b: BackupValue | undefined): boolean {
   return a === b;
 }
 
+// The verifier checks both copies' SQLite integrity before relying on their indexes.
 export async function compareBackupTables(input: {
   before: BackupQuery;
   after: BackupQuery;
@@ -62,8 +63,12 @@ export async function compareBackupTables(input: {
       added.some((name) => !Object.hasOwn(policy.addedColumns, name))
     )
       return false;
-    // BINARY overrides a table's collation; hex breaks SQLite's INTEGER/REAL numeric ties.
-    const order = columns
+    // Putting id first lets SQLite use the print_jobs primary-key index.
+    const orderColumns = columns.includes("id")
+      ? ["id", ...columns.filter((name) => name !== "id")]
+      : columns;
+    // BINARY overrides a table's collation. Hex breaks SQLite's INTEGER/REAL numeric ties.
+    const order = orderColumns
       .flatMap((name) => [`${ident(name)} collate binary`, `hex(${ident(name)}) collate binary`])
       .join(", ");
     const a = input.before.rows(`select * from ${table} order by ${order}`)[Symbol.asyncIterator]();

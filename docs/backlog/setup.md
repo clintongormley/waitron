@@ -264,8 +264,14 @@ Pair the box and Cloud release candidates on near-cap publication and on capture
 preview and staging of the representative year. Check an older raw archive on the same pair. The
 box refuses ciphertext above 2 GiB or expanded archives above 4 GiB with `cloud.unavailable`.
 A timed-out upload keeps its pending ciphertext for retries during the capture's first day.
-In the paired run, check grant renewal, publication within the trial deadline and the verifier's
-measured time and scratch.
+In the paired run, check grant renewal, publication within the trial deadline and the deployed
+verifier's time, peak memory and scratch on the representative capture.
+Record table sizes and comparison time for `payments`, `registros_facturacion`, `working_orders`
+and `working_order_lines`. Their comparison orders have at least 64 terms and still require a
+temporary sort. Include samples with individual tables in the hundreds of MB and at the
+representative year's size. The `print_jobs` controls reached the 1 GiB container ceiling with a
+373 MB SQLite copy and ran out of memory with a 1.47 GB print table. Use those sizes as trial
+points if a capture is dominated by one of the four tables.
 See the [Cloud transfer plan](../superpowers/plans/2026-11-17-cloud-snapshot-stream.md).
 
 Revisit content-named pieces, a read-only archive database and continuous Cloud copies after
