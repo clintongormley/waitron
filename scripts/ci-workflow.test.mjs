@@ -112,6 +112,7 @@ function routingContext(family = "server") {
         outputs: {
           code: "true",
           server_route: "server",
+          server_route_attempt: "1",
           server_jobs: allServerJobs,
           ...Object.fromEntries(
             DISPOSABLE_FAMILIES.map((name) => [
@@ -176,14 +177,18 @@ function watchFamilies(context) {
     if (!line.startsWith("            ")) break;
     rows.push(line.trim());
   }
+  const steps = { classify: { outputs: {} }, gates: { outputs: {} } };
+  for (const line of body) {
+    const binding = line.match(/^ {6}(\w+): \$\{\{ steps\.(classify|gates)\.outputs\.(\w+) \}\}$/);
+    if (!binding) continue;
+    const [, changeOutput, step, stepOutput] = binding;
+    steps[step].outputs[stepOutput] = context.needs.changes.outputs[changeOutput];
+  }
   return JSON.parse(
     rows.join(" ").replace(/\$\{\{ (.*?) \}\}/g, (_, source) =>
       JSON.stringify(
         runInNewContext(source, {
-          steps: {
-            classify: { outputs: context.needs.changes.outputs },
-            gates: { outputs: context.needs.changes.outputs },
-          },
+          steps,
           always: undefined,
           success: undefined,
           failure: undefined,
@@ -210,6 +215,31 @@ describe("disposable family routing", () => {
     context.github.run_attempt = 2;
     expect(expressionValue(routing, context)).toBe("ubuntu-latest");
     expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
+  });
+
+  it("keeps dependent jobs on GitHub during the first attempt", () => {
+    const context = routingContext();
+    for (const { id, body } of jobs.filter(
+      ({ id }) => id.endsWith("-merge") || id === "mutation-shared-aggregate",
+    )) {
+      const routing = body.find((line) => /^ {4}runs-on:/.test(line));
+      expect(expressionValue(routing, context), id).toBe("ubuntu-latest");
+    }
+  });
+
+  it("uses the old placement on a rerun only if that attempt ran its own planner", () => {
+    const context = routingContext();
+    context.github.run_attempt = 2;
+    context.needs.changes.outputs.server_route_attempt = "2";
+    for (const id of ["test-server", "test-server-merge", "lint", "root-guards"]) {
+      const routing = job(id).body.find((line) => /^ {4}runs-on:/.test(line));
+      expect(expressionValue(routing, context)).toEqual(["self-hosted", `dt-42-1234-2-${id}-1`]);
+      expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(true);
+      context.needs.changes.outputs.server_route_attempt = "1";
+      expect(expressionValue(routing, context)).toBe("ubuntu-latest");
+      expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
+      context.needs.changes.outputs.server_route_attempt = "2";
+    }
   });
 
   it("evaluates watch-list environment expressions without job-status functions", () => {
@@ -241,6 +271,14 @@ describe("disposable family routing", () => {
     context.needs.changes.outputs[family.replaceAll("-", "_")] = "true";
     context.needs.changes.outputs.code = "false";
     expect(row().enabled).toBe(false);
+  });
+
+  it("gives typecheck, root guards, lint and numbered server shards first claim on free slots", () => {
+    expect(
+      watchFamilies(routingContext())
+        .slice(0, 5)
+        .map(({ id }) => id),
+    ).toEqual(["typecheck", "root-guards", "lint", "test-server", "test-server-stream"]);
   });
 
   it("ties every watched family to its actual job scope, label and inventory", () => {
@@ -277,22 +315,26 @@ describe("disposable family routing", () => {
     }
   });
 
-  it("keeps lint and root guards hosted when planning fails after scope was set", () => {
-    const context = routingContext();
-    Object.assign(context.needs.changes, { result: "failure" });
-    Object.assign(context.needs.changes.outputs, { server_route: "", server_jobs: "" });
-    for (const id of ["lint", "root-guards"]) {
-      const body = job(id).body;
-      expect(runsAtGitHub(body, context)).toBe(true);
-      expect(
-        expressionValue(
-          body.find((line) => /^ {4}runs-on:/.test(line)),
-          context,
-        ),
-      ).toBe("ubuntu-latest");
-    }
-    expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
-  });
+  it.each([false, true])(
+    "keeps lint and root guards hosted when planning fails (route set: %s)",
+    (routed) => {
+      const context = routingContext();
+      context.needs.changes.result = "failure";
+      if (!routed)
+        Object.assign(context.needs.changes.outputs, { server_route: "", server_jobs: "" });
+      for (const id of ["lint", "root-guards"]) {
+        const body = job(id).body;
+        expect(runsAtGitHub(body, context)).toBe(true);
+        expect(
+          expressionValue(
+            body.find((line) => /^ {4}runs-on:/.test(line)),
+            context,
+          ),
+        ).toBe("ubuntu-latest");
+      }
+      expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
+    },
+  );
 
   it("keeps the watchdog on GitHub and starts it for every admitted event and attempt", () => {
     const body = job("server-queue-watchdog").body;
@@ -302,6 +344,7 @@ describe("disposable family routing", () => {
         const context = routingContext();
         context.github.event_name = event;
         context.github.run_attempt = attempt;
+        context.needs.changes.outputs.server_route_attempt = String(attempt);
         expect(jobCondition(body, context), `${event} ${attempt}`).toBe(true);
         expect(
           expressionValue(
@@ -421,6 +464,7 @@ describe("disposable server routing", () => {
         const context = routingContext();
         context.github.event_name = event;
         context.github.run_attempt = 2;
+        context.needs.changes.outputs.server_route_attempt = "2";
         expect(expressionValue(routing, context), entry.id).toEqual([
           "self-hosted",
           `dt-42-1234-2-${entry.id}-1`,

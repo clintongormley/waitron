@@ -13,7 +13,7 @@ import {
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 function workflowEnvironment(capacity) {
-  const step = workflow.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {2}#)/)?.[1];
+  const step = workflow.match(/^ {6}- id: server-route\n((?: {8}[^\n]*\n|[ \t]*\n)+)/m)?.[1];
   const condition = step.match(/^ {8}if: (.+)$/m)?.[1] ?? "true";
   expect(runInNewContext(condition, { vars: { DISPOSABLE_TESTS_MODE: "hosted" } })).toBe(true);
   const expression = workflow.match(/^ {10}CAPACITY: \$\{\{ (.+) \}\}$/m)?.[1];
@@ -69,9 +69,14 @@ function fixture(running = 0, queued = 0) {
 }
 
 describe("queue-pressure routing", () => {
-  it("fills free server slots even when queue pressure sends later jobs to GitHub", async () => {
+  it("fills free server slots without reading GitHub queue pressure on the first attempt", async () => {
     const { options } = fixture();
     options.capacity = { observedAt: 1, slots: 12, serverRunning: 6, serverWaiting: 1 };
+    const read = options.request;
+    options.request = async (path, requestOptions) => {
+      if (!path.includes("/workflows/ci.yml/runs?")) throw new Error("GitHub queue unavailable");
+      return read(path, requestOptions);
+    };
     options.families = [
       { id: "typecheck", count: 1, enabled: true },
       { id: "root-guards", count: 1, enabled: true },
@@ -85,6 +90,7 @@ describe("queue-pressure routing", () => {
       report: () => {},
     });
     expect(outputs).toContain("server_route=hosted");
+    expect(outputs).toContain("server_route_attempt=1");
     expect(outputs).toContain(
       'server_jobs={"typecheck":1,"root-guards":1,"lint":1,"test-server":2}',
     );

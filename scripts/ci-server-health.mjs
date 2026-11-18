@@ -333,12 +333,17 @@ export async function serverRoute(options) {
     };
   const capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
   assert.ok(validCapacity(capacity), "Unknown server capacity");
-  const freeSlots = Math.max(0, capacity.slots - capacity.serverRunning - capacity.serverWaiting);
+  const capacitySummary = `Server: ${capacity.serverRunning} running, ${capacity.serverWaiting} queued / ${capacity.slots} slots; snapshot age ${Math.max(0, (options.now ?? Date.now()) - capacity.observedAt)} ms.`;
+  if (attempt === 1 && options.families)
+    return {
+      route: "hosted",
+      freeSlots: Math.max(0, capacity.slots - capacity.serverRunning - capacity.serverWaiting),
+      reason: `${capacitySummary} Dependent jobs use GitHub on the first attempt.`,
+    };
   if (capacity.slots > 0 && capacity.serverRunning === 0 && capacity.serverWaiting === 0)
     return {
       route: "server",
-      freeSlots,
-      reason: `Server: 0 running, 0 queued / ${capacity.slots} slots; snapshot age ${Math.max(0, (options.now ?? Date.now()) - capacity.observedAt)} ms. Idle server capacity wins every hosted comparison.`,
+      reason: `${capacitySummary} Idle server capacity wins every hosted comparison.`,
     };
   const runs = new Map();
   for (const status of ["queued", "in_progress"]) {
@@ -361,13 +366,12 @@ export async function serverRoute(options) {
     }
   }
   return {
-    freeSlots,
     route:
       capacity.slots &&
       (capacity.serverRunning + capacity.serverWaiting) * 20 <= (running + queued) * capacity.slots
         ? "server"
         : "hosted",
-    reason: `Server: ${capacity.serverRunning} running, ${capacity.serverWaiting} queued / ${capacity.slots} slots; snapshot age ${Math.max(0, (options.now ?? Date.now()) - capacity.observedAt)} ms. Waitron hosted jobs: ${running} running, ${queued} queued / 20 slots.`,
+    reason: `${capacitySummary} Waitron hosted jobs: ${running} running, ${queued} queued / 20 slots.`,
   };
 }
 
@@ -632,6 +636,7 @@ export async function healthCommand(command, options, { report, output }) {
         }
         output(`server_families=${JSON.stringify(families)}`);
         output(`server_jobs=${JSON.stringify(serverJobs)}`);
+        output(`server_route_attempt=${options.attempt}`);
         report(`CI server job candidates: ${JSON.stringify(serverJobs)}`);
       }
       output(`server_route=${answer.route}`);

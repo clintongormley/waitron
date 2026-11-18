@@ -232,14 +232,18 @@ guards and lint first, followed by ascending server shards, the stream job, and 
 families in their listed order. Other legs use GitHub. The existing repository, head and hosted-mode
 checks still apply. A failed planner leaves lint and root guards on GitHub.
 
-Dependent merges and reruns still use the whole-route decision. When the server has positive slots
-and zero running and waiting work, it wins without reading hosted counts. Otherwise CI reads this
-repository's queued and running workflows, including fork PRs, and their current-attempt jobs.
-Jobs with a nonempty label list that excludes `self-hosted` count as hosted. CI compares
-`(running + waiting) / slots` for each side, using the stipulated 20 hosted slots. Ties select the
-server, and zero server slots select GitHub. Unreadable required inventory selects GitHub for both
-the first batch and the whole-route decision. The initial `changes` placement still uses the
-run-creation snapshot.
+The first batch uses the capacity snapshot and the server-health inventory. A stuck queue or an
+unreadable required server input sends that batch to GitHub. The planner skips the separate GitHub
+queue count on the first attempt. Dependent merges and the mutation aggregate use GitHub, since
+the planner's available slots describe the initial batch.
+
+A rerun that runs the planner again keeps the whole-route decision. Idle positive server capacity
+wins without a hosted count. Otherwise CI reads this repository's queued and running workflows,
+including fork PRs, and their current-attempt jobs. Jobs with a nonempty label list that excludes
+`self-hosted` count as hosted. CI compares `(running + waiting) / slots` for each side,
+using the stipulated 20 hosted slots. Ties select the server and zero server slots select GitHub.
+A partial rerun reusing an earlier planner's outputs uses GitHub. The initial `changes` placement
+still uses the run-creation snapshot. The watcher cleared these choices on 18 November at 10:36 CET.
 
 Read the planner's `CI server job candidates`, capacity source and snapshot age alongside the actual
 job labels. Even a fresh read contains the publisher's last observation. The run's own planner can

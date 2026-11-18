@@ -67,8 +67,10 @@ function route(
     matrix: { shard: 1 },
     needs: {
       changes: {
+        result: "success",
         outputs: {
           server_route: health,
+          server_route_attempt: String(attempt),
           server_jobs: JSON.stringify(
             health === "server" ? Object.fromEntries(jobs.map(({ id }) => [id, 1])) : {},
           ),
@@ -190,7 +192,7 @@ describe("server-first workflow routing", () => {
     for (const health of ["server", "hosted", ""]) expect(route(input, { health })).toBe(health);
   });
   it("keeps a timed-out route read from failing changes and defaults every job to hosted", () => {
-    const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {2}#)/)[1];
+    const step = yaml.match(/^ {6}- id: server-route\n((?: {8}[^\n]*\n|[ \t]*\n)+)/m)[1];
     expect(step).toMatch(/^ {8}continue-on-error: true$/m);
     expect(step).toMatch(/^ {8}timeout-minutes: 2$/m);
     for (const job of jobs) expect(route(job.route, { health: "" }), job.id).toBe("ubuntu-latest");
@@ -211,7 +213,8 @@ describe("server-first workflow routing", () => {
             continue;
           }
           if (
-            ["server-queue-watchdog", "publish", "release", "ci", "image-smoke"].includes(job.id)
+            ["server-queue-watchdog", "publish", "release", "ci", "image-smoke"].includes(job.id) ||
+            (attempt === 1 && (job.id.endsWith("-merge") || job.id === "mutation-shared-aggregate"))
           ) {
             expect(selected).toBe("ubuntu-latest");
             continue;
@@ -272,7 +275,7 @@ cat "$FIXTURE_ROUTER"
 `,
         { mode: 0o755 },
       );
-      const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {2}#)/)[1];
+      const step = yaml.match(/^ {6}- id: server-route\n((?: {8}[^\n]*\n|[ \t]*\n)+)/m)[1];
       expect(step).toContain("CAPACITY_READ_TOKEN: ${{ secrets.DISPOSABLE_CAPACITY_READ_TOKEN }}");
       const token = step.match(/^ {10}GH_TOKEN: \$\{\{ (.+) \}\}$/m)?.[1];
       expect(token).toBeDefined();
