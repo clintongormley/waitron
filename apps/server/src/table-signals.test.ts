@@ -1,7 +1,7 @@
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull, isNull, sql, inArray } from "drizzle-orm";
@@ -508,7 +508,7 @@ describe("the floor's attention signals", () => {
     const two = await seat(v, table2);
     const eight = await seat(v, table8);
     await inTx(v, (tx) =>
-      addTabRound(tx, v.cfg, two.tabId, [
+      addGroupedTabRound(tx, v.cfg, two.tabId, [
         { menuItemId: v.item("Caña"), quantity: "2" },
         { menuItemId: v.item("Caña"), quantity: "1" },
         { menuItemId: v.item("Burger"), quantity: "1" },
@@ -1086,6 +1086,7 @@ describe("each station's oldest ready time", () => {
   async function readyTable(
     quantities: readonly string[],
     minutes: readonly string[] = ["04", "01"],
+    add = addTabRound,
   ) {
     const v = await setupPartyVenue(suite.db);
     const bar = await inTx(v, async (tx) => {
@@ -1100,7 +1101,7 @@ describe("each station's oldest ready time", () => {
     const table2 = await v.table("Mesa 2");
     const seated = await seat(v, table2);
     await inTx(v, (tx) =>
-      addTabRound(tx, v.cfg, seated.tabId, [
+      add(tx, v.cfg, seated.tabId, [
         ...quantities.map((quantity) => ({ menuItemId: v.item("Caña"), quantity })),
         { menuItemId: v.item("Burger"), quantity: "1" },
       ]),
@@ -1173,7 +1174,11 @@ describe("each station's oldest ready time", () => {
   );
 
   it("serving the oldest ready dish moves the oldest ready time to the next", async () => {
-    const { v, bar, table2, partyId, tabId } = await readyTable(["2", "1"]);
+    const { v, bar, table2, partyId, tabId } = await readyTable(
+      ["2", "1"],
+      undefined,
+      addGroupedTabRound,
+    );
     const barEntry = async () =>
       (await floorRow(v, table2)).signals
         .flatMap((signal) => (signal.kind === "ready" ? signal.byStation : []))
@@ -1251,7 +1256,7 @@ describe("a ready dish a cook puts back to Preparing", () => {
     const table2 = await v.table("Mesa 2");
     const { partyId, tabId } = await seat(v, table2);
     await inTx(v, (tx) =>
-      addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.item("Caña"), quantity: "2" }]),
+      addGroupedTabRound(tx, v.cfg, tabId, [{ menuItemId: v.item("Caña"), quantity: "2" }]),
     );
     const readySignals = async () =>
       (await floorRow(v, table2)).signals.filter((signal) => signal.kind === "ready");

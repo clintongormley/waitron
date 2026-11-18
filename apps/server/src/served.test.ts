@@ -2,7 +2,7 @@ import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
@@ -648,7 +648,7 @@ describe("served by quantity (§12 item 5)", () => {
   it("serves a line put on the bill outside any group", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await inTx((tx) => addTabRound(tx, v.cfg, s.tabId, [line(v, "croquetas", "2")]));
+    await inTx((tx) => addGroupedTabRound(tx, v.cfg, s.tabId, [line(v, "croquetas", "2")]));
     const croq = await lineNamed(s.partyId, "croquetas");
     expect(croq.groupId).toBeNull();
 

@@ -2,7 +2,7 @@ import { seedPerson } from "@waitron/db/testing/seed.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import type { TradingContext } from "./trading-context.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import { sendLines } from "./testing/order-writer-fixture.js";
 // The domain outcomes of un-joining a table and settling a tab, single-threaded.
 import { randomUUID } from "node:crypto";
@@ -392,6 +392,7 @@ async function twoTabs(
   seeded: Seeded,
   round: { quantity: string; hold?: boolean },
   dishes = 1,
+  add = addTabRound,
 ): Promise<{ from: string; to: string }> {
   const { cfg, waterId, tableId } = seeded;
   const { tabId: from, partyId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
@@ -404,7 +405,7 @@ async function twoTabs(
     });
   });
   await asApp(cfg, (tx) =>
-    addTabRound(
+    add(
       tx,
       cfg,
       from,
@@ -449,7 +450,7 @@ describe("splitting a line the kitchen has", () => {
     await withKitchen(cfg);
     const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [
+      addGroupedTabRound(tx, cfg, tabId, [
         { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "2" },
       ]),
     );
@@ -475,7 +476,7 @@ describe("splitting a line the kitchen has", () => {
     const { cfg } = seeded;
     const stationId = await withKitchen(cfg);
     const printerId = await printerAt(cfg, stationId);
-    const { from } = await twoTabs(seeded, { quantity: "4" });
+    const { from } = await twoTabs(seeded, { quantity: "4" }, 1, addGroupedTabRound);
     const [line] = await linesWithTickets(from);
     const printed = await printedBy(printerId);
     expect(printed).toHaveLength(1);
@@ -547,7 +548,7 @@ describe("splitting a line the kitchen has", () => {
       const party = (await partyRevisionOfOrder(tx, from))!;
       await transferItems(tx, cfg, from, to, [{ lineNo: 1 }], {
         expectedPartyRevision: party.revision,
-        operatorId: randomUUID(),
+        operatorId: await seedPerson(tx, { displayName: randomUUID() }),
       });
     });
     expect(await printedBy(printerId)).toEqual([]);
@@ -580,7 +581,7 @@ describe("splitting a line the kitchen has", () => {
     const printerId = await printerAt(cfg, stationId);
     const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [
+      addGroupedTabRound(tx, cfg, tabId, [
         { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "2" },
         { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "1" },
       ]),
@@ -709,7 +710,7 @@ describe("moving sent work to another table tells the kitchen", () => {
       const party = (await partyRevisionOfOrder(tx, tabId))!;
       await mergeBills(tx, cfg, tabId, checkId, {
         expectedPartyRevision: party.revision,
-        operatorId: randomUUID(),
+        operatorId: await seedPerson(tx, { displayName: randomUUID() }),
       });
     });
 
@@ -743,7 +744,9 @@ describe("moving sent work to another table tells the kitchen", () => {
     const printerId = await printerAt(cfg, stationId);
     const offer = offersByCfg.get(cfg)!.offerFor(waterId);
     const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "2" }]));
+    await asApp(cfg, (tx) =>
+      addGroupedTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "2" }]),
+    );
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "5", hold: true }]),
     );

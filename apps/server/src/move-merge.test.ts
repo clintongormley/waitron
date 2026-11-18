@@ -2,7 +2,7 @@ import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { readWholePortionLines } from "./order-portions.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { randomUUID } from "node:crypto";
@@ -3058,7 +3058,9 @@ it("moves 32,772 lines, preserves sent numbers and portions, then moves the comp
     partyId: source.partyId,
     tabId: await inTx(v, (tx) => insertPartyBill(tx, v.cfg, source.partyId)),
   };
-  await order(v, source.tabId, "Water");
+  await inTx(v, (tx) =>
+    addGroupedTabRound(tx, v.cfg, source.tabId, [{ menuItemId: v.item("Water"), quantity: "1" }]),
+  );
   await order(v, target.tabId, "Water");
   const [template] = await db
     .select()

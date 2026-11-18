@@ -14,7 +14,8 @@ import {
 } from "./order-drafts.js";
 import { createPartyBill, partyRevisionOfOrder } from "./parties.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { addTabRound, abandonHeldOrder, parkOrder } from "./working-order.js";
+import { placeGroups, type PlaceGroupsInput } from "./order-groups.js";
+import { abandonHeldOrder, parkOrder } from "./working-order.js";
 import { inTx, provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 let venue: BillVenue;
@@ -76,6 +77,16 @@ const foreign = (e: BillEditState) => ({
   ownerName: e.editorName,
   edit: e,
 });
+/** One Caña placed and fired at once on `p`'s bill by `placeGroups`, under the authority as given. */
+function add(p: Fixture, authority: { operatorId: string | undefined; expectedEdit: unknown }) {
+  return inTx(venue, (tx) =>
+    placeGroups(tx, venue.cfg, p.partyId!, {
+      ...(authority as Pick<PlaceGroupsInput, "operatorId" | "expectedEdit">),
+      billId: p.id,
+      groups: [{ release: "fire", lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }] }],
+    }),
+  );
+}
 const operations = ["add", "abandon"] as const;
 type Operation = (typeof operations)[number];
 function run(
@@ -86,15 +97,7 @@ function run(
 ) {
   const authority = { operatorId, expectedEdit };
   return op === "add"
-    ? inTx(venue, (tx) =>
-        addTabRound(
-          tx,
-          venue.cfg,
-          p.id,
-          [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-          authority,
-        ),
-      )
+    ? add(p, authority)
     : abandonHeldOrder({ db: venue.db }, venue.cfg, p.id, authority);
 }
 
@@ -166,7 +169,9 @@ for (const op of operations)
       });
       expect(frozen()).toEqual(before);
     });
-    it.each(["absent", "null", "wrong-bill", "malformed", "no-actor"] as const)(
+    const kinds = ["absent", "null", "wrong-bill", "malformed", "no-actor"] as const;
+    // `placeGroups` types `operatorId` as a string and has no missing-person refusal.
+    it.each(kinds.filter((kind) => op === "abandon" || kind !== "no-actor"))(
       "requires the %s authority",
       async (kind) => {
         const p = await fixture(),
@@ -189,15 +194,7 @@ for (const op of operations)
         };
         const attempt =
           op === "add"
-            ? inTx(venue, (tx) =>
-                addTabRound(
-                  tx,
-                  venue.cfg,
-                  p.id,
-                  [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-                  authority as never,
-                ),
-              )
+            ? add(p, authority)
             : abandonHeldOrder({ db: venue.db }, venue.cfg, p.id, authority as never);
         await expect(attempt).rejects.toMatchObject({
           code: "management.request_invalid",

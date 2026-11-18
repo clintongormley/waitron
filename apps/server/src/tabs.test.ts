@@ -2,7 +2,7 @@ import { seedPerson } from "@waitron/db/testing/seed.js";
 import { cancelItemForTest, ensureOperator } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import { sendLines, updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -1089,7 +1089,7 @@ describe("listTablesWithState (occupancy)", () => {
       writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, operatorId),
     );
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "2" }]),
+      addGroupedTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "2" }]),
     );
     const busy = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(busy[0]).toMatchObject({
@@ -1363,7 +1363,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     await routeToNoPreparation(waterId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [
+      addGroupedTabRound(tx, cfg, tabId, [
         { menuItemId: coffeeOffer, quantity: "2" },
         { menuItemId: waterOffer, quantity: "1" },
       ]),
@@ -1547,7 +1547,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     const { cfg, tableId, coffeeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "2" }]),
+      addGroupedTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "2" }]),
     );
     // The line now bills three while the kitchen was asked for two.
     await db.execute(sql`
@@ -1658,7 +1658,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, coffeeId, waterId));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [
+      addGroupedTabRound(tx, cfg, tabId, [
         {
           menuItemId: coffeeOffer,
           quantity: "3",
@@ -1687,7 +1687,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     const { cfg, tableId, coffeeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "2" }]),
+      addGroupedTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "2" }]),
     );
     const ticket = await ticketOfLine(tabId, 1);
 
@@ -1705,7 +1705,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
       const { cfg, tableId, coffeeOffer } = await setupVenue();
       const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
       await asApp(cfg, (tx) =>
-        addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "2" }]),
+        addGroupedTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "2" }]),
       );
       const ticket = await ticketOfLine(tabId, 1);
 
@@ -1724,7 +1724,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     const { cfg, tableId, coffeeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "2" }]),
+      addGroupedTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "2" }]),
     );
     const ticket = await ticketOfLine(tabId, 1);
 
@@ -1742,7 +1742,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, coffeeId, waterId));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [
+      addGroupedTabRound(tx, cfg, tabId, [
         {
           menuItemId: coffeeOffer,
           quantity: "2",
@@ -1932,12 +1932,12 @@ async function ticketRow(tabId: string, lineNo: number) {
   return row ?? null;
 }
 
-/** A tab with one café line fired to the default station at `quantity`, and that station's id. */
-async function tabWithFiredCoffee(quantity = "1") {
+/** A tab with `quantity` cafés fired to the default station (one line under `addGroupedTabRound`). */
+async function tabWithFiredCoffee(quantity = "1", add = addTabRound) {
   const venue = await setupVenue();
   const { cfg, tableId, coffeeOffer } = venue;
   const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-  await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity }]));
+  await asApp(cfg, (tx) => add(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity }]));
   const ticket = await ticketOfLine(tabId, 1);
   const [line] = await db
     .select({ id: workingOrderLines.id })
@@ -2022,7 +2022,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   });
 
   it("Cancel item removes the difference: a VOID notice, and the ticket's quantity follows", async () => {
-    const { cfg, tabId, ticket } = await tabWithFiredCoffee("2");
+    const { cfg, tabId, ticket } = await tabWithFiredCoffee("2", addGroupedTabRound);
 
     await asApp(cfg, (tx) => cancelItemForTest(tx, cfg, tabId, 1, "1", OPERATOR));
 
@@ -2158,7 +2158,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   });
 
   it("refuses raising a started line with a note and lowering its count through Change dish", async () => {
-    const { cfg, tabId, ticket } = await tabWithFiredCoffee("2");
+    const { cfg, tabId, ticket } = await tabWithFiredCoffee("2", addGroupedTabRound);
     await asApp(cfg, (tx) => advanceTicketItem(tx, ticket.id, "preparing"));
     const before = await linesOf(tabId);
 
@@ -2406,7 +2406,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   });
 
   it("Cancel item removes part of a waiting dish at a Not allowed station", async () => {
-    const { cfg, tabId, ticket } = await tabWithFiredCoffee("2");
+    const { cfg, tabId, ticket } = await tabWithFiredCoffee("2", addGroupedTabRound);
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
 
     await asApp(cfg, (tx) => cancelItemForTest(tx, cfg, tabId, 1, "1", OPERATOR));
@@ -2425,7 +2425,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     await routeToNoPreparation(waterId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [
+      addGroupedTabRound(tx, cfg, tabId, [
         { menuItemId: coffeeOffer, quantity: "1", hold: true },
         { menuItemId: waterOffer, quantity: "1" },
       ]),
@@ -2462,7 +2462,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   });
 
   it("refuses an edit made from a copy another edit has since changed, changing nothing", async () => {
-    const { cfg, tabId } = await tabWithFiredCoffee("3");
+    const { cfg, tabId } = await tabWithFiredCoffee("3", addGroupedTabRound);
     const copy = await revisionOf(tabId);
 
     await asApp(cfg, (tx) =>
@@ -2730,7 +2730,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     // Dishes at lines 1 (held), 3 (two, fired) and 5 (held), each followed by its
     // extra.
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [
+      addGroupedTabRound(tx, cfg, tabId, [
         { menuItemId: coffeeOffer, quantity: "1", extras: withWater, hold: true },
         { menuItemId: coffeeOffer, quantity: "2", extras: withWater },
         { menuItemId: coffeeOffer, quantity: "1", extras: withWater, hold: true },
@@ -3282,20 +3282,20 @@ async function twoTabs() {
     });
   });
   await asApp(cfg, (tx) =>
-    addTabRound(tx, cfg, tabId, [
+    addGroupedTabRound(tx, cfg, tabId, [
       { menuItemId: coffeeOffer, quantity: "3" },
       { menuItemId: coffeeOffer, quantity: "1", courseId: course.id, hold: true },
     ]),
   );
   await asApp(cfg, (tx) =>
-    addTabRound(tx, cfg, otherId, [{ menuItemId: coffeeOffer, quantity: "1" }]),
+    addGroupedTabRound(tx, cfg, otherId, [{ menuItemId: coffeeOffer, quantity: "1" }]),
   );
   return { ...venue, tabId, otherId, courseId: course.id };
 }
 type Tabs = Awaited<ReturnType<typeof twoTabs>>;
 
-/** A party's tab at a table of its own, with a café line of 3 fired. */
-async function partyTab() {
+/** A party's tab at a table of its own, with 3 cafés fired. */
+async function partyTab(add = addTabRound) {
   const venue = await setupVenue();
   const { cfg, tableId, coffeeOffer } = venue;
   const { tabId, partyId } = await asApp(cfg, (tx) =>
@@ -3304,9 +3304,7 @@ async function partyTab() {
   await asApp(cfg, (tx) =>
     writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, OPERATOR),
   );
-  await asApp(cfg, (tx) =>
-    addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "3" }]),
-  );
+  await asApp(cfg, (tx) => add(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "3" }]));
   return { ...venue, tabId };
 }
 
@@ -3426,7 +3424,7 @@ describe("a line write on an order whose card payment is in flight is refused, a
   }
 
   it("takes a served mark, changing none of the compared fields but the line's served ones", async () => {
-    const tab = await partyTab();
+    const tab = await partyTab(addGroupedTabRound);
     const tabs = { tabId: tab.tabId, otherId: tab.tabId };
     await markPaying(tab.tabId, MARK);
     const before = await snapshot(tabs);
@@ -3556,7 +3554,7 @@ describe("the kitchen screen and the expo board are told which lines were sold i
     );
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [
+      addGroupedTabRound(tx, cfg, tabId, [
         { menuItemId: offerFor(productIds.get("Croquette")!), quantity: "2" },
         { menuItemId: offerFor(productIds.get("Gilda")!), quantity: "2" },
         { menuItemId: offerFor(productIds.get("Pulpo")!), quantity: "0.5" },

@@ -19,7 +19,7 @@ import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import { createCourse } from "./kitchen.js";
 import { fireGroup, readCurrentOrders, type CurrentOrders } from "./order-groups.js";
 import {
@@ -459,7 +459,7 @@ describe("A773 requested lifecycle: serving", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+      await addGroupedTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...dish(venue, "burger", true), quantity: "2" },
       ]);
       const burger = await lineOf(tx, venue, "burger");

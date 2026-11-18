@@ -29,7 +29,7 @@ import { fireGroup, moveGroupsToParty } from "./order-groups.js";
 import { withStationDishes } from "./station-closing.js";
 import { createTable } from "./testing/live-table.js";
 import { seatTable } from "./parties.js";
-import { addTabRound, sendLines } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound, sendLines } from "./testing/order-writer-fixture.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -298,7 +298,7 @@ describe("A773 pass board: reads", () => {
       const other = await seatAnotherParty(tx, venue, "Merged into");
       // As a merge does: the groups move, this bill stays on its own party.
       await moveGroupsToParty(tx, venue.party.partyId, other);
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+      await addGroupedTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...dish(venue, "burger"), quantity: "2" },
       ]);
       const [two] = await tx

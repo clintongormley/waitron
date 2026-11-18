@@ -61,7 +61,11 @@ import { passReleaseAsk, releasePassItems, type PassActor } from "./pass-release
 import * as kitchenRelease from "./kitchen-release.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setStationPrinting } from "./testing/station-printing.js";
-import { addTabRound, moveDishesToStation } from "./testing/order-writer-fixture.js";
+import {
+  addGroupedTabRound,
+  addTabRound,
+  moveDishesToStation,
+} from "./testing/order-writer-fixture.js";
 import { fireGroup, submitGroups } from "./order-groups.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { setStationToday } from "@waitron/venue-service";
@@ -882,7 +886,7 @@ describe("A773 pass release: paper", () => {
     const venue = await setupSplitExtrasVenue();
     const lineId = await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill, venue.stations.fryer]);
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+      await addGroupedTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...dish(venue, "burger", true), quantity: "2" },
       ]);
       const [burger] = await tx
@@ -1731,7 +1735,7 @@ describe("A773 pass release: races", () => {
     const venue = await setupSplitExtrasVenue();
     const placed = await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+      await addGroupedTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...dish(venue, "burger"), quantity: "2" },
       ]);
       const [line] = await tx
@@ -1913,10 +1917,10 @@ describe("A773 pass release: races", () => {
   }
 
   /** A burger waiting at Grill, and a water on the same bill outside its group. */
-  async function burgerAndWater() {
+  async function burgerAndWater(add = addTabRound) {
     const f = await burgerCard();
     const water = await withTransaction(db, async (tx) => {
-      await addTabRound(tx, f.venue.cfg, f.venue.party.tabId, [
+      await add(tx, f.venue.cfg, f.venue.party.tabId, [
         { menuItemId: f.venue.tables.offerFor(f.venue.products.water), quantity: "1" },
       ]);
       const [line] = await tx
@@ -1931,7 +1935,7 @@ describe("A773 pass release: races", () => {
   }
 
   it("lets a waiter's edit read before a Fire commit after it", async () => {
-    const f = await burgerAndWater();
+    const f = await burgerAndWater(addGroupedTabRound);
     const edit = await pendingEdit(f.venue, f.water, { portionLineNos: [], quantity: "2" });
     expect(await race(f.fire, edit)).toMatchObject([fulfilled, fulfilled]);
     expect(await rows([f.placed.item])).toEqual(f.before.map(releasedRow));

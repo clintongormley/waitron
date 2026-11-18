@@ -2,7 +2,7 @@ import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import net from "node:net";
 import { and, eq, sql } from "drizzle-orm";
@@ -1116,7 +1116,9 @@ describe("every correction reaches the station as a notice, printer or not", () 
         .returning({ id: diningTables.id });
       await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, table!.id));
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
-      await addTabRound(tx, cfg, tabId, [{ menuItemId: offers.offerFor(steak), quantity: "3" }]);
+      await addGroupedTabRound(tx, cfg, tabId, [
+        { menuItemId: offers.offerFor(steak), quantity: "3" },
+      ]);
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await cancelLine(tx, cfg, tabId, 1, "2");
       return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
@@ -3177,8 +3179,8 @@ describe("A803 portion grouping", () => {
     const kitchenTicket = await asApp(cfg, async (tx) => {
       const k = await portionKitchen(tx, cfg);
       const chips = { menuItemId: k.offer(k.ids.chips), quantity: "1" };
-      await addTabRound(tx, cfg, k.tabId, [chips]);
-      await addTabRound(tx, cfg, k.tabId, [chips]);
+      await addGroupedTabRound(tx, cfg, k.tabId, [chips]);
+      await addGroupedTabRound(tx, cfg, k.tabId, [chips]);
       const jobs = await jobsDuring(tx, () =>
         addPortionRound(tx, cfg, k.tabId, [{ menuItemId: k.offer(k.ids.burger), quantity: "1" }], {
           fire: true,
@@ -3289,8 +3291,8 @@ describe("A803 portion grouping", () => {
         await enqueueCorrectionSlips(tx, cfg, k.tabId, await firedAt(tx, k.tabId, k.kitchen), kind);
         const portions = await listStationNotices(tx, k.kitchen);
         const chips = { menuItemId: k.offer(k.ids.chips), quantity: "1" };
-        await addTabRound(tx, cfg, k.tabId, [chips]);
-        await addTabRound(tx, cfg, k.tabId, [chips]);
+        await addGroupedTabRound(tx, cfg, k.tabId, [chips]);
+        await addGroupedTabRound(tx, cfg, k.tabId, [chips]);
         const unbound = await firedAt(tx, k.tabId, k.fryer);
         expect(unbound).toHaveLength(2);
         await enqueueCorrectionSlips(tx, cfg, k.tabId, unbound, kind);
@@ -3335,8 +3337,8 @@ describe("A803 portion grouping", () => {
         same: await during([first!, second!]),
         mixed: await (async () => {
           const burger = { menuItemId: k.offer(k.ids.burger), quantity: "1" };
-          await addTabRound(tx, cfg, k.tabId, [burger]);
-          await addTabRound(tx, cfg, k.tabId, [burger]);
+          await addGroupedTabRound(tx, cfg, k.tabId, [burger]);
+          await addGroupedTabRound(tx, cfg, k.tabId, [burger]);
           const unbound = (await firedAt(tx, k.tabId, k.kitchen)).slice(3);
           expect(unbound).toHaveLength(2);
           return during([first!, second!, ...unbound]);
@@ -3421,8 +3423,8 @@ describe("A803 portion grouping", () => {
     const slips = await asApp(cfg, async (tx) => {
       const k = await portionKitchen(tx, cfg);
       const burger = { menuItemId: k.offer(k.ids.burger), quantity: "1" };
-      await addTabRound(tx, cfg, k.tabId, [burger]);
-      await addTabRound(tx, cfg, k.tabId, [burger]);
+      await addGroupedTabRound(tx, cfg, k.tabId, [burger]);
+      await addGroupedTabRound(tx, cfg, k.tabId, [burger]);
       const fired = await firedAt(tx, k.tabId, k.kitchen);
       expect(fired).toHaveLength(2);
       return jobsDuring(tx, () => enqueueCorrectionSlips(tx, cfg, k.tabId, fired, "RECALLED"));

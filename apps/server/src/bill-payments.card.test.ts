@@ -1,5 +1,6 @@
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { Hono } from "hono";
@@ -1090,9 +1091,17 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
     const card = await heldCard(billId, "10.00");
 
     const voided = await cancelItemHttp(venue.db, venue.app, venue.cookie, billId, 2);
-    // The round is the function a group submission calls.
+    const [bill] = venue.db.all<{ partyId: string }>(
+      sql`select party_id as "partyId" from working_orders where id = ${billId}`,
+    );
     const round = await inTx(venue, (tx) =>
-      addTabRound(tx, venue.cfg, billId, [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }]),
+      placeGroups(tx, venue.cfg, bill!.partyId, {
+        operatorId: venue.operatorId,
+        billId,
+        groups: [
+          { release: "fire", lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }] },
+        ],
+      }),
     ).catch((error: unknown) => error);
     const abandoned = await send(
       venue.app,

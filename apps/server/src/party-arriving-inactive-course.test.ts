@@ -12,7 +12,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deleteCourse } from "./course-delete.js";
 import { createCourse } from "./kitchen.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound } from "./testing/order-writer-fixture.js";
 import {
   inTx,
   OPERATOR,
@@ -44,7 +44,7 @@ describe("arriving dishes whose course no longer holds them", () => {
         await createCourse(tx, { name: `Later ${kind}`, displayOrder: 2 }),
       ]);
       await inTx(venue, (tx) =>
-        addTabRound(tx, venue.cfg, source.tabId, [
+        addGroupedTabRound(tx, venue.cfg, source.tabId, [
           { menuItemId: venue.item("Burger"), quantity: "1", courseId: starter!.id },
           {
             menuItemId: venue.item("Flan"),

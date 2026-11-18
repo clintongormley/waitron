@@ -9,7 +9,7 @@ import {
   readBillsOfParties,
   billOwes,
 } from "./testing/party-close-fixture.js";
-import { addTabRound, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
@@ -1971,7 +1971,7 @@ describe("A773 requested lifecycle", () => {
   async function seatedWithTwoBottles() {
     const party = await seatedWith(venue);
     await inTx(venue, (tx) =>
-      addTabRound(tx, venue.cfg, party.tabId, [
+      addGroupedTabRound(tx, venue.cfg, party.tabId, [
         { menuItemId: venue.offerFor("Red wine bottle"), quantity: "2" },
       ]),
     );

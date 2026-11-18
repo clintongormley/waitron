@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Transaction } from "@waitron/db";
 import { expandPortionRows } from "../order-portions.js";
-import type { OriginConfig } from "../trading-context.js";
+import type { OriginConfig, TradingContext } from "../trading-context.js";
 
 import {
   bumpRevision,
@@ -36,6 +36,27 @@ export function portionRefsOf(rows: readonly PricedTabRound["rows"][number][]): 
   );
 }
 
+/** A round priced for an open bill and expanded to one row per dish, as `placeGroups` expands it;
+ * `requestOfRow` gives each row's index in `lines`. Writes nothing. */
+export async function pricePortionRound(
+  tx: Transaction,
+  cfg: TradingContext,
+  billId: string,
+  lines: TabRoundLine[],
+): Promise<{ round: PricedTabRound; requestOfRow: number[] }> {
+  const priced = await priceTabRound(tx, cfg, billId, lines, "checked");
+  const out = expandPortionRows(
+    priced.rows,
+    priced.lineContexts,
+    priced.portionable,
+    priced.rows[0]!.lineNo,
+  );
+  return {
+    round: { ...priced, rows: out.rows, lineContexts: out.lineContexts },
+    requestOfRow: out.requestOfRow,
+  };
+}
+
 /** A round written onto an open bill as portions: priced once, one dish per line, bound. With
  * `fire`, every line is fired, none held. */
 export async function addPortionRound(
@@ -45,22 +66,11 @@ export async function addPortionRound(
   lines: TabRoundLine[],
   opts: { fire?: boolean; measureDishes?: true } = {},
 ): Promise<PortionRef[]> {
-  const round = await priceTabRound(tx, cfg, billId, lines, "checked");
-  const out = expandPortionRows(
-    round.rows,
-    round.lineContexts,
-    round.portionable,
-    round.rows[0]!.lineNo,
-  );
+  const { round } = await pricePortionRound(tx, cfg, billId, lines);
   const rows = opts.measureDishes
-    ? out.rows.map((row) => (row.parentLineId == null ? { ...row, wholePortion: false } : row))
-    : out.rows;
-  const inserted = await insertTabRound(
-    tx,
-    cfg,
-    { ...round, lineContexts: out.lineContexts },
-    rows,
-  );
+    ? round.rows.map((row) => (row.parentLineId == null ? { ...row, wholePortion: false } : row))
+    : round.rows;
+  const inserted = await insertTabRound(tx, cfg, round, rows);
   if (opts.fire === true) {
     await fireLines(tx, cfg, billId, inserted);
     await bumpRevision(tx, [billId]);

@@ -779,7 +779,7 @@ export function setMenuOfferLookup(
   `set_menu_role = 'dish'`, `set_menu_id` and `setMenuDishColumns(result, copy)` onto each row.
   Any dish unplaced → `set_menu.no_place` naming the first, and nothing is written.
   `insertTabRound` calls it before its insert, so every path that inserts a round
-  (`placeGroups`, `addTabRound` at `working-order.ts:3018-3035`) places; Task 9 calls it for a
+  (`placeGroups` is its only product caller) places; Task 9 calls it for a
   raised quantity.
 - A line with no `setMenuId` is an ordinary line, whatever product it is (spec §2).
 

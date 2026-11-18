@@ -696,7 +696,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **What a row action takes on a grouped row** (bundle of 3, size M, needs the owner). Holds A1193, A1194, A1198. [Detail](backlog/till.md#bundle-what-a-row-action-takes-on-a-grouped-row)
 
-- **Retire the old grouped-line writer** (bundle of 1, size S). Holds A1197. [Detail](backlog/till.md#bundle-retire-the-old-grouped-line-writer)
+- **Part-quantity handling of whole dishes** (bundle of 1, size S). Holds A1197. [Detail](backlog/till.md#bundle-part-quantity-handling-of-whole-dishes)
 
 - **A937. Measure the owner's real floor plan once it is drawn (left open by A757 slice 5).** Slice
   5's size check ran on Santet's invented grid, where Terrace's tables show names but no cue; re-run
