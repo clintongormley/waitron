@@ -1453,6 +1453,20 @@ describe("setup-app", () => {
     expect(link?.getAttribute("href")).toBe("/backup");
   });
 
+  it("returns to secure connection setup when the server refuses to send the Preparation key", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.connection_insecure", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    patch(el, { mode: "prepare" });
+    provisionRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).toBeNull();
+    const connection = await screenHost(el, "connection");
+    expect(connection.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      "needs a secure connection to show your server key",
+    );
+    expect(connection.shadowRoot!.querySelector("[data-test=trust-help]")).not.toBeNull();
+  });
+
   it("provisions on provision-requested and, on the 200, advances to done", async () => {
     const provision = vi.fn().mockResolvedValue({
       provisioned: true,

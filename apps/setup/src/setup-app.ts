@@ -936,10 +936,6 @@ export class SetupApp extends LitElement {
   #fiscalTestGeneration = 0;
   @state() private emailError?: Message;
 
-  /**
-   * The adopt response carries this once, so the done screen is the operator's only chance to see and
-   * record it before the box restarts.
-   */
   @state() private breakGlassSecret?: string;
   @state() private breakGlassKeyName?: string;
   @state() private breakGlassKeyInBackups = false;
@@ -1795,6 +1791,13 @@ export class SetupApp extends LitElement {
       case "setup.email_required":
         this.emailError = say("email.required");
         this.screen = "email";
+        return;
+      case "setup.connection_insecure":
+        this.connectionFailure = {
+          message: say("shell.connection.provision_secure"),
+          canRetry: true,
+        };
+        this.screen = "connection";
         return;
       case "setup.provisioning_secret_required":
         this.screen = "cert";

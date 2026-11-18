@@ -133,8 +133,8 @@ al propietario de Cloud que apruebe la nueva solicitud en Cloud.
 ## Identifícate ante la copia elegida {#proof}
 
 Al terminar de configurar un local en Preparación, anota la clave del servidor y su nombre en
-una hoja de recuperación. Guárdala con el paquete de recuperación del bucket. Después de revisar
-una copia del bucket, busca en la hoja el nombre que se muestra y escribe la clave agrupada en
+papel. Guárdalo con el paquete de recuperación del bucket. Después de revisar una copia del bucket,
+busca el nombre que se muestra entre los que anotaste y escribe la clave agrupada en
 **Clave del servidor**.
 
 Bajo la revisión, en «Recuperar este servidor», elige en **PDF de recuperación** tu paquete de

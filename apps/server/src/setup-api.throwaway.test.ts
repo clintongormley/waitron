@@ -31,7 +31,7 @@ import {
 } from "./provision.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
-import { createSetupOperationStore } from "./setup-operation.js";
+import { createSetupOperationStore, type SetupOperationStore } from "./setup-operation.js";
 import * as breakGlass from "./break-glass.js";
 import { STUB_NODE } from "./testing/node-copy.js";
 
@@ -413,10 +413,12 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       fiscalGate = "box",
       provision = (req: ProvisionRequest) => provisionVenue(provisionDeps(), req),
       persistTrading = async () => {},
+      operations = createSetupOperationStore(stateDir),
     }: {
       fiscalGate?: "box" | "passed";
       provision?: (req: ProvisionRequest) => Promise<VenueResult>;
       persistTrading?: SetupDeps["persistTrading"];
+      operations?: SetupOperationStore;
     } = {},
   ) {
     const app = new Hono();
@@ -428,7 +430,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
         db: venueDb.db,
         node: venueDb.node,
         ring,
-        operations: createSetupOperationStore(stateDir),
+        operations,
         provision,
         recoverProvision: (req) => recoverProvisionedVenue(venueDb.db, req),
         seedDemo: async () => {},
@@ -549,15 +551,20 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
 
   it("returns a usable Preparation key after retrying a failure before publication", async () => {
     const request = body("prepare");
+    let keyAtFirstPublication: string | null = null;
     const post = realApp(PREPRODUCTION_BOX, {
       persistTrading: vi
-        .fn()
-        .mockRejectedValueOnce(new Error("write refused"))
+        .fn<NonNullable<SetupDeps["persistTrading"]>>()
+        .mockImplementationOnce(async ({ nodeId }) => {
+          keyAtFirstPublication = await readRecoveryKeyName(venueDb.node, nodeId);
+          throw new Error("write refused");
+        })
         .mockResolvedValue(undefined),
     });
     const refused = await post(request);
     expect(refused.status).toBe(500);
     expect(await refused.json()).not.toHaveProperty("breakGlassSecret");
+    expect(typeof keyAtFirstPublication).toBe("string");
 
     const retried = await post(request);
     expect(retried.status).toBe(200);
@@ -567,6 +574,46 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(
       await verifyBreakGlass(venueDb.node, id, FISCAL_SERVER_KEY_AS_TYPED(breakGlassSecret)!),
     ).toBe(true);
+  });
+
+  it("keeps the published key when the operation completion write fails", async () => {
+    const request = body("prepare");
+    const store = createSetupOperationStore(stateDir);
+    const post = realApp(PREPRODUCTION_BOX, {
+      operations: {
+        ...store,
+        run(kind, hash, body, hold) {
+          return store.run(
+            kind,
+            hash,
+            async (operation) => {
+              operation.complete = async () => {
+                throw new Error("operation completion write refused");
+              };
+              return body(operation);
+            },
+            hold,
+          );
+        },
+      },
+    });
+    const refused = await post(request);
+    expect(refused.status).toBe(500);
+    expect(await refused.json()).not.toHaveProperty("breakGlassSecret");
+    expect((await store.read())?.phase).toBe("publishing");
+    const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
+    const key = await readRecoveryKeyName(venueDb.node, id);
+    expect(typeof key).toBe("string");
+
+    const retried = await realApp(PREPRODUCTION_BOX)(request);
+    expect(retried.status).toBe(200);
+    expect(await retried.json()).toEqual({
+      provisioned: true,
+      restarting: true,
+      breakGlassKeyInBackups: true,
+    });
+    expect(await readRecoveryKeyName(venueDb.node, id)).toBe(key);
+    expect((await store.read())?.phase).toBe("complete");
   });
 
   it("Live on a dev box with no initialOperations makes a throwaway venue", async () => {
