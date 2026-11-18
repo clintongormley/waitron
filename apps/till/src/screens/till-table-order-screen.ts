@@ -14,7 +14,7 @@ import type { BillEditExpected, DiningChoice, LineNutrition, ZoneDining } from "
 import "../widgets/order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "../widgets/order-kitchen-note.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
-import type { MenuState, TillApi } from "../api/client.js";
+import type { MealEndUnservedDish, MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import {
   ContentLanguageController,
@@ -117,6 +117,7 @@ import {
   billNumberLabel,
   owing,
   paidInPart,
+  printBillOffered,
   shownBills,
   stillOwed,
 } from "../state/bill-state.js";
@@ -472,18 +473,10 @@ export interface ServeLinesDetail {
   items: { lineId: string; quantity: string }[];
 }
 
-/** A dish Print the bill was refused for, as `meal_end.unserved_dishes` lists it: `released` says
- * the kitchen has it, so it can be marked served. */
-export interface UnservedDish {
-  lineId: string;
-  dishName: string;
-  quantity: string;
-  released: boolean;
-}
-
 /** Print the bill's answer for one bill: printed, or refused for the dishes not yet served. */
 export type MealEndShown =
-  { workingOrderId: string; printed: true } | { workingOrderId: string; unserved: UnservedDish[] };
+  | { workingOrderId: string; printed: true }
+  | { workingOrderId: string; unserved: MealEndUnservedDish[] };
 
 /** `serve-group`: every row of a fired group, marked served. */
 export interface ServeGroupDetail {
@@ -1433,6 +1426,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) billPaymentHeld = false;
   /** `false` hides the pay section. */
   @property({ type: Boolean }) canSettle = true;
+  /** The signed-in person may take payment, which Print the bill needs; `false` hides it. */
+  @property({ type: Boolean }) takesPayment = true;
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
   /** Mounted inside a card host, which supplies the header. */
@@ -5299,7 +5294,7 @@ export class TillTableOrderScreen extends LitElement {
                   ${t("table.take_payment")}
                 </wt-button>
                 ${
-                  firstUnpaid.invoiceNumber === undefined
+                  this.#printBillOffered(firstUnpaid)
                     ? html`<wt-button
                         size="sm"
                         data-print-bill
@@ -5320,16 +5315,28 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
+  /** The till reads the dishes and the unanswered whole payment of the bill on screen only. */
+  #printBillOffered(bill: PartyBill): boolean {
+    const onScreen = bill.workingOrderId === this.orderId;
+    return printBillOffered(bill, {
+      dishes: onScreen ? this.lines.length : undefined,
+      paymentUnanswered: onScreen && this.paymentConfirmation !== undefined,
+      takesPayment: this.takesPayment,
+    });
+  }
+
   /** Print the bill's answer: printed, or the dishes not yet served, with Mark served for those
    * the kitchen has and Print anyway. */
   #mealEndOutcome(): TemplateResult | typeof nothing {
     const shown = this.mealEnd;
     if (shown === null) return nothing;
     if ("printed" in shown)
-      return html`<p class="bill-printed" role="status" data-bill-printed>${t("bill.printed")}</p>`;
+      return html`<p class="bill-printed" role="status" data-bill-printed>${t("bill.issued")}</p>`;
     const servable = this.canMarkServed ? shown.unserved.filter((dish) => dish.released) : [];
     return html`<div class="finish-refusal meal-end-unserved" role="alert" data-meal-end-unserved>
-      <span>${codeMessage("meal_end.unserved_dishes")}</span>
+      <span
+        >${servable.length === 0 ? t("meal_end.unserved_no_mark") : codeMessage("meal_end.unserved_dishes")}</span
+      >
       <span>${t("meal_end.unserved_heading")}</span>
       <ul>
         ${shown.unserved.map(
@@ -5468,7 +5475,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Mark served in Print the bill's not-served list: the listed dishes the kitchen has, as listed. */
-  #markListedServed(dishes: readonly UnservedDish[]): void {
+  #markListedServed(dishes: readonly MealEndUnservedDish[]): void {
     if (this.#serveRefused()) return;
     this.#dispatch("serve-lines", {
       items: dishes.map((dish) => ({ lineId: dish.lineId, quantity: trimQuantity(dish.quantity) })),
@@ -6804,10 +6811,7 @@ export class TillTableOrderScreen extends LitElement {
                 : nothing,
               ...this.#billDocumentItems(
                 shown,
-                owing(shown) &&
-                  shown.invoiceNumber === undefined &&
-                  !shown.leftUnpaid &&
-                  this.paymentConfirmation === undefined
+                this.#printBillOffered(shown)
                   ? action("print-bill", "bill.print", () =>
                       this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId }),
                     )

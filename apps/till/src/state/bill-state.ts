@@ -8,6 +8,24 @@ export function owing(bill: Pick<PartyBill, "status">): boolean {
 }
 
 /**
+ * Print the bill is offered only where the server's `end-meal` would not refuse for something the
+ * till can see: a bill with no ticket that still owes and was not left unpaid, with no whole payment
+ * awaiting its answer, to a person who may take payment, and with dishes on it. `dishes` is the
+ * count of the bill's sent dishes when the till has read them; for a bill it has not read, the bills
+ * read's total stands in, so an open bill off screen at 0.00 is not offered, given away or empty.
+ */
+export function printBillOffered(
+  bill: Pick<PartyBill, "status" | "invoiceNumber" | "leftUnpaid" | "total">,
+  seen: { dishes: number | undefined; paymentUnanswered: boolean; takesPayment: boolean },
+): boolean {
+  if (!seen.takesPayment || seen.paymentUnanswered) return false;
+  if (bill.invoiceNumber !== undefined || bill.leftUnpaid === true || !owing(bill)) return false;
+  return seen.dishes === undefined
+    ? bill.status === "placed" || compareDecimal(decimal(bill.total), decimal("0")) !== 0
+    : seen.dishes > 0;
+}
+
+/**
  * A bill the table cannot finish without paying, as near the server's `billOwes` as the wire allows:
  * the bills read sends no line count, so an open bill whose lines total zero reads as not owing, and
  * the server's refusal of Finish table handles it.

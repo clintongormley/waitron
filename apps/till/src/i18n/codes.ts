@@ -66,8 +66,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "allergy.invalid": { en: en["allergy.invalid"], es: es["allergy.invalid"] },
 
   "bill.unsent_dishes": {
-    en: "Send or remove the unsent dishes before paying.",
-    es: "Envía o quita los platos sin enviar antes de cobrar.",
+    en: "Send or remove the unsent dishes first.",
+    es: "Envía o quita primero los platos sin enviar.",
   },
   "tab.cancel_context_changed": {
     en: "The dish changed. Check its current station state and choose again.",
@@ -591,11 +591,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "meal_end.already_issued": {
     en: "This bill already has its receipt. Take payment, or print a receipt copy.",
-    es: "Esta cuenta ya tiene su tique. Cóbrala o imprime una copia del tique.",
+    es: "Esta cuenta ya tiene su ticket. Cóbrala o imprime una copia del ticket.",
   },
   "meal_end.no_printer": {
     en: "This device has no receipt printer. Choose one in Equipment, then print the bill.",
-    es: "Este dispositivo no tiene impresora de tiques. Elige una en Equipo y luego imprime la cuenta.",
+    es: "Este dispositivo no tiene impresora de tickets. Elige una en Equipo y luego imprime la cuenta.",
   },
   "meal_end.delivery_unavailable": {
     en: "This full invoice cannot go where it was chosen to go. Choose another printer or email, then print the bill.",

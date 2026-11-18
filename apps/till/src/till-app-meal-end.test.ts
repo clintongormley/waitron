@@ -52,6 +52,7 @@ let api: TillApi;
 async function openBill(
   overrides: Record<string, unknown> = {},
   capabilities: CapabilityFlag[] = ["print-receipt", "take-cash", "hand-over-orders"],
+  permissions: string[] = ["payment.take"],
 ) {
   let printed = false;
   const endMeal = vi.fn(
@@ -79,7 +80,7 @@ async function openBill(
     }),
   });
   const { el } = await mountWidget<TillApp>("till-app", { api });
-  await openTable(el);
+  await openTable(el, permissions);
   return { el, endMeal };
 }
 
@@ -122,7 +123,7 @@ describe("till-app: Print the bill", () => {
       submissionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
     expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
-    expect(text(printedNotice(el))).toBe(t("bill.printed"));
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
     expect(tableOrder(el).bills[0]!.invoiceNumber).toBe("F-0042");
   });
 
@@ -186,7 +187,7 @@ describe("till-app: Print the bill", () => {
     expect(printedNotice(el)).toBeNull();
   });
 
-  it("shows Bill printed only under the bill printed, and not after switching bills or reopening the table", async () => {
+  it("shows Bill issued only under the bill printed, and not after switching bills or reopening the table", async () => {
     const { el } = await openBill({
       getPartyBills: vi.fn(async () => [
         billOf(),
@@ -216,7 +217,7 @@ describe("till-app: Print the bill", () => {
     expect(printedNotice(el)).toBeNull();
   });
 
-  it("does not say Bill printed under the bill the screen moves to when the printed bill leaves the party", async () => {
+  it("does not say Bill issued under the bill the screen moves to when the printed bill leaves the party", async () => {
     let printed = false;
     const { el } = await openBill({
       getPartyBills: vi.fn(async () =>
@@ -234,6 +235,43 @@ describe("till-app: Print the bill", () => {
 
     expect(tableOrder(el).orderId).toBe("wo-9");
     expect(printedNotice(el)).toBeNull();
+  });
+
+  it("offers no Print the bill to a person who may not take payment, and sends nothing if asked", async () => {
+    const { el, endMeal } = await openBill({}, undefined, []);
+
+    expect(tableOrder(el).takesPayment).toBe(false);
+    await printBill(el);
+
+    expect(endMeal).not.toHaveBeenCalled();
+  });
+
+  it("tells the screen a person who may take payment may print the bill", async () => {
+    const { el } = await openBill();
+
+    expect(tableOrder(el).takesPayment).toBe(true);
+  });
+
+  it("sends nothing for a new bill with no dishes", async () => {
+    const { el, endMeal } = await openBill({
+      getPartyBills: vi.fn(async () => [billOf({ total: "0.00", outstanding: "0.00" })]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+    });
+
+    await printBill(el);
+
+    expect(endMeal).not.toHaveBeenCalled();
+  });
+
+  it("says a refused permission as the person's own, not as an approver's", async () => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({ code: "authorization.not_permitted", status: 403 }),
+    });
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(t("take_payment.not_permitted"));
+    expect(banner(el)!.textContent).not.toContain(codeMessage("authorization.not_permitted"));
   });
 
   it("sends nothing for a bill other than the one on screen", async () => {
@@ -258,7 +296,6 @@ describe("till-app: Print the bill", () => {
     "bill.unsent_dishes",
     "bill.nothing_outstanding",
     "device.forbidden_action",
-    "authorization.not_permitted",
   ])("shows %s's own sentence and reads the bills again", async (code) => {
     const { el } = await openBill({
       endMeal: vi.fn().mockRejectedValue({ code, status: 409, workingOrderId: "wo-4" }),
@@ -349,7 +386,7 @@ describe("till-app: Print the bill with dishes not served", () => {
     const [first, second] = sentBodies(endMeal);
     expect(second!.printAnyway).toBeUndefined();
     expect(second!.submissionId).not.toBe(first!.submissionId);
-    expect(text(printedNotice(el))).toBe(t("bill.printed"));
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
     expect(warning(el)).toBeNull();
   });
 
@@ -506,7 +543,7 @@ describe("till-app: Print the bill with dishes not served", () => {
       submissionId: expect.stringMatching(/^[0-9a-f-]{36}$/),
     });
     expect(second!.submissionId).not.toBe(first!.submissionId);
-    expect(text(printedNotice(el))).toBe(t("bill.printed"));
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
     expect(warning(el)).toBeNull();
   });
 });
@@ -538,7 +575,7 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
     expect(endMeal).toHaveBeenCalledOnce();
     expect(sentBodies(endMeal)[0]!.billId).toBe("wo-9");
     expect(tableOrder(el).orderId).toBe("wo-9");
-    expect(text(printedNotice(el))).toBe(t("bill.printed"));
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
 
     emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-4" });
     await flush(el, 6);
@@ -557,6 +594,6 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
 
     expect(endMeal).toHaveBeenCalledOnce();
     expect(sentBodies(endMeal)[0]!.billId).toBe("wo-4");
-    expect(text(printedNotice(el))).toBe(t("bill.printed"));
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
   });
 });

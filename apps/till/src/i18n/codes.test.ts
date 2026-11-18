@@ -1155,3 +1155,24 @@ it("words Print the bill's not-served refusal as a choice for the whole list, in
     "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
   );
 });
+
+it("words Print the bill's other refusals, in both languages", () => {
+  expect(codeMessage("meal_end.already_issued", "en")).toBe(
+    "This bill already has its receipt. Take payment, or print a receipt copy.",
+  );
+  expect(codeMessage("meal_end.already_issued", "es")).toBe(
+    "Esta cuenta ya tiene su ticket. Cóbrala o imprime una copia del ticket.",
+  );
+  expect(codeMessage("meal_end.no_printer", "en")).toBe(
+    "This device has no receipt printer. Choose one in Equipment, then print the bill.",
+  );
+  expect(codeMessage("meal_end.no_printer", "es")).toBe(
+    "Este dispositivo no tiene impresora de tickets. Elige una en Equipo y luego imprime la cuenta.",
+  );
+  expect(codeMessage("meal_end.delivery_unavailable", "en")).toBe(
+    "This full invoice cannot go where it was chosen to go. Choose another printer or email, then print the bill.",
+  );
+  expect(codeMessage("meal_end.delivery_unavailable", "es")).toBe(
+    "Esta factura completa no puede ir adonde se eligió. Elige otra impresora u otro correo y luego imprime la cuenta.",
+  );
+});

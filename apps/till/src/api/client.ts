@@ -1301,6 +1301,15 @@ export interface EndMealRequest {
   printAnyway?: boolean;
 }
 
+/** A dish `meal_end.unserved_dishes` lists: `released` says the kitchen has it, so it can be
+ * marked served. */
+export interface MealEndUnservedDish {
+  lineId: string;
+  dishName: string;
+  quantity: string;
+  released: boolean;
+}
+
 /** The bill's ticket, for its whole total, and what it still owes. */
 export interface EndedMeal {
   revision: number;

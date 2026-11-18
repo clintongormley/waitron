@@ -349,6 +349,7 @@ import {
   billToShow,
   owing,
   paidInPart,
+  printBillOffered,
   shownBills,
   stillOwed,
   stillToPay,
@@ -385,6 +386,7 @@ import type {
   CounterWaitingOrder,
   UnpaidDepartureRequest,
   EndMealRequest,
+  MealEndUnservedDish,
   DeviceStationScreen,
   DevicePassBoard,
   DeadEndAnswer,
@@ -726,7 +728,6 @@ const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
   "meal_end.delivery_unavailable",
   "bill.unsent_dishes",
   "bill.nothing_outstanding",
-  "authorization.not_permitted",
   "device.forbidden_action",
 ]);
 
@@ -20053,9 +20054,11 @@ export class TillApp extends LitElement {
       this.mealEndSending ||
       this.activeTabId !== workingOrderId ||
       bill === undefined ||
-      bill.invoiceNumber !== undefined ||
-      bill.leftUnpaid ||
-      !owing(bill)
+      !printBillOffered(bill, {
+        dishes: this.tabLines.length,
+        paymentUnanswered: this.#unansweredWholePayments.has(workingOrderId),
+        takesPayment: this.permissions.includes("payment.take"),
+      })
     )
       return;
     const listed =
@@ -20120,8 +20123,9 @@ export class TillApp extends LitElement {
     if (billId !== undefined) await this.#rereadAmounts(billId, visit);
   }
 
-  /** Not served lists the dishes; a changed or closed party reloads the table as Finish does; any
-   * other refusal is said, and the party's bills are read again. */
+  /** Not served lists the dishes; a changed party reloads the table and a closed one is said, as
+   * Finish does; any other refusal is said, and the party's bills are read again. A refused
+   * permission is the signed-in person's own, as nobody approves Print the bill. */
   async #onMealEndRefused(
     partyId: string,
     request: EndMealRequest,
@@ -20137,7 +20141,7 @@ export class TillApp extends LitElement {
       this.mealEnd = {
         partyId,
         workingOrderId: request.billId,
-        unserved: refusal.dishes as Extract<MealEndShown, { unserved: unknown }>["unserved"],
+        unserved: refusal.dishes as MealEndUnservedDish[],
         revision: request.expectedPartyRevision,
       };
       return;
@@ -20147,14 +20151,16 @@ export class TillApp extends LitElement {
       return;
     }
     this.errorKey =
-      refusal?.code === "draft.taken_over"
-        ? draftRefusalError(
-            { refused: refusal.code, ownerName: refusal.ownerName ?? undefined },
-            true,
-          )
-        : typeof refusal?.code === "string" && MEAL_END_REFUSALS.has(refusal.code)
-          ? { code: refusal.code }
-          : tableWriteError(error);
+      refusal?.code === "authorization.not_permitted"
+        ? "take_payment.not_permitted"
+        : refusal?.code === "draft.taken_over"
+          ? draftRefusalError(
+              { refused: refusal.code, ownerName: refusal.ownerName ?? undefined },
+              true,
+            )
+          : typeof refusal?.code === "string" && MEAL_END_REFUSALS.has(refusal.code)
+            ? { code: refusal.code }
+            : tableWriteError(error);
     if (!this.#hasLeftParty(partyId, sent)) await this.#loadPartyBills();
   }
 
@@ -22905,6 +22911,7 @@ export class TillApp extends LitElement {
       .finishRefused=${this.finishRefused}
       .mealEnd=${this.#mealEndShown()}
       .canMarkServed=${this.capabilities.includes("hand-over-orders")}
+      .takesPayment=${this.permissions.includes("payment.take")}
       .nameRefusal=${this.nameRefusal}
       .billNameRefusal=${this.billNameRefusal}
       .revealOtherDrafts=${this.revealOtherDrafts}
@@ -23097,6 +23104,7 @@ export class TillApp extends LitElement {
           .finishRefused=${this.finishRefused}
           .mealEnd=${this.#mealEndShown()}
           .canMarkServed=${this.capabilities.includes("hand-over-orders")}
+          .takesPayment=${this.permissions.includes("payment.take")}
           .nameRefusal=${this.nameRefusal}
           .billNameRefusal=${this.billNameRefusal}
           .revealOtherDrafts=${this.revealOtherDrafts}

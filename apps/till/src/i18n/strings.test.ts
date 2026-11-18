@@ -478,3 +478,25 @@ it("says whether a switched-off receipt printer still gets the ticket, in both l
     ],
   ]);
 });
+
+describe("Print the bill's own sentences", () => {
+  it.each([
+    ["en-GB", "Bill issued"],
+    ["es-ES", "Cuenta emitida"],
+  ])("says the bill was issued, not that paper came out, in %s", (locale, message) => {
+    expect(catalogues[locale]?.["bill.issued"]).toBe(message);
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
+    ],
+    [
+      "es-ES",
+      "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+    ],
+  ])("offers no Mark served where none is drawn, in %s", (locale, message) => {
+    expect(catalogues[locale]?.["meal_end.unserved_no_mark"]).toBe(message);
+  });
+});

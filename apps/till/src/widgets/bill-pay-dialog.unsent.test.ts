@@ -16,13 +16,15 @@ describe.each([
     locale: "en",
     label: "Terrace · Bill 2",
     sentence: "Send or remove the unsent dishes before paying.",
+    codeOnly: "Send or remove the unsent dishes first.",
   },
   {
     locale: "es",
     label: "Terraza · Cuenta 2",
     sentence: "Envía o quita los platos sin enviar antes de cobrar.",
+    codeOnly: "Envía o quita primero los platos sin enviar.",
   },
-])("unsent payment refusal in $locale", ({ locale, label, sentence }) => {
+])("unsent payment refusal in $locale", ({ locale, label, sentence, codeOnly }) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
     it.each([360, 390, 1280])("shows the bill and code-only refusal at %i", async (width) => {
       setLocale(locale);
@@ -68,8 +70,8 @@ describe.each([
       await el.updateComplete;
       await form.updateComplete;
       await dialog.updateComplete;
-      expect(form.error).toBe(sentence);
-      expect(nativeError.textContent!.trim()).toBe(sentence);
+      expect(form.error).toBe(codeOnly);
+      expect(nativeError.textContent!.trim()).toBe(codeOnly);
     });
   });
 });

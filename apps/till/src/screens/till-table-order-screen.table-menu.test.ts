@@ -66,12 +66,14 @@ async function mountScreen(
     requested?: boolean;
     busy?: boolean;
     groupCommandBusy?: boolean;
+    lines?: TabLine[];
+    takesPayment?: boolean;
   } = {},
 ) {
   const party = over.party === undefined ? twoTables : over.party;
   const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products: [],
-    lines: [line],
+    lines: over.lines ?? [line],
     orderId: "orderId" in over ? over.orderId : "wo-2",
     party,
     bills: over.bills ?? bills,
@@ -80,6 +82,7 @@ async function mountScreen(
       party === null ? [] : party.tableIds.map((id) => table(id, party, over.requested ?? false)),
     busy: over.busy ?? false,
     groupCommandBusy: over.groupCommandBusy ?? false,
+    ...(over.takesPayment === undefined ? {} : { takesPayment: over.takesPayment }),
   });
   return el;
 }
@@ -342,6 +345,26 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       guestCount: 3,
     };
     await el.updateComplete;
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
+  });
+
+  it("offers no Print the bill on a new bill with no dishes, which the server says owes nothing", async () => {
+    const empty = partyBill("wo-2", 2, "0.00");
+    const el = await mountScreen({ bills: [empty], lines: [] });
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
+  });
+
+  it("offers Print the bill on a bill whose dishes were all given away, which prints at 0.00", async () => {
+    const given = partyBill("wo-2", 2, "0.00");
+    const el = await mountScreen({ bills: [given] });
+
+    expect(item(el, '[data-action="print-bill"]')).not.toBeNull();
+  });
+
+  it("offers no Print the bill to a person who may not take payment", async () => {
+    const el = await mountScreen({ takesPayment: false });
 
     expect(item(el, '[data-action="print-bill"]')).toBeNull();
   });

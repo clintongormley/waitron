@@ -525,6 +525,52 @@ describe("till-table-order-screen: Print the bill beside Finish table's refusal"
     expect(asked).toEqual([{ workingOrderId: "wo-check", showFirst: true }]);
   });
 
+  it("offers no Print the bill while the bill it names has a payment whose answer is unknown", async () => {
+    const el = await mountScreen({
+      finishRefused: true,
+      orderId: "wo-check",
+      lines: [wine],
+      paymentConfirmation: {
+        tender: { method: "cash", amount: "30.00" },
+        outstanding: "30.00",
+        guestCount: 2,
+      },
+    });
+
+    const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    expect(refusal.querySelector("[data-take-payment]")).not.toBeNull();
+    expect(refusal.querySelector("[data-print-bill]")).toBeNull();
+  });
+
+  it("offers no Print the bill to a person who may not take payment", async () => {
+    const el = await mountScreen({ finishRefused: true, takesPayment: false });
+
+    const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    expect(refusal.querySelector("[data-take-payment]")).not.toBeNull();
+    expect(refusal.querySelector("[data-print-bill]")).toBeNull();
+  });
+
+  it("offers no Print the bill when the bill it names is a new one at 0.00 off screen, whose dishes it cannot see", async () => {
+    const empty: PartyBill = { ...check, total: "0.00", outstanding: "0.00" };
+    const el = await mountScreen({ finishRefused: true, bills: [paidTab, empty] });
+
+    const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    expect(refusal.querySelector("[data-take-payment]")).not.toBeNull();
+    expect(refusal.querySelector("[data-print-bill]")).toBeNull();
+  });
+
+  it("offers Print the bill for the bill on screen at 0.00 that has dishes", async () => {
+    const given: PartyBill = { ...check, total: "0.00", outstanding: "0.00" };
+    const el = await mountScreen({
+      finishRefused: true,
+      orderId: "wo-check",
+      lines: [wine],
+      bills: [paidTab, given],
+    });
+
+    expect(shadow(el).querySelector("[data-finish-refusal] [data-print-bill]")).not.toBeNull();
+  });
+
   it("offers no Print the bill when the bill it names already has its receipt", async () => {
     const printed: PartyBill = {
       ...check,
@@ -573,7 +619,7 @@ describe("till-table-order-screen: Print the bill's outcome", () => {
 
     const said = shadow(el).querySelector<HTMLElement>("[data-bill-printed]")!;
     expect(said.getAttribute("role")).toBe("status");
-    expect(said.textContent!.trim()).toBe(t("bill.printed"));
+    expect(said.textContent!.trim()).toBe(t("bill.issued"));
   });
 
   it("lists the dishes not served by name, says what each choice does, and offers Mark served and Print anyway", async () => {
@@ -582,6 +628,7 @@ describe("till-table-order-screen: Print the bill's outcome", () => {
     const block = warning(el)!;
     expect(block.getAttribute("role")).toBe("alert");
     expect(block.textContent).toContain(codeMessage("meal_end.unserved_dishes"));
+    expect(block.textContent).not.toContain(t("meal_end.unserved_no_mark"));
     expect(block.textContent).toContain(t("meal_end.unserved_heading"));
     expect(
       [...block.querySelectorAll<HTMLElement>("[data-unserved-dish]")].map((dish) =>
@@ -622,6 +669,8 @@ describe("till-table-order-screen: Print the bill's outcome", () => {
 
     expect(warning(el)!.querySelector("[data-mark-served]")).toBeNull();
     expect(warning(el)!.querySelector("[data-print-anyway]")).not.toBeNull();
+    expect(warning(el)!.textContent).toContain(t("meal_end.unserved_no_mark"));
+    expect(warning(el)!.textContent).not.toContain(codeMessage("meal_end.unserved_dishes"));
   });
 
   it("offers no Mark served when the kitchen has none of the dishes", async () => {
@@ -631,6 +680,8 @@ describe("till-table-order-screen: Print the bill's outcome", () => {
     });
 
     expect(warning(el)!.querySelector("[data-mark-served]")).toBeNull();
+    expect(warning(el)!.textContent).toContain(t("meal_end.unserved_no_mark"));
+    expect(warning(el)!.textContent).not.toContain(codeMessage("meal_end.unserved_dishes"));
   });
 
   it("Print anyway sends end-meal for the bill with printAnyway", async () => {

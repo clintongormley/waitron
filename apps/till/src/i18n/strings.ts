@@ -1748,10 +1748,12 @@ export const en = {
     "This would take the order over {amount}, the limit for a simplified invoice. Choose Full invoice, or remove items.",
   "bill.take_rest": "Take the rest",
   "bill.print": "Print the bill",
-  "bill.printed": "Bill printed",
+  "bill.issued": "Bill issued",
   "meal_end.unserved_heading": "Not served yet:",
   "meal_end.mark_served": "Mark served",
   "meal_end.print_anyway": "Print anyway",
+  "meal_end.unserved_no_mark":
+    "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
   "meal_end.unconfirmed":
     "Print the bill got no answer, so the bill may have been printed. Check this bill before trying again.",
   // The confirmation before closing a whole bill as a deferred payment.
@@ -3871,10 +3873,12 @@ export const es: Record<StringKey, string> = {
     "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa o quita artículos.",
   "bill.take_rest": "Cobrar el resto",
   "bill.print": "Imprimir la cuenta",
-  "bill.printed": "Cuenta impresa",
+  "bill.issued": "Cuenta emitida",
   "meal_end.unserved_heading": "Aún sin servir:",
   "meal_end.mark_served": "Marcar como servidos",
   "meal_end.print_anyway": "Imprimir igualmente",
+  "meal_end.unserved_no_mark":
+    "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
   "meal_end.unconfirmed":
     "Imprimir la cuenta no obtuvo respuesta, así que puede que se haya impreso. Revisa esta cuenta antes de volver a intentarlo.",
   "deferred_close.title": "Cerrar como pago aplazado",
