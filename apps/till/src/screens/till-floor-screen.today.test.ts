@@ -166,23 +166,15 @@ describe("till-floor-screen: dragging on today's plan", () => {
     expect(refreshes.count).toBe(1);
   });
 
-  it("two free tables merge, asking for seats when the server wants them", async () => {
+  it("two free tables merge, asking for seats before sending once", async () => {
     const api = stubApi();
-    api.mergeToday.mockRejectedValueOnce({
-      code: "merge.seats_required",
-      status: 400,
-    });
     const el = await mount([planned("t1", 2), planned("t2", 20)], api);
     const refreshes = countRefreshes(el);
 
     await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
-    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
-      "t2",
-      { targetId: "t1", side: "right" },
-      0,
-    );
     expect(drawnAt(el, "t2")).toBe(4);
     await settle(el);
+    expect(api.mergeToday).not.toHaveBeenCalled();
 
     const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
     expect(dialog).not.toBeNull();
@@ -201,7 +193,7 @@ describe("till-floor-screen: dragging on today's plan", () => {
     );
     await settle(el);
 
-    expect(api.mergeToday).toHaveBeenLastCalledWith(
+    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
       "t2",
       {
         targetId: "t1",
@@ -210,14 +202,12 @@ describe("till-floor-screen: dragging on today's plan", () => {
       },
       0,
     );
-    expect(api.mergeToday).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
     expect(refreshes.count).toBe(1);
   });
 
   it("a third table dropped on a merge suggests its seats plus the group total", async () => {
     const api = stubApi();
-    api.mergeToday.mockRejectedValueOnce({ code: "merge.seats_required", status: 400 });
     const el = await mount(
       [
         planned("t1", 2, { joinId: "j1", joinSeats: 6 }),
@@ -228,6 +218,7 @@ describe("till-floor-screen: dragging on today's plan", () => {
     );
     await drop(el, { tableId: "t3", x: 7, y: 3, targetId: "t2" });
     await settle(el);
+    expect(api.mergeToday).not.toHaveBeenCalled();
     const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
     expect(dialog.action).toBe("join");
     expect(dialog.seats).toBe(10);
@@ -236,10 +227,6 @@ describe("till-floor-screen: dragging on today's plan", () => {
 
   it("a re-read while the seats are asked keeps the table where it was dropped", async () => {
     const api = stubApi();
-    api.mergeToday.mockRejectedValueOnce({
-      code: "merge.seats_required",
-      status: 400,
-    });
     const el = await mount([planned("t1", 2), planned("t2", 20)], api);
     await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
     await settle(el);
@@ -254,10 +241,6 @@ describe("till-floor-screen: dragging on today's plan", () => {
 
   it("cancelling the seats puts the table back", async () => {
     const api = stubApi();
-    api.mergeToday.mockRejectedValueOnce({
-      code: "merge.seats_required",
-      status: 400,
-    });
     const el = await mount([planned("t1", 2), planned("t2", 20)], api);
     await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
     await settle(el);
@@ -269,34 +252,69 @@ describe("till-floor-screen: dragging on today's plan", () => {
 
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
     expect(drawnAt(el, "t2")).toBe(20);
-    expect(api.mergeToday).toHaveBeenCalledTimes(1);
+    expect(api.mergeToday).not.toHaveBeenCalled();
     expect(api.moveToday).not.toHaveBeenCalled();
   });
 
-  it("a merge refused for another reason puts the table back and says why", async () => {
+  it.each([
+    "a new api",
+    "another operator",
+    "another selected zone",
+    "a zone tab",
+    "leaving the page",
+  ] as const)(
+    "%s while the seats are asked retires the merge, and a late confirm sends nothing",
+    async (change) => {
+      const api = stubApi();
+      const next = stubApi();
+      const el = await mount([planned("t1", 2), planned("t2", 20)], api, [
+        zone(),
+        zone({ id: "z2", name: "Terraza", displayOrder: 1 }),
+      ]);
+      const parent = el.parentElement!;
+      await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
+      const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
+      expect(drawnAt(el, "t2")).toBe(4);
+
+      if (change === "a new api") el.api = next as unknown as TillApi;
+      if (change === "another operator") el.operatorSession = 2;
+      if (change === "another selected zone") el.selectedZoneId = "z2";
+      if (change === "a zone tab")
+        el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z2"]')!.click();
+      if (change === "leaving the page") el.remove();
+      await settle(el);
+      dialog.dispatchEvent(
+        new CustomEvent("today-seats-confirm", {
+          detail: { seats: 10 },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await settle(el);
+      if (change === "another selected zone") el.selectedZoneId = "z1";
+      if (change === "a zone tab")
+        el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z1"]')!.click();
+      if (change === "leaving the page") parent.append(el);
+      await settle(el);
+
+      expect(api.mergeToday).not.toHaveBeenCalled();
+      expect(next.mergeToday).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
+      expect(drawnAt(el, "t2")).toBe(20);
+    },
+  );
+
+  it("a merge refused for another reason says why only after the seats are typed", async () => {
     const api = stubApi();
     api.mergeToday.mockRejectedValueOnce({ code: "table.merged", status: 409 });
     const el = await mount([planned("t1", 2), planned("t2", 20)], api);
     const refreshes = countRefreshes(el);
     await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
     await settle(el);
+    expect(api.mergeToday).not.toHaveBeenCalled();
+    expect(refusal(el)).toBeNull();
+    expect(drawnAt(el, "t2")).toBe(4);
 
-    expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
-    expect(drawnAt(el, "t2")).toBe(20);
-    expect(refusal(el)).toBe("That table is joined to another. Split it first");
-    expect(refreshes.count).toBe(1);
-  });
-
-  it("a merge refused for its seats a second time, or for another field, says why", async () => {
-    const api = stubApi();
-    const seatsRefusal = { code: "merge.seats_required", status: 400 };
-    api.mergeToday
-      .mockRejectedValueOnce(seatsRefusal)
-      .mockRejectedValueOnce(seatsRefusal)
-      .mockRejectedValueOnce({ code: "floor_plan.invalid", status: 400, field: "side" });
-    const el = await mount([planned("t1", 2), planned("t2", 20)], api);
-    await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
-    await settle(el);
     el.shadowRoot!.querySelector("till-today-seats-dialog")!.dispatchEvent(
       new CustomEvent("today-seats-confirm", {
         detail: { seats: 10 },
@@ -305,14 +323,40 @@ describe("till-floor-screen: dragging on today's plan", () => {
       }),
     );
     await settle(el);
-    expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
-    expect(refusal(el)).toBe("Enter the seats for this merge");
-    expect(drawnAt(el, "t2")).toBe(20);
 
-    await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
-    await settle(el);
+    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
+      "t2",
+      { targetId: "t1", side: "right", seats: 10 },
+      0,
+    );
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
-    expect(refusal(el)).toBe("Something went wrong, try again");
+    expect(drawnAt(el, "t2")).toBe(20);
+    expect(refusal(el)).toBe("That table is joined to another. Split it first");
+    expect(refreshes.count).toBe(1);
+  });
+
+  it("a merge refused for its seats, or for another field, after the seats are typed says why", async () => {
+    const api = stubApi();
+    api.mergeToday
+      .mockRejectedValueOnce({ code: "merge.seats_required", status: 400 })
+      .mockRejectedValueOnce({ code: "floor_plan.invalid", status: 400, field: "side" });
+    const el = await mount([planned("t1", 2), planned("t2", 20)], api);
+    for (const words of ["Enter the seats for this merge", "Something went wrong, try again"]) {
+      await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
+      await settle(el);
+      el.shadowRoot!.querySelector("till-today-seats-dialog")!.dispatchEvent(
+        new CustomEvent("today-seats-confirm", {
+          detail: { seats: 10 },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await settle(el);
+      expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
+      expect(refusal(el)).toBe(words);
+      expect(drawnAt(el, "t2")).toBe(20);
+    }
+    expect(api.mergeToday).toHaveBeenCalledTimes(2);
   });
 
   it("a write that fails with no code says the generic words", async () => {
@@ -439,17 +483,12 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     expect(api.moveToday).toHaveBeenCalledExactlyOnceWith("t1", { x: 12, y: 5 }, 7);
   });
 
-  it("a merge's seats resend sends the revision read at the drop, not a later read's", async () => {
+  it("a merge's seats send uses the revision read at the drop, not a later read's", async () => {
     const api = stubApi();
-    api.mergeToday.mockRejectedValueOnce({ code: "merge.seats_required", status: 400 });
     const el = await mount(at7(), api);
     await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
     await settle(el);
-    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
-      "t2",
-      { targetId: "t1", side: "right" },
-      7,
-    );
+    expect(api.mergeToday).not.toHaveBeenCalled();
 
     el.tablesReadAt = nextFloorMoment();
     el.tables = [planned("t1", 2, { zoneRevision: 8 }), planned("t2", 20, { zoneRevision: 8 })];
@@ -463,7 +502,7 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
     );
     await settle(el);
 
-    expect(api.mergeToday).toHaveBeenLastCalledWith(
+    expect(api.mergeToday).toHaveBeenCalledExactlyOnceWith(
       "t2",
       { targetId: "t1", side: "right", seats: 10 },
       7,
@@ -1090,7 +1129,6 @@ describe("A747 joined seats defaults", () => {
     { moving: null, target: 5, want: null },
   ])("prefills $moving plus $target as $want", async ({ moving, target, want }) => {
     const api = stubApi();
-    api.mergeToday.mockRejectedValueOnce({ code: "merge.seats_required", status: 400 });
     const el = await mount(
       [planned("t1", 2, { seats: target }), planned("t2", 20, { seats: moving })],
       api,
@@ -1107,7 +1145,6 @@ describe("A747 joined seats defaults", () => {
 
   it("counts an existing group once using its current seats", async () => {
     const api = stubApi();
-    api.mergeToday.mockRejectedValueOnce({ code: "merge.seats_required", status: 400 });
     const el = await mount(
       [
         planned("t1", 2, { seats: 2, joinId: "j1", joinSeats: 9 }),

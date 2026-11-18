@@ -2254,7 +2254,7 @@ export interface JoinMerge {
   moving: string;
   target: string;
   side: JoinSide;
-  seats?: number;
+  seats: number;
 }
 
 /**
@@ -4926,21 +4926,16 @@ export class TillApi {
     return this.#todayChange(tableId, "leave-here", {}, zoneRevision);
   }
 
-  /** Merge two free tables, `tableId` moving against `targetId` → `POST /api/tables/:id/today/merge`.
-   * `seats` is left out when unset: the server refuses a null. */
+  /** Merge two free tables, `tableId` moving against `targetId` → `POST /api/tables/:id/today/merge`. */
   mergeToday(
     tableId: string,
-    merge: { targetId: string; side: JoinSide; seats?: number },
+    merge: { targetId: string; side: JoinSide; seats: number },
     zoneRevision: number,
   ): Promise<FloorAnswer> {
     return this.#todayChange(
       tableId,
       "merge",
-      {
-        targetId: merge.targetId,
-        side: merge.side,
-        ...(merge.seats === undefined ? {} : { seats: merge.seats }),
-      },
+      { targetId: merge.targetId, side: merge.side, seats: merge.seats },
       zoneRevision,
     );
   }

@@ -2998,6 +2998,7 @@ describe("TillApi", () => {
       moving: "tbl-1",
       target: "tbl-9",
       side: "top",
+      seats: 4,
       zoneRevision: 5,
     });
     await api.joinTables("v1", "tbl-9", revisions);
@@ -3019,7 +3020,7 @@ describe("TillApi", () => {
         expectedPartyRevision: 3,
         otherPartyId: null,
         expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
-        merge: { moving: "tbl-1", target: "tbl-9", side: "top" },
+        merge: { moving: "tbl-1", target: "tbl-9", side: "top", seats: 4 },
         zoneRevision: 5,
       },
       {
@@ -3076,9 +3077,9 @@ describe("TillApi", () => {
     await expect(
       api.mergeToday("t1", { targetId: "t2", side: "right", seats: 8 }, 7),
     ).resolves.toEqual(answer);
-    await expect(api.mergeToday("t1", { targetId: "t2", side: "bottom" }, 7)).resolves.toEqual(
-      answer,
-    );
+    await expect(
+      api.mergeToday("t1", { targetId: "t2", side: "bottom", seats: 3 }, 7),
+    ).resolves.toEqual(answer);
     await expect(api.resetZoneToday("z1", 7)).resolves.toEqual(answer);
     await expect(api.resetZoneToday("z1", null)).resolves.toEqual(answer);
 
@@ -3099,7 +3100,11 @@ describe("TillApi", () => {
         "POST",
         { targetId: "t2", side: "right", seats: 8, zoneRevision: 7 },
       ],
-      ["/api/tables/t1/today/merge", "POST", { targetId: "t2", side: "bottom", zoneRevision: 7 }],
+      [
+        "/api/tables/t1/today/merge",
+        "POST",
+        { targetId: "t2", side: "bottom", seats: 3, zoneRevision: 7 },
+      ],
       ["/api/zones/z1/today/reset", "POST", { zoneRevision: 7 }],
       ["/api/zones/z1/today/reset", "POST", { zoneRevision: null }],
     ]);
@@ -6196,6 +6201,7 @@ describe("A803 action results", () => {
       moving: "tbl-9",
       target: "tbl-1",
       side: "left",
+      seats: 6,
       zoneRevision: 4,
     });
 
@@ -6203,7 +6209,7 @@ describe("A803 action results", () => {
     expect(bodyOf(fetchStub, 1)).toEqual({
       tableId: "tbl-9",
       ...revisions,
-      merge: { moving: "tbl-9", target: "tbl-1", side: "left" },
+      merge: { moving: "tbl-9", target: "tbl-1", side: "left", seats: 6 },
       zoneRevision: 4,
     });
   });

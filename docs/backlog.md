@@ -732,14 +732,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   menu, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-- **A666 — A floor join that moves tables together is sent once without seats and refused before
-  the Seats prompt opens (2026-10-14; owner decided 2026-10-17).** It first sends the merge or
-  join with no seat count, gets `400 merge.seats_required`, then opens the Seats prompt and sends
-  again. Owner, 2026-10-17: ask for the seat count first and send once; the other refusals (table
-  not free, already grouped, zone mismatch) then show only after the seats are typed. Done when a
-  floor join that needs seats asks for them before its first request and sends once.
-  [Detail](backlog/till.md#a666-a-floor-join-that-moves-tables-together-is-sent-once-without-seats)
-
 - **A559. The till's full-invoice dialog changes width when an error appears.** Left open by A231q.
   [Detail](backlog/till.md#a559-the-tills-full-invoice-dialog-changes-width-when-an-error-appears)
 

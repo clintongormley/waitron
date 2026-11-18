@@ -322,6 +322,11 @@ describe("till-floor-screen: a table that needs moving", () => {
 
     send(mapOf(el), "wt-table-drag-end", { tableId: "t4", x: 30, y: 3, targetId: "t3" });
     await settle(el);
+    expect(api.mergeToday).not.toHaveBeenCalled();
+    send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
+      seats: 6,
+    });
+    await settle(el);
     expect(refusal(el)).toBe("Table 3 needs moving. Mark it moved first.");
   });
 
@@ -334,6 +339,11 @@ describe("till-floor-screen: a table that needs moving", () => {
 
     send(mapOf(el), "wt-table-drag-end", { tableId: "t4", x: 30, y: 3, targetId: "t3" });
     await settle(el);
+    expect(api.mergeToday).not.toHaveBeenCalled();
+    send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
+      seats: 6,
+    });
+    await settle(el);
     expect(api.mergeToday).toHaveBeenCalledOnce();
     expect(refusal(el)).toBeNull();
   });
@@ -344,6 +354,11 @@ describe("till-floor-screen: a table that needs moving", () => {
     const el = await mount([moving("t3", 12), planned("t4", 30)], api);
 
     send(mapOf(el), "wt-table-drag-end", { tableId: "t4", x: 30, y: 3, targetId: "t3" });
+    await settle(el);
+    expect(api.mergeToday).not.toHaveBeenCalled();
+    send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
+      seats: 6,
+    });
     await settle(el);
     expect(refusal(el)).toBe("Table 3 needs moving. Mark it moved first.");
 
