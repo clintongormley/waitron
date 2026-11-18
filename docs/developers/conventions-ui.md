@@ -951,7 +951,7 @@ the bar instead, had not reloaded 15 s later, and after Reload came back on the 
 signed out. The limits kept on purpose are in `docs/backlog/dashboard.md` → "Decisions and
 deliberate limits".
 
-## The dashboard and pre-login till match the browser's `Accept-Language`
+## The dashboard and the till match the browser's `Accept-Language`
 
 The public locale response carries a separate `loginDefault`, and `venueDefault` still describes the
 venue. A signed-in person with no saved language gets `sessionDefault` from
@@ -960,7 +960,9 @@ the browser asks for nothing Waitron ships. It is derived per request and never 
 language still wins. Only the first 32 entries of the `Accept-Language` header are read. Account emails have no browser to ask, so a person with no saved language gets
 the venue default there. Before till login, `GET /api/locales` uses the same browser match; after
 logout the till returns to it. A till operator with no saved language, and an enrolled kitchen
-display with no language picked on it, get that browser match too (owner, 2026-11-18).
+display with no language picked on it, get that browser match too (owner, 2026-11-18: "when i open
+a new device, it switches to spanish rather than using the language of my browser"; that the remark
+covers these two cases is the watcher's and lane B's reading, not the owner's words).
 Returning to login after logout or session expiry uses the last browser match, or the venue default
 until that match is available. Guard late locale responses so they cannot overwrite a newly
 authenticated person's language or an explicit choice on sign-in
@@ -2109,10 +2111,10 @@ configuration.
 Fixed until the till starts again (a reload, or a server switch, which runs `#boot` again):
 
 - `locale`: the venue's display language, read when the server starts (`readVenueLocale`,
-  `apps/server/src/boot.ts`). The till uses it before sign-in, on a kitchen screen that has kept
-  no language of its own (`waitron.kitchenDisplayLanguage.<deviceId>`, used while the till still
-  offers it), and for a person who has saved no language of their own; a person's saved language wins
-  (`resolveActiveLocale`, `packages/shared/src/locales.ts`).
+  `apps/server/src/boot.ts`). The till falls back to it where nobody has chosen a language and the
+  browser matches no other: "The dashboard and the till match the browser's `Accept-Language`" above.
+  A kitchen screen keeps its own pick in `waitron.kitchenDisplayLanguage.<deviceId>`, used while the
+  till still offers it.
 - `servers`: the till's router follows the primary on its own among the servers it was given at
   start (`ServerRouter.setServers`, `apps/till/src/api/server-router.ts`). Each entry's `standing`
   names the main server and the spare for the main-server strip. A till shows it after 20 seconds

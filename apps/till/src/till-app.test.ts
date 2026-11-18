@@ -2279,7 +2279,6 @@ describe("till-app", () => {
   it("boots an ENROLLED kds_station device straight into the station screen in device mode", async () => {
     const { el } = await mountApp({
       getDevDevices: vi.fn().mockResolvedValue({ devices: [] }),
-      // The enrolled display has no operator and has kept no language, so boot applies the venue language.
       getTill: vi.fn().mockResolvedValue({
         ...till,
         locale: "en-GB",
@@ -15592,8 +15591,7 @@ describe("till-app", () => {
       expect(currentLocale()).toBe("en-GB"); // operator locale preserved, NOT clobbered to the venue default
     });
 
-    it("a null stored locale falls back to the venue default on login", async () => {
-      // resolveActiveLocale(null, "es-ES") === "es-ES": an operator with no preference gets the venue UI.
+    it("a null stored locale gets the venue's language on login when the browser's match is the venue's", async () => {
       const { el } = await mountApp();
       await toCounterAs(el, null);
       expect(currentLocale()).toBe("es-ES");
@@ -15661,7 +15659,7 @@ describe("till-app", () => {
     it("wt-locale-selected while LOGGED IN persists (putLocale) then switches (setLocale)", async () => {
       const putLocale = vi.fn().mockResolvedValue(undefined);
       const { el } = await mountApp({ putLocale });
-      const c = await toCounterAs(el, null); // venue default es-ES
+      const c = await toCounterAs(el, null);
       expect(currentLocale()).toBe("es-ES");
 
       emit(c, "wt-locale-selected", { code: "en-GB" });
@@ -15676,7 +15674,7 @@ describe("till-app", () => {
       // a non-fatal banner appears — never the raw code.
       const putLocale = vi.fn().mockRejectedValue({ code: "locale.unsupported" });
       const { el } = await mountApp({ putLocale });
-      const c = await toCounterAs(el, null); // venue default es-ES
+      const c = await toCounterAs(el, null);
       expect(currentLocale()).toBe("es-ES");
 
       emit(c, "wt-locale-selected", { code: "en-GB" });
@@ -15729,7 +15727,7 @@ describe("till-app", () => {
     });
 
     it("does not revert the locale if the app disconnects mid-logout", async () => {
-      // #onLogout's `setLocale(this.#venueLocale)` runs AFTER `await api.logout()`, so a teardown during
+      // #onLogout's `setLocale` runs AFTER `await api.logout()`, so a teardown during
       // that round trip must not repaint a live sibling's module-global locale — the same guard #boot
       // carries. Log in as an en-GB operator (UI → English), start logout with `logout()` in flight,
       // detach, then resolve: the venue-default revert (es-ES) must be SKIPPED.
@@ -15755,7 +15753,7 @@ describe("till-app", () => {
       let resolvePut!: () => void;
       const putLocale = vi.fn(() => new Promise<void>((r) => (resolvePut = r)));
       const { el, host } = await mountApp({ putLocale });
-      const c = await toCounterAs(el, null); // venue default es-ES
+      const c = await toCounterAs(el, null);
       expect(currentLocale()).toBe("es-ES");
 
       emit(c, "wt-locale-selected", { code: "en-GB" }); // putLocale now pending
@@ -15886,13 +15884,6 @@ describe("till-app", () => {
         }),
       });
 
-    it("shows the browser's language when nothing was picked on the display", async () => {
-      setLocale("fr-FR");
-      const { el } = await mountSpanishDisplay("en-GB");
-      await flush(el);
-      expect(currentLocale()).toBe("en-GB");
-    });
-
     it("shows the language picked on the display, whatever the browser's", async () => {
       localStorage.setItem("waitron.kitchenDisplayLanguage.dev-1", "fr-FR");
       const { el } = await mountSpanishDisplay("en-GB");
@@ -15907,7 +15898,7 @@ describe("till-app", () => {
       expect(currentLocale()).toBe("es-ES");
     });
 
-    it("falls back to the venue's language when the stored pick is no longer offered", async () => {
+    it("ignores a stored pick that is no longer offered", async () => {
       localStorage.setItem("waitron.kitchenDisplayLanguage.dev-1", "fr-FR");
       const { el } = await mountDisplay("dev-1");
       await flush(el);

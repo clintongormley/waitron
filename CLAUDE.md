@@ -319,8 +319,9 @@ called weaker than its name, the topic file lists what it does not see.
 - **The dashboard banner is persistent identity chrome** — top of the page, full width, the taxpayer's
   legal name. The account menu sits at the trailing edge only when a session exists.
   [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
-- **The dashboard matches the browser's `Accept-Language` when no language is saved.** Guard against
-  a late locale response overwriting an authenticated person's language or an explicit choice.
+- **The dashboard and the till match the browser's `Accept-Language` when no language is saved.**
+  Guard against a late locale response overwriting an authenticated person's language or an explicit
+  choice.
 - **Dashboard login offers methods without revealing account enrolment.** Never query account status
   or passkey enrolment to choose the public screen. A modal passkey prompt requires an explicit
   action: navigation, refresh, logout and session expiry never open one. Save the authenticated email and the successful method only with Remember selected, never

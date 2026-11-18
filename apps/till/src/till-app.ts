@@ -2970,7 +2970,6 @@ export class TillApp extends LitElement {
    * every render. */
   #affordanceList: ShellAffordance[] = [];
 
-  /** The venue's default UI locale, used when no operator's preference applies. */
   #venueLocale = "es-ES";
   #browserLocale?: string;
   #browserLocaleVenue?: string;
