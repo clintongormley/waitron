@@ -30,7 +30,7 @@ import {
   refusalOn,
   routingCellPeriods,
   routingCells,
-  saleReceiptHeaders,
+  sales,
   UNIQUE_VIOLATION,
   kitchenStations,
   workingOrderLines,
@@ -545,29 +545,26 @@ export async function resolveSalePolicy(
   };
 }
 
-export async function recordSaleReceiptHeader(
-  tx: Transaction,
-  saleId: string,
-  zoneId: string | null,
-): Promise<void> {
+export async function saleReceiptHeader(tx: Transaction, zoneId: string | null) {
   const policy = zoneId === null ? null : await resolveSalePolicy(tx, zoneId);
-  await tx.insert(saleReceiptHeaders).values({
-    saleId,
+  return {
     departmentId: policy?.departmentId ?? null,
     tradingName: policy?.tradingName ?? "",
-    printTradingName: policy?.printTradingName ?? false,
-  });
+    printsTradingName: policy?.printTradingName ?? false,
+  };
 }
 
 export async function readSaleReceiptHeader(tx: Transaction, saleId: string) {
   const [row] = await tx
     .select({
-      departmentId: saleReceiptHeaders.departmentId,
-      tradingName: saleReceiptHeaders.tradingName,
-      printTradingName: saleReceiptHeaders.printTradingName,
+      departmentId: sales.receiptDepartmentId,
+      tradingName: sql<string>`${sales.receiptTradingName}`,
+      printTradingName: sql<boolean>`${sales.receiptPrintsTradingName}`.mapWith(
+        sales.receiptPrintsTradingName,
+      ),
     })
-    .from(saleReceiptHeaders)
-    .where(eq(saleReceiptHeaders.saleId, saleId));
+    .from(sales)
+    .where(and(eq(sales.id, saleId), isNotNull(sales.receiptTradingName)));
   return row ?? null;
 }
 

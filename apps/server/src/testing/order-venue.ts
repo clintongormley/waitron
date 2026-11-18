@@ -281,7 +281,13 @@ export async function billlessSale(
     origin = venue.cfg.origin,
     lineCount = 1,
     unitPrice = "10.00",
-  }: { origin?: SaleOrigin; lineCount?: number; unitPrice?: string } = {},
+    receipt,
+  }: {
+    origin?: SaleOrigin;
+    lineCount?: number;
+    unitPrice?: string;
+    receipt?: Parameters<typeof recordSale>[2]["receipt"];
+  } = {},
 ): Promise<string> {
   // Identical lines merge on the ticket, so each of several lines is numbered.
   const name = (index: number) => (lineCount === 1 ? "Venta suelta" : `Venta suelta ${index + 1}`);
@@ -310,6 +316,7 @@ export async function billlessSale(
         tenders: [{ method: "cash", amount: total, tipAmount: "0.00", settledAt: new Date() }],
       },
       operatorId: venue.operatorId,
+      ...(receipt && { receipt }),
     }),
   );
   return saleId;

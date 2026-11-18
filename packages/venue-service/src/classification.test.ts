@@ -74,7 +74,7 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
     ).toEqual(seasons.map((table) => [table, "state"]));
   });
 
-  it("classifies each owned table once, with issued receipt headers and the bill-number history in the ledger", () => {
+  it("classifies each owned table once as state", () => {
     const tables = VENUE_SERVICE_CLASSIFICATION.map((entry) => entry.table);
     expect(new Set(tables).size).toBe(tables.length);
     expect(
@@ -82,7 +82,7 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
         entry.table,
         entry.class,
       ]),
-    ).toEqual([["sale_receipt_headers", "ledger"]]);
+    ).toEqual([]);
     expect(VENUE_SERVICE_CLASSIFICATION.every((entry) => entry.reason.trim().length > 0)).toBe(
       true,
     );

@@ -8,7 +8,6 @@ export const VENUE_SERVICE_TABLES = [
   "service_step_completions",
   "department_transfer_destinations",
   "department_transfer_requests",
-  "sale_receipt_headers",
   "menu_periods",
   "device_zone_selections",
   "device_zone_selection_zones",

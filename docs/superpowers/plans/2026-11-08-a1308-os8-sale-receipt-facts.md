@@ -21,8 +21,13 @@ change, and nothing in `fiscal-verifactu` reads these columns.
 (`voided_by` key), §4 (`sale_receipt_guests`, `sale_receipt_headers` → merge into sales), §5 (sales);
 README §5 U9 ("index names … drop the word"), U11. Rules: [slice rules](2026-11-08-a1308-slice-rules.md).
 
-**First line of the PR description:** "Every venue is reset: core; backups and exports from before
-this cannot be restored or imported." Second line: "Owner lands: changes `sales`."
+**First line of the PR description:** "Every venue needs a core reset. Older database backups cannot
+be restored." Second line: "Owner lands this change to `sales`." The configuration-transfer test
+imported one encrypted format-49 export made on main at 540d0d47c8 after the rebuild, keeping its
+menu, prices, extras and options (watcher, 2026-11-18 14:21).
+
+**Current readers:** Department takings and closed-bill reports also read the saved department
+(#2876). Move those two queries to `sales.receipt_department_id` and keep the existing report checks.
 
 ---
 

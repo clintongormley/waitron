@@ -9,7 +9,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   printJobs,
   serviceCommands,
-  saleReceiptGuests,
   sales,
   withTransaction,
   workingOrderLines,
@@ -332,9 +331,8 @@ describe("a discount that leaves a bill fully paid", () => {
     expect(
       await inTx(venue, (tx) =>
         tx
-          .select({ guests: saleReceiptGuests.guestCount })
-          .from(saleReceiptGuests)
-          .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
+          .select({ guests: sales.receiptGuestCount })
+          .from(sales)
           .where(eq(sales.workingOrderId, billId)),
       ),
     ).toEqual([{ guests: 3 }]);

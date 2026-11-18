@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
 import { id, label, money, newId, nowIso, table, tsString } from "./columns.js";
 import { devices } from "./devices.js";
+import { persons } from "./identity/persons.js";
 import { workingOrders } from "./orders.js";
 import { originChecks, sourceColumn } from "./origin.js";
 import { parties } from "./parties.js";
@@ -10,8 +11,7 @@ import { sales } from "./sales.js";
 /**
  * A bill whose party left without paying it: the invoice it is owed against and the amount that
  * invoice still owed when the party left. Append-only, and one row per bill.
- *
- * `recorded_by` and `authorized_by` are plain person ids with no key, as on `bill_payment_refunds`.
+
  */
 export const unpaidDepartures = table(
   "unpaid_departures",
@@ -45,6 +45,16 @@ export const unpaidDepartures = table(
       columns: [t.saleId],
       foreignColumns: [sales.id],
       name: "unpaid_departures_sale_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.recordedBy],
+      foreignColumns: [persons.id],
+      name: "unpaid_departures_recorded_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.authorizedBy],
+      foreignColumns: [persons.id],
+      name: "unpaid_departures_authorized_by_fk",
     }).onDelete("restrict"),
     unique("unpaid_departures_working_order_key").on(t.workingOrderId),
     check("unpaid_departures_amount_ck", sql`${t.amount} > 0`),

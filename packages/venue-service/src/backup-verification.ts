@@ -7,11 +7,10 @@ import { VENUE_SERVICE_TABLES } from "./classification.js";
 import * as schema from "@waitron/db/schema/venue-service.js";
 
 const tables = [...VENUE_SERVICE_TABLES];
-const immutableTables = ["sale_receipt_headers"];
 export const VENUE_SERVICE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,
-  data: { kind: "custom", tables, immutableTables, checks: ["data"] },
+  data: { kind: "custom", tables, immutableTables: [], checks: ["data"] },
   secrets: [],
   entries: [],
   effects: [],
@@ -29,7 +28,7 @@ export const VENUE_SERVICE_BACKUP_VERIFICATION: BackupVerificationContribution =
       after: context.after,
       policies: tables.map((table) => ({
         table,
-        immutable: immutableTables.includes(table),
+        immutable: false,
         addedColumns: {},
       })),
     });

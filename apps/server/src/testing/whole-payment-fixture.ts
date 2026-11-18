@@ -20,7 +20,6 @@ export type PayWorkingOrderRequest = ContentRequest<PayRequest>;
 export type TillSaleRequest = ContentRequest<SaleRequest>;
 export type IntegratedPayRequest = ContentRequest<ReaderRequest>;
 const observations = new WeakMap<Database, Map<string, BillEditExpected | null>>();
-const OPERATOR = "cccccccc-0000-4000-8000-0000000000f1";
 
 // Content fixtures retain the original observation without delaying the writer's queue admission.
 function observed<T extends { expectedEdit?: BillEditExpected | null }>(
@@ -33,18 +32,19 @@ function observed<T extends { expectedEdit?: BillEditExpected | null }>(
     id === undefined
       ? []
       : db.all<{
-          partyId: string | null;
+          openedBy: string;
           editorId: string | null;
           editorVersion: number;
           draftId: string | null;
           draftRevision: number | null;
-        }>(sql`select o.party_id as partyId, o.editor_id as editorId,
+        }>(sql`select p.opened_by as openedBy, o.editor_id as editorId,
     o.editor_version as editorVersion, d.id as draftId, d.revision as draftRevision
     from working_orders o
+    join parties p on p.id = o.party_id
     left join order_drafts d on d.bill_id = o.id and d.state = 'open'
     where o.id = ${id}`);
   let expectedEdit: BillEditExpected | null = null;
-  if (order?.partyId != null) {
+  if (order !== undefined) {
     let cache = observations.get(db);
     if (cache === undefined) {
       cache = new Map();
@@ -58,7 +58,7 @@ function observed<T extends { expectedEdit?: BillEditExpected | null }>(
         draftRevision: order.draftRevision,
       });
     expectedEdit = cache.get(id!)!;
-    operatorId ??= order.editorId ?? OPERATOR;
+    operatorId ??= order.editorId ?? order.openedBy;
   }
   return {
     operatorId,

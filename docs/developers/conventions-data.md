@@ -5429,8 +5429,8 @@ both the venue-service exported descriptor and the JSON manifest. The normal pus
 `scripts/append-only-migration-sets.test.ts`; after the descriptor fix, CI refused the descriptor/manifest
 equality in `packages/composition/src/composition.test.ts`. Add the table to both inputs: the descriptor derives
 its list with `appendOnlyTablesIn(...)` over its set's classification, and the manifest carries the same
-name. (Since A760 venue-service has no set of its own; its tables, `sale_receipt_headers` among
-them, are in core's, whose `CORE_MIGRATIONS` derives its list from `CORE_CLASSIFICATION`.)
+name. Since A760, core hosts venue-service tables and derives its append-only list from
+`CORE_CLASSIFICATION`. The issued receipt facts now live on the append-only sale.
 
 After those fixes, `pnpm exec vitest run scripts/append-only-migration-sets.test.ts` passed 15 tests,
 `pnpm --filter @waitron/composition exec vitest run src/composition.test.ts` passed 20, and

@@ -37,6 +37,7 @@ describe("unpaid_departures", () => {
   beforeAll(async () => {
     const db = suite.db;
     await seedPerson(db, { id: STAFF });
+    await seedPerson(db, { id: SUPERVISOR, displayName: "Supervisor" });
     await seedVenue(db, {
       name: "Loc",
       invoiceLocales: ["es"],
@@ -155,6 +156,8 @@ describe("unpaid_departures", () => {
     ["bill", { workingOrderId: MISSING }],
     ["sale", { saleId: MISSING }],
     ["device", { deviceId: MISSING }],
+    ["recorder", { recordedBy: MISSING }],
+    ["authoriser", { authorizedBy: MISSING }],
   ] as const)("refuses a departure naming no %s", async (_, overrides) => {
     const bill = await invoicedBill();
     const error = await captureError(() =>

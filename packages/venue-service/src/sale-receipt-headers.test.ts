@@ -6,7 +6,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
 
-// Core's set carries `sale_receipt_headers` among its append-only tables.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 let db: Database;
 beforeAll(() => {
@@ -25,6 +24,9 @@ describe("sale receipt header snapshot", () => {
       .insert(invoiceSeries)
       .values({ nodeId, code: "RC", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
+    const department = await db.execute<{ id: string }>(sql`
+      select id from departments `);
+    const departmentId = department.rows[0]!.id;
     const [sale] = await db
       .insert(sales)
       .values({
@@ -40,16 +42,11 @@ describe("sale receipt header snapshot", () => {
         invoiceLocales: ["en-GB"],
         fiscalBackend: "none",
         fiscalState: "recorded",
+        receiptDepartmentId: departmentId,
+        receiptTradingName: "Corner Kitchen",
+        receiptPrintsTradingName: true,
       })
       .returning({ id: sales.id });
-    const department = await db.execute<{ id: string }>(sql`
-      select id from departments `);
-    const departmentId = department.rows[0]!.id;
-
-    await db.execute(sql`
-      insert into sale_receipt_headers
-        (sale_id, department_id, trading_name, print_trading_name)
-      values (${sale!.id}, ${departmentId}, 'Corner Kitchen', 1)`);
     await db.execute(
       sql`update departments set trading_name = 'Renamed' where id = ${departmentId}`,
     );
@@ -59,18 +56,17 @@ describe("sale receipt header snapshot", () => {
       trading_name: string;
       print_trading_name: number;
     }>(sql`
-      select department_id, trading_name, print_trading_name
-      from sale_receipt_headers where sale_id = ${sale!.id}`);
+      select receipt_department_id as department_id, receipt_trading_name as trading_name,
+        receipt_prints_trading_name as print_trading_name
+      from sales where id = ${sale!.id}`);
     expect(rows.rows).toEqual([
       { department_id: departmentId, trading_name: "Corner Kitchen", print_trading_name: 1 },
     ]);
     expect(() =>
-      db.execute(
-        sql`update sale_receipt_headers set trading_name = 'Renamed' where sale_id = ${sale!.id}`,
-      ),
-    ).toThrow("sale_receipt_headers is append-only");
-    expect(() =>
-      db.execute(sql`delete from sale_receipt_headers where sale_id = ${sale!.id}`),
-    ).toThrow("sale_receipt_headers is append-only");
+      db.execute(sql`update sales set receipt_trading_name = 'Renamed' where id = ${sale!.id}`),
+    ).toThrow("sales is append-only");
+    expect(() => db.execute(sql`delete from sales where id = ${sale!.id}`)).toThrow(
+      "sales is append-only",
+    );
   });
 });

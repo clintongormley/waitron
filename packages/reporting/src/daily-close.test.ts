@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   departments,
-  saleReceiptHeaders,
   invoiceSeries,
   saleLines,
   saleSettlements,
@@ -88,17 +87,16 @@ describe("computeDailyClose", () => {
     ]);
 
     const sale = await seedSale(suite.db, venue, {
+      receipt: {
+        receiptDepartmentId: restaurant!.id,
+        receiptTradingName: "Restaurant",
+        receiptPrintsTradingName: true,
+      },
       invoiceNumber: 1,
       workingOrderId: bill.orderId,
       issuedAt: at,
       total: "100.00",
       lines: [{ vatRate: "10.00", lineTotal: "100.00" }],
-    });
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: sale,
-      departmentId: restaurant!.id,
-      tradingName: "Restaurant",
-      printTradingName: true,
     });
     await settleOrder(suite.db, bill.orderId, at);
     // The tender mirrors the payment; it must not count a second time.
@@ -127,15 +125,14 @@ describe("computeDailyClose", () => {
         applied: "20.00",
         tip: "1.00",
         at: "2026-08-03T10:00:00.000Z",
+        receipt: {
+          receiptDepartmentId: bar!.id,
+          receiptTradingName: "Bar",
+          receiptPrintsTradingName: false,
+        },
         invoiceNumber: 2,
       },
     );
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: direct.saleId,
-      departmentId: bar!.id,
-      tradingName: "Bar",
-      printTradingName: false,
-    });
     await seedTenderRefund(suite.db, direct, {
       applied: "5.00",
       tip: "0.00",
@@ -198,18 +195,17 @@ describe("computeDailyClose", () => {
       .values({ name: "Dining", tradingName: "Dining" })
       .returning();
     const { orderId } = await seedOpenOrder(suite.db, venue, 1);
-    const saleId = await seedSale(suite.db, venue, {
+    await seedSale(suite.db, venue, {
+      receipt: {
+        receiptDepartmentId: department!.id,
+        receiptTradingName: "Dining",
+        receiptPrintsTradingName: true,
+      },
       invoiceNumber: 1,
       workingOrderId: orderId,
       issuedAt: "2026-08-03T10:00:00.000Z",
       total: "10.00",
       lines: [{ vatRate: "10.00", lineTotal: "10.00" }],
-    });
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId,
-      departmentId: department!.id,
-      tradingName: "Dining",
-      printTradingName: true,
     });
     await settleOrder(suite.db, orderId, "2026-08-04T10:00:00.000Z");
     expect((await run(input())).departmentTakings).toEqual([

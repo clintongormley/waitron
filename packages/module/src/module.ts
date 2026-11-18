@@ -937,7 +937,14 @@ export interface VenueServiceContribution {
     workingOrderId: string,
     to: { departmentId: string; serviceMode: ServiceMode },
   ): Promise<void>;
-  recordSaleReceiptHeader(tx: Transaction, saleId: string, zoneId: string | null): Promise<void>;
+  saleReceiptHeader(
+    tx: Transaction,
+    zoneId: string | null,
+  ): Promise<{
+    departmentId: string | null;
+    tradingName: string;
+    printsTradingName: boolean;
+  }>;
   readDepartmentReceiptPolicy(
     tx: Transaction,
     departmentId: string,

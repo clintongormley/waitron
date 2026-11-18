@@ -9,13 +9,12 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billPayments,
   devices,
   printJobs,
-  saleReceiptGuests,
   sales,
   withTransaction,
   type Database,
@@ -271,10 +270,15 @@ async function sell(
 async function storedGuests(db: Database, workingOrderId: string) {
   return withTransaction(db, (tx) =>
     tx
-      .select({ guests: saleReceiptGuests.guestCount })
-      .from(saleReceiptGuests)
-      .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
-      .where(eq(sales.workingOrderId, workingOrderId)),
+      .select({ guests: sales.receiptGuestCount })
+      .from(sales)
+      .where(
+        and(
+          eq(sales.workingOrderId, workingOrderId),
+          isNotNull(sales.receiptTradingName),
+          isNull(sales.counterpartyTaxId),
+        ),
+      ),
   );
 }
 
@@ -293,7 +297,6 @@ async function receipts(db: Database): Promise<string[]> {
 
 const WRITTEN_TABLES = [
   "sales",
-  "sale_receipt_guests",
   "print_jobs",
   "drawer_opens",
   "working_orders",

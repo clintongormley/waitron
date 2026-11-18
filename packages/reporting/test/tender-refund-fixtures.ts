@@ -18,10 +18,12 @@ export async function seedRefundableSale(
     billPaymentId?: string;
     vatRate?: string;
     base?: string;
+    receipt?: Parameters<typeof seedSale>[2]["receipt"];
   },
 ) {
   const saleId = await seedSale(db, venue, {
     invoiceNumber: input.invoiceNumber,
+    ...(input.receipt && { receipt: input.receipt }),
     issuedAt: input.at,
     total: input.applied,
     lines: [{ vatRate: input.vatRate ?? "0.00", lineTotal: input.base ?? input.applied }],

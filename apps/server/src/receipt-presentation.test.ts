@@ -17,7 +17,7 @@ import {
   seedDepartmentReceipt,
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
-import { departments, saleReceiptHeaders } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { uploadImage, saveImage, readPresentations } from "@waitron/media";
@@ -57,15 +57,15 @@ async function fixture(header: "department" | "null" | "absent" = "department", 
       invoiceLocales: ["es-ES"],
       fiscalBackend: "none",
       fiscalState: "not_applicable",
+      ...(header === "absent"
+        ? {}
+        : {
+            receiptDepartmentId: header === "null" ? null : department!.id,
+            receiptTradingName: "Recorded brand",
+            receiptPrintsTradingName: true,
+          }),
     })
     .returning();
-  if (header !== "absent")
-    await db.insert(saleReceiptHeaders).values({
-      saleId: sale!.id,
-      departmentId: header === "null" ? null : department!.id,
-      tradingName: "Recorded brand",
-      printTradingName: true,
-    });
 
   const authored = async (receipt: Record<string, unknown>) => {
     await seedDepartmentReceipt(db, department!.id, receipt);

@@ -13,7 +13,6 @@ import {
   parties,
   partyTables,
   printJobs,
-  saleReceiptGuests,
   serviceCommands,
   sales,
   saleLines,
@@ -839,22 +838,17 @@ async function filed(billIds: string[]) {
       .from(tenders)
       .where(inArray(tenders.saleId, saleIds))
       .orderBy(tenders.id),
-    guests: await venue.db
-      .select()
-      .from(saleReceiptGuests)
-      .where(inArray(saleReceiptGuests.saleId, saleIds))
-      .orderBy(saleReceiptGuests.saleId),
     receipts,
   };
 }
 
 describe("sending a paid bill to the counter changes nothing filed", () => {
-  it("keeps the filed record, the sale, its lines, tenders, guests and receipt as they were", async () => {
+  it("keeps the filed record, the sale, its lines, tenders and receipt as they were", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
     const body = await collect(t.partyId, await bodyFor(t));
     const before = await filed(t.billIds);
     expect(before.registros.length).toBeGreaterThan(0);
-    expect(before.guests.length).toBeGreaterThan(0);
+    expect(before.sales.some((sale) => sale.receiptTradingName !== null)).toBe(true);
     expect(before.receipts.every((receipt) => receipt.status === 200)).toBe(true);
 
     expect(await post(t.partyId, body)).toEqual({ status: 200, body: { state: "closed" } });

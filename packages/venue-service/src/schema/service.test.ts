@@ -5,7 +5,6 @@ import {
   kitchenNotices,
   routingCellPeriods,
   routingCells,
-  saleReceiptHeaders,
   withTransaction,
   floorZones,
 } from "@waitron/db";
@@ -42,14 +41,6 @@ const EXPECTED: Record<
       "departments_dining_starts_as_ck",
     ],
     indexes: ["departments_name_key", "departments_one_default_key"],
-    uniqueConstraints: [],
-    primaryKeys: [],
-  },
-  sale_receipt_headers: {
-    table: saleReceiptHeaders,
-    foreignKeys: ["sale_receipt_headers_sale_fk", "sale_receipt_headers_department_fk"],
-    checks: [],
-    indexes: [],
     uniqueConstraints: [],
     primaryKeys: [],
   },
@@ -124,7 +115,7 @@ const EXPECTED: Record<
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
   it("covers the remaining service tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(5);
+    expect(Object.keys(EXPECTED)).toHaveLength(4);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

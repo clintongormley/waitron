@@ -292,7 +292,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   convenio_config: ["location_id"],
 };
 
-const RENAMED_COLUMNS: MadridColumnRenames = { sale_receipt_guests: { guests: "guest_count" } };
+const RENAMED_COLUMNS: MadridColumnRenames = {};
 /** Tables added after the capture; the seed writes no row to them. */
 const ADDED_TABLES = [
   "sign_in_challenges",
@@ -324,6 +324,8 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "sale_receipt_guests",
+  "sale_receipt_headers",
   "order_group_events",
   "order_draft_events",
   "working_line_contexts",
@@ -1047,6 +1049,58 @@ for (const locale of ["en", "es"] as const) {
       for (const row of Object.values(salesTable.rows)) {
         row.replaces_original = 0;
         row.supply_day = null;
+      }
+      const saleReceiptColumns = [
+        ["receipt_guest_count", "INTEGER"],
+        ["receipt_department_id", "TEXT"],
+        ["receipt_trading_name", "TEXT"],
+        ["receipt_prints_trading_name", "INTEGER"],
+      ] as const;
+      salesTable.columns.splice(
+        salesTable.columns.findIndex((column) => column.name === "working_order_id"),
+        0,
+        ...saleReceiptColumns.map(([name, type]) => ({
+          name,
+          type,
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        })),
+      );
+      for (const row of Object.values(salesTable.rows))
+        for (const [name] of saleReceiptColumns) row[name] = null;
+      for (const [name, added] of [
+        [
+          "sales",
+          [
+            ["receipt_department_id", "departments", "NO ACTION"],
+            ["operator_id", "persons", "RESTRICT"],
+            ["authorized_by", "persons", "RESTRICT"],
+          ],
+        ],
+        ["sale_voids", [["voided_by", "persons", "RESTRICT"]]],
+        [
+          "unpaid_departures",
+          [
+            ["authorized_by", "persons", "RESTRICT"],
+            ["recorded_by", "persons", "RESTRICT"],
+          ],
+        ],
+      ] as const) {
+        const table = expected[phase].tables[name]!;
+        table.foreignKeys = [
+          ...added.map(([from, table, on_delete], id) => ({
+            id,
+            seq: 0,
+            table,
+            from,
+            to: "id",
+            on_update: "NO ACTION",
+            on_delete,
+            match: "NONE",
+          })),
+          ...table.foreignKeys.map((key) => ({ ...key, id: key.id + added.length })),
+        ];
       }
       records.foreignKeys.push({
         id: 4,

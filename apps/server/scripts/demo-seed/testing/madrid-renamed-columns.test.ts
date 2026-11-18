@@ -22,7 +22,7 @@ const foreignKey = {
 const plainKey = '{"guests":4,"sale_id":"@sales:a"}';
 const original: CanonicalMadridSemantics = {
   tables: {
-    sale_receipt_guests: {
+    working_order_covers: {
       columns: [column("sale_id"), column("guests")],
       foreignKeys: [foreignKey],
       rows: { [plainKey]: { sale_id: "@sales:a", guests: 4 } },
@@ -35,14 +35,14 @@ const original: CanonicalMadridSemantics = {
   },
 };
 const renames: MadridColumnRenames = {
-  sale_receipt_guests: { guests: "guest_count", sale_id: "receipt_sale_id" },
+  working_order_covers: { guests: "guest_count", sale_id: "receipt_sale_id" },
   tables_with_id: { guests: "guest_count" },
 };
 
 it("renames the column, its foreign key and its row cells, leaving the capture untouched", () => {
   const before = structuredClone(original);
   const updated = madridWithRenamedColumns(original, renames);
-  const receipts = updated.tables.sale_receipt_guests!;
+  const receipts = updated.tables.working_order_covers!;
   expect(receipts.columns.map((entry) => entry.name)).toEqual(["receipt_sale_id", "guest_count"]);
   expect(receipts.foreignKeys).toEqual([{ ...foreignKey, from: "receipt_sale_id" }]);
   expect(receipts.rows).toEqual({
@@ -73,19 +73,19 @@ it("sorts re-keyed rows as the canonical capture does", () => {
 
 it.each<[MadridColumnRenames, string]>([
   [{ missing_table: { guests: "guest_count" } }, "missing_table.guests"],
-  [{ sale_receipt_guests: { missing: "guest_count" } }, "sale_receipt_guests.missing"],
-  [{ sale_receipt_guests: { guests: "sale_id" } }, "sale_receipt_guests.guests"],
-  [{ sale_receipt_guests: { guests: "guests" } }, "sale_receipt_guests.guests"],
+  [{ working_order_covers: { missing: "guest_count" } }, "working_order_covers.missing"],
+  [{ working_order_covers: { guests: "sale_id" } }, "working_order_covers.guests"],
+  [{ working_order_covers: { guests: "guests" } }, "working_order_covers.guests"],
   [
-    { sale_receipt_guests: { guests: "guest_count", sale_id: "guest_count" } },
-    "sale_receipt_guests.sale_id",
+    { working_order_covers: { guests: "guest_count", sale_id: "guest_count" } },
+    "working_order_covers.sale_id",
   ],
   [
-    { sale_receipt_guests: { guests: "guest_count", guest_count: "count" } },
-    "sale_receipt_guests.guest_count",
+    { working_order_covers: { guests: "guest_count", guest_count: "count" } },
+    "working_order_covers.guest_count",
   ],
   [{ missing_table: {} }, "missing_table"],
-  [{ sale_receipt_guests: {} }, "sale_receipt_guests"],
+  [{ working_order_covers: {} }, "working_order_covers"],
 ])("refuses an unused or invalid column rename %#", (invalid, cell) => {
   expect(() => madridWithRenamedColumns(original, invalid)).toThrow(
     `unused or invalid Madrid column rename: ${cell}`,
@@ -94,16 +94,16 @@ it.each<[MadridColumnRenames, string]>([
 
 it("renames incoming foreign-key target columns", () => {
   const capture = structuredClone(original);
-  capture.tables.sale_receipt_guests!.foreignKeys.push({
+  capture.tables.working_order_covers!.foreignKeys.push({
     ...foreignKey,
     table: "tables_with_id",
     to: "guests",
   });
   const result = madridWithRenamedColumns(capture, { tables_with_id: { guests: "guest_count" } });
-  expect(result.tables.sale_receipt_guests!.foreignKeys[1]).toEqual({
+  expect(result.tables.working_order_covers!.foreignKeys[1]).toEqual({
     ...foreignKey,
     table: "tables_with_id",
     to: "guest_count",
   });
-  expect(capture.tables.sale_receipt_guests!.foreignKeys[1]!.to).toBe("guests");
+  expect(capture.tables.working_order_covers!.foreignKeys[1]!.to).toBe("guests");
 });

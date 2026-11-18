@@ -101,11 +101,10 @@ describe("CORE_CHANGE_SOURCES", () => {
   });
 });
 
-/** The append-only tables core took in from menu, venue-service, adjustments and handover. */
+/** The append-only tables core took in from menu, adjustments and handover. */
 const FOLDED_APPEND_ONLY = [
   "menu_versions",
   "menu_version_images",
-  "sale_receipt_headers",
   "adjustments",
   "adjustment_refunds",
   "adjustment_lines",
@@ -132,13 +131,6 @@ const ROWS: Record<(typeof FOLDED_APPEND_ONLY)[number], { insert: SQL[]; update:
       sql`insert into menu_version_images (version_id, filename) values ('version-1', ${IMAGE})`,
     ],
     update: sql`update menu_version_images set version_id = 'version-2'`,
-  },
-  sale_receipt_headers: {
-    insert: [
-      sql`insert into sale_receipt_headers (sale_id, department_id, trading_name, print_trading_name)
-          values ('sale-1', null, 'Bar', 1)`,
-    ],
-    update: sql`update sale_receipt_headers set trading_name = 'Other'`,
   },
   adjustments: {
     insert: [

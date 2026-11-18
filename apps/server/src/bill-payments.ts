@@ -83,7 +83,7 @@ import { issueMoment, pinnedAt } from "./issue-moment.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
-import { recordSaleReceiptFacts, type GuestCountChoice } from "./receipt-guests.js";
+import { saleReceiptFacts, type GuestCountChoice } from "./receipt-guests.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import {
@@ -816,6 +816,12 @@ async function issueWhenFullyPaid(
   const recorded =
     outstanding === undefined
       ? await recordSale(tx, deps.backend, {
+          receipt: await saleReceiptFacts(
+            tx,
+            workingOrderId,
+            selected.sale.counterparty,
+            options.guestCount,
+          ),
           origin: cfg.origin,
           nodeId: cfg.nodeId,
           ...selected.sale,
@@ -833,11 +839,6 @@ async function issueWhenFullyPaid(
   const { saleId, fiscal } = recorded;
   if (fiscal !== undefined) {
     await linkSaleDishes(tx, saleId, stored.identities);
-    await recordSaleReceiptFacts(
-      tx,
-      { saleId, workingOrderId, counterparty: selected.sale.counterparty },
-      options.guestCount,
-    );
   }
   await settleSale(tx, { saleId, tenders: tendersOfBill });
   await linkCardBillPayments(tx, received, saleId);

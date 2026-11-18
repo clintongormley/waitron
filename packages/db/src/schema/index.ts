@@ -25,7 +25,6 @@ export * from "./print-agents.js";
 export * from "./printers.js";
 export * from "./print-jobs.js";
 export * from "./receipt-reprints.js";
-export * from "./sale-receipt-guests.js";
 export * from "./invoice-pdf-downloads.js";
 export * from "./invoice-corrections.js";
 export * from "./invoice-correction-refunds.js";

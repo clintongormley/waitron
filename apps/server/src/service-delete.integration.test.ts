@@ -853,7 +853,6 @@ const HISTORY_ROWS = [
   "tenders",
   "sale_settlements",
   "bill_payments",
-  "sale_receipt_headers",
   "registros_facturacion",
   "cadenas",
   "order_amendments",
@@ -1130,10 +1129,7 @@ it.each(["zone", "department"] as const)(
         department_id: f.departmentId,
       });
       const sale = rows("sales").find((row) => row.working_order_id === orderId)!;
-      expect(sale).toBeDefined();
-      expect(rows("sale_receipt_headers").find((row) => row.sale_id === sale.id)).toMatchObject({
-        department_id: f.departmentId,
-      });
+      expect(sale).toMatchObject({ receipt_department_id: f.departmentId });
       expect(rows("registros_facturacion").filter((row) => row.sale_id === sale.id)).not.toEqual(
         [],
       );
@@ -1147,11 +1143,9 @@ it.each(["zone", "department"] as const)(
     expect(unaffectedContext).toMatchObject({ zone_id: venue.counter.zoneId });
     expect(unaffectedContext.department_id).not.toBe(f.departmentId);
     const unaffectedSale = rows("sales").find((row) => row.working_order_id === unaffected)!;
-    expect(unaffectedSale).toBeDefined();
-    const unaffectedHeader = rows("sale_receipt_headers").find(
-      (row) => row.sale_id === unaffectedSale.id,
-    )!;
-    expect(unaffectedHeader).toMatchObject({ department_id: unaffectedContext.department_id });
+    expect(unaffectedSale).toMatchObject({
+      receipt_department_id: unaffectedContext.department_id,
+    });
     const unaffectedLines = rows("working_order_lines").filter(
       (row) => row.working_order_id === unaffected,
     );
@@ -1169,7 +1163,6 @@ it.each(["zone", "department"] as const)(
       "order_amendments",
       "working_order_lines",
       "orderContexts",
-      "sale_receipt_headers",
       "department_transfer_requests",
       "time_entries",
       "daily_closes",
@@ -1180,7 +1173,7 @@ it.each(["zone", "department"] as const)(
     await remove();
     const retained = await run(retainedHistory);
     expect(retained.orderContexts).toContainEqual(unaffectedContext);
-    expect(retained.sale_receipt_headers).toContainEqual(unaffectedHeader);
+    expect(retained.sales).toContainEqual(unaffectedSale);
     for (const line of unaffectedLines) expect(retained.working_order_lines).toContainEqual(line);
     expect(retained).toEqual(history);
     const after = await run(completeSnapshot);

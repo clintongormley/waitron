@@ -11,7 +11,7 @@ import {
   seedZone,
   seedDepartmentReceipt,
 } from "@waitron/db/testing/seed.js";
-import { departments, saleReceiptHeaders } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { resolveInvoiceEmailContact } from "./invoice-email-contact.js";
 
 const suite = useVenueDb({
@@ -67,14 +67,11 @@ async function fixture(nullHeader = false) {
       invoiceLocales: ["es-ES"],
       fiscalBackend: "none",
       fiscalState: "not_applicable",
+      receiptDepartmentId: nullHeader ? null : primary!.id,
+      receiptTradingName: "Saved",
+      receiptPrintsTradingName: true,
     })
     .returning();
-  await suite.db.insert(saleReceiptHeaders).values({
-    saleId: sale!.id,
-    departmentId: nullHeader ? null : primary!.id,
-    tradingName: "Saved",
-    printTradingName: true,
-  });
   return {
     primary: primary!.id,
     fallback: fallback!.id,

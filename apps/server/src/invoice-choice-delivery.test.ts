@@ -12,7 +12,7 @@ import {
   seedDepartmentReceipt,
 } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
-import { departments, saleReceiptHeaders } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { checkedInvoiceChoiceDelivery } from "./invoice-choice-delivery.js";
 import type { InvoicePrinter } from "./receipt-print.js";
@@ -71,14 +71,11 @@ async function fixture(nullHeader = false) {
       invoiceLocales: ["es-ES"],
       fiscalBackend: "none",
       fiscalState: "not_applicable",
+      receiptDepartmentId: nullHeader ? null : primary!.id,
+      receiptTradingName: "Saved",
+      receiptPrintsTradingName: true,
     })
     .returning();
-  await suite.db.insert(saleReceiptHeaders).values({
-    saleId: sale!.id,
-    departmentId: nullHeader ? null : primary!.id,
-    tradingName: "Saved",
-    printTradingName: true,
-  });
   return {
     cfg,
     nodeId: brandNodeId(nodeId),

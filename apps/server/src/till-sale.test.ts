@@ -51,7 +51,7 @@ import {
   rateLines,
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
-import { departments, saleReceiptHeaders } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -3169,6 +3169,12 @@ describe("receipt presentation sources", () => {
     });
     const sale = await withTransaction(suite.db, (tx) =>
       recordSale(tx, backend, {
+        receipt: {
+          guestCount: null,
+          departmentId: null,
+          tradingName: "Must not borrow this name",
+          printsTradingName: true,
+        },
         operationDescription: "Venta en establecimiento",
         origin: cfg.origin,
         nodeId: cfg.nodeId,
@@ -3193,12 +3199,6 @@ describe("receipt presentation sources", () => {
         ],
       }),
     );
-    await suite.db.insert(saleReceiptHeaders).values({
-      saleId: sale.saleId,
-      departmentId: null,
-      tradingName: "Must not borrow this name",
-      printTradingName: true,
-    });
     const noDepartment = await withTransaction(suite.db, (tx) =>
       readReceiptPresentation(tx, sale.saleId, "es-ES", false),
     );
@@ -3244,7 +3244,7 @@ describe("receipt presentation sources", () => {
         cfg,
         req,
       );
-      const [saved] = await suite.db.select().from(saleReceiptHeaders);
+      const [saved] = await suite.db.select({ saleId: sales.id }).from(sales);
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
       const hiddenDepartment = source !== "venue";
       try {

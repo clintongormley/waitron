@@ -181,6 +181,10 @@ export async function seedSale(
     issuedOffsetMinutes?: number;
     /** The bill this invoice was issued for; absent means a walk-up sale with no order. */
     workingOrderId?: string;
+    receipt?: Pick<
+      typeof sales.$inferInsert,
+      "receiptDepartmentId" | "receiptTradingName" | "receiptPrintsTradingName"
+    >;
   },
 ): Promise<SaleId> {
   const [row] = await db
@@ -205,6 +209,7 @@ export async function seedSale(
       correctsSaleId: opts.correctsSaleId,
       replacesOriginal: opts.replacesOriginal ?? false,
       supplyDay: opts.supplyDay ?? null,
+      ...opts.receipt,
       workingOrderId: opts.workingOrderId ?? null,
     })
     .returning({ id: sales.id });

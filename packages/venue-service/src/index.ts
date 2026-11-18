@@ -18,7 +18,6 @@ export {
   partyAllergyGuests,
   routingCellPeriods,
   routingCells,
-  saleReceiptHeaders,
   seasons,
   SERVICE_STEP_STARTS,
   serviceStepCompletions,

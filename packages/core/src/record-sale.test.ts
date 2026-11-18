@@ -34,7 +34,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
@@ -52,6 +52,23 @@ const suite = useVenueDb({
 
 beforeEach(async () => {
   ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
+});
+
+it("writes the receipt facts in the sale's own row", async () => {
+  const receipt = {
+    guestCount: 3,
+    departmentId: null,
+    tradingName: "Counter",
+    printsTradingName: true,
+  };
+  const { saleId } = await run(new FakeFiscalBackend(suite.db), { receipt });
+  const [sale] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+  expect(sale).toMatchObject({
+    receiptGuestCount: 3,
+    receiptDepartmentId: null,
+    receiptTradingName: "Counter",
+    receiptPrintsTradingName: true,
+  });
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -478,6 +495,7 @@ describe("recordSale — operator attribution", () => {
   const OPERATOR_ID = "11111111-1111-4111-8111-111111111111";
 
   it("stamps input.operatorId onto sales.operator_id when supplied", async () => {
+    await seedPerson(suite.db, { id: OPERATOR_ID, displayName: "Sale operator" });
     const { saleId } = await run(new FakeFiscalBackend(suite.db), { operatorId: OPERATOR_ID });
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(row?.operatorId).toBe(OPERATOR_ID);

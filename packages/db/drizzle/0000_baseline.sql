@@ -914,14 +914,6 @@ CREATE TABLE `receipt_reprints` (
 --> statement-breakpoint
 CREATE INDEX `receipt_reprints_sale_idx` ON `receipt_reprints` (`sale_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `receipt_reprints_job_uq` ON `receipt_reprints` (`print_job_id`);--> statement-breakpoint
-CREATE TABLE `sale_receipt_guests` (
-	`sale_id` text PRIMARY KEY NOT NULL,
-	`guest_count` integer,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "sale_receipt_guests_guest_count_ck" CHECK("sale_receipt_guests"."guest_count" is null or (typeof("sale_receipt_guests"."guest_count") = 'integer' and "sale_receipt_guests"."guest_count" between 1 and 999))
-);
---> statement-breakpoint
 CREATE TABLE `invoice_pdf_downloads` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,
@@ -1374,12 +1366,19 @@ CREATE TABLE `sales` (
 	`taxpayer_domicile` text,
 	`authorized_by` text,
 	`operator_id` text,
+	`receipt_guest_count` integer,
+	`receipt_department_id` text,
+	`receipt_trading_name` text,
+	`receipt_prints_trading_name` integer,
 	`working_order_id` text,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`series_id`) REFERENCES `invoice_series`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`corrects_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`authorized_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`operator_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`receipt_department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "sales_replaces_original_ck" CHECK("sales"."replaces_original" = 0 or "sales"."corrects_sale_id" is not null),
 	CONSTRAINT "sales_supply_day_ck" CHECK("sales"."supply_day" is null or "sales"."replaces_original" = 1),
 	CONSTRAINT "sales_total_ck" CHECK("sales"."total" >= 0 or "sales"."corrects_sale_id" is not null),
@@ -1388,11 +1387,15 @@ CREATE TABLE `sales` (
 	CONSTRAINT "sales_locale_member_ck" CHECK(instr("sales"."invoice_locales", '"' || "sales"."locale" || '"') > 0),
 	CONSTRAINT "sales_issued_offset_ck" CHECK("sales"."issued_offset_minutes" between -840 and 840),
 	CONSTRAINT "sales_fiscal_state_ck" CHECK("sales"."fiscal_state" in ('recorded', 'not_applicable')),
+	CONSTRAINT "sales_receipt_guest_count_ck" CHECK("sales"."receipt_guest_count" is null or (typeof("sales"."receipt_guest_count") = 'integer' and "sales"."receipt_guest_count" between 1 and 999)),
+	CONSTRAINT "sales_receipt_header_ck" CHECK(("sales"."receipt_trading_name" is null) = ("sales"."receipt_prints_trading_name" is null)
+        and ("sales"."receipt_department_id" is null or "sales"."receipt_trading_name" is not null)),
+	CONSTRAINT "sales_receipt_guest_count_recorded_ck" CHECK("sales"."receipt_guest_count" is null or "sales"."receipt_trading_name" is not null),
 	CONSTRAINT "sales_source_ck" CHECK("sales"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script')),
 	CONSTRAINT "sales_source_device_ck" CHECK(("sales"."source" = 'device') = ("sales"."device_id" is not null))
 );
 --> statement-breakpoint
-CREATE INDEX `sales_tenant_issued_idx` ON `sales` (`issued_at`);--> statement-breakpoint
+CREATE INDEX `sales_issued_idx` ON `sales` (`issued_at`);--> statement-breakpoint
 CREATE INDEX `sales_fiscal_state_idx` ON `sales` (`fiscal_state`);--> statement-breakpoint
 CREATE INDEX `sales_corrects_idx` ON `sales` (`corrects_sale_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `sales_one_replacement_uq` ON `sales` (`corrects_sale_id`) WHERE "sales"."replaces_original" = 1;--> statement-breakpoint
@@ -1423,7 +1426,8 @@ CREATE TABLE `sale_voids` (
 	`reason` text NOT NULL,
 	`voided_at` text NOT NULL,
 	`voided_by` text,
-	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict
+	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`voided_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict
 );
 --> statement-breakpoint
 CREATE INDEX `sale_voids_voided_at_idx` ON `sale_voids` (`voided_at`);--> statement-breakpoint
@@ -1444,6 +1448,8 @@ CREATE TABLE `unpaid_departures` (
 	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`recorded_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`authorized_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "unpaid_departures_amount_ck" CHECK("unpaid_departures"."amount" > 0),
 	CONSTRAINT "unpaid_departures_source_ck" CHECK("unpaid_departures"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')),
 	CONSTRAINT "unpaid_departures_source_device_ck" CHECK(("unpaid_departures"."source" = 'device') = ("unpaid_departures"."device_id" is not null))
@@ -2344,15 +2350,6 @@ CREATE TABLE `departments` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `departments_name_key` ON `departments` (`name`) WHERE "departments"."active" = 1;--> statement-breakpoint
 CREATE UNIQUE INDEX `departments_one_default_key` ON `departments` (`is_default`) WHERE "departments"."is_default";--> statement-breakpoint
-CREATE TABLE `sale_receipt_headers` (
-	`sale_id` text PRIMARY KEY NOT NULL,
-	`department_id` text,
-	`trading_name` text NOT NULL,
-	`print_trading_name` integer NOT NULL,
-	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `kitchen_notices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`station_id` text NOT NULL,
