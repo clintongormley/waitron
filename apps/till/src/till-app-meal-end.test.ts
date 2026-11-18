@@ -42,7 +42,7 @@ const unservedRefusal = {
   workingOrderId: "wo-4",
   dishes: [
     { lineId: "line-1", dishName: "Paella", quantity: "1.000", released: true },
-    { lineId: "line-2", dishName: "Chuletón", quantity: "1.000", released: false },
+    { lineId: "line-2", dishName: "Ribeye", quantity: "1.000", released: false },
   ],
 };
 
@@ -503,7 +503,7 @@ describe("till-app: Print the bill with dishes not served", () => {
     await printBill(el);
 
     expect(text(warning(el))).toContain("Paella");
-    expect(text(warning(el))).toContain("Chuletón");
+    expect(text(warning(el))).toContain("Ribeye");
     expect(text(warning(el))).toContain(codeMessage("meal_end.unserved_dishes"));
     expect(printedNotice(el)).toBeNull();
     warning(el)!.querySelector<HTMLElement>("[data-mark-served]")!.click();
@@ -641,7 +641,7 @@ describe("till-app: Print the bill with dishes not served", () => {
     emit(shell(el), "screen-select", { screen: "order" });
     await flush(el, 6);
     expect(tableOrder(el).party!.revision).toBe(3);
-    expect(text(warning(el))).toContain("Chuletón");
+    expect(text(warning(el))).toContain("Ribeye");
     expect(text(warning(el))).not.toContain("Paella");
 
     warning(el)!.querySelector<HTMLElement>("[data-print-anyway]")!.click();
@@ -659,7 +659,7 @@ describe("till-app: Print the bill with dishes not served", () => {
 
     warning(el)!.querySelector<HTMLElement>("[data-mark-served]")!.click();
     await flush(el, 6);
-    expect(text(warning(el))).toContain("Chuletón");
+    expect(text(warning(el))).toContain("Ribeye");
     expect(text(warning(el))).not.toContain("Paella");
     warning(el)!.querySelector<HTMLElement>("[data-print-anyway]")!.click();
     await flush(el, 6);
