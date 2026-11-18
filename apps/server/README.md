@@ -595,8 +595,9 @@ The box uses those defaults; tests can pass a partial `timings` option as the th
 one of several routes the process serves (the till API under `/api/*`, the management-dashboard API
 under `/management-api/*`, and the Stripe webhook at `POST /webhooks/stripe` share the same
 Hono app). On the main box, the full response gives you `200` after the first pass if each duty has
-succeeded within its staleness budget. On a joined spare, the first pass is empty and gives you
-`200` with both duties marked `stale: false`. Follow the spare's copy progress separately.
+succeeded within its staleness budget. On a joined spare, the full response gives you `200` with
+both duties marked `stale: false` after its first pass, which is empty. Follow the spare's copy
+progress separately.
 
 For example, a main box with stale filing work responds with `503`.
 
