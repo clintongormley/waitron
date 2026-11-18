@@ -175,11 +175,11 @@ export {
   purchaseRegime,
   purchaseVatKind,
 } from "./schema/purchase-invoices.js";
-export { deviceProfiles } from "./schema/device-profiles.js";
 export {
-  deviceProfilePrinterRole,
-  deviceProfilePrinters,
-} from "./schema/device-profile-printers.js";
+  deviceProfiles,
+  type PrinterListRole,
+  type StoredPrinterLists,
+} from "./schema/device-profiles.js";
 export { customThemes } from "./schema/custom-themes.js";
 export {
   fiscalState,

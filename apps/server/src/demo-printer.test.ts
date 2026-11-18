@@ -1,3 +1,4 @@
+import { readProfilesListingPrinter } from "@waitron/layouts";
 import { createJobRunner, type JobRunner } from "./job-runner.js";
 import { fakeTimerDelay } from "./testing/fake-timer-delay.js";
 import type { ResourceChange } from "@waitron/shared";
@@ -5,7 +6,6 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
-  deviceProfilePrinters,
   deviceProfiles,
   devices,
   kitchenStations,
@@ -161,10 +161,7 @@ describe("the Demo printer", () => {
       paymentSlipPrinterIds: [],
     });
     expect(
-      await suite.db
-        .select()
-        .from(deviceProfilePrinters)
-        .where(eq(deviceProfilePrinters.printerId, demo!.printerId)),
+      await withTransaction(suite.db, (tx) => readProfilesListingPrinter(tx, demo!.printerId)),
     ).toEqual([]);
     expect(
       await suite.db

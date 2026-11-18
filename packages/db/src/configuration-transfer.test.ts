@@ -16,6 +16,49 @@ const stationRefusal = expect.objectContaining({
 });
 
 describe("validateCoreConfiguration", () => {
+  describe("profile printer lists", () => {
+    const printers = [
+      { id: "bar", kind: "receipt" },
+      { id: "office", kind: "a4" },
+    ];
+
+    it.each([
+      ["a non-text column", {}],
+      ["invalid JSON", "{"],
+      ["null instead of lists", "null"],
+      ["an array instead of lists", "[]"],
+      ["an unknown role", '{"office":{"ids":[],"defaultId":null}}'],
+      ["a null role", '{"receipt":null}'],
+      ["a scalar role", '{"receipt":true}'],
+      ["an array role", '{"receipt":[]}'],
+      ["an absent list", '{"receipt":{"defaultId":null}}'],
+      ["a non-string id", '{"receipt":{"ids":[1],"defaultId":null}}'],
+      ["an unknown id", '{"receipt":{"ids":["old"],"defaultId":null}}'],
+      ["a repeated id", '{"receipt":{"ids":["bar","bar"],"defaultId":null}}'],
+      ["an office printer for receipts", '{"receipt":{"ids":["office"],"defaultId":null}}'],
+      ["a default outside its list", '{"receipt":{"ids":[],"defaultId":"bar"}}'],
+    ])("refuses %s", (_description, printer_lists) => {
+      expect(() =>
+        validateCoreConfiguration({ printers, device_profiles: [{ printer_lists }] }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: "device_profiles.printer_lists" },
+        }),
+      );
+    });
+
+    it("accepts a printer shared by roles and an office printer for invoices", () => {
+      const printer_lists = JSON.stringify({
+        receipt: { ids: ["bar"], defaultId: null },
+        invoice: { ids: ["bar", "office"], defaultId: "office" },
+      });
+      expect(() =>
+        validateCoreConfiguration({ printers, device_profiles: [{}, { printer_lists }] }),
+      ).not.toThrow();
+    });
+  });
+
   describe.each(["picks_up_receipts", "picks_up_payment_slips"])("%s", (field) => {
     it.each([[null], [-1], [2], [0.5], ["1"], [true], [[]], [{}]])(
       "refuses a malformed flag %j",

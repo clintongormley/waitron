@@ -22,6 +22,14 @@ import { departments } from "./venue-service/service.js";
  */
 export const deviceFormFactorEnum = enumType(["till", "phone-portrait", "tablet-landscape", "kds"]);
 
+export const printerListRoles = ["receipt", "payment_slip", "cash_drawer", "invoice"] as const;
+export type PrinterListRole = (typeof printerListRoles)[number];
+
+/** An absent role has no choices or default. Each stored default is on its role's list. */
+export type StoredPrinterLists = Partial<
+  Record<PrinterListRole, { readonly ids: readonly string[]; readonly defaultId: string | null }>
+>;
+
 export interface DeviceProfileCardReaders {
   ids?: string[];
   defaultId?: string | null;
@@ -56,6 +64,8 @@ export const deviceProfiles = table(
     // With a department, NULL allows every zone and an empty list allows none.
     // The scope writer checks the zone ids. Deleting a zone removes it from the list.
     orderZoneIds: json<string[]>("order_zone_ids"),
+    // Printer ids have no foreign key. The product's Delete clears them before retiring a printer.
+    printerLists: json<StoredPrinterLists>("printer_lists").notNull().default({}),
     cardReaders: json<DeviceProfileCardReaders>("card_readers").notNull().default({}),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
@@ -66,6 +76,7 @@ export const deviceProfiles = table(
       .on(t.name)
       .where(sql`${t.retiredAt} is null`),
     check("device_profiles_form_factor_ck", enumCheck(t.formFactor)),
+    check("device_profiles_printer_lists_ck", jsonShapeCheck(t.printerLists, "object")),
     check("device_profiles_card_readers_ck", jsonShapeCheck(t.cardReaders, "object")),
     check(
       "device_profiles_kds_timeout_ck",

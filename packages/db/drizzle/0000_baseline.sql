@@ -1173,6 +1173,7 @@ CREATE TABLE `device_profiles` (
 	`order_department_id` text,
 	`order_starting_zone_id` text,
 	`order_zone_ids` text,
+	`printer_lists` text DEFAULT '{}' NOT NULL,
 	`card_readers` text DEFAULT '{}' NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
@@ -1180,6 +1181,7 @@ CREATE TABLE `device_profiles` (
 	FOREIGN KEY (`order_department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`order_starting_zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "device_profiles_form_factor_ck" CHECK("device_profiles"."form_factor" in ('till', 'phone-portrait', 'tablet-landscape', 'kds')),
+	CONSTRAINT "device_profiles_printer_lists_ck" CHECK(json_valid("device_profiles"."printer_lists") and json_type("device_profiles"."printer_lists") = 'object'),
 	CONSTRAINT "device_profiles_card_readers_ck" CHECK(json_valid("device_profiles"."card_readers") and json_type("device_profiles"."card_readers") = 'object'),
 	CONSTRAINT "device_profiles_kds_timeout_ck" CHECK("device_profiles"."form_factor" <> 'kds' or "device_profiles"."inactivity_timeout_seconds" is null),
 	CONSTRAINT "device_profiles_order_scope_ck" CHECK(("device_profiles"."order_department_id" is null) = ("device_profiles"."order_starting_zone_id" is null)
@@ -1188,20 +1190,6 @@ CREATE TABLE `device_profiles` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `device_profiles_live_name_key` ON `device_profiles` (`name`) WHERE "device_profiles"."retired_at" is null;--> statement-breakpoint
-CREATE TABLE `device_profile_printers` (
-	`id` text PRIMARY KEY NOT NULL,
-	`device_profile_id` text NOT NULL,
-	`printer_id` text NOT NULL,
-	`role` text NOT NULL,
-	`position` integer NOT NULL,
-	`is_default` integer DEFAULT false NOT NULL,
-	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "device_profile_printers_role_ck" CHECK("device_profile_printers"."role" in ('receipt', 'payment_slip', 'cash_drawer', 'invoice'))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `device_profile_printers_profile_role_default_key` ON `device_profile_printers` (`device_profile_id`,`role`) WHERE "device_profile_printers"."is_default" = 1;--> statement-breakpoint
-CREATE UNIQUE INDEX `device_profile_printers_profile_role_printer_key` ON `device_profile_printers` (`device_profile_id`,`role`,`printer_id`);--> statement-breakpoint
 CREATE TABLE `custom_themes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,

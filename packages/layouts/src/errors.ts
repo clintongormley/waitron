@@ -9,6 +9,7 @@ declare module "@waitron/shared" {
         | "bad_inactivity_timeout"
         | "shared_display_action"
         | "bad_starting_screen"
+        | "duplicate_printer"
         | "default_not_listed"
         | "no_cash_drawer";
       /** The printer list or default field a `default_not_listed` or `no_cash_drawer` names. */

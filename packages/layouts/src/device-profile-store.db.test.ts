@@ -6,7 +6,6 @@ import {
   staffRoles,
   deviceProfileAdmissionRoles,
   captureError,
-  deviceProfilePrinters,
   deviceProfiles,
   departments,
   devices,
@@ -183,12 +182,11 @@ describe("device-profile store against a real migrated database", () => {
       paymentSlipPrinterIds: [],
       ...NO_DRAWERS_OR_DEFAULTS,
     });
-    expect(
-      await suite.db
-        .select()
-        .from(deviceProfilePrinters)
-        .where(eq(deviceProfilePrinters.deviceProfileId, created.id)),
-    ).toEqual([]);
+    const [stored] = await suite.db
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, created.id));
+    expect(stored!.lists).toEqual({});
     expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(updated);
     expect(await inTx((tx) => listDeviceProfiles(tx))).toContainEqual(updated);
   });
@@ -676,11 +674,11 @@ describe("device-profile store against a real migrated database", () => {
     );
     await seedBoundDevice(created.id, false);
     await inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id }));
-    const listed = await suite.db
-      .select({ printerId: deviceProfilePrinters.printerId })
-      .from(deviceProfilePrinters)
-      .where(eq(deviceProfilePrinters.deviceProfileId, created.id));
-    expect(listed).toEqual([]);
+    const [stored] = await suite.db
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, created.id));
+    expect(stored!.lists).toEqual({});
   });
 
   it("translates a form-factor change on a profile an active device uses to device_profile.in_use", async () => {
@@ -1177,12 +1175,6 @@ describe("what can refuse a write to device_profiles", () => {
       },
       {
         child: "device_profile_kitchen_screens",
-        column: "device_profile_id",
-        parent: "device_profiles",
-        on_delete: "CASCADE",
-      },
-      {
-        child: "device_profile_printers",
         column: "device_profile_id",
         parent: "device_profiles",
         on_delete: "CASCADE",

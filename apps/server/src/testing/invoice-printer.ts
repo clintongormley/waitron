@@ -1,5 +1,5 @@
-import { and, count, eq } from "drizzle-orm";
-import { deviceProfilePrinters, type Transaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { deviceProfiles, type Transaction } from "@waitron/db";
 
 type Target =
   { printerId: string; pagePrinterId?: never } | { pagePrinterId: string; printerId?: never };
@@ -9,20 +9,22 @@ export async function listInvoicePrinter(
   tx: Transaction,
   input: { profileId: string; isDefault: boolean } & Target,
 ): Promise<void> {
-  const [listed] = await tx
-    .select({ n: count() })
-    .from(deviceProfilePrinters)
-    .where(
-      and(
-        eq(deviceProfilePrinters.deviceProfileId, input.profileId),
-        eq(deviceProfilePrinters.role, "invoice"),
-      ),
-    );
-  await tx.insert(deviceProfilePrinters).values({
-    deviceProfileId: input.profileId,
-    role: "invoice",
-    printerId: input.printerId ?? input.pagePrinterId,
-    position: listed?.n ?? 0,
-    isDefault: input.isDefault,
-  });
+  const [profile] = await tx
+    .select({ lists: deviceProfiles.printerLists })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, input.profileId));
+  const { lists } = profile!;
+  const id = input.printerId ?? input.pagePrinterId;
+  await tx
+    .update(deviceProfiles)
+    .set({
+      printerLists: {
+        ...lists,
+        invoice: {
+          ids: [...(lists.invoice?.ids ?? []), id],
+          defaultId: input.isDefault ? id : (lists.invoice?.defaultId ?? null),
+        },
+      },
+    })
+    .where(eq(deviceProfiles.id, input.profileId));
 }

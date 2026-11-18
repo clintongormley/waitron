@@ -7,8 +7,6 @@ import {
 } from "@waitron/shared";
 import {
   deviceNotDeleted,
-  deviceProfilePrinters,
-  deviceProfiles,
   devices,
   invoiceDeliveries,
   kitchenStations,
@@ -20,7 +18,13 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { endDeletedPrinterJobs, readPrinterDeleteJobIds } from "@waitron/printing";
-import { PRINTER_ROLE_COLUMNS, clearDeletedPrinter, readPrinterEquipment } from "@waitron/layouts";
+import {
+  PRINTER_ROLE_COLUMNS,
+  clearDeletedPrinter,
+  readPrinterEquipment,
+  readProfilesListingPrinter,
+  type ProfilePrinterRole,
+} from "@waitron/layouts";
 import { named } from "./delete-impact.js";
 import { endInvoicePrintDeliveries } from "./invoice-print.js";
 
@@ -78,35 +82,24 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
     ),
   );
 
-  const listed = await tx
-    .select({
-      id: deviceProfiles.id,
-      name: deviceProfiles.name,
-      role: deviceProfilePrinters.role,
-      isDefault: deviceProfilePrinters.isDefault,
-    })
-    .from(deviceProfilePrinters)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
-    .where(eq(deviceProfilePrinters.printerId, id));
-  const profileTargets = (role: string, defaultOnly: boolean): DeleteTarget[] =>
+  const listed = await readProfilesListingPrinter(tx, id);
+  const profileTargets = (role: ProfilePrinterRole, defaultOnly: boolean): DeleteTarget[] =>
     listed
-      .filter((row) => row.role === role && (!defaultOnly || row.isDefault))
+      .filter(({ lists }) =>
+        defaultOnly ? lists[role]?.defaultId === id : lists[role]?.ids.includes(id),
+      )
       .map(({ id: profileId, name }) => ({ id: profileId, name }));
 
-  // Devices whose profile defaults to the printer, then the product's own resolver
-  // decides which of them it serves: a portable printer serves only the device holding it.
+  // The resolver determines which devices the default actually serves.
+  const defaults = listed
+    .filter(({ lists }) => PRINTER_ROLE_COLUMNS.some(({ role }) => lists[role]?.defaultId === id))
+    .map((profile) => profile.id);
   const candidates = await tx
-    .selectDistinct({ id: devices.id, name: devices.label })
+    .select({ id: devices.id, name: devices.label })
     .from(devices)
-    .innerJoin(
-      deviceProfilePrinters,
-      and(
-        eq(deviceProfilePrinters.deviceProfileId, devices.deviceProfileId),
-        eq(deviceProfilePrinters.printerId, id),
-        eq(deviceProfilePrinters.isDefault, true),
-      ),
-    )
-    .where(and(eq(devices.active, true), deviceNotDeleted()));
+    .where(
+      and(inArray(devices.deviceProfileId, defaults), eq(devices.active, true), deviceNotDeleted()),
+    );
   const equipment = await readPrinterEquipment(
     tx,
     candidates.map((device) => device.id),

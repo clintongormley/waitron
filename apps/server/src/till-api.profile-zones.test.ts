@@ -12,7 +12,7 @@ import {
   billPayments,
   invoiceDeliveries,
   sales,
-  deviceProfilePrinters,
+  removeIdsFromJson,
   deviceProfiles,
   kitchenStations,
   printers,
@@ -1895,9 +1895,9 @@ describe("a Restaurant profile in its own zones", () => {
         });
       }
     } finally {
-      await suite.db
-        .delete(deviceProfilePrinters)
-        .where(inArray(deviceProfilePrinters.printerId, [ids.restaurant, ids.deli]));
+      await withTransaction(suite.db, (tx) =>
+        removeIdsFromJson(tx, deviceProfiles.printerLists, [ids.restaurant, ids.deli]),
+      );
       await suite.db.delete(printers).where(inArray(printers.id, [ids.restaurant, ids.deli]));
     }
   });

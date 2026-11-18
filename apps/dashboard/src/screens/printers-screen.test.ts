@@ -4876,7 +4876,7 @@ it("lists the profiles that offer a printer, following their changes but not a d
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(api.listPrinterProfiles).toHaveBeenCalledTimes(1);
   vi.mocked(api.listPrinterProfiles).mockResolvedValue([printerProfiles[0]!]);
-  liveData.invalidate([{ type: "device_profile_printers", id: "changed" }]);
+  liveData.invalidate([{ type: "device_profiles", id: "changed" }]);
   await vi.waitFor(() =>
     expect(text(el, "[data-test=printer-used-by-profiles]")).toBe(
       fill("printers.used_by_profile", { profile: "Waitstaff", uses: receipts }),

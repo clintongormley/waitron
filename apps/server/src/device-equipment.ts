@@ -1,12 +1,13 @@
 import "./errors.js";
 import type { EquipmentField } from "./errors.js";
 import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
-import { devices, deviceProfilePrinters, isReceiptPrinter, printers } from "@waitron/db";
+import { devices, isReceiptPrinter, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons, tillSessions } from "@waitron/identity";
 import {
   clearUnlistedPrinterChoices,
   readPrinterEquipment,
+  readProfilePrinterLists,
   releaseDevicePrinters,
   selectDevicePrinter,
   settleDevicePrinters,
@@ -386,17 +387,12 @@ export async function selectDeviceEquipment(
       throw new AppError("device.binding_invalid", { field });
     }
     if (pickupRoles.length === 0) {
-      const [listed] = await tx
-        .select({ id: deviceProfilePrinters.printerId })
-        .from(deviceProfilePrinters)
-        .where(
-          and(
-            eq(deviceProfilePrinters.deviceProfileId, device.profileId),
-            eq(deviceProfilePrinters.printerId, input.selection.id),
-            inArray(deviceProfilePrinters.role, ["receipt", "payment_slip"]),
-          ),
-        );
-      if (listed === undefined) throw new AppError("device.binding_invalid", { field });
+      const lists = await readProfilePrinterLists(tx, device.profileId);
+      if (
+        !lists.receiptPrinterIds.includes(input.selection.id) &&
+        !lists.paymentSlipPrinterIds.includes(input.selection.id)
+      )
+        throw new AppError("device.binding_invalid", { field });
     }
 
     for (const role of pickupRoles) {

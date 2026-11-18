@@ -17,7 +17,6 @@ import type { SupportedLocale } from "@waitron/shared";
 import type { ReceiptQrText } from "@waitron/fiscal";
 import {
   receiptRollColumns,
-  deviceProfilePrinters,
   deviceProfiles,
   drawerOpens,
   invoiceDeliveries,
@@ -1997,25 +1996,23 @@ interface PrinterProfileUse {
 
 /** One row per printer or page printer and live profile listing it, its roles in a fixed order. */
 async function readPrinterProfileUses(tx: Transaction): Promise<PrinterProfileUse[]> {
+  const role = sql<ProfilePrinterRole>`printer_list.key`;
+  const printerId = sql<string>`listed_printer.value`;
   const rows = await tx
     .select({
-      printerId: deviceProfilePrinters.printerId,
+      printerId,
       kind: printers.kind,
       profileId: deviceProfiles.id,
       profileName: deviceProfiles.name,
-      role: deviceProfilePrinters.role,
+      role,
     })
-    .from(deviceProfilePrinters)
+    .from(deviceProfiles)
+    .crossJoin(sql`json_each(${deviceProfiles.printerLists}) as printer_list`)
+    .crossJoin(sql`json_each(printer_list.value, '$.ids') as listed_printer`)
     // The wire response carries both receipt and A4 printer usage.
-    .innerJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
+    .innerJoin(printers, eq(printers.id, printerId))
     .where(isNull(deviceProfiles.retiredAt))
-    .orderBy(
-      deviceProfiles.name,
-      deviceProfiles.id,
-      printers.kind,
-      deviceProfilePrinters.printerId,
-    );
+    .orderBy(deviceProfiles.name, deviceProfiles.id, printers.kind, printerId);
   const uses = new Map<string, PrinterProfileUse>();
   for (const row of rows) {
     const key = `${row.profileId}/${row.printerId}`;

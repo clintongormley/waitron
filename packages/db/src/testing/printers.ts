@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import { deviceProfiles, type StoredPrinterLists } from "../schema/device-profiles.js";
 import type { Transaction } from "../client.js";
 import { printers } from "../schema/printers.js";
 
@@ -43,4 +45,20 @@ export async function insertA4Printer(
     })
     .returning({ id: printers.id });
   return row!.id;
+}
+
+/** Replaces only the named fixture roles, including states the profile writer would refuse. */
+export async function setPrinterListsForTest(
+  tx: Transaction,
+  profileId: string,
+  lists: StoredPrinterLists,
+): Promise<void> {
+  const [profile] = await tx
+    .select({ lists: deviceProfiles.printerLists })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, profileId));
+  await tx
+    .update(deviceProfiles)
+    .set({ printerLists: { ...profile!.lists, ...lists } })
+    .where(eq(deviceProfiles.id, profileId));
 }

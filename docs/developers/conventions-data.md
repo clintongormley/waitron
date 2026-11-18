@@ -2196,6 +2196,13 @@ those lists in the same transaction. A department deletion also checks profiles 
 departments that still point to a zone being deleted. If the profile has another allowed zone,
 deletion can move its starting zone there. Otherwise the deletion names the profile and refuses.
 
+Configuration format 51 stores each device profile's ordered printer choices and defaults in
+`device_profiles.printer_lists`. You can transfer both receipt and office invoice choices. The
+export drops deleted printer ids and the import assigns the destination's printer ids. Receipt
+and office Delete clear their choices and defaults in the same transaction that removes the printer
+from service. The printer round trip in `apps/server/src/configuration-transfer.test.ts` checks
+order, defaults and a deleted printer.
+
 The export leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
 device profile, `retired_at`), or whose `leaveBehindWhenFalse` column holds false or 0
 (a deleted course or station, `active`). Archived products still travel: their `active` field

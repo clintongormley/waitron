@@ -1,4 +1,4 @@
-import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { departments, withFoldedPersonChanges } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
@@ -7,7 +7,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
-  deviceProfilePrinters,
   invoiceSeries,
   sales,
   printers,
@@ -182,14 +181,9 @@ it("device Invoice uses mixed paper and eligible choice before the default", asy
 
 it("a sole Invoice offer without choice or default still requires a deliberate choice", async () => {
   await suite.db
-    .delete(deviceProfilePrinters)
-    .where(eq(deviceProfilePrinters.deviceProfileId, till.deviceProof.device.deviceProfileId));
-  await suite.db.insert(deviceProfilePrinters).values({
-    deviceProfileId: till.deviceProof.device.deviceProfileId,
-    printerId: office,
-    role: "invoice",
-    position: 0,
-  });
+    .update(deviceProfiles)
+    .set({ printerLists: { invoice: { ids: [office], defaultId: null } } })
+    .where(eq(deviceProfiles.id, till.deviceProof.device.deviceProfileId));
   expect(await offers(till, "invoice", await fullSale())).toMatchObject({
     printers: [{ id: office }],
     chosenPrinterId: null,
@@ -262,11 +256,8 @@ it("accompanying device still restricts management delivery", async () => {
 
 it("two same-venue profiles have independent printer lists", async () => {
   const other = await seedDevice(suite.db, { label: "Back till", capabilities: ["print-receipt"] });
-  await suite.db.insert(deviceProfilePrinters).values({
-    deviceProfileId: other.profileId,
-    printerId: venue.printerId,
-    role: "receipt",
-    position: 0,
+  await setPrinterListsForTest(suite.db, other.profileId, {
+    receipt: { ids: [venue.printerId], defaultId: null },
   });
   const accompanied: DeliveryAuthority = {
     surface: "dashboard",

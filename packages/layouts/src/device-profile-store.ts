@@ -4,7 +4,6 @@ import {
   staffRoles,
   deviceProfileAdmissionRoles,
   constraintTarget,
-  deviceProfilePrinters,
   deviceProfiles,
   departments,
   deviceNotDeleted,
@@ -28,7 +27,7 @@ import {
 } from "./device-profile.js";
 import {
   emptyPrinterLists,
-  foldPrinterLists,
+  printerListsFrom,
   readProfilePrinterLists,
   setProfilePrinterLists,
   type ProfilePrinterLists,
@@ -110,26 +109,11 @@ export function translateWriteError(err: unknown): never {
 
 export async function listDeviceProfiles(tx: Transaction): Promise<DeviceProfileRow[]> {
   const rows = await tx
-    .select(PROFILE_COLUMNS)
+    .select({ ...PROFILE_COLUMNS, printerLists: deviceProfiles.printerLists })
     .from(deviceProfiles)
     .where(live)
     .orderBy(asc(deviceProfiles.name));
-  const listed = await tx
-    .select({
-      profileId: deviceProfilePrinters.deviceProfileId,
-      printerId: deviceProfilePrinters.printerId,
-      role: deviceProfilePrinters.role,
-      isDefault: deviceProfilePrinters.isDefault,
-    })
-    .from(deviceProfilePrinters)
-    .orderBy(asc(deviceProfilePrinters.position));
-  const byProfile = new Map<string, typeof listed>();
-  for (const row of listed) {
-    const group = byProfile.get(row.profileId);
-    if (group === undefined) byProfile.set(row.profileId, [row]);
-    else group.push(row);
-  }
-  return rows.map((row) => toRow(row, foldPrinterLists(byProfile.get(row.id) ?? [])));
+  return rows.map((row) => toRow(row, printerListsFrom(row.printerLists)));
 }
 
 /** The profile without its printer lists; {@link getDeviceProfileWithPrinters} reads those too. */
@@ -310,11 +294,8 @@ export async function deleteDeviceProfile(
       .where(eq(departments.transferDeskProfileId, input.id));
     await tx
       .update(deviceProfiles)
-      .set({ retiredAt: now, updatedAt: now })
+      .set({ retiredAt: now, updatedAt: now, printerLists: {} })
       .where(eq(deviceProfiles.id, input.id));
-    await tx
-      .delete(deviceProfilePrinters)
-      .where(eq(deviceProfilePrinters.deviceProfileId, input.id));
     return;
   }
   try {

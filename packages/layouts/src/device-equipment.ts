@@ -1,15 +1,15 @@
 // The registry of `printer.not_found`, which this file throws.
 import "@waitron/printing";
 import {
-  deviceProfilePrinters,
   deviceProfiles,
   devices,
   nowIso,
   isReceiptPrinter,
+  removeIdFromJson,
   printers,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
-import { and, asc, eq, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
+import type { StoredPrinterLists, Transaction } from "@waitron/db";
+import { and, eq, inArray, isNull, ne, notInArray } from "drizzle-orm";
 import { refuseDeletedPrinters } from "@waitron/printing";
 import { AppError, mayTakeOver } from "@waitron/shared";
 import type { EquipmentVia } from "@waitron/shared";
@@ -142,6 +142,7 @@ async function readStatesWith(
       id: devices.id,
       profileId: devices.deviceProfileId,
       formFactor: deviceProfiles.formFactor,
+      printerLists: deviceProfiles.printerLists,
       receiptPrinterId: devices.receiptPrinterId,
       paymentSlipPrinterId: devices.paymentSlipPrinterId,
       cashDrawerPrinterId: devices.cashDrawerPrinterId,
@@ -151,51 +152,26 @@ async function readStatesWith(
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .where(inArray(devices.id, [...deviceIds]));
   if (deviceRows.length === 0) return { states: new Map(), printers: new Map(), listed: [] };
-  const profileIds = [
-    ...new Set(
-      deviceRows.filter((device) => device.formFactor !== "kds").map((device) => device.profileId),
-    ),
-  ];
-  const profileRows: ListedPrinter[] = await tx
-    .select({
-      profileId: deviceProfilePrinters.deviceProfileId,
-      role: deviceProfilePrinters.role,
-      id: printers.id,
-      active: printers.active,
-      isDefault: deviceProfilePrinters.isDefault,
-    })
-    .from(deviceProfilePrinters)
-    .innerJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
-    .where(
-      and(
-        or(isReceiptPrinter(), eq(deviceProfilePrinters.role, "invoice")),
-        inArray(deviceProfilePrinters.deviceProfileId, profileIds),
-        withLists ? undefined : eq(deviceProfilePrinters.isDefault, true),
-      ),
-    )
-    .orderBy(asc(deviceProfilePrinters.position));
-  const defaultsOf = new Map<string, Map<ProfilePrinterRole, string>>();
-  for (const device of deviceRows) {
-    defaultsOf.set(
-      device.id,
-      new Map(
-        profileRows
-          .filter((row) => row.isDefault && row.profileId === device.profileId)
-          .map((row) => [row.role, row.id]),
-      ),
-    );
-  }
-  const ids = [
-    ...new Set([
-      ...deviceRows
-        .filter((device) => device.formFactor !== "kds")
-        .flatMap((device) => [
-          ...ROLES.map((role) => chosenPrinterOf(device, role)),
-          ...defaultsOf.get(device.id)!.values(),
-        ]),
-      ...(withLists ? profileRows.map((row) => row.id) : []),
-    ]),
-  ].filter((id): id is string => id !== null);
+  const byProfile = new Map(
+    deviceRows
+      .filter((device) => device.formFactor !== "kds")
+      .map((device) => [device.profileId, device.printerLists]),
+  );
+  const offers = [...byProfile].flatMap(([profileId, lists]) =>
+    ROLES.flatMap((role) => {
+      const list = lists[role];
+      if (list === undefined) return [];
+      const ids = withLists ? list.ids : list.defaultId === null ? [] : [list.defaultId];
+      return ids.map((id) => ({ profileId, role, id, isDefault: id === list.defaultId }));
+    }),
+  );
+  const usedIds = new Set(
+    deviceRows
+      .filter((device) => device.formFactor !== "kds")
+      .flatMap((device) => ROLES.map((role) => chosenPrinterOf(device, role)))
+      .filter((id): id is string => id !== null),
+  );
+  const ids = [...new Set([...usedIds, ...offers.map((offer) => offer.id)])];
   // Profiles can offer both receipt and A4 printers for the invoice role.
   const printerRows =
     ids.length === 0
@@ -211,6 +187,19 @@ async function readStatesWith(
           })
           .from(printers)
           .where(inArray(printers.id, ids));
+  const info = new Map<string, PrinterInfo>(printerRows.map((row) => [row.id, row]));
+  const listed: ListedPrinter[] = [];
+  const defaults = new Map<string, Map<ProfilePrinterRole, string>>(
+    [...byProfile.keys()].map((id) => [id, new Map()]),
+  );
+  for (const offer of offers) {
+    const printer = info.get(offer.id);
+    if (printer === undefined || (offer.role !== "invoice" && printer.kind !== "receipt")) continue;
+    usedIds.add(offer.id);
+    if (withLists) listed.push({ ...offer, active: printer.active });
+    if (offer.isDefault) defaults.get(offer.profileId)!.set(offer.role, offer.id);
+  }
+  for (const id of info.keys()) if (!usedIds.has(id)) info.delete(id);
   const portable = new Set(printerRows.filter((row) => row.portable).map((row) => row.id));
   const holderOf = new Map(
     printerRows.flatMap((row) =>
@@ -221,11 +210,11 @@ async function readStatesWith(
     states: new Map(
       deviceRows.map((device) => [
         device.id,
-        { device, defaults: defaultsOf.get(device.id)!, portable, holderOf },
+        { device, defaults: defaults.get(device.profileId) ?? new Map(), portable, holderOf },
       ]),
     ),
-    printers: new Map<string, PrinterInfo>(printerRows.map((row) => [row.id, row])),
-    listed: withLists ? profileRows : [],
+    printers: info,
+    listed,
   };
 }
 
@@ -351,7 +340,7 @@ export async function checkDevicePrinterChoice(
   const { deviceId, profileId, role, selection } = input;
   if (selection !== "default") await refuseDeletedPrinters(tx, [selection.id]);
   const [profile] = await tx
-    .select({ formFactor: deviceProfiles.formFactor })
+    .select({ formFactor: deviceProfiles.formFactor, lists: deviceProfiles.printerLists })
     .from(deviceProfiles)
     .where(eq(deviceProfiles.id, profileId));
   if (profile === undefined || profile.formFactor === "kds")
@@ -364,18 +353,17 @@ export async function checkDevicePrinterChoice(
       previousHolderDeviceId: null,
     };
   }
+  if (profile.lists[role]?.ids.includes(selection.id) !== true)
+    return { ok: false, refusal: "not_permitted" };
   const [listed] = await tx
     .select({
       printerId: printers.id,
       portable: printers.portable,
       holderDeviceId: printers.heldByDeviceId,
     })
-    .from(deviceProfilePrinters)
-    .innerJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
+    .from(printers)
     .where(
       and(
-        eq(deviceProfilePrinters.deviceProfileId, profileId),
-        eq(deviceProfilePrinters.role, role),
         eq(printers.id, selection.id),
         eq(printers.active, true),
         role === "invoice" ? undefined : isReceiptPrinter(),
@@ -457,7 +445,7 @@ export async function settleDevicePrinters(
   const state = await readState(tx, deviceId);
   if (state === undefined) return;
   if (state.device.formFactor === "kds") {
-    await clearUnlisted(tx, state.device, []);
+    await clearUnlisted(tx, state.device, {});
     await releaseDevicePrinters(tx, deviceId);
     return;
   }
@@ -527,7 +515,7 @@ async function clearPrinterChoices(
 /** Clears a deleted printer from every device's choices, every profile's lists and its holder. */
 export async function clearDeletedPrinter(tx: Transaction, printerId: string): Promise<void> {
   await clearPrinterChoices(tx, printerId, ROLES);
-  await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.printerId, printerId));
+  await removeIdFromJson(tx, deviceProfiles.printerLists, printerId);
   await tx
     .update(printers)
     .set(NO_HOLDER)
@@ -543,7 +531,7 @@ export async function clearDeletedPagePrinter(
     .update(devices)
     .set({ invoicePrinterId: null })
     .where(eq(devices.invoicePrinterId, pagePrinterId));
-  await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.printerId, pagePrinterId));
+  await removeIdFromJson(tx, deviceProfiles.printerLists, pagePrinterId);
 }
 
 /** Lets go of every printer the device holds; keeps its choices. */
@@ -564,31 +552,20 @@ const CHOICE_COLUMNS = {
   invoicePrinterId: devices.invoicePrinterId,
 };
 
-type Listed = { id: string; role: ProfilePrinterRole; isDefault: boolean };
-
-async function listedAt(tx: Transaction, profileId: string): Promise<Listed[]> {
-  return tx
-    .select({
-      id: deviceProfilePrinters.printerId,
-      role: deviceProfilePrinters.role,
-      isDefault: deviceProfilePrinters.isDefault,
-    })
-    .from(deviceProfilePrinters)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
-    .where(
-      and(
-        eq(deviceProfilePrinters.deviceProfileId, profileId),
-        ne(deviceProfiles.formFactor, "kds"),
-      ),
-    );
+async function listedAt(tx: Transaction, profileId: string): Promise<StoredPrinterLists> {
+  const [profile] = await tx
+    .select({ lists: deviceProfiles.printerLists })
+    .from(deviceProfiles)
+    .where(and(eq(deviceProfiles.id, profileId), ne(deviceProfiles.formFactor, "kds")));
+  return profile?.lists ?? {};
 }
 
 /** The choice columns that go back to Use default because `listed` does not name them. */
-function unlistedColumns(device: Choices, listed: Listed[]): Partial<Choices> {
+function unlistedColumns(device: Choices, listed: StoredPrinterLists): Partial<Choices> {
   let cleared: Partial<Choices> = {};
   for (const role of ROLES) {
     const chosenId = chosenPrinterOf(device, role);
-    if (chosenId !== null && !listed.some((p) => p.role === role && p.id === chosenId)) {
+    if (chosenId !== null && listed[role]?.ids.includes(chosenId) !== true) {
       cleared = { ...cleared, ...choiceColumns(role, null) };
     }
   }
@@ -611,7 +588,7 @@ export async function choicesClearedOnProfile(
 async function clearUnlisted(
   tx: Transaction,
   device: ChoiceRow,
-  listed: Listed[],
+  listed: StoredPrinterLists,
 ): Promise<ChoiceRow> {
   const cleared = unlistedColumns(device, listed);
   if (Object.keys(cleared).length > 0) {
@@ -658,8 +635,7 @@ export async function settleProfilePrinterDevices(
     usedBy.set(
       device.id,
       HELD_ROLES.flatMap((role) => {
-        const id =
-          kept[COLUMN[role]] ?? listed.find((p) => p.role === role && p.isDefault)?.id ?? null;
+        const id = kept[COLUMN[role]] ?? listed[role]?.defaultId ?? null;
         return id === null ? [] : [id];
       }),
     );

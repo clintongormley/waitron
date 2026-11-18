@@ -737,7 +737,7 @@ describe("readDeviceEquipment", () => {
     },
   );
 
-  it("takes nine reads for one device's equipment and six for the devices list of two", async () => {
+  it("takes eight reads for one device's equipment and five for the devices list of two", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
     const handheld = await seedPrinter("Handheld", { portable: true });
@@ -769,11 +769,10 @@ describe("readDeviceEquipment", () => {
 
     expect(one.value.roles[0]!.default!.heldBy).toMatchObject({ deviceId: b, personName: "Lucy" });
     expect(both.value.get(b)![4]!.resolved).toMatchObject({ id: reader });
-    // Devices, the profiles' printers, the printers with their holders; the device's reader
-    // choices, the profiles' readers, the readers with their holders; then, for the device's own
-    // read only, payments in progress and the holding devices' names and who is signed in on them.
-    expect(one.reads).toBe(9);
-    expect(both.reads).toBe(6);
+    // The device and its profile share a read. The other reads resolve printers, readers,
+    // and, for the device's own read, busy payments and the printer holder's name.
+    expect(one.reads).toBe(8);
+    expect(both.reads).toBe(5);
   });
 
   it("names the holder device and its signed-in person; null person when nobody is signed in", async () => {

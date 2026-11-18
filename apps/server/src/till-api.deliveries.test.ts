@@ -11,7 +11,7 @@ import { serve } from "@hono/node-server";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfilePrinters,
+  deviceProfiles,
   devices,
   invoiceDeliveries,
   invoiceSeries,
@@ -571,7 +571,7 @@ type Prepared = { sql: string; params: unknown[] };
 
 function invoicePrinterRead(id: string) {
   return ({ sql, params }: Prepared) =>
-    sql.includes('from "device_profile_printers" inner join "printers"') ||
+    sql.includes('"device_profiles"."printer_lists"') ||
     (PRINTER_INFO_READ.test(sql) && params.includes(id));
 }
 const RECEIPT_ORIGINAL_READ =
@@ -654,7 +654,9 @@ describe("GET /api/sales/:id/deliveries", () => {
   it("offers nothing to print when the till has no invoice printer", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
-    await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
+    await suite.db
+      .update(deviceProfiles)
+      .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.invoice')` });
     expect((await readStatus(v, orderId)).body).toMatchObject({ actions: { print: null } });
   });
 
@@ -852,7 +854,9 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
   it("refuses when the till has no invoice printer", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
-    await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
+    await suite.db
+      .update(deviceProfiles)
+      .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.invoice')` });
     expect(await printInvoice(v, orderId)).toEqual(
       refusal(409, "invoice_delivery.printer_invalid"),
     );
@@ -2303,7 +2307,9 @@ describe("what each delivery route reads", () => {
       answer: refusal(409, "invoice_delivery.active"),
       reads: 2,
     });
-    await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
+    await suite.db
+      .update(deviceProfiles)
+      .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.invoice')` });
     const none = await invoice(v);
     expect(
       await readsDuring(invoicePrinterRead(v.officeId), () => printInvoice(v, none.orderId)),

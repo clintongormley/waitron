@@ -1,3 +1,4 @@
+import { setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { setMadeHere } from "./testing/made-here-fixture.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { staffRoles, personStaffRoles } from "@waitron/db";
@@ -13,14 +14,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  deviceProfilePrinters,
-  devices,
-  deviceProfiles,
-  joinRequests,
-  printers,
-  withTransaction,
-} from "@waitron/db";
+import { devices, deviceProfiles, joinRequests, printers, withTransaction } from "@waitron/db";
 import {
   deviceProfileAdmissionRoles,
   hashSessionToken,
@@ -1474,16 +1468,12 @@ describe("a deleted device comes back as the same device", () => {
       .returning({ id: printers.id });
     const oldProfile = await seedProfile("till");
     const newProfile = await seedProfile("till");
-    await suite.db.insert(deviceProfilePrinters).values([
-      { deviceProfileId: oldProfile, printerId: oldPrinter!.id, role: "receipt", position: 0 },
-      {
-        deviceProfileId: newProfile,
-        printerId: newPrinter!.id,
-        role: "receipt",
-        position: 0,
-        isDefault: true,
-      },
-    ]);
+    await setPrinterListsForTest(suite.db, oldProfile, {
+      receipt: { ids: [oldPrinter!.id], defaultId: null },
+    });
+    await setPrinterListsForTest(suite.db, newProfile, {
+      receipt: { ids: [newPrinter!.id], defaultId: newPrinter!.id },
+    });
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", oldProfile);
     expect((await deviceRow(deviceId)).receiptPrinterId).toBeNull();

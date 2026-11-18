@@ -14,7 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  deviceProfilePrinters,
+  deviceProfiles,
   devices,
   billPaymentLines,
   billPaymentRefunds,
@@ -256,13 +256,9 @@ async function tillInvoicePrinter(tx: Transaction, pagePrinterId: string): Promi
     .from(devices)
     .where(eq(devices.id, venue.cfg.origin.deviceId));
   await tx
-    .delete(deviceProfilePrinters)
-    .where(
-      and(
-        eq(deviceProfilePrinters.deviceProfileId, device!.profileId),
-        eq(deviceProfilePrinters.role, "invoice"),
-      ),
-    );
+    .update(deviceProfiles)
+    .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.invoice')` })
+    .where(eq(deviceProfiles.id, device!.profileId));
   await listInvoicePrinter(tx, {
     profileId: device!.profileId,
     pagePrinterId,

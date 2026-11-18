@@ -31,7 +31,6 @@ import type { Transaction } from "@waitron/db";
 import * as receiptTicket from "./receipt-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
-  deviceProfilePrinters,
   devices,
   diningTables,
   drawerOpens,
@@ -52,7 +51,7 @@ import {
   floorZones,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, saleReceiptHeaders, createDepartment } from "@waitron/venue-service";
 import {
@@ -1446,12 +1445,8 @@ describe("receipt commands and cash drawer jobs after filing", () => {
         .select({ profileId: devices.deviceProfileId })
         .from(devices)
         .where(eq(devices.id, cfg.origin.deviceId));
-      await tx.insert(deviceProfilePrinters).values({
-        deviceProfileId: device!.profileId,
-        printerId,
-        role: "receipt",
-        position: 0,
-        isDefault: true,
+      await setPrinterListsForTest(tx, device!.profileId, {
+        receipt: { ids: [printerId], defaultId: printerId },
       });
     });
     const orderId = randomUUID();
@@ -1888,12 +1883,8 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
         .set({ cashDrawerPrinterId: null })
         .where(eq(devices.id, cfg.origin.deviceId))
         .returning({ profileId: devices.deviceProfileId });
-      await tx.insert(deviceProfilePrinters).values({
-        deviceProfileId: device!.profileId,
-        printerId: drawer,
-        role: "cash_drawer",
-        position: 0,
-        isDefault: true,
+      await setPrinterListsForTest(tx, device!.profileId, {
+        cash_drawer: { ids: [drawer], defaultId: drawer },
       });
     });
 

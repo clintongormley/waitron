@@ -106,7 +106,7 @@ import {
   printAgents,
   printers,
   printJobs,
-  deviceProfilePrinters,
+  type StoredPrinterLists,
   drawerOpens,
   stationPrinterPairs,
   CORE_CONFIGURATION_TRANSFER,
@@ -116,7 +116,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   deleteDeviceProfile,
@@ -221,22 +221,12 @@ it("an export carrying kitchen printer rows imports without assigning kitchen eq
     .insert(printers)
     .values({ name: "Configuration printer", transport: "network_tcp", host: "10.0.0.9" })
     .returning();
-  await suite.db.insert(deviceProfilePrinters).values([
-    {
-      deviceProfileId: kitchen!.id,
-      printerId: printer!.id,
-      role: "receipt",
-      position: 0,
-      isDefault: true,
-    },
-    {
-      deviceProfileId: till!.id,
-      printerId: printer!.id,
-      role: "receipt",
-      position: 0,
-      isDefault: true,
-    },
-  ]);
+  await setPrinterListsForTest(suite.db, kitchen!.id, {
+    receipt: { ids: [printer!.id], defaultId: printer!.id },
+  });
+  await setPrinterListsForTest(suite.db, till!.id, {
+    receipt: { ids: [printer!.id], defaultId: printer!.id },
+  });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -246,27 +236,27 @@ it("an export carrying kitchen printer rows imports without assigning kitchen eq
     versions,
   );
   expect(
-    transferred.tables.device_profile_printers!.some(
-      (row) => row.device_profile_id === kitchen!.id,
+    JSON.parse(
+      String(
+        transferred.tables.device_profiles!.find((row) => row.id === kitchen!.id)!.printer_lists,
+      ),
     ),
-  ).toBe(true);
+  ).toEqual({ receipt: { ids: [printer!.id], defaultId: printer!.id } });
   await applyVenue(planVenue(venue("B16734130"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
-  const rows = await targetSuite.db
-    .select({
-      formFactor: deviceProfiles.formFactor,
-      role: deviceProfilePrinters.role,
-      printerName: printers.name,
-    })
-    .from(deviceProfilePrinters)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
-    .innerJoin(printers, eq(printers.id, deviceProfilePrinters.printerId));
-  expect(rows).toEqual([
-    { formFactor: "till", role: "receipt", printerName: "Configuration printer" },
-  ]);
+  const [imported] = await targetSuite.db
+    .select({ id: printers.id })
+    .from(printers)
+    .where(eq(printers.name, "Configuration printer"));
+  const profiles = await targetSuite.db.select().from(deviceProfiles);
+  expect(
+    profiles
+      .filter((row) => Object.keys(row.printerLists).length > 0)
+      .map((row) => [row.formFactor, row.printerLists]),
+  ).toEqual([["till", { receipt: { ids: [imported!.id], defaultId: imported!.id } }]]);
 });
 
 it("transfers two photo identities sharing replacement bytes with framing, names and printable logos", async () => {
@@ -483,7 +473,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 50,
+  version: 51,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -876,9 +866,10 @@ describe("configuration transfer database path", () => {
       new Date("2026-10-15T12:00:00Z"),
       versions,
     );
-    expect(transferred.tables.device_profile_printers!.map((row) => row.printer_id)).toContain(
-      sourcePagePrinterId,
-    );
+    const exported = transferred.tables.device_profiles!.find((row) => row.name === "Office till")!;
+    expect(JSON.parse(String(exported.printer_lists))).toMatchObject({
+      invoice: { ids: [sourcePagePrinterId], defaultId: sourcePagePrinterId },
+    });
     await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
@@ -893,19 +884,9 @@ describe("configuration transfer database path", () => {
       .select({ id: deviceProfiles.id })
       .from(deviceProfiles)
       .where(eq(deviceProfiles.name, "Office till"));
-    const rows = await targetSuite.db
-      .select({
-        printerId: deviceProfilePrinters.printerId,
-        isDefault: deviceProfilePrinters.isDefault,
-      })
-      .from(deviceProfilePrinters)
-      .where(
-        and(
-          eq(deviceProfilePrinters.deviceProfileId, profile!.id),
-          eq(deviceProfilePrinters.role, "invoice"),
-        ),
-      );
-    expect(rows).toEqual([{ printerId: imported!.id, isDefault: true }]);
+    expect(
+      await withTransaction(targetSuite.db, (tx) => readProfilePrinterLists(tx, profile!.id)),
+    ).toMatchObject({ invoicePrinterIds: [imported!.id], invoicePrinterDefaultId: imported!.id });
   });
 
   it("copies declared configuration into a fresh venue while scrubbing staff authenticators", async () => {
@@ -3687,6 +3668,48 @@ it("remaps ordered profile printer lists and defaults, leaving a deleted printer
   });
 });
 
+it.each([
+  ["a malformed role", (_profileId: unknown) => ({ receipt: true })],
+  [
+    "an id that belongs to a profile",
+    (profileId: unknown) => ({
+      receipt: { ids: [profileId], defaultId: null },
+    }),
+  ],
+])(
+  "refuses a profile printer list with %s before writing the venue",
+  async (_description, lists) => {
+    const source = await applyVenue(planVenue(venue("B13572471"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const bundle = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-04T12:00:00Z"),
+      versions,
+    );
+    const profile = bundle.tables.device_profiles!.find((row) => row.form_factor === "till")!;
+    profile.printer_lists = JSON.stringify(lists(profile.id));
+    await expect(
+      applyVenue(planVenue(venue("B97531867"), ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "device_profiles.printer_lists" },
+    });
+    expect(await targetSuite.db.select({ id: deviceProfiles.id }).from(deviceProfiles)).toEqual([]);
+  },
+);
+
 it("leaves a table's clearing state behind", async () => {
   const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
@@ -4757,9 +4780,15 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
   const exportedProfiles = transferred.tables.device_profiles!.map((row) => row.id);
   expect(exportedProfiles).toContain(original.live);
   expect(exportedProfiles).not.toContain(original.retired);
-  expect(transferred.tables.device_profile_printers!.map((row) => row.device_profile_id)).toEqual([
-    original.live,
-  ]);
+  expect(
+    transferred.tables
+      .device_profiles!.filter((row) =>
+        Object.values(JSON.parse(String(row.printer_lists)) as StoredPrinterLists).some(
+          (list) => list.ids.length > 0,
+        ),
+      )
+      .map((row) => row.id),
+  ).toEqual([original.live]);
   await applyVenue(planVenue(venue("B97531246"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -5958,7 +5987,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(50);
+  expect(exported.version).toBe(51);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -7321,11 +7350,8 @@ describe("a deleted printer in a configuration transfer", () => {
       .values({ printerId: ids.old, personId: "admin", reason: "calibration" });
     await withTransaction(suite.db, (tx) => deletePrinter(tx, ids.old));
     await attachStationPrinterForTest(suite.db, ids.station, ids.old);
-    await suite.db.insert(deviceProfilePrinters).values({
-      deviceProfileId: ids.profile,
-      printerId: ids.old,
-      role: "payment_slip",
-      position: 0,
+    await setPrinterListsForTest(suite.db, ids.profile, {
+      payment_slip: { ids: [ids.old], defaultId: null },
     });
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
@@ -7357,12 +7383,12 @@ describe("a deleted printer in a configuration transfer", () => {
     expect(
       transferred.tables.kitchen_stations!.find((row) => row.id === ids.station)!.printer_ids,
     ).toBe(JSON.stringify([ids.live]));
+    const profile = transferred.tables.device_profiles!.find((row) => row.id === ids.profile)!;
     expect(
-      transferred.tables.device_profile_printers!.map((row) => [
-        row.device_profile_id,
-        row.printer_id,
-      ]),
-    ).toEqual([[ids.profile, ids.live]]);
+      Object.values(JSON.parse(String(profile.printer_lists)) as StoredPrinterLists).flatMap(
+        (list) => list.ids,
+      ),
+    ).toEqual([ids.live]);
     for (const table of ["print_jobs", "drawer_opens"])
       expect(transferred.tables).not.toHaveProperty(table);
     expect(transferred.reconnect).toContain("printers");
@@ -7408,13 +7434,12 @@ describe("a deleted printer in a configuration transfer", () => {
           .from(stationPrinterPairs)
       ).map((row) => row.printerId),
     ).toEqual([live.id]);
-    expect(
-      (
-        await targetSuite.db
-          .select({ printerId: deviceProfilePrinters.printerId })
-          .from(deviceProfilePrinters)
-      ).map((row) => row.printerId),
-    ).toEqual([live.id]);
+    const lists = await targetSuite.db
+      .select({ lists: deviceProfiles.printerLists })
+      .from(deviceProfiles);
+    expect(lists.flatMap((row) => Object.values(row.lists).flatMap((role) => role.ids))).toEqual([
+      live.id,
+    ]);
     expect(await targetSuite.db.select().from(printJobs)).toEqual([]);
     expect(await readPrinterHoldsForTest(targetSuite.db)).toEqual([]);
     expect(await targetSuite.db.select().from(drawerOpens)).toEqual([]);

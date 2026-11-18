@@ -80,16 +80,10 @@ export const QUERY_DEPENDENCIES = {
   getContentTranslationTargets: [...TRANSLATION_READS, "content_suggestions"],
   getContentTranslationCells: TRANSLATION_READS,
   listPrinters: ["printers", "print_jobs"],
-  listPrinterProfiles: ["device_profile_printers", "device_profiles", "departments"],
+  listPrinterProfiles: ["device_profiles", "departments"],
   listPrinterStationNames: ["kitchen_stations"],
   listPagePrinters: ["printers", "print_agents"],
-  getPagePrinterDeleteImpact: [
-    "printers",
-    "invoice_deliveries",
-    "devices",
-    "device_profiles",
-    "device_profile_printers",
-  ],
+  getPagePrinterDeleteImpact: ["printers", "invoice_deliveries", "devices", "device_profiles"],
   getPrinterDeleteImpact: [
     "printers",
     "print_jobs",
@@ -97,7 +91,6 @@ export const QUERY_DEPENDENCIES = {
     // The impact names devices by their printer choices.
     "devices",
     "device_profiles",
-    "device_profile_printers",
     "kitchen_stations",
   ],
   getDeviceDeleteImpact: [
@@ -344,17 +337,11 @@ export const QUERY_DEPENDENCIES = {
   getExtraList: ["extra_lists", "extra_list_items"],
   listDeviceProfiles: [
     "device_profiles",
-    "device_profile_printers",
     "devices",
     "device_profile_admission_roles",
     "staff_roles",
   ],
-  getDeviceProfile: [
-    "device_profiles",
-    "device_profile_printers",
-    "device_profile_admission_roles",
-    "staff_roles",
-  ],
+  getDeviceProfile: ["device_profiles", "device_profile_admission_roles", "staff_roles"],
   getProfileScopeChoices: ["departments", "floor_zones"],
   listProfileKitchenScreens: [
     "device_profiles",
@@ -370,7 +357,6 @@ export const QUERY_DEPENDENCIES = {
     "kitchen_stations",
     "device_approved_profiles",
     // Each device's equipment (`readDevicesEquipment`, apps/server/src/device-equipment.ts).
-    "device_profile_printers",
     "printers",
     "card_readers",
     // Each device's kitchen screens (`readDevicesKitchenScreens`, packages/venue-service).
@@ -436,7 +422,7 @@ export const QUERY_DEPENDENCIES = {
   listPurchaseInvoices: ["purchase_invoices", "purchase_invoice_vat"],
   getDepartmentReceipt: ["departments", "settings.business_day", "settings.venue"],
   // Each active device's resolved receipt printer (`activeReceiptSettings` in receipt-preview-api.ts).
-  getReceiptPaperWidths: ["printers", "devices", "device_profiles", "device_profile_printers"],
+  getReceiptPaperWidths: ["printers", "devices", "device_profiles"],
   getVenueDetails: [
     "settings.business_day",
     "settings.venue",
