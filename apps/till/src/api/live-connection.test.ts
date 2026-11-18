@@ -200,3 +200,9 @@ it("refreshes the menu group when a department's way of selling or the venue's r
   expect(TILL_LIVE_TYPES.menu).toContain("departments");
   expect(TILL_LIVE_TYPES.menu).toContain("settings.venue");
 });
+
+it("subscribes the menu to saved device zone changes", () => {
+  const { connection, reads } = setup();
+  connection.addInterests("menu", TILL_LIVE_TYPES.menu!);
+  expect(reads.at(-1)!.types).toContain("device_approved_profiles");
+});

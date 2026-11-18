@@ -781,9 +781,14 @@ CREATE UNIQUE INDEX `devices_label_active_key` ON `devices` (`label`) WHERE "dev
 CREATE TABLE `device_approved_profiles` (
 	`device_id` text NOT NULL,
 	`device_profile_id` text NOT NULL,
+	`starting_zone_id` text,
+	`zone_ids` text,
 	PRIMARY KEY(`device_id`, `device_profile_id`),
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade
+	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`starting_zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "device_approved_profiles_start_ck" CHECK("device_approved_profiles"."starting_zone_id" is null or "device_approved_profiles"."zone_ids" is not null),
+	CONSTRAINT "device_approved_profiles_zone_ids_ck" CHECK(json_valid("device_approved_profiles"."zone_ids") and json_type("device_approved_profiles"."zone_ids") = 'array')
 );
 --> statement-breakpoint
 CREATE TABLE `join_requests` (
@@ -2563,25 +2568,6 @@ CREATE TABLE `party_allergy_guests` (
 	CONSTRAINT "party_allergy_guests_who_ck" CHECK(length(trim("party_allergy_guests"."who")) between 1 and 40),
 	CONSTRAINT "party_allergy_guests_allergens_ck" CHECK(json_valid("party_allergy_guests"."allergens") and json_type("party_allergy_guests"."allergens") = 'object' and "party_allergy_guests"."allergens" <> '{}'),
 	CONSTRAINT "party_allergy_guests_note_ck" CHECK("party_allergy_guests"."note" is null or length("party_allergy_guests"."note") <= 2000)
-);
---> statement-breakpoint
-CREATE TABLE `device_zone_selection_zones` (
-	`device_id` text NOT NULL,
-	`device_profile_id` text NOT NULL,
-	`zone_id` text NOT NULL,
-	PRIMARY KEY(`device_id`, `device_profile_id`, `zone_id`),
-	FOREIGN KEY (`device_id`,`device_profile_id`) REFERENCES `device_zone_selections`(`device_id`,`device_profile_id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE TABLE `device_zone_selections` (
-	`device_id` text NOT NULL,
-	`device_profile_id` text NOT NULL,
-	`starting_zone_id` text,
-	PRIMARY KEY(`device_id`, `device_profile_id`),
-	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`starting_zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `service_step_completions` (

@@ -122,7 +122,6 @@
   "src/schema/ticket-items.ts": 47.5,
   "src/schema/unpaid-departures.ts": 82,
   "src/schema/venue-service/department-transfers.ts": 165.9,
-  "src/schema/venue-service/device-zone-selection.ts": 87.5,
   "src/schema/venue-service/index.ts": 0.1,
   "src/schema/venue-service/kitchen-allergy.ts": 2.1,
   "src/schema/venue-service/kitchen-notices.ts": 103.9,

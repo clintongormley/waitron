@@ -9,11 +9,11 @@ import { placeOrder } from "./testing/order-writer-fixture.js";
 /** The device join, enrolment and management surface end to end. */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   devices,
-  deviceZoneSelections,
+  deviceApprovedProfiles,
   deviceProfiles,
   diningTables,
   floorZones,
@@ -4373,8 +4373,13 @@ it.each([false, true])(
       (
         await suite.db
           .select()
-          .from(deviceZoneSelections)
-          .where(eq(deviceZoneSelections.deviceId, device.deviceId))
+          .from(deviceApprovedProfiles)
+          .where(
+            and(
+              eq(deviceApprovedProfiles.deviceId, device.deviceId),
+              isNotNull(deviceApprovedProfiles.zoneIds),
+            ),
+          )
       ).length,
     ).toBe(retire ? 2 : 1);
     const [first] = await suite.db

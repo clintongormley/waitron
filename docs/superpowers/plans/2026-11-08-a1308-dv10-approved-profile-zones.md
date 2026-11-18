@@ -19,6 +19,13 @@ approval — Also forgets the floor zones it chose under that profile");
 **Base:** `main` after dv9. Lines read at `a086eedfb7`; a cite that no longer says what this plan
 says is a stop (rules §5.1); a cite that only moved is not.
 
+**2026-11-18 preflight decision (watcher, 18:30):** Device Delete keeps the row and its settings, as
+in [#2805](https://github.com/clintongormley/waitron/pull/2805). Keep the device foreign key cascading
+on a physical delete. Same-profile rejoin keeps every saved choice and approved alternative.
+A manager who accepts a returning device under a different profile withdraws the former active
+profile's approval and saved zones. Test both rejoin paths and check that the new profile's scope
+excludes a zone it does not allow. The till menu subscribes to the merged table.
+
 **Owner lands:** no (rules §6).
 
 **Pull request's first line (rules §2):** "Every venue is reset: core; backups and exports from
@@ -30,7 +37,7 @@ before this cannot be restored or imported."
 
 | Column | Type | Rule |
 | --- | --- | --- |
-| `device_id` | pk part, key to `devices` | **no action** (was cascade): `deleteDevice` deletes the rows explicitly (`apps/server/src/device-delete.ts:204`) |
+| `device_id` | pk part, key to `devices` | cascade (kept) |
 | `device_profile_id` | pk part, key to `device_profiles` | cascade (kept) |
 | `starting_zone_id` (`startingZoneId`) | `id`, null, key to `floor_zones` | was `device_zone_selections.starting_zone_id` |
 | `zone_ids` (`zoneIds`) | `json<string[] \| null>`, null | `null` = the device never saved a zone choice under this profile; `[]` = saved, then a delete took its last zone |
@@ -41,14 +48,8 @@ CHECKs: `device_approved_profiles_start_ck` (`starting_zone_id is null or zone_i
 
 **What a row means now** (§1.3): the device's active profile still counts as approved with or
 without a row (`apps/server/src/device.ts:186-187`); saving a zone choice under the active profile
-now writes a row for it. Every reader of "approved alternatives" already leaves the active profile
-out (`readApprovedAlternatives`, `device.ts:156`); this slice adds the same condition to the one
-reader that does not:
-
-- `device-delete.ts:124-128` (the delete impact's "approved profiles"): add
-  `ne(deviceApprovedProfiles.deviceProfileId, devices.deviceProfileId)` (join `devices`), so a zone
-  memory row for the active profile is not listed as an approval. Its zone-memory count
-  (`:135`, `countDeviceZoneSelections`) counts rows with `zone_ids is not null`.
+now writes a row for it. `readApprovedAlternatives` leaves the active profile out. Device Delete keeps its settings, and
+its impact preview lists no approval or zone memory removal.
 
 **The two writers that change** (§1.3, quoted):
 
@@ -60,11 +61,8 @@ reader that does not:
   approved keeps its zones; a withdrawn profile's row goes with its zones (the owner's decision).
 
 **The zone writer and readers** (`packages/venue-service/src/device-zone-selection.ts`), signatures
-kept: `readDeviceZoneSelection` (`:25-117`) reads the row's two columns (`stored === undefined`
-becomes "no row, or `zone_ids` null"); `setDeviceZoneSelection` (`:119-156`) upserts the row's
-`starting_zone_id` and `zone_ids` in one statement; `countDeviceZoneSelections` (`:158-167`) as
-above; `removeDeviceZoneSelections` (`:169-171`) sets both columns null on the device's rows (the
-rows themselves are approvals and stay until `deleteDevice` removes them). The snapshot hash
+kept: `readDeviceZoneSelection` (`:25-117`) reads the row's two columns when `zone_ids` is present. `setDeviceZoneSelection` upserts the row's
+`starting_zone_id` and `zone_ids` in one statement. The snapshot hash
 (`:89-105`) keeps its inputs and order, so a client's saved snapshot keeps matching for the same
 state.
 
@@ -88,10 +86,10 @@ column with `json_each`.
   `packages/db/src/schema/venue-service/device-zone-selection.ts`; `packages/db/src/index.ts:458-459`,
   `packages/venue-service/src/index.ts:25-26`; `packages/db/src/classification.ts:340-341`;
   `packages/venue-service/src/classification.ts:22-23`.
-- `apps/server/src/device.ts:190-246`; `apps/server/src/device-delete.ts:124-135`, `:204`, `:207`.
+- `apps/server/src/device.ts` and `apps/server/src/join-requests.ts` with their tests.
 - `packages/venue-service/src/device-zone-selection.ts`; `service-delete-settings.ts:226-247`,
   `:388-393`.
-- `apps/dashboard/src/api/live-queries.ts:139` (and any list naming the two tables).
+- Dashboard hierarchy and till menu live dependencies, with their tests.
 - `scripts/schema-constraints.test.ts:34-38`, `:89-90`.
 - `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` (two tables to `REMOVED_TABLES`;
   `device_approved_profiles` column edits).
@@ -133,7 +131,6 @@ missing index device_zone_selections.primary key(device_id,device_profile_id)
 missing table device_zone_selection_zones
 missing table device_zone_selections
 changed table device_approved_profiles.columnOrder
-changed table device_approved_profiles.foreignKeys[device_id->devices(id)].onDelete
 extra table device_approved_profiles.checks[device_approved_profiles_start_ck]
 extra table device_approved_profiles.checks[device_approved_profiles_zone_ids_ck]
 extra table device_approved_profiles.columns[starting_zone_id]
@@ -141,12 +138,12 @@ extra table device_approved_profiles.columns[zone_ids]
 extra table device_approved_profiles.foreignKeys[starting_zone_id->floor_zones(id)]
 ```
 
-(`onDelete` changes from `cascade` to `no action`.) Under the two `change-feed` headers, also the six
+Under the two `change-feed` headers, also the six
 `waitron_change_device_zone_selection*` triggers `missing` and
 `changed trigger waitron_change_device_approved_profiles_update.when`.
 
-Reasons (`tables-devices.md` §5): "device_approved_profiles: PK, both FKs cascade — kept on the
-merged table (device side becomes no action, deleted explicitly at `device-delete.ts:204`)";
+Reasons (`tables-devices.md` §5 and the preflight decision above): the approval row keeps its
+primary key and both cascading parent keys.
 "device_zone_selections: PK, FKs device / profile cascade / start zone — the PK and FKs move onto
 `device_approved_profiles`"; "device_zone_selection_zones: PK, composite FK cascade, zone FK —
 **given up**: the shape holds one owner; duplicates and unknown zones are refused by
@@ -178,8 +175,7 @@ plan).
 
 - [ ] **Step 1: failing test** `device-approved-profiles.test.ts`: "a row with no zone memory, one
   with a saved list and start, one with a saved empty list" (stored); "refuses a start with no saved
-  list" (`device_approved_profiles_start_ck`); "refuses a zone list that is not an array"; "deleting
-  a device with rows is refused, and deleting a profile removes its rows" (raw deletes with keys on).
+  list" (`device_approved_profiles_start_ck`); "refuses a zone list that is not an array"; "physically deleting a device or an approved profile removes its rows" (raw deletes with keys on).
   Run: FAIL.
 - [ ] **Step 2:** schema; delete the two tables; rebuild core. Run: PASS. Commit.
 
@@ -190,13 +186,11 @@ plan).
   forgets the zones saved under it"; "switching profile keeps the zones saved under the new active
   profile"; "a zone choice saved under the active profile does not list it as an alternative". Run:
   FAIL.
-- [ ] **Step 2:** the two writers, the device-delete impact and count, the zone writer and readers,
-  the zone delete; re-point the three tests' set-up. Run the finish line: PASS (stops 1–2). Commit.
+- [ ] **Step 2:** the two approval writers, the returning-device accept, the zone writer and reader, and
+  zone deletion. Re-point the tests' set-up. Run the finish line: PASS (stops 1–2). Commit.
 
 ### Task 3: lists, protection list, finish
 
 - [ ] Live queries, classification, schema-constraints, demo-seed. Protection list after;
-  `compare`; mark each line. `apps/server/src/guide/{en,es}/devices.md`: if a sentence says
-  re-approving a profile resets the device's zones, change it to say withdrawing the approval does
-  (grep "zone" in both); otherwise none. Commit; `/finish-branch`; reset dev slots and Santet after
+  `compare`; mark each line. `apps/server/src/guide/{en,es}/table-service.md`: explain that withdrawing approval forgets the saved zones. Commit; `/finish-branch`; reset dev slots and Santet after
   landing.

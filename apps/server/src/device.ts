@@ -2,7 +2,7 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { requireBodyUuid } from "@waitron/server-kit";
-import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, notInArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   constraintTarget,
@@ -183,17 +183,24 @@ export async function approveDeviceProfiles(
     if (profile.formFactor !== device.formFactor)
       throw new AppError("device_profile.incompatible", { field: "approvedProfileIds" });
   }
-  await tx.delete(deviceApprovedProfiles).where(eq(deviceApprovedProfiles.deviceId, deviceId));
+  await tx
+    .delete(deviceApprovedProfiles)
+    .where(
+      and(
+        eq(deviceApprovedProfiles.deviceId, deviceId),
+        notInArray(deviceApprovedProfiles.deviceProfileId, [device.profileId, ...alternatives]),
+      ),
+    );
   if (alternatives.length > 0)
     await tx
       .insert(deviceApprovedProfiles)
-      .values(alternatives.map((deviceProfileId) => ({ deviceId, deviceProfileId })));
+      .values(alternatives.map((deviceProfileId) => ({ deviceId, deviceProfileId })))
+      .onConflictDoNothing({
+        target: [deviceApprovedProfiles.deviceId, deviceApprovedProfiles.deviceProfileId],
+      });
 }
 
-/**
- * After a device's active profile moved from `from` to `to`: `from` stays approved as an
- * alternative, and `to`, approved by being active, needs no row.
- */
+/** Switching profiles keeps the former profile approved so staff can switch back. */
 export async function keepApprovedAfterSwitch(
   tx: Transaction,
   deviceId: string,
@@ -207,14 +214,6 @@ export async function keepApprovedAfterSwitch(
     .onConflictDoNothing({
       target: [deviceApprovedProfiles.deviceId, deviceApprovedProfiles.deviceProfileId],
     });
-  await tx
-    .delete(deviceApprovedProfiles)
-    .where(
-      and(
-        eq(deviceApprovedProfiles.deviceId, deviceId),
-        eq(deviceApprovedProfiles.deviceProfileId, to),
-      ),
-    );
 }
 
 /**

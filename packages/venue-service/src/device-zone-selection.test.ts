@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   deviceProfiles,
   devices,
-  deviceZoneSelections,
-  deviceZoneSelectionZones,
+  deviceApprovedProfiles,
   floorZones,
   withTransaction,
   type Transaction,
@@ -161,8 +160,13 @@ describe("device zone selection", () => {
       (
         await suite.db
           .select()
-          .from(deviceZoneSelections)
-          .where(eq(deviceZoneSelections.deviceId, f.deviceId))
+          .from(deviceApprovedProfiles)
+          .where(
+            and(
+              eq(deviceApprovedProfiles.deviceId, f.deviceId),
+              isNotNull(deviceApprovedProfiles.zoneIds),
+            ),
+          )
       ).length,
     ).toBe(2);
     await run((tx) =>
@@ -260,8 +264,13 @@ describe("device zone selection", () => {
         (
           await suite.db
             .select()
-            .from(deviceZoneSelections)
-            .where(eq(deviceZoneSelections.deviceId, f.deviceId))
+            .from(deviceApprovedProfiles)
+            .where(
+              and(
+                eq(deviceApprovedProfiles.deviceId, f.deviceId),
+                isNotNull(deviceApprovedProfiles.zoneIds),
+              ),
+            )
         ).length,
       ).toBe(0);
     },
@@ -283,8 +292,13 @@ describe("device zone selection", () => {
       (
         await suite.db
           .select()
-          .from(deviceZoneSelections)
-          .where(eq(deviceZoneSelections.deviceId, f.deviceId))
+          .from(deviceApprovedProfiles)
+          .where(
+            and(
+              eq(deviceApprovedProfiles.deviceId, f.deviceId),
+              isNotNull(deviceApprovedProfiles.zoneIds),
+            ),
+          )
       ).length,
     ).toBe(0);
   });
@@ -332,7 +346,15 @@ describe("device zone selection", () => {
     ).rejects.toMatchObject({ code: "device_zones.changed" });
     expect(
       await run((tx) =>
-        tx.select().from(deviceZoneSelections).where(eq(deviceZoneSelections.deviceId, f.deviceId)),
+        tx
+          .select()
+          .from(deviceApprovedProfiles)
+          .where(
+            and(
+              eq(deviceApprovedProfiles.deviceId, f.deviceId),
+              isNotNull(deviceApprovedProfiles.zoneIds),
+            ),
+          ),
       ),
     ).toEqual([]);
     expect(await save(f, [f.dining], f.dining)).toMatchObject({
@@ -453,43 +475,27 @@ it("invalidates a snapshot after profile capability, zone wording or department 
   expect((await read(f)).snapshot).not.toBe(capability.snapshot);
 });
 
-it("enforces parent and child foreign keys and both composite primary keys on actual writes", async () => {
+it("enforces the device, profile and starting-zone keys and one approval row per profile", async () => {
   const f = await fixture();
-  const parent = { deviceId: f.deviceId, deviceProfileId: f.profileId, startingZoneId: f.dining };
+  const approval = {
+    deviceId: f.deviceId,
+    deviceProfileId: f.profileId,
+    startingZoneId: f.dining,
+    zoneIds: [f.dining],
+  };
   for (const values of [
-    { ...parent, deviceId: randomUUID() },
-    { ...parent, deviceProfileId: randomUUID() },
-    { ...parent, startingZoneId: randomUUID() },
+    { ...approval, deviceId: randomUUID() },
+    { ...approval, deviceProfileId: randomUUID() },
+    { ...approval, startingZoneId: randomUUID() },
   ]) {
-    await expect(run((tx) => tx.insert(deviceZoneSelections).values(values))).rejects.toThrow(
+    await expect(run((tx) => tx.insert(deviceApprovedProfiles).values(values))).rejects.toThrow(
       /FOREIGN KEY constraint failed/,
     );
   }
-  await expect(
-    run((tx) =>
-      tx
-        .insert(deviceZoneSelectionZones)
-        .values({ deviceId: f.deviceId, deviceProfileId: f.profileId, zoneId: f.dining }),
-    ),
-  ).rejects.toThrow(/FOREIGN KEY constraint failed/);
   await save(f, [f.dining], f.dining);
-  await expect(run((tx) => tx.insert(deviceZoneSelections).values(parent))).rejects.toThrow(
+  await expect(run((tx) => tx.insert(deviceApprovedProfiles).values(approval))).rejects.toThrow(
     /UNIQUE constraint failed/,
   );
-  await expect(
-    run((tx) =>
-      tx
-        .insert(deviceZoneSelectionZones)
-        .values({ deviceId: f.deviceId, deviceProfileId: f.profileId, zoneId: f.dining }),
-    ),
-  ).rejects.toThrow(/UNIQUE constraint failed/);
-  await expect(
-    run((tx) =>
-      tx
-        .insert(deviceZoneSelectionZones)
-        .values({ deviceId: f.deviceId, deviceProfileId: f.profileId, zoneId: randomUUID() }),
-    ),
-  ).rejects.toThrow(/FOREIGN KEY constraint failed/);
 });
 
 it("retains every permitted zone's department metadata when the display subset hides one", async () => {

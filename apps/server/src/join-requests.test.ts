@@ -25,10 +25,12 @@ import {
   returningDevicesOf,
   selfEnrolNodeAgent,
 } from "./join-requests.js";
+import { approveDeviceProfiles, readApprovedProfiles } from "./device.js";
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
 import { parseDeviceCookie } from "./device-session.js";
 import {
   floorZones,
+  deviceProfiles,
   devices,
   joinRequests,
   kitchenStations,
@@ -890,6 +892,55 @@ describe("a returning disabled device", () => {
     await comeBack(venue, deviceId, { label: "Bar till", profileId: other });
     expect(await printersOf()).toEqual({ receiptPrinterId: null, paymentSlipPrinterId: null });
   });
+
+  it.each([true, false])(
+    "a returning device keeps profile approval and zones only while that profile is chosen (same=%s)",
+    async (same) => {
+      const venue = await setupVenue(suite.db);
+      const original = await seedProfile("till");
+      const other = await seedProfile("till");
+      const terrace = await seedZone(suite.db, { name: "Terrace" });
+      const bar = await seedZone(suite.db, { name: "Bar", departmentId: terrace.departmentId });
+      await suite.db
+        .update(deviceProfiles)
+        .set({
+          orderDepartmentId: bar.departmentId,
+          orderStartingZoneId: bar.id,
+          orderZoneIds: [bar.id],
+        })
+        .where(eq(deviceProfiles.id, other));
+      const deviceId = await disabledDevice(venue, original);
+      const read = () =>
+        withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceZoneSelection(tx, deviceId));
+      await withTransaction(suite.db, async (tx) => {
+        await tx.update(devices).set({ active: true }).where(eq(devices.id, deviceId));
+        await approveDeviceProfiles(tx, deviceId, [other]);
+        const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, deviceId);
+        await VENUE_SERVICE.setDeviceZoneSelection(tx, deviceId, {
+          profileId: original,
+          snapshot: current.snapshot,
+          selectedZoneIds: [terrace.id],
+          startingZoneId: terrace.id,
+        });
+        await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+      });
+
+      await comeBack(venue, deviceId, { label: "Bar till", profileId: same ? original : other });
+      const approved = await withTransaction(suite.db, (tx) => readApprovedProfiles(tx, deviceId));
+      expect(approved.map(({ id }) => id)).toEqual(same ? [original, other] : [other]);
+      expect(await read()).toMatchObject({
+        saved: same,
+        selectedZoneIds: [same ? terrace.id : bar.id],
+        startingZoneId: same ? terrace.id : bar.id,
+      });
+
+      if (!same) {
+        await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+        await comeBack(venue, deviceId, { label: "Bar till", profileId: original });
+        expect(await read()).toMatchObject({ saved: false, profileId: original });
+      }
+    },
+  );
 
   it("gives a returning kitchen display its profile screen", async () => {
     const venue = await setupVenue(suite.db);

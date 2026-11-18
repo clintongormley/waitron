@@ -1094,6 +1094,7 @@ it.each(["Zone", "Department"] as const)(
       "ticket_items",
       "departments",
       "device_profiles",
+      "device_approved_profiles",
       "devices",
       "routing_cells",
       "routing_cell_periods",
