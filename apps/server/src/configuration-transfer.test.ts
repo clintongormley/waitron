@@ -5134,25 +5134,33 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       name: "Terrace",
       departmentId: restaurant.id,
     });
-    const [grill] = await tx
+    const [grill, inactive] = await tx
       .insert(kitchenStations)
-      .values({ name: "Grill" })
+      .values([{ name: "Grill" }, { name: "Old station" }])
       .returning({ id: kitchenStations.id });
-    const [till, wall, retired] = await seedDeviceProfiles(tx, [
+    const [till, wall, station, retired] = await seedDeviceProfiles(tx, [
       { name: "Pass till", formFactor: "till" },
       { name: "Pass wall", formFactor: "kds" },
+      { name: "Station wall", formFactor: "kds" },
       { name: "Old till", formFactor: "till" },
     ]);
     await VENUE_SERVICE.setProfileKitchenScreens(tx, till!.id, {
-      pass: { stationIds: [grill!.id], zoneIds: [terrace.id] },
+      pass: { stationIds: [grill!.id, inactive!.id], zoneIds: [terrace.id] },
     });
     await VENUE_SERVICE.setProfileKitchenScreens(tx, wall!.id, {
       pass_monitor: { stationIds: null, zoneIds: null },
     });
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, station!.id, {
+      station: { stationIds: null, zoneIds: null },
+    });
+    await tx
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, inactive!.id));
     await VENUE_SERVICE.setProfileKitchenScreens(tx, retired!.id, {
       station: { stationIds: [grill!.id], zoneIds: null },
     });
-    return { till: till!.id, wall: wall!.id, retired: retired!.id };
+    return { till: till!.id, wall: wall!.id, station: station!.id, retired: retired!.id };
   });
   await retireProfile(original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -5168,7 +5176,11 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       (row) => `${String(row.device_profile_id)}:${String(row.screen)}`,
     ).sort();
   expect(exported("device_profile_kitchen_screens")).toEqual(
-    [`${original.till}:pass`, `${original.wall}:pass_monitor`].sort(),
+    [
+      `${original.till}:pass`,
+      `${original.wall}:pass_monitor`,
+      `${original.station}:station`,
+    ].sort(),
   );
   expect(exported("device_profile_kitchen_screen_stations")).toEqual([`${original.till}:pass`]);
   expect(exported("device_profile_kitchen_screen_zones")).toEqual([`${original.till}:pass`]);
@@ -5213,6 +5225,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       },
     },
     { profile: "Pass wall", screens: { pass_monitor: { stations: null, zones: null } } },
+    { profile: "Station wall", screens: { station: { stations: null, zones: null } } },
   ]);
 });
 
