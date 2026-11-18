@@ -401,3 +401,32 @@ it("refuses ordinary Prices operations on a set-menu dish", async () => {
     { id: f.bottle, included: false, surcharge: null },
   ]);
 });
+
+it("names the missing menu item when a set-menu variant write uses an item from another menu", async () => {
+  const other = await app(async (tx) => {
+    const other = await createMenu(tx, { ...terms, name: "Evening" });
+    await addSetMenuDishes(tx, other.id, [pick(f.wine)]);
+    return readSetMenu(tx, other.id);
+  });
+  const menuItemId = other.dishes[0]!.menuItemId;
+  await expect(app((tx) => choosing(tx, menuItemId, false))).rejects.toMatchObject({
+    code: "menu_item.not_found",
+    params: { menuId: f.menuId, menuItemId },
+  });
+});
+
+it("names the surcharge field when the variant surcharge is sent as a number", async () => {
+  await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.wine)]));
+  const item = (await reading()).dishes[0]!.menuItemId;
+  await expect(
+    app((tx) =>
+      saveSetMenuVariantChoices(tx, f.menuId, item, [
+        { variantId: f.glass, included: true, surcharge: 1.5 as never },
+        { variantId: f.bottle, included: false, surcharge: null },
+      ]),
+    ),
+  ).rejects.toMatchObject({
+    code: "set_menu.invalid",
+    params: { field: "surcharge" },
+  });
+});

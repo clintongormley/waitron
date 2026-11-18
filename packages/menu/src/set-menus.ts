@@ -314,7 +314,7 @@ export async function readSetMenu(
   return { ...details, problems: setMenuProblems(details) };
 }
 
-export function includedDishChoices(dish: SetMenuDishSetting): {
+function includedDishChoices(dish: SetMenuDishSetting): {
   id: string;
   name: string;
   courseId: string | null;
@@ -401,7 +401,7 @@ export async function saveSetMenuVariantChoices(
 ): Promise<void> {
   await requireSetMenu(tx, menuId);
   const item = await reachableMenuItem(tx, menuItemId, menuId);
-  if (item === undefined) throw new AppError("set_menu.not_found", { menuId });
+  if (item === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
   const { productId } = item;
   const active = await activeVariantsByProduct(tx, [productId]);
   const allowed = active.get(productId);
@@ -416,7 +416,7 @@ export async function saveSetMenuVariantChoices(
     const row = { menuItemId, productId, variantId };
     if (!included) exclusions.push(row);
     else if (surcharge !== null) {
-      if (!isProductPrice(surcharge))
+      if (typeof surcharge !== "string" || !isProductPrice(surcharge))
         throw new AppError("set_menu.invalid", { field: "surcharge" });
       surcharges.push({ ...row, price: stringToCents(surcharge) });
     }
