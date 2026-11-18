@@ -164,7 +164,7 @@ External provenance, read 2026-11-06:
 
 Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
-ordinary reruns are eligible for the server route when the queue-pressure comparison below selects it. Fork pull requests stay hosted. The `server-queue-watchdog`, final `ci` summary, `publish` and `release` jobs stay on
+ordinary reruns can use the server. Fork pull requests stay on GitHub. The `server-queue-watchdog`, final `ci` summary, `publish` and `release` jobs stay on
 GitHub; the independent Server health workflow also stays hosted so rescue can run when server assignment stops. Image smoke always uses `ubuntu-latest` until a
 disposable guest is qualified (watcher, 2026-11-09 08:20). CI still passes
 `server_route` into the reusable image workflow, but that input does not choose its runner.
@@ -173,10 +173,9 @@ PR planning (`changes`) uses a server guest only on the first attempt of a same-
 PR, with server mode and the existing selected-head and hosted-attempt gates. The published
 snapshot must show no waiting server jobs and fewer occupied slots than usable slots.
 Absent, partial or zero capacity selects GitHub. The capacity variable must contain valid JSON,
-as must the existing hosted-attempt variable. This placement reads no output from its own job;
-the downstream queue-pressure routing described below stays unchanged. Later planner
-attempts, forks, pushes, schedules and manual runs stay hosted. Concurrent placements
-reserve no slots, and the snapshot has no new expiry rule.
+as must the existing hosted-attempt variable. This placement uses the snapshot available before
+the planner starts. Later planner attempts, forks, pushes, schedules and manual runs use GitHub.
+Concurrent placements reserve no slots.
 
 A server planning job installs a missing `gh` with three bounded apt attempts; each update
 and install has a 20-second outer timeout and 10-second HTTP/HTTPS limits. The setup step
@@ -222,27 +221,36 @@ renew an expired token.
 | --- | --- | --- |
 | [Variable API](https://docs.github.com/en/rest/actions/variables#get-a-repository-variable) | “Variables” repository permissions (read) | Grant the capacity credential this read permission. |
 
-After a successful server-health
-scan and capacity validation, positive server slots with zero running and waiting work select
-the server without reading hosted counts: every hosted count gives the same server-tie result.
-Otherwise, with no stuck server queue,
-it reads this repository's queued and running workflows, including fork pull requests,
-and their current-attempt jobs. Jobs with nonempty labels that do not include
-`self-hosted` count as hosted. Running jobs and `queued`, `pending`, `waiting` or `requested` jobs count.
 The controller publishes `DISPOSABLE_TESTS_CAPACITY`: observed time, usable server slots,
 occupied slots and waiting jobs, plus hosted counts. Preparation and manual work occupy slots;
-quarantined slots and retained runners are excluded, and admitted jobs are not counted twice.
-A failed free-slot health check publishes zero slots; a full pool uses its recorded capacity. The router refreshes hosted counts through
-its existing read-only API scan and compares `(running + waiting) / slots` with the server
-snapshot, using the owner's stipulated 20 hosted slots. Ties select the server; zero server
-slots select hosted. Unknown required inputs select hosted; readable-stall checks remain.
-For measured decisions, the summary prints snapshot age and the chosen side, including in hosted mode; it prints hosted
-counts when the comparison needs them. This repository snapshot reserves no capacity;
-simultaneous decisions can choose the same side. The run's own `changes` job counts while running.
-Before activation, verify repository-variable arrival in an ordinary run and check its route and labels.
-Inspect the printed age: a fresh read still contains the publisher's last observation. The
-decision routes a whole run. The initial allocation of `changes` still uses its run-creation snapshot.
-An idle server can therefore coexist with hosted work: [44036225100](https://github.com/clintongormley/waitron/actions/runs/44036225100) and [44036195836](https://github.com/clintongormley/waitron/actions/runs/44036195836) chose hosted on 17 November from snapshots about 51 seconds old (server 2/13, hosted 0/20), then the server emptied while those placements persisted; the watcher kept the policy at 08:28 CET.
+quarantined slots and retained runners are excluded, and admitted jobs are counted once.
+A failed free-slot health check publishes zero slots; a full pool uses its recorded capacity.
+
+After licence and sign-off pass, the first attempt selects up to `slots - serverRunning - serverWaiting`
+eligible jobs for the server, with zero as the minimum. The ordered family list puts typecheck, root
+guards and lint first, followed by ascending server shards, the stream job, and the other enabled
+families in their listed order. Other legs use GitHub. The existing repository, head and hosted-mode
+checks still apply. A failed planner leaves lint and root guards on GitHub.
+
+The first batch uses the capacity snapshot and the server-health inventory. A stuck queue or an
+unreadable required server input sends that batch to GitHub. The planner skips the separate GitHub
+queue count on the first attempt. Dependent merges and the mutation aggregate use GitHub, since
+the planner's available slots describe the initial batch.
+
+A rerun that runs the planner again keeps the whole-route decision. Idle positive server capacity
+wins without a hosted count. Otherwise CI reads this repository's queued and running workflows,
+including fork PRs, and their current-attempt jobs. Jobs with a nonempty label list that excludes
+`self-hosted` count as hosted. CI compares `(running + waiting) / slots` for each side,
+using the stipulated 20 hosted slots. Ties select the server and zero server slots select GitHub.
+A partial rerun reusing an earlier planner's outputs uses GitHub. The initial `changes` placement
+still uses the run-creation snapshot. The watcher cleared these choices on 18 November at 10:36 CET.
+
+Read the planner's `CI server job candidates`, capacity source and snapshot age alongside the actual
+job labels. Even a fresh read contains the publisher's last observation. The run's own planner can
+count as occupied, and simultaneous planners can select the same available slots. Confirm both
+placements and completed checks in an ordinary mixed run before calling the split qualified.
+
+Under the former whole-run rule, [44036225100](https://github.com/clintongormley/waitron/actions/runs/44036225100) and [44036195836](https://github.com/clintongormley/waitron/actions/runs/44036195836) chose hosted on 17 November from snapshots about 51 seconds old (server 2/13, hosted 0/20), then the server emptied while those placements persisted; the watcher kept the policy at 08:28 CET.
 
 Check the jobs' runner labels as well as the routing log. The server shards and their
 coverage merge also require `DISPOSABLE_TESTS_MODE=server`. The 17 November nightly
@@ -307,7 +315,9 @@ After ordinary polling ends, an invalid final inventory gets one complete reread
 200-call cap and outer deadline. Failed page reads report their poll, page, endpoint and
 exit status, with the captured error or exhausted deadline. Structural failures name their reason.
 Reads require complete family membership, unique job IDs and matching run, metadata attempt and head.
-A completed job may retain an exact routing label from an earlier attempt of the same run;
+On the first attempt, the watchdog checks the selected shard numbers against the server labels and
+accepts families selected wholly for GitHub. A later attempt may carry forward a completed hosted
+family. A completed job may retain an exact routing label from an earlier attempt of the same run;
 queued and running jobs require the current attempt's label. After the wait it dispatches
 `server-health.yml` on `main`. A valid waiting inventory and accepted dispatch pass this
 watchdog; incomplete inventories and refused dispatches fail it. The shell retains its

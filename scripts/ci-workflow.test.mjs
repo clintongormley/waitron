@@ -76,6 +76,13 @@ const ADDITIONAL_ROUTES = [
   ["root-guards", "ROOT_GUARDS", null, false],
   ["bundle-smoke", "BUNDLE_SMOKE", null],
 ];
+const allServerJobs = JSON.stringify(
+  Object.fromEntries([
+    ...DISPOSABLE_FAMILIES.map((family) => [`test-${family}`, 24]),
+    ...ADDITIONAL_ROUTES.map(([id]) => [id, 24]),
+    ["test-server-stream", 1],
+  ]),
+);
 const familyCap = (family) => `DISPOSABLE_TESTS_${family.replaceAll("-", "_").toUpperCase()}_JOBS`;
 function routingContext(family = "server") {
   return {
@@ -105,6 +112,8 @@ function routingContext(family = "server") {
         outputs: {
           code: "true",
           server_route: "server",
+          server_route_attempt: "1",
+          server_jobs: allServerJobs,
           ...Object.fromEntries(
             DISPOSABLE_FAMILIES.map((name) => [
               name.replaceAll("-", "_"),
@@ -160,7 +169,7 @@ function runsAtGitHub(body, context) {
   });
 }
 function watchFamilies(context) {
-  const body = job("server-queue-watchdog").body;
+  const body = job("changes").body;
   const at = body.indexOf("          FAMILIES: >-");
   expect(at).toBeGreaterThan(-1);
   const rows = [];
@@ -168,11 +177,18 @@ function watchFamilies(context) {
     if (!line.startsWith("            ")) break;
     rows.push(line.trim());
   }
+  const steps = { classify: { outputs: {} }, gates: { outputs: {} } };
+  for (const line of body) {
+    const binding = line.match(/^ {6}(\w+): \$\{\{ steps\.(classify|gates)\.outputs\.(\w+) \}\}$/);
+    if (!binding) continue;
+    const [, changeOutput, step, stepOutput] = binding;
+    steps[step].outputs[stepOutput] = context.needs.changes.outputs[changeOutput];
+  }
   return JSON.parse(
     rows.join(" ").replace(/\$\{\{ (.*?) \}\}/g, (_, source) =>
       JSON.stringify(
         runInNewContext(source, {
-          ...context,
+          steps,
           always: undefined,
           success: undefined,
           failure: undefined,
@@ -184,6 +200,48 @@ function watchFamilies(context) {
 }
 
 describe("disposable family routing", () => {
+  it("places only selected shards of the first attempt on the server", () => {
+    const context = routingContext();
+    context.needs.changes.outputs.server_route = "hosted";
+    context.needs.changes.outputs.server_jobs = '{"lint":1,"test-server":2}';
+    const routing = job("test-server").body.find((line) => /^ {4}runs-on:/.test(line));
+    for (const shard of [1, 2, 3, 24]) {
+      context.matrix.shard = shard;
+      expect(expressionValue(routing, context)).toEqual(
+        shard <= 2 ? ["self-hosted", `dt-42-1234-1-test-server-${shard}`] : "ubuntu-latest",
+      );
+    }
+    expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(true);
+    context.github.run_attempt = 2;
+    expect(expressionValue(routing, context)).toBe("ubuntu-latest");
+    expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
+  });
+
+  it("keeps dependent jobs on GitHub during the first attempt", () => {
+    const context = routingContext();
+    for (const { id, body } of jobs.filter(
+      ({ id }) => id.endsWith("-merge") || id === "mutation-shared-aggregate",
+    )) {
+      const routing = body.find((line) => /^ {4}runs-on:/.test(line));
+      expect(expressionValue(routing, context), id).toBe("ubuntu-latest");
+    }
+  });
+
+  it("uses the old placement on a rerun only if that attempt ran its own planner", () => {
+    const context = routingContext();
+    context.github.run_attempt = 2;
+    context.needs.changes.outputs.server_route_attempt = "2";
+    for (const id of ["test-server", "test-server-merge", "lint", "root-guards"]) {
+      const routing = job(id).body.find((line) => /^ {4}runs-on:/.test(line));
+      expect(expressionValue(routing, context)).toEqual(["self-hosted", `dt-42-1234-2-${id}-1`]);
+      expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(true);
+      context.needs.changes.outputs.server_route_attempt = "1";
+      expect(expressionValue(routing, context)).toBe("ubuntu-latest");
+      expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
+      context.needs.changes.outputs.server_route_attempt = "2";
+    }
+  });
+
   it("evaluates watch-list environment expressions without job-status functions", () => {
     expect(() => watchFamilies(routingContext())).not.toThrow();
   });
@@ -215,12 +273,21 @@ describe("disposable family routing", () => {
     expect(row().enabled).toBe(false);
   });
 
+  it("gives typecheck, root guards, lint and numbered server shards first claim on free slots", () => {
+    expect(
+      watchFamilies(routingContext())
+        .slice(0, 5)
+        .map(({ id }) => id),
+    ).toEqual(["typecheck", "root-guards", "lint", "test-server", "test-server-stream"]);
+  });
+
   it("ties every watched family to its actual job scope, label and inventory", () => {
     const rows = watchFamilies(routingContext());
     expect(rows.map((row) => row.id).sort()).toEqual(
       [
         ...DISPOSABLE_FAMILIES.map((family) => `test-${family}`),
         ...ADDITIONAL_ROUTES.map(([id]) => id),
+        "test-server-stream",
       ].sort(),
     );
     for (const row of rows) {
@@ -231,6 +298,7 @@ describe("disposable family routing", () => {
       for (const match of body.join("\n").matchAll(/needs\.changes\.outputs\.(\w+)/g))
         context.needs.changes.outputs[match[1]] = "true";
       context.needs.changes.outputs.server_route = "server";
+      context.needs.changes.outputs.server_jobs = allServerJobs;
       const routing = body.find((line) => /^ {4}runs-on:/.test(line));
       expect(row.count).toBe(matrixShards(body)?.length ?? 1);
       expect(row.matrix).toBe(matrixShards(body) !== undefined);
@@ -247,30 +315,26 @@ describe("disposable family routing", () => {
     }
   });
 
-  // The licence and sign-off steps run after `gates`, so `changes` can fail with every output set.
-  it("watches only the families whose jobs still run when changes failed with outputs intact", () => {
-    const context = routingContext();
-    for (const key of Object.keys(context.needs.changes.outputs))
-      context.needs.changes.outputs[key] = "true";
-    for (const { id } of watchFamilies(context))
-      for (const match of job(id)
-        .body.join("\n")
-        .matchAll(/needs\.changes\.outputs\.(\w+)/g))
-        context.needs.changes.outputs[match[1]] = "true";
-    context.needs.changes.outputs.server_route = "server";
-    for (const result of ["success", "failure"]) {
-      context.needs.changes.result = result;
-      expect(jobCondition(job("server-queue-watchdog").body, context), result).toBe(true);
-      const rows = watchFamilies(context);
-      for (const row of rows)
-        expect(row.enabled, `${row.id} after ${result}`).toBe(
-          runsAtGitHub(job(row.id).body, context),
-        );
-      const enabled = rows.filter((row) => row.enabled).map((row) => row.id);
-      if (result === "success") expect(enabled).toHaveLength(rows.length);
-      else expect(enabled.sort()).toEqual(["lint", "root-guards"]);
-    }
-  });
+  it.each([false, true])(
+    "keeps lint and root guards hosted when planning fails (route set: %s)",
+    (routed) => {
+      const context = routingContext();
+      context.needs.changes.result = "failure";
+      if (!routed)
+        Object.assign(context.needs.changes.outputs, { server_route: "", server_jobs: "" });
+      for (const id of ["lint", "root-guards"]) {
+        const body = job(id).body;
+        expect(runsAtGitHub(body, context)).toBe(true);
+        expect(
+          expressionValue(
+            body.find((line) => /^ {4}runs-on:/.test(line)),
+            context,
+          ),
+        ).toBe("ubuntu-latest");
+      }
+      expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
+    },
+  );
 
   it("keeps the watchdog on GitHub and starts it for every admitted event and attempt", () => {
     const body = job("server-queue-watchdog").body;
@@ -280,6 +344,7 @@ describe("disposable family routing", () => {
         const context = routingContext();
         context.github.event_name = event;
         context.github.run_attempt = attempt;
+        context.needs.changes.outputs.server_route_attempt = String(attempt);
         expect(jobCondition(body, context), `${event} ${attempt}`).toBe(true);
         expect(
           expressionValue(
@@ -399,6 +464,7 @@ describe("disposable server routing", () => {
         const context = routingContext();
         context.github.event_name = event;
         context.github.run_attempt = 2;
+        context.needs.changes.outputs.server_route_attempt = "2";
         expect(expressionValue(routing, context), entry.id).toEqual([
           "self-hosted",
           `dt-42-1234-2-${entry.id}-1`,
@@ -650,6 +716,52 @@ exit "$status"
       if (!both) expect(result.output).toContain("test-ui");
     },
   );
+  it("watches the server prefix of a mixed batch and allows a hosted-only family", () => {
+    const server = inventory((rows) => {
+      Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
+      Object.assign(rows[1], {
+        status: "in_progress",
+        runner_id: 10,
+        labels: ["self-hosted", "dt-42-1234-1-test-server-2"],
+      });
+    });
+    const ui = familyRows("test-ui", 1, false, 100);
+    ui[0].labels = ["ubuntu-latest"];
+    const env = {
+      ...familyEnvironment(
+        { id: "test-server", count: 24, matrix: true, enabled: true },
+        { id: "test-ui", count: 1, matrix: false, enabled: true },
+      ),
+      SERVER_JOBS: '{"test-server":2}',
+    };
+    const result = runWatch({ polls: [pages([...server, ...ui])] }, env);
+    expect(result.status, result.output).toBe(0);
+    expect(recoveryDispatches(result)).toEqual([]);
+
+    server[1].labels = ["ubuntu-latest"];
+    const missing = runWatch({ polls: [pages([...server, ...ui])] }, env);
+    expect(missing.status, missing.output).not.toBe(0);
+    expect(missing.output).toContain("unexpected test-server placement");
+  });
+
+  it("accepts a completed hosted family carried over in a partial rerun", () => {
+    const ui = familyRows("test-ui", 1, false, 100);
+    Object.assign(ui[0], {
+      run_attempt: 2,
+      status: "completed",
+      labels: ["ubuntu-latest"],
+    });
+    const result = runWatch(
+      { polls: [pages(ui)] },
+      {
+        ...familyEnvironment({ id: "test-ui", count: 1, matrix: false, enabled: true }),
+        RUN_ATTEMPT: "2",
+      },
+    );
+    expect(result.status, result.output).toBe(0);
+    expect(recoveryDispatches(result)).toEqual([]);
+  });
+
   it("fails an enabled all-hosted family even when another family is assigned", () => {
     const server = inventory((rows) =>
       Object.assign(rows[0], { status: "in_progress", runner_id: 9 }),
@@ -3204,8 +3316,8 @@ describe("the test shards", () => {
     expect(job("ci").body).toContain("      - mutation-shared-aggregate");
   });
 
-  // `changes` can fail after setting every output, because its licence and sign-off steps come last.
-  it("runs only lint, root-guards, the watchdog and ci after changes failed with outputs set", () => {
+  // A licence or sign-off failure leaves the scope outputs available.
+  it("runs only lint, root-guards and ci after changes failed with scope outputs set", () => {
     const context = routingContext();
     for (const { body } of jobs)
       for (const match of body.join("\n").matchAll(/needs\.changes\.outputs\.(\w+)/g))
@@ -3222,9 +3334,10 @@ describe("the test shards", () => {
     expect(run()).toContain("mutation-shared-aggregate");
 
     context.needs.changes.result = "failure";
+    Object.assign(context.needs.changes.outputs, { server_route: "", server_jobs: "" });
     for (const { id } of downstream) context.needs[id] = { result: "skipped" };
     context.needs.ci = { result: "failure" };
-    expect(run().sort()).toEqual(["ci", "lint", "root-guards", "server-queue-watchdog"]);
+    expect(run().sort()).toEqual(["ci", "lint", "root-guards"]);
   });
 
   // A case's `pnpm ls` calls run side by side; when the case ends, pass or fail, the ones still

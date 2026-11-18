@@ -13,7 +13,7 @@ import {
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 function workflowEnvironment(capacity) {
-  const step = workflow.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}(?:- |#))/)?.[1];
+  const step = workflow.match(/^ {6}- id: server-route\n((?: {8}[^\n]*\n|[ \t]*\n)+)/m)?.[1];
   const condition = step.match(/^ {8}if: (.+)$/m)?.[1] ?? "true";
   expect(runInNewContext(condition, { vars: { DISPOSABLE_TESTS_MODE: "hosted" } })).toBe(true);
   const expression = workflow.match(/^ {10}CAPACITY: \$\{\{ (.+) \}\}$/m)?.[1];
@@ -69,6 +69,52 @@ function fixture(running = 0, queued = 0) {
 }
 
 describe("queue-pressure routing", () => {
+  it("fills free server slots without reading GitHub queue pressure on the first attempt", async () => {
+    const { options } = fixture();
+    options.capacity = { observedAt: 1, slots: 12, serverRunning: 6, serverWaiting: 1 };
+    const read = options.request;
+    options.request = async (path, requestOptions) => {
+      if (!path.includes("/workflows/ci.yml/runs?")) throw new Error("GitHub queue unavailable");
+      return read(path, requestOptions);
+    };
+    options.families = [
+      { id: "typecheck", count: 1, enabled: true },
+      { id: "root-guards", count: 1, enabled: true },
+      { id: "lint", count: 1, enabled: true },
+      { id: "test-server", count: 24, enabled: true },
+      { id: "test-server-stream", count: 1, enabled: true },
+    ];
+    const outputs = [];
+    await healthCommand("route", options, {
+      output: (line) => outputs.push(line),
+      report: () => {},
+    });
+    expect(outputs).toContain("server_route=hosted");
+    expect(outputs).toContain("server_route_attempt=1");
+    expect(outputs).toContain(
+      'server_jobs={"typecheck":1,"root-guards":1,"lint":1,"test-server":2}',
+    );
+  });
+
+  it("logs the whole route on a fresh rerun without a first-batch candidate list", async () => {
+    const { options, run } = fixture(20);
+    const read = options.request;
+    options.attempt = 2;
+    options.families = [{ id: "lint", count: 1, enabled: true }];
+    options.request = async (path, requestOptions) => {
+      if (path.endsWith("/runs/51")) return { ...run, id: 51, head_repository: { id: 42 } };
+      if (path.includes("/runs/51/attempts/1/jobs?")) return { total_count: 0, jobs: [] };
+      return read(path, requestOptions);
+    };
+    const reports = [];
+    await healthCommand("route", options, {
+      output: () => {},
+      report: (line) => reports.push(line),
+    });
+    expect(reports.join("\n")).toContain("CI route: server;");
+    expect(reports.join("\n")).not.toContain("CI server job candidates:");
+  });
+
   it.each(["health", "hosted"])(
     "routes past an old queued-list mismatch in the %s read but refuses differing fresh rows",
     async (scope) => {
