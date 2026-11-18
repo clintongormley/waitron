@@ -20,6 +20,7 @@ import {
 import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { deliversAsFullInvoice } from "./invoice-selection.js";
 import {
+  deliveryDue,
   expireInvoiceDeliveryClaims,
   latestNextAttempt,
   reportInvoiceDelivery,
@@ -104,7 +105,6 @@ export async function resendInvoicePrintJob(
   return retry;
 }
 
-/** The pull checks when the receipt is due in the same transaction, before attaching its token. */
 export async function claimInvoiceReceipt(
   tx: Transaction,
   printJobId: string,
@@ -131,6 +131,7 @@ export async function claimInvoiceReceipt(
         eq(invoiceDeliveries.printJobId, printJobId),
         eq(invoiceDeliveries.medium, "receipt"),
         eq(invoiceDeliveries.status, "queued"),
+        deliveryDue(now),
         exists(claimedJob),
       ),
     )

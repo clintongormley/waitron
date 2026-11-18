@@ -16,7 +16,8 @@ existing due-time inputs stay until dv14 and that the existing receipt claim che
 writer. The wire check applies to receipt claims. At 21:41 the watcher cleared keeping the claim
 holder and time when Bluetooth unpairing ends a claimed invoice receipt, so its original holder can
 still report the outcome. The till and dashboard keep the sending time by reading the linked job,
-as the watcher confirmed at 21:43. M1 was recorded separately in the
+as the watcher confirmed at 21:43. At 22:18 the watcher confirmed keeping the writer's due check
+and the exact drawer row test, including an empty claim hash on drawer jobs. M1 was recorded separately in the
 [printers backlog](../../backlog/printers.md#the-virtual-pdf-printer).
 
 **Original plan: one pull request, two parts** (merged on 2026-11-08 from two smaller plans to keep the area's PR

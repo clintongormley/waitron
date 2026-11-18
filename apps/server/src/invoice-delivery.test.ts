@@ -1116,6 +1116,27 @@ describe("receipt delivery reservation", () => {
     expect(await claimReceipt(ctx)).toBeDefined();
   });
 
+  it("does not attach a receipt claim before its delivery is due", async () => {
+    const ctx = await receiptClaimSetup();
+    await suite.db
+      .update(printJobs)
+      .set({ status: "printing", claimedBy: ctx.agentId })
+      .where(eq(printJobs.id, ctx.job.jobId));
+    const dueAt = new Date(start.getTime() + 60_000);
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({ nextAttemptAt: dueAt.toISOString() })
+      .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+    expect(await claimReceipt(ctx)).toBeUndefined();
+    expect((await rows())[0]).toMatchObject({ status: "queued", attempts: 0 });
+    expect((await suite.db.select().from(printJobs))[0]).toMatchObject({ claimTokenHash: null });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        claimInvoiceReceipt(tx, ctx.job.jobId, ctx.agentId, dueAt),
+      ),
+    ).toEqual({ token: expect.any(String) });
+  });
+
   it("requires the same agent's current print claim before assigning an invoice token", async () => {
     const ctx = await receiptClaimSetup();
     expect(await claimReceipt(ctx)).toBeUndefined();
