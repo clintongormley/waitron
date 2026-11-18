@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { cutParts, mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
-import { setMadeHereStations } from "./made-here.js";
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 
 import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
@@ -64,7 +64,7 @@ useVenueDb({
         { row: { kind: "product", productId: v.productId("Red wine bottle") }, zoneId: null },
         { kind: "station", stationId: cheeseStation },
       );
-      await setMadeHereStations(tx, v.cfg.origin.deviceId, [cheeseStation]);
+      await setMadeHere(tx, v.cfg.origin.deviceId, [cheeseStation]);
     });
     madeHereCfg = { ...v.cfg, sendingDeviceId: v.cfg.origin.deviceId };
     offers = await inTx(v, (tx) => offerProducts(tx, v.cfg, { zone: "tables" }));

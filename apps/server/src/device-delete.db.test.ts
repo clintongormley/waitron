@@ -1,3 +1,4 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { seedDeviceProfiles, seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
@@ -8,7 +9,6 @@ import {
   billPaymentRefunds,
   billPayments,
   deviceApprovedProfiles,
-  deviceMadeHereStations,
   deviceZoneSelections,
   devices,
   drawerOpens,
@@ -325,10 +325,8 @@ async function seed() {
     .where(eq(cardReaders.id, readerS));
   await suite.db.update(devices).set({ cardReaderId: readerR }).where(eq(devices.id, barTill));
   await suite.db.update(devices).set({ cardReaderId: readerS }).where(eq(devices.id, pass));
-  await suite.db.insert(deviceMadeHereStations).values([
-    { deviceId: barTill, stationId: grill },
-    { deviceId: pass, stationId: grill },
-  ]);
+  await setMadeHere(suite.db, barTill, [grill]);
+  await setMadeHere(suite.db, pass, [grill]);
   await suite.db.insert(deviceApprovedProfiles).values([
     { deviceId: barTill, deviceProfileId: waiters },
     { deviceId: pass, deviceProfileId: waiters },
@@ -624,10 +622,7 @@ describe("the device delete impact", () => {
     const s = await seed();
     await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, s.barTill));
     await signIn(s.barTill);
-    await suite.db
-      .update(deviceMadeHereStations)
-      .set({ stationId: s.fryer })
-      .where(eq(deviceMadeHereStations.deviceId, s.barTill));
+    await setMadeHere(suite.db, s.barTill, [s.fryer]);
     const before = await snapshot();
 
     const impact = await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill));
@@ -662,12 +657,14 @@ describe("the device delete impact", () => {
     const passRows = (snap: Snapshot, table: string, column = "device_id") =>
       snap[table]!.filter((row) => row[column] === s.pass);
     expect(passRows(before, "devices", "id")).toHaveLength(1);
+    expect(passRows(before, "devices", "id")[0]!.made_here_station_ids).toBe(
+      JSON.stringify([s.grill]),
+    );
     for (const [table, column] of [
       ["devices", "id"],
       ["till_sessions", "device_id"],
       ["printer_holders", "device_id"],
       ["card_readers", "held_by_device_id"],
-      ["device_made_here_stations", "device_id"],
       ["device_approved_profiles", "device_id"],
     ] as const) {
       expect(passRows(before, table, column).length, table).toBeGreaterThan(0);

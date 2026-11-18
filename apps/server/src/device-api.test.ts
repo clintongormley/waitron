@@ -11,7 +11,6 @@ import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceMadeHereStations,
   devices,
   deviceZoneSelections,
   deviceProfiles,
@@ -2010,14 +2009,11 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
         profileId: devices.deviceProfileId,
         receiptPrinterId: devices.receiptPrinterId,
         paymentSlipPrinterId: devices.paymentSlipPrinterId,
+        madeHereStationIds: devices.madeHereStationIds,
       })
       .from(devices)
       .where(eq(devices.id, deviceId));
-    const madeHere = await suite.db
-      .select({ stationId: deviceMadeHereStations.stationId })
-      .from(deviceMadeHereStations)
-      .where(eq(deviceMadeHereStations.deviceId, deviceId));
-    return { ...row!, madeHereStationIds: madeHere.map((r) => r.stationId) };
+    return row!;
   }
 
   async function edit(
@@ -2105,6 +2101,21 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "device.name_taken" } });
     expect(await labelOf(deviceId)).toBe("Till");
+  });
+
+  it("answers a taken name before an unavailable made-here station", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    await enrolTill(app, venue, "Bar till");
+    const { deviceId } = await enrolTill(app, venue, "Till");
+    const before = await storedBody(deviceId);
+    const res = await edit(app, venue.managerCookie, deviceId, {
+      name: "Bar till",
+      madeHereStationIds: [randomUUID()],
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "device.name_taken" } });
+    expect(await storedBody(deviceId)).toEqual(before);
   });
 
   it("a name differing only by surrounding spaces clashes", async () => {
@@ -2274,11 +2285,13 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
         paymentSlipPrinterId: t.counter,
         cashDrawerPrinterId: t.counter,
         invoicePrinterId: t.counter,
+        madeHereStationIds: [venue.defaultStationId],
       });
       expect(res.status).toBe(204);
     });
     expect(writes).toBe(1);
     expect(await labelOf(t.deviceId)).toBe("Bar till 2");
+    expect((await storedBody(t.deviceId)).madeHereStationIds).toEqual([venue.defaultStationId]);
     expect(await deviceBindings(t.deviceId)).toEqual({
       deviceProfileId: t.profileId,
       receiptPrinterId: t.counter,

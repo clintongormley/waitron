@@ -8,7 +8,6 @@ import {
   type DeleteTarget,
 } from "@waitron/shared";
 import {
-  deviceMadeHereStations,
   devices,
   deviceProfiles,
   kitchenStations,
@@ -17,6 +16,7 @@ import {
   orderTableLabels,
   parties,
   printers,
+  removeIdFromJson,
   stationPrinterPairs,
   ticketItems,
   workingOrderLines,
@@ -101,10 +101,14 @@ async function stationDeleteRules(tx: Transaction, id: string) {
     .where(eq(stationPrinterPairs.stationId, id));
   const madeHere = await tx
     .select({ id: devices.id, name: devices.label, active: devices.active })
-    .from(deviceMadeHereStations)
-    .innerJoin(devices, eq(devices.id, deviceMadeHereStations.deviceId))
+    .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(and(eq(deviceMadeHereStations.stationId, id), eq(deviceProfiles.formFactor, "till")));
+    .where(
+      and(
+        sql`exists (select 1 from json_each(${devices.madeHereStationIds}) where value = ${id})`,
+        eq(deviceProfiles.formFactor, "till"),
+      ),
+    );
   const refusals: DeleteImpact["refusals"] = [];
   if (station.isDefault)
     refusals.push({ code: "station.is_default", params: { stationId: id }, targets: [target] });
@@ -192,7 +196,7 @@ export async function deleteStation(
       .where(inArray(orderDrafts.id, [...new Set(drafts.map((row) => row.draftId))]));
   }
   await tx.update(kitchenStations).set({ printerIds: [] }).where(eq(kitchenStations.id, id));
-  await tx.delete(deviceMadeHereStations).where(eq(deviceMadeHereStations.stationId, id));
+  await removeIdFromJson(tx, devices.madeHereStationIds, id);
   await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, id));
   return impact;
 }

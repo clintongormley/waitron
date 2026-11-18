@@ -402,7 +402,6 @@ it.each([
       "printers",
       "card_readers",
       "join_requests",
-      "device_made_here_stations",
       "kitchen_stations",
       "device_approved_profiles",
       "device_profiles",
@@ -437,7 +436,6 @@ it.each([
       "devices",
       "device_profiles",
       "kitchen_stations",
-      "device_made_here_stations",
       "device_approved_profiles",
       "printer_holders",
       "device_profile_printers",
@@ -1031,7 +1029,6 @@ const stationDeleteReads = [
   "order_draft_lines",
   "kitchen_stations",
   "printers",
-  "device_made_here_stations",
   "devices",
   "device_profiles",
   "device_profile_kitchen_screens",
@@ -1087,7 +1084,7 @@ it("kitchen delete receives an arriving blocker and removed binding through pass
     api.liveData.invalidate([{ type: "ticket_items", id: "new-ticket" }]);
     await vi.waitFor(() => expect(observed.snapshot.value).toEqual(blocked));
     model = cleared;
-    api.liveData.invalidate([{ type: "device_made_here_stations", id: "removed-binding" }]);
+    api.liveData.invalidate([{ type: "devices", id: "till-1" }]);
     await vi.waitFor(() => expect(observed.snapshot.value).toEqual(cleared));
     expect(fetchImpl.mock.calls).toHaveLength(3);
     expect(

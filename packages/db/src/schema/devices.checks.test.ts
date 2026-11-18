@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDevice, seedVenue } from "../testing/seed.js";
@@ -49,4 +49,37 @@ it("stores the enrollment time without a second creation column", async () => {
     .from(devices)
     .where(eq(devices.id, deviceId));
   expect(row?.enrolledAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+});
+
+describe("made-here station assignment", () => {
+  const stationId = "aaaaaaaa-0000-4000-8000-000000000004";
+  const otherStationId = "aaaaaaaa-0000-4000-8000-000000000006";
+  const read = () =>
+    suite.db.all(sql`select made_here_station_ids from devices where id = ${deviceId}`);
+  const write = (value: string) =>
+    suite.db.execute(
+      sql`update devices set made_here_station_ids = ${value} where id = ${deviceId}`,
+    );
+
+  it("defaults to no station and round-trips one station", async () => {
+    expect(read()).toEqual([{ made_here_station_ids: "[]" }]);
+    const assignment = JSON.stringify([stationId]);
+    await write(assignment);
+    expect(read()).toEqual([{ made_here_station_ids: assignment }]);
+  });
+
+  it.each([
+    ["malformed JSON", "["],
+    ["an object", JSON.stringify({ stationId })],
+    ["two stations", JSON.stringify([stationId, otherStationId])],
+    ["a duplicate station", JSON.stringify([stationId, stationId])],
+  ])("refuses %s without replacing the saved station", async (_name, invalid) => {
+    const assignment = JSON.stringify([stationId]);
+    await write(assignment);
+    const error = await captureError(() => write(invalid));
+    expect(engineErrorMessage(error)).toBe(
+      "CHECK constraint failed: devices_made_here_station_ids_ck",
+    );
+    expect(read()).toEqual([{ made_here_station_ids: assignment }]);
+  });
 });

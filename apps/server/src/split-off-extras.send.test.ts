@@ -1,10 +1,10 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  deviceMadeHereStations,
   diningTables,
   kitchenStations,
   printJobs,
@@ -977,7 +977,7 @@ describe("sending split-off extras", () => {
         capabilities: [],
       });
       const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bar till" });
-      await tx.insert(deviceMadeHereStations).values({ deviceId, stationId: bar.id });
+      await setMadeHere(tx, deviceId, [bar.id]);
       const sink = new Set<string>();
       const { orderId, lines } = await sendWithHold(
         tx,
@@ -1025,9 +1025,7 @@ describe("sending split-off extras", () => {
         profileId: profile!.id,
         label: "Elsewhere",
       });
-      await tx
-        .insert(deviceMadeHereStations)
-        .values({ deviceId: here, stationId: venue.stations.fryer });
+      await setMadeHere(tx, here, [venue.stations.fryer]);
       const groupLine = {
         menuItemId: venue.tables.offerFor(venue.products.burger),
         quantity: "1",

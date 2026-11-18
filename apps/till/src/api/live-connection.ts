@@ -52,7 +52,6 @@ const KITCHEN_TYPES = [
   "kitchen_stations",
   "routing_cells",
   "routing_cell_periods",
-  "device_made_here_stations",
   "device_profile_kitchen_screens",
   "device_profile_kitchen_screen_stations",
   "device_profile_kitchen_screen_zones",

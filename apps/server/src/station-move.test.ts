@@ -1,3 +1,4 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import {
   seedBusinessDay,
@@ -13,7 +14,6 @@ import { describe, expect, it, vi } from "vitest";
 import { markIncidentHandled } from "@waitron/core";
 import {
   insertInChunks,
-  deviceMadeHereStations,
   kitchenStations,
   incidents,
   orderGroupHoldStations,
@@ -904,7 +904,7 @@ describe("release", () => {
         profileId: profile!.id,
         label: `Bar till ${randomUUID()}`,
       });
-      await tx.insert(deviceMadeHereStations).values({ deviceId: tillId, stationId: bar });
+      await setMadeHere(tx, tillId, [bar]);
       await setStationToday(
         tx,
         grill,
@@ -2701,7 +2701,7 @@ describe("moveDishesToStation", () => {
           profileId: profile!.id,
           label: `Bar till ${randomUUID()}`,
         });
-        await tx.insert(deviceMadeHereStations).values({ deviceId: tillId, stationId: bar });
+        await setMadeHere(tx, tillId, [bar]);
         return tillId;
       });
       const tableId = await venue.table(`D-${randomUUID().slice(0, 8)}`);

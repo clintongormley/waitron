@@ -1,3 +1,4 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { randomUUID } from "node:crypto";
@@ -5,7 +6,6 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  deviceMadeHereStations,
   kitchenStations,
   printJobs,
   ticketItems,
@@ -23,7 +23,7 @@ import { createCourse, createStation } from "./kitchen.js";
 import {
   readMadeHereStations,
   listMadeHereStations,
-  setMadeHereStations,
+  requireMadeHereStations,
   readMadeHereItems,
   madeHereAnswer,
   madeHereSinkFor,
@@ -82,8 +82,13 @@ async function deviceAt(tx: Transaction, stationId: string): Promise<string> {
     capabilities: [],
   });
   const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bar till" });
-  await tx.insert(deviceMadeHereStations).values({ deviceId, stationId });
+  await setMadeHere(tx, deviceId, [stationId]);
   return deviceId;
+}
+
+async function saveMadeHere(tx: Transaction, deviceId: string, stationIds: string[]) {
+  await requireMadeHereStations(tx, stationIds);
+  await setMadeHere(tx, deviceId, stationIds);
 }
 
 describe("device made-here stations", () => {
@@ -510,7 +515,7 @@ describe("device made-here stations", () => {
       const device = {
         id: (await seedDevice(tx, { profileId: profile!.id, label: "Bar till" })).deviceId,
       };
-      await setMadeHereStations(tx, device!.id, [venue.defaultStationId]);
+      await saveMadeHere(tx, device!.id, [venue.defaultStationId]);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const [line] = await tx
@@ -565,16 +570,16 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const bar = await createStation(tx, { name: "Bar" });
       await expect(
-        setMadeHereStations(tx, deviceId, [bar.id, venue.defaultStationId]),
+        saveMadeHere(tx, deviceId, [bar.id, venue.defaultStationId]),
       ).rejects.toMatchObject({
         code: "management.request_invalid",
         params: { field: "madeHereStationIds" },
       });
       expect(await readMadeHereStations(tx, deviceId)).toEqual(new Set([venue.defaultStationId]));
-      await setMadeHereStations(tx, deviceId, [bar.id]);
+      await saveMadeHere(tx, deviceId, [bar.id]);
       expect(await readMadeHereStations(tx, deviceId)).toEqual(new Set([bar.id]));
       expect((await listMadeHereStations(tx)).get(deviceId)).toEqual([bar.id]);
-      await setMadeHereStations(tx, deviceId, []);
+      await saveMadeHere(tx, deviceId, []);
       expect(await readMadeHereStations(tx, deviceId)).toEqual(new Set());
       expect((await listMadeHereStations(tx)).has(deviceId)).toBe(false);
       expect(await readMadeHereStations(tx, undefined)).toEqual(new Set());
@@ -592,9 +597,7 @@ describe("device made-here stations", () => {
           capabilities: [],
         });
         const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Device" });
-        await tx
-          .insert(deviceMadeHereStations)
-          .values({ deviceId, stationId: venue.defaultStationId });
+        await setMadeHere(tx, deviceId, [venue.defaultStationId]);
         const printerId = await stationPrinter(tx, venue.defaultStationId);
         const orderId = randomUUID();
         await createOpenOrder(tx, venue.cfg, orderId, [], null);
@@ -630,9 +633,9 @@ describe("device made-here stations", () => {
         id: (await seedDevice(tx, { profileId: profile!.id, label: "Counter" })).deviceId,
       };
       const off = await createStation(tx, { name: "Off" });
-      await setMadeHereStations(tx, device!.id, [venue.defaultStationId]);
+      await saveMadeHere(tx, device!.id, [venue.defaultStationId]);
       await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, off.id));
-      await expect(setMadeHereStations(tx, device!.id, [off.id])).rejects.toMatchObject({
+      await expect(saveMadeHere(tx, device!.id, [off.id])).rejects.toMatchObject({
         code: "station.not_found",
       });
       expect(await readMadeHereStations(tx, device!.id)).toEqual(new Set([venue.defaultStationId]));
@@ -652,8 +655,8 @@ describe("device made-here stations", () => {
         { id: (await seedDevice(tx, { profileId: profile!.id, label: "B" })).deviceId },
       ];
       const bar = await createStation(tx, { name: "Other bar" });
-      await setMadeHereStations(tx, b!.id, [bar.id]);
-      await setMadeHereStations(tx, a!.id, [venue.defaultStationId]);
+      await saveMadeHere(tx, b!.id, [bar.id]);
+      await saveMadeHere(tx, a!.id, [venue.defaultStationId]);
       expect(await readMadeHereStations(tx, a!.id)).toEqual(new Set([venue.defaultStationId]));
       expect(await readMadeHereStations(tx, b!.id)).toEqual(new Set([bar.id]));
     });

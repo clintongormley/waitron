@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ff87e590-7654-46ff-87cd-5a3b6c3c9e34",
+  "id": "70cc53f5-b02a-4e6c-81ac-04c769aa76af",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4893,6 +4893,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "made_here_station_ids": {
+          "name": "made_here_station_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
         "invoice_revision": {
           "name": "invoice_revision",
           "type": "integer",
@@ -5003,62 +5011,15 @@
           "name": "devices_deleted_ck",
           "value": "\"devices\".\"deleted_at\" is null or \"devices\".\"active\" = 0"
         },
+        "devices_made_here_station_ids_ck": {
+          "name": "devices_made_here_station_ids_ck",
+          "value": "json_valid(\"devices\".\"made_here_station_ids\") and json_type(\"devices\".\"made_here_station_ids\") = 'array' and json_array_length(\"devices\".\"made_here_station_ids\") <= 1"
+        },
         "devices_invoice_revision_ck": {
           "name": "devices_invoice_revision_ck",
           "value": "\"devices\".\"invoice_revision\" between 0 and 9007199254740991 and \"devices\".\"invoice_revision\" = cast(\"devices\".\"invoice_revision\" as integer)"
         }
       }
-    },
-    "device_made_here_stations": {
-      "name": "device_made_here_stations",
-      "columns": {
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "station_id": {
-          "name": "station_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "device_made_here_stations_device_fk": {
-          "name": "device_made_here_stations_device_fk",
-          "tableFrom": "device_made_here_stations",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "device_made_here_stations_station_fk": {
-          "name": "device_made_here_stations_station_fk",
-          "tableFrom": "device_made_here_stations",
-          "tableTo": "kitchen_stations",
-          "columnsFrom": [
-            "station_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "device_approved_profiles": {
       "name": "device_approved_profiles",

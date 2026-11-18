@@ -1,3 +1,4 @@
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { staffRoles, personStaffRoles } from "@waitron/db";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
@@ -13,7 +14,6 @@ import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  deviceMadeHereStations,
   deviceProfilePrinters,
   devices,
   deviceProfiles,
@@ -644,9 +644,7 @@ describe("a deleted device comes back as the same device", () => {
     const profileId = await seedProfile("till");
     const holdId = await openWindow(app, venue);
     const { deviceId, jar: oldJar } = await addDevice(app, venue, holdId, "Bar till", profileId);
-    await suite.db
-      .insert(deviceMadeHereStations)
-      .values({ deviceId, stationId: venue.defaultStationId });
+    await setMadeHere(suite.db, deviceId, [venue.defaultStationId]);
     const [reader] = await suite.db
       .insert(cardReaders)
       .values({ provider: "fake", providerRef: "reader-1", name: "Lector 1" })
@@ -694,10 +692,10 @@ describe("a deleted device comes back as the same device", () => {
     expect((await deviceRow(deviceId)).active).toBe(true);
     expect(
       await suite.db
-        .select({ stationId: deviceMadeHereStations.stationId })
-        .from(deviceMadeHereStations)
-        .where(eq(deviceMadeHereStations.deviceId, deviceId)),
-    ).toEqual([{ stationId: venue.defaultStationId }]);
+        .select({ madeHereStationIds: devices.madeHereStationIds })
+        .from(devices)
+        .where(eq(devices.id, deviceId)),
+    ).toEqual([{ madeHereStationIds: [venue.defaultStationId] }]);
     expect(
       await suite.db
         .select({ readerId: devices.cardReaderId })

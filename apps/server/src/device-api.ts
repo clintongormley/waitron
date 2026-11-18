@@ -100,7 +100,7 @@ import type { KitchenScreenKind, ResolvedKitchenScreen, ScreenSlot } from "@wait
 import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
-import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
+import { listMadeHereStations, requireMadeHereStations } from "./made-here.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
 import type { PassBoard } from "./pass-card.js";
 import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
@@ -926,16 +926,34 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           }
           columns = { ...columns, ...check.columns };
         }
-        await updateDeviceSettings(tx, { id }, { label, profileId }, refused ? {} : columns);
+        let stationRefusal: AppError | undefined;
+        if (!refused && madeHere !== undefined) {
+          try {
+            await requireMadeHereStations(tx, madeHere as string[]);
+          } catch (error) {
+            if (!(error instanceof AppError)) throw error;
+            stationRefusal = error;
+          }
+        }
+        // Let the device write report a taken name before a station refusal.
+        await updateDeviceSettings(
+          tx,
+          { id },
+          { label, profileId },
+          refused
+            ? {}
+            : {
+                ...columns,
+                madeHereStationIds: stationRefusal ? undefined : (madeHere as string[] | undefined),
+              },
+        );
         if (refused) {
           throw await equipmentRefusal(tx, refused.role, refused.selection, refused.result);
         }
         if (!switching && Object.keys(columns).length > 0) {
           await settleDevicePrinters(tx, id, { acquire: true });
         }
-        if (madeHere !== undefined) {
-          await setMadeHereStations(tx, id, madeHere as string[]);
-        }
+        if (stationRefusal) throw stationRefusal;
         await keepApprovedAfterSwitch(tx, id, device.deviceProfileId, profileId);
         if (approvedIds !== undefined) await approveDeviceProfiles(tx, id, approvedIds as string[]);
         if (switching) await endSessionsNotAdmitted(tx, id, profileId);

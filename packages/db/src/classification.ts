@@ -135,7 +135,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("day_cutover_changes", "state", STATE),
   classify("nodes", "state", STATE),
   classify("devices", "state", STATE),
-  classify("device_made_here_stations", "state", STATE),
   classify("device_approved_profiles", "state", STATE),
   classify("device_profiles", "state", STATE),
   classify("device_profile_printers", "state", STATE),

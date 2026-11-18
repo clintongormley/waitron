@@ -433,7 +433,7 @@ it("delete impact refreshes a new blocker and a removed binding through the modu
     await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
     expect(observed.snapshot.value).toEqual(model);
     model = { ...model, removes: [] };
-    liveData.invalidate([{ type: "device_made_here_stations", id: "removed" }]);
+    liveData.invalidate([{ type: "devices", id: "till-1" }]);
     await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
     expect(observed.snapshot.value).toEqual(model);
     expect(request.mock.calls).toEqual(

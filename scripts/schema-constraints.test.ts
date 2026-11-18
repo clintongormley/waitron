@@ -81,8 +81,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["special_day_dates", ["special_day_id"], "special_days"],
   ["device_approved_profiles", ["device_id"], "devices"],
   ["device_approved_profiles", ["device_profile_id"], "device_profiles"],
-  ["device_made_here_stations", ["device_id"], "devices"],
-  ["device_made_here_stations", ["station_id"], "kitchen_stations"],
   ["device_profile_admission_roles", ["device_profile_id"], "device_profiles"],
   ["device_profile_admission_roles", ["staff_role_id"], "staff_roles"],
   ["device_profile_printers", ["device_profile_id"], "device_profiles"],
