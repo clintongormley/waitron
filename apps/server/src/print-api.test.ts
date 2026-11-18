@@ -6511,6 +6511,7 @@ describe("held print pulls", () => {
       body: { status: "failed", error: "printer offline" },
     });
     expect(report.status).toBe(204);
+    await enqueue(printer, new Uint8Array([2]));
     const dueAt = Date.now() + 5_000;
     const pending = r.request();
     await held(r.bus);

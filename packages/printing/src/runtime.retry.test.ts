@@ -3,7 +3,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, printAgents, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { enqueuePrintJob } from "./outbox.js";
+import { endMovedPrintJob, enqueuePrintJob } from "./outbox.js";
+import { endDeletedPrinterJobs } from "./printer-delete-jobs.js";
 import { createPrinter } from "./printers.js";
 import { claimPrintJobs, endUnpairedPrinterJobs, reportPrintJob } from "./runtime.js";
 
@@ -106,6 +107,20 @@ it("ends a waiting retry when its printer is unpaired", async () => {
   expect(state(id)).toEqual({ status: "failed", attempts: 5, next_attempt_at: null });
   vi.setSystemTime(start + 5_000);
   expect(await claim()).toEqual([]);
+});
+
+it("clears a waiting retry when its document is moved to another printer", async () => {
+  const id = await failFirstAttempt();
+  expect(await withTransaction(suite.db, (tx) => endMovedPrintJob(tx, id))).toBe(true);
+  expect(state(id)).toEqual({ status: "failed", attempts: 5, next_attempt_at: null });
+});
+
+it("clears a waiting retry when its printer is deleted", async () => {
+  const id = await failFirstAttempt();
+  expect(await withTransaction(suite.db, (tx) => endDeletedPrinterJobs(tx, printerId))).toEqual([
+    id,
+  ]);
+  expect(state(id)).toEqual({ status: "failed", attempts: 5, next_attempt_at: null });
 });
 
 it("holds later documents on the same printer while drawers and other printers continue", async () => {

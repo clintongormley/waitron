@@ -666,6 +666,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             createdAt: printJobs.createdAt,
             claimedAt: printJobs.claimedAt,
             nextAttemptAt: printJobs.nextAttemptAt,
+            printerId: printJobs.printerId,
           })
           .from(printJobs)
           .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
@@ -694,13 +695,17 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               ),
             ),
           );
+        const retryingPrinters = new Set(
+          pending.filter((job) => job.status === "failed").map((job) => job.printerId),
+        );
         for (const job of pending) {
           if (job.status === "failed") {
             remaining = Math.min(remaining, Date.parse(job.nextAttemptAt!) - Date.now());
             continue;
           }
           if (job.status === "queued" && job.kind === "document") {
-            remaining = Math.min(remaining, 2_000);
+            // A retry already tells us this printer is reachable.
+            if (!retryingPrinters.has(job.printerId)) remaining = Math.min(remaining, 2_000);
             continue;
           }
           const at =
