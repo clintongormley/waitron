@@ -6377,7 +6377,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 ### Personal log field names
 
 - **A detail or log field holding a person's name, email or tax number uses a name on
-  `PERSONAL_LOG_KEYS` (`apps/server/src/log-personal-data.ts`),
+  `PERSONAL_LOG_KEYS` or a path on `PERSONAL_LOG_PATHS` (`apps/server/src/log-personal-data.ts`),
   which the server's logger masks in every line it writes; the answer keeps it. Name it for whose
   it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is
   the venue's own): the list is flat across every code.** Cost: staff names and emails reached the
@@ -6385,6 +6385,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   `scripts/personal-log-params.test.ts`, weaker than its name: reads text, judges keys by a word
   list and a named type only by its name, sees no spread at a throw site or in a log call, no free
   text and not the watchdog's own line. Limits: [conventions-ui.md](conventions-ui.md#the-unauthenticated-recovery-page-curated-title-and-action-the-failed-starts-report-and-the-logs-last-lines).
+
+2026-11-18: `PERSONAL_LOG_PATHS` no longer exists; a SumUp merchant's name travels as
+`merchantName`, a key on `PERSONAL_LOG_KEYS`.
 
 ### Configuration preview field guard
 
