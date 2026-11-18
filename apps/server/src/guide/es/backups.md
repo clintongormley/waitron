@@ -14,11 +14,15 @@ Para reutilizar tu configuración en un local nuevo, introduce y confirma una co
 
 ## Copias programadas {#archives}
 
-Elige una carpeta de este servidor, un bucket compatible con S3 o ambos. Para un bucket, introduce sus datos de conexión.
+Puedes guardar copias en una carpeta de este servidor o en un bucket compatible con S3. Para un bucket, introduce sus datos de conexión.
 
 Elige los días y la hora y establece cuántas copias guardar y qué antigüedad pueden tener. Deja seleccionado **Que lo decida el servidor** si quieres hacer las copias tras el cierre y los informes del día. Guarda la clave de recuperación como se indica abajo y elige **Activar las copias**.
 
+Si puedes elegir **Waitron Cloud**, selecciona **Todos los días** para que Cloud reciba las copias según la programación de tu local. Waitron Cloud decide cuándo caducan sus copias antiguas.
+
 Con las copias activadas, usa **Cambiar el destino o la programación** y **Guardar cambios** para ajustarlas. Revisa la última copia de cada destino y atiende los fallos que muestre.
+
+Si Cloud deja de estar disponible, abre **Cambiar el destino o la programación** y elige **Quitar Waitron Cloud**. Mantén una carpeta o un bucket seleccionado y guarda los cambios.
 
 ## Guarda tus claves {#keys}
 

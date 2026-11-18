@@ -58,6 +58,7 @@ import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import { readStreamSettings, type StreamSettings } from "./stream-host.js";
 import type { StreamHost } from "./stream-host.js";
 import type { Turns } from "./backup-turns.js";
+import { cloudArchiveAvailable } from "./cloud-archive-target.js";
 import type { CloudConnectionStatus } from "./cloud-client.js";
 import "./errors.js";
 
@@ -365,7 +366,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     const key = await recoveryKeyFacts(env, () => deps.supervisor.current().recoveryKey);
     const stream: StreamView & { pruneBlockedSince?: string } = { ...deps.readStream() };
     delete stream.pruneBlockedSince;
+    const cloud = await deps.readCloudStatus?.().catch(() => undefined);
     return {
+      cloudBackups: cloudArchiveAvailable(cloud) ? "available" : "unavailable",
       ...projectStatus(await deps.supervisor.status()),
       ...(key.fileKey === undefined
         ? {}

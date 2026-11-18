@@ -1,7 +1,7 @@
 import { useLocale } from "../testing/locale-setup.js";
 import { LiveData, hasCodeMessage } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget, quietRejection } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -1409,6 +1409,131 @@ describe("backup-screen failures and edit-mode prefill", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
     return { el, api };
   }
+
+  it("offers Cloud as the only destination and saves the choice", async () => {
+    const api = stubApi({}, { ...OFF, recoveryKeySet: true, cloudBackups: "available" });
+    const el = await mountLoaded(api);
+    const choice = q(el, "[data-test=archive-cloud]")!;
+    expect(choice).not.toBeNull();
+    await page.getByRole("switch", { name: "Waitron Cloud" }).click();
+    q(el, "[data-test=archive-folder-on]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: false } }),
+    );
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await vi.waitFor(() =>
+      expect(api.applyBackup).toHaveBeenCalledWith(
+        expect.objectContaining({ cloud: true, destinations: [] }),
+      ),
+    );
+  });
+
+  it("shows a saved Cloud outcome, hides the unavailable choice and preserves it on a local save", async () => {
+    const { el, api } = await enterEdit({
+      ...ENABLED,
+      cloud: true,
+      cloudBackups: "unavailable",
+      backupStatus: {
+        configured: true,
+        destinations: [
+          {
+            id: "cloud",
+            lastBackupAt: null,
+            ageSeconds: null,
+            stale: true,
+            readErrorCode: "cloud.unavailable",
+            storedUnderCurrentKey: false,
+            uploadErrorCode: null,
+            pruneErrorCode: null,
+          },
+        ],
+      },
+    });
+    expect(q(el, "[data-test=archive-cloud]")).toBeNull();
+    expect(q(el, "[data-destination=cloud]")?.textContent).toContain(
+      codeMessage("cloud.unavailable"),
+    );
+    const folder = page.getByText(t("backup.destination.choice_local"), { exact: true });
+    await folder.click();
+    q(el, "[data-test=save-settings]")!.click();
+    await el.updateComplete;
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    await folder.click();
+    await editDestination(el);
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.applyBackup).mock.calls[0]![0]).not.toHaveProperty("cloud");
+  });
+
+  it("removes saved Cloud while unavailable and saves a weekday schedule", async () => {
+    const { el, api } = await enterEdit({ ...ENABLED, cloud: true, cloudBackups: "unavailable" });
+    await vi.waitFor(() => expect(q(el, "[data-test=remove-cloud]")).not.toBeNull());
+    q(el, "[data-test=remove-cloud]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=save-settings]")).toHaveProperty("disabled", false);
+    await chooseOption(q(el, "[data-test=days-mode]")!, "weekdays");
+    await el.updateComplete;
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() =>
+      expect(api.applyBackup).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          cloud: false,
+          schedule: { kind: "wall-clock", days: [1, 2, 3, 4, 5], at: "auto" },
+        }),
+      ),
+    );
+  });
+
+  it("places the daily refusal under the schedule and fixes the draft when asked", async () => {
+    const { el, api } = await enterEdit({
+      ...ENABLED,
+      cloud: true,
+      cloudBackups: "available",
+    });
+    vi.mocked(api.applyBackup).mockRejectedValueOnce({
+      code: "backup.cloud_needs_daily",
+      params: { field: "schedule" },
+    });
+    await chooseOption(q(el, "[data-test=days-mode]")!, "weekdays");
+    tickCheckbox(el, "[data-test=weekday-1]");
+    await el.updateComplete;
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=days-mode]")).toHaveProperty(
+        "error",
+        codeMessage("backup.cloud_needs_daily"),
+      ),
+    );
+    expect(archiveAlertText(el)).toBe(t("form.fix_fields"));
+    expect(q(el, "[data-test=save-settings]")).toHaveProperty("disabled", false);
+    q(el, "[data-test=cloud-daily]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=days-mode]")).toHaveProperty("value", "daily");
+    expect(q(el, "[data-test=days-mode]")).toHaveProperty("error", "");
+    expect(api.applyBackup).toHaveBeenCalledOnce();
+  });
+
+  it("puts a Cloud refusal under the choice and clears it when that choice changes", async () => {
+    const { el, api } = await enterEdit({ ...ENABLED, cloudBackups: "available" });
+    vi.mocked(api.applyBackup).mockRejectedValueOnce({
+      code: "backup.cloud_unavailable",
+      params: { field: "cloud" },
+    });
+    const choice = page.getByRole("switch", { name: "Waitron Cloud" });
+    await choice.click();
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=archive-cloud]")).toHaveProperty(
+        "description",
+        codeMessage("backup.cloud_unavailable"),
+      ),
+    );
+    expect(archiveAlertText(el)).toBe(t("form.fix_fields"));
+    const control = q(el, "[data-test=archive-cloud]")!.shadowRoot!;
+    await vi.waitFor(() => expect(control.activeElement).toBe(control.querySelector("input")));
+    await userEvent.keyboard(" ");
+    expect(q(el, "[data-test=archive-cloud]")).toHaveProperty("description", "");
+  });
 
   it("shows a localized alert and keeps apply disabled when no key can be minted", async () => {
     const api = stubApi({
