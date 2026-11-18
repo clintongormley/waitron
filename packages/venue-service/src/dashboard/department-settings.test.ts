@@ -2185,17 +2185,14 @@ async function addStep(el: DepartmentSettings) {
   stepList(el).shadowRoot!.querySelector<HTMLElement>("[data-test=add-service-step]")!.click();
   await settled(el);
 }
-function listError(el: DepartmentSettings) {
-  return (
-    stepList(el).shadowRoot!.querySelector("[data-test=list-error]")?.textContent?.trim() ?? ""
-  );
-}
 function stepErrors(el: DepartmentSettings) {
   return stepRows(el).map((_, index) =>
     (["Name", "Start", "Minutes"] as const).map((name) => stepControl(el, index, name).error),
   );
 }
 const REFUSED = "This value was not accepted. Change it and save again.";
+const LIST_REFUSED = "The service steps were not accepted. Change them and save again.";
+const STEP_CHANGED = "A step was changed elsewhere. Cancel and open it again to see the latest.";
 const COURSE_GONE = "That course was deleted. Choose another start.";
 it("shows Service steps under Table states, before Needs clearing, with this department's steps", async () => {
   const { el } = await mount(stepsView());
@@ -2864,7 +2861,6 @@ it("a refusal naming a step's field, sent while Details shows, brings back Table
     await settled(el);
     expect(stepControl(el, index, control).error).toBe(REFUSED);
     expect(stepErrors(el).flat().filter(Boolean)).toEqual([REFUSED]);
-    expect(listError(el)).toBe("");
     await strip(el).updateComplete;
     expect(strip(el).items.map((item) => item.marked)).toEqual([
       undefined,
@@ -2877,8 +2873,11 @@ it("a refusal naming a step's field, sent while Details shows, brings back Table
     expect(save(el).disabled).toBe(false);
     expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
   }
-  for (const refusedField of ["serviceSteps", "serviceSteps.1", "serviceSteps.1.id"]) {
-    const { el } = await mount(stepsView(), {
+});
+it.each(["serviceSteps", "serviceSteps.1", "serviceSteps.1.id"])(
+  "puts the refusal for %s above Save without marking any step",
+  async (refusedField) => {
+    const { el, writes } = await mount(stepsView(), {
       code: "management.request_invalid",
       params: { field: refusedField },
     });
@@ -2889,14 +2888,16 @@ it("a refusal naming a step's field, sent while Details shows, brings back Table
     save(el).click();
     await expect.poll(() => el.tab).toBe("tables");
     await settled(el);
-    expect(listError(el)).toBe(REFUSED);
+    await expect.poll(() => bottom(el)).toBe(LIST_REFUSED);
     expect(stepErrors(el).flat().filter(Boolean)).toEqual([]);
     expect(save(el).disabled).toBe(false);
-    expect(await bottom(el)).toBe("");
+    save(el).click();
+    await expect.poll(() => writes.length).toBe(2);
+    await expect.poll(() => bottom(el)).toBe(LIST_REFUSED);
     await editStep(el, 1, "Name", "Take the orders");
-    expect(listError(el)).toBe("");
-  }
-});
+    expect(await bottom(el)).toBe("");
+  },
+);
 it("a course deleted meanwhile is named under every step that starts from it", async () => {
   const { el } = await mount(stepsView(), {
     code: "course.not_found",
@@ -2912,7 +2913,6 @@ it("a course deleted meanwhile is named under every step that starts from it", a
     ["", COURSE_GONE, ""],
     ["", COURSE_GONE, ""],
   ]);
-  expect(listError(el)).toBe("");
   expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
   expect(save(el).disabled).toBe(false);
   await chooseStart(el, 1, "all_served");
@@ -2955,19 +2955,16 @@ it("a step another manager deleted says so, and Cancel emits cancelled", async (
   await settled(el);
   await editStep(el, 1, "Name", "Take orders");
   save(el).click();
-  await expect
-    .poll(() => listError(el))
-    .toBe("A step was changed elsewhere. Cancel and open it again to see the latest.");
+  await expect.poll(() => bottom(el)).toBe(STEP_CHANGED);
   expect(stepErrors(el).flat().filter(Boolean)).toEqual([]);
   expect(save(el).disabled).toBe(false);
-  expect(await bottom(el)).toBe("");
   const heard: unknown[] = [];
   el.addEventListener("cancelled", (e) => heard.push((e as CustomEvent).detail));
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
   await el.updateComplete;
   expect(heard).toEqual([{ departmentId: "d1" }]);
 });
-it("a list refusal beside a highlighted field keeps Correct the highlighted fields at the bottom", async () => {
+it("shows both the list refusal and the correction sentence when a field is highlighted", async () => {
   const { el } = await mount(stepsView(), {
     code: "service_step.not_found",
     params: { stepId: "s2" },
@@ -2976,16 +2973,10 @@ it("a list refusal beside a highlighted field keeps Correct the highlighted fiel
   await settled(el);
   await editStep(el, 1, "Name", "Take orders");
   save(el).click();
-  await expect
-    .poll(() => listError(el))
-    .toBe("A step was changed elsewhere. Cancel and open it again to see the latest.");
-  expect(await bottom(el)).toBe("");
+  await expect.poll(() => bottom(el)).toBe(STEP_CHANGED);
   await change(el, "name", "");
   expect(field(el, "name").error).toBe("This field is required.");
-  expect(listError(el)).toBe(
-    "A step was changed elsewhere. Cancel and open it again to see the latest.",
-  );
-  expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
+  expect(await bottom(el)).toBe(`${STEP_CHANGED} Correct the highlighted fields to continue.`);
 });
 it("reads in Spanish: Pasos de servicio under Estados de la mesa", async () => {
   setLocale("es");

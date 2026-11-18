@@ -99,11 +99,8 @@ export class DepartmentServiceSteps extends LitElement {
       .visually-hidden {
         ${visuallyHiddenStyles}
       }
-      .required,
-      .error {
-        color: var(--wt-color-danger);
-      }
       .required {
+        color: var(--wt-color-danger);
         margin-inline-start: var(--wt-space-1);
       }
     `,
@@ -112,7 +109,6 @@ export class DepartmentServiceSteps extends LitElement {
   @property({ attribute: false }) steps: ServiceStepDraft[] = [];
   @property({ attribute: false }) courses: { id: string; name: string }[] = [];
   @property({ attribute: false }) errors: ServiceStepErrors = {};
-  @property({ attribute: false }) listError = "";
   @property({ type: Boolean }) disabled = false;
 
   #send(steps: ServiceStepDraft[], place = false): void {
@@ -308,9 +304,11 @@ export class DepartmentServiceSteps extends LitElement {
                     >*</span
                   ></span
                 >
-                <span class="minutes" data-head>
-                  <span class="visually-hidden">${t("venue.service_step_minutes")}</span>
-                </span>
+                <span class="minutes" data-head
+                  >${t("venue.service_step_minutes")}<span class="required" aria-hidden="true"
+                    >*</span
+                  ></span
+                >
               </div>
             </th>
             ${
@@ -341,11 +339,6 @@ export class DepartmentServiceSteps extends LitElement {
         this.steps.length === 0
           ? html`<p class="empty" data-test="empty">${t("venue.no_service_steps")}</p>`
           : this.#table()
-      }
-      ${
-        this.listError
-          ? html`<p class="error" data-test="list-error" role="alert">${this.listError}</p>`
-          : nothing
       }
       ${
         this.disabled

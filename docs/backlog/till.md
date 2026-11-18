@@ -814,9 +814,7 @@ later in the dashboard gets the starter steps. Also for the owner, from #1891's 
 start box cuts labels short — "Repeats after the last order" at every width (Chromium on macOS:
 the text needs 176 px and the box gives 150 on a desktop), and several more at phone width once
 the minutes box grew to 120 px — so either a shorter fifth-start wording or the start on its own
-line on a phone; the minutes field has no visible required mark, since its column heading is
-hidden; and when only the step list is refused, the form's bottom message stays blank, where the
-forms contract expects the refusal's own sentence there.
+line on a phone.
 [Open questions](../superpowers/plans/2026-10-19-a757-7-service-step-settings.md#open-questions-each-with-the-default-this-plan-uses)
 
 

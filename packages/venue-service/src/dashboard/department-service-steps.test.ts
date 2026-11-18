@@ -64,9 +64,7 @@ async function settle(el: DepartmentServiceSteps): Promise<void> {
 }
 
 async function mount(
-  props: Partial<
-    Pick<DepartmentServiceSteps, "steps" | "courses" | "errors" | "listError" | "disabled">
-  > = {},
+  props: Partial<Pick<DepartmentServiceSteps, "steps" | "courses" | "errors" | "disabled">> = {},
 ): Promise<DepartmentServiceSteps> {
   const el = (await mountInShadowRoot(
     "<department-service-steps></department-service-steps>",
@@ -339,7 +337,6 @@ it("shows each error under its own field", async () => {
       s2: { name: "This field is required." },
       s3: { minutes: "Whole minutes, 0 to 120." },
     },
-    listError: "A step was changed elsewhere. Cancel and open it again to see the latest.",
   });
   const name = nameInput(el, 1);
   const minutes = minutesInput(el, 2);
@@ -353,9 +350,6 @@ it("shows each error under its own field", async () => {
   expect(minutes.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
   expect(nameInput(el, 0).shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe(
     "false",
-  );
-  expect(q(el, '[data-test="list-error"]')!.textContent!.trim()).toBe(
-    "A step was changed elsewhere. Cancel and open it again to see the latest.",
   );
 });
 
@@ -493,24 +487,38 @@ it("reads in Spanish", async () => {
   }
 });
 
-it("marks Step and Starts as required", async () => {
+it("visibly marks Step, Starts and Minutes as required", async () => {
   const el = await mount();
-  const marks = [...el.shadowRoot!.querySelectorAll("thead [data-head]")]
-    .slice(0, 2)
-    .map((head) => head.querySelector(".required"));
-  expect(marks.map((mark) => mark?.textContent)).toEqual(["*", "*"]);
-  expect(marks.map((mark) => mark!.getAttribute("aria-hidden"))).toEqual(["true", "true"]);
+  const marks = [...el.shadowRoot!.querySelectorAll("thead [data-head]")].map((head) =>
+    head.querySelector<HTMLElement>(".required"),
+  );
+  expect(marks.map((mark) => mark?.textContent)).toEqual(["*", "*", "*"]);
+  for (const mark of marks) {
+    expect(mark!.getAttribute("aria-hidden")).toBe("true");
+    expect(mark!.checkVisibility()).toBe(true);
+    const box = mark!.getBoundingClientRect();
+    expect(box.width * box.height).toBeGreaterThan(1);
+  }
+  expect(minutesInput(el, 0).shadowRoot!.querySelector<HTMLInputElement>("input")!.required).toBe(
+    true,
+  );
 });
 
-it("names the Minutes and Actions columns for screen readers without drawing the words", async () => {
+it("draws Minutes beside its required mark and keeps Actions available to screen readers", async () => {
   const el = await mount();
-  const labels = [...el.shadowRoot!.querySelectorAll<HTMLElement>("thead .visually-hidden")];
-  expect(labels.map((label) => label.textContent)).toEqual(["Minutes", "Actions"]);
-  for (const label of labels) {
-    expect(label.checkVisibility(), label.textContent!).toBe(true);
-    const box = label.getBoundingClientRect();
-    expect(box.width * box.height, label.textContent!).toBeLessThanOrEqual(1);
-  }
+  expect(heads(el)).toEqual(["Step", "Starts", "Minutes"]);
+  const heading = q(el, "thead .minutes")!;
+  const label = new Range();
+  label.selectNodeContents(heading);
+  const box = label.getBoundingClientRect();
+  expect(box.width).toBeGreaterThan(
+    heading.querySelector(".required")!.getBoundingClientRect().width,
+  );
+  const actions = q(el, "thead .actions-cell")!.querySelector<HTMLElement>(".visually-hidden")!;
+  expect(actions.textContent).toBe("Actions");
+  expect(actions.checkVisibility()).toBe(true);
+  const hidden = actions.getBoundingClientRect();
+  expect(hidden.width * hidden.height).toBeLessThanOrEqual(1);
 });
 
 it("reads a course or step name holding a replacement pattern literally", async () => {
