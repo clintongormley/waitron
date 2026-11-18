@@ -85,11 +85,14 @@ const OFFSET_MARGIN_MS = 14 * 60 * 60 * 1000;
 const FIRST_EVENT_AT = "0000-01-01T00:00:00.000Z";
 const LAST_EVENT_AT = "9999-12-31T23:59:59.000Z";
 
-const unretimedAnchor = sql`not exists (
-  select 1 from time_entries corrected indexed by time_entries_corrects_entry_idx
-  where corrected.corrects_entry_id = anchor.id and corrected.person_id = anchor.person_id
-    and corrected.entry_kind = 'correction' and corrected.correction_status = 'approved'
-)`;
+function hasNoApprovedReplacement(entryId: SQL, personId: SQL): SQL {
+  return sql`not exists (
+    select 1 from time_entries corrected indexed by time_entries_corrects_entry_idx
+    where corrected.corrects_entry_id = ${entryId} and corrected.person_id = ${personId}
+      and corrected.entry_kind = 'correction' and corrected.correction_status = 'approved'
+  )`;
+}
+const unretimedAnchor = hasNoApprovedReplacement(sql`anchor.id`, sql`anchor.person_id`);
 const seedColumns = sql`seed.id, seed.person_id, seed.event_at, seed.corrects_entry_id, seed.responds_to_entry_id`;
 
 function entryFamily(seed: SQL): SQL {
@@ -180,11 +183,12 @@ export async function readOutstandingHoursEntries(
   },
 ): Promise<TimeEntryRecord[]> {
   // Checking whether an undecided correction is ready still needs the full sequence.
-  const undecided = tx.execute(sql`
+  const undecided = await tx.execute(sql`
     select 1 from time_entries request indexed by time_entries_person_event_idx
     where request.person_id = ${personId} and request.entry_kind = 'correction'
       and request.correction_status = 'requested'
       and request.correction_direction in ('worker_request', 'manager_proposal')
+      and ${hasNoApprovedReplacement(sql`request.corrects_entry_id`, sql`request.person_id`)}
       and not exists (
         select 1 from time_entries decision indexed by time_entries_person_event_idx
         where decision.person_id = request.person_id and decision.event_at = request.event_at
@@ -192,8 +196,8 @@ export async function readOutstandingHoursEntries(
           and decision.responds_to_entry_id = request.id
       )
     limit 1
-  `).rows;
-  if (undecided.length > 0) return readRecordedEntries(tx, { personId });
+  `);
+  if (undecided.rows.length > 0) return readRecordedEntries(tx, { personId });
 
   // An unretimed direct in or out resets open shifts. Keep every event at its instant.
   const latest = sql`(

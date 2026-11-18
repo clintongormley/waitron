@@ -324,6 +324,30 @@ it("keeps old missing questions and unacknowledged automatic history outside a s
   expect(value.pending.prompts.map((p) => p.id)).toEqual([questionId]);
   expect(value.record.entries.map((e) => e.entry.entryId)).toEqual([start, end]);
 });
+it("reads only the current shift boundary once a competing correction has changed the target", async () => {
+  await shift("2026-01-02");
+  const { end } = await shift();
+  await request(end);
+  const proposal = await send(
+    {
+      action: "propose",
+      personId: f.personId,
+      changes: [{ target: { entryId: end }, at: "2026-01-05T19:00:00Z", offsetMinutes: 0 }],
+      reason: "Later finish",
+    },
+    f.manager,
+  );
+  await send({ action: "accept", itemId: proposal.entryIds[0]! });
+  const latest = await shift("2026-03-02");
+  const entries = await f.run((tx) =>
+    recordReads.readOutstandingHoursEntries(tx, {
+      personId: f.personId,
+      questionWindows: [],
+      questionEntryIds: [],
+    }),
+  );
+  expect(entries.map(({ entryId }) => entryId)).toEqual([latest.end]);
+});
 it("matches full-history Hours with a year of settled shifts and older outstanding work", async () => {
   const { questionId } = await automatic();
   const automaticEnd = async (date: string) => {
@@ -351,11 +375,6 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
     entryIds: [declined],
   } = await request(anotherEnd, "2026-01-08T18:00:00Z");
   await send({ action: "decline", itemId: declined! }, f.manager);
-  // Exercise a saved resolution pointing outside the question's day and other entry families.
-  await f.suite.db
-    .update(api.attendanceQuestions)
-    .set({ resolvedByEntryId: declined! })
-    .where(eq(api.attendanceQuestions.id, questionId));
 
   const { start: missingDayStart, end: missingDayEnd } = await shift("2026-01-09");
   const missingDay = {
@@ -372,7 +391,7 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
         day: missingDay,
         shiftKey: "another-shift",
         kind: "missing-times",
-        missingKinds: ["out"],
+        missingKinds: ["in", "out"],
         openEntryId: null,
         automaticEntryId: null,
         evidenceKeys: ["order:another"],
@@ -381,6 +400,26 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
       dayId,
     );
   });
+  const pair = await send({
+    action: "request",
+    questionId: missingQuestion,
+    changes: [
+      { target: { missingKind: "in" }, at: "2026-01-09T22:00:00Z", offsetMinutes: 0 },
+      { target: { missingKind: "out" }, at: "2026-01-10T05:00:00Z", offsetMinutes: 0 },
+    ],
+    reason: "I missed both stamps",
+  });
+  const decline = await send({ action: "decline", itemId: pair.commandId }, f.manager);
+  // Exercise a saved resolution pointing outside the question's day and other entry families.
+  await f.suite.db
+    .update(api.attendanceQuestions)
+    .set({ resolvedByEntryId: declined! })
+    .where(eq(api.attendanceQuestions.id, questionId));
+  // A linked decline leaves the question open even when the saved resolution names a clock-in.
+  await f.suite.db
+    .update(api.attendanceQuestions)
+    .set({ resolvedByEntryId: missingDayStart })
+    .where(eq(api.attendanceQuestions.id, missingQuestion));
   const confirmed = await automaticEnd("2026-01-10");
   await f.run((tx) =>
     f.backend.confirmAutomaticEntry(tx, {
@@ -441,6 +480,8 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
   expect(hours.pending.prompts[1]!.history.map(({ entryId }) => entryId)).toEqual([
     missingDayStart,
     missingDayEnd,
+    ...pair.entryIds,
+    ...decline.entryIds,
   ]);
   expect(otherHours.pending.items).toMatchObject([
     { id: pending, status: "waiting-manager", readyToApply: false },
