@@ -913,9 +913,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * checkbox, the Edit/Delete menu) sit above the activator, so they are never swallowed. */
   @property({ attribute: false }) rowClick?: (row: Row) => void;
   @property({ attribute: false }) rowClickLabel: (row: Row) => string = () => "Open row";
-  /** What a click or Enter anywhere on a row does: "click" calls `rowClick`, "none" leaves the row
-   * to its own controls, and "toggle" opens and closes a tree's branch (on a flat table it acts as
-   * "none"). Unset, every row clicks. */
+  /** What a row's activator does: "click" calls `rowClick`, "none" draws no activator and leaves the
+   * row to its own controls, and "toggle" opens and closes a tree row that can collapse and acts as
+   * "none" on any other row, every row of a flat table included. Unset, every row clicks. */
   @property({ attribute: false }) rowActivation?: (row: Row) => "toggle" | "click" | "none";
   @property({ type: Boolean }) loading = false;
   @property() loadingMessage = "Loading";

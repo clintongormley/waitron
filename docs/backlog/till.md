@@ -1585,26 +1585,34 @@ except that it no longer waits on the retired split and transfer routes (A1196).
 - **Editing a device still has to send its name, its profile and, unless the profile is a kitchen
   display, its receipt and payment-slip printer choices (lane B, 2026-11-18, not the owner; the
   owner may overrule).** The edit request (`PATCH /management-api/devices/:id`) does not treat every
-  field as optional, as #1235's review suggested: no screen sends a partial edit, so that would add
-  a path nothing uses.
+  field as optional, as #1235's review suggested: its one caller, the Devices screen's Edit
+  (`updateDevice` in `apps/dashboard/src/api/client.ts`), always sends them, so that would add a
+  path nothing uses.
 
-- **A copy of a disabled device's cookie can still ask to come back first, and so make the real
-  device's cookie stop working (watcher, 2026-11-18, not the owner; the owner may overrule).** Each
-  ask to come back gives the asking browser a new cookie and makes the old one worthless
-  (`createJoinRequest` in `apps/server/src/join-requests.ts`), so the real tablet's next ask joins
-  as a new device, and a manager gives it its name and profile again. It stays because a page
-  cannot read the cookie (`httpOnly`, `sameSite: "Strict"`, `setDeviceCookie` in
-  `apps/server/src/device-session.ts`): a copy needs hands on the tablet's browser or a compromised
-  tablet, and that person could already act as the device while it was enabled. Keeping the old
-  cookie valid as a second lasting proof would add a credential to guard. Outside development mode
-  an ask only waits: a route that requires the device refuses a disabled one (`requireDeviceProof`,
-  through `readDeviceProof`, reads only `active` devices, `apps/server/src/device-session.ts:197`)
-  until a manager with hardware administration checks the number on the device's screen and accepts
+- **A copy of a deleted device's cookie can still ask to come back first, and so make the real
+  device's cookie stop working (watcher, 2026-11-18, lane B, not the owner; the owner may overrule;
+  decided before review showed that on a box serving plain HTTP the cookie crosses the network
+  unencrypted).** Each ask to come back gives the asking browser a new cookie and makes the old one
+  worthless (`createJoinRequest` in `apps/server/src/join-requests.ts`), so the real tablet's next
+  ask joins as a new device, and a manager gives it its name and profile again. It stays because a
+  copy taken while the device was enabled already let its holder act as the device, and keeping the
+  old cookie valid as a second lasting proof would add a credential to guard. A page's scripts
+  cannot read the cookie (`httpOnly`, `setDeviceCookie` in `apps/server/src/device-session.ts`). It
+  is marked `Secure` only when the box serves the tills over HTTPS (`secureCookies` in
+  `apps/server/src/boot.ts`); on a box serving plain HTTP it crosses the venue's network
+  unencrypted. Outside development mode a copy can ask only while the venue's join window is open,
+  "held open by the dashboard dialogs that are open" (`apps/server/src/pairing-mode.ts`); with it
+  shut the ask is refused `device.pairing_closed` and replaces nothing ("with no Add a device dialog
+  open, a disabled device's knock is refused and changes nothing" in
+  `apps/server/src/join-e2e.test.ts`). An ask that is taken only waits: a route that requires the
+  device refuses it (`requireDeviceProof`, through `readDeviceProof`, reads only `active` devices,
+  `apps/server/src/device-session.ts:197`) until a manager with hardware administration checks the
+  number on the device's screen and accepts
   (`POST /management-api/device-join-requests/:id/accept`, `apps/server/src/join-api.ts:334`).
-  Pinned by "a disabled device that asks again reaches no device route until its ask is accepted"
-  in `apps/server/src/device-api.test.ts`, for the device's own read (`GET /api/device/me`). In
-  development mode (`devMode`) an ask is accepted at once (the `auto` branch of
-  `POST /api/device/join` in `apps/server/src/device-api.ts`).
+  Pinned by "knocks as itself, is listed as returning, and Pair enables the same row with its
+  settings" in `apps/server/src/join-e2e.test.ts`, for the device's own read
+  (`GET /api/device/me`). In development mode (`devMode`) an ask is accepted at once (the `auto`
+  branch of `POST /api/device/join` in `apps/server/src/device-api.ts`).
 
 - **A sold-out extra stays on a reopened held order, flagged, and only a raise of its line is refused
   (owner, 2026-09-23, lane B Q1, option A: "keep sold-out lines in held work, flag them on the till,

@@ -677,6 +677,9 @@ describe("a deleted device comes back as the same device", () => {
     ]);
     const pending = await send(app, "GET", "/api/device/join/status", { cookie: back.jar });
     expect(await pending.json()).toEqual({ status: "pending" });
+    const waiting = await send(app, "GET", "/api/device/me", { cookie: back.jar });
+    expect(waiting.status).toBe(401);
+    expect((await errorOf(waiting)).code).toBe("device.unauthorized");
 
     const accepted = await pair(app, venue, holdId, back, { name: "Bar till", profileId });
     expect(accepted.status).toBe(200);
