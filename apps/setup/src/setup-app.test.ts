@@ -2745,6 +2745,57 @@ describe("setup-app", () => {
       expect(refused.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
     });
 
+    it("focuses the code field when the main server asks again for another email", async () => {
+      const adopt = vi.fn().mockRejectedValue(TOTP_REQUIRED);
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeLoginAndConnect(el);
+      const first = await screenHost(el, "connect");
+      await vi.waitFor(() =>
+        expect(first.shadowRoot!.querySelector("[data-test=totp]")).not.toBeNull(),
+      );
+      await userEvent.fill(input(first, "email"), "other@example.com");
+      first.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
+      await flush(el);
+      expect(adopt).toHaveBeenCalledTimes(2);
+
+      const connect = await screenHost(el, "connect");
+      expect(connect).not.toBe(first);
+      const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
+      await vi.waitFor(() => expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp")));
+      expect(input(connect, "email").value).toBe("other@example.com");
+    });
+
+    it("focuses the code field when the main server asks again after the person left and came back", async () => {
+      const adopt = vi.fn().mockRejectedValue(TOTP_REQUIRED);
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeLoginAndConnect(el);
+      const first = await screenHost(el, "connect");
+      await vi.waitFor(() =>
+        expect(first.shadowRoot!.querySelector("[data-test=totp]")).not.toBeNull(),
+      );
+      goto(el, "role");
+      await el.updateComplete;
+      const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "wt-unsaved-changes",
+      )!;
+      await expect.poll(() => warning.open).toBe(true);
+      warning.dispatchEvent(
+        new CustomEvent("wt-unsaved-choice", {
+          detail: { decision: "discard" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await expect.poll(() => readState(el, ["screen"]).screen).toBe("role");
+
+      await typeLoginAndConnect(el);
+      expect(adopt).toHaveBeenCalledTimes(2);
+      const connect = await screenHost(el, "connect");
+      expect(connect).not.toBe(first);
+      const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
+      await vi.waitFor(() => expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp")));
+    });
+
     it("drops the code request once the person changes the address, before the new main server answers", async () => {
       const adopt = vi
         .fn()
