@@ -707,7 +707,7 @@ describe("the first-start marker (rebuild-first-start.ts)", () => {
   });
 });
 
-describe("validateArtifact / writeValidated (validate before wipe)", () => {
+describe("validateArtifact / writeValidated", () => {
   useTempDirs("waitron-validate-");
 
   function deps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
