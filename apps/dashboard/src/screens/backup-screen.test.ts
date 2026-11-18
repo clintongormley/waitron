@@ -1469,6 +1469,8 @@ describe("backup-screen failures and edit-mode prefill", () => {
     const { el, api } = await enterEdit({ ...ENABLED, cloud: true, cloudBackups: "unavailable" });
     await vi.waitFor(() => expect(q(el, "[data-test=remove-cloud]")).not.toBeNull());
     q(el, "[data-test=remove-cloud]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=save-settings]")).toHaveProperty("disabled", false);
     await chooseOption(q(el, "[data-test=days-mode]")!, "weekdays");
     await el.updateComplete;
     q(el, "[data-test=save-settings]")!.click();
