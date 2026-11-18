@@ -77,11 +77,12 @@ record the successful €10 Virtual A control and the later virtual-reader sessi
 The €11 late decline needed a manager-confirmed release after the provider reported `FAILED`;
 €42.51 returned a generic decline within the till's wait. A separate €10 Virtual B payment settled
 its own bill and matched SumUp's `SUCCESSFUL` transaction. The owner's 17 November paired-Solo
-check captured EUR 1.40 (TAAA7H7DNAD). The paired-reader daily match still needs the post-midnight
-read-only venue evidence and the owner's comparison; backup-machine, PIN and signature
-qualification remain open. Idle reader battery refresh timing is not qualified. Waitron omits
-old or undated SumUp battery snapshots; staff check charge on the reader when no percentage is
-shown. See the script's dated battery provenance and the existing alert-cache limit.
+check captured €1.40. The next daily audit checked that charge by reference and amount with no
+discrepancies. The owner saw both completed checks in SumUp comparison, with no rows in the two
+payment lists. Backup-machine, PIN and signature qualification remain open. Idle reader battery
+refresh timing remains unqualified. Waitron omits old or undated SumUp battery snapshots. Check
+charge on the reader when no percentage is shown. See the script's dated battery provenance and
+the existing alert-cache limit.
 
 **9 November continuation:** the owner's cross-account session accepted Waitron's new affiliate
 block with the restaurant's credential. A reference read changed from 404 to PENDING before the
@@ -166,6 +167,8 @@ refunded unfiled charge keeps the order held until explicit confirmation. Direct
 linked payments can retain provider-confirmed remaining money on the bill, bill-first with any excess
 as a tip; failed-linked payments keep the full-refund route. Stripe durable reversal attempts and backup-machine
 hardware qualification remain open, along with signature handling.
+
+- Show managers the daily match result for payments taken through paired SumUp readers. The SumUp comparison lists standalone payment matches and payments that need checking.
 
 The daily gross-charge audit and read-only refund comparison do not establish bank arrival.
 The original transaction can stay
