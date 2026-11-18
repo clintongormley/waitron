@@ -132,10 +132,13 @@ it("draws semantic shared fields, explicit unset text and a locked province expl
 
 it("uses the country-pack dropdown to preview and save Canary Islands time", async () => {
   setLocale("en-GB");
-  const r = rig();
+  const r = rig(venueDetailsFixture({ timeZone: "europe/madrid" }));
   const el = await editing(r.api);
   const zone = q(el, 'wt-combobox[name="timeZone"]')!;
   expect(zone).not.toBeNull();
+  expect(zone.shadowRoot!.querySelector('[role="combobox"]')?.textContent).toContain(
+    "Mainland Spain (Europe/Madrid)",
+  );
   await userEvent.click(page.getByRole("combobox", { name: /Time zone/ }));
   expect(
     [...zone.shadowRoot!.querySelectorAll('[role="option"]')].map((option) =>

@@ -589,7 +589,7 @@ export class VenueDetailsPanel extends LitElement {
     const selected = listedZone(value);
     const current = this.#expected!.timeZone;
     const listedCurrent = value === current ? selected : listedZone(current);
-    if (current !== "" && listedCurrent === undefined)
+    if (listedCurrent === undefined)
       options.unshift({
         value: current,
         label: fill("venue_details.time_zone_current", { zone: current }),
