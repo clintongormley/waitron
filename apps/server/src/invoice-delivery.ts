@@ -13,7 +13,7 @@ import {
   type A4FailureCode,
   type Transaction,
 } from "@waitron/db";
-import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
+import { enqueueA4PrintJob, MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import { deliversAsFullInvoice } from "./invoice-selection.js";
 
@@ -151,6 +151,11 @@ export async function reserveInvoiceDelivery(
   if (receiptJob !== undefined && receiptJob.receiptCopy !== (designation === "duplicate")) {
     throw new AppError("invoice_delivery.receipt_invalid", {});
   }
+  const a4CreatedAt = input.medium === "a4" ? new Date().toISOString() : undefined;
+  const a4Job =
+    input.medium === "a4" && !disabledDestination
+      ? await enqueueA4PrintJob(tx, input.pagePrinterId, saleId, a4CreatedAt!)
+      : undefined;
   const [delivery] = await tx
     .insert(invoiceDeliveries)
     .values({
@@ -164,7 +169,7 @@ export async function reserveInvoiceDelivery(
       ...(input.medium === "email"
         ? { recipient: input.recipient, madeByRetry: input.madeByRetry }
         : input.medium === "a4"
-          ? { printerId: input.pagePrinterId }
+          ? { printerId: input.pagePrinterId, printJobId: a4Job?.jobId, createdAt: a4CreatedAt }
           : { printJobId: input.printJobId, printerChosen: input.printerChosen }),
     })
     .returning();
@@ -242,6 +247,41 @@ export function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+export function dueA4Print(now: Date): SQL {
+  return and(
+    eq(printJobs.kind, "a4"),
+    eq(printJobs.status, "queued"),
+    or(
+      lte(printJobs.createdAt, now.toISOString()),
+      gt(printJobs.createdAt, latestNextAttempt(now)),
+    ),
+  )!;
+}
+
+export async function endA4PrintJobs(
+  tx: Transaction,
+  deliveries: { printJobId: string | null }[],
+  reason: "printer_disabled" | "switched",
+) {
+  const ids = deliveries.flatMap(({ printJobId }) => (printJobId === null ? [] : [printJobId]));
+  if (ids.length === 0) return;
+  await tx
+    .update(printJobs)
+    .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: reason })
+    .where(and(eq(printJobs.kind, "a4"), inArray(printJobs.id, ids)));
+}
+
+export function a4DeliveryClaim(claim: InvoiceDeliveryClaim): SQL {
+  return and(
+    eq(invoiceDeliveries.medium, "a4"),
+    eq(invoiceDeliveries.id, claim.deliveryId),
+    eq(invoiceDeliveries.generation, claim.generation),
+    sql`exists (select 1 from ${printJobs} where ${printJobs.id} = ${invoiceDeliveries.printJobId}
+      and ${printJobs.kind} = 'a4' and ${printJobs.claimedBy} = ${claim.holder}
+      and ${printJobs.claimTokenHash} = ${tokenHash(claim.token)})`,
+  )!;
+}
+
 export async function claimInvoiceDelivery(
   tx: Transaction,
   deliveryId: string,
@@ -254,6 +294,26 @@ export async function claimInvoiceDelivery(
     .where(eq(invoiceDeliveries.id, deliveryId));
   if (delivery === undefined || delivery.medium === "receipt") return undefined;
   const token = randomUUID();
+  if (delivery.medium === "a4") {
+    if (delivery.status !== "queued" || delivery.printJobId === null) return undefined;
+    const [job] = await tx
+      .update(printJobs)
+      .set({
+        status: "printing",
+        attempts: sql`${printJobs.attempts} + 1`,
+        claimTokenHash: tokenHash(token),
+        claimedBy: holder,
+        claimedAt: now.toISOString(),
+      })
+      .where(and(eq(printJobs.id, delivery.printJobId), dueA4Print(now)))
+      .returning({ id: printJobs.id });
+    if (job === undefined) return undefined;
+    await tx
+      .update(invoiceDeliveries)
+      .set({ status: "sending" })
+      .where(eq(invoiceDeliveries.id, deliveryId));
+    return { deliveryId, generation: delivery.generation, token, holder };
+  }
   const [row] = await tx
     .update(invoiceDeliveries)
     .set({
@@ -261,7 +321,6 @@ export async function claimInvoiceDelivery(
       attempts: sql`${invoiceDeliveries.attempts} + 1`,
       claimTokenHash: tokenHash(token),
       claimedBy: holder,
-      claimedAgentId: delivery.medium === "email" ? null : holder,
       claimedAt: now.toISOString(),
     })
     .where(
@@ -281,9 +340,9 @@ function expiringClaims(now: Date, restart = false) {
     restart
       ? undefined
       : or(
-          and(ne(invoiceDeliveries.medium, "receipt"), claimLapsed(now)),
+          and(eq(invoiceDeliveries.medium, "email"), claimLapsed(now)),
           and(
-            eq(invoiceDeliveries.medium, "receipt"),
+            ne(invoiceDeliveries.medium, "email"),
             sql`exists (select 1 from ${printJobs}
               where ${printJobs.id} = ${invoiceDeliveries.printJobId}
                 and ${claimLapsed(now, printJobs.claimedAt)})`,
@@ -423,12 +482,15 @@ export async function reportInvoiceDelivery(
           sql`exists (select 1 from ${printJobs} where ${printJobs.id} = ${claim.printJobId}
             and ${printJobs.claimedBy} = ${claim.holder} and ${printJobs.claimTokenHash} = ${hash})`,
         )
-      : and(
-          ne(invoiceDeliveries.medium, "receipt"),
-          eq(invoiceDeliveries.id, claim.deliveryId),
-          eq(invoiceDeliveries.generation, claim.generation),
-          eq(invoiceDeliveries.claimTokenHash, hash),
-          eq(invoiceDeliveries.claimedBy, claim.holder),
+      : or(
+          a4DeliveryClaim(claim),
+          and(
+            eq(invoiceDeliveries.medium, "email"),
+            eq(invoiceDeliveries.id, claim.deliveryId),
+            eq(invoiceDeliveries.generation, claim.generation),
+            eq(invoiceDeliveries.claimTokenHash, hash),
+            eq(invoiceDeliveries.claimedBy, claim.holder),
+          ),
         );
   const [delivery] = await tx
     .select()

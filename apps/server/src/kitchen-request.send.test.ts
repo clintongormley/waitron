@@ -88,7 +88,7 @@ async function payloadHashes(tx: Transaction, printerId: string) {
       .select({ payload: printJobs.payload })
       .from(printJobs)
       .where(eq(printJobs.printerId, printerId))
-  ).map((job) => createHash("sha256").update(job.payload).digest("hex"));
+  ).map((job) => createHash("sha256").update(job.payload!).digest("hex"));
 }
 
 async function jobCounts(tx: Transaction, venue: Venue) {

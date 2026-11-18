@@ -464,8 +464,8 @@ describe("POST /management-api/reports/categories/print", () => {
     const job = jobs.find((j) => j.id === body.jobId)!;
     expect(job.kind).toBe("document");
     // CLAUDE.md §5: a document job never carries a drawer pulse.
-    expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
-    const lines = printedLines(new Uint8Array(job.payload));
+    expect(opensDrawer(new Uint8Array(job.payload!))).toBe(false);
+    const lines = printedLines(new Uint8Array(job.payload!));
     expect(lines[0]).toBe("Current categories");
     expect(lines).toContain("From 2026-06-10 to 2026-06-11");
     expect(lines.find((l) => l.startsWith("Beverages"))).toBeDefined();
@@ -489,7 +489,7 @@ describe("POST /management-api/reports/categories/print", () => {
     expect(res.status).toBe(202);
     const { jobId } = (await res.json()) as { jobId: string };
     const job = (await jobsOn(narrowPrinter)).find((j) => j.id === jobId)!;
-    const lines = printedLines(new Uint8Array(job.payload));
+    const lines = printedLines(new Uint8Array(job.payload!));
     expect(lines[0]).toBe("Categories at time of sale");
     expect(lines.join(" ")).toContain("Extras rolled into their dish");
     expect(lines.join(" ")).not.toContain("incomplete");
@@ -501,7 +501,7 @@ describe("POST /management-api/reports/categories/print", () => {
     const heading = async (res: Response): Promise<string> => {
       const { jobId } = (await res.json()) as { jobId: string };
       const job = (await jobsOn(barPrinter)).find((j) => j.id === jobId)!;
-      return printedLines(new Uint8Array(job.payload))[0]!;
+      return printedLines(new Uint8Array(job.payload!))[0]!;
     };
     expect(await heading(await print(body, { acceptLanguage: "es" }))).toBe("Categorías actuales");
     await personLocale(managerCookie, "en-GB");

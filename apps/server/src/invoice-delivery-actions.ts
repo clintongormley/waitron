@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, exists, isNull } from "drizzle-orm";
 import {
   cancelMail,
   receiptRollColumns,
@@ -14,6 +14,7 @@ import {
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import {
+  endA4PrintJobs,
   expireInvoiceDeliveryClaims,
   reserveInvoiceDelivery,
   type InvoiceDelivery,
@@ -238,12 +239,26 @@ export async function switchToReceipt(
       and(
         eq(invoiceDeliveries.id, deliveryId),
         eq(invoiceDeliveries.status, "queued"),
-        isNull(invoiceDeliveries.claimedAt),
+        attempt.medium === "a4"
+          ? exists(
+              tx
+                .select({ id: printJobs.id })
+                .from(printJobs)
+                .where(
+                  and(
+                    eq(printJobs.id, invoiceDeliveries.printJobId),
+                    eq(printJobs.status, "queued"),
+                    isNull(printJobs.claimedAt),
+                  ),
+                ),
+            )
+          : isNull(invoiceDeliveries.claimedAt),
       ),
     )
-    .returning({ id: invoiceDeliveries.id });
+    .returning({ printJobId: invoiceDeliveries.printJobId });
   if (switched.length === 0) throw new AppError("invoice_delivery.active", {});
   if (attempt.medium === "email") await cancelMail(tx, `invoice:${deliveryId}`);
+  else await endA4PrintJobs(tx, switched, "switched");
   if (receipt.status === "not_queued") {
     const ticket =
       sale.workingOrderId === null

@@ -117,7 +117,7 @@ describe("A964 language boundaries", () => {
       }
       const before = await v.db.select().from(printJobs);
       expect(before).toHaveLength(2);
-      expect(before.every((j) => text(j.payload).includes("Pass roast"))).toBe(true);
+      expect(before.every((j) => text(j.payload!).includes("Pass roast"))).toBe(true);
       const tickets = await ticketItemsWithBill(v.db).where(
         eq(workingOrderLines.workingOrderId, p.tabId),
       );
@@ -157,7 +157,7 @@ describe("A964 language boundaries", () => {
       expect(after).toHaveLength(3);
       const next = after.find((j) => !before.some((old) => old.id === j.id))!;
       expect(next.printerId).toBe(printerId);
-      const paper = text(next.payload);
+      const paper = text(next.payload!);
       expect(paper.match(/Pass roast/g)).toHaveLength(2);
       expect(paper.match(/Window guest/g)).toHaveLength(2);
       expect(paper.match(/Separate pan/g)).toHaveLength(2);
@@ -239,14 +239,14 @@ describe("A964 language boundaries", () => {
         enqueueAllergyCorrectionSlips(tx, v.cfg, p.tabId, [{ ...target, allergyBlock: block }]),
       );
       const corrected = (await v.db.select().from(printJobs)).at(-1)!;
-      expect(text(corrected.payload)).toContain("New guest");
-      expect(text(corrected.payload)).not.toContain("Window guest");
+      expect(text(corrected.payload!)).toContain("New guest");
+      expect(text(corrected.payload!)).not.toContain("Window guest");
       await inTx(v, (tx) =>
         enqueueAllergyCorrectionSlips(tx, v.cfg, p.tabId, [{ ...target, allergyBlock: null }]),
       );
       const removed = (await v.db.select().from(printJobs)).at(-1)!;
-      expect(text(removed.payload)).toContain(KITCHEN_ALLERGY_WORDS[language].removed);
-      expect(text(removed.payload)).not.toContain("New guest");
+      expect(text(removed.payload!)).toContain(KITCHEN_ALLERGY_WORDS[language].removed);
+      expect(text(removed.payload!)).not.toContain("New guest");
       await inTx(v, async (tx) => {
         await tx
           .update(printJobs)
@@ -315,7 +315,7 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
       (j) => !old.some((o) => o.id === j.id),
     );
     expect(next).toHaveLength(1);
-    const paper = text(next[0]!.payload);
+    const paper = text(next[0]!.payload!);
     expect(paper).toContain(receiptDateTime(payment!.settledAt!, "es-ES"));
     expect(paper).toContain(formatMoney("1234.56", "es-ES"));
     expect(formatMoney("1234.56", "en-GB")).not.toBe(formatMoney("1234.56", "es-ES"));
@@ -323,7 +323,7 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
       receiptDateTime(payment!.settledAt!, "es-ES"),
     );
     if (first !== undefined) expect(next[0]!.payload).toEqual(first);
-    first = next[0]!.payload;
+    first = next[0]!.payload!;
   }
   const after = await v.db.select().from(printJobs);
   for (const j of before) expect(after.find((o) => o.id === j.id)).toEqual(j);

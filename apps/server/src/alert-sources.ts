@@ -543,7 +543,7 @@ export function undeliveredInvoice(
     };
   }
   if (current.medium !== "a4" || current.status !== "queued") return null;
-  // A queued row's time is its `next_attempt_at`, which is never null. One further ahead than the
+  // A queued A4 delivery reports its due time. One further ahead than the
   // longest retry wait was stamped before the clock stepped back: it is due now, and when it became
   // due is unknown.
   const stampedAhead = Date.parse(current.at!) > Date.parse(latestNextAttempt(now));
@@ -564,12 +564,20 @@ async function readUndeliveredContext(
   const attempts = await tx
     .select({ id: invoiceDeliveries.id, printerId: printers.id, name: printers.name })
     .from(invoiceDeliveries)
-    .innerJoin(printers, and(isA4Printer(), eq(printers.id, invoiceDeliveries.printerId)))
+    .leftJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
+    .innerJoin(
+      printers,
+      and(
+        isA4Printer(),
+        eq(printers.id, sql`coalesce(${printJobs.printerId}, ${invoiceDeliveries.printerId})`),
+      ),
+    )
     .where(inArray(invoiceDeliveries.saleId, [...saleIds]));
   const sending = await tx
-    .select({ printerId: invoiceDeliveries.printerId, hold: invoiceDeliveries.printerHold })
-    .from(invoiceDeliveries)
-    .where(and(eq(invoiceDeliveries.status, "sending"), isNotNull(invoiceDeliveries.printerId)));
+    .select({ printerId: printJobs.printerId, hold: printJobs.printerHold })
+    .from(printers)
+    .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
+    .where(and(isA4Printer(), eq(printJobs.kind, "a4"), eq(printJobs.status, "printing")));
   const holds = sending.filter((row) => row.hold !== null);
   return {
     officePrinters: new Map(attempts.map((a) => [a.id, { id: a.printerId, name: a.name }])),
@@ -634,12 +642,13 @@ async function undeliveredCandidates(tx: Transaction) {
     .from(invoiceDeliveries)
     .innerJoin(sales, eq(sales.id, invoiceDeliveries.saleId))
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .leftJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
     .where(
       and(
         or(
           inArray(invoiceDeliveries.status, ["failed", "unknown"]),
           and(eq(invoiceDeliveries.status, "queued"), eq(invoiceDeliveries.medium, "a4")),
-          and(eq(invoiceDeliveries.status, "sending"), isNotNull(invoiceDeliveries.printerHold)),
+          and(eq(invoiceDeliveries.status, "sending"), isNotNull(printJobs.printerHold)),
         ),
         deliversAsFullInvoiceSql(),
         noCompletedOriginal(tx),

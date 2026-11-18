@@ -1,3 +1,4 @@
+import { dateA4Job } from "./testing/a4-print-job.js";
 import type { PageFormat } from "./page-print-api.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
@@ -208,11 +209,8 @@ async function queuedInvoice(v: Venue, pagePrinterId: string): Promise<string> {
       pagePrinterId,
     }),
   );
-  await suite.db
-    .update(invoiceDeliveries)
-    .set({ createdAt: at(-1_000).toISOString(), nextAttemptAt: at(-1_000).toISOString() })
-    .where(eq(invoiceDeliveries.id, delivery.id));
-  return delivery.id;
+  await dateA4Job(suite.db, delivery.printJobId!, at(-1_000));
+  return delivery.printJobId!;
 }
 
 function call(
@@ -250,7 +248,6 @@ async function outcome(v: Venue, id: string, cookie = v.cookies.manager): Promis
 
 type Job = {
   id: string;
-  generation: number;
   token: string;
   printer: Record<string, unknown>;
 };
@@ -262,7 +259,7 @@ async function claim(v: Venue, token = v.tokenOne): Promise<Job | undefined> {
   return (await res.json()) as Job;
 }
 
-const held = (job: Job) => ({ generation: job.generation, token: job.token });
+const held = (job: Job) => ({ token: job.token });
 
 const agentPost = (v: Venue, path: string, body: unknown, token = v.tokenOne) =>
   call(v, "POST", `/print-api/agent/page-jobs/${path}`, { bearer: token }, body);
@@ -462,7 +459,6 @@ describe("printing a test page", () => {
     const job = (await claim(v))!;
     expect(job).toEqual({
       id: page.id,
-      generation: 1,
       token: expect.any(String),
       printer: {
         id: office,
@@ -601,9 +597,6 @@ describe("printing a test page", () => {
     await lost(
       await agentPost(v, `${job.id}/result`, { ...held(job), token: randomUUID(), status: "sent" }),
     );
-    await lost(
-      await agentPost(v, `${job.id}/result`, { ...held(job), generation: 2, status: "sent" }),
-    );
     expect(await outcome(v, office)).toEqual({ id: page.id, status: "printing" });
   });
 });
@@ -621,8 +614,9 @@ describe("one job per office printer, test pages included", () => {
     expect((await claim(v))?.id).toBe(onY);
     expect(await claim(v)).toBeUndefined();
     expect(
-      (await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, onX)))[0]
-        ?.status,
+      (
+        await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.printJobId, onX))
+      )[0]?.status,
     ).toBe("queued");
 
     expect(
@@ -657,10 +651,7 @@ describe("one job per office printer, test pages included", () => {
     const x = await printer(v.agentOne);
     const page = await requested(v, x);
     const onX = await queuedInvoice(v, x);
-    await suite.db
-      .update(invoiceDeliveries)
-      .set({ nextAttemptAt: at(1_000).toISOString() })
-      .where(eq(invoiceDeliveries.id, onX));
+    await dateA4Job(suite.db, onX, at(1_000));
     // A fresh sighting spares the agent check its own write, which would wait behind the writer.
     await suite.db.update(printAgents).set({ lastSeenAt: new Date().toISOString() });
 

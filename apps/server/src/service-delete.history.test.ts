@@ -181,7 +181,7 @@ it("deleted department reprints its original receipt configuration and frozen he
   await run((tx) => enqueueReceiptReprint(tx, venue.cfg, ticket, sale!.id));
   const afterPrint = (await run((tx) => tx.select().from(printJobs)))[1]!;
   expect(decodeTicket(afterPrint.payload)).toBe(beforeText);
-  expect(previewPrintJob(afterPrint.payload)).toEqual(previewPrintJob(beforePrint.payload));
+  expect(previewPrintJob(afterPrint.payload!)).toEqual(previewPrintJob(beforePrint.payload!));
   expect(await run((tx) => readReceiptOrder(tx, billId))).toEqual(grouping);
   const afterDetail = await run((tx) => readOrderDetail(tx, billId, "all", false));
   expect(afterDetail.row).toEqual(detail.row);

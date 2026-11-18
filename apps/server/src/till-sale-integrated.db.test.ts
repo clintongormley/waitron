@@ -409,7 +409,7 @@ async function printJobPayloads(printerId: string): Promise<Uint8Array[]> {
       .select({ payload: printJobs.payload })
       .from(printJobs)
       .where(eq(printJobs.printerId, printerId));
-    return rows.map((r) => r.payload);
+    return rows.map((r) => r.payload!);
   });
 }
 

@@ -284,7 +284,7 @@ async function takePrinted(db: Database): Promise<string[][]> {
     tx.select({ payload: printJobs.payload }).from(printJobs).orderBy(printJobs.createdAt),
   );
   await withTransaction(db, (tx) => tx.delete(printJobs));
-  return jobs.map((job) => printedLines(new Uint8Array(job.payload)).map((line) => line.trim()));
+  return jobs.map((job) => printedLines(new Uint8Array(job.payload!)).map((line) => line.trim()));
 }
 
 function saleRow(db: Database, workingOrderId: string) {
@@ -612,7 +612,7 @@ async function takeJobs(db: Database): Promise<Job[]> {
       .orderBy(printJobs.createdAt),
   );
   await withTransaction(db, (tx) => tx.delete(printJobs));
-  return jobs.map((job) => ({ ...job, payload: new Uint8Array(job.payload) }));
+  return jobs.map((job) => ({ ...job, payload: new Uint8Array(job.payload!) }));
 }
 
 /** The QR image and the legend after it: the bytes a reprint must carry unchanged. */

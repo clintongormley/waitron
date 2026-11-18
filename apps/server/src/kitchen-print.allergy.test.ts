@@ -123,10 +123,10 @@ describe("A669 paper stored copies", () => {
       await send(p, release);
       const jobs = await v.db.select().from(printJobs);
       expect(jobs).toHaveLength(1);
-      expect(words(jobs[0]!.payload)).toContain(
+      expect(words(jobs[0]!.payload!)).toContain(
         KITCHEN_ALLERGY_WORDS.es.guestHeading.replace("{who}", "Window guest"),
       );
-      expect(words(jobs[0]!.payload)).toContain("Separate pan");
+      expect(words(jobs[0]!.payload!)).toContain("Separate pan");
     },
   );
 
@@ -160,7 +160,7 @@ describe("A669 paper stored copies", () => {
     expect(jobs).toHaveLength(3);
     for (const old of before) expect(jobs.find((j) => j.id === old.id)).toEqual(old);
     const next = jobs.find((j) => !before.some((old) => old.id === j.id))!;
-    const text = words(next.payload);
+    const text = words(next.payload!);
     expect(text.match(/Window guest/g)).toHaveLength(2);
     expect(text).not.toContain("New guest");
     expect(text).not.toContain("New note");
@@ -172,8 +172,8 @@ describe("A669 paper stored copies", () => {
     await send(p, "fire", false);
     const jobs = await v.db.select().from(printJobs);
     expect(jobs).toHaveLength(1);
-    expect(words(jobs[0]!.payload)).not.toContain("Window guest");
-    expect(words(jobs[0]!.payload)).not.toContain(KITCHEN_ALLERGY_WORDS.es.ticketHeading);
+    expect(words(jobs[0]!.payload!)).not.toContain("Window guest");
+    expect(words(jobs[0]!.payload!)).not.toContain(KITCHEN_ALLERGY_WORDS.es.ticketHeading);
   });
 });
 

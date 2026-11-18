@@ -20,7 +20,8 @@ export function bytesInclude(haystack: Uint8Array, needle: Uint8Array): boolean 
  * skipped. Asserts the preview decoded the whole payload, so a stop part-way (an unsupported command
  * or byte) fails the calling test instead of hiding the rest of the ticket.
  */
-export function printedLines(bytes: Uint8Array): string[] {
+export function printedLines(bytes: Uint8Array | null): string[] {
+  if (bytes === null) throw new Error("expected thermal print payload");
   const preview = previewPrintJob(bytes);
   expect(preview.unsupported, "preview stopped at an unsupported command").toBe(false);
   expect(preview.truncated, "preview was truncated").toBe(false);
@@ -33,7 +34,7 @@ export function withoutRules(lines: string[]): string[] {
 }
 
 /** {@link printedLines} as one string, for a search through the whole printed ticket. */
-export function decodeTicket(bytes: Uint8Array): string {
+export function decodeTicket(bytes: Uint8Array | null): string {
   return printedLines(bytes).join("\n");
 }
 
@@ -41,12 +42,13 @@ export function decodeTicket(bytes: Uint8Array): string {
  * The names of a payload's commands in order (`ESC p`, `GS v 0`, …), stepping over image and QR
  * data, so a check for a drawer pulse is not fooled by the same bytes inside a picture.
  */
-export function commandNames(bytes: Uint8Array): string[] {
+export function commandNames(bytes: Uint8Array | null): string[] {
+  if (bytes === null) throw new Error("expected thermal print payload");
   return escPosCommands(bytes).map((command) => command.name);
 }
 
 /** True when a payload carries a drawer pulse: `ESC p`, or the real-time `DLE DC4`. */
-export function opensDrawer(bytes: Uint8Array): boolean {
+export function opensDrawer(bytes: Uint8Array | null): boolean {
   return commandNames(bytes).some((name) => name === "ESC p" || name === "DLE DC4");
 }
 
@@ -61,7 +63,8 @@ export interface PrintedCommand {
 }
 
 /** A payload's commands with their bytes, each drawn line of text carrying what it reads as. */
-export function printedCommands(payload: Uint8Array): PrintedCommand[] {
+export function printedCommands(payload: Uint8Array | null): PrintedCommand[] {
+  if (payload === null) throw new Error("expected thermal print payload");
   return escPosCommands(payload).map(({ name, offset, length, widthDots, heightDots }) => {
     const bytes = payload.subarray(offset, offset + length);
     if (widthDots === undefined || heightDots === undefined) return { name, bytes };

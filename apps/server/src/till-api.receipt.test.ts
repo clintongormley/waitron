@@ -332,13 +332,15 @@ async function printJobsFor(
 ): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    return tx
-      .select({
-        printerId: printJobs.printerId,
-        status: printJobs.status,
-        payload: printJobs.payload,
-      })
-      .from(printJobs);
+    return (
+      await tx
+        .select({
+          printerId: printJobs.printerId,
+          status: printJobs.status,
+          payload: printJobs.payload,
+        })
+        .from(printJobs)
+    ).map((job) => ({ ...job, payload: job.payload! }));
   });
 }
 
@@ -1792,7 +1794,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
       const audits = await suite.db.select().from(drawerOpens);
       expect(jobs).toHaveLength(1);
       expect(jobs[0]!.kind).toBe("drawer");
-      expect([...jobs[0]!.payload]).toEqual([...DRAWER_KICK]);
+      expect([...jobs[0]!.payload!]).toEqual([...DRAWER_KICK]);
       expect(audits).toHaveLength(1);
       expect(audits[0]!.tenderRefundId).toBeNull();
       expect(jobs[0]!.tenderRefundId).toBeNull();
@@ -1812,6 +1814,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
         ].sort(),
       );
       expect(jobs[0]!.claimTokenHash).toBeNull();
+      expect(jobs[0]!.printerHold).toBeNull();
       expect(Object.keys(jobs[0]!).sort()).toEqual(
         [
           "id",
@@ -1824,6 +1827,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
           "status",
           "attempts",
           "claimTokenHash",
+          "printerHold",
           "claimedAt",
           "lastError",
           "createdAt",
@@ -2910,7 +2914,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     const rows = await suite.db
       .select({ printerId: printJobs.printerId, kind: printJobs.kind, payload: printJobs.payload })
       .from(printJobs);
-    return rows.map((row) => ({ ...row, payload: [...new Uint8Array(row.payload)] }));
+    return rows.map((row) => ({ ...row, payload: [...new Uint8Array(row.payload!)] }));
   }
 
   async function venueWithPrinters() {

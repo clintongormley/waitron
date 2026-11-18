@@ -33,7 +33,7 @@ export type InvoicePrintJob = ClaimedJob & { invoiceClaim?: InvoicePrintClaim };
 export function assertPrintPayload(
   job: Pick<typeof printJobs.$inferSelect, "id" | "kind" | "saleId" | "payload">,
 ): void {
-  if (job.kind === "document" && job.payload.byteLength === 0) {
+  if (job.kind === "document" && job.payload?.byteLength === 0) {
     throw new AppError(
       job.saleId === null ? "print_job.payload_expired" : "print_job.sale_payload_expired",
       { id: job.id },

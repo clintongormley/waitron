@@ -1,3 +1,4 @@
+import { readDeliveryAndClaim } from "./testing/a4-print-job.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -597,12 +598,8 @@ async function tillStatus(v: Venue, orderId: string) {
   };
 }
 
-async function row(id: string) {
-  const [found] = await suite.db
-    .select()
-    .from(invoiceDeliveries)
-    .where(eq(invoiceDeliveries.id, id));
-  return found!;
+function row(id: string) {
+  return readDeliveryAndClaim(suite.db, eq(invoiceDeliveries.id, id));
 }
 
 async function originalPdf(v: Venue, saleId: string): Promise<Buffer> {
@@ -631,7 +628,7 @@ async function lapsedOriginal(v: Venue) {
   const original = await printOnA4(saleId, office);
   await first.agent.runOnce();
   await reached;
-  expect(first.claims.map((job) => job.id)).toEqual([original.id]);
+  expect(first.claims.map((job) => job.id)).toEqual([original.printJobId]);
   expect(await row(original.id)).toMatchObject({ status: "sending", claimedBy: agentId });
 
   v.serverClock.ahead = INVOICE_DELIVERY_LEASE_MS + 1_000;
@@ -749,7 +746,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
 
     await pollUntilIdle(running);
 
-    expect(running.claims.map((job) => job.id)).toEqual([delivery.id]);
+    expect(running.claims.map((job) => job.id)).toEqual([delivery.printJobId]);
     expect(await row(delivery.id)).toMatchObject({
       status: "sent",
       designation: "original",
@@ -790,7 +787,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
       expect(await row(delivery.id)).toMatchObject({
         status: "failed",
         failureCode: "printer_disabled",
-        attempts: 0,
+        claimedAt: null,
         claimedBy: null,
         completedAt: null,
       });
@@ -814,7 +811,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
     expect(retry).toMatchObject({ status: "queued", designation: "original", generation: 2 });
     await pollUntilIdle(restarted);
 
-    expect(restarted.claims.map((job) => job.id)).toEqual([retry.id]);
+    expect(restarted.claims.map((job) => job.id)).toEqual([retry.printJobId]);
     expect(await row(retry.id)).toMatchObject({
       status: "sent",
       designation: "original",
@@ -890,7 +887,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
       });
       await pollUntilIdle(running);
 
-      expect(running.claims.map((job) => job.id)).toEqual([held.id, other.id]);
+      expect(running.claims.map((job) => job.id)).toEqual([held.printJobId, other.printJobId]);
       expect(await row(held.id)).toMatchObject({
         status: "sent",
         designation: "original",

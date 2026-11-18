@@ -2209,7 +2209,7 @@ describe("printer cash-drawer calibration", () => {
     const { jobId } = (await response.json()) as { jobId: string };
     const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
     expect(job).toMatchObject({ printerId: id, kind: "drawer", status: "queued" });
-    expect([...job!.payload]).toEqual([0x1b, 0x70, 0, 25, 250]);
+    expect([...job!.payload!]).toEqual([0x1b, 0x70, 0, 25, 250]);
     const audit = await suite.db.execute<{
       person_id: string;
       device_id: string | null;
@@ -2350,7 +2350,7 @@ describe("mountPrintApi — management: test-print", () => {
           .select({ payload: printJobs.payload })
           .from(printJobs)
           .where(eq(printJobs.id, jobId));
-        expect([...new Uint8Array(job!.payload)]).toEqual([
+        expect([...new Uint8Array(job!.payload!)]).toEqual([
           ...formatTestPage({ locale: expected }),
         ]);
       } finally {
@@ -2391,7 +2391,7 @@ describe("mountPrintApi — management: test-print", () => {
       .select({ payload: printJobs.payload })
       .from(printJobs)
       .where(eq(printJobs.id, jobId));
-    expect([...new Uint8Array(job!.payload)]).toEqual([
+    expect([...new Uint8Array(job!.payload!)]).toEqual([
       ...formatSampleReceipt(settings, undefined, "es-ES"),
     ]);
   });
@@ -2411,7 +2411,7 @@ describe("mountPrintApi — management: test-print", () => {
       .select({ payload: printJobs.payload })
       .from(printJobs)
       .where(eq(printJobs.id, jobId));
-    const payload = new Uint8Array(job!.payload);
+    const payload = new Uint8Array(job!.payload!);
     expect([...payload]).toEqual([...formatSampleReceipt(settings, words, "es-ES")]);
     expect(printedLines(payload).map((line) => line.trim())).toContain("LEG-Y");
   });
@@ -2477,7 +2477,7 @@ describe("mountPrintApi — management: test-print", () => {
         .select({ payload: printJobs.payload })
         .from(printJobs)
         .where(eq(printJobs.id, jobId));
-      expect([...new Uint8Array(job!.payload)]).toEqual([
+      expect([...new Uint8Array(job!.payload!)]).toEqual([
         ...formatTestPage({ locale: venueLocale }),
       ]);
     },
@@ -2524,7 +2524,7 @@ describe("mountPrintApi — management: print-test-page", () => {
       .select({ id: printJobs.id, kind: printJobs.kind, payload: printJobs.payload })
       .from(printJobs)
       .where(eq(printJobs.printerId, printerId));
-    return rows.map((row) => ({ ...row, payload: new Uint8Array(row.payload) }));
+    return rows.map((row) => ({ ...row, payload: new Uint8Array(row.payload!) }));
   }
 
   it("prints calibration in the committed venue zone without remounting the routes", async () => {
@@ -2743,7 +2743,7 @@ describe("mountPrintApi — management: recent jobs", () => {
       { kind: "document", text: "Kitchen ticket\n" },
     ]);
     expect(
-      (await suite.db.select().from(printJobs).where(eq(printJobs.id, receipt)))[0]!.payload
+      (await suite.db.select().from(printJobs).where(eq(printJobs.id, receipt)))[0]!.payload!
         .byteLength,
     ).toBe(0);
     await withTransaction(suite.db, (tx) =>
@@ -2757,7 +2757,7 @@ describe("mountPrintApi — management: recent jobs", () => {
       "document",
     ]);
     expect(
-      (await suite.db.select().from(printJobs).where(eq(printJobs.id, drawer.jobId)))[0]!.payload
+      (await suite.db.select().from(printJobs).where(eq(printJobs.id, drawer.jobId)))[0]!.payload!
         .byteLength,
     ).toBe(0);
   });

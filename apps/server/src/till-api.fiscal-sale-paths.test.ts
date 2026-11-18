@@ -3190,8 +3190,8 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       tx.select({ kind: printJobs.kind, payload: printJobs.payload }).from(printJobs),
     );
     return {
-      drawer: rows.filter((row) => row.kind === "drawer").map((row) => row.payload),
-      documents: rows.filter((row) => row.kind === "document").map((row) => row.payload),
+      drawer: rows.filter((row) => row.kind === "drawer").map((row) => row.payload!),
+      documents: rows.filter((row) => row.kind === "document").map((row) => row.payload!),
     };
   }
 

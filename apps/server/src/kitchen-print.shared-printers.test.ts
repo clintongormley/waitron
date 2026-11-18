@@ -349,9 +349,9 @@ describe("a printer shared by several stations", () => {
     expect(jobs).toHaveLength(2);
     const shared = onPrinter(jobs, p);
     // PY prints Grill's station ticket alone, at the same layout, so equal bytes mean P printed it.
-    expect(Buffer.from(shared.payload).equals(Buffer.from(onPrinter(jobs, venue.py).payload))).toBe(
-      true,
-    );
+    expect(
+      Buffer.from(shared.payload!).equals(Buffer.from(onPrinter(jobs, venue.py).payload!)),
+    ).toBe(true);
     expect(shared.printed[0]).toBe("Grill");
     expect(shared.stationIds).toEqual([venue.y]);
   });
@@ -381,7 +381,7 @@ describe("a printer shared by several stations", () => {
     expect(jobs).toHaveLength(4);
     const wideJob = onPrinter(jobs, wide);
     const narrowJob = onPrinter(jobs, narrow);
-    expect(Buffer.from(wideJob.payload).equals(Buffer.from(narrowJob.payload))).toBe(false);
+    expect(Buffer.from(wideJob.payload!).equals(Buffer.from(narrowJob.payload!))).toBe(false);
     for (const job of [wideJob, narrowJob]) {
       expect(job.printed[0]).toBe("Grill · Pastry");
       expect(job.printed.slice(4)).toEqual(["Grill", "1 x Steak", "Pastry", "1 x Tart", ""]);

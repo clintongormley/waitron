@@ -631,12 +631,12 @@ describe("print payload housekeeping", () => {
         runner.add(duty);
         await vi.advanceTimersByTimeAsync(999);
         expect(
-          (await suite.db.select().from(printJobs).where(eq(printJobs.id, row.id)))[0]!.payload
+          (await suite.db.select().from(printJobs).where(eq(printJobs.id, row.id)))[0]!.payload!
             .byteLength,
         ).toBe(3);
         await vi.advanceTimersByTimeAsync(1);
         sizes.push(
-          (await suite.db.select().from(printJobs).where(eq(printJobs.id, row.id)))[0]!.payload
+          (await suite.db.select().from(printJobs).where(eq(printJobs.id, row.id)))[0]!.payload!
             .byteLength,
         );
       } finally {

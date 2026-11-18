@@ -2716,10 +2716,13 @@ for (const locale of ["en", "es"] as const) {
       });
       deliveriesTable.foreignKeys = deliveriesTable.foreignKeys.map((key, id) => ({ ...key, id }));
       const printJobsTable = expected[phase].tables.print_jobs!;
+      const payload = printJobsTable.columns.find((column) => column.name === "payload");
+      expect(payload?.notnull, `${phase}/print_jobs/payload was required`).toBe(1);
+      payload!.notnull = 0;
       for (const [anchor, names] of [
         ["receipt_copy", ["handed_over_by", "handed_over_at"]],
         ["last_error", ["next_attempt_at"]],
-        ["claimed_at", ["claim_token_hash"]],
+        ["claimed_at", ["claim_token_hash", "printer_hold"]],
       ] as const) {
         const index = printJobsTable.columns.findIndex((column) => column.name === anchor);
         expect(index, `${phase}/print_jobs/${anchor} anchor`).toBeGreaterThanOrEqual(0);

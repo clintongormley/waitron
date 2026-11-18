@@ -13,6 +13,7 @@ import type { OfficePrinterReport } from "@waitron/print-agent";
 import { AppError, type DeleteImpact } from "@waitron/shared";
 import { named } from "./delete-impact.js";
 import { isListed } from "./discovery-listing.js";
+import { endA4PrintJobs } from "./invoice-delivery.js";
 
 /** One agent's discovery report of a device, as the server holds it. */
 export interface PagePrinterDiscovery {
@@ -189,13 +190,16 @@ export async function deletePagePrinter(
     .set({ active: false })
     .where(and(isA4Printer(), eq(printers.id, id)));
   const ofThisPrinter = eq(invoiceDeliveries.printerId, id);
-  await tx
+  const queued = await tx
     .update(invoiceDeliveries)
     .set({ status: "failed", failureCode: "printer_disabled" })
-    .where(and(ofThisPrinter, eq(invoiceDeliveries.status, "queued")));
-  await tx
+    .where(and(ofThisPrinter, eq(invoiceDeliveries.status, "queued")))
+    .returning({ printJobId: invoiceDeliveries.printJobId });
+  const sending = await tx
     .update(invoiceDeliveries)
     .set({ status: "unknown", failureCode: "printer_disabled", expiredAt: now.toISOString() })
-    .where(and(ofThisPrinter, eq(invoiceDeliveries.status, "sending")));
+    .where(and(ofThisPrinter, eq(invoiceDeliveries.status, "sending")))
+    .returning({ printJobId: invoiceDeliveries.printJobId });
+  await endA4PrintJobs(tx, [...queued, ...sending], "printer_disabled");
   return impact;
 }

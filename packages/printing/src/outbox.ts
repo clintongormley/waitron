@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { printJobs, isReceiptPrinter, printers } from "@waitron/db";
+import { printJobs, isA4Printer, isReceiptPrinter, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
@@ -31,21 +31,38 @@ export async function enqueuePrintJob(
   });
 }
 
+export function enqueueA4PrintJob(
+  tx: Transaction,
+  printerId: string,
+  saleId: string,
+  createdAt: string,
+): Promise<{ jobId: string }> {
+  return insertPrintJob(tx, printerId, null, "a4", {
+    resendOf: null,
+    saleId,
+    receiptCopy: null,
+    tenderRefundId: null,
+    createdAt,
+  });
+}
+
 async function insertPrintJob(
   tx: Transaction,
   printerId: string,
-  payload: Uint8Array,
-  kind: "document" | "drawer",
+  payload: Uint8Array | null,
+  kind: typeof printJobs.$inferSelect.kind,
   {
     resendOf,
     saleId,
     receiptCopy,
     tenderRefundId,
+    createdAt,
   }: {
     resendOf: string | null;
     saleId: string | null;
     receiptCopy: boolean | null;
     tenderRefundId: string | null;
+    createdAt?: string;
   },
 ): Promise<{ jobId: string }> {
   // A deactivated or deleted printer is reported as `printer.not_found`, not a code of its own.
@@ -54,7 +71,7 @@ async function insertPrintJob(
     .from(printers)
     .where(
       and(
-        isReceiptPrinter(),
+        kind === "a4" ? isA4Printer() : isReceiptPrinter(),
         eq(printers.id, printerId),
         eq(printers.active, true),
         isNull(printers.deletedAt),
@@ -72,6 +89,7 @@ async function insertPrintJob(
       saleId,
       receiptCopy,
       tenderRefundId,
+      createdAt,
     })
     .returning({ id: printJobs.id });
   return { jobId: job!.id };
@@ -79,7 +97,7 @@ async function insertPrintJob(
 
 /** Completed receipt originals need a marked copy; a job out of delivery attempts may be resent. */
 export function canResendPrintJob(job: {
-  kind: "document" | "drawer";
+  kind: typeof printJobs.$inferSelect.kind;
   status: string;
   attempts: number;
   lastError?: string | null;

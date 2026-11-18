@@ -26,6 +26,7 @@ import {
   PRINT_JOB_MOVED,
   canResendPrintJob,
   endMovedPrintJob,
+  enqueueA4PrintJob,
   enqueuePrintJob,
   resendPrintJob,
 } from "./outbox.js";
@@ -57,7 +58,7 @@ async function jobRow(
     .select({ status: printJobs.status, payload: printJobs.payload })
     .from(printJobs)
     .where(eq(printJobs.id, jobId));
-  return row!;
+  return { ...row!, payload: row!.payload! };
 }
 
 /**
@@ -74,6 +75,38 @@ function spyOnNoSocketOpened() {
 }
 
 describe("enqueuePrintJob (never-block outbox)", () => {
+  it("queues an office job only for an active office printer", async () => {
+    await setup();
+    const { saleId } = await seedCashSale(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const receipt = await createPrinter(tx, {
+        name: "Receipt",
+        transport: "usb",
+        localKey: "receipt",
+      });
+      const stopped = await insertA4Printer(tx, { active: false });
+      const office = await insertA4Printer(tx, { host: "10.255.0.5" });
+      const at = "2026-11-19T00:00:00.000Z";
+      for (const printerId of [receipt.id, stopped]) {
+        await expect(enqueueA4PrintJob(tx, printerId, saleId, at)).rejects.toMatchObject({
+          code: "printer.not_found",
+        });
+      }
+      const { jobId } = await enqueueA4PrintJob(tx, office, saleId, at);
+      expect(await tx.select().from(printJobs)).toMatchObject([
+        {
+          id: jobId,
+          printerId: office,
+          saleId,
+          kind: "a4",
+          payload: null,
+          createdAt: at,
+          status: "queued",
+        },
+      ]);
+    });
+  });
+
   it("enqueues a job after reading only the printer", async () => {
     await setup();
     await withTransaction(suite.db, async (tx) => {
@@ -247,7 +280,7 @@ describe("resendPrintJob", () => {
           claimedAt: null,
           claimedBy: null,
         });
-        expect([...copy!.payload]).toEqual([...payload]);
+        expect([...copy!.payload!]).toEqual([...payload]);
         expect(
           (await tx.select().from(printJobs).where(eq(printJobs.id, original.jobId)))[0],
         ).toEqual(before);
@@ -300,7 +333,7 @@ describe("resendPrintJob", () => {
         for (const { jobId } of [first, second, third]) {
           const [row] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));
           expect(row!.receiptCopy).toBe(receiptCopy);
-          expect([...row!.payload]).toEqual([...payload]);
+          expect([...row!.payload!]).toEqual([...payload]);
         }
         const unrelated = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]));
         const [row] = await tx.select().from(printJobs).where(eq(printJobs.id, unrelated.jobId));

@@ -176,7 +176,7 @@ describe("invoice delivery reservation", () => {
     ]);
   });
 
-  it("reserves an A4 original with only the page-printer reference and replays it", async () => {
+  it("reserves an A4 original with one print job and replays it", async () => {
     const sale = await issue();
     await suite.db.select().from(nodes);
     const printerId = await insertA4Printer(suite.db, {
@@ -194,7 +194,7 @@ describe("invoice delivery reservation", () => {
     expect(first).toMatchObject({
       medium: "a4",
       printerId,
-      printJobId: null,
+      printJobId: expect.any(String),
       recipient: null,
       status: "queued",
       attempts: 0,
@@ -205,7 +205,9 @@ describe("invoice delivery reservation", () => {
       await withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
     ).toEqual(first);
     expect(await rows()).toHaveLength(1);
-    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    expect(await suite.db.select().from(printJobs)).toMatchObject([
+      { id: first.printJobId, printerId, saleId: sale.saleId, kind: "a4", status: "queued" },
+    ]);
   });
 
   it.each(["disabled"])("refuses a %s A4 destination without queuing", async (kind) => {

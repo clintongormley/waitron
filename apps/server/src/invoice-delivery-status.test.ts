@@ -1,3 +1,4 @@
+import { dateA4Job, readDeliveryAndClaim } from "./testing/a4-print-job.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
@@ -209,6 +210,7 @@ async function reserve(
     .update(invoiceDeliveries)
     .set({ nextAttemptAt: START.toISOString() })
     .where(eq(invoiceDeliveries.id, delivery.id));
+  if (medium === "a4") await dateA4Job(suite.db, delivery.printJobId!, START);
   return (
     await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, delivery.id))
   )[0]!;
@@ -400,10 +402,7 @@ describe("readInvoiceDeliveries", () => {
         await report(held, { status: "failed", failureCode: "printer_refused" });
       }
       if (status === "unknown") await expire();
-      const [row] = await suite.db
-        .select()
-        .from(invoiceDeliveries)
-        .where(eq(invoiceDeliveries.id, delivery.id));
+      const row = await readDeliveryAndClaim(suite.db, eq(invoiceDeliveries.id, delivery.id));
       // The column keeps the last hold once the attempt ends; the reader decides what it shows.
       expect(row).toMatchObject({ status, printerHold: "paper_out" });
       return row!;
