@@ -1,8 +1,8 @@
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { nowIso, orderGroupEvents, parties, partyTables } from "@waitron/db";
+import { nowIso, orderEvents, parties, partyTables } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -110,9 +110,9 @@ async function done(
 async function lastOrderAt(v: PartyVenue, partyId: string): Promise<number> {
   const rows = await inTx(v, (tx) =>
     tx
-      .select({ at: orderGroupEvents.createdAt })
-      .from(orderGroupEvents)
-      .where(eq(orderGroupEvents.partyId, partyId)),
+      .select({ at: orderEvents.at })
+      .from(orderEvents)
+      .where(and(eq(orderEvents.partyId, partyId), sql`${orderEvents.kind} like 'group.%'`)),
   );
   return Math.max(...rows.map((row) => Date.parse(row.at)));
 }

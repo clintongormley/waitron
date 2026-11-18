@@ -10,7 +10,8 @@ import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/se
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
-import { orderGroupEvents, orderGroups } from "./order-groups.js";
+import { orderEvents } from "./order-events.js";
+import { orderGroups } from "./order-groups.js";
 import { workingOrderLines } from "./orders.js";
 import { parties } from "./parties.js";
 
@@ -19,7 +20,7 @@ const DASHBOARD = { source: "dashboard", deviceId: null } as const;
 const OPERATOR = "bbbbbbbb-2222-4000-8000-000000000002";
 const MISSING = "bbbbbbbb-3333-4000-8000-0000000000ff";
 
-describe("order_groups, order_group_events and working_order_lines.group_id", () => {
+describe("order_groups, order_events and working_order_lines.group_id", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let nodeId = "";
   let deviceId = "";
@@ -169,14 +170,14 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
     const error = await captureError(() =>
       inTx(async (tx) => {
         await tx.execute(sql`
-          insert into order_group_events (id, party_id, group_id, kind, actor_id, detail, created_at)
+          insert into order_events (id, party_id, group_id, kind, actor_id, detail, at)
           values (${MISSING}, ${partyId}, ${groupId}, 'cancelled', ${OPERATOR}, '{}',
             ${new Date().toISOString()})
         `);
       }),
     );
-    expect(checkFailed(error, "order_group_events_kind_ck")).toBe(true);
-    await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, kind: "submitted" }));
+    expect(checkFailed(error, "order_events_kind_ck")).toBe(true);
+    await inTx((tx) => tx.insert(orderEvents).values({ ...event, kind: "group.submitted" }));
   });
 
   it("refuses a group naming no party, and accepts one naming a party", async () => {
@@ -188,24 +189,24 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
   it("refuses an event naming no party, and accepts one naming a party", async () => {
     const partyId = await party();
     const groupId = await group({ partyId });
-    const event = { groupId, kind: "submitted" as const, actorId: OPERATOR, detail: {} };
+    const event = { groupId, kind: "group.submitted" as const, actorId: OPERATOR, detail: {} };
     const error = await captureError(() =>
-      inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, partyId: MISSING })),
+      inTx((tx) => tx.insert(orderEvents).values({ ...event, partyId: MISSING })),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-    await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, partyId }));
+    await inTx((tx) => tx.insert(orderEvents).values({ ...event, partyId }));
   });
 
   it("refuses an event naming no group, and accepts one naming a group or none", async () => {
     const partyId = await party();
-    const event = { partyId, kind: "reordered" as const, actorId: OPERATOR, detail: {} };
+    const event = { partyId, kind: "group.reordered" as const, actorId: OPERATOR, detail: {} };
     const error = await captureError(() =>
-      inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, groupId: MISSING })),
+      inTx((tx) => tx.insert(orderEvents).values({ ...event, groupId: MISSING })),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
     const groupId = await group({ partyId });
-    await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, groupId }));
-    await inTx((tx) => tx.insert(orderGroupEvents).values({ ...event, groupId: null }));
+    await inTx((tx) => tx.insert(orderEvents).values({ ...event, groupId }));
+    await inTx((tx) => tx.insert(orderEvents).values({ ...event, groupId: null }));
   });
 
   it("refuses a line naming no group, and accepts one naming a group", async () => {
@@ -251,43 +252,39 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
 
   it("accepts an event by a device alone, and refuses one by both or by neither", async () => {
     const partyId = await party();
-    const event = { partyId, kind: "fired" as const, detail: {} };
+    const event = { partyId, kind: "group.fired" as const, detail: {} };
     await inTx((tx) =>
-      tx.insert(orderGroupEvents).values({ ...event, actorId: null, actorDeviceId: deviceId }),
+      tx.insert(orderEvents).values({ ...event, actorId: null, actorDeviceId: deviceId }),
     );
     const rows = await inTx((tx) =>
       tx
         .select({
-          actorId: orderGroupEvents.actorId,
-          actorDeviceId: orderGroupEvents.actorDeviceId,
+          actorId: orderEvents.actorId,
+          actorDeviceId: orderEvents.actorDeviceId,
         })
-        .from(orderGroupEvents)
-        .where(eq(orderGroupEvents.partyId, partyId)),
+        .from(orderEvents)
+        .where(eq(orderEvents.partyId, partyId)),
     );
     expect(rows).toEqual([{ actorId: null, actorDeviceId: deviceId }]);
     const both = await captureError(() =>
       inTx((tx) =>
-        tx
-          .insert(orderGroupEvents)
-          .values({ ...event, actorId: OPERATOR, actorDeviceId: deviceId }),
+        tx.insert(orderEvents).values({ ...event, actorId: OPERATOR, actorDeviceId: deviceId }),
       ),
     );
-    expect(checkFailed(both, "order_group_events_actor_ck")).toBe(true);
+    expect(checkFailed(both, "order_events_group_ck")).toBe(true);
     const neither = await captureError(() =>
-      inTx((tx) =>
-        tx.insert(orderGroupEvents).values({ ...event, actorId: null, actorDeviceId: null }),
-      ),
+      inTx((tx) => tx.insert(orderEvents).values({ ...event, actorId: null, actorDeviceId: null })),
     );
-    expect(checkFailed(neither, "order_group_events_actor_ck")).toBe(true);
+    expect(checkFailed(neither, "order_events_group_ck")).toBe(true);
   });
 
   it("refuses an event by a device that does not exist", async () => {
     const partyId = await party();
     const error = await captureError(() =>
       inTx((tx) =>
-        tx.insert(orderGroupEvents).values({
+        tx.insert(orderEvents).values({
           partyId,
-          kind: "fired",
+          kind: "group.fired",
           detail: {},
           actorId: null,
           actorDeviceId: MISSING,

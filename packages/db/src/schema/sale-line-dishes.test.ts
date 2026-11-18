@@ -9,7 +9,7 @@ import { captureError } from "../testing/errors.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
-import { orderPortionEvents } from "./order-portion-events.js";
+import { orderEvents } from "./order-events.js";
 import { saleLineDishes } from "./sale-line-dishes.js";
 import { workingOrderLines } from "./orders.js";
 import { saleLines, sales } from "./sales.js";
@@ -151,12 +151,12 @@ describe("Dish sale links and events", () => {
       .values({ saleLineId, dishLineId: dish })
       .returning({ id: saleLineDishes.id });
     const [event] = await db
-      .insert(orderPortionEvents)
-      .values({ lineId: dish, kind: "cancelled", fromOrderId: orderId })
-      .returning({ id: orderPortionEvents.id });
+      .insert(orderEvents)
+      .values({ lineId: dish, kind: "dish.cancelled", fromOrderId: orderId })
+      .returning({ id: orderEvents.id });
     const rows = [
       ["sale_line_dishes", link!.id, sql`dish_line_id = dish_line_id`],
-      ["order_portion_events", event!.id, sql`actor_id = ${"someone"}`],
+      ["order_events", event!.id, sql`actor_id = ${"someone"}`],
     ] as const;
     for (const [name, rowId, set] of rows) {
       const raised = `${name} is append-only`;
@@ -180,24 +180,24 @@ describe("Dish sale links and events", () => {
   it("A803 portions: a moved event to its own order, or a cancelled event naming a destination, is refused", async () => {
     const dish = await insertLine(1);
     const refusedValues = [
-      { kind: "moved" as const, fromOrderId: orderId, toOrderId: orderId },
-      { kind: "moved" as const, fromOrderId: orderId, toOrderId: null },
-      { kind: "cancelled" as const, fromOrderId: orderId, toOrderId: otherOrderId },
+      { kind: "dish.moved" as const, fromOrderId: orderId, toOrderId: orderId },
+      { kind: "dish.moved" as const, fromOrderId: orderId, toOrderId: null },
+      { kind: "dish.cancelled" as const, fromOrderId: orderId, toOrderId: otherOrderId },
     ];
     for (const values of refusedValues) {
       const error = await captureError(() =>
-        db.insert(orderPortionEvents).values({ lineId: dish, ...values }),
+        db.insert(orderEvents).values({ lineId: dish, ...values }),
       );
-      expect(checkFailed(error, "order_portion_events_destination_ck")).toBe(true);
+      expect(checkFailed(error, "order_events_dish_ck")).toBe(true);
     }
     await db
-      .insert(orderPortionEvents)
-      .values({ lineId: dish, kind: "moved", fromOrderId: orderId, toOrderId: otherOrderId });
+      .insert(orderEvents)
+      .values({ lineId: dish, kind: "dish.moved", fromOrderId: orderId, toOrderId: otherOrderId });
     const kind = await captureError(() =>
       db.run(
-        sql`insert into order_portion_events (id, line_id, kind, from_order_id, at) values ('e', ${dish}, 'split', ${orderId}, ${AT})`,
+        sql`insert into order_events (id, line_id, kind, from_order_id, at) values ('e', ${dish}, 'split', ${orderId}, ${AT})`,
       ),
     );
-    expect(checkFailed(kind, "order_portion_events_kind_ck")).toBe(true);
+    expect(checkFailed(kind, "order_events_kind_ck")).toBe(true);
   });
 });

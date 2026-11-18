@@ -13,7 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billPayments,
   lineServiceCancellations,
-  orderPortionEvents,
+  orderEvents,
   parties,
   printJobs,
   products,
@@ -2844,11 +2844,11 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
       expect(await dishesNamed(portions.billId, "Burger")).toEqual([members[0]]);
       const events = await inTx(venue, (tx) =>
         tx
-          .select({ kind: orderPortionEvents.kind })
-          .from(orderPortionEvents)
-          .where(eq(orderPortionEvents.fromOrderId, portions.billId)),
+          .select({ kind: orderEvents.kind })
+          .from(orderEvents)
+          .where(eq(orderEvents.fromOrderId, portions.billId)),
       );
-      expect(events).toEqual([{ kind: "cancelled" }, { kind: "cancelled" }]);
+      expect(events).toEqual([{ kind: "dish.cancelled" }, { kind: "dish.cancelled" }]);
     } finally {
       await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
     }

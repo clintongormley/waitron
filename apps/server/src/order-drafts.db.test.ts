@@ -18,7 +18,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
-  orderDraftEvents,
+  orderEvents,
   orderDraftLines,
   orderDrafts,
   orderGroups,
@@ -374,17 +374,17 @@ async function savedAtOf(draftId: string): Promise<string> {
 async function eventsOf(draftId: string) {
   const rows = await db
     .select({
-      kind: orderDraftEvents.kind,
-      fromPerson: orderDraftEvents.fromPerson,
-      toPerson: orderDraftEvents.toPerson,
-      actorId: orderDraftEvents.actorId,
-      detail: orderDraftEvents.detail,
-      createdAt: orderDraftEvents.createdAt,
+      kind: orderEvents.kind,
+      fromPerson: orderEvents.fromPerson,
+      toPerson: orderEvents.toPerson,
+      actorId: orderEvents.actorId,
+      detail: orderEvents.detail,
+      createdAt: orderEvents.at,
     })
-    .from(orderDraftEvents)
-    .where(eq(orderDraftEvents.draftId, draftId));
-  // `created_at` can tie within a millisecond; the kinds' own order breaks the tie.
-  const order = ["created", "taken_over", "submitted", "discarded"];
+    .from(orderEvents)
+    .where(eq(orderEvents.draftId, draftId));
+  // `at` can tie within a millisecond; the kinds' own order breaks the tie.
+  const order = ["draft.created", "draft.taken_over", "draft.submitted", "draft.discarded"];
   return rows
     .sort(
       (a, b) =>
@@ -663,7 +663,7 @@ describe("saving a draft", () => {
     const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     expect(draft).toMatchObject({ revision: 0, ownerId: ALEX });
     expect(await eventsOf(draft.id)).toEqual([
-      { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
+      { kind: "draft.created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
     ]);
   });
 
@@ -1984,8 +1984,8 @@ describe("taking over a draft (D5, spec §2)", () => {
       params: { draftId: alex.id, ownerId: SAM, ownerName: "Sam" },
     });
     expect(await eventsOf(alex.id)).toEqual([
-      { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
-      { kind: "taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
+      { kind: "draft.created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
+      { kind: "draft.taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
     ]);
     expect(await unsentDraftsAt(table4.tableId)).toEqual([
       {
@@ -2093,8 +2093,8 @@ describe("taking over a draft (D5, spec §2)", () => {
     expect(await draftsOf(v, table4.partyId)).toEqual([taken, sam]);
     expect(await draftRow(alex.id)).toMatchObject({ state: "open", ownerId: SAM, revision: 1 });
     expect(await eventsOf(alex.id)).toEqual([
-      { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
-      { kind: "taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
+      { kind: "draft.created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
+      { kind: "draft.taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
     ]);
     expect(await unsentDraftsAt(table4.tableId)).toEqual([
       {
@@ -2734,10 +2734,10 @@ describe("submitting a draft: takeover and credit (D5, spec §2)", () => {
     expect(await draftRow(sams.id)).toMatchObject({ state: "submitted", ownerId: SAM });
     expect(await storedLines(sams.id)).toEqual([]);
     expect(await eventsOf(sams.id)).toEqual([
-      { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
-      { kind: "taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
+      { kind: "draft.created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
+      { kind: "draft.taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
       {
-        kind: "submitted",
+        kind: "draft.submitted",
         fromPerson: SAM,
         toPerson: SAM,
         actorId: SAM,
@@ -2985,9 +2985,9 @@ describe("partial submission", () => {
     expect(await storedLines(draft.id)).toEqual([]);
     expect(await draftsOf(v, partyId)).toEqual([]);
     expect((await eventsOf(draft.id)).map(({ kind, detail }) => [kind, detail])).toEqual([
-      ["created", {}],
-      ["submitted", { groupIds: [drinks.groups[0]!.id] }],
-      ["submitted", { groupIds: food.groups.map((group) => group.id) }],
+      ["draft.created", {}],
+      ["draft.submitted", { groupIds: [drinks.groups[0]!.id] }],
+      ["draft.submitted", { groupIds: food.groups.map((group) => group.id) }],
     ]);
   });
 
@@ -3508,20 +3508,20 @@ describe("merging parties (D2)", () => {
     });
     expect(await storedLines(alexOn5.id)).toEqual([]);
     expect(await eventsOf(alexOn5.id)).toEqual([
-      { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
+      { kind: "draft.created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
       {
-        kind: "discarded",
+        kind: "draft.discarded",
         fromPerson: ALEX,
         toPerson: ALEX,
         actorId: ALEX,
         detail: { intoDraftId: alexOn4.id },
       },
     ]);
-    expect((await eventsOf(alexOn4.id)).map((event) => event.kind)).toEqual(["created"]);
+    expect((await eventsOf(alexOn4.id)).map((event) => event.kind)).toEqual(["draft.created"]);
     expect((await eventsOf(samOn5.id)).map((event) => event.kind)).toEqual([
-      "created",
-      "taken_over",
-      "taken_over",
+      "draft.created",
+      "draft.taken_over",
+      "draft.taken_over",
     ]);
     // A draft that was no longer open stays with the party it was sent from.
     expect(await draftRow(miasSent.id)).toEqual(sentRow);
@@ -3708,7 +3708,7 @@ describe("finishing the table", () => {
         revision: draft.revision,
       });
       expect((await eventsOf(draft.id)).at(-1)).toEqual({
-        kind: "created",
+        kind: "draft.created",
         fromPerson: null,
         toPerson: owner,
         actorId: owner,
@@ -4151,7 +4151,7 @@ describe("fresh drafts alongside existing bill families", () => {
       billId: intoId,
     });
     expect(await eventsOf(source.id)).toContainEqual({
-      kind: "discarded",
+      kind: "draft.discarded",
       fromPerson: ALEX,
       toPerson: ALEX,
       actorId: ALEX,

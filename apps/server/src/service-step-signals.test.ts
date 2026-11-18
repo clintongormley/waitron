@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
   diningTables,
-  orderGroupEvents,
+  orderEvents,
   parties,
   partyTables,
   workingOrderLines,
@@ -141,12 +141,12 @@ async function setCourse(v: PartyVenue, courseId: string, lineIds: string[]): Pr
 async function lastOrderAt(v: PartyVenue, partyId: string): Promise<number> {
   const rows = await inTx(v, (tx) =>
     tx
-      .select({ at: orderGroupEvents.createdAt })
-      .from(orderGroupEvents)
+      .select({ at: orderEvents.at })
+      .from(orderEvents)
       .where(
         and(
-          eq(orderGroupEvents.partyId, partyId),
-          inArray(orderGroupEvents.kind, ["submitted", "joined"]),
+          eq(orderEvents.partyId, partyId),
+          inArray(orderEvents.kind, ["group.submitted", "group.joined"]),
         ),
       ),
   );
@@ -753,11 +753,9 @@ describe("a party whose dishes arrived from another table or the counter", () =>
   async function arrivalsOf(v: PartyVenue, partyId: string): Promise<number[]> {
     const rows = await inTx(v, (tx) =>
       tx
-        .select({ at: orderGroupEvents.createdAt, detail: orderGroupEvents.detail })
-        .from(orderGroupEvents)
-        .where(
-          and(eq(orderGroupEvents.partyId, partyId), eq(orderGroupEvents.kind, "lines_moved")),
-        ),
+        .select({ at: orderEvents.at, detail: orderEvents.detail })
+        .from(orderEvents)
+        .where(and(eq(orderEvents.partyId, partyId), eq(orderEvents.kind, "group.lines_moved"))),
     );
     return rows.filter((row) => row.detail.arrived === true).map((row) => Date.parse(row.at));
   }
@@ -1076,9 +1074,9 @@ describe("a party whose dishes arrived from another table or the counter", () =>
     await setOpenedAt(v, partyId, OPENED);
 
     await inTx(v, (tx) =>
-      tx.insert(orderGroupEvents).values({
+      tx.insert(orderEvents).values({
         partyId,
-        kind: "lines_moved",
+        kind: "group.lines_moved",
         actorId: OPERATOR,
         detail: { lineIds: ["line"], from: "group", arrived: true },
       }),
@@ -1104,8 +1102,8 @@ describe("a party whose dishes arrived from another table or the counter", () =>
     const movedLines = (detail: Record<string, unknown>) =>
       inTx(v, (tx) =>
         tx
-          .insert(orderGroupEvents)
-          .values({ partyId, kind: "lines_moved", actorId: OPERATOR, detail }),
+          .insert(orderEvents)
+          .values({ partyId, kind: "group.lines_moved", actorId: OPERATOR, detail }),
       );
 
     await movedLines({ lineIds: ["line"], to: "group" });
@@ -1163,16 +1161,14 @@ describe("a party whose dishes arrived from another table or the counter", () =>
   async function addEvents(
     v: PartyVenue,
     partyId: string,
-    kind: "submitted" | "joined" | "fired" | "lines_moved",
+    kind: "group.submitted" | "group.joined" | "group.fired" | "group.lines_moved",
     detail: Record<string, unknown>,
     times: readonly string[],
   ): Promise<void> {
     await inTx(v, (tx) =>
       tx
-        .insert(orderGroupEvents)
-        .values(
-          times.map((createdAt) => ({ partyId, kind, actorId: OPERATOR, detail, createdAt })),
-        ),
+        .insert(orderEvents)
+        .values(times.map((at) => ({ partyId, kind, actorId: OPERATOR, detail, at }))),
     );
   }
 
@@ -1184,7 +1180,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
       try {
         const facts = (await readStepFacts(tx, [given])).get(tableId)!.facts;
         const eventRows = (all.mock.contexts as StatementSync[]).flatMap((statement, call) =>
-          statement.sourceSQL.includes('from "order_group_events"')
+          statement.sourceSQL.includes('from "order_events"')
             ? [all.mock.results[call]!.value as unknown[]]
             : [],
         );
@@ -1209,7 +1205,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
         new Date(Date.UTC(year, 0, 1, 0, 0, 0, ms)).toISOString(),
       );
     // Neither extreme is the first or last written, and each is a millisecond from its neighbour.
-    await addEvents(v, partyId, "lines_moved", ARRIVED, [
+    await addEvents(v, partyId, "group.lines_moved", ARRIVED, [
       ...filler(2050),
       "2090-06-01T12:00:00.998Z",
       "2020-06-01T12:00:00.002Z",
@@ -1225,12 +1221,12 @@ describe("a party whose dishes arrived from another table or the counter", () =>
       ordersArrived: true,
     });
 
-    await addEvents(v, partyId, "submitted", { release: "fire" }, [
+    await addEvents(v, partyId, "group.submitted", { release: "fire" }, [
       ...filler(2060),
       "2070-06-01T12:00:00.998Z",
       "2030-06-01T12:00:00.002Z",
     ]);
-    await addEvents(v, partyId, "joined", { release: "fire" }, [
+    await addEvents(v, partyId, "group.joined", { release: "fire" }, [
       "2070-06-01T12:00:00.999Z",
       "2030-06-01T12:00:00.001Z",
       ...filler(2061),
@@ -1269,11 +1265,11 @@ describe("a party whose dishes arrived from another table or the counter", () =>
       "Table 3",
     );
     await joinInto(arrivals.partyId, joinedIn);
-    await addEvents(v, arrivals.partyId, "lines_moved", ARRIVED, [
+    await addEvents(v, arrivals.partyId, "group.lines_moved", ARRIVED, [
       "2030-06-01T12:00:00.000Z",
       "2090-06-01T12:00:00.999Z",
     ]);
-    await addEvents(v, joinedIn.partyId, "lines_moved", ARRIVED, [
+    await addEvents(v, joinedIn.partyId, "group.lines_moved", ARRIVED, [
       "2050-06-01T12:00:00.000Z",
       "2020-06-01T12:00:00.001Z",
     ]);
@@ -1289,22 +1285,28 @@ describe("a party whose dishes arrived from another table or the counter", () =>
     const ownJoinedTable = await v.table("Table 5");
     const ownJoined = await seat(v, ownJoinedTable);
     await joinInto(own.partyId, { partyId: ownJoined.partyId, tableId: ownJoinedTable });
-    await addEvents(v, own.partyId, "submitted", { release: "fire" }, ["2070-06-01T12:00:00.998Z"]);
-    await addEvents(v, own.partyId, "joined", { release: "fire" }, [
+    await addEvents(v, own.partyId, "group.submitted", { release: "fire" }, [
+      "2070-06-01T12:00:00.998Z",
+    ]);
+    await addEvents(v, own.partyId, "group.joined", { release: "fire" }, [
       "2030-06-01T12:00:00.000Z",
       "2080-06-01T12:00:00.999Z",
     ]);
-    await addEvents(v, ownJoined.partyId, "submitted", { release: "fire" }, [
+    await addEvents(v, ownJoined.partyId, "group.submitted", { release: "fire" }, [
       "2040-06-01T12:00:00.000Z",
     ]);
-    await addEvents(v, ownJoined.partyId, "joined", { release: "fire" }, [
+    await addEvents(v, ownJoined.partyId, "group.joined", { release: "fire" }, [
       "2025-06-01T12:00:00.001Z",
       "2060-06-01T12:00:00.000Z",
     ]);
-    await addEvents(v, own.partyId, "lines_moved", ARRIVED, ["2010-06-01T12:00:00.000Z"]);
-    await addEvents(v, ownJoined.partyId, "lines_moved", ARRIVED, ["2095-06-01T12:00:00.000Z"]);
-    await addEvents(v, own.partyId, "fired", { lineId: "line" }, ["2005-06-01T12:00:00.000Z"]);
-    await addEvents(v, ownJoined.partyId, "lines_moved", { lineIds: ["line"], to: "group" }, [
+    await addEvents(v, own.partyId, "group.lines_moved", ARRIVED, ["2010-06-01T12:00:00.000Z"]);
+    await addEvents(v, ownJoined.partyId, "group.lines_moved", ARRIVED, [
+      "2095-06-01T12:00:00.000Z",
+    ]);
+    await addEvents(v, own.partyId, "group.fired", { lineId: "line" }, [
+      "2005-06-01T12:00:00.000Z",
+    ]);
+    await addEvents(v, ownJoined.partyId, "group.lines_moved", { lineIds: ["line"], to: "group" }, [
       "2098-06-01T12:00:00.000Z",
     ]);
 

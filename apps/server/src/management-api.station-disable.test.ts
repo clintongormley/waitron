@@ -135,7 +135,7 @@ async function snapshot() {
       "ticket_item_moves",
       "order_drafts",
       "order_draft_lines",
-      "order_draft_events",
+      "order_events",
       "print_jobs",
       "kitchen_print_jobs",
       "kitchen_print_job_lines",

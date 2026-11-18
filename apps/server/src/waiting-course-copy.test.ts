@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import { unboundLineCohort } from "./testing/portion-bill.js";
 import { departmentCourses } from "@waitron/db";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
@@ -12,7 +13,7 @@ import {
   lineServiceCancellations,
   orderDraftLines,
   orderDrafts,
-  orderGroupEvents,
+  orderEvents,
   orderGroupHoldStations,
   orderGroups,
   parties,
@@ -85,6 +86,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
+    await inTx(v, (tx) => ensureOperator(tx, MOVER));
     desserts = await inTx(
       v,
       async (tx) => (await createCourse(tx, { name: "Desserts", displayOrder: 1 })).id,
@@ -167,9 +169,18 @@ function holdStationsOf(groupId: string) {
 
 function eventsOf(groupId: string) {
   return v.db
-    .select()
-    .from(orderGroupEvents)
-    .where(eq(orderGroupEvents.groupId, groupId))
+    .select({
+      id: orderEvents.id,
+      partyId: orderEvents.partyId,
+      groupId: orderEvents.groupId,
+      kind: orderEvents.kind,
+      actorId: orderEvents.actorId,
+      actorDeviceId: orderEvents.actorDeviceId,
+      detail: orderEvents.detail,
+      createdAt: orderEvents.at,
+    })
+    .from(orderEvents)
+    .where(eq(orderEvents.groupId, groupId))
     .orderBy(sql`rowid`);
 }
 
@@ -574,7 +585,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     expect((await groupRow(g)).state).toBe("removed");
     expect(
       (await eventsOf(g))
-        .filter((event) => event.kind === "removed")
+        .filter((event) => event.kind === "group.removed")
         .map((event) => [event.partyId, event.actorId]),
     ).toEqual([[a.partyId, MOVER]]);
   });
@@ -650,8 +661,8 @@ describe("A803 waiting copy: copyHeldGroups", () => {
 
     const sourceEvents = (await eventsOf(g)).slice(before);
     const copyEvents = await eventsOf(copies.get(g)!);
-    expect(sourceEvents.map((event) => event.kind)).toEqual(["lines_moved", "removed"]);
-    expect(copyEvents.map((event) => event.kind)).toEqual(["lines_moved"]);
+    expect(sourceEvents.map((event) => event.kind)).toEqual(["group.lines_moved", "group.removed"]);
+    expect(copyEvents.map((event) => event.kind)).toEqual(["group.lines_moved"]);
     expect(facts).toEqual(
       [sourceEvents[0]!, copyEvents[0]!, sourceEvents[1]!].map((event) => ({
         source: "draft",
@@ -681,7 +692,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
         id: expect.any(String),
         partyId: a.partyId,
         groupId: g,
-        kind: "lines_moved",
+        kind: "group.lines_moved",
         actorId: MOVER,
         actorDeviceId: null,
         detail: { lineIds: [cake.id], to: copyId },
@@ -693,7 +704,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
         id: expect.any(String),
         partyId: b,
         groupId: copyId,
-        kind: "lines_moved",
+        kind: "group.lines_moved",
         actorId: MOVER,
         actorDeviceId: null,
         detail: { lineIds: [cake.id], from: g, arrived: true },
@@ -884,7 +895,7 @@ describe("A1327 waiting copy: copyWaitingGroups", () => {
         id: expect.any(String),
         partyId: w.partyId,
         groupId: w.g,
-        kind: "lines_moved",
+        kind: "group.lines_moved",
         actorId: MOVER,
         actorDeviceId: null,
         detail: { lineIds: [w.cake.id, w.rice.id], to: copyId },
@@ -896,7 +907,7 @@ describe("A1327 waiting copy: copyWaitingGroups", () => {
         id: expect.any(String),
         partyId: b,
         groupId: copyId,
-        kind: "lines_moved",
+        kind: "group.lines_moved",
         actorId: MOVER,
         actorDeviceId: null,
         detail: { lineIds: [w.cake.id, w.rice.id], from: w.g, arrived: true },
@@ -920,7 +931,9 @@ describe("A1327 waiting copy: copyWaitingGroups", () => {
     const copyId = copies.get(w.g)!;
     expect((await linesOf(w.bill2)).map((line) => line.groupId)).toEqual([copyId, copyId, copyId]);
     expect((await groupRow(w.g)).state).toBe("fired");
-    expect((await eventsOf(w.g)).slice(before).map((event) => event.kind)).toEqual(["lines_moved"]);
+    expect((await eventsOf(w.g)).slice(before).map((event) => event.kind)).toEqual([
+      "group.lines_moved",
+    ]);
   });
 
   it("A1327 waiting copy: copyWaitingGroups ignores a dish of a held group it is given", async () => {
@@ -1170,9 +1183,9 @@ async function rowsOf(partyIds: string[], billIds: string[]) {
       .orderBy(asc(orderGroupHoldStations.groupId), asc(orderGroupHoldStations.stationId)),
     events: await v.db
       .select()
-      .from(orderGroupEvents)
-      .where(inArray(orderGroupEvents.partyId, partyIds))
-      .orderBy(asc(orderGroupEvents.id)),
+      .from(orderEvents)
+      .where(and(inArray(orderEvents.partyId, partyIds), sql`${orderEvents.kind} like 'group.%'`))
+      .orderBy(asc(orderEvents.id)),
     lines: await v.db
       .select()
       .from(workingOrderLines)
@@ -1352,9 +1365,9 @@ describe("A803 waiting copy: Split a table", () => {
     expect(copyId).not.toBe(source);
     const sourceEvents = (await eventsOf(source)).slice(before);
     const copyEvents = await eventsOf(copyId);
-    expect(sourceEvents.map((event) => event.kind)).toEqual(["lines_moved", "removed"]);
+    expect(sourceEvents.map((event) => event.kind)).toEqual(["group.lines_moved", "group.removed"]);
     expect(copyEvents.map((event) => [event.kind, event.partyId])).toEqual([
-      ["lines_moved", result.partyId],
+      ["group.lines_moved", result.partyId],
     ]);
     expect(facts.filter((fact) => fact.key === `group:${copyEvents[0]!.id}`)).toEqual([
       {
@@ -2795,12 +2808,12 @@ function judge(
 function eventKindsSince(groupIds: string[], before: Set<string>) {
   return v.db
     .select({
-      id: orderGroupEvents.id,
-      groupId: orderGroupEvents.groupId,
-      kind: orderGroupEvents.kind,
+      id: orderEvents.id,
+      groupId: orderEvents.groupId,
+      kind: orderEvents.kind,
     })
-    .from(orderGroupEvents)
-    .where(inArray(orderGroupEvents.groupId, groupIds))
+    .from(orderEvents)
+    .where(inArray(orderEvents.groupId, groupIds))
     .orderBy(sql`rowid`)
     .then((rows) => rows.filter((row) => !before.has(row.id)));
 }
@@ -2868,8 +2881,8 @@ describe("A803 waiting copy: races", () => {
     expect(
       (await eventKindsSince([t.g, cake.groupId!], eventsBefore)).map((e) => [e.groupId, e.kind]),
     ).toEqual([
-      [t.g, "lines_moved"],
-      [cake.groupId, "lines_moved"],
+      [t.g, "group.lines_moved"],
+      [cake.groupId, "group.lines_moved"],
     ]);
     expect(
       (await movedNoticesOf([t.bill1, t.bill2], noticesBefore)).map((n) => [n.lineName, n.movedTo]),
@@ -2932,14 +2945,16 @@ describe("A803 waiting copy: races", () => {
         expect((await groupRow(t.g)).state).toBe("held");
         expect(
           (await eventKindsSince([t.g, cake.groupId!], eventsBefore)).map((e) => e.kind),
-        ).toEqual(["lines_moved", "lines_moved"]);
+        ).toEqual(["group.lines_moved", "group.lines_moved"]);
         expect(newPrints).toEqual([`*** ${words.moved} ***`]);
       } else {
         expect(await holderNow(tableId)).toBeNull();
         expect(cake.groupId).toBe(t.g);
         expect((await groupRow(t.g)).state).toBe("fired");
         expect(await kitchenItemOf(cake.id)).toMatchObject({ firedAt: expect.any(String) });
-        expect((await eventKindsSince([t.g], eventsBefore)).map((e) => e.kind)).toEqual(["fired"]);
+        expect((await eventKindsSince([t.g], eventsBefore)).map((e) => e.kind)).toEqual([
+          "group.fired",
+        ]);
         expect(await movedNoticesOf([t.bill1, t.bill2], noticesBefore)).toEqual([]);
         expect(newPrints).toEqual([`*** ${words.fire} ***`, `*** ${words.fire} ***`]);
       }
@@ -3172,6 +3187,6 @@ it("copies 32,767 held dishes with their extras, HOLD stations, events and both 
   expect(await draftLineRows(draft)).toEqual(
     before.map((row) => pointedAt(row, dish.groupId!, copyId)),
   );
-  const moved = (await eventsOf(copyId)).find((event) => event.kind === "lines_moved")!;
+  const moved = (await eventsOf(copyId)).find((event) => event.kind === "group.lines_moved")!;
   expect(moved.detail).toEqual({ lineIds: ids, from: dish.groupId, arrived: true });
 });

@@ -4,7 +4,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { adjustmentLines } from "@waitron/adjustments";
 import {
   insertInChunks,
-  orderPortionEvents,
+  orderEvents,
   saleLineDishes,
   saleLines,
   workingOrderLines,
@@ -266,8 +266,8 @@ export async function readWholePortionLines(
 }
 
 export type PortionEvent =
-  | { kind: "moved"; fromOrderId: string; toOrderId: string; actorId: string | null }
-  | { kind: "cancelled"; fromOrderId: string; actorId: string | null };
+  | { kind: "dish.moved"; fromOrderId: string; toOrderId: string; actorId: string | null }
+  | { kind: "dish.cancelled"; fromOrderId: string; actorId: string | null };
 
 /** Record `event` for the portion each of `lineIds` holds; a line holding none records nothing. */
 export async function recordPortionEvents(
@@ -286,12 +286,12 @@ export async function recordPortionEvents(
             detail: { cohortId: binding.cohortId, ordinal: binding.ordinal },
             kind: event.kind,
             fromOrderId: event.fromOrderId,
-            toOrderId: event.kind === "moved" ? event.toOrderId : null,
+            toOrderId: event.kind === "dish.moved" ? event.toOrderId : null,
             actorId: event.actorId,
           },
         ];
   });
-  await insertInChunks(tx, orderPortionEvents, rows);
+  await insertInChunks(tx, orderEvents, rows);
 }
 
 /** Record the dish identity before its line is deleted with the charge. */
@@ -301,7 +301,7 @@ export async function cancelPortions(
   lineIds: readonly string[],
   actorId: string | null,
 ): Promise<void> {
-  await recordPortionEvents(tx, lineIds, { kind: "cancelled", fromOrderId: orderId, actorId });
+  await recordPortionEvents(tx, lineIds, { kind: "dish.cancelled", fromOrderId: orderId, actorId });
 }
 
 /**

@@ -312,7 +312,7 @@ const ADDED_TABLES = [
   "handover_return_batches",
   "invoice_correction_refunds",
   "invoice_corrections",
-  "order_portion_events",
+  "order_events",
   "recovery_packs",
   "sale_line_dishes",
   "deferred_closures",
@@ -320,6 +320,8 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "order_group_events",
+  "order_draft_events",
   "working_line_contexts",
   "printer_holders",
   "page_printers",

@@ -266,6 +266,19 @@ it.each(["working_orders", "working_order_lines"])(
   },
 );
 
+it("rereads the open draft when a takeover adds an order event", async () => {
+  const stream = liveReadFixture();
+  const { el } = await mountApp({ readLiveEvents: stream.read });
+  await openTable(el);
+  stream.event("ready");
+  await flush(el);
+  const drafts = api.listDrafts!.mock.calls.length;
+  if (stream.reads.at(-1)!.types.includes("order_events"))
+    stream.event("change", '[{"type":"order_events"}]');
+  await flush(el);
+  expect(api.listDrafts).toHaveBeenCalledTimes(drafts + 1);
+});
+
 it("the bill-draft timer quiets while connected and resumes after a connection ends", async () => {
   const stream = liveReadFixture();
   const { el } = await mountApp({ readLiveEvents: stream.read });

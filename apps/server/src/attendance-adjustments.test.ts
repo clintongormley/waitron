@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
   newId,
-  orderGroupEvents,
+  orderEvents,
   parties,
   printJobs,
   serviceCommands,
@@ -135,8 +135,8 @@ describe("an adjustment that empties a held group", () => {
     expect(await command.send()).toMatchObject({ status: 200 });
     const [event] = await suite.db
       .select()
-      .from(orderGroupEvents)
-      .where(eq(orderGroupEvents.kind, "removed"));
+      .from(orderEvents)
+      .where(eq(orderEvents.kind, "group.removed"));
     expect(event!.actorId).toBe(v.supervisorId);
     const facts = (await state()).facts;
     expect(facts.map((row) => [row.personId, row.lastAt])).toEqual([

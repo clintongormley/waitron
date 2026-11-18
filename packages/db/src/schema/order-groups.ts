@@ -5,7 +5,6 @@ import {
   enumCheck,
   enumType,
   id,
-  json,
   label,
   newId,
   nowIso,
@@ -71,60 +70,5 @@ export const orderGroups = table(
     check("order_groups_state_ck", enumCheck(t.state)),
     check("order_groups_fired_at_ck", sql`(${t.state} = 'fired') = (${t.firedAt} is not null)`),
     check("order_groups_firer_ck", sql`${t.firedBy} is null or ${t.firedByDeviceId} is null`),
-  ],
-);
-
-export const orderGroupEventKind = enumType([
-  "submitted",
-  "joined",
-  "fired",
-  "reordered",
-  "lines_moved",
-  "removed",
-]);
-
-/**
- * What happened to a party's groups, and who did it. Declared `appendOnly()` in
- * `../classification.ts`. A retried command is answered from `service_commands` and writes no
- * second event.
- *
- * `group_id` is null on a reorder, which names every held group in its `detail`. Exactly one of
- * `actor_id` (a plain person id, as `order_groups.submitted_by` is) and `actor_device_id` is set.
- */
-export const orderGroupEvents = table(
-  "order_group_events",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    partyId: id("party_id").notNull(),
-    groupId: id("group_id"),
-    kind: orderGroupEventKind("kind").notNull(),
-    actorId: id("actor_id"),
-    actorDeviceId: id("actor_device_id"),
-    detail: json<Record<string, unknown>>("detail").notNull(),
-    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.partyId],
-      foreignColumns: [parties.id],
-      name: "order_group_events_party_fk",
-    }),
-    foreignKey({
-      columns: [t.groupId],
-      foreignColumns: [orderGroups.id],
-      name: "order_group_events_group_fk",
-    }),
-    foreignKey({
-      columns: [t.actorDeviceId],
-      foreignColumns: [devices.id],
-      name: "order_group_events_actor_device_fk",
-    }),
-    index("order_group_events_party_idx").on(t.partyId),
-    index("order_group_events_group_idx").on(t.groupId),
-    check("order_group_events_kind_ck", enumCheck(t.kind)),
-    check(
-      "order_group_events_actor_ck",
-      sql`(${t.actorId} is null) <> (${t.actorDeviceId} is null)`,
-    ),
   ],
 );

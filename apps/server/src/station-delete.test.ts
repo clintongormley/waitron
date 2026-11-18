@@ -20,7 +20,7 @@ import {
   ticketItems,
   orderDrafts,
   orderDraftLines,
-  orderDraftEvents,
+  orderEvents,
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -147,7 +147,7 @@ async function snapshot(v: PartyVenue) {
       "ticket_items",
       "order_drafts",
       "order_draft_lines",
-      "order_draft_events",
+      "order_events",
       "print_jobs",
       "kitchen_print_jobs",
       "kitchen_print_job_lines",
@@ -338,7 +338,12 @@ describe("permanent station deletion", () => {
     const beforeQueue = await inTx(v, (tx) => listStationQueue(tx, id));
     const beforeRest = await inTx(v, (tx) => readRestOfOrder(tx, [ready.order.id]));
     const beforeDrafts = await inTx(v, (tx) => tx.select().from(orderDrafts));
-    const beforeEvents = await inTx(v, (tx) => tx.select().from(orderDraftEvents));
+    const beforeEvents = await inTx(v, (tx) =>
+      tx
+        .select()
+        .from(orderEvents)
+        .where(sql`${orderEvents.kind} like 'draft.%'`),
+    );
     expect((await inTx(v, (tx) => readStationDeleteImpact(tx, id))).removes).toEqual([
       { key: "station_unsent_lines", count: 1, targets: [] },
       { key: "station_draft_lines", count: 1, targets: [] },
@@ -393,7 +398,14 @@ describe("permanent station deletion", () => {
     expect(
       (await inTx(v, (tx) => tx.select().from(orderDraftLines))).map((row) => row.makeAtStationId),
     ).toEqual([null]);
-    expect(await inTx(v, (tx) => tx.select().from(orderDraftEvents))).toEqual(beforeEvents);
+    expect(
+      await inTx(v, (tx) =>
+        tx
+          .select()
+          .from(orderEvents)
+          .where(sql`${orderEvents.kind} like 'draft.%'`),
+      ),
+    ).toEqual(beforeEvents);
     expect(await inTx(v, (tx) => listStationQueue(tx, id))).toEqual(beforeQueue);
     expect(await inTx(v, (tx) => readRestOfOrder(tx, [ready.order.id]))).toEqual(beforeRest);
     expect(beforeRest.get(ready.order.id)!.map((row) => row.stationName)).toEqual(["Delete me"]);
@@ -500,7 +512,7 @@ describe("permanent station deletion", () => {
       "print_jobs",
       "kitchen_print_jobs",
       "kitchen_print_job_lines",
-      "order_draft_events",
+      "order_events",
     ])
       expect(after[key]).toEqual(before[key]);
   });

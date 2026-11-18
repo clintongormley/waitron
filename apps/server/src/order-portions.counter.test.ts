@@ -6,7 +6,7 @@ import { adjustmentLines, adjustments, createAdjustmentReason } from "@waitron/a
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
 import {
   billPaymentLines,
-  orderPortionEvents,
+  orderEvents,
   saleLineDishes,
   saleLines,
   sales,
@@ -546,9 +546,9 @@ describe("A1208 a counter order of more portions than one statement can bind", (
 
     expect(linesOf(id).map((line) => line.id)).toEqual([kept!.id]);
     const cancelled = await venue.db
-      .select({ portionId: orderPortionEvents.lineId })
-      .from(orderPortionEvents)
-      .where(eq(orderPortionEvents.fromOrderId, id));
+      .select({ portionId: orderEvents.lineId })
+      .from(orderEvents)
+      .where(eq(orderEvents.fromOrderId, id));
     expect(cancelled.map((event) => event.portionId).sort()).toEqual(
       sorted(removed.map((line) => line.portionId)),
     );

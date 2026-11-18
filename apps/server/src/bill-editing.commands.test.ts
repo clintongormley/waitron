@@ -1,9 +1,9 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq, getTableColumns } from "drizzle-orm";
+import { eq, getTableColumns, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  orderDraftEvents,
+  orderEvents,
   orderDraftLines,
   orderDrafts,
   parties,
@@ -111,7 +111,11 @@ async function rows() {
       .orderBy(workingOrders.id),
     drafts: await venue.db.select().from(orderDrafts).orderBy(orderDrafts.id),
     fresh: await venue.db.select().from(orderDraftLines).orderBy(orderDraftLines.id),
-    events: await venue.db.select().from(orderDraftEvents).orderBy(orderDraftEvents.id),
+    events: await venue.db
+      .select()
+      .from(orderEvents)
+      .where(sql`${orderEvents.kind} like 'draft.%'`)
+      .orderBy(orderEvents.id),
     commands: await venue.db.select().from(serviceCommands).orderBy(serviceCommands.id),
     charges: await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id),
     tickets: await venue.db.select().from(ticketItems).orderBy(ticketItems.id),

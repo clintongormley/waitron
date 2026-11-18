@@ -53,6 +53,7 @@ export async function splitPartyBill(
   billId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<{ billId: string }> {
+  await ensureOperator(tx, OPERATOR);
   const party = await partyRevisionOfOrder(tx, billId);
   return splitBill(tx, cfg, billId, transfers, {
     expectedPartyRevision: party!.revision,

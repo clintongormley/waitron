@@ -31,7 +31,7 @@ Left open:
 - Setting up a venue from an imported configuration deletes every kitchen station, and the
   `kitchen_print_jobs` station key has no delete rule; whether that venue can already hold
   link rows at that point was not tested (read, not run).
-- The pass's Ready records no `order_group_events` row, so who pressed them is
+- The pass's Ready records no `order_events` row, so who pressed them is
   recorded nowhere readable; a new kind changes that append-only table's check, which is a
   core migration.
 

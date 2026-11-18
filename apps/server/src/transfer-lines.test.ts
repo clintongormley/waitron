@@ -1,12 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  insertInChunks,
-  orderPortionEvents,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { insertInChunks, orderEvents, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -535,11 +530,8 @@ it("moves 32,767 selected lines in source order, with their prices, parent links
       await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, from))
     ).map((row) => row.id),
   ).toEqual([staying]);
-  const events = await db
-    .select()
-    .from(orderPortionEvents)
-    .where(eq(orderPortionEvents.fromOrderId, from));
+  const events = await db.select().from(orderEvents).where(eq(orderEvents.fromOrderId, from));
   expect(
     events.map((row) => ({ portionId: row.lineId, kind: row.kind, to: row.toOrderId })),
-  ).toEqual([{ portionId: selected[0]!, kind: "moved", to }]);
+  ).toEqual([{ portionId: selected[0]!, kind: "dish.moved", to }]);
 });

@@ -1448,7 +1448,7 @@ describe("A803 race replay: through the route", () => {
         (select count(*) from parties) as parties,
         (select count(*) from working_orders) as bills,
         (select count(*) from kitchen_notices) as notices,
-        (select count(*) from order_group_events) as events`)[0]!;
+        (select count(*) from order_events where kind like 'group.%') as events`)[0]!;
   }
 
   function partyRow(partyId: string) {

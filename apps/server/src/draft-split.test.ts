@@ -10,7 +10,7 @@ import {
   sales,
   tenders,
   orderDraftLines,
-  orderDraftEvents,
+  orderEvents,
   orderDrafts,
   parties,
   workingOrderLines,
@@ -180,7 +180,11 @@ async function frozen() {
     fresh: await venue.db.select().from(orderDraftLines).orderBy(orderDraftLines.id),
     lines: await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id),
     parties: await venue.db.select().from(parties).orderBy(parties.id),
-    events: await venue.db.select().from(orderDraftEvents).orderBy(orderDraftEvents.id),
+    events: await venue.db
+      .select()
+      .from(orderEvents)
+      .where(sql`${orderEvents.kind} like 'draft.%'`)
+      .orderBy(orderEvents.id),
     commands: await venue.db.select().from(serviceCommands).orderBy(serviceCommands.id),
     payments: await venue.db.select().from(billPayments).orderBy(billPayments.id),
     allocations: await venue.db.select().from(billPaymentLines).orderBy(billPaymentLines.id),
@@ -265,9 +269,9 @@ describe("splitting a saved outbox to a new bill", () => {
     expect(closed!.state).toBe("discarded");
     const events = await venue.db
       .select()
-      .from(orderDraftEvents)
-      .where(eq(orderDraftEvents.draftId, p.snapshot.draft!.id));
-    expect(events.map((event) => event.kind)).toEqual(["created", "discarded"]);
+      .from(orderEvents)
+      .where(eq(orderEvents.draftId, p.snapshot.draft!.id));
+    expect(events.map((event) => event.kind)).toEqual(["draft.created", "draft.discarded"]);
     const before = await frozen();
     const retry = await send(venue.app, venue.cookie, "POST", p.path, body);
     expect(retry).toEqual(result);

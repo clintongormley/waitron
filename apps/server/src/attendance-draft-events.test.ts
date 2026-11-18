@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { firstOpenBillOf } from "./testing/party-bill-of.js";
@@ -6,7 +7,7 @@ import {
   takeOverDraftForTest as takeOverDraft,
 } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { orderDraftEvents, orderDraftLines, orderDrafts, withTransaction } from "@waitron/db";
+import { orderEvents, orderDraftLines, orderDrafts, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -90,7 +91,10 @@ async function saveOtherBill(owner: string) {
 const state = async () => ({
   drafts: await suite.db.select().from(orderDrafts),
   lines: await suite.db.select().from(orderDraftLines),
-  events: await suite.db.select().from(orderDraftEvents),
+  events: await suite.db
+    .select()
+    .from(orderEvents)
+    .where(sql`${orderEvents.kind} like 'draft.%'`),
   facts: await suite.db.select().from(staffActivity),
   days: await suite.db.select().from(attendanceDays),
 });
@@ -121,7 +125,7 @@ describe("natural draft-event attendance snapshots", () => {
       const events = (await state()).events.filter(
         (e) => !before.events.some((old) => old.id === e.id),
       );
-      expect(events.map((e) => e.kind)).toEqual(["taken_over"]);
+      expect(events.map((e) => e.kind)).toEqual(["draft.taken_over"]);
       await assertSnapshots(events, "2026-01-05T13:00:00.000Z", other);
     },
   );

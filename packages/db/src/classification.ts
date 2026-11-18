@@ -119,11 +119,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "which dish lines each filed sale row stands for; written with the sale, never corrected",
   ),
-  appendOnly(
-    "order_portion_events",
-    "ledger",
-    "a portion moved to another order or cancelled with its charge, by whom; never corrected",
-  ),
 
   // state — manager configuration and live service; copied to a standby, never drained back.
   classify("taxpayer", "state", STATE),
@@ -210,11 +205,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "the stations that have a held group's HOLD paper; copied to a standby, never drained back",
   ),
-  appendOnly(
-    "order_group_events",
-    "state",
-    "who (a person or a kitchen display) submitted, fired, reordered or moved a party's groups; never corrected, copied to a standby, never drained back",
-  ),
   classify(
     "order_drafts",
     "state",
@@ -224,11 +214,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "order_draft_lines",
     "state",
     "the lines of an unsent order; copied to a standby, never drained back",
-  ),
-  appendOnly(
-    "order_draft_events",
-    "state",
-    "who owned an unsent order and what became of it; never corrected, copied to a standby, never drained back",
   ),
   appendOnly(
     "order_events",

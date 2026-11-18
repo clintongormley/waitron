@@ -7,7 +7,6 @@ export * from "./orders.js";
 export * from "./order-amendments.js";
 export * from "./order-events.js";
 export * from "./sale-line-dishes.js";
-export * from "./order-portion-events.js";
 export * from "./dining-tables.js";
 export * from "./floor-plans.js";
 export * from "./parties.js";

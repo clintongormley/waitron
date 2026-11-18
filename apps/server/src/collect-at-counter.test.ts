@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  orderGroupEvents,
+  orderEvents,
   orderGroups,
   parties,
   products,
@@ -195,8 +195,8 @@ describe("releaseHeldWorkOf", () => {
 
     const events = await venue.db
       .select()
-      .from(orderGroupEvents)
-      .where(and(eq(orderGroupEvents.partyId, p.partyId), eq(orderGroupEvents.kind, "fired")));
+      .from(orderEvents)
+      .where(and(eq(orderEvents.partyId, p.partyId), eq(orderEvents.kind, "group.fired")));
     expect(events).toHaveLength(1);
     const tickets = await ticketsOf([p.billId, split.billId]);
     expect(new Set(tickets.map((item) => item.workingOrderId))).toEqual(
@@ -222,15 +222,18 @@ describe("releaseHeldWorkOf", () => {
     const groups = await groupsOf(p.partyId);
     const events = await venue.db
       .select()
-      .from(orderGroupEvents)
-      .where(eq(orderGroupEvents.partyId, p.partyId));
+      .from(orderEvents)
+      .where(and(eq(orderEvents.partyId, p.partyId), sql`${orderEvents.kind} like 'group.%'`));
     const before = lastJobRow();
 
     await release(p.partyId, [p.billId]);
 
     expect(await groupsOf(p.partyId)).toEqual(groups);
     expect(
-      await venue.db.select().from(orderGroupEvents).where(eq(orderGroupEvents.partyId, p.partyId)),
+      await venue.db
+        .select()
+        .from(orderEvents)
+        .where(and(eq(orderEvents.partyId, p.partyId), sql`${orderEvents.kind} like 'group.%'`)),
     ).toEqual(events);
     expect(jobsByPrinterAfter(before)).toEqual([]);
   });
@@ -273,17 +276,17 @@ describe("releaseHeldWorkOf", () => {
 
     const events = await venue.db
       .select()
-      .from(orderGroupEvents)
+      .from(orderEvents)
       .where(
         and(
-          inArray(orderGroupEvents.partyId, [fired.partyId, removed.partyId]),
-          inArray(orderGroupEvents.kind, ["fired", "removed"]),
+          inArray(orderEvents.partyId, [fired.partyId, removed.partyId]),
+          inArray(orderEvents.kind, ["group.fired", "group.removed"]),
         ),
       );
     expect(events.map((event) => [event.partyId, event.kind]).sort()).toEqual(
       [
-        [fired.partyId, "fired"],
-        [removed.partyId, "removed"],
+        [fired.partyId, "group.fired"],
+        [removed.partyId, "group.removed"],
       ].sort(),
     );
   });

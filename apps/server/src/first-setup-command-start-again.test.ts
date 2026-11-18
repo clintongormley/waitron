@@ -313,7 +313,7 @@ it.each(["activation-started", "uncertain"] as const)(
     const db = new DatabaseSync(join(f.folders.venueDir, "venue.db"));
     try {
       db.prepare(
-        "insert into order_portion_events (id, line_id, kind, from_order_id, at) values (?, ?, 'cancelled', ?, ?)",
+        "insert into order_events (id, line_id, kind, from_order_id, at) values (?, ?, 'dish.cancelled', ?, ?)",
       ).run(randomUUID(), randomUUID(), randomUUID(), "2026-10-16T11:40:00.000Z");
     } finally {
       db.close();

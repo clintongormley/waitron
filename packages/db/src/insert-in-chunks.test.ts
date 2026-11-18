@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { insertInChunks, rowsPerStatement, statementChunks } from "./insert-in-chunks.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
-import { orderPortionEvents } from "./schema/order-portion-events.js";
+import { orderEvents } from "./schema/order-events.js";
 import { withTransaction } from "./tenancy.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
@@ -25,20 +25,20 @@ describe("rowsPerStatement", () => {
   });
 });
 
-const EVENT_COLUMNS = 8;
+const EVENT_COLUMNS = 14;
 
 describe("statementChunks", () => {
   it("cuts rows into runs of as many as fit the limit at one value per column, in order", () => {
-    expect(
-      statementChunks(orderPortionEvents, ["a", "b", "c", "d", "e"], EVENT_COLUMNS * 2),
-    ).toEqual([["a", "b"], ["c", "d"], ["e"]]);
-    expect(statementChunks(orderPortionEvents, ["a", "b"], EVENT_COLUMNS * 2)).toEqual([
+    expect(statementChunks(orderEvents, ["a", "b", "c", "d", "e"], EVENT_COLUMNS * 2)).toEqual([
       ["a", "b"],
+      ["c", "d"],
+      ["e"],
     ]);
+    expect(statementChunks(orderEvents, ["a", "b"], EVENT_COLUMNS * 2)).toEqual([["a", "b"]]);
   });
 
   it("gives no runs for no rows", () => {
-    expect(statementChunks(orderPortionEvents, [], EVENT_COLUMNS * 2)).toEqual([]);
+    expect(statementChunks(orderEvents, [], EVENT_COLUMNS * 2)).toEqual([]);
   });
 
   it("by default fills each run up to SQLite's limit", () => {
@@ -46,7 +46,7 @@ describe("statementChunks", () => {
       { length: Math.floor(SQL_VARIABLE_LIMIT / EVENT_COLUMNS) + 1 },
       (_, i) => i,
     );
-    expect(statementChunks(orderPortionEvents, rows).map((run) => run.length)).toEqual([
+    expect(statementChunks(orderEvents, rows).map((run) => run.length)).toEqual([
       rows.length - 1,
       1,
     ]);
@@ -70,14 +70,14 @@ describe("insertInChunks", () => {
       lineId: String(i).padStart(5, "0"),
       fromOrderId,
       detail: { cohortId: fromOrderId, ordinal: i + 1 },
-      kind: "cancelled" as const,
+      kind: "dish.cancelled" as const,
     }));
   };
 
   async function insertCounting(rows: ReturnType<typeof events>, limit?: number): Promise<number> {
     return withTransaction(suite.db, async (tx) => {
       const insert = vi.spyOn(tx, "insert");
-      await insertInChunks(tx, orderPortionEvents, rows, limit);
+      await insertInChunks(tx, orderEvents, rows, limit);
       const statements = insert.mock.calls.length;
       insert.mockRestore();
       return statements;
@@ -87,19 +87,19 @@ describe("insertInChunks", () => {
   const stored = (fromOrderId: string) =>
     suite.db
       .select({
-        id: orderPortionEvents.id,
-        lineId: orderPortionEvents.lineId,
-        fromOrderId: orderPortionEvents.fromOrderId,
-        detail: orderPortionEvents.detail,
-        kind: orderPortionEvents.kind,
+        id: orderEvents.id,
+        lineId: orderEvents.lineId,
+        fromOrderId: orderEvents.fromOrderId,
+        detail: orderEvents.detail,
+        kind: orderEvents.kind,
       })
-      .from(orderPortionEvents)
-      .where(eq(orderPortionEvents.fromOrderId, fromOrderId))
-      .orderBy(asc(orderPortionEvents.lineId));
+      .from(orderEvents)
+      .where(eq(orderEvents.fromOrderId, fromOrderId))
+      .orderBy(asc(orderEvents.lineId));
 
   it("writes nothing, and issues no statement, for no rows", async () => {
     expect(await insertCounting([])).toBe(0);
-    expect(await suite.db.select().from(orderPortionEvents)).toEqual([]);
+    expect(await suite.db.select().from(orderEvents)).toEqual([]);
   });
 
   it("splits rows across statements so none binds more than the limit, and writes every row", async () => {

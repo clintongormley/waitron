@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   lineServiceCancellations,
   orderDrafts,
-  orderGroupEvents,
+  orderEvents,
   partyFamilies,
   workingOrderLines,
   workingOrders,
@@ -123,34 +123,34 @@ export async function readStepFacts(
   // A party with orders of its own keeps their times: a bill arriving is not this table ordering.
   const orders = new Map<string, OrderTimes>();
   const arrivals = new Map<string, OrderTimes>();
-  const isArrival = sql<number>`${orderGroupEvents.kind} = 'lines_moved'`;
+  const isArrival = sql<number>`${orderEvents.kind} = 'group.lines_moved'`;
   const orderRows = await tx
     .select({
-      partyId: orderGroupEvents.partyId,
+      partyId: orderEvents.partyId,
       isArrival,
       // Every event is stamped by the column's `nowIso`, so text order is time order.
-      first: sql<string>`min(${orderGroupEvents.createdAt})`,
-      last: sql<string>`max(${orderGroupEvents.createdAt})`,
+      first: sql<string>`min(${orderEvents.at})`,
+      last: sql<string>`max(${orderEvents.at})`,
     })
-    .from(orderGroupEvents)
+    .from(orderEvents)
     .where(
       and(
-        inArray(orderGroupEvents.partyId, members),
+        inArray(orderEvents.partyId, members),
         or(
-          inArray(orderGroupEvents.kind, ["submitted", "joined"]),
+          inArray(orderEvents.kind, ["group.submitted", "group.joined"]),
           and(
-            eq(orderGroupEvents.kind, "lines_moved"),
-            sql`json_extract(${orderGroupEvents.detail}, '$.arrived') = 1`,
+            eq(orderEvents.kind, "group.lines_moved"),
+            sql`json_extract(${orderEvents.detail}, '$.arrived') = 1`,
           ),
         ),
       ),
     )
-    .groupBy(orderGroupEvents.partyId, isArrival);
+    .groupBy(orderEvents.partyId, isArrival);
   for (const row of orderRows) {
     const first = Date.parse(row.first);
     const last = Date.parse(row.last);
     const times = row.isArrival === 1 ? arrivals : orders;
-    for (const root of rootsOf.get(row.partyId)!) {
+    for (const root of rootsOf.get(row.partyId!)!) {
       const seen = times.get(root);
       times.set(
         root,

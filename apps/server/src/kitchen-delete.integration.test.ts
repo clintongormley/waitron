@@ -4,7 +4,7 @@ import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.j
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
-import { ticketItems, workingOrderLines, orderDraftEvents, products } from "@waitron/db";
+import { ticketItems, workingOrderLines, orderEvents, products } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -26,7 +26,7 @@ import {
 import { mountMenuApi } from "./menu-api.js";
 import { deleteCourse, readCourseDeleteImpact } from "./course-delete.js";
 import { deleteStation, readStationDeleteImpact } from "./station-delete.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { republishMenus } from "./testing/publish-menu.js";
 import { mountManagementApi } from "./management-api.js";
 import { readDrafts, submitDraft } from "./order-drafts.js";
@@ -195,7 +195,10 @@ it("keeps retained draft, group, course and ready station history through manage
   const history = async () => ({
     tickets: await v.db.select().from(ticketItems),
     lines: await v.db.select().from(workingOrderLines),
-    events: await v.db.select().from(orderDraftEvents),
+    events: await v.db
+      .select()
+      .from(orderEvents)
+      .where(sql`${orderEvents.kind} like 'draft.%'`),
     groups: await inTx(v, (tx) => listOrderGroups(tx, seated.partyId)),
     tab: await inTx(v, (tx) => readTabLines(tx, submitted.tabId)),
     pass: await inTx(v, (tx) => readScopedPassBoard(tx, EVERY)),
