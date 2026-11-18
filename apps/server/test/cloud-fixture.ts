@@ -81,7 +81,7 @@ export async function cloudFixture(
         Buffer.from(signature, "base64url"),
       ),
     ).toBe(true);
-    expect(values[0]).toBe("waitron-cloud-pair-v2");
+    expect(values[0]).toBe("waitron-cloud-pair-v3");
     expect(req.url).toBe(`/api/pairing/${values[2]}`);
     const saved = JSON.parse(await readFile(join(stateDir, "cloud/connection.json"), "utf8"));
     expect(saved.requestId).toBe(values[3]);
@@ -148,6 +148,7 @@ export async function cloudFixture(
     origin,
     environment,
     readVenueId: async () => storedVenueId,
+    readVenueName: async () => "Bar Pepe",
     recordVenueId: async (id: string) => {
       storedVenueId = id;
     },

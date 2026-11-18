@@ -8,7 +8,7 @@ import {
 import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
 import { CLOUD_DIR, CLOUD_CONNECTION_FILE } from "@waitron/store";
-import { pairingPayload } from "@waitron/contract";
+import { pairingPayload, pairingVenueName } from "@waitron/contract";
 import {
   reserveCloudCapture,
   publishCloudCapture,
@@ -102,6 +102,7 @@ export interface CloudConnectionOptions {
   tunnelDir?: string;
   origin: string;
   readVenueId(): Promise<string | null>;
+  readVenueName(): Promise<string>;
   recordVenueId(venueId: string): Promise<void>;
   environment: "test" | "production";
 }
@@ -364,6 +365,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     action: "start" | "status" | "complete",
     choice?: CloudChoice,
   ): Promise<CloudPairingView> {
+    // Read before stamping issuedAt: a slow read must not age the proof past Cloud's 60-second window.
+    const venueName = action === "start" ? pairingVenueName(await options.readVenueName()) : "";
     const bytes = pairingPayload({
       origin: state.origin,
       action,
@@ -375,6 +378,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       organisationId: choice?.organisationId ?? "",
       legalBusinessId: choice?.legalBusinessId ?? "",
       issuedAt: Date.now(),
+      venueName,
     });
     const signature = signCloudPayload(bytes, state.privateKey);
     try {

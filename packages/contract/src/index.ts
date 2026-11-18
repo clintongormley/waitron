@@ -1,5 +1,7 @@
 export {
   pairingPayload,
+  pairingVenueName,
+  PAIRING_VENUE_NAME_MAX,
   verifyPairingProof,
   PairingError,
   type PairingClaims,

@@ -106,6 +106,7 @@ async function fixture(
     stateDir,
     origin: cloudOrigin,
     readVenueId: async () => registration.venueId,
+    readVenueName: async () => "",
     recordVenueId: async () => {},
     environment: "test",
   });
@@ -175,6 +176,7 @@ it("refuses a replacement for another Cloud venue without changing the held venu
     ...f.options,
     environment: "test",
     readVenueId: async () => stored,
+    readVenueName: async () => "",
     recordVenueId: async (id) => {
       stored = id;
     },
@@ -364,6 +366,7 @@ async function connectedReplacement() {
       stateDir: f.stateDir,
       origin: f.origin,
       readVenueId: async () => registration.venueId,
+      readVenueName: async () => "",
       recordVenueId: async () => {},
       environment: "test",
     });
