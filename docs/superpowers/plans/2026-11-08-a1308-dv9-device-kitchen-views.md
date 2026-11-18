@@ -1,5 +1,7 @@
 # A1308 dv9: a device's kitchen views live on the device, and "taken away" is worked out — implementation plan
 
+> **2026-11-18, watcher decision:** dv9 is superseded by [#3323](https://github.com/clintongormley/waitron/pull/3323), which made devices inherit their profile's kitchen screen, and [#3771](https://github.com/clintongormley/waitron/pull/3771), which moved the screen onto the profile. Dv10's dependency on dv9 is satisfied.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`)
 > syntax for tracking.
