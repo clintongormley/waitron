@@ -216,6 +216,7 @@ it.runIf(process.env.WAITRON_LARGE_CLOUD_BACKUP_TEST === "1")(
         new Date(),
         new AbortController().signal,
         async (grant, file, metadata) => {
+          expect(await readdir(join(root, "scratch"))).toEqual(["backup"]);
           await uploadCloudCaptureFile(
             { ...grant, location: { ...grant.location, endpoint } },
             file,

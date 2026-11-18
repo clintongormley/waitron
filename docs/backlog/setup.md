@@ -275,8 +275,11 @@ whole-file reads are separate work:
 
 Pair the box and Cloud release candidates on near-cap publication and on capture, verification,
 preview and staging of the representative year. Check an older raw archive on the same pair. The
-box refuses ciphertext above 2 GiB with `cloud.unavailable`. A timed-out upload keeps its
-pending ciphertext for retries during the capture's first day. See the [Cloud transfer plan](../superpowers/plans/2026-11-17-cloud-snapshot-stream.md).
+box refuses ciphertext above 2 GiB or expanded archives above 4 GiB with `cloud.unavailable`.
+A timed-out upload keeps its
+pending ciphertext for retries during the capture's first day. In the paired run, check grant
+renewal, publication within the trial deadline and the verifier's measured time and scratch.
+See the [Cloud transfer plan](../superpowers/plans/2026-11-17-cloud-snapshot-stream.md).
 
 Revisit content-named pieces, a read-only archive database and continuous Cloud copies after
 time-ordered IDs and real venue measurements (owner, 17 November 2026, 23:16 and 23:19).

@@ -1,4 +1,3 @@
-import { publishFileDurable } from "@waitron/provisioning";
 import { SCRATCH_DIR } from "@waitron/store";
 import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -155,7 +154,7 @@ export interface BackupSweepDeps {
   deviceOf?: DeviceOf;
   /** DI for tests; defaults to `node:fs/promises`'s `statfs`. */
   statfs?: Statfs;
-  /** Held by each tick, so nothing else in this process touches `stagingDir` while it runs. */
+  /** Protects shared staging and marks the Cloud pack as backup work. */
   stagingTurn?: StagingTurn;
 }
 
@@ -208,7 +207,9 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
   const buildBackupManifest = deps.buildManifest ?? buildManifest;
   const stamp = now();
   const dumpName = dumpFileName(stamp);
-  const staged = join(deps.stagingDir, dumpName);
+  let staged = join(deps.stagingDir, dumpName);
+  let cloudCopyDir: string | undefined;
+  let deliverCloud = false;
   let dumped = false;
   let encryptedDir: string | undefined;
   const budget = new ArchiveReadBudget();
@@ -281,6 +282,10 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
           estimate * copies +
           ((await deps.cloud?.target.roomNeeded(estimate)) ?? 0),
       );
+    }
+    if (deps.cloud) {
+      cloudCopyDir = await mkdtemp(join(deps.stateDir, SCRATCH_DIR, "cloud-copy-"));
+      staged = join(cloudCopyDir, dumpName);
     }
     await deps.archive(staged, deps.signal);
     dumped = true;
@@ -389,7 +394,6 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
       await rm(encryptedDir, { recursive: true, force: true });
       encryptedDir = undefined;
     }
-    let cloudCopyDir: string | undefined;
     try {
       if (room) {
         const neededBytes = await target.roomNeeded(plaintextBytes);
@@ -399,35 +403,42 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
             neededBytes + (deps.spaceFloorBytes ?? START_FREE_SPACE_FLOOR),
           );
       }
-      const scratch = join(deps.stateDir, SCRATCH_DIR);
-      cloudCopyDir = await mkdtemp(join(scratch, "cloud-copy-"));
-      const cloudCopy = join(cloudCopyDir, dumpName);
-      // Box status can clear shared backup staging while Cloud uses its private copy.
-      await publishFileDurable(staged, cloudCopy);
-      dumped = false;
-      entries[1] = { kind: "file", name: "db.dump", path: cloudCopy };
     } catch (error) {
-      if (cloudCopyDir) await rm(cloudCopyDir, { recursive: true, force: true });
       report({ stored: false, errorCode: codeOf(error) });
       return;
     }
-    const cleanup = cloudCopyDir;
+    const discardCopy = async () => {
+      if (!cloudCopyDir) return;
+      await rm(cloudCopyDir, { recursive: true, force: true });
+      cloudCopyDir = undefined;
+    };
+    deliverCloud = true;
     return async () => {
       try {
         if (deps.signal.aborted) return;
-        const result = await target.store({
-          entries: () => packArchiveStream(entries),
-          plaintextBytes,
-          modules: manifest.modules,
-          at: stamp,
-          clock: await readClock(),
-          signal: deps.signal,
-        });
+        let result: Awaited<ReturnType<CloudArchiveTarget["store"]>>;
+        try {
+          result = await target.store({
+            async *entries() {
+              try {
+                yield* packArchiveStream(entries);
+              } finally {
+                await discardCopy();
+              }
+            },
+            plaintextBytes,
+            modules: manifest.modules,
+            at: stamp,
+            clock: await readClock(),
+            signal: deps.signal,
+            stagingTurn: deps.stagingTurn,
+          });
+        } catch (error) {
+          result = { stored: false, errorCode: codeOf(error) };
+        }
         report(result);
-      } catch (error) {
-        report({ stored: false, errorCode: codeOf(error) });
       } finally {
-        await rm(cleanup, { recursive: true, force: true });
+        await discardCopy();
       }
     };
   } catch (err) {
@@ -450,7 +461,10 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
     throw err;
   } finally {
     if (encryptedDir) await rm(encryptedDir, { recursive: true, force: true });
-    if (dumped) await rm(staged, { force: true });
+    if (!deliverCloud) {
+      if (cloudCopyDir) await rm(cloudCopyDir, { recursive: true, force: true });
+      else if (dumped) await rm(staged, { force: true });
+    }
   }
 }
 

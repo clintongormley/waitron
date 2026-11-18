@@ -810,15 +810,15 @@ insert into bookings
     });
   });
   it.each([
-    [30_001, "passed", "none"],
-    [300_000, "unavailable", "deadline"],
-  ])("checks elapsed %i ms independently of the signed clock", async (elapsed, status, reason) => {
+    [30_001, { status: "passed", reason: "none" }],
+    [300_000, { status: "unavailable", reason: "deadline", measuredArchive: null, modules: [] }],
+  ])("checks elapsed %i ms independently of the signed clock", async (elapsed, expected) => {
     const f = await fixture();
     await seal(f);
     vi.spyOn(performance, "now")
       .mockReturnValueOnce(1)
       .mockReturnValue(1 + elapsed);
-    expect(await verify(f)).toMatchObject({ status, reason });
+    expect(await verify(f)).toMatchObject(expected);
   });
   it("an owner cannot read another owner's private archive entry", async () => {
     const f = await fixture();

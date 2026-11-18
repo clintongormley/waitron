@@ -3319,9 +3319,9 @@ has already thrown (inferred, not isolated).
 #### Backup staging is touched only inside the staging turn
 
 The turn is `apps/server/src/backup-staging-turn.ts`. A backup run holds the turn from its first
-step to the end of its shared staging clean-up (`runBackup` in `backup-sweep.ts`). Cloud takes the
-same staged copy into a private scratch directory before the turn ends. A free-space deletion takes
-the turn through `ifNoBackup`,
+step to the end of its shared staging clean-up (`runBackup` in `backup-sweep.ts`). A Cloud-enabled
+run writes its shared database copy in private scratch. Cloud takes the turn while packing the copy
+and releases it before upload. A free-space deletion takes the turn through `ifNoBackup`,
 which answers `{ ran: false }` at once, and the deletion skips staging and says
 `backupRunning: true`, while a run holds the turn or waits for it — a deletion never waits for a
 run. A page's survey takes no turn: it measures staging best-effort and leaves it out while a run
@@ -5743,8 +5743,8 @@ read-only open of a cleanly stopped database failed there and worked at 64 KiB.
 ## One state-folder layout
 
 Backup, restore and setup working copies live below `scratch/`, with `backup/` and `restore/` children.
-Cloud takes the shared backup copy into a private directory under `scratch/` before releasing the
-backup staging turn. It writes ciphertext to scratch, then flushes and renames it into
+A Cloud-enabled run writes the shared backup copy in a private directory under `scratch/`. Cloud
+removes that copy after reading it. It writes ciphertext to scratch, then flushes and renames it into
 `cloud/snapshots/` before saving its publication record there for retries. A start deletes
 scratch entries, never the root itself. Each maker holds the venue folder before creating its
 working directory; Box status's Free still touches only backup dumps and `backup-encrypt-*`

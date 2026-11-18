@@ -1,11 +1,12 @@
 import { gunzipSync } from "node:zlib";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { CloudConnectionStatus } from "./cloud-client.js";
 import type { CloudCaptureGrant, CloudCaptureMetadata, CloudCapturePoint } from "./cloud-backup.js";
+import { createStagingTurn } from "./backup-staging-turn.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 import { decryptArtifactAsync } from "./artifact-cipher.js";
@@ -256,10 +257,10 @@ it("counts the fixed overhead and a waiting ciphertext in the space needed", asy
     throw Error("offline");
   };
   const target = createCloudArchiveTarget(f.deps);
-  await expect(target.roomNeeded(10)).resolves.toBeGreaterThanOrEqual(79);
+  await expect(target.roomNeeded(10)).resolves.toBe(92);
   await target.store(f.input());
   const waiting = await readFile(join(f.root, "cloud/snapshots/archive.enc"));
-  await expect(target.roomNeeded(10)).resolves.toBeGreaterThanOrEqual(79 + waiting.length);
+  await expect(target.roomNeeded(10)).resolves.toBe(92 + waiting.length);
 });
 
 it("labels the first capture of a month monthly and later captures daily", async () => {
@@ -475,6 +476,60 @@ it("writes temporary ciphertext in scratch and leaves no partial archive on fail
   expect(spoolEntries).toEqual(["state.json"]);
   expect(await readdir(join(f.root, "scratch"))).toEqual([]);
   expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual(["state.json"]);
+});
+
+it("holds the backup turn while packing and releases it before uploading", async () => {
+  const f = await fixture();
+  const turn = createStagingTurn();
+  const input = f.input();
+  const upload = f.deps.upload;
+  const states: boolean[] = [];
+  f.deps.upload = async (grant, path) => {
+    states.push(turn.backupRunning());
+    await upload(grant, path);
+  };
+  await expect(
+    createCloudArchiveTarget(f.deps).store({
+      ...input,
+      stagingTurn: turn,
+      async *entries() {
+        states.push(turn.backupRunning());
+        yield* input.entries();
+      },
+    }),
+  ).resolves.toEqual({ stored: true, errorCode: null });
+  expect(states).toEqual([true, false]);
+});
+
+it("stops packing when the ciphertext reaches its byte limit and removes the partial file", async () => {
+  const f = await fixture();
+  const input = f.input();
+  vi.resetModules();
+  vi.doMock("./cloud-backup-limits.js", async (original) => ({
+    ...(await original<typeof import("./cloud-backup-limits.js")>()),
+    MAX_CLOUD_ARCHIVE_BYTES: 65_536,
+  }));
+  try {
+    const { createCloudArchiveTarget } = await import("./cloud-archive-target.js");
+    let entireSourceRead = false;
+    await expect(
+      createCloudArchiveTarget(f.deps).store({
+        ...input,
+        plaintextBytes: 4 * 1024 ** 2,
+        async *entries() {
+          for (let i = 0; i < 64; i++) yield randomBytes(65_536);
+          entireSourceRead = true;
+        },
+      }),
+    ).resolves.toEqual(unavailable);
+    expect(entireSourceRead).toBe(false);
+    expect(f.uploads).toEqual([]);
+    expect(await readdir(join(f.root, "scratch"))).toEqual([]);
+    expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual(["state.json"]);
+  } finally {
+    vi.doUnmock("./cloud-backup-limits.js");
+    vi.resetModules();
+  }
 });
 
 it.each([1, 2])("renews a grant after packing, with key version %i", async (keyVersion) => {

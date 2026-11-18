@@ -544,6 +544,7 @@ describe("runOnce (fan-out)", () => {
       uploadErrorCode: null,
       pruneErrorCode: null,
     });
+    expect(dirname(dirname(archive.mock.calls[0]![0]))).toBe(join(stateDir, "scratch"));
     expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
   });
 
