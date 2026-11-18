@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, venueCredentials } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -23,9 +23,6 @@ const inputs = {
 const email = { url: "smtp://private-sentinel@example.test" };
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-beforeEach(() => {
-  suite.db.run(sql`delete from venue_credentials`);
-});
 async function query<T>(body: (q: BackupQuery) => Promise<T>): Promise<T> {
   const file = suite.db
     .all<{ file: string }>(sql`pragma database_list`)

@@ -1,7 +1,7 @@
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { generateKeyPairSync } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   readMembershipTrustSet,
@@ -64,10 +64,6 @@ describe("before the node set has run", () => {
 describe("the box's signing key in node.db", () => {
   const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
-  });
-
-  beforeEach(() => {
-    suite.node.run(sql`delete from box`);
   });
 
   async function insertRaw(nodeId: string, aad: string, plaintext: string, keyVersion = 1) {

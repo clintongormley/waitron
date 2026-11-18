@@ -157,7 +157,7 @@ describe("validatePayload", () => {
     expect(JSON.stringify(error)).not.toContain("sk_live_OOPS");
   });
 
-  it("never echoes an unexpected field's own NAME either — only a count (M7)", () => {
+  it("never echoes an unexpected field's own NAME either, only a count", () => {
     // Here the SENSITIVE text is the extra field's own key, not its value — the shape an operator
     // produces by piping a raw secret in as a bare JSON object key by mistake.
     const error = captured(() =>

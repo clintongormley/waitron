@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   readActivityForSubject,
   CORE_MIGRATIONS,
@@ -37,11 +37,6 @@ const STRIPE = {
 };
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-
-// Listing reads the whole vault, so each case starts with an empty credential table.
-beforeEach(async () => {
-  await suite.db.execute(sql`delete from venue_credentials`);
-});
 
 describe("the seal binds each credential to its purpose", () => {
   it("round-trips a credential through the seal and the store", async () => {
@@ -122,6 +117,22 @@ describe("putCredential and getCredential", () => {
     const rows = await suite.db.execute<{ blob: Uint8Array }>(sql`
       select ciphertext as blob from venue_credentials`);
     expect(Buffer.from(rows.rows[0]!.blob).toString("latin1")).not.toContain("sk_test_x");
+  });
+
+  it("reads the sealed columns back as plain bytes, not Node Buffers", async () => {
+    const row = await withTransaction(suite.db, async (tx) => {
+      await putCredential(tx, RING_V1, {
+        personId: null,
+        purpose: "payments.stripe",
+        value: STRIPE,
+      });
+      const [stored] = await tx.select().from(venueCredentials);
+      return stored!;
+    });
+    for (const bytes of [row.ciphertext, row.iv, row.authTag]) {
+      expect(Buffer.isBuffer(bytes)).toBe(false);
+      expect(bytes).toBeInstanceOf(Uint8Array);
+    }
   });
 
   it("overwrites an existing purpose rather than failing on the primary key", async () => {

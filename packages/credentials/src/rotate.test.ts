@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   readActivityForSubject,
   CORE_MIGRATIONS,
@@ -66,13 +66,6 @@ const PAIR_LINK: NewPairLink = {
   accessKeyId: "waitron0123456789abcdef",
   secretAccessKey: "0f".repeat(32),
 };
-
-/** Rotation enumerates the whole vault, so each case starts with an empty credential table. */
-beforeEach(async () => {
-  await suite.db.execute(sql`delete from venue_credentials`);
-  suite.node.run(sql`delete from box`);
-  suite.node.run(sql`delete from node_pair_link`);
-});
 
 describe("rotateCredentials", () => {
   it("re-seals every row onto the current key and advances its version", async () => {

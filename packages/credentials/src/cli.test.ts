@@ -39,13 +39,6 @@ const STRIPE_JSON = JSON.stringify({
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 
-// Listing reads the whole vault, and rotation refuses under a pair link, so each case starts with
-// an empty credential table and no pair link.
-beforeEach(async () => {
-  await suite.db.execute(sql`delete from venue_credentials`);
-  suite.node.run(sql`delete from node_pair_link`);
-});
-
 interface Harness {
   deps: CliDeps;
   out: string[];
@@ -382,7 +375,6 @@ describe("waitron-credentials rotate", () => {
     const SIGNING_KEY = "MC4CAQAwBQYDK2VwBCIEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     beforeEach(async () => {
-      await suite.node.execute(sql`delete from box`);
       await runCli(["set", "--purpose", "payments.stripe"], harness(STRIPE_JSON).deps);
       await withNodeTransaction(suite.node, (tx) =>
         sealNodeSigningKeyTx(tx, RING, NODE, SIGNING_KEY),

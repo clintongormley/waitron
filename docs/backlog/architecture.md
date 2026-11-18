@@ -40,17 +40,6 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   checks read `packages/provisioning` and `apps/server/src` only. The same claim stands in
   `packages/fiscal-verifactu/src/venue-fields.ts`. Prune with those.
 
-## Nothing now checks at run time that a read returns something other than a Node `Buffer`
-
-- `packages/credentials`: nothing now checks at run time that a
-  read returns something other than a Node `Buffer` (the runtime case went with the PostgreSQL
-  suite; a 2026-09-22 measurement read `Uint8Array`, `Buffer.isBuffer` false). Nothing checks
-  that a caller other than the application cannot read or list the vault; only the encryption
-  protects it. Test titles ending "— C1" and "(M7)" are old review labels, and
-  `credentials.test.ts`'s fixtures `sk_test_rls`/`whsec_rls` carry a PostgreSQL-era name. The
-  `beforeEach` deletes in the store, cli and rotate suites may be redundant beside `useVenueDb`'s
-  per-test reset (not tried).
-
 ## The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert
 
 - The nested `tx.transaction(...)` in `enqueueSuccessor`
@@ -1068,8 +1057,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   wide** — found by #567 while pruning comments. The same claim stands in
   `packages/fiscal-verifactu/src/venue-fields.ts`.
   [Detail](architecture.md#nothing-under-apps-may-import-a-regime-package-scriptsmodule-seamstestts--is-too-wide)
-- **Nothing now checks at run time that a read returns something other than a Node `Buffer`**
-  [Detail](architecture.md#nothing-now-checks-at-run-time-that-a-read-returns-something-other-than-a-node-buffer)
 - **The nested `tx.transaction(...)` in `enqueueSuccessor` wraps one insert**
   [Detail](architecture.md#the-nested-txtransaction-in-enqueuesuccessor-wraps-one-insert)
 - **`decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no
