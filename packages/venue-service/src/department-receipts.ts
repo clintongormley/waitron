@@ -3,8 +3,8 @@ import {
   mediaImages,
   departments,
   nowIso,
-  orderServiceContexts,
   saleReceiptHeaders,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { isValidEmail } from "@waitron/identity";
@@ -329,9 +329,9 @@ export async function receiptDepartmentForOrder(
   orderId: string,
 ): Promise<string | null> {
   const [row] = await tx
-    .select({ id: orderServiceContexts.departmentId })
-    .from(orderServiceContexts)
-    .where(eq(orderServiceContexts.workingOrderId, orderId));
+    .select({ id: workingOrders.departmentId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
   return row?.id ?? null;
 }
 export async function receiptDefaultDepartment(tx: Transaction): Promise<string | null> {

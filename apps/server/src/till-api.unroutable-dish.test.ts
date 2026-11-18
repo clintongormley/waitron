@@ -380,7 +380,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const id = randomUUID();
     await park(id, [made]);
     await inTx(v, async (tx) =>
-      tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`),
+      tx.run(
+        sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${id}`,
+      ),
     );
     const till = await enrolTill();
     const facts = () => ({
@@ -1520,7 +1522,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const id = randomUUID();
     await park(id, [made]);
     await inTx(v, async (tx) =>
-      tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`),
+      tx.run(
+        sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${id}`,
+      ),
     );
     Object.assign(v.cfg, { orderFlow: "invoice_first" });
 
@@ -1545,7 +1549,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const { partyId } = await seat(v, tableId);
     await inTx(v, async (tx) => {
       await tx.run(sql`update working_orders set party_id = ${partyId} where id = ${id}`);
-      await tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`);
+      await tx.run(
+        sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${id}`,
+      );
     });
     Object.assign(v.cfg, { orderFlow: "invoice_first" });
 

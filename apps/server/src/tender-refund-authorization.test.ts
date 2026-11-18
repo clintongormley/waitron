@@ -1,3 +1,4 @@
+import { workingOrders } from "@waitron/db";
 import { staffRoles, personStaffRoles, withFoldedPersonChanges } from "@waitron/db";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
@@ -35,7 +36,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
 import { AppError, deviceOrigin } from "@waitron/shared";
-import { departments, orderServiceContexts, setProfileServiceAccess } from "@waitron/venue-service";
+import { departments, setProfileServiceAccess } from "@waitron/venue-service";
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
@@ -141,12 +142,14 @@ async function target(
     orderNumber: ++counter,
   });
   if (zoneId !== null)
-    await db.insert(orderServiceContexts).values({
-      workingOrderId: orderId,
-      departmentId,
-      zoneId,
-      serviceMode: "ticket_then_pay",
-    });
+    await db
+      .update(workingOrders)
+      .set({
+        departmentId,
+        zoneId,
+        serviceMode: "ticket_then_pay",
+      })
+      .where(eq(workingOrders.id, orderId));
   const [sale] = await db
     .insert(sales)
     .values({
@@ -664,9 +667,9 @@ describe("settled-tender refund authorization before reservation", () => {
     watchDerivationsAndLock(store.db, PIN, () =>
       withTransaction(store.db, async (tx) => {
         await tx
-          .update(orderServiceContexts)
+          .update(workingOrders)
           .set({ zoneId: zones[1]! })
-          .where(eq(orderServiceContexts.workingOrderId, t.orderId));
+          .where(eq(workingOrders.id, t.orderId));
       }),
     );
     await refused(t, "service_zone.not_allowed", request(t.tenderId, { override: override() }));

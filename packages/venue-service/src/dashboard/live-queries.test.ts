@@ -97,7 +97,6 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "working_orders",
       "working_order_lines",
       "ticket_items",
-      "order_service_contexts",
       "departments",
       "device_profiles",
       "devices",

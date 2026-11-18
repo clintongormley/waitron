@@ -537,11 +537,7 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
   });
 
   expect(
-    (
-      await suite.db.execute(
-        sql`select service_mode from order_service_contexts where working_order_id = ${id}`,
-      )
-    ).rows,
+    (await suite.db.execute(sql`select service_mode from working_orders where id = ${id}`)).rows,
   ).toEqual([{ service_mode: "ticket_then_pay" }]);
   await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
 
@@ -583,11 +579,7 @@ it("a counter order paid at collection records its flow but prints no collection
     lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
   });
   expect(
-    (
-      await suite.db.execute(
-        sql`select service_mode from order_service_contexts where working_order_id = ${id}`,
-      )
-    ).rows,
+    (await suite.db.execute(sql`select service_mode from working_orders where id = ${id}`)).rows,
   ).toEqual([{ service_mode: "ticket_then_pay" }]);
   await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
   expect((await printJobsFor(cfg)).filter((job) => job.printerId === printerId)).toEqual([]);

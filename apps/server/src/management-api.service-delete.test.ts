@@ -31,7 +31,6 @@ import {
   createServiceZone,
   departments,
   departmentTransferRequests,
-  orderServiceContexts,
   setProfileServiceScope,
   VENUE_SERVICE_ROUTES,
   VENUE_SERVICE_PERMISSIONS,
@@ -152,7 +151,7 @@ async function rows(tx: Transaction) {
     policies: await tx.select().from(floorZones),
     tables: await tx.select().from(diningTables),
     orders: await tx.select().from(workingOrders),
-    contexts: await tx.select().from(orderServiceContexts),
+
     transfers: await tx.select().from(departmentTransferRequests),
     bookings: await tx.select().from(bookings),
   };
@@ -365,12 +364,14 @@ it.each([
             .where(eq(departments.id, department.id));
     } else if (code.endsWith("order_in_progress")) {
       const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 99 });
-      await tx.insert(orderServiceContexts).values({
-        workingOrderId: order!.id,
-        zoneId: code === "zone.order_in_progress" ? f.zoneId : v.counter.zoneId,
-        departmentId: f.departmentId,
-        serviceMode: "prepay",
-      });
+      await tx
+        .update(workingOrders)
+        .set({
+          zoneId: code === "zone.order_in_progress" ? f.zoneId : v.counter.zoneId,
+          departmentId: f.departmentId,
+          serviceMode: "prepay",
+        })
+        .where(eq(workingOrders.id, order!.id));
     } else if (code.endsWith("transfer_pending")) {
       const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 99 });
       const [source] = await tx

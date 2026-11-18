@@ -1,3 +1,4 @@
+import { workingOrders } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -10,7 +11,7 @@ import {
   seedZone,
   seedDepartmentReceipt,
 } from "@waitron/db/testing/seed.js";
-import { departments, orderServiceContexts, saleReceiptHeaders } from "@waitron/venue-service";
+import { departments, saleReceiptHeaders } from "@waitron/venue-service";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 
 const suite = useVenueDb({
@@ -47,12 +48,14 @@ async function fixture(nullHeader = false) {
     .set({ departmentId: primary!.id })
     .where(eq(floorZones.id, zone!.id));
 
-  await suite.db.insert(orderServiceContexts).values({
-    workingOrderId: order.id,
-    zoneId: zone!.id,
-    departmentId: primary!.id,
-    serviceMode: "prepay",
-  });
+  await suite.db
+    .update(workingOrders)
+    .set({
+      zoneId: zone!.id,
+      departmentId: primary!.id,
+      serviceMode: "prepay",
+    })
+    .where(eq(workingOrders.id, order.id));
   const [series] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
   const [sale] = await suite.db
     .insert(sales)

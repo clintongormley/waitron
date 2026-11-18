@@ -1293,7 +1293,7 @@ describe("the move route", () => {
     expect(answer.json).toEqual({ partyId: null, billId });
     expect(identity()).toEqual([{ party_id: null, bill_number: null }]);
     const [context] = venue.db.all<{ zone_id: string }>(
-      sql`select zone_id from order_service_contexts where working_order_id = ${billId}`,
+      sql`select zone_id from working_orders where id = ${billId}`,
     );
     expect(context!.zone_id).toBe(ticketThenPayZone);
   });

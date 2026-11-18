@@ -39,9 +39,11 @@ function desk(live?: TillLiveConnection) {
   let readError: { code: string; status: number } | undefined;
   const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
   const reads: string[] = [];
+  const subscriptions: string[] = [];
   const api = new client.TillApi("", async (input, init) => {
     const url = String(input);
     if (url.startsWith("/api/live/events?")) {
+      subscriptions.push(url);
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           streams.push(controller);
@@ -88,6 +90,7 @@ function desk(live?: TillLiveConnection) {
     connection,
     streams,
     reads,
+    subscriptions,
     invalid,
     queue(rows: DepartmentTransfer[]) {
       incoming = rows;
@@ -137,6 +140,20 @@ describe("DepartmentTransferMonitor", () => {
       expect(source.invalid).toEqual(["device_profile.not_admitted"]);
     },
   );
+  it("refreshes transfers on a bill change through the shared stream", async () => {
+    const source = desk();
+    source.monitor.start();
+    source.signal("ready");
+    await expect.poll(() => source.reads.length).toBe(2);
+    await expect.poll(() => source.monitor.snapshot.incoming).toEqual([pending]);
+    const readySubscription = source.subscriptions.at(-1)!;
+    expect(readySubscription).toContain("working_orders");
+    expect(readySubscription).not.toContain("order_service_contexts");
+    source.queue([]);
+    source.signal("change", '[{"type":"working_orders"}]');
+    await expect.poll(() => source.monitor.snapshot.incoming).toEqual([]);
+    expect(source.reads).toHaveLength(3);
+  });
   it("keeps its fifteen-second access check while the shared connection is up", async () => {
     const live = liveConnectionFixture();
     const source = desk(live.connection);

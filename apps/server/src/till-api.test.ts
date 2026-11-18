@@ -4994,11 +4994,8 @@ describe("sale-policy order flow routes", () => {
       });
       expect(parked.status).toBe(200);
       expect(
-        (
-          await suite.db.execute(
-            sql`select service_mode from order_service_contexts where working_order_id = ${id}`,
-          )
-        ).rows,
+        (await suite.db.execute(sql`select service_mode from working_orders where id = ${id}`))
+          .rows,
       ).toEqual([{ service_mode: want }]);
       await withTransaction(suite.db, (tx) => fireDishesAtPayment(tx, cfg, id));
       expect(

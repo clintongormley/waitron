@@ -18,7 +18,6 @@ const ORDER_TYPES = [
   "working_order_lines",
   "order_groups",
   "ticket_items",
-  "order_service_contexts",
   "line_service_cancellations",
   "order_drafts",
   "order_draft_lines",

@@ -1965,6 +1965,22 @@ it.each(["prepay", "ticket_then_pay"] as const)(
       await setZoneSalePolicyOverride(tx, venue.barZone, "paidWhen", paidWhen);
       const fresh = await openOrder(tx, venue, 1);
       await recordOrderServiceContext(tx, fresh, venue.barZone);
+      expect(
+        await tx
+          .select({
+            zoneId: workingOrders.zoneId,
+            departmentId: workingOrders.departmentId,
+            serviceMode: workingOrders.serviceMode,
+          })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, fresh)),
+      ).toEqual([
+        {
+          zoneId: venue.barZone,
+          departmentId: venue.barId,
+          serviceMode: paidWhen,
+        },
+      ]);
       expect(await getOrderServiceContext(tx, fresh)).toEqual({
         zoneId: venue.barZone,
         departmentId: venue.barId,
@@ -3293,6 +3309,18 @@ describe("each served menu's structure and Device Home Page", () => {
   });
 });
 
+it("finds a bill with no recorded service context missing", async () => {
+  const venue = await seedSellingVenue();
+  await scoped(async (tx) => {
+    const id = await openOrder(tx, venue, 1);
+    await expect(findOrderServiceContext(tx, id)).resolves.toBeNull();
+    await expect(getOrderServiceContext(tx, id)).rejects.toMatchObject({
+      code: "order.service_context_missing",
+      params: { workingOrderId: id },
+    });
+  });
+});
+
 describe("findOrderServiceModes", () => {
   it("reads every named order's frozen service mode in one query, leaving out an order with none", async () => {
     const venue = await seedSellingVenue();
@@ -3378,7 +3406,7 @@ describe("orderZoneIdSql", () => {
         .select({ id: workingOrders.id, zoneId: expression })
         .from(workingOrders)
         .where(inArray(workingOrders.id, ids));
-      expect(query.toSQL().sql).toContain('osc.working_order_id = "working_orders"."id"');
+      expect(query.toSQL().sql).toContain('wz.id = "working_orders"."id"');
       const expected = [
         { id: dining, zoneId: venue.diningZone },
         { id: bar, zoneId: venue.barZone },
@@ -3402,8 +3430,14 @@ describe("orderInZones", () => {
       const dining = await openOrder(tx, venue, 1);
       const bar = await openOrder(tx, venue, 2);
       const none = await openOrder(tx, venue, 3);
-      await recordOrderServiceContext(tx, dining, venue.diningZone);
-      await recordOrderServiceContext(tx, bar, venue.barZone);
+      await tx
+        .update(workingOrders)
+        .set(await resolveZoneContext(tx, venue.diningZone))
+        .where(eq(workingOrders.id, dining));
+      await tx
+        .update(workingOrders)
+        .set(await resolveZoneContext(tx, venue.barZone))
+        .where(eq(workingOrders.id, bar));
       const shown = async (zoneIds: string[]) =>
         (
           await tx
@@ -3435,8 +3469,8 @@ for (const { statement, constraint } of [
     constraint: "floor_zones_order_start_ck",
   },
   {
-    statement: sql`update order_service_contexts set service_mode = 'invoice_first'`,
-    constraint: "order_service_contexts_mode_ck",
+    statement: sql`update working_orders set service_mode = 'invoice_first'`,
+    constraint: "working_orders_service_mode_ck",
   },
 ]) {
   it(`refuses retired invoice-first storage through ${constraint}`, async () => {

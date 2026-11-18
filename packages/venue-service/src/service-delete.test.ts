@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -10,7 +10,6 @@ import {
   diningTables,
   devices,
   floorZones,
-  orderServiceContexts,
   withTransaction,
   workingOrders,
   type Transaction,
@@ -272,14 +271,15 @@ describe("service deletion", () => {
         await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 3 }),
         await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 4, status: "placed" }),
       ];
-      await tx.insert(orderServiceContexts).values(
-        orders.map((order) => ({
-          workingOrderId: order.id,
-          zoneId: f.alpha,
-          departmentId: f.dining,
-          serviceMode: "prepay",
-        })),
-      );
+      await tx
+        .update(workingOrders)
+        .set({ zoneId: f.alpha, departmentId: f.dining, serviceMode: "prepay" })
+        .where(
+          inArray(
+            workingOrders.id,
+            orders.map((order) => order.id),
+          ),
+        );
       return orders.map((order) => order.id);
     });
     const zone = await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW));
@@ -566,12 +566,14 @@ describe("service deletion", () => {
     ).toEqual([]);
     const orderId = await run(async (tx) => {
       const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 4 });
-      await tx.insert(orderServiceContexts).values({
-        workingOrderId: order.id,
-        zoneId: f.alpha,
-        departmentId: f.dining,
-        serviceMode: "prepay",
-      });
+      await tx
+        .update(workingOrders)
+        .set({
+          zoneId: f.alpha,
+          departmentId: f.dining,
+          serviceMode: "prepay",
+        })
+        .where(eq(workingOrders.id, order.id));
       return order.id;
     });
     expect(await refusal(run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW)))).toBe(

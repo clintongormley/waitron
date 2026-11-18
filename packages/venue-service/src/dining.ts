@@ -4,7 +4,6 @@ import {
   departments,
   floorZones,
   orderDiningLocked,
-  orderServiceContexts,
   readTaxpayer,
   readVenueSettings,
   workingOrders,
@@ -48,14 +47,11 @@ export async function findOrdersWithDiningChoice(
 ): Promise<ReadonlySet<string>> {
   if (workingOrderIds.length === 0 || !(await venueChargesTakeawayVat(tx))) return new Set();
   const rows = await tx
-    .select({ id: orderServiceContexts.workingOrderId })
-    .from(orderServiceContexts)
-    .innerJoin(departments, eq(departments.id, orderServiceContexts.departmentId))
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .innerJoin(departments, eq(departments.id, workingOrders.departmentId))
     .where(
-      and(
-        inArray(orderServiceContexts.workingOrderId, [...workingOrderIds]),
-        eq(departments.dining, "till_choice"),
-      ),
+      and(inArray(workingOrders.id, [...workingOrderIds]), eq(departments.dining, "till_choice")),
     );
   return new Set(rows.map((row) => row.id));
 }

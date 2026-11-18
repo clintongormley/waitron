@@ -21,7 +21,6 @@ import {
   billPayments,
   billPaymentRefunds,
   diningTables,
-  orderServiceContexts,
   parties,
   kitchenStations,
   workingLineContexts,
@@ -281,9 +280,9 @@ describe("departmental tab transfers", () => {
     });
     await withTransaction(suite.db, (tx) =>
       tx
-        .update(orderServiceContexts)
+        .update(workingOrders)
         .set({ zoneId: v.bz, departmentId: v.b })
-        .where(eq(orderServiceContexts.workingOrderId, v.tab)),
+        .where(eq(workingOrders.id, v.tab)),
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -680,10 +679,7 @@ describe("departmental tab transfers", () => {
           .select()
           .from(departmentTransferRequests)
           .where(eq(departmentTransferRequests.id, v.request.id)),
-        context: await tx
-          .select()
-          .from(orderServiceContexts)
-          .where(eq(orderServiceContexts.workingOrderId, v.tab)),
+        context: await tx.select().from(workingOrders).where(eq(workingOrders.id, v.tab)),
         department: await tx.select().from(departments).where(eq(departments.id, v.a)),
       }));
       expect(before.department).toContainEqual(
@@ -739,10 +735,7 @@ describe("departmental tab transfers", () => {
             .select()
             .from(departmentTransferRequests)
             .where(eq(departmentTransferRequests.id, v.request.id)),
-          context: await tx
-            .select()
-            .from(orderServiceContexts)
-            .where(eq(orderServiceContexts.workingOrderId, v.tab)),
+          context: await tx.select().from(workingOrders).where(eq(workingOrders.id, v.tab)),
           department: await tx.select().from(departments).where(eq(departments.id, v.a)),
         })),
       ).toEqual(before);
@@ -1079,9 +1072,9 @@ describe("departmental tab transfers", () => {
             .where(eq(workingOrders.id, v.tab));
         if (kind === "sender_changed")
           await tx
-            .update(orderServiceContexts)
+            .update(workingOrders)
             .set({ departmentId: v.b, zoneId: v.bz })
-            .where(eq(orderServiceContexts.workingOrderId, v.tab));
+            .where(eq(workingOrders.id, v.tab));
         if (kind === "disabled_zone") {
           await createServiceZone(tx, {
             name: "Other active receiving zone",
@@ -1112,8 +1105,8 @@ describe("departmental tab transfers", () => {
       if (kind === "wrong_profile") actor = { ...actor, profileId: randomUUID() };
       const [before] = await suite.db
         .select()
-        .from(orderServiceContexts)
-        .where(eq(orderServiceContexts.workingOrderId, v.tab));
+        .from(workingOrders)
+        .where(eq(workingOrders.id, v.tab));
       const code =
         kind === "payment_mark" || kind === "partial_card"
           ? "order.payment_in_flight"
@@ -1137,10 +1130,7 @@ describe("departmental tab transfers", () => {
         ),
       ).rejects.toMatchObject({ code });
       expect(
-        await suite.db
-          .select()
-          .from(orderServiceContexts)
-          .where(eq(orderServiceContexts.workingOrderId, v.tab)),
+        await suite.db.select().from(workingOrders).where(eq(workingOrders.id, v.tab)),
       ).toEqual([before]);
       expect(
         await suite.db
@@ -1389,9 +1379,9 @@ describe("departmental tab transfers", () => {
         await setDepartmentSalePolicyField(tx, v.b, "dining", restaurant.dining);
         await setDepartmentSalePolicyField(tx, v.b, "orderStart", restaurant.orderStart);
         await tx
-          .update(orderServiceContexts)
+          .update(workingOrders)
           .set({ serviceMode: "prepay" })
-          .where(eq(orderServiceContexts.workingOrderId, v.tab));
+          .where(eq(workingOrders.id, v.tab));
         await tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, v.tab));
       });
       return v;

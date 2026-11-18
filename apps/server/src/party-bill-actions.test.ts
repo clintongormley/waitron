@@ -1353,8 +1353,8 @@ describe("bills of two service modes", () => {
     const tableTab = await splitOff(partyId, prepay, [2]);
     await inTx(v, (tx) => VENUE_SERVICE.retargetOrderContext(tx, prepay, counter.zoneId));
     const modes = v.db.all<{ id: string; mode: string }>(sql`
-      select working_order_id as id, service_mode as mode from order_service_contexts
-      where working_order_id in (${prepay}, ${tableTab}) order by service_mode`);
+      select id, service_mode as mode from working_orders
+      where id in (${prepay}, ${tableTab}) order by service_mode`);
     expect(modes).toEqual([
       { id: prepay, mode: "prepay" },
       { id: tableTab, mode: "table_tab" },

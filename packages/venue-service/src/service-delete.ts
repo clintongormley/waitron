@@ -8,7 +8,6 @@ import {
   deviceProfileZones,
   floorZones,
   menuPeriods,
-  orderServiceContexts,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
@@ -123,25 +122,22 @@ async function selection(
       : await tx
           .select({
             id: workingOrders.id,
-            zoneId: orderServiceContexts.zoneId,
-            departmentId: orderServiceContexts.departmentId,
+            zoneId: workingOrders.zoneId,
+            departmentId: workingOrders.departmentId,
           })
-          .from(orderServiceContexts)
-          .innerJoin(workingOrders, eq(workingOrders.id, orderServiceContexts.workingOrderId))
+          .from(workingOrders)
           .where(
             and(
               inArray(workingOrders.status, ["open", "placed"]),
               or(
-                inArray(orderServiceContexts.zoneId, zoneIds),
-                departmentId === null
-                  ? undefined
-                  : eq(orderServiceContexts.departmentId, departmentId),
+                inArray(workingOrders.zoneId, zoneIds),
+                departmentId === null ? undefined : eq(workingOrders.departmentId, departmentId),
               ),
             ),
           )
           .orderBy(asc(workingOrders.id));
   for (const item of orders) {
-    if (zoneIds.includes(item.zoneId))
+    if (item.zoneId !== null && zoneIds.includes(item.zoneId))
       refusals.push({
         code: "zone.order_in_progress",
         params: { zoneId: item.zoneId, workingOrderId: item.id },

@@ -756,7 +756,7 @@ describe("parkOrder", () => {
       select cast(unit_price_gross as int) as unit_price_gross
       from working_order_lines where working_order_id = ${id}`);
     const context = await db.execute<{ zone_id: string; service_mode: string }>(sql`
-      select zone_id, service_mode from order_service_contexts where working_order_id = ${id}`);
+      select zone_id, service_mode from working_orders where id = ${id}`);
     const attribution = await db.execute<{
       menu_item_id: string;
       menu_name: string;
@@ -798,8 +798,8 @@ describe("parkOrder", () => {
     });
 
     const contexts = await db.execute<{ working_order_id: string; service_mode: string }>(sql`
-      select working_order_id, service_mode from order_service_contexts
-      where working_order_id in (${first}, ${second})`);
+      select id as working_order_id, service_mode from working_orders
+      where id in (${first}, ${second})`);
     expect(new Map(contexts.rows.map((row) => [row.working_order_id, row.service_mode]))).toEqual(
       new Map([
         [first, "ticket_then_pay"],
@@ -1089,11 +1089,8 @@ describe("seating from order start", () => {
       await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, tableId));
       const opened = await openPartyTab(tx, cfg, { tableId });
       expect(
-        (
-          await tx.execute(
-            sql`select service_mode from order_service_contexts where working_order_id = ${opened.tabId}`,
-          )
-        ).rows,
+        (await tx.execute(sql`select service_mode from working_orders where id = ${opened.tabId}`))
+          .rows,
       ).toEqual([{ service_mode: "table_tab" }]);
     });
   });
@@ -1155,7 +1152,7 @@ describe("openTab service context", () => {
         select cast(unit_price_gross as int) as unit_price_gross
         from working_order_lines where working_order_id = ${tabId}`);
       const context = await tx.execute<{ zone_id: string; service_mode: string }>(sql`
-        select zone_id, service_mode from order_service_contexts where working_order_id = ${tabId}`);
+        select zone_id, service_mode from working_orders where id = ${tabId}`);
       expect(priced.rows).toEqual([{ unit_price_gross: 325 }]);
       expect(context.rows).toEqual([{ zone_id: zoneId, service_mode: "table_tab" }]);
     });

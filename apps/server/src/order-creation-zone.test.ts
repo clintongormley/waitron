@@ -7,11 +7,7 @@ import { devices, withTransaction, workingOrders, floorZones } from "@waitron/db
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider } from "@waitron/payments";
-import {
-  orderServiceContexts,
-  setProfileServiceScope,
-  replaceZoneClosedWeek,
-} from "@waitron/venue-service";
+import { setProfileServiceScope, replaceZoneClosedWeek } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
@@ -39,11 +35,11 @@ beforeEach(async () => {
 function context(id: string) {
   return suite.db
     .select({
-      zoneId: orderServiceContexts.zoneId,
-      departmentId: orderServiceContexts.departmentId,
+      zoneId: workingOrders.zoneId,
+      departmentId: workingOrders.departmentId,
     })
-    .from(orderServiceContexts)
-    .where(eq(orderServiceContexts.workingOrderId, id));
+    .from(workingOrders)
+    .where(eq(workingOrders.id, id));
 }
 
 it.each(["cash", "integrated"] as const)(
@@ -160,7 +156,10 @@ it("a split of a damaged counter order refuses instead of creating another order
     lines: [{ menuItemId: venue.counterItem("Water"), quantity: "1" }],
     operatorId: venue.operator.personId,
   });
-  await suite.db.delete(orderServiceContexts).where(eq(orderServiceContexts.workingOrderId, id));
+  await suite.db
+    .update(workingOrders)
+    .set({ zoneId: null, departmentId: null, serviceMode: null })
+    .where(eq(workingOrders.id, id));
   const before = suite.db.all(sql`select * from working_orders order by id`);
   await expect(
     withTransaction(suite.db, (tx) =>
@@ -184,9 +183,9 @@ it("splitting a counter bill retains its zone and frozen payment flow without us
     operatorId: venue.operator.personId,
   });
   await suite.db
-    .update(orderServiceContexts)
+    .update(workingOrders)
     .set({ serviceMode: "ticket_then_pay" })
-    .where(eq(orderServiceContexts.workingOrderId, id));
+    .where(eq(workingOrders.id, id));
   await suite.db.update(floorZones).set({ isCounterDefault: false });
   const result = await withTransaction(suite.db, (tx) =>
     splitBill(tx, venue.cfg, id, [{ lineNo: 1, quantity: "1" }], {
@@ -196,12 +195,12 @@ it("splitting a counter bill retains its zone and frozen payment flow without us
   expect(
     await suite.db
       .select({
-        zoneId: orderServiceContexts.zoneId,
-        departmentId: orderServiceContexts.departmentId,
-        serviceMode: orderServiceContexts.serviceMode,
+        zoneId: workingOrders.zoneId,
+        departmentId: workingOrders.departmentId,
+        serviceMode: workingOrders.serviceMode,
       })
-      .from(orderServiceContexts)
-      .where(eq(orderServiceContexts.workingOrderId, result.billId)),
+      .from(workingOrders)
+      .where(eq(workingOrders.id, result.billId)),
   ).toEqual([
     {
       zoneId: venue.counter.zoneId,

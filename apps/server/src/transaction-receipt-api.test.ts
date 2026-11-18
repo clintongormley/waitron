@@ -28,7 +28,7 @@ import { payments } from "@waitron/payments";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { orderServiceContexts, setProfileServiceAccess } from "@waitron/venue-service";
+import { setProfileServiceAccess } from "@waitron/venue-service";
 import { inTx, send } from "./testing/bill-venue.js";
 import {
   billlessSale,
@@ -590,9 +590,9 @@ it("orderless delivery checks every source zone before any status or action", as
   const firstOrderId = [firstSale.workingOrderId!, secondSale.workingOrderId!].sort()[0]!;
   await inTx(venue, async (tx) => {
     await tx
-      .update(orderServiceContexts)
+      .update(workingOrders)
       .set({ zoneId: venue.zoneId })
-      .where(eq(orderServiceContexts.workingOrderId, firstOrderId));
+      .where(eq(workingOrders.id, firstOrderId));
     await tx.insert(saleSubstitutions).values(
       [firstSale, secondSale].map((sale) => ({
         substitutionSaleId: own.id,
