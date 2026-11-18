@@ -4472,7 +4472,9 @@ jobs:
       packages: write
     outputs:
       release_version: ${{ steps.tags.outputs.release_version }}
-      release_image: ${{ steps.tags.outputs.release_image }}
+      release_image: ${{ format('{0}@{1}', steps.tags.outputs.release_repository, steps.push_app.outputs.digest) }}
+      app_digest: ${{ steps.push_app.outputs.digest }}
+      print_agent_digest: ${{ steps.push_print_agent.outputs.digest }}
     steps:
       - id: checkout
         name: Check out the code
@@ -4627,6 +4629,7 @@ jobs:
           echo "agent_tags=$agent_tags" >> "$GITHUB_OUTPUT"
           echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
           echo "release_image=$release_image" >> "$GITHUB_OUTPUT"
+          echo "release_repository=$repo" >> "$GITHUB_OUTPUT"
 
       # A production box refuses to start on a chain made under another producer tax number
       # (`sif.producer_changed`), and nothing can open the new installation a new producer needs
@@ -4782,6 +4785,7 @@ jobs:
           fi
 
       - name: Publish the print-agent image to GHCR
+        id: push_print_agent
         uses: docker/build-push-action@v7
         timeout-minutes: 10
         with:
@@ -4800,6 +4804,7 @@ jobs:
             org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
 
       - name: Publish to GHCR
+        id: push_app
         uses: docker/build-push-action@v7
         timeout-minutes: 10
         with:
@@ -4819,14 +4824,13 @@ jobs:
             org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
             org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
 
-  # The GitHub Release's two files are copied out of the image publish pushed, so they are the box's
-  # own, byte for byte. A re-run of this job alone replaces them; a re-run of the whole workflow
-  # stops at publish, which refuses a version the registry already holds.
+  # A release retry can repeat declaration uploads. The signed file must stay byte-identical.
   release:
     needs: [publish]
     # As publish does, so an intended upstream skip cannot drop it.
     if: always() && !cancelled() && needs.publish.result == 'success' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    environment: release
     timeout-minutes: 10
     # The only job given `contents: write`, which making a Release needs.
     permissions:
@@ -4892,3 +4896,42 @@ jobs:
         run: |
           set -euo pipefail
           timeout 150 scripts/release/github-release.sh "$RELEASE_VERSION" "$RELEASE_IMAGE"
+
+      - id: setup-node
+        name: Set up Node
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+      - name: Set up Node, second attempt
+        if: steps.setup-node.outcome == 'failure'
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+
+      - name: Sign the release file
+        timeout-minutes: 1
+        env:
+          WAITRON_RELEASE_SIGNING_KEY: ${{ secrets.WAITRON_RELEASE_SIGNING_KEY }}
+          RELEASE_VERSION: ${{ needs.publish.outputs.release_version }}
+          RELEASE_SOURCE_SHA: ${{ github.sha }}
+          RELEASE_APP_DIGEST: ${{ needs.publish.outputs.app_digest }}
+          RELEASE_PRINT_AGENT_DIGEST: ${{ needs.publish.outputs.print_agent_digest }}
+        run: |
+          timeout 30 node scripts/release/sign-release-list.mjs deploy/box/release-keys "$RUNNER_TEMP/waitron-release.json"
+
+      - name: Attach the signed file to the GitHub Release
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.publish.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/waitron-release.json"
+          if [ -f "$file" ]; then
+            timeout 150 scripts/release/github-release.sh --signed-file "$RELEASE_VERSION" "$file"
+          fi

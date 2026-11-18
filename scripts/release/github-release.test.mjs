@@ -31,6 +31,18 @@ writeFileSync(
   `#!/usr/bin/env bash
 printf 'gh %s\\n' "$*" >> "$STUB_DIR/calls"
 for arg in "$@"; do [ -f "$arg" ] && printf '%s: %s\\n' "\${arg##*/}" "$(cat "$arg")" >> "$STUB_DIR/files"; done
+if [ "$1 $2" = "release view" ] && [ "$4" = "--json" ]; then
+  if [ "$STUB_SIGNED_ASSET" = "unreadable" ]; then
+    echo "HTTP 401: Bad credentials" >&2
+    exit 1
+  fi
+  [ "$STUB_SIGNED_ASSET" = "absent" ] || echo waitron-release.json
+  exit 0
+fi
+if [ "$1 $2" = "release download" ]; then
+  [ "$STUB_SIGNED_ASSET" = "identical" ] && printf 'signed bytes' || printf 'different bytes'
+  exit 0
+fi
 if [ "$1 $2" = "release view" ]; then
   case "$STUB_RELEASE" in
     present) echo "title: 1.2.3" ;;
@@ -43,9 +55,14 @@ fi
 chmodSync(join(bin, "docker"), 0o755);
 chmodSync(join(bin, "gh"), 0o755);
 
-function run({ release = "absent", cpFails = "", args = ["1.2.3", IMAGE] } = {}) {
+function run({ release = "absent", cpFails = "", args = ["1.2.3", IMAGE], signedAsset } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "github-release-"));
   try {
+    if (signedAsset) {
+      const manifest = join(dir, "waitron-release.json");
+      writeFileSync(manifest, "signed bytes");
+      args = ["--signed-file", "1.2.3", manifest];
+    }
     // A minimal environment, so nothing of the caller's (GIT_*, GH_*) reaches the script.
     const result = spawnSync("bash", [SCRIPT, ...args], {
       encoding: "utf8",
@@ -57,6 +74,7 @@ function run({ release = "absent", cpFails = "", args = ["1.2.3", IMAGE] } = {})
         STUB_DIR: dir,
         STUB_RELEASE: release,
         STUB_CP_FAILS: cpFails,
+        STUB_SIGNED_ASSET: signedAsset ?? "",
       },
     });
     const read = (name) =>
@@ -134,4 +152,42 @@ describe("github-release.sh", () => {
       expect(result.calls).toEqual([]);
     },
   );
+});
+
+describe("attaching the signed release file", () => {
+  it("refuses an incomplete signed-file command without touching Docker or GitHub", () => {
+    const result = run({ args: ["--signed-file", "1.2.3"] });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("usage");
+    expect(result.calls).toEqual([]);
+  });
+
+  it("uploads the asset once without replacing any file", () => {
+    const result = run({ signedAsset: "absent" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.calls).toHaveLength(2);
+    expect(result.calls[0]).toMatch(/^gh release view v1\.2\.3 --json assets /);
+    expect(result.calls[1]).toMatch(/^gh release upload v1\.2\.3 \S+\/waitron-release\.json$/);
+    expect(result.files).toBe("waitron-release.json: signed bytes\n");
+  });
+
+  it.each([
+    ["identical", 0],
+    ["different", 1],
+  ])("on retry keeps the %s existing asset and exits %d", (signedAsset, status) => {
+    const result = run({ signedAsset });
+    expect(result.status, result.stderr).toBe(status);
+    expect(result.calls).toHaveLength(2);
+    expect(result.calls[1]).toBe(
+      "gh release download v1.2.3 --pattern waitron-release.json --output -",
+    );
+    if (status) expect(result.stderr).toContain("differs");
+  });
+
+  it("refuses to upload if the existing assets cannot be checked", () => {
+    const result = run({ signedAsset: "unreadable" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("HTTP 401");
+    expect(result.calls).toHaveLength(1);
+  });
 });

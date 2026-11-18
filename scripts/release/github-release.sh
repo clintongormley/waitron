@@ -3,6 +3,24 @@
 # Release when there is none. Usage: github-release.sh <version> <image>
 set -euo pipefail
 
+if [ "${1-}" = "--signed-file" ]; then
+  if [ "$#" -ne 3 ]; then
+    echo "usage: github-release.sh --signed-file <version> <file>" >&2
+    exit 2
+  fi
+  tag="v$2"
+  file=$3
+  asset=waitron-release.json
+  existing=$(gh release view "$tag" --json assets --jq '.assets[] | select(.name == "waitron-release.json") | .name')
+  if [ -z "$existing" ]; then
+    gh release upload "$tag" "$file"
+  elif ! gh release download "$tag" --pattern "$asset" --output - | cmp -s "$file" -; then
+    echo "The published $asset could not be read or differs from the signed file for $tag" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
 if [ "$#" -ne 2 ]; then
   echo "usage: github-release.sh <version> <image>" >&2
   exit 2

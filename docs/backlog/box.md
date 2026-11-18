@@ -982,12 +982,14 @@ client. No screen calls them yet.
 
 **For later slices, from PR 3's [re-map against main](../superpowers/plans/2026-11-03-b3-3-installer-policy.md#re-map-against-main-on-2026-11-03):**
 
-- The signed release list waits for one thing not on main: a chosen signature format (algorithm,
-  key encoding, signed byte layout). It is shared
-  with slice 5 and with A950's `verifyManifest`, carries the fields A950's `parseVerifiedRelease`
-  reads, and must name the oldest installer a release accepts, which needs an installer version
-  scheme nobody has defined yet. Who holds the signing keys gates publication (parent Task 5.1),
-  not the verifier.
+- A950's [signed release file](../superpowers/plans/2026-11-18-a950-signed-release-file.md)
+  uses Ed25519 with SPKI public keys and a PKCS#8 private key. Its signature covers the
+  decoded UTF-8 JSON payload, including the source commit and the two published image
+  digests. The B3 USB image can use the envelope with a payload of its own, including
+  an installer compatibility number. The A950 release payload omits a host-protocol
+  minimum and a new-installation flag. GitHub HTTPS vouches for the box script files
+  fetched at the signed commit. Revisit signing those files when the key moves out of
+  GitHub. The old Cloud-hold discovery adapter remains dormant.
 - The Linux installer fills `DiskObservation.nameTag` with `findNameTag` of the frozen internal
   disk's own `luksDump --dump-json-metadata` output and hands the policy
   `nameTag === null ? null : decodeNameTag(nameTag)`, for that disk and no other.
