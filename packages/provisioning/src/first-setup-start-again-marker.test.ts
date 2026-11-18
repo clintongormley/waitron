@@ -189,6 +189,33 @@ it("a marker names every listed file, records the side files' state, and reads b
   await expect(writeStartAgainMarker(roots, marker)).rejects.toMatchObject(incomplete);
 });
 
+it("a venue.db over 2 GiB is marked with its full size and hash", async () => {
+  const roots = await attemptFolders();
+  const path = join(roots.venueDir, "venue.db");
+  const size = 2 ** 31 + 16;
+  const tail = Buffer.from("END");
+  await writeFile(path, "");
+  await fs.truncate(path, size);
+  const handle = await fs.open(path, "r+");
+  try {
+    await handle.write(tail, 0, tail.length, size - tail.length);
+  } finally {
+    await handle.close();
+  }
+  const expected = createHash("sha256");
+  const zeros = Buffer.alloc(1 << 20);
+  for (let left = size - tail.length; left > 0; left -= zeros.length)
+    expected.update(left >= zeros.length ? zeros : zeros.subarray(0, left));
+  expected.update(tail);
+  const marker = await startAgainMarkerFor(roots, ATTEMPT);
+  expect(marker.files.find((entry) => entry.name === "venue.db")).toEqual({
+    root: "venue",
+    name: "venue.db",
+    size,
+    sha256: expected.digest("hex"),
+  });
+});
+
 it.each([
   ["after the marker", 1],
   ["after the first deletion", 2],

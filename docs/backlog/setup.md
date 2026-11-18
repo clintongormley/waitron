@@ -235,10 +235,6 @@ whole-file reads are separate work:
   capped at 128 MiB. The unused `recheckEmptyDatabase` reader also retains its whole-file
   128 MiB check. Keep content-change detection when replacing those buffers. A1159's Start again
   work remains open.
-- `packages/provisioning/src/first-setup-start-again-deletion.ts` (`sha256`) reads whole files for
-  deletion markers, including `venue.db`, `node.db` and their WALs. `fingerprintAgainst` avoids the
-  read when the size differs; equal-size files are still hashed through a whole buffer. Preserve
-  the same-size replacement refusal when streaming these hashes.
 - The unused archive branch of `/recovery/preparation` and emergency handover still buffer archives
   within 256 MiB.
   Configuration transfer retains its separate buffer.

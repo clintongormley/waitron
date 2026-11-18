@@ -18,7 +18,7 @@ import {
   VENUE_LITESTREAM_DIR,
 } from "@waitron/store";
 import { createHash } from "node:crypto";
-import { lstat, readFile, readdir } from "node:fs/promises";
+import { lstat, open, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readRestoreFlowPhase } from "./restore-flow-phase.js";
 import type { DatabaseSync } from "node:sqlite";
@@ -331,8 +331,26 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
 }
 
 async function sha256(path: string): Promise<StartAgainFingerprint> {
-  const bytes = await readFile(path);
-  return { size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+  try {
+    const handle = await open(path);
+    try {
+      const hash = createHash("sha256");
+      let size = 0;
+      for await (const chunk of handle.createReadStream({
+        autoClose: false,
+      }) as AsyncIterable<Buffer>) {
+        hash.update(chunk);
+        size += chunk.length;
+      }
+      return { size, sha256: hash.digest("hex") };
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    // A read through an open handle fails without a path, and refusals name the file from it.
+    if (object(error) && pathOf(error) === undefined) error.path = path;
+    throw error;
+  }
 }
 
 /**
