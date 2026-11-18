@@ -545,9 +545,8 @@ export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]
 }
 
 /**
- * The authorizing-supervisor picker a till shows (cash-drawer-authorization §5). The picker is shown
- * before the supervisor has entered a credential, so like `listActiveStaff` it returns ONLY
- * `{ personId, displayName }`.
+ * The authorizing-supervisor picker a till shows. The picker is shown before the supervisor has
+ * entered a credential, so like `listActiveStaff` it returns ONLY `{ personId, displayName }`.
  */
 export async function listActivePersonsWithPermission(
   tx: Transaction,

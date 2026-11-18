@@ -375,9 +375,10 @@ describe("computeCashUp — bill payments and their refunds", () => {
   });
 
   it("counts the invoice's tenders from bill payments on no day, and a walk-up sale's tender once", async () => {
-    // Design §8 tests 24 and 26: €50.00 cash on device A on day 1 and €70.00 card on device B on day 2
-    // against one €120.00 bill; the invoice is issued on day 2 on device B, with one tender per
-    // payment settled when its money moved. A walk-up cash sale on device B on day 2 sits beside it.
+    // Bill payments design §8 tests 24 and 26: €50.00 cash on device A on day 1 and €70.00 card on
+    // device B on day 2 against one €120.00 bill; the invoice is issued on day 2 on device B, with
+    // one tender per payment settled when its money moved. A walk-up cash sale on device B on day 2
+    // sits beside it.
     const deviceB = await seedVenueDevice(suite.db);
     const bill = await openBill();
     const cashPayment = await seedBillPayment(
@@ -457,7 +458,7 @@ describe("computeCashUp — bill payments and their refunds", () => {
   });
 
   it("subtracts a completed refund on its own device and day, under its payment's method", async () => {
-    // Design §8 test 25, and a whole card payment given back with its tip.
+    // Bill payments design §8 test 25, and a whole card payment given back with its tip.
     const deviceB = await seedVenueDevice(suite.db);
     const bill = await openBill();
     const cashPayment = await seedBillPayment(
@@ -514,7 +515,7 @@ describe("computeCashUp — bill payments and their refunds", () => {
   });
 
   it("keeps a device's cash line when what it took and gave back nets to zero", async () => {
-    // Design §8 test 27: the line is how the close knows the drawer moved.
+    // Bill payments design §8 test 27: the line is how the close knows the drawer moved.
     const bill = await openBill();
     const payment = await seedBillPayment(
       suite.db,

@@ -242,7 +242,7 @@ describe("computeOverdueOrders", () => {
     expect(rows[0]).toMatchObject({ orderId, band: "overdue", stationName: "Kitchen" });
   });
 
-  it("excludes a COLLECTED order even if its worst line is forgotten (design §3 — ages until collected)", async () => {
+  it("excludes a COLLECTED order even if its worst line is forgotten (it ages until collected)", async () => {
     await seedFiredOrder(
       suite.db,
       {

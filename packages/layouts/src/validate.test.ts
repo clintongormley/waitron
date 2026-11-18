@@ -56,7 +56,7 @@ describe("validateReceiptConfig", () => {
     });
   });
 
-  it("rejects an unknown field with reason unknown_field (fail-closed — no field may suppress the fiscal core, design §8)", () => {
+  it("rejects an unknown field with reason unknown_field (fail-closed — no field may suppress the fiscal core)", () => {
     const error = catchAppError(() => validateReceiptConfig({ showCashChange: true }));
     expect(error.params).toEqual({ reason: "unknown_field" });
   });

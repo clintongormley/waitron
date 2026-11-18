@@ -53,7 +53,7 @@ function comparable(value: BookingDraft): string {
   });
 }
 
-/** Date and time stay venue-local values, never instants (design §2b). */
+/** Date and time stay venue-local values, never instants. */
 @customElement("dashboard-booking-form")
 export class BookingForm extends LitElement {
   static override styles = [

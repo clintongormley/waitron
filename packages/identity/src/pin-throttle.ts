@@ -2,7 +2,7 @@ import "./errors.js";
 import { AppError, steadyNow } from "@waitron/shared";
 
 /**
- * An in-memory back-off on wrong PINs, keyed per slot and person (spec §5). The slot is the device
+ * An in-memory back-off on wrong PINs, keyed per slot and person. The slot is the device
  * id at the till's PIN sign-in, `override:<device id>` (the session's device) for an approver's
  * (manager's or supervisor's) PIN typed at a till, and `management` for the dashboard's two PIN attestation routes. It is NOT
  * a database write, so wrong PINs add no write load that could contend with the sale path. State

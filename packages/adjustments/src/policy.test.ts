@@ -14,7 +14,7 @@ import {
   type CompRequest,
 } from "./policy.js";
 
-/** The design's worked example (§3.2, picture 04). */
+/** The A758 design's worked example (§3.2, picture 04). */
 const COMPLAINT: AdjustmentReason = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Complaint",
