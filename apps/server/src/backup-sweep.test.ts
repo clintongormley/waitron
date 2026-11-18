@@ -470,19 +470,25 @@ describe("runOnce (fan-out)", () => {
   });
 
   it("waits for the node copy when the backup manifest fails", async () => {
-    const copying = Promise.withResolvers<void>();
-    const finishCopy = Promise.withResolvers<void>();
+    let startedCopy!: () => void;
+    const copying = new Promise<void>((resolve) => {
+      startedCopy = resolve;
+    });
+    let finishCopy!: () => void;
+    const copyCanFinish = new Promise<void>((resolve) => {
+      finishCopy = resolve;
+    });
     const failure = new Error("manifest refused");
     const attempt = runOnce({
       ...deps([]),
       buildManifest: async () => {
-        await copying.promise;
+        await copying;
         throw failure;
       },
       node: {
         archiveTo: async (path: string) => {
-          copying.resolve();
-          await finishCopy.promise;
+          startedCopy();
+          await copyCanFinish;
           await writeFile(path, "NODE");
         },
       } as NodeDatabase,
@@ -490,15 +496,15 @@ describe("runOnce (fan-out)", () => {
     const completed = vi.fn();
     void attempt.catch(completed);
     try {
-      await copying.promise;
+      await copying;
       // Both rejection and the caller's observer run before this macrotask if collection is skipped.
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(completed).not.toHaveBeenCalled();
     } finally {
-      finishCopy.resolve();
+      finishCopy();
       await expect(attempt).rejects.toBe(failure);
     }
-    await vi.waitFor(async () => expect(await readdir(join(stateDir, "scratch"))).toEqual([]));
+    expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
   });
 
   it("releases the staging turn before Cloud uses the private copy", async () => {
