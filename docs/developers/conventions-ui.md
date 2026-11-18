@@ -990,9 +990,7 @@ password or PIN and a wrong authenticator or recovery code with ONE code, the sa
 same status — `password.invalid` for a password login, `pin.invalid` for a PIN — each after the
 same hashing work, and a screen shows it as one sentence for every cause — "the login failed"
 as the form's bottom message on the dashboard and the setup wizard's Connect, "Wrong PIN" on the till, where
-the PIN is the only thing typed. The one answer that differs, `totp.required`, comes only after the
-right password of an account with an authenticator, when no code was sent, and asks for that code
-(`completeManagerLogin` in `packages/identity/src/manager-login.ts`). A refused sign-in marks no field on any sign-in form, the setup
+the PIN is the only thing typed. A refused sign-in marks no field on any sign-in form, the setup
 wizard's Reset form included (`apps/setup/src/screens/reset-screen.ts`); there a field is marked
 only when its value is missing or malformed (owner, 2026-09-30, A153).
 The same hashing work is not enough when attempts arrive together. `withAuthenticatedOperation`
