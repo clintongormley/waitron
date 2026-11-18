@@ -256,3 +256,22 @@ it("keeps an existing member when replacing it with the same product after its c
   expect(await app((tx) => replaceMember(tx, f.root, member.id, ref))).toEqual(member);
   expect(await reading()).toEqual(before);
 });
+
+it("checks the listed product's class when every kept variant has a matching class of its own", async () => {
+  const other = await app(async (tx) => {
+    await updateProduct(tx, f.glass, { vatClass: "reduced" });
+    await addSetMenuDishes(tx, f.menuId, [pick(f.wine, f.bottle)]);
+    await updateProduct(tx, f.wine, { vatClass: "general" });
+    return createMenu(tx, { ...terms, name: "Other menu" });
+  });
+  expect((await reading()).problems).toContainEqual({
+    kind: "dish_vat_class_differs",
+    productId: f.wine,
+    name: "Wine",
+    parentName: null,
+    vatClass: "general",
+  });
+  await expect(
+    app((tx) => addSetMenuDishes(tx, other.id, [pick(f.wine, f.bottle)])),
+  ).rejects.toMatchObject(differentClass(f.wine));
+});

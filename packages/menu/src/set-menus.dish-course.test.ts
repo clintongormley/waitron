@@ -228,8 +228,14 @@ it("leaves a removed line alone when the dish's course stays the same", async ()
   await add(f.soup);
   const itemId = (await read()).dishes[0]!.menuItemId;
   await app((tx) => saveSetMenuLines(tx, f.menuId, []));
+  const readStamp = () =>
+    suite.db.select({ updatedAt: menus.updatedAt }).from(menus).where(eq(menus.id, f.menuId));
+  const before = await readStamp();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2030-02-01T12:00:00Z"));
   expect(await change(itemId, f.starters)).toEqual({ addedLines: [], removedLines: [] });
   expect((await read()).lines).toEqual([]);
+  expect(await readStamp()).toEqual(before);
 });
 
 it("follows each variant's own course when the dish returns to its product's course", async () => {
