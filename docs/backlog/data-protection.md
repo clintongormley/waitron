@@ -204,10 +204,6 @@ by the answers):
   §4.1.1). Receipt Email omits the existing full-invoice notice; the processing-guide entries also
   need to cover the receipt customer's stored address and its email-provider recipient when this decision is settled.
 - **S10 follow-ups (from #2094's review, not taken there):**
-  - **Rename the SumUp merchant's `name` to `merchantName`.** That removes the log mask's one path
-    rule (`merchants[].name`, `apps/server/src/log-personal-data.ts`) and the guard's array check
-    that goes with it. Touches `packages/payments-sumup` and the dashboard's connect form, which
-    S10 kept out of scope.
   - **Smaller tidy-ups:** read registries with TypeScript's parser instead of text in
     `scripts/personal-log-params.test.ts` (its header lists what text reading misses); merge its
     three similar allow-list checks; reuse the existing fake mail server in

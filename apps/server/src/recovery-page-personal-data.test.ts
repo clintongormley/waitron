@@ -536,15 +536,15 @@ describe("the recovery page, the log file and stdout carry no person's details",
         () =>
           new AppError("payment.provider_merchant_ambiguous", {
             merchants: [
-              { code: "MC1", name: VENUE_LEGAL_NAME },
-              { code: "MC2", name: MARTHA_NAME },
+              { code: "MC1", merchantName: VENUE_LEGAL_NAME },
+              { code: "MC2", merchantName: MARTHA_NAME },
             ],
           }),
         "payment.provider_merchant_ambiguous",
         {
           merchants: [
-            { code: "MC1", name: "Jordi Puig Ferrer" },
-            { code: "MC2", name: "Martha Lewis" },
+            { code: "MC1", merchantName: "Jordi Puig Ferrer" },
+            { code: "MC2", merchantName: "Martha Lewis" },
           ],
         },
       ],
@@ -602,8 +602,8 @@ describe("the recovery page, the log file and stdout carry no person's details",
       },
       {
         merchants: [
-          { code: "MC1", name: "J***i P***g F***r" },
-          { code: "MC2", name: "M***a L***s" },
+          { code: "MC1", merchantName: "J***i P***g F***r" },
+          { code: "MC2", merchantName: "M***a L***s" },
         ],
         event: "payment.provider_merchant_ambiguous",
       },
@@ -632,7 +632,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
       expect(page).toContain(`&quot;${key}&quot;:&quot;${masked}&quot;`);
     }
     expect(page).toContain(
-      "&quot;code&quot;:&quot;MC2&quot;,&quot;name&quot;:&quot;M***a L***s&quot;",
+      "&quot;code&quot;:&quot;MC2&quot;,&quot;merchantName&quot;:&quot;M***a L***s&quot;",
     );
     for (const visible of [LOCATION_NAME, "MC1", "Patio 1", "Bar till"]) {
       expect(page).toContain(visible);

@@ -41,40 +41,23 @@ const PERSONAL_LOG_RULES: ReadonlyMap<string, (value: string) => string> = new M
   ["taxId", maskPiece],
   ["idEmisorFactura", maskPiece],
   ["todayName", maskName],
+  ["merchantName", maskName],
 ]);
 
 export const PERSONAL_LOG_KEYS: ReadonlySet<string> = new Set(PERSONAL_LOG_RULES.keys());
 
-export const PERSONAL_LOG_PATHS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  ["merchants", new Set(["name"])],
-]);
-
-// Anything but a string is `***` whole: nothing inside it is looked at.
-function masked(value: unknown, rule: (value: string) => string): unknown {
-  if (value === null || value === undefined) return value;
+export function maskPersonalData(key: string, value: unknown): unknown {
+  const rule = PERSONAL_LOG_RULES.get(key);
+  // A function or symbol stays out of the text, as plain JSON leaves it, so `stringifyMasked`'s
+  // test for the key in the unmasked text agrees with this replacer.
+  if (rule === undefined || value === null || value === undefined) return value;
+  if (typeof value === "function" || typeof value === "symbol") return value;
+  // Anything but a string is `***` whole: nothing inside it is looked at.
   return typeof value === "string" ? rule(value) : MASK;
 }
 
-export function maskPersonalData(key: string, value: unknown): unknown {
-  const rule = PERSONAL_LOG_RULES.get(key);
-  if (rule !== undefined) {
-    // A function or symbol stays out of the text, as plain JSON leaves it, so `stringifyMasked`'s
-    // test for the key in the unmasked text agrees with this replacer.
-    if (typeof value === "function" || typeof value === "symbol") return value;
-    return masked(value, rule);
-  }
-  const children = PERSONAL_LOG_PATHS.get(key);
-  if (children === undefined || !Array.isArray(value)) return value;
-  return value.map((element: unknown) => {
-    if (typeof element !== "object" || element === null || Array.isArray(element)) return element;
-    const copy: Record<string, unknown> = { ...(element as Record<string, unknown>) };
-    for (const child of children) copy[child] = masked(copy[child], maskName);
-    return copy;
-  });
-}
-
 const PERSONAL_KEY_TEXT = new RegExp(
-  `"(?:${[...PERSONAL_LOG_KEYS, ...PERSONAL_LOG_PATHS.keys()]
+  `"(?:${[...PERSONAL_LOG_KEYS]
     .map((key) => key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("|")})":`,
 );

@@ -6377,7 +6377,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 ### Personal log field names
 
 - **A detail or log field holding a person's name, email or tax number uses a name on
-  `PERSONAL_LOG_KEYS` or a path on `PERSONAL_LOG_PATHS` (`apps/server/src/log-personal-data.ts`),
+  `PERSONAL_LOG_KEYS` (`apps/server/src/log-personal-data.ts`),
   which the server's logger masks in every line it writes; the answer keeps it. Name it for whose
   it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is
   the venue's own): the list is flat across every code.** Cost: staff names and emails reached the

@@ -250,7 +250,7 @@ export class SumUpConnectForm extends LitElement {
                 search="auto"
                 searchPlaceholder=${t("payments.sumup.combobox_search")}
                 noResultsLabel=${t("payments.sumup.combobox_no_results")}
-                .options=${this.merchants.map((m) => ({ value: m.code, label: m.name }))}
+                .options=${this.merchants.map((m) => ({ value: m.code, label: m.merchantName }))}
                 error=${errors.merchant}
                 @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=connect]"))}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onMerchant(e, opening)}

@@ -24,7 +24,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { PERSONAL_LOG_KEYS, PERSONAL_LOG_PATHS } from "../apps/server/src/log-personal-data.js";
+import { PERSONAL_LOG_KEYS } from "../apps/server/src/log-personal-data.js";
 import { blankComments, blankCommentsAndLiterals } from "../packages/shared/src/source-comments.js";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -153,19 +153,14 @@ interface RegistryType {
   name: string;
 }
 
-interface PlacedKey {
-  key: string;
-  parent?: string | undefined;
-  parentIsArray?: boolean;
-}
-
-interface LogField extends PlacedKey {
+interface LogField {
   event: string;
+  key: string;
 }
 
-interface RegistryKey extends PlacedKey {
+interface RegistryKey {
   code: string;
-  parent: string | undefined;
+  key: string;
 }
 
 interface Blanked {
@@ -195,16 +190,7 @@ const LOG_CALL = new RegExp(
 );
 const MAY_LOG = new RegExp(LOG_LEVEL);
 const OBJECT_TOKEN = /[{}()[\]]|[A-Za-z_$][\w$]*/g;
-const KEY_OR_BRACE = /([A-Za-z_$][\w$]*)\??\s*:|[{}]/g;
-
-function isMasked({ key, parent, parentIsArray }: PlacedKey): boolean {
-  return (
-    PERSONAL_LOG_KEYS.has(key) ||
-    (parent !== undefined &&
-      parentIsArray === true &&
-      PERSONAL_LOG_PATHS.get(parent)?.has(key) === true)
-  );
-}
+const KEY = /([A-Za-z_$][\w$]*)\??\s*:/g;
 
 function isJudgedKey(key: string): boolean {
   const id = ID_ENDING.exec(key);
@@ -221,51 +207,8 @@ function closingBrace(code: string, opening: number): number {
   return code.length;
 }
 
-/** Brackets left open between the enclosing object's `{` and `opening`, innermost first. */
-function unclosedBefore(text: string, opening: number): string[] {
-  const unclosed: string[] = [];
-  let depth = 0;
-  for (let at = opening - 1; at >= 0; at--) {
-    const char = text[at] ?? "";
-    if ("}])".includes(char) || (char === ">" && text[at - 1] !== "=")) depth++;
-    else if ("{[(<".includes(char)) {
-      if (depth > 0) depth--;
-      else if (char === "{") break;
-      else unclosed.push(char === "<" && /\bArray\s*$/.test(text.slice(0, at)) ? "Array<" : char);
-    }
-  }
-  return unclosed;
-}
-
-/** `maskPersonalData` masks only an object that is a direct element of the array, never nested. */
-function isArrayMember(text: string, opening: number): boolean {
-  const unclosed = unclosedBefore(text, opening).join(" ");
-  const after = text.slice(closingBrace(text, opening) + 1);
-  if (unclosed === "") return /^\s*\[\s*\](?!\s*\[)/.test(after);
-  return unclosed === "Array<" && /^\s*>(?!\s*\[)/.test(after);
-}
-
 function keysOfEntry(code: string, text: string): RegistryKey[] {
-  const keys: RegistryKey[] = [];
-  const parents: { key: string | undefined; array: boolean }[] = [];
-  let last: string | undefined;
-  for (const match of text.matchAll(KEY_OR_BRACE)) {
-    if (match[0] === "{") {
-      parents.push({ key: last, array: isArrayMember(text, match.index) });
-      last = undefined;
-    } else if (match[0] === "}") {
-      last = parents.pop()?.key;
-    } else if (match[1] !== undefined) {
-      const parent = parents.at(-1);
-      keys.push(
-        parent?.key === undefined
-          ? { code, key: match[1], parent: undefined }
-          : { code, key: match[1], parent: parent.key, parentIsArray: parent.array },
-      );
-      last = match[1];
-    }
-  }
-  return keys;
+  return [...text.matchAll(KEY)].map((match) => ({ code, key: match[1]! }));
 }
 
 interface RegistryBody extends Blanked {
@@ -364,7 +307,9 @@ function refusedPairs(
   notPersonal: ReadonlyMap<string, string>,
 ): string[] {
   const refused = judgedPairs(keys)
-    .filter((pair) => !isMasked(pair) && !notPersonal.has(`${pair.code}.${pair.key}`))
+    .filter(
+      (pair) => !PERSONAL_LOG_KEYS.has(pair.key) && !notPersonal.has(`${pair.code}.${pair.key}`),
+    )
     .map(({ code, key }) => `${code}.${key}`);
   return [...new Set(refused)];
 }
@@ -400,45 +345,21 @@ function argumentEnd(text: string, from: number): number {
   return text.length;
 }
 
-interface OpenBracket {
-  token: string;
-  key: string | undefined;
-  parent: string | undefined;
-  parentIsArray: boolean;
-}
-
-function objectKeys(text: string): PlacedKey[] {
-  const keys: PlacedKey[] = [];
-  const open: OpenBracket[] = [];
-  let last: string | undefined;
+function objectKeys(text: string): string[] {
+  const keys: string[] = [];
+  const open: string[] = [];
   for (const match of text.matchAll(OBJECT_TOKEN)) {
     const token = match[0];
     if (token === "{" || token === "(" || token === "[") {
-      const enclosing = open.at(-1);
-      const inArray = enclosing?.token === "[";
-      open.push({
-        token: token === "{" && text[match.index - 1] === "$" ? "${" : token,
-        key: last,
-        parent: inArray ? enclosing.key : last,
-        parentIsArray: inArray,
-      });
-      last = undefined;
+      open.push(token === "{" && text[match.index - 1] === "$" ? "${" : token);
     } else if (token === "}" || token === ")" || token === "]") {
-      last = open.pop()?.key;
-    } else {
-      const object = open.at(-1);
-      if (
-        object?.token === "{" &&
-        /[{,]\s*$/.test(text.slice(0, match.index)) &&
-        /^\s*[:,}]/.test(text.slice(match.index + token.length))
-      ) {
-        keys.push(
-          object.parent === undefined
-            ? { key: token }
-            : { key: token, parent: object.parent, parentIsArray: object.parentIsArray },
-        );
-        last = token;
-      }
+      open.pop();
+    } else if (
+      open.at(-1) === "{" &&
+      /[{,]\s*$/.test(text.slice(0, match.index)) &&
+      /^\s*[:,}]/.test(text.slice(match.index + token.length))
+    ) {
+      keys.push(token);
     }
   }
   return keys;
@@ -456,7 +377,7 @@ function logFields(file: string, source: Source): LogField[] {
     const literal = /^"([^"\\]*)"$/.exec(code.slice(eventStart, eventEnd).trim());
     const event = literal?.[1] ?? file;
     const body = literalsBlank.slice(fieldsStart, closingBrace(literalsBlank, fieldsStart) + 1);
-    fields.push(...objectKeys(body).map((placed) => ({ event, ...placed })));
+    fields.push(...objectKeys(body).map((key) => ({ event, key })));
   }
   return fields;
 }
@@ -468,7 +389,9 @@ function refusedLogFields(
   const refused = fields
     .filter(
       (field) =>
-        isJudgedKey(field.key) && !isMasked(field) && !harmless.has(`${field.event}.${field.key}`),
+        isJudgedKey(field.key) &&
+        !PERSONAL_LOG_KEYS.has(field.key) &&
+        !harmless.has(`${field.event}.${field.key}`),
     )
     .map(({ event, key }) => `${event}.${key}`);
   return [...new Set(refused)];
@@ -556,20 +479,20 @@ describe("error-code details that name a person are masked in the log", () => {
     expect(refusedIn(registry(`"x.u": { userName: string };`))).toEqual(["x.u.userName"]);
   });
 
-  it("accepts an id, a listed key and a child of a listed path", () => {
+  it("accepts an id and a listed key", () => {
     expect(
       refusedIn(
         registry(
           [
             `"x.y": { personId: string };`,
             `"x.z": { email: string };`,
-            `"x.m": { merchants: { code: string; name: string }[] };`,
+            `"x.m": { merchants: { code: string; merchantName: string }[] };`,
           ].join("\n"),
         ),
       ),
     ).toEqual([]);
     expect(registryKeys(registry(`"x.y": { personId: string };`))).toEqual([
-      { code: "x.y", key: "personId", parent: undefined },
+      { code: "x.y", key: "personId" },
     ]);
   });
 
@@ -590,8 +513,8 @@ describe("error-code details that name a person are masked in the log", () => {
     expect(registryKeys(text).map(({ key }) => key)).toEqual(["tableId"]);
   });
 
-  it("bounds the path rule by its parent's braces", () => {
-    expect(refusedIn(registry(`"x.n": { merchants: { code: string }[]; name: string };`))).toEqual([
+  it("refuses a merchant's bare name inside a list", () => {
+    expect(refusedIn(registry(`"x.n": { merchants: { code: string; name: string }[] };`))).toEqual([
       "x.n.name",
     ]);
   });
@@ -615,38 +538,6 @@ describe("error-code details that name a person are masked in the log", () => {
         ),
       ),
     ).toEqual(["[X_CODE]: { guestName: string }", `"x.Bad": { ownerEmail: string }`]);
-  });
-
-  it("accepts a listed path's child only where the parent's member is an array", () => {
-    expect(refusedIn(registry(`"x.o": { merchants: { code: string; name: string } };`))).toEqual([
-      "x.o.name",
-    ]);
-    expect(
-      refusedIn(
-        registry(
-          [
-            `"x.a": { merchants: Array<{ code: string; name: string }> };`,
-            `"x.u": { merchants: { code: string; name: string }[] | { name: string; extra: number }[] };`,
-          ].join("\n"),
-        ),
-      ),
-    ).toEqual([]);
-  });
-
-  it("refuses a listed path's child whose parent's member is an array nested in an array", () => {
-    expect(
-      refusedIn(
-        registry(
-          [
-            `"x.d": { merchants: { name: string }[][] };`,
-            `"x.e": { merchants: Array<Array<{ name: string }>> };`,
-            `"x.f": { merchants: Array<{ name: string }[]> };`,
-            `"x.g": { merchants: Array<{ name: string }>[] };`,
-            `"x.h": { merchants: Array<string | Array<{ name: string }>> };`,
-          ].join("\n"),
-        ),
-      ),
-    ).toEqual(["x.d.name", "x.e.name", "x.f.name", "x.g.name", "x.h.name"]);
   });
 
   it("ignores keys written in comments", () => {
@@ -715,28 +606,6 @@ describe("log calls' fields that name a person are masked", () => {
       { event: "x", key: "email" },
     ]);
     expect(refusedLogFields(fields, new Map())).toEqual([]);
-  });
-
-  it("accepts a listed path's child only where it is an element of the parent's array", () => {
-    expect(
-      refusedLogFields(
-        logFields(
-          "x/merchants.ts",
-          `log("warn", "x.a", { merchants: [{ name: "Marta", code: "MC1" }] });`,
-        ),
-        new Map(),
-      ),
-    ).toEqual([]);
-    const text = [
-      `log("warn", "x.o", { merchants: { name: m } });`,
-      `log("warn", "x.n", { merchants: [{ code: c }], name: n });`,
-      `log("warn", "x.d", { merchants: [[{ name: n }]] });`,
-    ].join("\n");
-    expect(refusedLogFields(logFields("x/merchants.ts", text), new Map())).toEqual([
-      "x.o.name",
-      "x.n.name",
-      "x.d.name",
-    ]);
   });
 
   it("keys a field of an event that is not a literal by the file's path", () => {

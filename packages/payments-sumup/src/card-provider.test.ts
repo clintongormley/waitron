@@ -147,8 +147,8 @@ describe("SUMUP_CARD_PROVIDER.connect", () => {
       code: "payment.provider_merchant_ambiguous",
       params: {
         merchants: [
-          { code: "M1", name: "One" },
-          { code: "M2", name: "Two" },
+          { code: "M1", merchantName: "One" },
+          { code: "M2", merchantName: "Two" },
         ],
       },
     });

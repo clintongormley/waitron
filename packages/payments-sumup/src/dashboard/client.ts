@@ -14,7 +14,7 @@ export interface ConnectResult {
  * not secrets, so the form offers a picker and re-submits with the chosen `merchantCode`. */
 export interface AmbiguousMerchant {
   code: string;
-  name: string;
+  merchantName: string;
 }
 
 /** The `POST /management-api/payments/readers` response for SumUp: the new row id and whether the

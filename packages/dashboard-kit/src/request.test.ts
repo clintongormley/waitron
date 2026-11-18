@@ -119,8 +119,8 @@ it("reports a rejected session before rejecting the request", async () => {
 
 it("carries the envelope's error params through on the rejection", async () => {
   const merchants = [
-    { code: "M1", name: "Deli One" },
-    { code: "M2", name: "Deli Two" },
+    { code: "M1", merchantName: "Deli One" },
+    { code: "M2", merchantName: "Deli Two" },
   ];
   const fetchImpl = vi
     .fn<FetchLike>()

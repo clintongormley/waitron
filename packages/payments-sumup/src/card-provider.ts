@@ -157,7 +157,7 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
         : merchants.find((m) => m.merchantCode === payload.merchantCode);
     if (chosen === undefined)
       throw new AppError("payment.provider_merchant_ambiguous", {
-        merchants: merchants.map((m) => ({ code: m.merchantCode, name: m.name })),
+        merchants: merchants.map((m) => ({ code: m.merchantCode, merchantName: m.name })),
       });
 
     return {
