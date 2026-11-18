@@ -19,7 +19,8 @@ English beside Spanish; this header and everything after Part 2 are not in it.
 - Item d) of the declaration lists full invoices as well as simplified ones (question 9), as
   `packages/fiscal-verifactu/declarations/functions.md` now does.
 
-**Answers relayed by the owner, 18 November.** Each is quoted under its question's Note in Part 1;
+**The owner's answers, 18 November.** These are the owner's own answers, not the adviser's; the
+adviser will come back with more details. Each is quoted under its question's Note in Part 1;
 Part 2 and the shared Google Doc are unchanged. Against the plans this sheet put forward:
 
 - **Changed.** Money paid towards a meal before its ticket is issued is an advance, with its own
@@ -71,7 +72,7 @@ You said that a meal's ticket is due when the meal ends, even if the bill is not
 - **A bill that is never printed** is issued when it is fully paid, when staff record that the guests left without paying, or when the venue's trading day ends, whichever comes first. Each venue sets its day to end at a time when it is closed, such as 05:00. A ticket issued before it is paid shows the amount still owed. *Is that acceptable?*
 - **Money paid towards the bill before the meal ends, naming no dishes,** is not an advance and gets no ticket of its own. For example, at 21:30 Ana pays €30 "towards the bill" of a table of four and leaves, and the others pay the rest at 23:00. Waitron records the €30 against the bill, and the ticket issued at the end covers everything served and shows the €30 as already paid. The same goes for a group that leaves €1,000 towards its tab at the start of the evening. We take this from your answer 1.8, where a deposit that identifies nothing is not an advance. By contrast, a company that pays €1,000 for its dinner on the 14th, for 40 guests on a set menu, has identified what it pays for: that is an advance, with its own ticket, which the final ticket deducts. *Have we read that correctly, or is money paid towards this table's meal already "clearly identified"? If it is an advance, what should its ticket describe when it names no dishes, for example "payment on account for the meal at table 7" at 10%?*
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 - When the meal ends: "Whichever comes first: printing the bill; taking the last payment; close of trading day".
 - A bill that is never printed: "yes".
@@ -88,7 +89,7 @@ Because a ticket may now be issued before it is paid, Waitron prints on each tic
 - **Guests who split the bill after it was printed.** Printing the bill issues the table's ticket, so if the guests then decide to pay for their own items, the table's ticket has to be undone and each guest given a ticket of their own. We plan a corrective invoice (R5) that takes the table's ticket back to zero, then a new ticket for each guest. You said (1.7) that a cancellation record is for an invoice issued in error, for a sale that never happened, and here the sale did happen. *Is a corrective right, or is this a cancellation, since the table's ticket was replaced before anyone paid it?*
 - **No pre-bill.** You confirmed (1.2) that a pre-bill, printed for the table to check before paying, is allowed if it is kept and linked to the ticket that follows. We have set the pre-bill aside: printing the bill issues the ticket, and a table that splits afterwards is handled with a corrective, as above. Splits after printing will be common, so this means many correctives. *Is that acceptable, or should we print a pre-bill first and issue the ticket only once the table has decided how to pay?*
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 - A payment made after the ticket: "Yes, but not required." Read as: the slip is still not an invoice when printed later, and it may name the ticket number but need not.
 - A reprint: "Nobody is going to get upset about us printing duplicate receipts for other reasons than those listed, so it is ok for us to print duplicates whenever we want to."
@@ -103,7 +104,7 @@ You said that the customer cannot waive the ticket, and that sending it by email
 
 *If staff choose "None", what does the venue risk?*
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 "It is required to deliver a ticket. We must always print one unless we email it instead."
 
@@ -114,7 +115,7 @@ A set menu has one price. The dishes it covers go to the kitchen at €0.00. A d
 - **What the ticket lists.** The ticket and the full invoice list each menu with its price, and every supplement and paid extra, but not a covered dish with nothing to pay. For example, a €14.00 menu at 10% covers soup, sirloin and a glass of wine. The sirloin carries a €5.00 supplement and the soup a €1.50 portion of bread. The ticket shows the menu 14.00, Sirloin +5.00, and Soup with Bread 1.50: €20.50 in all. The wine is not listed. A ticket needs «La identificación del tipo de bienes entregados o de servicios prestados» (RD 1619/2012 art. 7.1.e), and a full invoice the description needed to work out the taxable base (art. 6.1.f). *May covered dishes be left off the ticket? May they be left off the full invoice, or must they be listed there, perhaps without a price?*
 - **Splitting the price between VAT rates.** Each item a menu covers has its own VAT rate (question 5). When a menu's items carry different rates, we split the menu's price between them in proportion to what each item sells for on its own, as your answer 1.10 does for a free item (LIVA 79.Dos). Today that happens only when a menu is taken away, since everything eaten at the venue, drinks included, is restaurant service at 10% (LIVA 91.Uno.2.2.º). Taken away, a menu is a sale of goods and each part takes its own rate (LIVA 91.Uno.1.1.º; DGT V2949-16). For example, a €12.00 takeaway menu has a burger that sells for €9.50 on its own (food, 10%) and a cola that sells for €3.00 (a sugared soft drink, 21%). The menu is split into €9.12 at 10% and €2.88 at 21%. *Is that right? Must the split follow the separate prices exactly, or will a reasonable estimate do? If the customer leaves out the cola and still pays €12.00, is it all food at 10%?*
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 - What the ticket lists: "It is fine to just list the "menu del dia" and any supplements. We don't need to list every dish that it includes."
 - Splitting the price between VAT rates: "Actually things are both more and less complicated. The VAT rate of the major purchase item is applied. So if the customer buys food that is accompanied by a drink (either dine-in or as a bundle to take-away) then the VAT rate of the food applies. So if the customer buys a bundle consisting of a hamburger, a salad, and a small bottle of wine to take away, then that is 10%. However if the customer orders 1 x hamburger, 1 x salad, 1  x small bottle of wine separately to take away, then each item gets its own VAT rate. Also, in the restaurant, if a customer orders just alcohol without food then they should pay 21% instead of 10% (this is a grey area, but certainly if the restaurant no longer serves food, just drinks, then those drinks attract the 21%). This is definitely not something handled by Square today. I'm not quite sure how we should handle it. The adviser is going to come back to us with more info"
@@ -128,7 +129,7 @@ Open: whether covered dishes may also be left off a full invoice; drinks served 
 - **A rate set too low, found later.** The product is corrected ("should have been 21% from 1 February") without rewriting what was charged: customers' tickets stay as they are and nothing is sent to AEAT. For each earlier quarter, Waitron works out the VAT owed by treating the price charged as including the right rate (your answer 1.13), and puts it on the corrections report described in question 8, for the accountant to file in a complementary return. For example, 200 bottles of wine sold to take away at €8.00 in the first quarter, at 10% instead of 21%: €1,600 × 21/121 − €1,600 × 10/110 = €277.69 − €145.45 = €132.24 owed. *Is that right? Is the difference worked out per invoice line, per invoice, or on the quarter's total for the product? Rounding gives slightly different amounts.*
 - **A rate set too high.** For example, 21% charged where 10% was due, so the venue paid too much VAT. Reducing it in the current return obliges the venue to repay the excess to the customer (LIVA 89.Cinco.b), which it cannot do for a ticket that names nobody. *Must the venue then ask for the earlier return to be corrected (LGT art. 120.3), or leave the VAT as declared?*
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 - Two rates per product: "correct".
 - Eating in or taking away at the counter: "yes".
@@ -141,7 +142,7 @@ Open: whether covered dishes may also be left off a full invoice; drinks served 
 - **A deposit kept after a no-show.** A €40 deposit for a booking has its own ticket: €36.36 plus €3.64 VAT at 10%. The guests don't come and the venue keeps the €40 as compensation, which is outside VAT (DGT V0839-20). But reducing VAT already declared requires refunding it to the customer (LIVA 89.Cinco.b). *Does the venue issue a corrective removing the €3.64, though it refunds nothing, or does the deposit's ticket stand?*
 - **Money given back as goodwill.** A guest complains after paying €62 and the manager gives €10 back. You said (1.5) that a price reduction after the ticket "will, where applicable, require" a corrective invoice (LIVA 80.Uno.2.º). *Is the corrective required here, or may the venue give the money back without one and go on declaring VAT on €62?*
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 - A table given its meal free: "The question is is it for autoconsumo. So you invite an instagrammer to eat for free, or you reward a loyal customer, or you give somebody a free meal because they had a bad experience, and all of that could be considered marketing, not autoconsumo, ie something that helps your business. Feeding your employee is also not autoconsumo. However, inviting somebody in exchange for services would be considered autoconsumo and would attract VAT. Saying that our margin is 30% so our cost is 70% gives you a basis for working out the VAT to invoice. However, if it isn't autoconsumo, then theoretically you shouldn't get the VAT back on the raw ingredients! This is way too complex for us to handle automatically in Waitron, instead this should be part of some report that we make available to the accountant to decide what to do."
 - A deposit kept after a no-show: "yes we should issue the corrective. the customer could theoretically reclaim the VAT unless our website states that they lose the full amount should they fail to arrive. But this is an issue for the restaurants to figure out."
@@ -158,7 +159,7 @@ Waitron can offer a tip when a guest pays, and keeps tips off the invoice. The c
 - **Who withholds income tax on a tip.** It depends on who pays the worker (LIRPF art. 99.2; RIRPF art. 76.1; ruling 2174-03). Card tips, and cash tips put in the till and shared out at the close, are paid by the employer, so they go through payroll with withholding. Cash handed straight to a waiter and kept, or a tip jar staff run with the business taking no part, is paid by the guest: there is no withholding, and the waiter declares it. *Is that right?*
 - **Social security on card tips.** We take it that card tips paid through payroll attract social security contributions, reported as ordinary pay (code 0001), since the social security system has no code for tips and no way to report one as excluded. STS 692/2021 put casino tips in the contribution base but said hospitality tips differ. *Is that right, or is this one for a payroll adviser?*
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 "to be confirmed"
 
@@ -176,7 +177,7 @@ Each record sent to AEAT carries the time it was made, but the invoice shows onl
 - **The customer.** A ticket names no customer, so the venue keeps the corrective and gives it only to a customer it knows, as you said (1.7) for a card refund made without the customer present. *Since a date correction changes nothing the customer paid, is there any risk in not delivering it?*
 - **AEAT.** We report nothing beyond the corrective's own record, because we found no duty or channel to report a clock fault. *Is that right?*
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 - Wrong time, right day: "yes probably, tbc"
 - Wrong day: "always use a separate series for correctives"
@@ -204,7 +205,7 @@ For each version of the software, its producer signs a declaración responsable 
 - **Item f), several taxpayers.** It asks whether the system «permite ser usado por varios obligados tributarios o por un mismo usuario para dar soporte a la facturación de varios obligados tributarios». We answer N: each venue has its own installation, database and certificate, on its own server or in Waitron Cloud. We read item f) as asking about one installation, not about the product being sold to many businesses. The VERI\*FACTU library Waitron uses has its own declaration, which answers S, because another program using it could invoice for several taxpayers. *Is N right for Waitron? In Waitron Cloud, Waitron runs a separate installation for each venue: does that make Waitron «un mismo usuario» supporting several taxpayers, so that the answer must be S?*
 - **A venue that moves.** A venue that moves between its own server and Waitron Cloud keeps Waitron's system code, gets a new installation number, and needs no new declaration. *Is that right?*
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 - Item d): "tbc".
 - Item f): "i think because we're using a cert for each user, it should be N. we're not using our cert to report on many users (which would be S). tbc"
@@ -218,7 +219,7 @@ For each version of the software, its producer signs a declaración responsable 
 - **Records AEAT never received.** A record still waiting to be sent, or one AEAT refused, never reaches AEAT, so the restaurant's copy is the only one. We keep it, with AEAT's reply, until it is settled, and then for the same six years. *Is that right?*
 - **Rebuilding invoices after a restore.** You said (1.16) that if the server is restored from an old backup, the venue should retrieve the missing invoices' records from AEAT's query service to rebuild its copies. AEAT's reply gives each record's number, date, description, customer where there is one, VAT breakdown and totals, but not the dishes. *Is a copy rebuilt from that acceptable, or must the venue keep the full invoice some other way, such as a continuous backup copy?*
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 - Access without the internet: "yes"
 - What a copy looks like: today's header and logo: "probably, tbc"; whether the copy says it was cancelled or replaced: "no"
@@ -237,11 +238,11 @@ Open: which records need ten years.
   - **Labour and payroll.** Overtime under a yearly total of hours; a person's time record when a server is replaced; tips on the payslip; sharing tips when nothing has been agreed; what Waitron gives the payroll office; how long absences and rotas are kept.
   - **Privacy.** Keeping allergy notes after the meal as evidence, and the legal basis for them during it; what to delete early; deleted data left in backups; what assessment a single restaurant needs; a former employee's details; data the law requires us to keep; Waitron's own role for bug reports; recording what staff do at the till; collecting a customer's details for an invoice.
 
-**Answers, as the owner relayed them on 18 November 2026** (quoted as written):
+**The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
 - A change of legal name (S18): "not an issue. the name doesn't matter"
 - Holding back records (S19): "we should ask on the AEAT developer's channel, but given that they already accept invoices 2-999 when invoice 1 in the chain has been rejected, it seems that we don't need to hold anything back."
-- Questions outside tax: no answer relayed.
+- Questions outside tax: no answer yet.
 
 ## Part 2: Español
 

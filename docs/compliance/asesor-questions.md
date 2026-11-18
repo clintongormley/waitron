@@ -1,6 +1,6 @@
 # Questions for the asesor
 
-**2026-11-18, answers:** The owner relayed answers to the [meeting sheet](2026-11-19-adviser-meeting.md)'s questions, S18 and S19 among them; they are quoted under each question there, with a summary of what they change in its header. Several are still to be confirmed.
+**2026-11-18, answers:** The owner answered the [meeting sheet](2026-11-19-adviser-meeting.md)'s questions, S18 and S19 among them; the answers are the owner's own, quoted under each question there with a summary in its header, and the adviser will come back with more details. Several are still to be confirmed.
 
 **2026-11-15, answers:** The adviser answered [the shortened list](#the-shortened-list-2026-10-09)'s S1 to S16 and R1 to R6 in a draft of 15 November (his 1.1 to 1.16 and 2.1 to 2.6). S17 to S19 are unanswered. What each answer changes, and the owner's decisions it needs, are in [2026-11-15-adviser-answers.md](2026-11-15-adviser-answers.md); the follow-ups are questions 3, 4 and 15 to 22 of the [meeting sheet](2026-11-19-adviser-meeting.md). The question texts below are unchanged.
 
