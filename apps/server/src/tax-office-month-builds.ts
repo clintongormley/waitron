@@ -1,6 +1,6 @@
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, type WriteStream } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -163,17 +163,17 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
   ): Promise<void> {
     const path = pathOf(record.id);
     let outcome: BuildRecord | null = null;
+    let out: WriteStream | null = null;
     try {
       await mkdir(deps.dir, { recursive: true });
       const zip = zipStream(
         deps.entries(input, () => signal.throwIfAborted()),
         input.at,
       );
-      await pipeline(
-        Readable.fromWeb(zip as WebReadableStream<Uint8Array>),
-        keepingTheReserve(),
-        createWriteStream(path),
-      );
+      const source = Readable.fromWeb(zip as WebReadableStream<Uint8Array>);
+      const reserve = keepingTheReserve();
+      out = createWriteStream(path);
+      await pipeline(source, reserve, out);
       signal.throwIfAborted();
       const { size } = await stat(path);
       signal.throwIfAborted();
@@ -192,6 +192,14 @@ export function createTaxOfficeMonthBuilds(deps: TaxOfficeMonthBuildsDeps): TaxO
           errorClass: error instanceof Error ? error.name : typeof error,
           errno: errnoOf(error) ?? null,
         });
+      // pipeline can reject while the file is still opening, and an open that finishes after rm
+      // creates the file again; destroy covers a writer pipeline never took over.
+      const writing = out;
+      if (writing !== null && !writing.closed) {
+        const closed = new Promise((resolve) => writing.once("close", resolve));
+        writing.destroy();
+        await closed;
+      }
       await remove(path);
       if (!signal.aborted) {
         outcome = {
