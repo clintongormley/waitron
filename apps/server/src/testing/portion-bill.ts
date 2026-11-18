@@ -80,3 +80,19 @@ export async function portionBill(
   const { tabId } = await openPartyTab(tx, cfg, { tableId: table.id });
   return { billId: tabId, portions: await addPortionRound(tx, cfg, tabId, lines, opts) };
 }
+
+export const unboundLineCohort = { cohortId: null, cohortOrdinal: null, wholePortion: null };
+
+export async function addFixtureExtra(
+  tx: Transaction,
+  cfg: OriginConfig,
+  billId: string,
+  parentLineId: string,
+  menuItemId: string,
+  fire = false,
+): Promise<string> {
+  const round = await priceTabRound(tx, cfg, billId, [{ menuItemId, quantity: "1" }], "checked");
+  const [row] = await insertTabRound(tx, cfg, round, [{ ...round.rows[0]!, parentLineId }]);
+  if (fire) await fireLines(tx, cfg, billId, [row!]);
+  return row!.id;
+}

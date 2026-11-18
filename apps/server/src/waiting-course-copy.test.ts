@@ -1,3 +1,4 @@
+import { unboundLineCohort } from "./testing/portion-bill.js";
 import { departmentCourses } from "@waitron/db";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
@@ -197,6 +198,7 @@ async function addExtra(billId: string, dishId: string): Promise<string> {
   await inTx(v, (tx) =>
     tx.insert(workingOrderLines).values({
       ...dish,
+      ...unboundLineCohort,
       id,
       lineNo: Math.max(...lines.map((line) => line.lineNo)) + 1,
       parentLineId: dish.id,
@@ -3126,8 +3128,14 @@ it("copies 32,767 held dishes with their extras, HOLD stations, events and both 
       tx,
       workingOrderLines,
       ids.slice(1).flatMap((id, i) => [
-        { ...template!, id, lineNo: 4 + i * 2 },
-        { ...template!, id: randomUUID(), lineNo: 5 + i * 2, parentLineId: id },
+        { ...template!, ...unboundLineCohort, id, lineNo: 4 + i * 2 },
+        {
+          ...template!,
+          ...unboundLineCohort,
+          id: randomUUID(),
+          lineNo: 5 + i * 2,
+          parentLineId: id,
+        },
       ]),
     );
     await insertInChunks(

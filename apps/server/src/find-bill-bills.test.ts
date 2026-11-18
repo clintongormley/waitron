@@ -1,3 +1,4 @@
+import { addFixtureExtra } from "./testing/portion-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -77,7 +78,7 @@ async function contribute(id: string, amount: string, tip = "0.00") {
 
 describe("Find Bills SQL paging", () => {
   it("counts whole portions and ignores extras and cancelled portions", async () => {
-    const id = await named("Counted dishes", "Caña", "Tarta");
+    const id = await named("Counted dishes", "Caña");
     let parentId!: string;
     await inTx(venue, async (tx) => {
       const lines = await tx
@@ -89,10 +90,7 @@ describe("Find Bills SQL paging", () => {
         .update(workingOrderLines)
         .set({ quantity: 3000 })
         .where(eq(workingOrderLines.id, lines[0]!.id));
-      await tx
-        .update(workingOrderLines)
-        .set({ parentLineId: lines[0]!.id })
-        .where(eq(workingOrderLines.id, lines[1]!.id));
+      await addFixtureExtra(tx, venue.cfg, id, parentId, venue.offerFor("Tarta"));
     });
     expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({ itemCount: 3 });
     await inTx(venue, (tx) =>

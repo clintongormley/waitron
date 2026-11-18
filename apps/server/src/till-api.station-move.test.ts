@@ -1,3 +1,4 @@
+import { addFixtureExtra } from "./testing/portion-bill.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
@@ -81,16 +82,19 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   it.each([false, true])(
     "refuses an extra without changing the request's dishes (mixed: %s)",
     async (mixed) => {
-      const { tabId } = await seatedWith(venue, "Paella", "Caña");
-      const items = await inTx(venue, (tx) =>
+      const { tabId } = await seatedWith(venue, "Paella");
+      const [dish] = await inTx(venue, (tx) =>
         ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
       );
-      const [dish, extra] = items as [(typeof items)[0], (typeof items)[0]];
-      await inTx(venue, (tx) =>
-        tx
-          .update(workingOrderLines)
-          .set({ parentLineId: dish.workingOrderLineId })
-          .where(eq(workingOrderLines.id, extra.workingOrderLineId)),
+      const extraId = await inTx(venue, (tx) =>
+        addFixtureExtra(
+          tx,
+          venue.cfg,
+          tabId,
+          dish!.workingOrderLineId,
+          venue.offerFor("Caña"),
+          true,
+        ),
       );
       const snapshot = () =>
         inTx(venue, async (tx) => ({
@@ -106,16 +110,14 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
       const before = await snapshot();
       const answer = await call(`/api/working-orders/${tabId}/lines/move-station`, {
         submissionId: randomUUID(),
-        lineIds: mixed
-          ? [dish.workingOrderLineId, extra.workingOrderLineId]
-          : [extra.workingOrderLineId],
+        lineIds: mixed ? [dish!.workingOrderLineId, extraId] : [extraId],
         stationId: grill,
         ...{ includeExtras: true },
       });
       expect({ status: answer.status, ...answer.json }).toMatchObject({
         status: 400,
         code: "ticket.extra_not_movable",
-        params: { workingOrderId: tabId, lineId: extra.workingOrderLineId },
+        params: { workingOrderId: tabId, lineId: extraId },
       });
       expect(await snapshot()).toEqual(before);
     },
