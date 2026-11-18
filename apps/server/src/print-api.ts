@@ -617,20 +617,19 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
     };
     const unsubscribe = deps.bus.subscribe((event) => {
-      if (event.kind === "close") end();
-      else if (
-        event.change.resources.some(({ type }) =>
-          ["print_jobs", "invoice_deliveries", "printers"].includes(type),
-        )
-      ) {
-        if (
-          event.change.resources.some(({ type }) =>
-            ["invoice_deliveries", "printers"].includes(type),
-          )
-        )
-          reply = true;
-        wake();
+      if (event.kind === "close") {
+        end();
+        return;
       }
+      const resources = event.change.resources;
+      const printJob = resources.some(({ type }) => type === "print_jobs");
+      // A job adds its printer to the event so the dashboard updates the queue. Only a separate
+      // printer change needs an empty reply so the agent checks for office pages.
+      const pageChange = resources.some(
+        ({ type }) => type === "invoice_deliveries" || (type === "printers" && !printJob),
+      );
+      if (pageChange) reply = true;
+      if (printJob || pageChange) wake();
     });
     pullWakes.add(wakeAgent);
     signal.addEventListener("abort", end, { once: true });

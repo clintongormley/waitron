@@ -157,6 +157,7 @@ it.each([
   ["getOrder", ["bill-1"], "receipt_reprints"],
   ["getOrder", ["bill-1"], "invoice_deliveries"],
   ["getOrder", ["bill-1"], "invoice_pdf_downloads"],
+  ["getOrder", ["bill-1"], "printers"],
   ["getOverdueOrders", [], "ticket_items"],
   ["getOverdueOrders", [], "party_tables"],
   ["getOverdueOrders", [], "parties"],

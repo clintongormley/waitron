@@ -12,6 +12,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
+  CORE_CHANGE_SOURCES,
   CORE_MIGRATIONS,
   type Database,
   deviceProfiles,
@@ -6409,10 +6410,12 @@ describe("held print pulls", () => {
     const stop = new AbortController();
     const app = mountApp({ bus, gate, stopping: AbortSignal.any([gate.closed, stop.signal]) });
     const { token, agentId } = await joinAndAccept(app);
-    await installChangeFeed(suite.db, [
-      { table: "print_jobs", type: "print_jobs" },
-      { table: "invoice_deliveries", type: "invoice_deliveries" },
-    ]);
+    await installChangeFeed(
+      suite.db,
+      CORE_CHANGE_SOURCES.filter(({ table }) =>
+        ["print_jobs", "invoice_deliveries", "printers"].includes(table),
+      ),
+    );
     const unsubscribe = subscribeToChanges(changeSubscriber(bus, noopLog));
     onTestFinished(() => {
       stop.abort();
