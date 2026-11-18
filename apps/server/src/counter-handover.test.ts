@@ -1,3 +1,4 @@
+import { addFixtureExtra } from "./testing/portion-bill.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -904,21 +905,15 @@ describe("GET /api/orders/counter-waiting", () => {
   });
 
   it("lists a paid order's dishes that can still move, each with its station, leaving out a started dish, a made-here record and an extras row", async () => {
-    const id = await parked("ticket_then_pay", "Tarta", "Tarta", "Tarta", "Tarta", "Tarta");
+    const id = await parked("ticket_then_pay", "Tarta", "Tarta", "Tarta", "Tarta");
     const lineIds = venue.db
       .all<{ id: string }>(
         sql`select id from working_order_lines where working_order_id = ${id} order by line_no`,
       )
       .map((row) => row.id);
-    const [queued, otherQueued, started, madeHere, extra] = lineIds as [
-      string,
-      string,
-      string,
-      string,
-      string,
-    ];
-    venue.db.run(
-      sql`update working_order_lines set parent_line_id = ${queued} where id = ${extra}`,
+    const [queued, otherQueued, started, madeHere] = lineIds as [string, string, string, string];
+    const extra = await inTx(venue, (tx) =>
+      addFixtureExtra(tx, venue.cfg, id, queued, venue.offerFor("Tarta")),
     );
     await placeOrder(
       { ...deps(), admission: testTradingAdmission() },

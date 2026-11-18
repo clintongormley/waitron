@@ -23,8 +23,6 @@ import {
   isReceiptPrinter,
   printers,
   invoicePdfDownloads,
-  orderPortions,
-  workingLinePortions,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
@@ -832,7 +830,7 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
       sentAt: workingOrderLines.sentAt,
       servedAt: workingOrderLines.servedAt,
       servedQuantity: workingOrderLines.servedQuantity,
-      measured: orderPortions.measured,
+      wholePortion: workingOrderLines.wholePortion,
       lineNo: workingOrderLines.lineNo,
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
@@ -842,8 +840,6 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
       creditedTo: workingOrderLines.creditedTo,
     })
     .from(workingOrderLines)
-    .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
-    .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(workingOrderLines.lineNo);
   const saved = await VENUE_SERVICE.readSentLineNutrition(
@@ -856,6 +852,7 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
   );
   const lines = stored.map((line) => ({
     ...line,
+    measured: line.wholePortion === null ? null : !line.wholePortion,
     setLunch: lunches.has(line.id),
     sentNutrition: saved.get(line.id) ?? null,
   }));

@@ -122,6 +122,9 @@ CREATE TABLE `working_order_lines` (
 	`offer_unit_precision` integer,
 	`offer_vat_class` text,
 	`offer_category_name` text,
+	`cohort_id` text,
+	`cohort_ordinal` integer,
+	`whole_portion` integer,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE restrict,
@@ -138,6 +141,10 @@ CREATE TABLE `working_order_lines` (
 	CONSTRAINT "working_order_lines_vat_class_ck" CHECK("working_order_lines"."vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "working_order_lines_takeaway_vat_class_ck" CHECK("working_order_lines"."takeaway_vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "working_order_lines_line_no_ck" CHECK("working_order_lines"."line_no" >= 1),
+	CONSTRAINT "working_order_lines_cohort_ck" CHECK(("working_order_lines"."cohort_id" is null and "working_order_lines"."cohort_ordinal" is null and "working_order_lines"."whole_portion" is null)
+        or ("working_order_lines"."cohort_id" is not null and "working_order_lines"."cohort_ordinal" is not null
+          and "working_order_lines"."cohort_ordinal" >= 1 and "working_order_lines"."whole_portion" is not null
+          and "working_order_lines"."parent_line_id" is null)),
 	CONSTRAINT "working_order_lines_hardware_unit_ck" CHECK("working_order_lines"."hardware_unit" is null or "working_order_lines"."hardware_unit" in ('kg','g','mg')),
 	CONSTRAINT "working_order_lines_offer_unit_precision_ck" CHECK("working_order_lines"."offer_unit_precision" between 0 and 3),
 	CONSTRAINT "working_order_lines_offer_vat_class_ck" CHECK("working_order_lines"."offer_vat_class" in ('general','reduced','super_reduced','zero')),
@@ -157,6 +164,7 @@ CREATE INDEX `working_order_lines_group_idx` ON `working_order_lines` (`group_id
 CREATE INDEX `working_order_lines_parent_idx` ON `working_order_lines` (`parent_line_id`);--> statement-breakpoint
 CREATE INDEX `working_order_lines_order_idx` ON `working_order_lines` (`working_order_id`);--> statement-breakpoint
 CREATE INDEX `working_order_lines_course_idx` ON `working_order_lines` (`course_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `working_order_lines_cohort_ordinal_key` ON `working_order_lines` (`cohort_id`,`cohort_ordinal`);--> statement-breakpoint
 CREATE UNIQUE INDEX `working_order_lines_line_no_key` ON `working_order_lines` (`working_order_id`,`line_no`);--> statement-breakpoint
 CREATE TABLE `working_orders` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -248,47 +256,29 @@ CREATE TABLE `order_amendments` (
 --> statement-breakpoint
 CREATE INDEX `order_amendments_order_idx` ON `order_amendments` (`working_order_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `order_amendments_chain_position_key` ON `order_amendments` (`working_order_id`,`sequence_no`);--> statement-breakpoint
+CREATE TABLE `sale_line_dishes` (
+	`id` text PRIMARY KEY NOT NULL,
+	`sale_line_id` text NOT NULL,
+	`dish_line_id` text NOT NULL,
+	FOREIGN KEY (`sale_line_id`) REFERENCES `sale_lines`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`dish_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
+CREATE INDEX `sale_line_dishes_dish_line_idx` ON `sale_line_dishes` (`dish_line_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `sale_line_dishes_sale_line_dish_key` ON `sale_line_dishes` (`sale_line_id`,`dish_line_id`);--> statement-breakpoint
 CREATE TABLE `order_portion_events` (
 	`id` text PRIMARY KEY NOT NULL,
-	`portion_id` text NOT NULL,
+	`line_id` text NOT NULL,
+	`detail` text DEFAULT '{}' NOT NULL,
 	`kind` text NOT NULL,
 	`from_order_id` text NOT NULL,
 	`to_order_id` text,
 	`actor_id` text,
 	`at` text NOT NULL,
-	FOREIGN KEY (`portion_id`) REFERENCES `order_portions`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "order_portion_events_kind_ck" CHECK("order_portion_events"."kind" in ('moved', 'cancelled')),
 	CONSTRAINT "order_portion_events_destination_ck" CHECK(("order_portion_events"."kind" = 'moved' and "order_portion_events"."to_order_id" is not null and "order_portion_events"."to_order_id" <> "order_portion_events"."from_order_id") or ("order_portion_events"."kind" = 'cancelled' and "order_portion_events"."to_order_id" is null))
 );
 --> statement-breakpoint
-CREATE TABLE `order_portions` (
-	`id` text PRIMARY KEY NOT NULL,
-	`cohort_id` text NOT NULL,
-	`ordinal` integer NOT NULL,
-	`measured` integer NOT NULL,
-	`created_at` text NOT NULL,
-	CONSTRAINT "order_portions_ordinal_ck" CHECK("order_portions"."ordinal" >= 1)
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `order_portions_cohort_ordinal_key` ON `order_portions` (`cohort_id`,`ordinal`);--> statement-breakpoint
-CREATE TABLE `sale_line_portions` (
-	`id` text PRIMARY KEY NOT NULL,
-	`sale_line_id` text NOT NULL,
-	`portion_id` text NOT NULL,
-	FOREIGN KEY (`sale_line_id`) REFERENCES `sale_lines`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`portion_id`) REFERENCES `order_portions`(`id`) ON UPDATE no action ON DELETE restrict
-);
---> statement-breakpoint
-CREATE INDEX `sale_line_portions_portion_idx` ON `sale_line_portions` (`portion_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `sale_line_portions_sale_line_portion_key` ON `sale_line_portions` (`sale_line_id`,`portion_id`);--> statement-breakpoint
-CREATE TABLE `working_line_portions` (
-	`working_order_line_id` text PRIMARY KEY NOT NULL,
-	`portion_id` text NOT NULL,
-	FOREIGN KEY (`working_order_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`portion_id`) REFERENCES `order_portions`(`id`) ON UPDATE no action ON DELETE restrict
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `working_line_portions_portion_key` ON `working_line_portions` (`portion_id`);--> statement-breakpoint
 CREATE TABLE `dining_tables` (
 	`id` text PRIMARY KEY NOT NULL,
 	`label` text NOT NULL,
@@ -3243,6 +3233,9 @@ BEGIN
       AND new.classification IS old.classification
       AND new.group_id IS old.group_id
       AND new.credited_to IS old.credited_to
+      AND new.cohort_id IS old.cohort_id
+      AND new.cohort_ordinal IS old.cohort_ordinal
+      AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
@@ -3306,6 +3299,9 @@ BEGIN
       AND new.extra_list_id IS old.extra_list_id
       AND new.classification IS old.classification
       AND new.credited_to IS old.credited_to
+      AND new.cohort_id IS old.cohort_id
+      AND new.cohort_ordinal IS old.cohort_ordinal
+      AND new.whole_portion IS old.whole_portion
       AND new.served_quantity IS old.served_quantity
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.menu_item_id IS old.menu_item_id
@@ -3385,6 +3381,9 @@ BEGIN
       AND new.classification IS old.classification
       AND new.group_id IS old.group_id
       AND new.credited_to IS old.credited_to
+      AND new.cohort_id IS old.cohort_id
+      AND new.cohort_ordinal IS old.cohort_ordinal
+      AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
@@ -3407,6 +3406,18 @@ BEGIN
       AND new.offer_category_name IS old.offer_category_name
     )
   );
+END;
+--> statement-breakpoint
+CREATE TRIGGER working_order_lines_cohort_fixed
+BEFORE UPDATE OF cohort_id, cohort_ordinal, whole_portion ON working_order_lines
+FOR EACH ROW
+WHEN old.cohort_id IS NOT NULL AND (
+  new.cohort_id IS NOT old.cohort_id
+  OR new.cohort_ordinal IS NOT old.cohort_ordinal
+  OR new.whole_portion IS NOT old.whole_portion
+)
+BEGIN
+  SELECT raise(ABORT, 'a dish''s cohort is fixed once set');
 END;
 --> statement-breakpoint
 CREATE TRIGGER working_orders_recipient_identity_insert

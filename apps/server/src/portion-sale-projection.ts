@@ -2,17 +2,16 @@ import type { LockedLine } from "@waitron/menu";
 import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
 import type { OrderLineIdentity, StoredOrderLine } from "./working-order.js";
 
-/** Which portion a working dish line holds, as `working_line_portions` and `order_portions` say. */
+/** A dish line's place in its pricing cohort. */
 export interface PortionBinding {
   lineId: string;
-  portionId: string;
   cohortId: string;
   ordinal: number;
 }
 
-/** A stored line after grouping: every working line it stands for, and their portions. */
+/** A grouped sale row with the working lines and dishes it represents. */
 export interface ProjectedLine {
-  identity: OrderLineIdentity & { lineIds: string[]; portionIds: string[] };
+  identity: OrderLineIdentity & { lineIds: string[]; dishLineIds: string[] };
   locked: LockedLine;
 }
 
@@ -119,13 +118,13 @@ export function projectPortionSale(
   const out: ProjectedLine[] = [];
   for (const members of ordered) {
     const [first] = members as [Dish, ...Dish[]];
-    const portionIds = members.flatMap((dish) => (dish.binding ? [dish.binding.portionId] : []));
+    const dishLineIds = members.flatMap((dish) => (dish.binding ? [dish.binding.lineId] : []));
     const dishNo = out.length + 1;
     out.push({
       identity: {
         ...first.line.identity,
         lineIds: members.map((dish) => dish.line.identity.id),
-        portionIds,
+        dishLineIds,
       },
       locked: { ...first.line.locked, quantity: sum(members.map((dish) => dish.line)) },
     });
@@ -146,7 +145,7 @@ export function projectPortionSale(
         identity: {
           ...extra.identity,
           lineIds: matches.map((line) => line.identity.id),
-          portionIds,
+          dishLineIds,
         },
         locked: { ...extra.locked, quantity: sum(matches), parentLineNo: dishNo },
       });

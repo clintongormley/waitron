@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { saleLinePortions, saleLines, workingOrderLines, type Transaction } from "@waitron/db";
+import { saleLineDishes, saleLines, workingOrderLines, type Transaction } from "@waitron/db";
 import {
   addDecimal,
   centsToDecimal,
@@ -62,11 +62,11 @@ async function refundValues(
       ? []
       : await tx
           .select({
-            saleLineId: saleLinePortions.saleLineId,
-            portionId: saleLinePortions.portionId,
+            saleLineId: saleLineDishes.saleLineId,
+            dishLineId: saleLineDishes.dishLineId,
           })
-          .from(saleLinePortions)
-          .innerJoin(saleLines, eq(saleLines.id, saleLinePortions.saleLineId))
+          .from(saleLineDishes)
+          .innerJoin(saleLines, eq(saleLines.id, saleLineDishes.saleLineId))
           .where(eq(saleLines.saleId, saleId));
   const linked = new Set(links.map((link) => link.saleLineId));
   const unboundStored = stored.filter((row) => !bindings.has(row.parentLineId ?? row.id));
@@ -80,7 +80,7 @@ async function refundValues(
     return byPortion(
       filed,
       links,
-      binding.portionId,
+      binding.lineId,
       stored.filter((row) => row.id === lineId || row.parentLineId === lineId),
     );
   });
@@ -122,15 +122,15 @@ function byPosition(
  */
 function byPortion(
   filed: readonly Filed[],
-  links: readonly { saleLineId: string; portionId: string }[],
-  portionId: string,
+  links: readonly { saleLineId: string; dishLineId: string }[],
+  dishLineId: string,
   family: readonly Stored[],
 ): { quantity: string; gross: string } | undefined {
   const count = new Map<string, number>();
   const mine = new Set<string>();
   for (const link of links) {
     count.set(link.saleLineId, (count.get(link.saleLineId) ?? 0) + 1);
-    if (link.portionId === portionId) mine.add(link.saleLineId);
+    if (link.dishLineId === dishLineId) mine.add(link.saleLineId);
   }
   const rows = filed.filter((row) => mine.has(row.id));
   const dish = rows.find((row) => row.parentLineId === null);

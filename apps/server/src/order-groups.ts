@@ -117,7 +117,7 @@ import {
 import type { BillEditExpected } from "./order-drafts.js";
 import type { AllergyPatch, AllergyLineRef } from "@waitron/module";
 import { copyAllergyWorkingTicks, enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
-import { expandPortionRows, registerPortions } from "./order-portions.js";
+import { expandPortionRows } from "./order-portions.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {
   applyPartyAllergyPatch,
@@ -402,7 +402,6 @@ export async function placeGroups(
     creditedTo: operatorId,
   }));
   const inserted = round === null ? [] : await insertTabRound(tx, cfg, round, rows);
-  if (expanded !== null) await registerPortions(tx, expanded.portions);
   const portionsOfLine: string[][] = lines.map(() => []);
   rows.forEach((row, i) => {
     if (row.parentLineId == null) portionsOfLine[requestOfRow[i]!]!.push(row.id!);

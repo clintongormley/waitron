@@ -195,6 +195,7 @@ export {
   tenderMethod,
   tenders,
 } from "./schema/sales.js";
+export { saleLineDishes } from "./schema/sale-line-dishes.js";
 export { saleVoids } from "./schema/sale-voids.js";
 export { unpaidDepartures } from "./schema/unpaid-departures.js";
 export { deferredClosures } from "./schema/deferred-closures.js";
@@ -202,13 +203,7 @@ export type {
   DeferredClosurePartyBlocker,
   DeferredClosureResult,
 } from "./schema/deferred-closures.js";
-export {
-  ORDER_PORTION_EVENT_KINDS,
-  orderPortionEvents,
-  orderPortions,
-  saleLinePortions,
-  workingLinePortions,
-} from "./schema/order-portions.js";
+export { ORDER_PORTION_EVENT_KINDS, orderPortionEvents } from "./schema/order-portion-events.js";
 export {
   billPaymentKind,
   billPaymentLines,

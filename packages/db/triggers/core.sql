@@ -408,6 +408,9 @@ BEGIN
       AND new.classification IS old.classification
       AND new.group_id IS old.group_id
       AND new.credited_to IS old.credited_to
+      AND new.cohort_id IS old.cohort_id
+      AND new.cohort_ordinal IS old.cohort_ordinal
+      AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
@@ -471,6 +474,9 @@ BEGIN
       AND new.extra_list_id IS old.extra_list_id
       AND new.classification IS old.classification
       AND new.credited_to IS old.credited_to
+      AND new.cohort_id IS old.cohort_id
+      AND new.cohort_ordinal IS old.cohort_ordinal
+      AND new.whole_portion IS old.whole_portion
       AND new.served_quantity IS old.served_quantity
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.menu_item_id IS old.menu_item_id
@@ -550,6 +556,9 @@ BEGIN
       AND new.classification IS old.classification
       AND new.group_id IS old.group_id
       AND new.credited_to IS old.credited_to
+      AND new.cohort_id IS old.cohort_id
+      AND new.cohort_ordinal IS old.cohort_ordinal
+      AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
@@ -572,6 +581,18 @@ BEGIN
       AND new.offer_category_name IS old.offer_category_name
     )
   );
+END;
+--> statement-breakpoint
+CREATE TRIGGER working_order_lines_cohort_fixed
+BEFORE UPDATE OF cohort_id, cohort_ordinal, whole_portion ON working_order_lines
+FOR EACH ROW
+WHEN old.cohort_id IS NOT NULL AND (
+  new.cohort_id IS NOT old.cohort_id
+  OR new.cohort_ordinal IS NOT old.cohort_ordinal
+  OR new.whole_portion IS NOT old.whole_portion
+)
+BEGIN
+  SELECT raise(ABORT, 'a dish''s cohort is fixed once set');
 END;
 --> statement-breakpoint
 CREATE TRIGGER working_orders_recipient_identity_insert

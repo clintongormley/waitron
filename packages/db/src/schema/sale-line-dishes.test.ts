@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { checkFailed, refusalOn, triggerRaised } from "../constraint-target.js";
+import { checkFailed, refusalOn, restrictRefused, triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { withTransaction } from "../tenancy.js";
@@ -9,17 +9,12 @@ import { captureError } from "../testing/errors.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
-import {
-  orderPortionEvents,
-  orderPortions,
-  saleLinePortions,
-  workingLinePortions,
-} from "./order-portions.js";
+import { orderPortionEvents } from "./order-portion-events.js";
+import { saleLineDishes } from "./sale-line-dishes.js";
 import { workingOrderLines } from "./orders.js";
 import { saleLines, sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 
-const COHORT = "bbbbbbbb-0000-4000-8000-000000000001";
 const GHOST = "bbbbbbbb-0000-4000-8000-0000000000ff";
 const AT = "2026-10-27T12:00:00.000Z";
 
@@ -33,7 +28,7 @@ const LINE = {
   lineTotal: 950,
 };
 
-describe("A803 portions: the registry, bindings, sale links and events", () => {
+describe("Dish sale links and events", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   let db: Database;
   let orderId = "";
@@ -111,76 +106,56 @@ describe("A803 portions: the registry, bindings, sale links and events", () => {
     return row!.id;
   }
 
-  async function insertPortion(ordinal: number): Promise<string> {
-    const [row] = await db
-      .insert(orderPortions)
-      .values({ cohortId: COHORT, ordinal, measured: false })
-      .returning({ id: orderPortions.id });
-    return row!.id;
-  }
-
-  it("A803 portions: a second binding for one line is refused", async () => {
-    const line = await insertLine(1);
-    const [first, second] = [await insertPortion(1), await insertPortion(2)];
-    await db.insert(workingLinePortions).values({ workingOrderLineId: line, portionId: first });
-    const error = await captureError(() =>
-      db.insert(workingLinePortions).values({ workingOrderLineId: line, portionId: second }),
-    );
+  it("refuses linking one dish twice to one sale line", async () => {
+    const dish = await insertLine(1);
+    const link = (id: string) =>
+      db.run(sql`insert into sale_line_dishes (id, sale_line_id, dish_line_id)
+      values (${id}, ${saleLineId}, ${dish})`);
+    await link("first");
+    const error = await captureError(() => link("duplicate"));
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
-        table: "working_line_portions",
-        columns: ["working_order_line_id"],
+        table: "sale_line_dishes",
+        columns: ["sale_line_id", "dish_line_id"],
       }),
     ).toBe(true);
   });
 
-  it("A803 portions: a second line for one portion is refused", async () => {
-    const [a, b] = [await insertLine(1), await insertLine(2)];
-    const portion = await insertPortion(1);
-    await db.insert(workingLinePortions).values({ workingOrderLineId: a, portionId: portion });
-    const error = await captureError(() =>
-      db.insert(workingLinePortions).values({ workingOrderLineId: b, portionId: portion }),
-    );
-    expect(
-      refusalOn(error, UNIQUE_VIOLATION, {
-        table: "working_line_portions",
-        columns: ["portion_id"],
-      }),
-    ).toBe(true);
+  it("refuses deleting a dish line a sale line points at", async () => {
+    const [sold, unsold] = [await insertLine(1), await insertLine(2)];
+    await db.run(sql`insert into sale_line_dishes (id, sale_line_id, dish_line_id)
+      values ('sold', ${saleLineId}, ${sold})`);
+    const remove = (id: string) => db.delete(workingOrderLines).where(eq(workingOrderLines.id, id));
+    expect(restrictRefused(await captureError(() => remove(sold)))).toBe(true);
+    await remove(unsold);
+    expect(await db.select({ id: workingOrderLines.id }).from(workingOrderLines)).toEqual([
+      { id: sold },
+    ]);
   });
 
-  it("A803 portions: a binding, sale link or event naming a missing portion or sale line is refused", async () => {
-    const line = await insertLine(1);
-    const portion = await insertPortion(1);
-    const writes = [
-      () => db.insert(workingLinePortions).values({ workingOrderLineId: line, portionId: GHOST }),
-      () =>
-        db.insert(workingLinePortions).values({ workingOrderLineId: GHOST, portionId: portion }),
-      () => db.insert(saleLinePortions).values({ saleLineId, portionId: GHOST }),
-      () => db.insert(saleLinePortions).values({ saleLineId: GHOST, portionId: portion }),
-      () =>
-        db
-          .insert(orderPortionEvents)
-          .values({ portionId: GHOST, kind: "cancelled", fromOrderId: orderId }),
-    ];
-    for (const write of writes) {
-      expect(isRefusal(await captureError(write), FOREIGN_KEY_VIOLATION)).toBe(true);
+  it("refuses a sale link with a missing dish or sale line", async () => {
+    const dishLineId = await insertLine(1);
+    for (const values of [
+      { saleLineId, dishLineId: GHOST },
+      { saleLineId: GHOST, dishLineId },
+    ]) {
+      const error = await captureError(() => db.insert(saleLineDishes).values(values));
+      expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
     }
   });
 
-  it("A803 portions: registry, sale-link and event rows refuse update, delete and insert-or-replace", async () => {
-    const portion = await insertPortion(1);
+  it("sale-link and event rows refuse update, delete and insert-or-replace", async () => {
+    const dish = await insertLine(1);
     const [link] = await db
-      .insert(saleLinePortions)
-      .values({ saleLineId, portionId: portion })
-      .returning({ id: saleLinePortions.id });
+      .insert(saleLineDishes)
+      .values({ saleLineId, dishLineId: dish })
+      .returning({ id: saleLineDishes.id });
     const [event] = await db
       .insert(orderPortionEvents)
-      .values({ portionId: portion, kind: "cancelled", fromOrderId: orderId })
+      .values({ lineId: dish, kind: "cancelled", fromOrderId: orderId })
       .returning({ id: orderPortionEvents.id });
     const rows = [
-      ["order_portions", portion, sql`ordinal = 2`],
-      ["sale_line_portions", link!.id, sql`portion_id = portion_id`],
+      ["sale_line_dishes", link!.id, sql`dish_line_id = dish_line_id`],
       ["order_portion_events", event!.id, sql`actor_id = ${"someone"}`],
     ] as const;
     for (const [name, rowId, set] of rows) {
@@ -202,23 +177,8 @@ describe("A803 portions: the registry, bindings, sale links and events", () => {
     }
   });
 
-  it("A803 portions: deleting a bound line is refused until its binding is deleted, and the registry row stays", async () => {
-    const line = await insertLine(1);
-    const portion = await insertPortion(1);
-    await db.insert(workingLinePortions).values({ workingOrderLineId: line, portionId: portion });
-    const refused = await captureError(() =>
-      db.delete(workingOrderLines).where(eq(workingOrderLines.id, line)),
-    );
-    expect(isRefusal(refused, FOREIGN_KEY_VIOLATION)).toBe(true);
-    await db.delete(workingLinePortions).where(eq(workingLinePortions.workingOrderLineId, line));
-    await db.delete(workingOrderLines).where(eq(workingOrderLines.id, line));
-    expect(await db.select({ id: orderPortions.id }).from(orderPortions)).toEqual([
-      { id: portion },
-    ]);
-  });
-
   it("A803 portions: a moved event to its own order, or a cancelled event naming a destination, is refused", async () => {
-    const portion = await insertPortion(1);
+    const dish = await insertLine(1);
     const refusedValues = [
       { kind: "moved" as const, fromOrderId: orderId, toOrderId: orderId },
       { kind: "moved" as const, fromOrderId: orderId, toOrderId: null },
@@ -226,31 +186,18 @@ describe("A803 portions: the registry, bindings, sale links and events", () => {
     ];
     for (const values of refusedValues) {
       const error = await captureError(() =>
-        db.insert(orderPortionEvents).values({ portionId: portion, ...values }),
+        db.insert(orderPortionEvents).values({ lineId: dish, ...values }),
       );
       expect(checkFailed(error, "order_portion_events_destination_ck")).toBe(true);
     }
     await db
       .insert(orderPortionEvents)
-      .values({ portionId: portion, kind: "moved", fromOrderId: orderId, toOrderId: otherOrderId });
+      .values({ lineId: dish, kind: "moved", fromOrderId: orderId, toOrderId: otherOrderId });
     const kind = await captureError(() =>
       db.run(
-        sql`insert into order_portion_events (id, portion_id, kind, from_order_id, at) values ('e', ${portion}, 'split', ${orderId}, ${AT})`,
+        sql`insert into order_portion_events (id, line_id, kind, from_order_id, at) values ('e', ${dish}, 'split', ${orderId}, ${AT})`,
       ),
     );
     expect(checkFailed(kind, "order_portion_events_kind_ck")).toBe(true);
-  });
-
-  it("A803 portions: an ordinal below 1, or repeated in a cohort, is refused", async () => {
-    const low = await captureError(() => insertPortion(0));
-    expect(checkFailed(low, "order_portions_ordinal_ck")).toBe(true);
-    await insertPortion(1);
-    const repeated = await captureError(() => insertPortion(1));
-    expect(
-      refusalOn(repeated, UNIQUE_VIOLATION, {
-        table: "order_portions",
-        columns: ["cohort_id", "ordinal"],
-      }),
-    ).toBe(true);
   });
 });

@@ -36,7 +36,7 @@ import { cancelLine } from "./testing/cancel-line.js";
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { addPortionRound, portionBill as registeredPortionBill } from "./testing/portion-bill.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import type { PortionRef } from "./order-portions.js";
+import type { PortionRef } from "./testing/portion-bill.js";
 import { splitPartyBill } from "./testing/serve-line.js";
 import { setupVenue, useSplitExtrasDb, type ProductLine } from "./testing/split-extras-venue.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
@@ -144,7 +144,7 @@ function portions(
         identity: identity(lineId, `product-${dish.name}`),
         locked: locked(dish.name, dish.price, "1.000", dish.vatClass ?? "reduced"),
       });
-      bindings.set(lineId, { lineId, portionId: newId("portion"), cohortId, ordinal });
+      bindings.set(lineId, { lineId, cohortId, ordinal });
       for (const extra of dish.extras ?? []) {
         lines.push({
           identity: identity(newId("line"), `product-${extra.name}`),
@@ -562,7 +562,6 @@ describe("A803 monetary comparison: operations on portions through the real path
       members.forEach((lineId, i) =>
         bindings.set(lineId, {
           lineId,
-          portionId: randomUUID(),
           cohortId: dish.id,
           ordinal: i + 1,
         }),

@@ -1,4 +1,5 @@
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { unboundLineCohort } from "./testing/portion-bill.js";
 import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -1622,6 +1623,7 @@ describe("what an item payment may name", () => {
         .where(eq(workingOrderLines.workingOrderId, billId));
       await tx.insert(workingOrderLines).values({
         ...dish!,
+        ...unboundLineCohort,
         id: randomUUID(),
         lineNo: Math.max(...lineNos.map((line) => line.lineNo)) + 1,
         parentLineId: dish!.id,

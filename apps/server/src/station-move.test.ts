@@ -1,3 +1,4 @@
+import { unboundLineCohort } from "./testing/portion-bill.js";
 import { setMadeHere } from "./testing/made-here-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import {
@@ -3410,7 +3411,7 @@ it("moves 6,000 dishes to a station and records every move", async () => {
     await insertInChunks(
       tx,
       workingOrderLines,
-      ids.slice(1).map((id, i) => ({ ...template!, id, lineNo: i + 2 })),
+      ids.slice(1).map((id, i) => ({ ...template!, ...unboundLineCohort, id, lineNo: i + 2 })),
     );
     await insertInChunks(
       tx,

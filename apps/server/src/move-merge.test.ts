@@ -10,8 +10,6 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   insertInChunks,
-  orderPortions,
-  workingLinePortions,
   orderPortionEvents,
   orderGroups,
   captureError,
@@ -3075,7 +3073,6 @@ it("moves 32,772 lines, preserves sent numbers and portions, then moves the comp
   );
   // Leave enough fired items past 32,766 after the held and made-here exclusions.
   const ids = [template!.id, ...Array.from({ length: 32771 }, () => randomUUID())];
-  const portionIds = ids.map(() => randomUUID());
   const number = (await billRow(v, source.tabId)).orderNumber;
   await inTx(v, async (tx) => {
     const [printed, unprinted] = await tx
@@ -3092,6 +3089,10 @@ it("moves 32,772 lines, preserves sent numbers and portions, then moves the comp
       ])
       .returning();
     await recordHeldPaper(tx, printed!.id, new Set([originalTicket!.stationId]));
+    await tx
+      .update(workingOrderLines)
+      .set({ cohortId: template!.id, cohortOrdinal: 1, wholePortion: true })
+      .where(eq(workingOrderLines.id, template!.id));
     await insertInChunks(
       tx,
       workingOrderLines,
@@ -3099,6 +3100,9 @@ it("moves 32,772 lines, preserves sent numbers and portions, then moves the comp
         ...template!,
         id,
         lineNo: index + 2,
+        cohortId: id,
+        cohortOrdinal: index + 2,
+        wholePortion: true,
         groupId: index === 0 ? printed!.id : index === 1 ? unprinted!.id : template!.groupId,
       })),
     );
@@ -3113,16 +3117,6 @@ it("moves 32,772 lines, preserves sent numbers and portions, then moves the comp
         madeHere: index === 2,
         sentOrderNumber: index === 3 ? 456 : null,
       })),
-    );
-    await insertInChunks(
-      tx,
-      orderPortions,
-      portionIds.map((id, i) => ({ id, cohortId: id, ordinal: i + 1, measured: false })),
-    );
-    await insertInChunks(
-      tx,
-      workingLinePortions,
-      ids.map((id, i) => ({ workingOrderLineId: id, portionId: portionIds[i]! })),
     );
   });
   const moved = await inTx(v, (tx) =>
@@ -3151,7 +3145,7 @@ it("moves 32,772 lines, preserves sent numbers and portions, then moves the comp
     .from(orderPortionEvents)
     .where(eq(orderPortionEvents.fromOrderId, source.tabId));
   expect(events).toHaveLength(32772);
-  expect(new Set(events.map((row) => row.portionId))).toEqual(new Set(portionIds));
+  expect(new Set(events.map((row) => row.lineId))).toEqual(new Set(ids));
   expect(events.every((row) => row.kind === "moved" && row.toOrderId === target.tabId)).toBe(true);
 
   const destinationTable = await v.table("Large destination");

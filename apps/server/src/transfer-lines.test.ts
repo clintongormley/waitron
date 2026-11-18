@@ -3,9 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   insertInChunks,
-  orderPortions,
   orderPortionEvents,
-  workingLinePortions,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -501,11 +499,9 @@ it("moves 32,767 selected lines in source order, with their prices, parent links
       })),
     );
     await tx
-      .insert(orderPortions)
-      .values({ id: portion, cohortId: randomUUID(), ordinal: 1, measured: false });
-    await tx
-      .insert(workingLinePortions)
-      .values({ workingOrderLineId: selected[0]!, portionId: portion });
+      .update(workingOrderLines)
+      .set({ cohortId: portion, cohortOrdinal: 1, wholePortion: true })
+      .where(eq(workingOrderLines.id, selected[0]!));
   });
   const moved = await asApp((tx) =>
     moveOrderLines(
@@ -544,6 +540,6 @@ it("moves 32,767 selected lines in source order, with their prices, parent links
     .from(orderPortionEvents)
     .where(eq(orderPortionEvents.fromOrderId, from));
   expect(
-    events.map((row) => ({ portionId: row.portionId, kind: row.kind, to: row.toOrderId })),
-  ).toEqual([{ portionId: portion, kind: "moved", to }]);
+    events.map((row) => ({ portionId: row.lineId, kind: row.kind, to: row.toOrderId })),
+  ).toEqual([{ portionId: selected[0]!, kind: "moved", to }]);
 });

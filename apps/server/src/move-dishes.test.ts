@@ -212,7 +212,12 @@ function bindings(lineIds: readonly string[]) {
     .all<{
       line: string;
       portion: string;
-    }>(sql`select working_order_line_id as line, portion_id as portion from working_line_portions`)
+      cohortId: string;
+      ordinal: number;
+    }>(
+      sql`select id as line, id as portion, cohort_id as cohortId, cohort_ordinal as ordinal
+      from working_order_lines where cohort_id is not null`,
+    )
     .filter((row) => lineIds.includes(row.line))
     .sort((a, b) => a.line.localeCompare(b.line));
 }
@@ -220,15 +225,17 @@ function bindings(lineIds: readonly string[]) {
 function movedEvents(portionIds: readonly string[]) {
   return v.db
     .all<{
-      portion_id: string;
+      line_id: string;
+      detail: string;
       kind: string;
       from_order_id: string;
       to_order_id: string | null;
       actor_id: string | null;
     }>(
-      sql`select portion_id, kind, from_order_id, to_order_id, actor_id from order_portion_events order by rowid`,
+      sql`select line_id, detail, kind, from_order_id, to_order_id, actor_id from order_portion_events order by rowid`,
     )
-    .filter((event) => portionIds.includes(event.portion_id));
+    .filter((event) => portionIds.includes(event.line_id))
+    .map(({ detail, ...event }) => ({ ...event, detail: JSON.parse(detail) }));
 }
 
 async function editsOf(...billIds: string[]): Promise<BillEditExpected[]> {
@@ -352,7 +359,8 @@ describe("A803 move dishes: the moves that succeed", () => {
     expect((await rowsOf(p.bill1)).map((row) => row.name)).toEqual(["Burger", "Cheese"]);
     expect(movedEvents([binding!.portion])).toEqual([
       {
-        portion_id: binding!.portion,
+        line_id: binding!.portion,
+        detail: { cohortId: binding!.cohortId, ordinal: binding!.ordinal },
         kind: "moved",
         from_order_id: p.bill1,
         to_order_id: p.bill2,

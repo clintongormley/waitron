@@ -1,14 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { adjustmentLines } from "@waitron/adjustments";
 import {
   insertInChunks,
   orderPortionEvents,
-  orderPortions,
-  saleLinePortions,
+  saleLineDishes,
   saleLines,
-  workingLinePortions,
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
@@ -18,18 +16,6 @@ import "./errors.js";
 import type { OrderLineIdentity, PricedTabRound } from "./working-order.js";
 
 type Row = PricedTabRound["rows"][number];
-
-/** A dish a priced round wrote, and the permanent portion it holds. */
-export interface PortionRef {
-  portionId: string;
-  lineId: string;
-  /** 1 to n within its pricing cohort. */
-  ordinal: number;
-  /** The portions expanded from one priced request line. */
-  pricingCohortId: string;
-  /** Sold by weight, in decimals or in a measure: one portion. */
-  measured: boolean;
-}
 
 /** Refuses adding `count` portions of one dish in one write. */
 export function refuseTooManyPortions(count: number): void {
@@ -48,10 +34,9 @@ export function expandPortionRows<C extends { workingOrderLineId: string }>(
   lineContexts: readonly C[],
   portionable: readonly boolean[],
   firstLineNo: number,
-): { rows: Row[]; lineContexts: C[]; portions: PortionRef[]; requestOfRow: number[] } {
+): { rows: Row[]; lineContexts: C[]; requestOfRow: number[] } {
   const out: Row[] = [];
   const contexts: C[] = [];
-  const portions: PortionRef[] = [];
   const requestOfRow: number[] = [];
   const extrasOf = new Map<string, { child: Row; context: C }[]>();
   rows.forEach((child, j) => {
@@ -75,16 +60,15 @@ export function expandPortionRows<C extends { workingOrderLineId: string }>(
     const cohort = randomUUID();
     for (let ordinal = 1; ordinal <= count; ordinal++) {
       const id = ordinal === 1 ? row.id! : randomUUID();
-      out.push({ ...share(row, count), id });
+      out.push({
+        ...share(row, count),
+        id,
+        cohortId: cohort,
+        cohortOrdinal: ordinal,
+        wholePortion: portionable[i] === true,
+      });
       contexts.push({ ...lineContexts[i]!, workingOrderLineId: id });
       requestOfRow.push(request);
-      portions.push({
-        portionId: randomUUID(),
-        lineId: id,
-        ordinal,
-        pricingCohortId: cohort,
-        measured: portionable[i] !== true,
-      });
       for (const { child, context } of extras) {
         const childId = ordinal === 1 ? child.id! : randomUUID();
         out.push({ ...share(child, count), id: childId, parentLineId: id });
@@ -96,21 +80,20 @@ export function expandPortionRows<C extends { workingOrderLineId: string }>(
   return {
     rows: out.map((row, i) => ({ ...row, lineNo: firstLineNo + i })),
     lineContexts: contexts,
-    portions,
     requestOfRow,
   };
 }
 
 /**
- * Each priced row's identity with the expanded lines and portions it stands for, as
+ * Each priced row's identity with its expanded lines and dish links, as
  * `projectPortionSale` reads them back: a dish row lists its portions' dish lines, an extra row that
- * extra's copy under each portion, and both list the dish's portions. `identities` and `requestRows`
+ * extra's copy under each dish, and both link to the dish lines. `identities` and `requestRows`
  * are aligned, as `priceOrderLines` returns them; `expanded` is `expandPortionRows` of `requestRows`.
  */
 export function portionIdentities(
   identities: readonly OrderLineIdentity[],
   requestRows: readonly Row[],
-  expanded: Pick<ReturnType<typeof expandPortionRows>, "rows" | "portions" | "requestOfRow">,
+  expanded: Pick<ReturnType<typeof expandPortionRows>, "rows" | "requestOfRow">,
 ): OrderLineIdentity[] {
   const indexOf = new Map(requestRows.map((row, i) => [row.id!, i]));
   const dishes: number[] = [];
@@ -125,17 +108,12 @@ export function portionIdentities(
     extras.push(i);
     extrasOf.set(parent, extras);
   });
-  const portionOf = new Map(
-    expanded.portions.map((portion) => [portion.lineId, portion.portionId]),
-  );
   const lineIds = requestRows.map((): string[] => []);
-  const portionIds = requestRows.map((): string[] => []);
   let extrasLeft: number[] = [];
   expanded.rows.forEach((row, k) => {
     const dish = dishes[expanded.requestOfRow[k]!]!;
     if (row.parentLineId == null) {
       lineIds[dish]!.push(row.id!);
-      portionIds[dish]!.push(portionOf.get(row.id!)!);
       extrasLeft = [...(extrasOf.get(dish) ?? [])];
     } else {
       lineIds[extrasLeft.shift()!]!.push(row.id!);
@@ -144,7 +122,7 @@ export function portionIdentities(
   return identities.map((identity, i) => {
     const parent = requestRows[i]!.parentLineId;
     const dish = parent == null ? i : indexOf.get(parent)!;
-    return { ...identity, lineIds: lineIds[i]!, portionIds: portionIds[dish]! };
+    return { ...identity, lineIds: lineIds[i]!, dishLineIds: lineIds[dish]! };
   });
 }
 
@@ -156,48 +134,6 @@ function share(row: Row, count: number): Row {
       `expandPortionRows: line ${row.id}'s total ${row.lineTotal} does not split into ${count} equal portions`,
     );
   return { ...row, quantity: row.quantity / count, lineTotal: row.lineTotal / count };
-}
-
-/**
- * Record each portion and bind it to its line. A line already holding the same portion is left as
- * it is; a line holding another portion is a bug and is refused.
- */
-export async function registerPortions(
-  tx: Transaction,
-  portions: readonly PortionRef[],
-): Promise<void> {
-  const bound = await readPortionBindings(
-    tx,
-    portions.map((portion) => portion.lineId),
-  );
-  const fresh = portions.filter((portion) => {
-    const held = bound.get(portion.lineId);
-    if (held?.portionId === portion.portionId) return false;
-    if (held !== undefined)
-      throw new Error(
-        `registerPortions: line ${portion.lineId} already holds portion ${held.portionId}, not ${portion.portionId}`,
-      );
-    return true;
-  });
-  if (fresh.length === 0) return;
-  await insertInChunks(
-    tx,
-    orderPortions,
-    fresh.map((portion) => ({
-      id: portion.portionId,
-      cohortId: portion.pricingCohortId,
-      ordinal: portion.ordinal,
-      measured: portion.measured,
-    })),
-  );
-  await insertInChunks(
-    tx,
-    workingLinePortions,
-    fresh.map((portion) => ({
-      workingOrderLineId: portion.lineId,
-      portionId: portion.portionId,
-    })),
-  );
 }
 
 /** For each `{ from, to }`, a copy or a part split off `from`, give `to` every row of what a comp or
@@ -237,20 +173,26 @@ export async function readPortionBindings(
   if (lineIds.length === 0) return new Map();
   const rows = await tx
     .select({
-      lineId: workingLinePortions.workingOrderLineId,
-      portionId: orderPortions.id,
-      cohortId: orderPortions.cohortId,
-      ordinal: orderPortions.ordinal,
+      lineId: workingOrderLines.id,
+      cohortId: workingOrderLines.cohortId,
+      ordinal: workingOrderLines.cohortOrdinal,
     })
-    .from(workingLinePortions)
-    .innerJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
+    .from(workingOrderLines)
     .where(
-      inArray(
-        workingLinePortions.workingOrderLineId,
-        sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+      and(
+        isNotNull(workingOrderLines.cohortId),
+        inArray(
+          workingOrderLines.id,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
       ),
     );
-  return new Map(rows.map((row) => [row.lineId, row]));
+  return new Map(
+    rows.map(({ lineId, cohortId, ordinal }) => [
+      lineId,
+      { lineId, cohortId: cohortId!, ordinal: ordinal! },
+    ]),
+  );
 }
 
 /** A raised dish's portion: its cohort and whether it is measured. */
@@ -279,27 +221,22 @@ export async function readGrowingPortions(
   lineIds: readonly string[],
 ): Promise<Map<string, GrowingPortion>> {
   if (lineIds.length === 0) return new Map();
-  const cohort = alias(orderPortions, "cohort");
+  const cohort = alias(workingOrderLines, "cohort");
   const rows = await tx
     .select({
-      lineId: workingLinePortions.workingOrderLineId,
-      cohortId: orderPortions.cohortId,
-      measured: orderPortions.measured,
-      lastOrdinal: sql<number>`max(${cohort.ordinal})`,
+      lineId: workingOrderLines.id,
+      cohortId: workingOrderLines.cohortId,
+      whole: workingOrderLines.wholePortion,
+      lastOrdinal: sql<number>`max(${cohort.cohortOrdinal})`,
     })
-    .from(workingLinePortions)
-    .innerJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
-    .innerJoin(cohort, eq(cohort.cohortId, orderPortions.cohortId))
-    .where(inArray(workingLinePortions.workingOrderLineId, [...lineIds]))
-    .groupBy(
-      workingLinePortions.workingOrderLineId,
-      orderPortions.cohortId,
-      orderPortions.measured,
-    );
+    .from(workingOrderLines)
+    .innerJoin(cohort, eq(cohort.cohortId, workingOrderLines.cohortId))
+    .where(inArray(workingOrderLines.id, [...lineIds]))
+    .groupBy(workingOrderLines.id, workingOrderLines.cohortId, workingOrderLines.wholePortion);
   return new Map(
     rows.map((row) => [
       row.lineId,
-      { cohortId: row.cohortId, measured: row.measured, nextOrdinal: row.lastOrdinal + 1 },
+      { cohortId: row.cohortId!, measured: row.whole === false, nextOrdinal: row.lastOrdinal + 1 },
     ]),
   );
 }
@@ -313,33 +250,19 @@ export async function readWholePortionLines(
   lineIds: readonly string[],
 ): Promise<Set<string>> {
   if (lineIds.length === 0) return new Set();
+  const dish = alias(workingOrderLines, "dish");
   const rows = await tx
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
     .innerJoin(
-      workingLinePortions,
-      eq(
-        workingLinePortions.workingOrderLineId,
-        sql`coalesce(${workingOrderLines.parentLineId}, ${workingOrderLines.id})`,
+      dish,
+      and(
+        eq(dish.id, sql`coalesce(${workingOrderLines.parentLineId}, ${workingOrderLines.id})`),
+        eq(dish.wholePortion, true),
       ),
-    )
-    .innerJoin(
-      orderPortions,
-      and(eq(orderPortions.id, workingLinePortions.portionId), eq(orderPortions.measured, false)),
     )
     .where(inArray(workingOrderLines.id, [...lineIds]));
   return new Set(rows.map((row) => row.id));
-}
-
-/** Unbind `lineIds` before their lines are deleted (the binding's key has no delete rule). */
-export async function deletePortionBindings(
-  tx: Transaction,
-  lineIds: readonly string[],
-): Promise<void> {
-  if (lineIds.length === 0) return;
-  await tx
-    .delete(workingLinePortions)
-    .where(inArray(workingLinePortions.workingOrderLineId, [...lineIds]));
 }
 
 export type PortionEvent =
@@ -359,7 +282,8 @@ export async function recordPortionEvents(
       ? []
       : [
           {
-            portionId: binding.portionId,
+            lineId,
+            detail: { cohortId: binding.cohortId, ordinal: binding.ordinal },
             kind: event.kind,
             fromOrderId: event.fromOrderId,
             toOrderId: event.kind === "moved" ? event.toOrderId : null,
@@ -370,10 +294,7 @@ export async function recordPortionEvents(
   await insertInChunks(tx, orderPortionEvents, rows);
 }
 
-/**
- * Before `lineIds` are deleted with their charge: record each held portion as cancelled and unbind
- * it. The registry row stays.
- */
+/** Record the dish identity before its line is deleted with the charge. */
 export async function cancelPortions(
   tx: Transaction,
   orderId: string,
@@ -381,19 +302,18 @@ export async function cancelPortions(
   actorId: string | null,
 ): Promise<void> {
   await recordPortionEvents(tx, lineIds, { kind: "cancelled", fromOrderId: orderId, actorId });
-  await deletePortionBindings(tx, lineIds);
 }
 
 /**
  * Link each row `recordSale` just filed to the portions it stands for. `identities[i]` is the row
  * filed as line `i + 1`, the number `grossRows` gives it and `saleLineRows` keeps.
  */
-export async function linkSalePortions(
+export async function linkSaleDishes(
   tx: Transaction,
   saleId: string,
-  identities: readonly Pick<OrderLineIdentity, "portionIds">[],
+  identities: readonly Pick<OrderLineIdentity, "dishLineIds">[],
 ): Promise<void> {
-  if (!identities.some((identity) => (identity.portionIds?.length ?? 0) > 0)) return;
+  if (!identities.some((identity) => (identity.dishLineIds?.length ?? 0) > 0)) return;
   const filed = await tx
     .select({ id: saleLines.id, lineNo: saleLines.lineNo })
     .from(saleLines)
@@ -402,8 +322,8 @@ export async function linkSalePortions(
   const links = identities.flatMap((identity, i) => {
     const saleLineId = rowOf.get(i + 1);
     if (saleLineId === undefined)
-      throw new Error(`linkSalePortions: sale ${saleId} filed no line ${i + 1}`);
-    return (identity.portionIds ?? []).map((portionId) => ({ saleLineId, portionId }));
+      throw new Error(`linkSaleDishes: sale ${saleId} filed no line ${i + 1}`);
+    return (identity.dishLineIds ?? []).map((dishLineId) => ({ saleLineId, dishLineId }));
   });
-  await insertInChunks(tx, saleLinePortions, links);
+  await insertInChunks(tx, saleLineDishes, links);
 }

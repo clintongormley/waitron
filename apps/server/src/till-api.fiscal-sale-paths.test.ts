@@ -959,12 +959,11 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
       const kitchenPortions = async (id: string) => {
         const rows = (
           await suite.db.execute<{ line: string; cohort: string; ordinal: number }>(
-            sql`select ti.working_order_line_id as line, p.cohort_id as cohort, p.ordinal as ordinal
+            sql`select ti.working_order_line_id as line, p.cohort_id as cohort, p.cohort_ordinal as ordinal
                 from ticket_items ti
-                join working_line_portions wlp on wlp.working_order_line_id = ti.working_order_line_id
-                join order_portions p on p.id = wlp.portion_id
-                where ti.working_order_line_id in (select id from working_order_lines where working_order_id = ${id})
-                order by p.ordinal`,
+                join working_order_lines p on p.id = ti.working_order_line_id
+                where p.working_order_id = ${id} and p.cohort_id is not null
+                order by p.cohort_ordinal`,
           )
         ).rows;
         return {
@@ -2916,11 +2915,10 @@ it("files an extras pick and an options answer through cash checkout and reprint
   ]);
   const portions = (
     await suite.db.execute<{ line: string; portion: string; cohort: string; ordinal: number }>(
-      sql`select wlp.working_order_line_id as line, p.id as portion, p.cohort_id as cohort,
-                 p.ordinal as ordinal
-          from working_line_portions wlp join order_portions p on p.id = wlp.portion_id
-          where wlp.working_order_line_id in (${dish1!.id}, ${dish2!.id})
-          order by p.ordinal`,
+      sql`select id as line, id as portion, cohort_id as cohort, cohort_ordinal as ordinal
+          from working_order_lines
+          where id in (${dish1!.id}, ${dish2!.id}) and cohort_id is not null
+          order by cohort_ordinal`,
     )
   ).rows;
   expect(portions.map((row) => [row.line, row.ordinal])).toEqual([
@@ -2931,9 +2929,9 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // Both filed rows, the dish's and the cheese's, stand for both portions.
   const links = (
     await suite.db.execute<{ line_no: number; portion: string }>(
-      sql`select sl.line_no as line_no, slp.portion_id as portion
-          from sale_line_portions slp join sale_lines sl on sl.id = slp.sale_line_id
-          order by sl.line_no, slp.portion_id`,
+      sql`select sl.line_no as line_no, slp.dish_line_id as portion
+          from sale_line_dishes slp join sale_lines sl on sl.id = slp.sale_line_id
+          order by sl.line_no, slp.dish_line_id`,
     )
   ).rows;
   const both = portions.map((row) => row.portion).sort();

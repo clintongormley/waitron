@@ -1,3 +1,4 @@
+import { addFixtureExtra } from "./testing/portion-bill.js";
 import { oneBill, observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
@@ -1357,9 +1358,11 @@ describe("A803 split: the route", () => {
     });
 
     it("an extra's id: 400 tab.transfer_modifier_line", async () => {
-      const { anna, second } = await annaWith("Tarta", "Caña");
-      const [cake, beer] = lineIdsOf(anna.tabId);
-      venue.db.run(sql`update working_order_lines set parent_line_id = ${cake} where id = ${beer}`);
+      const { anna, second } = await annaWith("Tarta");
+      const [cake] = lineIdsOf(anna.tabId);
+      const beer = await inTx(venue, (tx) =>
+        addFixtureExtra(tx, venue.cfg, anna.tabId, cake!, venue.offerFor("Caña")),
+      );
 
       const answer = await refusal(anna, second, beer!);
 

@@ -1,3 +1,4 @@
+import { unboundLineCohort } from "./testing/portion-bill.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
@@ -102,6 +103,7 @@ async function history(tx: Transaction, billId: string, count = 256, leaveOpen =
     workingOrderLines,
     ids.map((id) => ({
       ...line!,
+      ...unboundLineCohort,
       id: id.line,
       workingOrderId: id.bill,
       lineNo: 1,

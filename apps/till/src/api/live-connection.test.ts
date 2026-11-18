@@ -188,6 +188,14 @@ it("keeps floor and kitchen live on today events without adding them to timed re
   }
 });
 
+it("subscribes the bill draft to dish line changes without requesting retired resources", () => {
+  const { connection, reads } = setup();
+  connection.addInterests("billDraft", TILL_LIVE_TYPES.billDraft!);
+  expect(reads.at(-1)!.types).toContain("working_order_lines");
+  expect(reads.at(-1)!.types).not.toContain("working_line_portions");
+  expect(reads.at(-1)!.types).not.toContain("order_portions");
+});
+
 it("refreshes the menu group when a department's way of selling or the venue's region changes (A1522)", () => {
   expect(TILL_LIVE_TYPES.menu).toContain("departments");
   expect(TILL_LIVE_TYPES.menu).toContain("settings.venue");

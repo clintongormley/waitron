@@ -104,12 +104,10 @@ import {
   expandPortionRows,
   portionIdentities,
   refuseTooManyPortions,
-  linkSalePortions,
+  linkSaleDishes,
   readGrowingPortions,
   recordPortionEvents,
-  registerPortions,
   type GrowingPortion,
-  type PortionRef,
 } from "./order-portions.js";
 import {
   asksNoNewAnswer,
@@ -186,7 +184,6 @@ import {
   lineServiceCancellations,
   nowIso,
   orderGroups,
-  orderPortions,
   orderTableLabels,
   products,
   sales,
@@ -196,7 +193,6 @@ import {
   ticketItemMoves,
   partyTableLabels,
   withTransaction,
-  workingLinePortions,
   workingOrderLines,
   workingOrders,
   workingOrderStatus,
@@ -1178,8 +1174,6 @@ export async function readLockedLines(
     .select({ ...storedLineColumns, ...portionColumns })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
-    .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
   return groupedByPortion(rows, toStoredLines(rows));
@@ -1202,8 +1196,6 @@ async function readLockedLinesForIssuance(
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(parentProducts, parentJoin)
-    .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
-    .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
   const stored = toStoredLines(rows);
@@ -1218,16 +1210,14 @@ async function readLockedLinesForIssuance(
 }
 
 const portionColumns = {
-  portionId: orderPortions.id,
-  cohortId: orderPortions.cohortId,
-  ordinal: orderPortions.ordinal,
+  cohortId: workingOrderLines.cohortId,
+  ordinal: workingOrderLines.cohortOrdinal,
 };
 
 /** Bound portions grouped back into the rows they were priced as; an order with none is as stored. */
 function groupedByPortion(
   rows: readonly {
     id: string;
-    portionId: string | null;
     cohortId: string | null;
     ordinal: number | null;
   }[],
@@ -1235,11 +1225,10 @@ function groupedByPortion(
 ): StoredOrderLine[] {
   const bindings = new Map<string, PortionBinding>();
   for (const row of rows) {
-    if (row.portionId === null) continue;
+    if (row.cohortId === null) continue;
     bindings.set(row.id, {
       lineId: row.id,
-      portionId: row.portionId,
-      cohortId: row.cohortId!,
+      cohortId: row.cohortId,
       ordinal: row.ordinal!,
     });
   }
@@ -1300,8 +1289,8 @@ export interface OrderLineIdentity {
   /** Set on every row of an order holding a bound portion: every working line the row stands for,
    * `id` first. Absent on every row of an order holding none. */
   lineIds?: string[];
-  /** Beside `lineIds`: the portions the row stands for, a dish's or its extra's; empty on an unbound line. */
-  portionIds?: string[];
+  /** The dish lines the sale row represents. An extra links to its parents. Unbound rows have none. */
+  dishLineIds?: string[];
 }
 
 /** Gross lines together with, at the same index, the working-order line each was priced from. */
@@ -1624,7 +1613,6 @@ export async function createOpenOrder(
     workingOrderLines,
     lineRows.map((row) => ({ ...row, ...contextByLine.get(row.id!) })),
   );
-  await registerPortions(tx, expanded.portions);
 
   if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
   return { orderNumber, gross, identities, lineRows };
@@ -4633,7 +4621,6 @@ export async function readTabLines(tx: Transaction, tabId: string): Promise<TabL
 
 /** A bill's lines whatever its status, in line-number order, at their stored prices. */
 export async function readBillLines(tx: Transaction, tabId: string): Promise<TabLine[]> {
-  // `ticket_items` and `working_line_portions` are unique per line, so no join multiplies rows.
   const rows = await tx
     .select({
       lineNo: workingOrderLines.lineNo,
@@ -4670,7 +4657,7 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
       note: workingOrderLines.note,
       listId: workingOrderLines.extraListId,
       productParentId: products.parentId,
-      portionMeasured: orderPortions.measured,
+      wholePortion: workingOrderLines.wholePortion,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
@@ -4679,8 +4666,6 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
-    .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
   const contexts = await VENUE_SERVICE.listLineContexts(tx, tabId);
@@ -4767,7 +4752,7 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
       listId: row.listId,
       menuItemId: menuItemByLine.get(row.id) ?? null,
       parentProductId: sold.variantId === null ? null : sold.productId,
-      portion: row.portionMeasured === false,
+      portion: row.wholePortion === true,
     };
   });
 }
@@ -6797,7 +6782,6 @@ async function applyLineEdits(
   const keepReleased = new Set<string>();
   const keepRequestedAt = new Map<string, string>();
   const keepSentNumber = new Map<number, string[]>();
-  const newPortions: PortionRef[] = [];
   const copiedContexts: { from: string; to: string }[] = [];
   const copiedDishes: { from: string; to: string }[] = [];
   // Two raised portions of one cohort number their copies on from each other.
@@ -6934,16 +6918,10 @@ async function applyLineEdits(
           lineNo: ++nextLineNo,
           servedAt: null,
           servedQuantity: 0,
+          cohortOrdinal: ordinal++,
         });
         copiedContexts.push({ from: parent.id, to: dishId });
         copiedDishes.push({ from: parent.id, to: dishId });
-        newPortions.push({
-          portionId: randomUUID(),
-          lineId: dishId,
-          ordinal: ordinal++,
-          pricingCohortId: cohortId,
-          measured: false,
-        });
         for (const extra of storedExtras) {
           const id = randomUUID();
           inserted.push({
@@ -6999,7 +6977,6 @@ async function applyLineEdits(
     let group: { rows: WorkingOrderLineInsert[]; contexts: typeof priced.contexts } = priced;
     if (as.expand === true) {
       const out = expandPortionRows(priced.rows, priced.contexts, priced.portionable, 0);
-      newPortions.push(...out.portions);
       group = { rows: out.rows, contexts: out.lineContexts };
     }
     const groupId = as.joins === undefined ? (newGroups.get(as.kitchen) ?? null) : as.joins.groupId;
@@ -7077,7 +7054,6 @@ async function applyLineEdits(
       workingOrderLines,
       inserted.map((row) => ({ ...row, ...contextByLine.get(row.id!) })),
     );
-    await registerPortions(tx, newPortions);
     await carryLineReductions(tx, copiedContexts);
     await copyAllergyWorkingTicks(tx, copiedDishes);
   }
@@ -7833,7 +7809,7 @@ export async function issueUnpaidInvoice(
     operatorId,
     settlement: { kind: "deferred" },
   });
-  await linkSalePortions(tx, saleId, invoice.identities);
+  await linkSaleDishes(tx, saleId, invoice.identities);
   await linkBillCardPaymentsToSale(tx, id, saleId);
   await recordSaleReceiptFacts(
     tx,

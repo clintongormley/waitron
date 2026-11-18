@@ -23,10 +23,8 @@ import {
 import {
   kitchenStations,
   orderPortionEvents,
-  orderPortions,
   ticketItems,
   withTransaction,
-  workingLinePortions,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -695,36 +693,31 @@ export async function todayLine(
         listUnitPriceGross: workingOrderLines.listUnitPriceGross,
         groupId: workingOrderLines.groupId,
         servedAt: workingOrderLines.servedAt,
-        portionId: orderPortions.id,
-        cohortId: orderPortions.cohortId,
-        ordinal: orderPortions.ordinal,
+        cohortId: workingOrderLines.cohortId,
+        ordinal: workingOrderLines.cohortOrdinal,
       })
       .from(workingOrderLines)
-      .leftJoin(
-        workingLinePortions,
-        eq(workingLinePortions.workingOrderLineId, workingOrderLines.id),
-      )
-      .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
       .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(asc(workingOrderLines.lineNo)),
     left: await tx
       .select({
-        portionId: orderPortions.id,
-        cohortId: orderPortions.cohortId,
-        ordinal: orderPortions.ordinal,
+        id: orderPortionEvents.lineId,
+        detail: orderPortionEvents.detail,
       })
       .from(orderPortionEvents)
-      .innerJoin(orderPortions, eq(orderPortions.id, orderPortionEvents.portionId))
       .where(eq(orderPortionEvents.fromOrderId, billId)),
   }));
   const byId = new Map(rows.map((row) => [row.id, row]));
   // Every dish of each cohort that was on this bill, still here or since gone: its ordinal.
   const placed = new Map<string, Map<string, number>>();
-  for (const one of [...rows, ...left]) {
-    if (one.cohortId === null || one.portionId === null || one.ordinal === null) continue;
-    const dishes = placed.get(one.cohortId) ?? new Map<string, number>();
-    dishes.set(one.portionId, one.ordinal);
-    placed.set(one.cohortId, dishes);
+  for (const { id, cohortId, ordinal } of [
+    ...rows,
+    ...left.map(({ id, detail }) => ({ id, ...detail })),
+  ]) {
+    if (cohortId == null || ordinal == null) continue;
+    const dishes = placed.get(cohortId) ?? new Map<string, number>();
+    dishes.set(id, ordinal);
+    placed.set(cohortId, dishes);
   }
   const present = new Set(rows.map((row) => row.cohortId));
   for (const [cohort, dishes] of placed) {

@@ -1,13 +1,7 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import {
-  saleLinePortions,
-  saleLines,
-  sales,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { saleLineDishes, saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -270,9 +264,9 @@ describe("split-bill: pay each check files its own registro", () => {
 
     const waterLinks = await asApp((tx) =>
       tx
-        .select({ workingOrderId: sales.workingOrderId, portionId: saleLinePortions.portionId })
-        .from(saleLinePortions)
-        .innerJoin(saleLines, eq(saleLines.id, saleLinePortions.saleLineId))
+        .select({ workingOrderId: sales.workingOrderId, portionId: saleLineDishes.dishLineId })
+        .from(saleLineDishes)
+        .innerJoin(saleLines, eq(saleLines.id, saleLineDishes.saleLineId))
         .innerJoin(sales, eq(sales.id, saleLines.saleId))
         .where(eq(saleLines.vatRate, 2100)),
     );

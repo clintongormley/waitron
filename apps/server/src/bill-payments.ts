@@ -10,7 +10,7 @@ import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
-import { linkSalePortions } from "./order-portions.js";
+import { linkSaleDishes } from "./order-portions.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   billPaymentLines,
@@ -832,7 +832,7 @@ async function issueWhenFullyPaid(
       : { saleId: outstanding.saleId, fiscal: undefined };
   const { saleId, fiscal } = recorded;
   if (fiscal !== undefined) {
-    await linkSalePortions(tx, saleId, stored.identities);
+    await linkSaleDishes(tx, saleId, stored.identities);
     await recordSaleReceiptFacts(
       tx,
       { saleId, workingOrderId, counterparty: selected.sale.counterparty },
