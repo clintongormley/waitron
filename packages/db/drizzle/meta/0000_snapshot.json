@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a0bba500-2220-473c-a88d-c8e20a3a12aa",
+  "id": "1b6f389e-2497-4246-87cf-dfbb4a342282",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5451,6 +5451,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'receipt'"
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -5607,6 +5615,10 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "printers_kind_ck": {
+          "name": "printers_kind_ck",
+          "value": "\"printers\".\"kind\" in ('receipt', 'a4')"
+        },
         "printers_transport_ck": {
           "name": "printers_transport_ck",
           "value": "\"printers\".\"transport\" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll')"
