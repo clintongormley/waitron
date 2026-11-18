@@ -561,6 +561,46 @@ describe("saveSeasons", () => {
     expect(await restaurantWeek(v, v.winter)).toEqual(v.winterWeek);
   });
 
+  it("refuses deleting a season while another season's hours cross a waiting start, and deletes the one holding them", async () => {
+    const v = await autumnVenue();
+    // A waiting change of the day's start to 03:00, which Autumn's Saturday Dinner (20:00–05:45)
+    // crosses.
+    await scoped(async (tx) => {
+      await tx
+        .update(businessDaySettingsTable)
+        .set({ revision: 2 })
+        .where(eq(businessDaySettingsTable.module, "business_day"));
+      await tx.insert(dayCutoverChanges).values({
+        effectiveBusinessDay: "2030-10-20",
+        dayCutover: "03:00:00",
+      });
+    });
+    const weeksBefore = await everyWeek();
+    expect(await refusal(change({ delete: [v.winter] }, 2))).toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            seasonId: v.autumn,
+            periodId: v.dinner,
+            weekday: SATURDAY,
+            startsAt: "20:00",
+            endsAt: "05:45",
+          }),
+        ],
+      },
+    });
+    expect(await seasonsOf()).toEqual(THREE);
+    expect(await everyWeek()).toEqual(weeksBefore);
+    await change({ delete: [v.autumn] }, 2);
+    expect(await seasonsOf()).toEqual(THREE.slice(1));
+    expect(await db.select().from(openingHours).where(eq(openingHours.seasonId, v.autumn))).toEqual(
+      [],
+    );
+  });
+
   it("refuses deleting every season", async () => {
     await newVenue("Lone season, saveSeasons");
     const [only] = await db

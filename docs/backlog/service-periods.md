@@ -99,9 +99,6 @@ code, not run again here.
   `special_day.invalid` (reason `order`): `saveSpecialDay` parses one-off dates under the starts
   already in force (`settledClock`). Task 11 left it unchanged, per its implementer, read in the
   code.
-- **A871.** Branches no test pins in A788's hours writers: an unchanged week resubmitted beside a
-  stored clash (`menu-timetable.ts`), a season delete while a change waits (`seasons.ts`), and an
-  all-day range or two waiting changes in the menu-week check.
 - **A872, repeated work.** A preview or a Save (`apps/server/src/business-day-start.ts`) works the
   plan out with `planBusinessDayStart`, and `clockTransitionAt`
   (`apps/server/src/business-day-changeover.ts`) works it out again, then once more for each of up
