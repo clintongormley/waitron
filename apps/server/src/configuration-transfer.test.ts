@@ -3602,7 +3602,7 @@ it("transfers a printer's pick-up flags, leaves the holder behind and refuses an
   ]);
 });
 
-it("transfers a device profile's receipt and payment-slip printer lists, in order", async () => {
+it("remaps ordered profile printer lists and defaults, leaving a deleted printer behind (M4)", async () => {
   const source = await applyVenue(planVenue(venue("B13572471"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -3612,13 +3612,14 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
     const added = await tx
       .insert(printers)
       .values(
-        ["Bar printer", "Back printer", "Slip printer"].map((name, index) => ({
+        ["Bar printer", "Back printer", "Slip printer", "Old printer"].map((name, index) => ({
           name,
           transport: "network_tcp" as const,
           host: `10.0.1.${index + 1}`,
         })),
       )
       .returning({ id: printers.id });
+    const office = await insertA4Printer(tx, { name: "Back office", host: "10.0.1.12" });
     const [profile] = await seedDeviceProfiles(tx, {
       name: "Counter till",
       formFactor: "tablet-landscape",
@@ -3626,8 +3627,17 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
     await setProfilePrinterLists(tx, profile!.id, {
       ...emptyPrinterLists(),
       receiptPrinterIds: [added[1]!.id, added[0]!.id],
-      paymentSlipPrinterIds: [added[2]!.id],
+      receiptPrinterDefaultId: added[0]!.id,
+      paymentSlipPrinterIds: [added[2]!.id, added[3]!.id],
+      paymentSlipPrinterDefaultId: added[3]!.id,
+      invoicePrinterIds: [added[0]!.id, office],
+      invoicePrinterDefaultId: office,
     });
+    // Leave the deleted printer on the saved list to exercise the export's pruning.
+    await tx
+      .update(printers)
+      .set({ active: false, deletedAt: "2026-10-04T09:00:00.000Z" })
+      .where(eq(printers.id, added[3]!.id));
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -3650,6 +3660,7 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
       .select({ id: deviceProfiles.id })
       .from(deviceProfiles)
       .where(eq(deviceProfiles.name, "Counter till"));
+    // The invoice list includes both receipt and office printers.
     const names = new Map(
       (await tx.select({ id: printers.id, name: printers.name }).from(printers)).map((row) => [
         row.id,
@@ -3659,12 +3670,20 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
     const lists = await readProfilePrinterLists(tx, profile!.id);
     return {
       receipt: lists.receiptPrinterIds.map((id) => names.get(id)),
+      receiptDefault: names.get(lists.receiptPrinterDefaultId!),
       paymentSlip: lists.paymentSlipPrinterIds.map((id) => names.get(id)),
+      paymentSlipDefault: lists.paymentSlipPrinterDefaultId,
+      invoice: lists.invoicePrinterIds.map((id) => names.get(id)),
+      invoiceDefault: names.get(lists.invoicePrinterDefaultId!),
     };
   });
   expect(imported).toEqual({
     receipt: ["Back printer", "Bar printer"],
+    receiptDefault: "Bar printer",
     paymentSlip: ["Slip printer"],
+    paymentSlipDefault: null,
+    invoice: ["Bar printer", "Back office"],
+    invoiceDefault: "Back office",
   });
 });
 
