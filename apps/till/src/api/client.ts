@@ -457,7 +457,7 @@ export interface ZoneOffers {
   defaultMenuId: string | null;
   menus: TillZoneMenu[];
   offers: TillMenuOffer[];
-  setMenus: readonly ServedSetMenu[];
+  setMenus?: readonly ServedSetMenu[];
   zones?: ServiceZoneSummary[];
   liveFields?: string;
 }

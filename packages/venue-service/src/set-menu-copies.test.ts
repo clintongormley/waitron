@@ -78,13 +78,15 @@ it("applies the same live availability and course rule to a recorded copy", () =
     });
   }));
 
-it("refuses a version that does not hold the requested set menu", () =>
-  scenario(async (tx, f) => {
-    const { versionId } = await f.publish(f.dinner);
-    await expect(serveRecordedSetMenus(tx, [{ versionId, menuId: f.daily }])).rejects.toMatchObject(
-      {
+it.each(["without copies", "with another copy"] as const)(
+  "refuses a set menu missing from a version %s",
+  (fixture) =>
+    scenario(async (tx, f) => {
+      const { versionId } = await f.publish(fixture === "without copies" ? f.dinner : f.lunch);
+      const menuId = fixture === "without copies" ? f.daily : f.dinner;
+      await expect(serveRecordedSetMenus(tx, [{ versionId, menuId }])).rejects.toMatchObject({
         code: "set_menu.not_found",
-        params: { menuId: f.daily },
-      },
-    );
-  }));
+        params: { menuId },
+      });
+    }),
+);

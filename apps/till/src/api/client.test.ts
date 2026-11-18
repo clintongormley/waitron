@@ -889,7 +889,6 @@ describe("TillApi", () => {
       variants: [],
     };
     const payload: ZoneOffers = {
-      setMenus: [],
       service: {
         open: true,
         zoneOpen: true,

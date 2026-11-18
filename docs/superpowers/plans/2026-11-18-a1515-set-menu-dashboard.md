@@ -1176,9 +1176,11 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   not see set-menu dishes, or a surcharge would stand in for the full menu's price. Add an option
   on `readLiveState` and `applyLiveFields` only, under which both also read those offers, keyed by
   menu-item id. Both reads then fold the copies' dishes into the same fingerprint. Never wrap a copy
-  as a document of its own: two copies of one set menu would overwrite each other. A dish only a
-  set menu lists then changes the state when it sells out. A changed copy reaches the till as a new
-  full-menu version, which the state already carries.
+  as a document of its own: two copies of one set menu would overwrite each other. The fingerprint
+  includes availability for its dishes and variants, including dishes also sold on their own. If
+  one sells out, the till reloads the copies (watcher, 19 November 2026, 00:41 in Lane D's
+  questions.md). The poll reports unavailable extras and option labels for the copies too.
+  A changed copy reaches the till as a new full-menu version, which the state already carries.
 - When `listZoneOffers` is called with `menuItemIds` (every draft and line write does,
   `order-drafts.ts:1434`, `working-order.ts:558,570`), it serves no copies and answers
   `setMenus: []`; piece 2 reads a bill's copies through Task 6b's `serveRecordedSetMenus`.

@@ -85,7 +85,6 @@ const floorZones: FloorZone[] = zones.map((zone) => ({
   layoutDue: null,
 }));
 const zoneOffers = (id: string): ZoneOffers => ({
-  setMenus: [],
   service: {
     open: true,
     zoneOpen: true,

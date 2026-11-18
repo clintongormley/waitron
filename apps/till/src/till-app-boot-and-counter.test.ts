@@ -115,7 +115,6 @@ function zoneOffers(
   defaultMenuId: string | null = menu.menus.find((menu) => menu.isDefault)?.id ?? null,
 ): ZoneOffers {
   const body: ZoneOffers = {
-    setMenus: [],
     service: {
       open: true,
       zoneOpen: true,

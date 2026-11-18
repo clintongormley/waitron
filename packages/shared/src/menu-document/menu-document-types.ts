@@ -183,7 +183,7 @@ export interface LiveOffer extends Omit<MenuOffer, "ordering" | "combined">, Pub
 }
 
 export type ServedSetMenuOffer = LiveOffer & {
-  /** The counting course in this published copy. The live course controls sending. */
+  /** The counting course in this published copy. The served courseId controls sending. */
   countsAsCourseId: string | null;
   variantCountsAs: Record<string, string>;
 };

@@ -343,11 +343,13 @@ it("selects the newest copy on sale even when a later copy is held for another p
       ]),
     );
     const republished = await f.publish();
-    expect((await served(tx, f)).setMenus).toMatchObject([
-      {
-        versionIds: [republished.versionId, dinner.versionId].sort(),
-        orderable: true,
-        newestOnSale: true,
-      },
-    ]);
+    for (const at of [f.midday, f.evening]) {
+      expect((await listZoneOffers(tx, f.zoneId, { at })).setMenus).toMatchObject([
+        {
+          versionIds: [republished.versionId, dinner.versionId].sort(),
+          orderable: true,
+          newestOnSale: true,
+        },
+      ]);
+    }
   }));

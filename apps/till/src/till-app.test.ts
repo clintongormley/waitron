@@ -417,7 +417,6 @@ function fixtureOffers(
     courseId: product.courseId ?? null,
   }));
   return {
-    setMenus: [],
     service: {
       open: true,
       zoneOpen: true,
@@ -8982,7 +8981,6 @@ describe("till-app", () => {
       },
     };
     const zoneOffers = {
-      setMenus: [],
       service: {
         open: true,
         zoneOpen: true,

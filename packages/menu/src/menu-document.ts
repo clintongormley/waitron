@@ -716,7 +716,7 @@ function liveFieldsDigest({
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([id, row]) => [id, row.courseId, row.category, productDeclarationValues(row)]);
   const ordinary = missingLists.size === 0 ? rows : [rows, [...missingLists].sort()];
-  // The till can apply ordinary availability from the poll; copied dishes also need a reload.
+  // Reload copies when any dish they hold changes availability, including shared offers.
   const snapshot =
     setMenuProductIds.size === 0
       ? ordinary
