@@ -14,9 +14,12 @@ import {
 } from "./columns.js";
 import { persons } from "./identity/persons.js";
 import { printAgents } from "./print-agents.js";
-import { printJobs } from "./print-jobs.js";
+import { printHoldCodes, printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
 import { sales } from "./sales.js";
+
+export { printHoldCodes as a4HoldCodes };
+export type A4HoldCode = (typeof printHoldCodes)[number];
 
 export const invoiceDeliveryMedium = enumType(["email", "a4", "receipt"]);
 export const invoiceDeliveryDesignation = enumType(["original", "duplicate"]);
@@ -41,19 +44,6 @@ export const a4FailureCodes = [
   "document_unavailable",
 ] as const;
 export type A4FailureCode = (typeof a4FailureCodes)[number];
-
-/** Why the printer is holding an A4 job it has not finished, as its agent last renewed it. */
-export const a4HoldCodes = [
-  "paper_jam",
-  "cover_open",
-  "paper_out",
-  "tray_missing",
-  "ink_or_toner_out",
-  "output_full",
-  "paused",
-  "stopped",
-] as const;
-export type A4HoldCode = (typeof a4HoldCodes)[number];
 
 export const invoiceDeliveries = table(
   "invoice_deliveries",

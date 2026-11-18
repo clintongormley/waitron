@@ -20,6 +20,17 @@ import { printers } from "./printers.js";
 import { sales } from "./sales.js";
 import { tenderRefunds } from "./tender-refunds.js";
 
+/** Why the printer is holding an A4 job it has not finished, as its agent last renewed it. */
+export const printHoldCodes = [
+  "paper_jam",
+  "cover_open",
+  "paper_out",
+  "tray_missing",
+  "ink_or_toner_out",
+  "output_full",
+  "paused",
+  "stopped",
+] as const;
 export const printJobStatus = enumType(["queued", "printing", "done", "failed"]);
 
 /**
@@ -40,11 +51,10 @@ export const printJobs = table(
     /* v8 ignore start */
     claimedBy: id("claimed_by").references(() => printAgents.id),
     /* v8 ignore stop */
-    // Opaque ESC/POS bytes. A read through this column yields a `Uint8Array`; `claimPrintJobs`
-    // (packages/printing/src/runtime.ts) reads it with raw SQL and gets the driver's value instead.
-    payload: binary("payload").notNull(),
+    // Office pages are rendered on request. Thermal jobs carry their ESC/POS bytes.
+    payload: binary("payload"),
     // Drawer pulses share transport delivery but are claimed once and cannot be resent.
-    kind: label("kind").$type<"document" | "drawer">().notNull().default("document"),
+    kind: label("kind").$type<"document" | "drawer" | "a4">().notNull().default("document"),
     // Null for other documents and drawer jobs; false for a receipt original, true for a copy.
     receiptCopy: flag("receipt_copy"),
     // Staff confirmation of customer handover, separate from the agent's delivered_at stamp.
@@ -61,6 +71,7 @@ export const printJobs = table(
     claimedAt: tsString("claimed_at"),
     // An invoice receipt retains its hashed token so a late report can still be authenticated.
     claimTokenHash: label("claim_token_hash"),
+    printerHold: enumType(printHoldCodes)("printer_hold"),
     deliveredAt: tsString("delivered_at"),
     // The job a resend copies, always the first of its chain: a resend of a resend names the same
     // job (`resendPrintJob`, packages/printing/src/outbox.ts).
@@ -79,8 +90,14 @@ export const printJobs = table(
     index("print_jobs_printer_kind_idx").on(t.printerId, t.kind),
     index("print_jobs_resend_of_idx").on(t.resendOf),
     index("print_jobs_sale_id_idx").on(t.saleId),
-    check("print_jobs_kind_ck", sql`${t.kind} in ('document', 'drawer')`),
+    check("print_jobs_kind_ck", sql`${t.kind} in ('document', 'drawer', 'a4')`),
     check("print_jobs_status_ck", enumCheck(t.status)),
+    check("print_jobs_payload_ck", sql`(${t.kind} = 'a4') = (${t.payload} is null)`),
+    check("print_jobs_a4_sale_ck", sql`${t.kind} <> 'a4' or ${t.saleId} is not null`),
+    check(
+      "print_jobs_printer_hold_ck",
+      sql`${t.printerHold} is null or (${t.kind} = 'a4' and ${enumCheck(t.printerHold)})`,
+    ),
     check(
       "print_jobs_handover_pair_ck",
       sql`(${t.handedOverBy} is null) = (${t.handedOverAt} is null)`,

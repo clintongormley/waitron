@@ -884,7 +884,7 @@ CREATE TABLE `print_jobs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`printer_id` text NOT NULL,
 	`claimed_by` text,
-	`payload` blob NOT NULL,
+	`payload` blob,
 	`kind` text DEFAULT 'document' NOT NULL,
 	`receipt_copy` integer,
 	`handed_over_by` text,
@@ -896,6 +896,7 @@ CREATE TABLE `print_jobs` (
 	`created_at` text NOT NULL,
 	`claimed_at` text,
 	`claim_token_hash` text,
+	`printer_hold` text,
 	`delivered_at` text,
 	`resend_of` text,
 	`sale_id` text,
@@ -906,8 +907,11 @@ CREATE TABLE `print_jobs` (
 	FOREIGN KEY (`resend_of`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`tender_refund_id`) REFERENCES `tender_refunds`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "print_jobs_kind_ck" CHECK("print_jobs"."kind" in ('document', 'drawer')),
+	CONSTRAINT "print_jobs_kind_ck" CHECK("print_jobs"."kind" in ('document', 'drawer', 'a4')),
 	CONSTRAINT "print_jobs_status_ck" CHECK("print_jobs"."status" in ('queued', 'printing', 'done', 'failed')),
+	CONSTRAINT "print_jobs_payload_ck" CHECK(("print_jobs"."kind" = 'a4') = ("print_jobs"."payload" is null)),
+	CONSTRAINT "print_jobs_a4_sale_ck" CHECK("print_jobs"."kind" <> 'a4' or "print_jobs"."sale_id" is not null),
+	CONSTRAINT "print_jobs_printer_hold_ck" CHECK("print_jobs"."printer_hold" is null or ("print_jobs"."kind" = 'a4' and "print_jobs"."printer_hold" in ('paper_jam', 'cover_open', 'paper_out', 'tray_missing', 'ink_or_toner_out', 'output_full', 'paused', 'stopped'))),
 	CONSTRAINT "print_jobs_handover_pair_ck" CHECK(("print_jobs"."handed_over_by" is null) = ("print_jobs"."handed_over_at" is null))
 );
 --> statement-breakpoint
