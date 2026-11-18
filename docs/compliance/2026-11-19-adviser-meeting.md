@@ -1,12 +1,12 @@
 # Adviser meeting, Thursday 19 November 2026
 
-Written 15 November 2026 for the owner; last updated 17 November. Nothing here has been sent.
+Written 15 November 2026 for the owner; last updated 18 November. Nothing here has been sent.
 
 **How to use it.** Part 1 is in English, for you. Part 2 asks the same questions in Spanish, for the
 tax adviser, and can be printed on its own. Each question can be read without the others. Questions
 1 and 2 need the adviser's judgement, questions 3 to 14 are confirmations, questions 15 to 21 follow
-up the adviser's answers of 15 November, questions 22 and 23 ask about what is still missing, and questions 24 and 25, added on 17 November,
-ask about duplicates and about separate tickets after a table's ticket.
+up the adviser's answers of 15 November, questions 22 and 23 ask about what is still missing, questions 24 and 25, added on 17 November,
+ask about duplicates and about separate tickets after a table's ticket, and question 26, added on 18 November, asks what a set menu's ticket and invoice must list.
 
 **Where the questions come from.** The adviser answered S1 to S16 and R1 to R6 of the October
 [shortened list](asesor-questions.md#the-shortened-list-2026-10-09) on 15 November; what those
@@ -21,7 +21,9 @@ AEAT's developer FAQ v1.3 in [sources/](sources/)). The downloads are not commit
 in « » is ours, and "where applicable" in question 19 is the adviser's own English. The annex is an
 example printed by the declaration's own code, not a law. Question 24's two quotations come from
 the BOE text of RD 1619/2012 art. 14 quoted in [verifactu-findings.md](verifactu-findings.md) §15.1,
-fetched 12 September 2026, and were not run through the script.
+fetched 12 September 2026, and were not run through the script. Question 26's quotations of RD 1619/2012
+and LIVA were matched by a script against the BOE's consolidated texts on 18 November 2026; its quotation of
+V0858-11 comes from the copy inside V0237-25 published by fiscal-impuestos.com, not from the DGT's database.
 
 ## Part 1: English (for the owner)
 
@@ -551,6 +553,43 @@ for each guest, never a cancellation record, because the sale happened (answer 1
 
 Yes / No / Note: ____________________________________________
 
+**26. What a set menu's ticket and full invoice must list (follows answer 1.10).**
+
+*The situation.* Waitron is adding set menus eaten at the venue. The menu has one price; the dishes
+it covers go to the kitchen and are recorded at €0.00. A dish may carry a supplement, and a covered
+dish may have a paid extra. The record sent to AEAT holds only totals per VAT rate, so it is the same
+whichever lines are printed.
+
+*What Waitron proposes.*
+
+- The ticket and the full invoice list each menu with its price, and every supplement and paid
+  extra. A covered dish with nothing to pay is not listed. A simplified invoice requires «La
+  identificación del tipo de bienes entregados o de servicios prestados» (RD 1619/2012 art. 7.1.e).
+  A full invoice requires «Descripción de las operaciones, consignándose todos los datos necesarios
+  para la determinación de la base imponible» (art. 6.1.f), and the DGT asks for «una descripción
+  genérica de los bienes o servicios que constituyan el objeto de cada operación» with enough detail
+  to determine «su naturaleza, cuantía y tipo impositivo aplicable» (V0858-11). We found no ruling on
+  set menus.
+- A menu eaten at the venue is one restaurant service at one rate, drinks included: «el suministro
+  de comidas y bebidas para consumir en el acto» (LIVA 91.Uno.2.2.º). A covered item therefore takes
+  the menu's rate while it is covered.
+
+*Example.* A €14.00 menu at 10% covers soup, sirloin and a glass of wine. The sirloin carries a €5.00
+supplement and the soup a €1.50 portion of bread. The ticket shows the menu 14,00, Solomillo +5,00, and
+Sopa with Pan 1,50 beneath it: €20.50 in all. The wine is not listed.
+
+*We ask:*
+
+- (a) May covered dishes be left off the simplified invoice?
+- (b) May they be left off the full invoice? If not, is listing them under the menu without a price
+  enough?
+- (c) Answer 1.10 shares the price with a free item that carries another rate (LIVA 79.Dos). Does that
+  apply inside a menu eaten at the venue, or is the proposal above right? And if a menu lets the guest
+  choose something the venue really sells at another rate, for example a closed bottle to take home
+  at 21%, must the menu's price then be shared between the two rates?
+
+Yes / No / Note: ____________________________________________
+
 ## Part 2: Español (para el asesor fiscal)
 
 Preguntas para la reunión del jueves 19 de noviembre de 2026. Waitron es un software de punto de
@@ -559,7 +598,8 @@ en el propio local o en Waitron Cloud, cuyo reloj fecha las facturas. Cada pregu
 separado. Las preguntas 1 y 2 requieren su criterio; de la 3 a la 14 son confirmaciones; de la 15 a
 la 21 parten de sus respuestas del 15 de noviembre a las S1 a S16 y R1 a R6 (sus apartados 1.1 a
 1.16 y 2.1 a 2.6), que le agradecemos; la 22 y la 23 tratan lo que aún falta, y la 24 y la 25, añadidas el
-17 de noviembre, tratan de los duplicados y de los tiques separados tras el tique de la mesa.
+17 de noviembre, tratan de los duplicados y de los tiques separados tras el tique de la mesa, y la 26, añadida el 18 de
+noviembre, trata de lo que deben detallar el tique y la factura de un menú.
 
 ### Requieren su criterio
 
@@ -1111,6 +1151,42 @@ tique nuevo para cada comensal, nunca un registro de anulación, porque la venta
 respuesta 1.7).
 
 *Preguntamos:* ¿Es correcto?
+
+Sí / No / Nota: ____________________________________________
+
+**26. Qué deben detallar el tique y la factura completa de un menú (a partir de su respuesta 1.10).**
+
+*Situación.* Waitron va a incorporar menús consumidos en el local. El menú tiene un precio único; los
+platos que incluye se envían a cocina y se registran a 0,00 €. Un plato puede llevar un suplemento, y
+un plato incluido puede tener un extra de pago. El registro que se remite a la AEAT solo contiene
+totales por tipo de IVA, de modo que no cambia sean cuales sean las líneas impresas.
+
+*Qué propone Waitron.*
+
+- El tique y la factura completa detallan cada menú con su precio, y todos los suplementos y extras
+  de pago. Un plato incluido sin nada que pagar no se detalla. La factura simplificada exige «La
+  identificación del tipo de bienes entregados o de servicios prestados» (RD 1619/2012, art. 7.1.e).
+  La factura completa exige «Descripción de las operaciones, consignándose todos los datos necesarios
+  para la determinación de la base imponible» (art. 6.1.f), y la DGT pide «una descripción genérica
+  de los bienes o servicios que constituyan el objeto de cada operación» con detalle suficiente para
+  determinar «su naturaleza, cuantía y tipo impositivo aplicable» (V0858-11). No hemos encontrado
+  ninguna consulta sobre menús.
+- Un menú consumido en el local es un único servicio de restauración a un solo tipo, bebidas
+  incluidas: «el suministro de comidas y bebidas para consumir en el acto» (LIVA 91.Uno.2.2.º). Por
+  eso, mientras esté incluido, cada producto toma el tipo del menú.
+
+*Ejemplo.* Un menú de 14,00 € al 10 % incluye sopa, solomillo y una copa de vino. El solomillo lleva
+un suplemento de 5,00 € y la sopa una ración de pan de 1,50 €. El tique muestra el menú 14,00, Solomillo
++5,00, y Sopa con Pan 1,50 debajo: 20,50 € en total. El vino no se detalla.
+
+*Preguntamos:*
+
+- (a) ¿Pueden omitirse los platos incluidos en la factura simplificada?
+- (b) ¿Pueden omitirse en la factura completa? Si no, ¿basta con detallarlos bajo el menú sin precio?
+- (c) Su respuesta 1.10 reparte el precio con un artículo gratuito de otro tipo (LIVA 79.Dos). ¿Se
+  aplica dentro de un menú consumido en el local, o es correcta la propuesta anterior? Y si el menú
+  permite elegir algo que el local vende realmente a otro tipo, por ejemplo una botella cerrada para
+  llevar al 21 %, ¿debe repartirse entonces el precio del menú entre ambos tipos?
 
 Sí / No / Nota: ____________________________________________
 
