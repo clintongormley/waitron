@@ -30,7 +30,9 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 
 let venue: BillVenue;
@@ -663,7 +665,12 @@ it("ignores a forged slip request without the print capability", async () => {
 describe("the Payment slip button on a paid sale", () => {
   const duplicate = receiptLabelsFor("es-ES").duplicate;
 
-  const take = async (billId: string, amount: string, entry: "reader" | "manual" = "reader") => {
+  const take = async (
+    billId: string,
+    amount: string,
+    entry: "reader" | "manual" = "reader",
+    extra: Record<string, string> = {},
+  ) => {
     const paid = await send(
       venue.app,
       venue.cookie,
@@ -677,6 +684,7 @@ describe("the Payment slip button on a paid sale", () => {
         entry,
         applied: amount,
         tip: "0.00",
+        ...extra,
       },
     );
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
@@ -904,7 +912,32 @@ describe("the Payment slip button on a paid sale", () => {
       expect((await press(billId, payment.id)).printed).toEqual([]);
   });
 
-  it("offers nothing for a sale paid in cash", async () => {
+  /** A captured card row tied to the sale, which no payment path writes for these sales. */
+  const strayCapture = async (workingOrderId: string, billPaymentId: string | null = null) => {
+    const id = randomUUID();
+    const [sale] = await venue.db
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, workingOrderId));
+    await withTransaction(venue.db, (tx) =>
+      tx.insert(payments).values({
+        id,
+        workingOrderId,
+        saleId: sale!.id,
+        billPaymentId,
+        source: venue.cfg.origin.source,
+        deviceId: venue.cfg.origin.deviceId,
+        provider: "fake",
+        paymentRef: randomUUID(),
+        amount: 1000,
+        state: "captured",
+        settledAt: new Date().toISOString(),
+      }),
+    );
+    return id;
+  };
+
+  it("offers and prints nothing for a sale paid in cash", async () => {
     const billId = await tabWith(venue, "Red wine bottle");
     const paid = await send(
       venue.app,
@@ -923,11 +956,21 @@ describe("the Payment slip button on a paid sale", () => {
     );
     expect(paid.status).toBe(200);
     expect(await offered(billId)).toEqual([]);
+
+    const stray = await strayCapture(billId, (paid.json as { payment: { id: string } }).payment.id);
+    expect(await offered(billId)).toEqual([]);
+    const { answer, printed } = await press(billId, stray);
+    expect(answer.status).toBe(200);
+    expect(printed).toEqual([]);
   });
 
-  it("offers nothing and prints nothing for a hand-keyed card", async () => {
+  it.each<[string, Record<string, string>]>([
+    ["with no reference", {}],
+    ["with an operation number", { externalRef: "OP-400" }],
+    ["on an outside machine", { externalProvider: "other", externalMachine: "Bank counter" }],
+  ])("offers nothing and prints nothing for a hand-keyed card %s", async (_, extra) => {
     const billId = await tabWith(venue, "Red wine bottle");
-    await take(billId, "30.00", "manual");
+    await take(billId, "30.00", "manual", extra);
     const [keyed] = await venue.db
       .select()
       .from(payments)
@@ -936,6 +979,90 @@ describe("the Payment slip button on a paid sale", () => {
     const { answer, printed } = await press(billId, keyed!.id);
     expect(answer.status).toBe(200);
     expect(printed).toEqual([]);
+  });
+
+  it("offers only the reader card of a sale also paid by cash and a hand-keyed card", async () => {
+    const billId = await tabWith(venue, "Red wine bottle");
+    const cash = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "5.00",
+        method: "cash",
+        tendered: "5.00",
+        applied: "5.00",
+        tip: "0.00",
+      },
+    );
+    expect(cash.status).toBe(200);
+    await take(billId, "5.00", "manual", { externalRef: "OP-400" });
+    await take(billId, "20.00");
+    const rows = await venue.db.select().from(payments).where(eq(payments.workingOrderId, billId));
+    const reader = rows.find((row) => row.provider !== "manual")!;
+    expect(await offered(billId)).toEqual([{ id: reader.id, amount: "20.00", last4: null }]);
+  });
+
+  describe("on a sale with no card money", () => {
+    const issuedUnpaid = async () => {
+      const id = await tabWith(venue, "Red wine bottle");
+      await issueOrderInvoice(
+        { ...venue, admission: testTradingAdmission() },
+        venue.cfg,
+        id,
+        venue.operatorId,
+      );
+      return id;
+    };
+
+    const closedDeferred = async () => {
+      const { zoneId } = await withTransaction(venue.db, (tx) =>
+        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      );
+      const kit = deferredCloseKit(venue, zoneId);
+      const id = await kit.counterOrder("open");
+      await kit.close(await kit.requestFor(id, "18.00", null));
+      return id;
+    };
+
+    it.each([
+      ["unpaid", issuedUnpaid],
+      ["deferred", closedDeferred],
+    ] as const)("offers and prints nothing on a %s sale", async (method, sale) => {
+      const id = await sale();
+      const ticket = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/sales/${id}?receiptPreview=1`,
+      );
+      expect(ticket.json).toMatchObject({ tender: { method }, paymentSlips: [] });
+      const unknown = await press(id, randomUUID());
+      expect(unknown.answer.status).toBe(404);
+      expect(unknown.answer.json).toMatchObject({ code: "bill.payment_not_found" });
+      expect(unknown.printed).toEqual([]);
+
+      const stray = await strayCapture(id);
+      expect(await offered(id)).toEqual([]);
+      const { answer, printed } = await press(id, stray);
+      expect(answer.status).toBe(200);
+      expect(printed).toEqual([]);
+    });
+
+    it("refuses a card taken towards an issued invoice that is not paid off yet", async () => {
+      const id = await issuedUnpaid();
+      await take(id, "10.00");
+      const [card] = await venue.db.select().from(payments).where(eq(payments.workingOrderId, id));
+      expect(card!.saleId).toBeNull();
+      expect(await offered(id)).toEqual([]);
+      const { answer, printed } = await press(id, card!.id);
+      expect(answer.status).toBe(404);
+      expect(answer.json).toMatchObject({ code: "bill.payment_not_found" });
+      expect(printed).toEqual([]);
+    });
   });
 
   it("offers nothing and prints nothing for a reader that prints its own slip", async () => {

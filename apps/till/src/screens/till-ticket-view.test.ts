@@ -554,6 +554,17 @@ describe("till-ticket-view", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
+  it.each(["unpaid", "deferred"] as const)(
+    "offers no card slip for an %s tender the server lists no payment for",
+    async (method) => {
+      for (const over of [{}, { paymentSlips: [] }]) {
+        const { el } = await mount({ tender: { method }, ...over });
+        expect(slipButtons(el)).toEqual([]);
+        expect(el.shadowRoot!.querySelector(".payment-slips")).toBeNull();
+      }
+    },
+  );
+
   it("offers each card of a split sale separately, and a press names only that card", async () => {
     const { el } = await mount({ paymentSlips: [firstCard, secondCard] });
     const group = el.shadowRoot!.querySelector<HTMLElement>(".payment-slips")!;
