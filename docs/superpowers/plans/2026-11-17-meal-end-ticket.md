@@ -182,7 +182,7 @@ may still be eating. For that bill, in one transaction, it:
 2. after step 3's paper checks (so a till that cannot print is refused before staff are asked to
    print anyway), unless the request says `printAnyway: true`, refuses `meal_end.unserved_dishes`, listing them,
    while any line on the bill is not fully served and not cancelled (the same reckoning as Finish:
-   `serviceDishCondition` and `serviceQuantities(...).remaining`, `finish-party-service.ts:255-306`).
+   `serviceDishCondition` and `serviceQuantities(...).remaining`, `finish-party-service.ts:255-306`; 2026-11-18: #3703 removed set lunches and that helper, and both now select top-level lines).
    Each listed dish says whether the kitchen has it (`isReleased`, `working-order.ts:3999-4011`): one
    it has can be marked served; one not sent, on hold or waiting to be called can be sent or taken
    off. With `printAnyway: true` it prints with those dishes on the ticket. `printAnyway` absent

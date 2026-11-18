@@ -78,8 +78,8 @@ its deduction on the final ticket and record, and issuing, when the trading day 
 was neither printed nor fully paid. Today a payment that leaves a bill part-paid issues no invoice
 (`apps/server/src/bill-payments-api.test.ts:771`, "leaves €70.00 outstanding on a €120.00 bill …
 and issues no invoice"). Printing the bill, which issues the ticket before payment, is lane L's
-MEAL-END-TICKET (the server side is #3704; the till's Print the bill button is #3724, not
-landed); a payment after that is not an advance but a payment slip (question 2). An advance taken at the till is issued by Waitron when the payment is
+MEAL-END-TICKET (the route that issues it is #3704; the till's Print the bill button is #3724,
+not landed); a payment after that is not an advance but a payment slip (question 2). An advance taken at the till is issued by Waitron when the payment is
 taken, as one line «Pago a cuenta — consumo en mesa 7» ("payment on account for the meal at
 table 7") at the venue's eat-in rate (owner, 2026-11-18). Waitron also issues an advance paid before the
 day, such as a company's €1,000 for its staff dinner: staff record the transfer against the
