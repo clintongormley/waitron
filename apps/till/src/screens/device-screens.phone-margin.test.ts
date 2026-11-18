@@ -66,7 +66,6 @@ const screens: [string, () => Promise<HTMLElement>, string, { left: number; widt
     async () =>
       (
         await mountWidget<TillFloorScreen>("till-floor-screen", {
-          embedded: true,
           zones: [],
           tables: [],
         })
@@ -142,7 +141,6 @@ describe("device screens at phone width", () => {
     it(`a planned zone's map fits its shape within the floor screen's content box at ${width}px`, async () => {
       await onPage(width);
       const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
-        embedded: true,
         zones: [
           {
             id: "z1",

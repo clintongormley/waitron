@@ -6153,9 +6153,8 @@ it.each([["till", "floor", "till-floor-screen"]] as const)(
     expect(buttons).toHaveLength(2);
     await userEvent.click(buttons[1]!);
     await flush(el);
-    const screen = el.shadowRoot!.querySelector(tag) as HTMLElement & { embedded: boolean };
+    const screen = el.shadowRoot!.querySelector(tag);
     expect(screen).not.toBeNull();
-    expect(screen.embedded).toBe(true);
     expect(location.pathname).toBe(`/till/tabs/${destination}`);
   },
 );

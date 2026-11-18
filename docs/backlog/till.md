@@ -44,17 +44,14 @@ their full text.
 ## Till widget points from #616 that were read but not run
 
 - Found by #616 (`apps/till/src/widgets`). Read, not run: `ReaderOption.online` is never set
-  outside tests; the fixed handheld mount and table screen still need their redundant exit
+  outside tests; the table screen still needs its redundant exit
   configuration audited; the tab shell and the supervisor dialog emit
   events not named `wt-*` (CLAUDE.md §3; not checked whether the rule reaches till widgets).
 
-## The till always mounts the floor screen `embedded`
+## The table-order screen's `#lineGross` comment was not restored
 
-- Found by #614 (`apps/till/src/screens`), not fixable in a comments-only change. Read, not run:
-  the till's one floor mount (`apps/till/src/till-app.ts`, the `<till-floor-screen>` in its
-  render) passes `embedded` and `canExitToCounter=false`, so the floor screen's standalone header,
-  its Back button and that property are reached only by the screen's own tests. Not restored because nothing confirms it: the table-order
-  screen's `#lineGross` comment "same arithmetic the server files with".
+- Found by #614 (`apps/till/src/screens`). Not restored because nothing confirms it: the
+  table-order screen's `#lineGross` comment "same arithmetic the server files with".
 
 ## Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`, `finalizeSettle`) cite `provider.ts:66-83`
 

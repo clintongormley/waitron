@@ -22574,7 +22574,6 @@ export class TillApp extends LitElement {
       const navigation = this.#deviceNavigation();
       return html`<till-floor-screen
         .live=${this.#live}
-        embedded
         .zones=${
           navigation === null
             ? this.zones
@@ -22598,7 +22597,6 @@ export class TillApp extends LitElement {
         .carriedRevisions=${this.floorCarried}
         .api=${this.api}
         .operatorSession=${this.#operatorSession}
-        .canExitToCounter=${false}
         .canOpenStation=${this.#allowsDestination("station")}
         .canChangeToday=${this.capabilities.includes("take-orders")}
         .canMarkSteps=${this.capabilities.includes("take-orders")}
