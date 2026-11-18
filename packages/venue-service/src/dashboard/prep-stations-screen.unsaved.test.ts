@@ -195,16 +195,17 @@ async function choose(decision: "keep" | "discard") {
   q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
   await expect.poll(() => q.open).toBe(false);
 }
+const withPass: PrepStationsView = {
+  ...view,
+  stations: [...view.stations, { ...view.stations[0]!, id: "upstairs", isDefault: false }],
+  printers: [{ id: "pass", name: "Pass printer", active: true }],
+  stationPrinters: [
+    { stationId: "bar", printerId: "pass" },
+    { stationId: "upstairs", printerId: "pass" },
+  ],
+};
 it("Add with the printers every station lists already chosen is clean and closes directly", async () => {
-  const { screen } = await mount(undefined, false, undefined, {
-    ...view,
-    stations: [...view.stations, { ...view.stations[0]!, id: "upstairs", isDefault: false }],
-    printers: [{ id: "pass", name: "Pass printer", active: true }],
-    stationPrinters: [
-      { stationId: "bar", printerId: "pass" },
-      { stationId: "upstairs", printerId: "pass" },
-    ],
-  });
+  const { screen } = await mount(undefined, false, undefined, withPass);
   const modal = await open(screen, false);
   expect(modal.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.values).toEqual([
     "pass",
@@ -216,6 +217,48 @@ it("Add with the printers every station lists already chosen is clean and closes
   await closed;
   await expect.poll(() => modalIn(screen)).toBeNull();
   expect((await question()).open).toBe(false);
+});
+for (const rename of [false, true]) {
+  const label = rename ? "Edit" : "Add";
+  it(`${label} left untouched stays clean when its chosen printer is deleted elsewhere`, async () => {
+    const liveData = new LiveData();
+    const { screen } = await mount(undefined, false, liveData, withPass);
+    const modal = await open(screen, rename);
+    const printers = () =>
+      modal.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!;
+    expect(printers().values).toEqual(["pass"]);
+    app.api.load = (async () =>
+      structuredClone({
+        ...withPass,
+        printers: [],
+        stationPrinters: [],
+      })) as PrepStationsApi["load"];
+    liveData.invalidate([{ type: "printers", id: "pass" }]);
+    await expect.poll(() => printers().values).toEqual([]);
+    await screen.updateComplete;
+    await modal.updateComplete;
+    expect(shownErrors(modal)).toEqual(["A printer you chose was deleted."]);
+    expect(unload()).toBe(false);
+    const closed = closeOf(modal);
+    modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await closed;
+    await expect.poll(() => modalIn(screen)).toBeNull();
+    expect((await question()).open).toBe(false);
+  });
+}
+it("Add keeps a typed name as an edit when its chosen printer is deleted elsewhere", async () => {
+  const liveData = new LiveData();
+  const { screen } = await mount(undefined, false, liveData, withPass);
+  const modal = await open(screen, false);
+  await field(modal, "Grill");
+  app.api.load = (async () =>
+    structuredClone({ ...withPass, printers: [], stationPrinters: [] })) as PrepStationsApi["load"];
+  liveData.invalidate([{ type: "printers", id: "pass" }]);
+  await expect
+    .poll(() => modal.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.values)
+    .toEqual([]);
+  expect(unload()).toBe(true);
+  expect(modal.querySelector("[data-test=save-station]")!.hasAttribute("disabled")).toBe(false);
 });
 for (const rename of [false, true]) {
   const label = rename ? "Edit" : "Add";

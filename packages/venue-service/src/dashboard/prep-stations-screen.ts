@@ -600,6 +600,14 @@ export class PrepStationsScreen extends LitElement {
   /** A printer deleted elsewhere leaves the open printer choices, and each says so in its message. */
   #dropUnlistedPrinters(printers: PrepStationsView["printers"]): void {
     if (this.editor) {
+      const baseline = this.#stationBaseline;
+      if (baseline) {
+        const base = listedPrinterIds(baseline.printerIds, printers);
+        if (base.length < baseline.printerIds.length) {
+          this.#stationBaseline = { ...baseline, printerIds: base };
+          this.#stationScope?.commit(this.#stationBaseline);
+        }
+      }
       const printerIds = listedPrinterIds(this.draft.printerIds, printers);
       if (printerIds.length < this.draft.printerIds.length) {
         this.#change("printerIds", printerIds);

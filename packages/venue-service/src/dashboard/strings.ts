@@ -313,7 +313,7 @@ const en = {
   "prep.printer_deleted": "A printer you chose was deleted.",
   "prep.printers_not_permitted": "You can't change printers.",
   "prep.printers_need_active": "Enable the station to change its printers.",
-  "prep.printers_every_station": "Printers on every station are already chosen.",
+  "prep.printers_every_station": "New stations start with the printers every station uses.",
   "prep.screens": "Station screens",
   "prep.devices": "Devices",
   "prep.none": "None",
@@ -1244,7 +1244,8 @@ const es: Record<keyof typeof en, string> = {
   "prep.printer_deleted": "Se eliminó una impresora que elegiste.",
   "prep.printers_not_permitted": "No puedes cambiar las impresoras.",
   "prep.printers_need_active": "Habilita la estación para cambiar sus impresoras.",
-  "prep.printers_every_station": "Las impresoras de todas las estaciones ya están elegidas.",
+  "prep.printers_every_station":
+    "Las estaciones nuevas empiezan con las impresoras que usan todas las estaciones.",
   "prep.screens": "Pantallas de estación",
   "prep.devices": "Dispositivos",
   "prep.none": "Ninguno",

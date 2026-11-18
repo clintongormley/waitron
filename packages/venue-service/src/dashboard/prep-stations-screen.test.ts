@@ -5199,7 +5199,7 @@ describe("The station editor", () => {
     await settle(el);
     expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).values).toEqual(["watcher"]);
     expect(q(el, "wt-modal p.note")?.textContent).toBe(
-      "Printers on every station are already chosen.",
+      "New stations start with the printers every station uses.",
     );
     await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
     q(el, '[data-test="save-station"]')!.click();
