@@ -1054,7 +1054,7 @@ show the group's name. A bar counter's one-person fixed seats are joined the sam
 A deposit for a booking is an advance with its own ticket (the adviser's answer 1.8), and when a
 no-show's deposit is kept the venue issues a corrective removing its VAT, though it refunds
 nothing ("yes we should issue the corrective", owner, 2026-11-18, question 6 of the
-[19 November sheet](../compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details). The owner chose prepayment
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details). Waitron issues that corrective by itself, at every venue, when a booking is marked as a no-show and its deposit kept (owner, 2026-11-18). The owner chose prepayment
 refunded on arrival ([comparison](../superpowers/specs/2026-11-15-booking-fees-and-no-show-charges.md)).
 
 

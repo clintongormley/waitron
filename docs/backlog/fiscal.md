@@ -61,7 +61,8 @@ Asked as [S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) (
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details:
 
 - **When the meal ends, and so when its ticket is issued:** "Whichever comes first: printing the
-  bill; taking the last payment; close of trading day". The trading day is the venue's own day,
+  bill; taking the last payment; close of trading day", or staff marking the table as having left
+  without paying (owner, 2026-11-18). The trading day is the venue's own day,
   set to end at an hour when it is closed, such as 05:00. A ticket issued before it is paid shows
   the amount still owed.
 - **Money paid before then is an advance, even when it names no dishes** ("€30 towards the
@@ -78,10 +79,16 @@ was neither printed nor fully paid. Today a payment that leaves a bill part-paid
 (`apps/server/src/bill-payments-api.test.ts:771`, "leaves €70.00 outstanding on a €120.00 bill …
 and issues no invoice"). Printing the bill, which issues the ticket before payment, is lane L's
 MEAL-END-TICKET (#3704 and #3724, not landed); a payment after that is not an advance but a
-payment slip (question 2). The answer does not say what an advance's ticket describes when it
-names no dishes (the sheet proposed "payment on account for the meal at table 7"), and the sheet
-records as open that its "yes" does not single out recording that the guests left without paying
-as one of the moments of issue.
+payment slip (question 2). An advance taken at the till is issued by Waitron when the payment is
+taken, as one line «Pago a cuenta — consumo en mesa 7» ("payment on account for the meal at
+table 7") at the venue's eat-in rate (owner, 2026-11-18). Waitron also issues an advance paid before the
+day, such as a company's €1,000 for its staff dinner: staff record the transfer against the
+booking, or the booking takes the payment, and Waitron issues the company a full invoice for the
+advance and deducts it on the night. Where the company can pay afterwards instead, the dinner can
+be closed as a deferred payment (`POST /api/working-orders/:id/close-deferred`,
+`apps/server/src/deferred-close-api.ts`), which issues the invoice on the night, so no advance
+arises (owner, 2026-11-18). A walkout's
+ticket is for the full amount, with everything still owed.
 
 ## Adviser confirmation: supplier invoice numbers by issue year
 

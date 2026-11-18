@@ -994,6 +994,9 @@ _2026-11-18: adviser question
 the adviser is still to confirm the details): a set menu
 takes the VAT rate of its main item, so food with a drink takes the food's rate, eaten in or
 taken away, and its price is not split between its items' rates; items ordered separately to take
-away keep their own rates. Covered dishes may be left off the ticket; whether also off a full
-invoice is open. The spec's refusal of set menus on takeaway and delivery orders, and the plans'
-refusal of a dish at another rate, are the owner's to revisit._
+away keep their own rates. Covered dishes may be left off the ticket, and a full invoice lists
+the menu and its supplements the same way (owner, 2026-11-18). Owner's decision, 2026-11-18: a set menu carries its own two VAT rates, eaten in
+and taken away, set by the manager like any product's (normally the food's, 10%); any dish may be
+included and takes the menu's rate, and set menus are allowed on takeaway orders. The spec's
+refusal of set menus on takeaway and delivery orders, and the plans' refusal of a dish at another
+rate, go._

@@ -53,6 +53,22 @@ Part 2 and the shared Google Doc are unchanged. Against the plans this sheet put
   certificate (question 9); a copy carrying today's header and logo, and which records are kept ten
   years (question 10). The questions outside tax had no answer.
 
+**The owner's decisions on the answers, 18 November** (from the follow-up questions the same day):
+
+- A1420 D8 stands: a wrong date AEAT accepts is not corrected; only a sale AEAT refuses as dated
+  in the future gets a corrective (question 8).
+- A set menu carries its own two VAT rates, eaten in and taken away, set like any product's; any
+  dish may be included and set menus may be taken away (question 4). A full invoice lists the menu
+  and its supplements as the ticket does.
+- Drinks served without food stay at the eat-in rate until the adviser comes back (question 4).
+- Money given back as goodwill takes a corrective (question 6).
+- Waitron issues the corrective for a no-show's kept deposit by itself, at every venue (question 6).
+- A duplicate shows the payments made since the original and what is still owed (question 2).
+- Staff marking a table as having left without paying issues its ticket at once (question 1).
+- An advance's ticket reads «Pago a cuenta — consumo en mesa 7» at the eat-in rate. Waitron issues
+  advances paid before the day too, on the booking; where the company can pay afterwards, the
+  dinner is closed as a deferred payment instead (question 1).
+
 **How the quotations were checked.** Every quotation of a law, ruling or FAQ comes from the earlier
 version of this sheet (commit `fccbd09f1a`), whose quotations were matched by script against the
 official texts on 15 and 18 November 2026, with two exceptions. «pérdida del original» (question 2)
