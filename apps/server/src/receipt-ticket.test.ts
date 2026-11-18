@@ -951,6 +951,11 @@ describe("the QR comes first on an invoice that carries one", () => {
   });
 });
 
+/** A ticket's printed lines with each run of spaces closed up, so a row reads `caption amount`. */
+function paymentLines(bytes: Uint8Array): string[] {
+  return printedLines(bytes).map((line) => line.trim().replace(/\s+/g, " "));
+}
+
 /** A line's goods name as the receipt resolves it for an `es-ES` invoice. */
 function lineName(line: TillSaleResult["lines"][number]): string {
   return resolveSnapshotText(line.descriptions, "es-ES", "es-ES");
@@ -1545,8 +1550,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(s[idx + "20,90".length]).toBe(" ");
   });
 
-  it("keeps card identity off the fiscal ticket", () => {
-    // Inject surplus identity fields to catch accidental rendering independently of the DTO type.
+  it("names a contactless card and its authorisation on the ticket", () => {
     const bytes = formatReceipt({
       result: {
         ...FILED_SALE,
@@ -1554,9 +1558,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           method: "card",
           charged: "20.90",
           tip: "0.00",
-          ...{
-            card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
-          },
+          card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
           reference: null,
         },
       },
@@ -1565,16 +1567,18 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       invoiceLocale: "es-ES",
       printer: PRINTER_80,
     });
+    const lines = paymentLines(bytes);
+    expect(lines).toContain("Visa ****5838 (Sin contacto) 20,90 €");
+    expect(lines[lines.indexOf("Visa ****5838 (Sin contacto) 20,90 €") + 1]).toBe(
+      "Autorización 328600",
+    );
     const s = decodeTicket(bytes);
-    expect(s).toContain("Tarjeta");
+    expect(s).not.toContain("Tarjeta");
     expect(s).not.toContain("VISA");
-    expect(s).not.toContain("5838");
-    expect(s).not.toContain("Sin contacto");
-    expect(s).not.toContain("328600");
     expect(s).not.toContain("Efectivo");
   });
 
-  it("omits chip identity and authorization from the invoice", () => {
+  it("names a chip card and its authorisation on the invoice", () => {
     const bytes = formatReceipt({
       result: {
         ...FILED_SALE,
@@ -1582,9 +1586,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           method: "card",
           charged: "20.90",
           tip: "0.00",
-          ...{
-            card: { scheme: "MASTERCARD", last4: "4291", entryMode: "chip", authCode: "911234" },
-          },
+          card: { scheme: "MASTERCARD", last4: "4291", entryMode: "chip", authCode: "911234" },
           reference: null,
         },
       },
@@ -1593,14 +1595,15 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       invoiceLocale: "es-ES",
       printer: PRINTER_80,
     });
-    const s = decodeTicket(bytes);
-    expect(s).not.toContain("MASTERCARD");
-    expect(s).not.toContain("4291");
-    expect(s).not.toContain("Chip");
-    expect(s).not.toContain("911234");
+    const lines = paymentLines(bytes);
+    expect(lines).toContain("Mastercard ****4291 (Chip) 20,90 €");
+    expect(lines[lines.indexOf("Mastercard ****4291 (Chip) 20,90 €") + 1]).toBe(
+      "Autorización 911234",
+    );
+    expect(decodeTicket(bytes)).not.toContain("MASTERCARD");
   });
 
-  it("ignores surplus card identity even when its entry mode is unknown", () => {
+  it("names a card of unknown type with the receipt's own word for card", () => {
     const bytes = formatReceipt({
       result: {
         ...FILED_SALE,
@@ -1608,7 +1611,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           method: "card",
           charged: "20.90",
           tip: "0.00",
-          ...{ card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null } },
+          card: { scheme: "UNKNOWN", last4: "5838", entryMode: "chip", authCode: null },
           reference: null,
         },
       },
@@ -1617,11 +1620,32 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       invoiceLocale: "es-ES",
       printer: PRINTER_80,
     });
+    expect(paymentLines(bytes)).toContain("Tarjeta ****5838 (Chip) 20,90 €");
+    expect(decodeTicket(bytes)).not.toMatch(/unknown/i);
+  });
+
+  it("names a card whose entry mode is unknown without a bracket or authorisation", () => {
+    const bytes = formatReceipt({
+      result: {
+        ...FILED_SALE,
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null },
+          reference: null,
+        },
+      },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+      printer: PRINTER_80,
+    });
+    expect(paymentLines(bytes)).toContain("Visa ****5838 20,90 €");
     const s = decodeTicket(bytes);
-    expect(s).toContain("Tarjeta");
+    expect(s).not.toContain("****5838 (");
     expect(s).not.toContain("VISA");
-    expect(s).not.toContain("5838");
-    expect(s).not.toContain("Aut ");
+    expect(s).not.toContain("Autorización");
   });
 
   it("prints the tip and charged lines only when a tip rode on the card", () => {
@@ -1633,9 +1657,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
             method: "card",
             charged: "21.40",
             tip: "0.50",
-            ...{
-              card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
-            },
+            card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
             reference: null,
           },
         },
@@ -1658,7 +1680,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
             method: "card",
             charged: "20.90",
             tip: "0.00",
-            ...{ card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null } },
+            card: { scheme: "VISA", last4: "5838", entryMode: "unknown", authCode: null },
             reference: null,
           },
         },
@@ -2132,6 +2154,148 @@ function expectPaymentRowsToAddUpToTotal(printed: string[]): void {
   }
   expect(paid).toBe(printedCents(printed[start]!));
 }
+
+describe("names the card on a card payment", () => {
+  const CARD = {
+    scheme: "VISA",
+    last4: "4034",
+    entryMode: "contactless",
+    authCode: "354739",
+  } as const;
+  const CARD_SALE: TillSaleResult = {
+    ...FILED_SALE,
+    total: "26.50",
+    vatBreakdown: [{ rate: "10", base: "24.09", tax: "2.41" }],
+    lines: [
+      { descriptions: { "es-ES": "Paella" }, quantity: "1", gross: "26.50", parentLineNo: null },
+    ],
+    tender: { method: "card", charged: "26.50", tip: "0.00", reference: null, card: CARD },
+  };
+  const BILL_LINE_SALE: TillSaleResult = {
+    ...CARD_SALE,
+    tender: { method: "card", charged: "26.50", tip: "0.00", reference: null },
+    payments: [
+      { method: "card", amount: "26.50", tip: "0.00", reference: null, card: CARD, refunds: [] },
+    ],
+  };
+  function lines(result: TillSaleResult, printer: EscSetting = PRINTER_80): string[] {
+    return paymentLines(
+      formatReceipt({ result, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES", printer }),
+    );
+  }
+  function after(printed: string[], first: string, count: number): string[] {
+    const at = printed.indexOf(first);
+    expect(at, `"${first}" in ${JSON.stringify(printed)}`).toBeGreaterThanOrEqual(0);
+    return printed.slice(at, at + count);
+  }
+
+  it.each([
+    ["the single card tender", CARD_SALE],
+    ["a card bill payment", BILL_LINE_SALE],
+  ])("names the card on a card payment: %s at 80 mm", (_name, result) => {
+    expect(after(lines(result), "Visa ****4034 (Sin contacto) 26,50 €", 2)).toEqual([
+      "Visa ****4034 (Sin contacto) 26,50 €",
+      "Autorización 354739",
+    ]);
+    expect(lines(result).some((line) => line.startsWith("Tarjeta"))).toBe(false);
+  });
+
+  it.each([
+    ["the single card tender", CARD_SALE],
+    ["a card bill payment", BILL_LINE_SALE],
+  ])("names the card on a card payment: %s at 58 mm", (_name, result) => {
+    const printed = lines(result, PRINTER_58);
+    expect(after(printed, "Visa ****4034 (Sin contacto)", 3)).toEqual([
+      "Visa ****4034 (Sin contacto)",
+      "26,50 €",
+      "Autorización 354739",
+    ]);
+    for (const line of printedLines(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    ))
+      expect(line.length).toBeLessThanOrEqual(
+        textGrid(PRINTER_58.paperWidth, PRINTER_58.resolution).columns,
+      );
+  });
+
+  it("names the card on a card payment and keeps a typed reference", () => {
+    const single = lines({
+      ...CARD_SALE,
+      tender: { method: "card", charged: "26.50", tip: "0.00", reference: "OP-9", card: CARD },
+    });
+    const billLine = lines({
+      ...BILL_LINE_SALE,
+      payments: [
+        {
+          method: "card",
+          amount: "26.50",
+          tip: "0.00",
+          reference: "OP-9",
+          card: CARD,
+          refunds: [],
+        },
+      ],
+    });
+    for (const printed of [single, billLine])
+      expect(after(printed, "Visa ****4034 (Sin contacto) 26,50 €", 3)).toEqual([
+        "Visa ****4034 (Sin contacto) 26,50 €",
+        "Autorización 354739",
+        "Ref. OP-9",
+      ]);
+  });
+
+  it("names the card on a card payment with no bracket when its entry mode is unknown", () => {
+    const unknown = { ...CARD, entryMode: "unknown", authCode: null } as const;
+    const printed = lines({
+      ...BILL_LINE_SALE,
+      payments: [
+        {
+          method: "card",
+          amount: "26.50",
+          tip: "0.00",
+          reference: null,
+          card: unknown,
+          refunds: [],
+        },
+      ],
+    });
+    expect(printed).toContain("Visa ****4034 26,50 €");
+    expect(printed.some((line) => line.startsWith("Autorización"))).toBe(false);
+  });
+
+  it("names the card on a card payment and capitalises each word of the scheme", () => {
+    const printed = lines({
+      ...CARD_SALE,
+      tender: {
+        method: "card",
+        charged: "26.50",
+        tip: "0.00",
+        reference: null,
+        card: { ...CARD, scheme: "AMERICAN EXPRESS", entryMode: "chip" },
+      },
+    });
+    expect(printed).toContain("American Express ****4034 (Chip) 26,50 €");
+  });
+
+  it("names the card on a card payment: the card row holds what went on the card, tip included", () => {
+    const printed = lines({
+      ...CARD_SALE,
+      tender: { method: "card", charged: "28.50", tip: "2.00", reference: null, card: CARD },
+    });
+    expect(after(printed, "Visa ****4034 (Sin contacto) 28,50 €", 4)).toEqual([
+      "Visa ****4034 (Sin contacto) 28,50 €",
+      "Autorización 354739",
+      "Propina 2,00 €",
+      "Cobrado 28,50 €",
+    ]);
+  });
+});
 
 describe("a bill paid in parts before its invoice", () => {
   // €20.90 paid as €10.00 cash from a €50.00 note, then €10.90 by hand-keyed card with a €1.00

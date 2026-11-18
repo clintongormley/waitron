@@ -25,6 +25,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { payments } from "@waitron/payments";
+import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -983,6 +984,101 @@ it("reads every pre-invoice payment in order without replaying settlement", asyn
     { method: "cash", amount: "2.00", tip: "0.00", tendered: "2.00", change: "0.00", refunds: [] },
   ]);
   expect(await snapshot()).toEqual(before);
+});
+it("a card bill payment's details reach the receipt", async () => {
+  const order = await parked(venue, "Caña");
+  for (const amount of ["1.00", "2.00"])
+    expect(
+      (
+        await send(venue.app, venue.cookie, "POST", `/api/working-orders/${order}/payments`, {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          method: "card",
+          entry: "manual",
+          amount,
+          applied: amount,
+          tip: "0.00",
+        })
+      ).status,
+    ).toBe(200);
+  const [first] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: payments.id })
+      .from(payments)
+      .where(eq(payments.workingOrderId, order))
+      .orderBy(sql`${payments}.rowid`)
+      .limit(1),
+  );
+  await liftPaymentGuard(venue.db, () =>
+    venue.db.execute(
+      sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = 'chip', card_auth_code = null where id = ${first!.id}`,
+    ),
+  );
+  const answer = await get((await saleOf(order)).id);
+  expect(answer.status).toBe(200);
+  expect(answer.json.payments).toEqual([
+    {
+      method: "card",
+      amount: "1.00",
+      tip: "0.00",
+      reference: null,
+      card: { scheme: "VISA", last4: "4034", entryMode: "chip", authCode: null },
+      refunds: [],
+    },
+    { method: "card", amount: "2.00", tip: "0.00", reference: null, refunds: [] },
+  ]);
+});
+it("a card bill payment names its card when charged, even if voided later, and not before", async () => {
+  const order = await parked(venue, "Caña");
+  for (const amount of ["1.00", "2.00"])
+    expect(
+      (
+        await send(venue.app, venue.cookie, "POST", `/api/working-orders/${order}/payments`, {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          method: "card",
+          entry: "manual",
+          amount,
+          applied: amount,
+          tip: "0.00",
+        })
+      ).status,
+    ).toBe(200);
+  const [voided, unsettled] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: payments.id })
+      .from(payments)
+      .where(eq(payments.workingOrderId, order))
+      .orderBy(sql`${payments}.rowid`),
+  );
+  await liftPaymentGuard(venue.db, async () => {
+    await venue.db.execute(
+      sql`update payments set provider = 'sumup', state = 'voided', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = null, card_auth_code = '354739' where id = ${voided!.id}`,
+    );
+    await venue.db.execute(
+      sql`update payments set provider = 'sumup', state = 'failed', settled_at = null, card_scheme = 'MASTERCARD', card_last4 = '1111', card_entry_mode = 'chip', card_auth_code = null where id = ${unsettled!.id}`,
+    );
+  });
+  const answer = await get((await saleOf(order)).id);
+  expect(answer.status).toBe(200);
+  expect(answer.json.payments).toEqual([
+    {
+      method: "card",
+      amount: "1.00",
+      tip: "0.00",
+      reference: null,
+      card: { scheme: "VISA", last4: "4034", entryMode: "unknown", authCode: "354739" },
+      refunds: [],
+    },
+    { method: "card", amount: "2.00", tip: "0.00", reference: null, refunds: [] },
+  ]);
+  expect(answer.json).toMatchObject({
+    receiptPreview: expect.arrayContaining([
+      expect.objectContaining({ kind: "amount", caption: "Visa ****4034" }),
+      expect.objectContaining({ kind: "text", text: "Autorización 354739" }),
+    ]),
+  });
+  expect(JSON.stringify(answer.json.receiptPreview)).not.toContain("****1111");
 });
 async function correctiveOf(
   originalId: string,

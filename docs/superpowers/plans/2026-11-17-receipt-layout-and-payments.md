@@ -43,6 +43,10 @@ Task 7 Step 1's and Task 9 Step 1's surveys against the code as it is then.
   every file `grep -rln "Base imponible\|Taxable base" apps packages --include='*.test.ts'` lists
   after Task 3, and every file naming `paymentRemaining`/`remaining` after Tasks 8–9.
 - The till's on-screen receipt view (`apps/till/src/screens/till-ticket-view.ts`) is out of scope.
+  _2026-11-18: #3740 then made that view, opened from Find a bill, draw the receipt builder's
+  output, so the card details this design prints, like the rest of that output, show there too.
+  It is now a third renderer beside the two named under Architecture, so a new element kind needs
+  a case in its `renderReceipt`._
 - New words go in every language block of `packages/country-es/src/receipt-labels.ts`
   (`en-GB`, `es-ES`, `ca-ES`, `gl-ES`, `eu-ES`) and every key in `RECEIPT_LABEL_KEYS`
   (`packages/country/src/country.ts:60`). Pre-live: rename freely.
@@ -54,7 +58,7 @@ Task 7 Step 1's and Task 9 Step 1's surveys against the code as it is then.
 
 ## Review Focus
 
-1. **58 mm paper.** At `PRINTER_58` (32 columns) a mixed-rate receipt with a `1.234,56` line and a
+1. **58 mm paper.** At `PRINTER_58` (32 columns; 30 as built, see Task 4) a mixed-rate receipt with a `1.234,56` line and a
    two-rate tax table prints no line wider than 32 columns and keeps each letter beside its amount
    (Task 2 and Task 3 tests).
 2. **Discounted line.** A line with `listGross` gets its unit price from `listGross`, and its
@@ -129,7 +133,7 @@ Task 7 Step 1's and Task 9 Step 1's surveys against the code as it is then.
     (`adjustments`) ends with the line's letter.
   - `"prints no letters on a single-rate bill"` and `"prints no letter on a bill-wide discount"`.
   - `"fits 58 mm"`: the mixed-rate sale with a `1234.56` line at `PRINTER_58` — every printed line
-    ≤ 32 characters, and the letter follows the amount on the same line.
+    ≤ 32 characters (30 as built, see Task 4), and the letter follows the amount on the same line.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/receipt-ticket.test.ts -t
   "price each and rate letters"` — expect FAIL.
 - [ ] **Step 3: Implement.** In `withVatGroup` (simplified path only), after the dish row: when the
@@ -168,7 +172,7 @@ Task 7 Step 1's and Task 9 Step 1's surveys against the code as it is then.
 
 - [ ] **Step 1: Failing tests.** `receipt-tax-table.test.ts`: `"right-aligns three amount columns
   after the rate"` (42 columns: header then `10%  24,09  2,41  26,50` shape, amounts
-  right-aligned under their headings); `"fits 32 columns with two rates and four-figure
+  right-aligned under their headings); `"fits 32 columns (30 as built, see Task 4) with two rates and four-figure
   amounts"`. `receipt-ticket.test.ts`: `"prints the simplified tax summary as one row per rate"`
   — Santet's sale (`10%`, base `24.09`, tax `2.41`, total `26.50`, `es-ES`) prints a row holding
   `10%`, `24,09`, `2,41`, `26,50` and no `Base imponible 10%` line; mixed-rate → rows start `A 10%`

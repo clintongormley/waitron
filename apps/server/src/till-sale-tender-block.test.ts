@@ -241,7 +241,7 @@ describe("readTenderBlock", () => {
     expect(block).toEqual({ method: "cash", change: "1.00" });
   });
 
-  it("returns the card amounts without exposing payment identity", async () => {
+  it("returns the card amounts and the card's details", async () => {
     const block = await withTransaction(suite.db, async (tx) => {
       const { saleId, workingOrderId } = await seedSale(
         tx,
@@ -258,6 +258,7 @@ describe("readTenderBlock", () => {
       charged: "1.00",
       tip: "0.00",
       reference: null,
+      card: { scheme: "VISA", last4: "5838", entryMode: "contactless", authCode: "328600" },
     });
   });
 

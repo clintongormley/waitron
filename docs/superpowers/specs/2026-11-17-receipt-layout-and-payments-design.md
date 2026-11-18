@@ -50,6 +50,8 @@ to say what is still owed.
   only. F1 already has unit-price and rate columns.
 - No server name ("David"), website field or other header changes.
 - No change to the till's on-screen receipt view (`apps/till/src/screens/till-ticket-view.ts`).
+  _2026-11-18: #3740 then made that view, opened from Find a bill, draw the receipt builder's
+  output, so the card details this design prints, like the rest of that output, show there too._
 - The slip does not name the ticket it pays, for now: the adviser's ruling R2 covers a slip "with no
   invoice number and no QR, printed beside the ticket" (`docs/compliance/asesor-questions.md:434`).
   Question 24(c) asks whether it may; this design changes only if the answer is yes.

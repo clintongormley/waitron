@@ -93,7 +93,7 @@ describe("payment slip (pure renderer, no database)", () => {
       "Casa Gormley",
       "B12345678",
       "Table 6 · Pedido 41",
-      "VISA **** 5838",
+      "Visa ****5838",
       "Sin contacto",
       "328600",
       "Importe",
@@ -109,6 +109,13 @@ describe("payment slip (pure renderer, no database)", () => {
     expect(text).not.toContain("VERI*FACTU");
     expect(text).not.toMatch(/^\s*(?:Factura|Serie|Número de factura)\s*[:#]?\s*\S+/im);
     expect(commandNames(bytes)).not.toContain("GS ( k");
+  });
+  it("names a card of unknown type with the slip's own word for card", () => {
+    const text = decodeTicket(
+      formatPaymentSlip({ ...input, card: { ...input.card, scheme: "UNKNOWN" } }),
+    );
+    expect(text).toContain("Tarjeta ****5838");
+    expect(text).not.toMatch(/unknown/i);
   });
   it("prints the payment time with a two-digit hour", () => {
     const paidAt = new Date(2026, 8, 12, 9, 5).toISOString();

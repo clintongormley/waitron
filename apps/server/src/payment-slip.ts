@@ -1,6 +1,7 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { esc, labelAmountLines, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import type { CardDetails } from "@waitron/payments";
+import { cardName } from "./card-details.js";
 import { receiptDateTime } from "./receipt-dates.js";
 import { formatMoney } from "./receipt-money.js";
 
@@ -41,7 +42,7 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
   text([input.orderLabel, `${labels.order} ${input.orderNumber}`].filter(Boolean).join(" · "));
   b.line();
   if (input.card !== null) {
-    row(labels.card, `${input.card.scheme} **** ${input.card.last4}`);
+    row(labels.card, cardName(input.card, labels.card));
     const entries: Partial<Record<CardDetails["entryMode"], string>> = {
       contactless: labels.paymentContactless,
       chip: labels.paymentChip,

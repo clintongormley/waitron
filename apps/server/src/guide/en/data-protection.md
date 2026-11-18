@@ -375,9 +375,13 @@ to the station. They record the details so the station can prepare food safely.
 - Purpose: take card payments and prove them.
 - Whose data: customers who pay by card.
 - What data: the card type, its last four digits, how the card was presented, the authorisation
-  code and the payment provider's references.
+  code and the payment provider's references. When the provider reports them, the card type, last
+  four digits, how it was presented and the authorisation code print on the sale's receipts and
+  invoices, the emailed PDF included, and on the card slip. The till shows them too when staff open
+  the sale in **Find a bill**.
 - Who receives it: the card payment provider you chose. Its reader reads the card itself; Waitron
   sends the provider the amount and its own references for the order, and no customer details.
+  Your email provider, for each invoice you email.
 - How long: _set with your adviser_.
 - Security: as for every entry.
 
