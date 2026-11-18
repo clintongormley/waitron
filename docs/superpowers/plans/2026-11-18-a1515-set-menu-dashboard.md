@@ -7,8 +7,9 @@ surcharges, and what one set menu includes, place it in a full menu, and publish
 the full menu's published version then holds a copy of the set menu, and the till's offers read
 carries it, for piece 2 to draw.
 
-**Architecture:** A set menu is a `menus` row with `kind = 'set_menu'`, a price and an eat-in VAT
-class. Its dishes are the products in its root list, so `menu_items` and the whole offer pipeline
+**Architecture:** A set menu is a `menus` row with `kind = 'set_menu'`, a price, an eat-in VAT
+class and an optional takeaway VAT class. Its dishes are the products in its root list, so
+`menu_items` and the whole offer pipeline
 (`listMenuOffers` → `freezeOffer`) build each dish's full offer, options, extras and variants
 included, unchanged. On a set menu, `menu_items.gross_price` holds the dish's surcharge (null:
 included). What one set menu includes is two new tables of lines and their courses; the variants it
@@ -64,7 +65,10 @@ M2 are answered by decisions 4 and 10. Nothing in this piece chose set-menu type
 one sentence that had a bill use every copy on sale (Task 6) is replaced by decision 10. A fresh
 reader then found four more points, applied the same day: the Madrid baseline test (Task 1, Step
 4b), a live correction defeating "newest" (decision 10's stamp), a live VAT correction getting
-round decision 11 (Task 5c), and three tasks too large for one implementer (Tasks 3b, 4c, 5b).
+round the original decision 11 (Task 5c), and three tasks too large for one implementer
+(Tasks 3b, 4c, 5b). Later on 18 November, the owner replaced the original VAT rule with separate
+rates for eating in and taking away and allowed dishes at any rate. See decision 11 and the
+[VAT terms foundation](2026-11-18-a1515-set-menu-vat-terms.md).
 
 ## Decisions this plan makes (the builder's, for the plan review and the owner)
 
@@ -72,7 +76,7 @@ The spec leaves table names, where the price and VAT live, and error codes to th
 further than that and are marked **my call** where they first appear in a task; those added in the
 second amendment are marked **my call (plan writer)**:
 
-1. **Price, VAT class and names live on the menu, not on a hidden product.** Order and sale lines do
+1. **Price, VAT classes and names live on the menu.** Order and sale lines do
    not need a product (`working_order_lines.product_id` and `sale_lines.product_id` are nullable,
    `packages/db/src/schema/orders.ts:179`, `sales.ts:217`) and snapshot names, VAT class and
    classification by value. A hidden product would appear in every product list, picker, archive
@@ -150,16 +154,10 @@ second amendment are marked **my call (plan writer)**:
     writes.
     Serving also reads a copy from a version that is no longer live (Task 6b), so piece 2 can draw
     and price a bill's recorded copy after a republish.
-11. **The editor refuses a product whose eat-in VAT class differs from the set menu's, until
-    adviser question 26(c) is answered** (**owner**, 18 November 2026, "refuse until answered",
-    ledger item 3; spec section 1). The eat-in class is the product's effective `vatClass`, a
-    variant's own or else its parent's (`effectiveProductColumns`,
-    `packages/menu/src/variant-fallback.ts:65-67`). Refused `set_menu.vat_class_differs` when a dish
-    or a kept variant is added, copied or included again, and when the set menu's own class is
-    changed while it holds a dish at another one. A product whose class is changed afterwards on
-    its own page is not refused there: the set menu shows the problem `dish_vat_class_differs`,
-    which stops publishing (**my call (plan writer)**: refusing on the product page would reach
-    into every product save for a rule that lasts only until the adviser answers).
+11. **A set menu has its own eat-in and takeaway VAT classes.** An empty takeaway override
+    follows the eat-in class. Dishes and variants may have any VAT class on the product.
+    Supplements take the applicable class of the set menu. The owner's decisions are recorded
+    on the [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md).
 12. **A product sold by measure cannot be in a set menu** (owner, 18 November 2026: "no" when
     asked whether a set menu can include dishes sold by weight). A set-menu dish is stored one unit per line
     (spec section 3, "What is stored"), and a dish sold by weight has a fraction for its quantity.
@@ -212,7 +210,6 @@ second amendment are marked **my call (plan writer)**:
   | `set_menu.wrong_place`     | `{ menuId }`      | a set menu named where only an ordinary menu fits: default menu, a period, an include, Prices, publishing it |
   | `set_menu.dishes_only`     | `{ menuId }`      | a section, an included menu or a set menu added to a set menu's list                            |
   | `set_menu.not_publishable` | `{ menuId, count }` | publishing (now or queued) a full menu holding a set menu that has problems (Task 5a)         |
-  | `set_menu.vat_class_differs` | `{ productId, productVatClass, setMenuVatClass }`, plus `field: "setVatClass"` and `requestedVatClass` for a class change | a dish or kept variant at another eat-in VAT class than the set menu's, or the set menu's class changed under its dishes, or a live correction that would do either (decision 11, Task 5c) |
   | `set_menu.dish_sold_by_measure` | `{ productId }` | a product sold by measure added to a set menu (decision 12)                                 |
 
 - **Forms:** new or changed forms follow `docs/developers/design-system.md` → Forms and
@@ -262,10 +259,9 @@ second amendment are marked **my call (plan writer)**:
    keep selling the dish from that set menu's folder, sent with its product's course, until the
    full menu is published again; deleting the course changes the zone's fingerprint, so open tills
    reload. Pinned in Tasks 6a and 6b (the zone read and a recorded copy).
-9. **A product at another VAT class, by any route into the set menu.** Add products, the existing
-   member route, Copy dishes, including a variant again, and changing the set menu's own class are
-   all refused naming both classes; a product whose class changes afterwards shows as a problem and
-   stops publishing. Pinned in Task 4b.
+9. **A dish or kept variant at another VAT class.** It can be added, replaced or copied.
+   Changing the dish's class leaves the set menu's terms and publish checks alone.
+   Pinned in Task 4b and the VAT foundation.
 10. **A price typed in cents** (14000 for €14.00): refused above €10,000.00 on the set menu's price,
     a dish's surcharge and a variant's, and still accepted on an ordinary menu's price. Pinned in
     Tasks 2 and 4b.
@@ -273,6 +269,9 @@ second amendment are marked **my call (plan writer)**:
 ---
 
 ### Task 1: Schema — the set-menu kind, its lines and its left-out variants
+
+The initial schema below is extended by the
+[VAT terms foundation](2026-11-18-a1515-set-menu-vat-terms.md), which adds the takeaway override.
 
 **Files:**
 - Modify: `packages/db/src/schema/menus.ts` (the `menus` table, `:33-66`)
@@ -412,22 +411,15 @@ export type SetMenuProblem =
       courseId: string;
       courseName: string;
     }
-  /** Decision 11: the product's class was changed on its own page after it was added. */
-  | {
-      kind: "dish_vat_class_differs";
-      productId: string;
-      name: string;
-      parentName: string | null;
-      vatClass: VatClass;
-    }
   /** Decision 12: the product's unit was changed to one that measures an amount. */
   | { kind: "dish_sold_by_measure"; productId: string; name: string };
 
-/** A set menu's price, VAT class, names and lines, as a full menu's copy of it holds them. */
+/** A set menu's price, VAT classes, names and lines, as a full menu's copy of it holds them. */
 export interface SetMenuTerms {
   /** Gross, per set menu, as a two-place decimal string. */
   price: string;
   vatClass: VatClass;
+  takeawayVatClass: VatClass;
   /** Customer-facing names by language, frozen at publish, for receipts printed from a recorded
    * version (piece 4); `{}` when the set menu has none. */
   names: Record<string, string>;
@@ -446,8 +438,8 @@ export interface SetMenuTerms {
   `setVatClass?: VatClass | null`; `updateMenuDetails`'s gains `setPrice` and `setVatClass`
   (refused with `set_menu.not_found` on an ordinary menu). A set menu's price must pass
   `isProductPrice` and be at most `MAX_SET_MENU_AMOUNT_CENTS` (decision 13; `set_menu.invalid`,
-  `field: "setPrice"`), and its class must be one of the four (`field: "setVatClass"`). Refusing a
-  class change while the set menu holds dishes at the old class is Task 4b's.
+  `field: "setPrice"`), and its class must be one of the four (`field: "setVatClass"`). The VAT terms
+  foundation adds the optional takeaway override.
 
 - [ ] **Step 1: Write the failing tests** in `set-menus.test.ts`:
   - `"creates a set menu with its price and class, and a root and home like any menu"`:
@@ -628,8 +620,6 @@ export interface SetMenuDishSetting {
   productCourseId: string | null;
   /** The course this set menu gives the dish (decision 9); null: the product's. */
   courseOverrideId: string | null;
-  /** The product's effective eat-in class (decision 11). */
-  vatClass: VatClass;
   /** Its unit measures an amount (`units.measure`, decision 12). */
   soldByMeasure: boolean;
   variants: {
@@ -640,8 +630,6 @@ export interface SetMenuDishSetting {
     surcharge: string | null;
     /** The dish's `courseOverrideId` when set, else the variant's own effective course. */
     courseId: string | null;
-    /** The variant's effective eat-in class: its own, else its parent's. */
-    vatClass: VatClass;
   }[];
 }
 
@@ -651,6 +639,7 @@ export interface SetMenuDetails {
   names: Record<string, string>;
   price: string;
   vatClass: VatClass;
+  takeawayVatClass: VatClass | null;
   /** In the root list's member order. */
   dishes: SetMenuDishSetting[];
   lines: SetMenuLine[];
@@ -784,56 +773,27 @@ export function setMenuProblems(details: Omit<SetMenuDetails, "problems">): SetM
 - [ ] **Step 5: Run the file and `packages/menu`'s suite; all pass.**
 - [ ] **Step 6: Commit** — "Set menus: dishes with surcharges, variants left out, and what one set menu includes".
 
-### Task 4b: What a set menu may hold — its VAT class, nothing sold by measure, and the amount limit
+### Task 4b: Measured dishes and the surcharge limit
 
 **Files:**
 - Modify: `packages/menu/src/set-menus.ts`, `packages/menu/src/errors.ts`,
-  `packages/menu/src/operations.ts` (`updateMenuDetails`, `:819` at `b31ec62e37`, for the class change;
-  `updateMenuItem` `:390-399` for a set menu's surcharge), `packages/menu/src/variants.ts` only if
+  `packages/menu/src/operations.ts` (`updateMenuItem` `:390-399` for a set menu's surcharge), `packages/menu/src/variants.ts` only if
   the variant surcharge write is shared with `setMenuVariantPrice` (`:444-470`)
 - Test: `packages/menu/src/set-menus.refusals.test.ts`
 
 **Interfaces:**
-- Consumes `readSetMenu`'s `vatClass`, `soldByMeasure` and variant `vatClass` (Task 4).
-- Produces, in `set-menus.ts`:
-  `refuseDishesSetMenuCannotHold(tx: Transaction, menuId: string, dishes: readonly { productId: string; keptVariantIds: readonly string[] }[]): Promise<void>`,
-  which throws `set_menu.vat_class_differs` `{ productId, productVatClass, setMenuVatClass }` for
-  the first product or kept variant (in the order given) whose effective eat-in class is not the
-  set menu's, and `set_menu.dish_sold_by_measure` `{ productId }` for the first product whose unit
-  has `measure` set. Called, before anything is written, by `addSetMenuDishes`,
-  `copySetMenuDishes`, the member write that adds products to a set menu's root (the same site
-  that calls `addLinesForCourses`, Task 4), and `saveSetMenuVariantChoices` for each variant it
-  includes. Decisions 11 and 12; both codes are declared in `errors.ts` with these params.
-- `updateMenuDetails` refuses a new `setVatClass` with `set_menu.vat_class_differs` naming the
-  first included dish or variant still at another class. The refusal carries
-  `{ productId, productVatClass, setMenuVatClass, field: "setVatClass", requestedVatClass }`
-  so the editor can explain the attempted change next to the field.
+- `refuseIneligibleSetMenuProducts` checks the added or replaced dishes for units with
+  `measure` set (decision 12). Including a variant again also checks its dish's unit.
+  The refusal is `set_menu.dish_sold_by_measure` with `{ productId }`.
 - On a set menu's menu item, `updateMenuItem` refuses a surcharge above
   `MAX_SET_MENU_AMOUNT_CENTS` with `set_menu.invalid` `{ field: "surcharge" }`, and
   `saveSetMenuVariantChoices` does the same for a variant's surcharge (decision 13). Import the
   limit from `@waitron/shared` (`packages/shared/src/index.ts:573`); never copy the number.
-- `setMenuProblems` adds `dish_vat_class_differs` for each included dish or variant whose class is
-  not the set menu's, and `dish_sold_by_measure` for each dish sold by measure: the two ways a
-  product changed on its own page can break the rule after it was added.
+- `setMenuProblems` reports a dish changed to a measured unit after it was added.
+- The VAT foundation covers adding, replacing and copying dishes at another rate, including
+  a variant at another rate, and saving a new menu rate with dishes already listed.
 
-- [ ] **Step 1: Write the failing tests** in `set-menus.refusals.test.ts`, on a Daily menu at
-  `reduced`:
-  - `"a product at another eat-in class is refused, by every way in"`: Sirloin at `general` →
-    `addSetMenuDishes`, the existing add-products member write and `copySetMenuDishes` (from a
-    set menu that lists Sirloin) each throw `set_menu.vat_class_differs`
-    `{ productId: sirloin, productVatClass: "general", setMenuVatClass: "reduced" }`, and the set
-    menu's dishes are unchanged after each.
-  - `"a variant at another class is refused only while it is kept"`: Wine at `reduced` whose
-    Bottle variant is `general`: adding Wine with nothing left out is refused naming Bottle;
-    adding it with Bottle left out is accepted; including Bottle later through
-    `saveSetMenuVariantChoices` is refused.
-  - `"a product's takeaway class does not matter"`: Soup at `reduced` with takeaway class
-    `general` is accepted.
-  - `"the set menu's class cannot change under its dishes"`: `updateMenuDetails(daily, { setVatClass: "general" })`
-    with Soup listed is refused naming Soup; a set menu with no dishes changes class.
-  - `"a class changed on the product afterwards is a problem"`: Soup listed, then its class set
-    to `general` on the product → `readSetMenu(daily).problems` holds `dish_vat_class_differs`
-    `{ productId: soup, vatClass: "general" }`.
+- [ ] **Step 1: Write the failing tests** in `set-menus.refusals.test.ts`.
   - `"a product sold by measure is refused, and one changed to it afterwards is a problem"`:
     Turbot in a unit with `measure: true` → `set_menu.dish_sold_by_measure` `{ productId: turbot }`;
     Hake listed, then its unit changed to that unit → `dish_sold_by_measure` in `problems`.
@@ -845,7 +805,7 @@ export function setMenuProblems(details: Omit<SetMenuDetails, "problems">): SetM
   `pnpm --filter @waitron/menu exec vitest run src/set-menus.refusals.test.ts`
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run the file, `src/set-menus.dishes.test.ts`, and `packages/menu`'s suite; all pass.**
-- [ ] **Step 5: Commit** — "Set menus: hold only dishes at the set menu's VAT class, none sold by measure, within the amount limit".
+- [ ] **Step 5: Commit** — "Set menus: refuse dishes sold by measure and limit surcharges".
 
 ### Task 4c: Giving a dish another course in the set menu
 
@@ -956,7 +916,8 @@ export interface PublishedSetMenu {
   - `countsAsCourseId` is the course `readSetMenu` reports for the dish and for each kept variant,
     which is the set menu's own course for the dish when it gives one; `courseOverrideId` is
     `readSetMenu`'s `courseOverrideId`.
-  - `terms` is `{ price, vatClass, names, lines }`, `names` from the set menu's root section.
+  - `terms` is `{ price, vatClass, takeawayVatClass, names, lines }`, with names from the root
+    section and a missing takeaway override resolved to the eat-in class.
 - Produces `documentSetMenuOffers(document: MenuDocument): SetMenuFrozenOffer[]` in
   `menu-document.ts`, beside `documentOffers` (`:496`): every copy's offers, copy by copy in set
   menu id order and each in its root's order, `[]` for a document without `setMenus`. It is how
@@ -993,7 +954,7 @@ export interface PublishedSetMenu {
     `"5.00"`, Wine's variants only Glass at `"1.50"`; Sirloin's `offeredModifiers` equal those of
     Lunch's own Sirloin offer; Lunch's own Sirloin offer stays `"18.00"`.
   - `"the copy carries the terms and what each dish counts as in this set menu"`: `terms` equals
-    `{ price: "14.00", vatClass: "reduced", names: { en: "Daily menu" }, lines: [...] }`; Soup's
+    `{ price: "14.00", vatClass: "reduced", takeawayVatClass: "general", names: { en: "Daily menu" }, lines: [...] }`; Soup's
     `countsAsCourseId` is Starters; Glass's is its own course.
   - `"two set menus' copies give one product different courses"`: Bravas listed in Daily menu
     with no course of its own and in Special menu given Starters, both placed in Lunch → Daily's
@@ -1011,8 +972,8 @@ export interface PublishedSetMenu {
   - `"the copy carries the set menu's change stamp, and it moves only when the set menu changes"`:
     `changedAt` equals Daily menu's `updated_at`; building Lunch twice gives the same working hash;
     a surcharge change moves `changedAt` and the working hash.
-  - `"a product's class changed afterwards stops Lunch's next publish"`: Soup's class set to
-    `general` on the product → `publishMenu(Lunch)` refuses `set_menu.not_publishable` (decision 11).
+  - Publish a surcharge on a dish at a different rate. A null takeaway override resolves to
+    the set menu's eat-in rate. A takeaway-only edit changes the working hash and the stamp.
   - `"a set menu has no Publish of its own"`: `publishMenu(dailyMenu)` and
     `patchLiveMenu(dailyMenu)` refuse `set_menu.wrong_place`.
   - `"building every menu reads set-menu details once"`: count statements (or spy) while
@@ -1046,7 +1007,7 @@ export interface PublishedSetMenu {
 - Queueing refuses as publishing does, at `menu-schedule.ts:48-49`: a set menu itself →
   `set_menu.wrong_place`; a full menu with `setMenuProblems` → `set_menu.not_publishable`.
 - `MenuPreview` gains `setMenuProblems` with `BuiltMenu`'s shape; `previewMenu` on a set menu
-  refuses `set_menu.wrong_place`.
+  refuses `set_menu.wrong_place`. Compare both terms rates for the Preview's VAT change.
 - `MenuChangeBody` gains
   `{ kind: "set_menu_changed"; setMenu: { id: string; name: string }; fields: ("price" | "vat" | "names" | "lines" | "dishes")[] }`;
   `MenuChangeSource` gains `"set_menu"`.
@@ -1103,14 +1064,8 @@ export interface PublishedSetMenu {
   dish's own price, which changes only the full menu's own offer: in a copy that price is a
   surcharge, changed on the set menu's page (**my call**). Apply the walk `menu-patch.ts:160-200`
   uses for `offers` to `setMenus[*].offers` too. Every copy keeps its `changedAt` unchanged.
-- **A correction cannot break decision 11.** A correction may change a dish's `vatClass`
-  (`menu-patch.ts:101-103` admits `vatClass` and `takeawayVatClass`). After applying it,
-  `patchLiveMenu` refuses `set_menu.vat_class_differs`
-  `{ productId, productVatClass, setMenuVatClass }` when any copy's dish or kept variant would then
-  carry a `vatClass` other than its copy's `terms.vatClass`, and writes nothing (**my call (plan
-  writer)**: refusing keeps one rule everywhere, where leaving VAT out of copy corrections would
-  leave a copy's surcharge taxed at a class the product no longer has). A `takeawayVatClass`
-  correction is applied to copies freely: set menus are eat-in only.
+- A live correction can change a copied dish's `vatClass` or `takeawayVatClass` fields.
+  The copied set menu's own `terms` determine its rates and stay as published.
 - **Other readers of a published document's offers** do not see the copies unless changed. Decide
   each and record it in the commit message: `documentProductIds`/`assertOffPublishedMenus`
   (`archive.ts:77`) and `documentImages` (`menu-document.ts:472`) read the copies;
@@ -1123,11 +1078,9 @@ export interface PublishedSetMenu {
 - [ ] **Step 1: Write the failing tests:**
   - `"a live price correction of Lunch's Sirloin leaves the copy's surcharge alone, and a live
     wording correction reaches the copy and keeps its changedAt"`.
-  - `"a live VAT correction that would put a copy's dish at another class is refused"`: Daily menu
-    at `reduced` in Lunch; a correction setting Soup's `vatClass` to `general` →
-    `set_menu.vat_class_differs` and Lunch's live version is unchanged. Control: the same
-    correction of a dish only Lunch's own offers hold is applied, and a `takeawayVatClass`
-    correction of Soup is applied to the copy.
+  - `"a live VAT correction changes a copied dish and keeps the set menu's rates"`:
+    change both rates on Soup's offer. The correction reaches the copy and its own terms
+    still carry the two set-menu rates from publication.
   - `"a published copy protects its dishes from being archived"`: `assertOffPublishedMenus`
     refuses archiving a dish only the set menu lists while Lunch is live.
   - `"the copy's dish images are kept"`: `documentImages` of Lunch's document lists the image of a
@@ -1331,8 +1284,9 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   menu calls are tested there; otherwise in the screen tests of Task 8a)
 
 **Interfaces:**
-- `POST /management-api/menus` accepts `kind`, `setPrice`, `setVatClass`; `PATCH .../menus/:id`
-  accepts `setPrice`, `setVatClass`.
+- `POST /management-api/menus` accepts `kind`, `setPrice`, `setVatClass` and `setTakeawayVatClass`.
+  `PATCH .../menus/:id` accepts the three terms fields. A null `setTakeawayVatClass` clears the
+  override. An invalid takeaway class answers `set_menu.invalid` naming `setTakeawayVatClass`.
 - `GET /management-api/menus/:id/set-menu` → `SetMenuDetails`.
 - `PUT /management-api/menus/:id/set-menu/lines` body `{ lines: { count, courseIds }[] }` →
   `{ lines: SetMenuLine[] }`.
@@ -1357,7 +1311,7 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   and the menus list shows no publication status for one (Task 8a).
 - Status: `set_menu.not_found` 404; `set_menu.invalid`, `set_menu.dishes_only` 400 (or whatever
   status the map gives the nearest `menu_section.*` code); `set_menu.wrong_place`,
-  `set_menu.not_publishable`, `set_menu.vat_class_differs`, `set_menu.dish_sold_by_measure` 409.
+  `set_menu.not_publishable`, `set_menu.dish_sold_by_measure` 409.
 - Client methods: `createMenu` (extended), `readSetMenu(menuId)`, `addSetMenuDishes(menuId, dishes)`,
   `saveSetMenuLines(menuId, lines)`, `saveSetMenuDishCourse(menuId, itemId, courseId)` (Fable's
   M7: Task 9 calls it),
@@ -1365,8 +1319,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   `placeSetMenu(sectionId, menuId)`.
 
 - [ ] **Step 1: Write the failing route tests**, one per route: the answer's shape on success, and
-  one refusal each with its status and code (the dishes route's is `409 set_menu.vat_class_differs`
-  for a product at another class); plus `"publishing a full menu holding a set menu with a
+  one refusal each with its status and code (the dishes route answers `409 set_menu.dish_sold_by_measure`
+  for a product sold by measure); plus `"publishing a full menu holding a set menu with a
   problem answers 409 set_menu.not_publishable"` and `"publishing a set menu itself answers 409
   set_menu.wrong_place"`, `"a change to a set menu's lines marks the full menu holding it as
   changed in menu status"`, and `"menu status lists no set menu"`. In the dashboard, one live-query
@@ -1376,8 +1330,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   `apps/server/src/boot.management-origin.test.ts` must still pass.
 - [ ] **Step 2: Run; they fail.**
 - [ ] **Step 3: Implement the routes, the status entries, the client methods, and the English and
-  Spanish wording in `codes.ts` for the codes below.** Task 8b words the class-change refusal. Task 9 words the two refusals
-  when adding dishes (`set_menu.vat_class_differs` and `set_menu.dish_sold_by_measure`). Wording, **my call**, each saying what to do:
+  Spanish wording in `codes.ts` for the codes below.** Task 9 words the refusal for a dish
+  sold by measure. The messages say what the person can do.
   - `set_menu.wrong_place`: "A set menu is sold by placing it in a menu. Open that menu's
     Structure and add the set menu there." / «Un menú a precio fijo se vende colocándolo dentro de
     un menú. Abre la Estructura de ese menú y añádelo allí.»
@@ -1432,7 +1386,7 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 - [ ] **Step 4: Run the new tests and `menus-screen.test.ts`, `menus-screen.a11y.test.ts`.**
 - [ ] **Step 5: Commit** — "Set menus: offer a set menu on the menus list and give it its own editor".
 
-### Task 8b: Dashboard — a set menu's name, price and VAT class
+### Task 8b: Dashboard — a set menu's name, price and VAT classes
 
 **Files:**
 - Create: `apps/dashboard/src/widgets/set-menu-terms-form.ts`
@@ -1443,21 +1397,16 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 **Interfaces:**
 - The form: **Name** (required), customer names by language as the section form takes them (reuse
   `dashboard-section-details-form`'s name fields if it can be composed, rather than copying them),
-  **Price per set menu** (required, `wt-price-input`, gross), **VAT class** (required; the same
-  field and default the product editor gives a new product — read
-  `product-editor.vat-default.test.ts` for how the default is chosen). It creates from the Task 11
-  dialog or saves at the top of the editor and emits `set-menu-terms-saved`. Saves quiet until
-  the draft changes. Use the refusal's `field` and `requestedVatClass` for the class change, and
-  find the dish or variant in the loaded details. For example, "This set menu holds Soup at
-  Reduced (10%), so its class can't change to General (21%). Remove those dishes first, or keep
-  Reduced." Move the shared `vatClassLabel` to `i18n/domain.ts` here and use it in Task 9 too.
+  **Price per set menu** (required, `wt-price-input`, gross), **Eat-in VAT** (required) and
+  **Takeaway VAT** (optional). Follow the product editor's choices and default
+  (`product-editor.vat-default.test.ts`). Clearing takeaway VAT makes it follow eat-in.
+  The form creates from the Task 11 dialog or saves at the top of the editor and emits
+  `set-menu-terms-saved`. Save stays quiet until the draft changes.
 
-- [ ] **Step 1: Write the failing form tests:** required marks; `"a negative or blank price shows its error
-  under the field and disables Save"`; `"Save stays quiet until something changes"`; a refused save
-  puts `set_menu.invalid` `{ field: "setPrice" }` under the price field; a refused class change
-  puts the class-change wording for `set_menu.vat_class_differs` under the VAT class field. The a11y file: axe in both
-  themes for the empty, filled and refused states. The unsaved file: leaving with a changed price
-  asks, as the other `*.unsaved` tests do.
+- [ ] **Step 1: Write the failing form tests:** required marks and defaults, saving a different
+  takeaway rate, clearing it, invalid price disabling Save, and quiet Save until a value changes.
+  Put a server refusal beneath the field it names. Run axe in both themes for empty, filled and
+  refused states. Verify that leaving with a changed price asks before dropping the draft.
 - [ ] **Step 2: Run; they fail.** **Step 3: Implement.** **Step 4: Run them.**
 - [ ] **Step 5: Look at it.** Open a fixture draft and check the list and editor in both themes and
   at phone width. Task 11 checks creation through Add menu on the dev stack.
@@ -1481,18 +1430,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 - After adding, copying or changing a dish's course, any `addedLines` show once as a note above
   the lines: "Added a line: 1 × Coffee" (decision 5), and any `removedLines` as "Removed a line:
   1 × Sharing plates" (decision 14).
-- **The two dish refusals** (decisions 11 and 12) show in the dialog that caused them (Add
-  products, Copy dishes, Variants…), naming the product, and the dialog stays open with nothing
-  saved. Their wording in `codes.ts`, **my call (plan writer)** (the owner's example in the spec,
-  section 1: "This product is taxed at 21%, the set menu at 10%"), with each class through
-  `vatClassLabel` in `i18n/domain.ts` (moved in Task 8b):
-  - `set_menu.vat_class_differs`: "{product} is taxed at {productClass}, and this set menu at
-    {setMenuClass}. Until the tax treatment of a set menu with dishes at another rate is confirmed,
-    a set menu can only hold products at its own rate. Leave {product} out, or correct its VAT
-    class on the product if it is wrong." / «{product} lleva el IVA {productClass} y este menú,
-    {setMenuClass}. Hasta que se confirme cómo tributa un menú con platos a otro tipo, un menú solo
-    puede incluir productos a su mismo tipo. Deja fuera {product} o corrige su tipo de IVA en el
-    producto si es erróneo.»
+- **A dish sold by measure** (decision 12) is refused in the dialog that caused it. The dialog
+  names the dish and stays open.
   - `set_menu.dish_sold_by_measure`: "{product} is sold by weight or measure, and a set menu
     covers one portion of each dish. Sell it à la carte, or sell it by the portion on the
     product." / «{product} se vende al peso o por medida, y un menú cubre una ración de cada plato.
@@ -1546,11 +1485,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 - Under the lines, the editor lists `problems` in plain words ("Bottle (Wine) counts as Desserts,
   which no line includes. Add Desserts to a line, or leave Bottle out."), each with the control
   that fixes it where there is one (a link to the product). Task 9 adds and tests the Variants
-  control. The two kinds a
-  product's own page can cause (Task 4b): "Sirloin is now taxed at General (21%), and this set menu
-  at Reduced (10%). Leave it out, or correct its VAT class on the product." and "Turbot is now sold
-  by weight. Leave it out, or sell it by the portion on the product.", each linking to the product
-  (**my call (plan writer)**).
+  control. If a product's unit changed, show "Turbot is now sold by weight. Leave it out, or
+  sell it by the portion on the product." Link to the product.
 
 - [ ] **Step 1: Write the failing tests:** `"lines show as N × courses joined by or"`;
   `"joining a course onto a line and saving sends both courses"`; `"a count outside 1–99 shows
@@ -1586,8 +1522,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 - Guide: a `## Set menus {#set-menus}` section in both languages, written from the code as built:
   what a set menu is, creating one, its dishes and surcharges, giving a dish another course in
   the set menu (on a bill it counts as that course in this set menu, and a dish ordered from this
-  set menu's folder is sent with it), variants, that a set menu holds only products at its own VAT
-  rate and none sold by weight, what one set menu includes, placing it in a menu, and that its
+  set menu's folder is sent with it), variants, how to choose eat-in and takeaway VAT, which
+  dishes are sold separately by weight, what one set menu includes, placing it in a menu, and that its
   changes reach the tills only when a menu that holds it is published. Remove any "set lunch" wording A1515-REMOVE left behind in these two files.
   Short; a sentence earns its place by changing what staff do (CLAUDE.md §3).
 

@@ -59,7 +59,9 @@ Part 2 and the shared Google Doc are unchanged. Against the plans this sheet put
   in the future gets a corrective (question 8).
 - A set menu carries its own two VAT rates, eaten in and taken away, set like any product's; any
   dish may be included and set menus may be taken away (question 4). A full invoice lists the menu
-  and its supplements as the ticket does.
+  and its supplements as the ticket does. In the watcher's follow-up on 18 November around 19:30,
+  the owner answered "no" to whether a drink supplement keeps the drink's own VAT rate. The
+  supplement takes the set menu's rate.
 - Drinks served without food stay at the eat-in rate until the adviser comes back (question 4).
 - Money given back as goodwill takes a corrective (question 6).
 - Waitron issues the corrective for a no-show's kept deposit by itself, at every venue (question 6).

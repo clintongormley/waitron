@@ -65,7 +65,6 @@ import { addMember, sectionPatchValues } from "./sections.js";
 import { archiveProducts } from "./archive.js";
 import {
   refuseSetMenu,
-  refuseSetMenuVatClassChange,
   requireSetMenu,
   setMenuPriceCents,
   setMenuSurchargeCents,
@@ -349,6 +348,7 @@ export async function createMenu(
     kind?: MenuKind;
     setPrice?: string | null;
     setVatClass?: VatClass | null;
+    setTakeawayVatClass?: VatClass | null;
   },
 ): Promise<Menu> {
   const presentation = await sectionPatchValues(tx, {
@@ -363,6 +363,10 @@ export async function createMenu(
           kind: input.kind,
           setPrice: setMenuPriceCents(input.setPrice),
           setVatClass: setMenuVatClass(input.setVatClass),
+          setTakeawayVatClass:
+            input.setTakeawayVatClass == null
+              ? null
+              : setMenuVatClass(input.setTakeawayVatClass, "setTakeawayVatClass"),
         }
       : undefined;
   const row = await insertMenu(tx, presentation.internalName!, terms);
@@ -374,7 +378,10 @@ export async function createMenu(
 export async function insertMenu(
   tx: Transaction,
   name: string,
-  terms?: Pick<typeof menus.$inferInsert, "kind" | "setPrice" | "setVatClass">,
+  terms?: Pick<
+    typeof menus.$inferInsert,
+    "kind" | "setPrice" | "setVatClass" | "setTakeawayVatClass"
+  >,
 ): Promise<Menu> {
   await assertMenuNameFree(tx, name);
   const [row] = await tx
@@ -877,13 +884,20 @@ export async function updateMenuDetails(
     color?: string | null;
     setPrice?: string | null;
     setVatClass?: VatClass | null;
+    setTakeawayVatClass?: VatClass | null;
   },
   fallbackLanguage?: string,
 ): Promise<void> {
-  const changesTerms = patch.setPrice !== undefined || patch.setVatClass !== undefined;
+  const changesTerms =
+    patch.setPrice !== undefined ||
+    patch.setVatClass !== undefined ||
+    patch.setTakeawayVatClass !== undefined;
   if (changesTerms) await requireSetMenu(tx, menuId);
   const vatClass = patch.setVatClass === undefined ? undefined : setMenuVatClass(patch.setVatClass);
-  if (vatClass !== undefined) await refuseSetMenuVatClassChange(tx, menuId, vatClass);
+  const takeawayVatClass =
+    patch.setTakeawayVatClass == null
+      ? patch.setTakeawayVatClass
+      : setMenuVatClass(patch.setTakeawayVatClass, "setTakeawayVatClass");
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const [stored] =
     patch.names === undefined
@@ -911,6 +925,7 @@ export async function updateMenuDetails(
         name: internalName,
         setPrice: patch.setPrice === undefined ? undefined : setMenuPriceCents(patch.setPrice),
         setVatClass: vatClass,
+        setTakeawayVatClass: takeawayVatClass,
         updatedAt: now(),
       })
       .where(eq(menus.id, menuId));

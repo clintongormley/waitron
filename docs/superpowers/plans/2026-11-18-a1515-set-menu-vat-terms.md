@@ -1,8 +1,9 @@
 # A1515 set-menu VAT terms
 
 A set-menu draft can save its own eat-in rate and an optional takeaway rate, be duplicated and
-exported with both, and hold products or kept variants at different VAT rates. This is the
-foundation the watcher cleared at 19:32 on 18 November. The owner's decision is in
+exported with both, and hold products or kept variants at different VAT rates. Managers get these
+controls when Tasks 7 and 8b land. The watcher cleared the split at 19:32 and this plan at 19:48 on
+18 November. The owner's decision is in
 [the adviser meeting notes](../../compliance/2026-11-19-adviser-meeting.md) under “The owner's
 decisions on the answers, 18 November”. The watcher also recorded the owner's “no” when asked
 whether a drink supplement keeps the drink's own rate. Supplements take the set menu's rate.
@@ -21,7 +22,8 @@ whether a drink supplement keeps the drink's own rate. Supplements take the set 
    `setTakeawayVatClass` in `set_menu.invalid`. The draft detail read returns the stored override
    as `takeawayVatClass: VatClass | null`. `menu-copy.ts` preserves it. Keep the ordinary menu
    summary unchanged. In `set-menus.test.ts`, prove distinct rates, duplication, clearing,
-   a takeaway-only patch advancing `updated_at`, and refusal of that patch on an ordinary menu.
+   a takeaway-only patch advancing `updated_at`, invalid takeaway class refusal naming the
+   field, and refusal of that patch on an ordinary menu.
 3. In `set-menus.ts` and `operations.ts`, remove the VAT comparisons from adding, copying
    and replacing dishes, editing kept variants and saving terms. Remove the corresponding
    publishing problem, obsolete error registry entry and unused draft dish and variant VAT fields.
@@ -36,14 +38,19 @@ whether a drink supplement keeps the drink's own rate. Supplements take the set 
    `pnpm --filter @waitron/server migration-baseline rebuild --set core`. Run the touched menu,
    transfer, log and schema tests and the schema, trigger and migration checks in CLAUDE.md.
 5. Correct the dashboard plan's decision 11, problem and error lists, refusal tests, Preview
-   and live-correction tasks, editor and guides. The editor follows the product's rate choices.
+   and live corrections. Task 7's create and update routes accept `setTakeawayVatClass`, with
+   null clearing it. Remove the retired VAT refusal from the 409 list. Task 8b and the guides
+   follow the product's rate choices. Correct the set-menu design and record the supplement
+   answer on the adviser sheet.
    Supplements use the set menu's applicable rate. The watcher routes changes to ordering,
    demo and bill plans to their lanes.
 6. Keep #3775 open until the foundation lands. Rebase Task 5a, resolve the published terms'
    takeaway rate once as `takeawayVatClass ?? vatClass`, and remove the old VAT refusal in
    immediate and scheduled publishing. Exercise a published surcharge on a dish at a different
    rate, a null override resolving to the menu's rate, and a takeaway-only edit moving the hash
-   and timestamp. Supplement charging consumes the two published term rates.
+   and timestamp. Supplement charging consumes the two published term rates. Expect #3775
+   to stay around 1,000 changed lines against its 1,140-line stop after replacing the old
+   refusal and its tests with the rate cases.
 
 Run the behavioural cases first, observe the failures and run them again after the changes.
 The first line of the PR says **Resets test venues**. Expected size is 120–200 production lines

@@ -473,7 +473,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 52,
+  version: 53,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -1704,7 +1704,8 @@ it("transfers set-menu terms, course choices, dish overrides and variant exclusi
     await tx.insert(products).values({ id: "cup", parentId: dish.id, name: "Cup" });
     await tx.insert(kitchenCourses).values({ id: "starter", name: "Starters" });
     await tx.execute(sql`
-      update menus set kind = 'set_menu', set_price = 1400, set_vat_class = 'reduced'
+      update menus set kind = 'set_menu', set_price = 1400, set_vat_class = 'reduced',
+                       set_takeaway_vat_class = 'general'
       where id = ${menu.id}
     `);
     await tx.execute(sql`
@@ -1737,7 +1738,7 @@ it("transfers set-menu terms, course choices, dish overrides and variant exclusi
     beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
   });
   const { rows } = await targetSuite.db.execute(sql`
-    select menus.id as menu_id, menus.kind, menus.set_price, menus.set_vat_class,
+    select menus.id as menu_id, menus.kind, menus.set_price, menus.set_vat_class, menus.set_takeaway_vat_class,
            line.id as line_id, line.count, course.id as course_id, course.name as course,
            menu_items.id as item_id, dish.id as product_id, dish.name as dish,
            variant.id as variant_id, variant.name as excluded_variant
@@ -1758,6 +1759,7 @@ it("transfers set-menu terms, course choices, dish overrides and variant exclusi
       kind: "set_menu",
       set_price: 1400,
       set_vat_class: "reduced",
+      set_takeaway_vat_class: "general",
       line_id: expect.any(String),
       count: 2,
       course_id: expect.any(String),
@@ -6009,7 +6011,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(52);
+  expect(exported.version).toBe(53);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

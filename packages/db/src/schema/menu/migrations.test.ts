@@ -480,8 +480,9 @@ describe("the menu tables carry no taxpayer column", () => {
       menus_set_not_default_ck: `"menus"."kind" = 'menu' or "menus"."is_default" = 0`,
       menus_set_price_ck: `"menus"."set_price" is null or "menus"."set_price" >= 0`,
       menus_set_terms_ck: `("menus"."kind" = 'set_menu' and "menus"."set_price" is not null and "menus"."set_vat_class" is not null)
-        or ("menus"."kind" = 'menu' and "menus"."set_price" is null and "menus"."set_vat_class" is null)`,
+        or ("menus"."kind" = 'menu' and "menus"."set_price" is null and "menus"."set_vat_class" is null and "menus"."set_takeaway_vat_class" is null)`,
       menus_set_vat_class_ck: `"menus"."set_vat_class" in ('general','reduced','super_reduced','zero')`,
+      menus_set_takeaway_vat_class_ck: `"menus"."set_takeaway_vat_class" in ('general','reduced','super_reduced','zero')`,
       set_menu_lines_count_ck: `"set_menu_lines"."count" between 1 and 99`,
       menu_items_gross_price_ck: `"menu_items"."gross_price" >= 0`,
       units_precision_ck: `"units"."precision" between 0 and 3`,

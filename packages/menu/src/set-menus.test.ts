@@ -1,7 +1,9 @@
 import { and, eq } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { expect, it, onTestFinished, vi } from "vitest";
 import { menus, sections, withTransaction, type Transaction } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
+import { duplicateMenu } from "./menu-copy.js";
+import { readSetMenu } from "./set-menus.js";
 import { menuRoot } from "./menu-structure.js";
 import {
   createMenu,
@@ -40,6 +42,7 @@ it.each([
   [{ setPrice: undefined }, "setPrice"],
   [{ setVatClass: "luxury" as never }, "setVatClass"],
   [{ setVatClass: null }, "setVatClass"],
+  [{ setTakeawayVatClass: "luxury" as never }, "setTakeawayVatClass"],
 ])("refuses missing or invalid terms %j", async (terms, field) => {
   await expect(app((tx) => createMenu(tx, { ...lunch, ...terms }))).rejects.toMatchObject({
     code: "set_menu.invalid",
@@ -78,6 +81,45 @@ it("changes a set menu's terms independently and refuses terms for an ordinary m
   await expect(
     app((tx) => updateMenuDetails(tx, set.id, { setPrice: "2.00" })),
   ).rejects.toMatchObject({ code: "set_menu.not_found", params: { menuId: set.id } });
+});
+
+it("duplicates the distinct takeaway rate with the eat-in rate", async () => {
+  const set = await app((tx) => createMenu(tx, { ...lunch, setTakeawayVatClass: "general" }));
+  const copy = await app((tx) => duplicateMenu(tx, set.id, "Lunch copy"));
+  const rates = { vatClass: "reduced", takeawayVatClass: "general" };
+  expect(await app((tx) => readSetMenu(tx, set.id))).toMatchObject(rates);
+  expect(await app((tx) => readSetMenu(tx, copy.id))).toMatchObject(rates);
+});
+
+it("saves a takeaway-only patch, stamps it and allows clearing the override", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => vi.useRealTimers());
+  vi.setSystemTime(new Date("2030-02-01T12:00:00Z"));
+  const set = await app((tx) => createMenu(tx, lunch));
+  const read = () => app((tx) => readSetMenu(tx, set.id));
+  expect((await read()).takeawayVatClass).toBeNull();
+  const editTime = new Date("2030-02-01T12:01:00Z");
+  vi.setSystemTime(editTime);
+  await app((tx) => updateMenuDetails(tx, set.id, { setTakeawayVatClass: "general" }));
+  expect(await read()).toMatchObject({ vatClass: "reduced", takeawayVatClass: "general" });
+  expect(
+    await suite.db.select({ updatedAt: menus.updatedAt }).from(menus).where(eq(menus.id, set.id)),
+  ).toEqual([{ updatedAt: editTime }]);
+  await app((tx) => updateMenuDetails(tx, set.id, { setPrice: "15.00" }));
+  expect((await read()).takeawayVatClass).toBe("general");
+  await app((tx) => updateMenuDetails(tx, set.id, { setTakeawayVatClass: null }));
+  expect(await read()).toMatchObject({ vatClass: "reduced", takeawayVatClass: null });
+});
+
+it("refuses an invalid takeaway patch and a takeaway patch to an ordinary menu", async () => {
+  const set = await app((tx) => createMenu(tx, lunch));
+  await expect(
+    app((tx) => updateMenuDetails(tx, set.id, { setTakeawayVatClass: "luxury" as never })),
+  ).rejects.toMatchObject({ code: "set_menu.invalid", params: { field: "setTakeawayVatClass" } });
+  const ordinary = await app((tx) => createMenu(tx, { name: "Dinner" }));
+  await expect(
+    app((tx) => updateMenuDetails(tx, ordinary.id, { setTakeawayVatClass: "general" })),
+  ).rejects.toMatchObject({ code: "set_menu.not_found", params: { menuId: ordinary.id } });
 });
 
 it("refuses a set menu as the venue default and leaves the current default in place", async () => {

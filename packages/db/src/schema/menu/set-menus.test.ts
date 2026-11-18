@@ -65,6 +65,28 @@ it.each([
   },
 );
 
+it.each([
+  ["set_menu", 1400, "reduced", null, null],
+  ["set_menu", 1400, "reduced", "general", null],
+  ["set_menu", 1400, "reduced", "luxury", "menus_set_takeaway_vat_class_ck"],
+  ["menu", null, null, "general", "menus_set_terms_ck"],
+])("checks takeaway terms (%s, %s, %s, %s)", async (kind, price, vatClass, takeaway, check) => {
+  await insertMenu(kind, price, vatClass);
+  const write = async () =>
+    suite.db.execute(sql`
+    update menus set set_takeaway_vat_class = ${takeaway} where id = 'lunch'
+  `);
+  if (check !== null) {
+    await expect(write()).rejects.toThrow(check);
+  } else {
+    await write();
+    const { rows } = await suite.db.execute(sql`
+      select set_vat_class, set_takeaway_vat_class from menus where id = 'lunch'
+    `);
+    expect(rows).toEqual([{ set_vat_class: vatClass, set_takeaway_vat_class: takeaway }]);
+  }
+});
+
 it("a line takes between one and ninety-nine dishes", async () => {
   await insertMenu("set_menu", 1400, "reduced");
   for (const count of [0, 100])
