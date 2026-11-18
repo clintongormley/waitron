@@ -11,8 +11,18 @@ export async function insertA4Printer(
       kind: "a4",
       name: fields?.name ?? "Office printer",
       active: fields?.active ?? true,
-      transport: "network_tcp",
+      transport: "ipp",
       host: "10.255.0.4",
+      port: 631,
+      resourcePath: "/ipp/print",
+      documentFormat: "application/pdf",
+      supportedFormats: ["application/pdf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 300,
+      paperWidth: null,
+      resolution: null,
+      picksUpReceipts: false,
+      picksUpPaymentSlips: false,
     })
     .returning({ id: printers.id });
   return row!.id;

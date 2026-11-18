@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1b6f389e-2497-4246-87cf-dfbb4a342282",
+  "id": "48b61d7d-d6f9-440a-9940-90a5002a5c67",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5513,7 +5513,7 @@
           "name": "paper_width",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false,
           "default": "'80mm'"
         },
@@ -5521,7 +5521,7 @@
           "name": "resolution",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false,
           "default": "'180dpi'"
         },
@@ -5571,6 +5571,48 @@
           "autoincrement": false,
           "default": true
         },
+        "resource_path": {
+          "name": "resource_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "document_format": {
+          "name": "document_format",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "supported_formats": {
+          "name": "supported_formats",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "media": {
+          "name": "media",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resolution_dpi": {
+          "name": "resolution_dpi",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "active": {
           "name": "active",
           "type": "integer",
@@ -5595,6 +5637,16 @@
           ],
           "isUnique": true,
           "where": "\"printers\".\"local_key\" is not null and \"printers\".\"deleted_at\" is null"
+        },
+        "printers_endpoint_uq": {
+          "name": "printers_endpoint_uq",
+          "columns": [
+            "host",
+            "port",
+            "resource_path"
+          ],
+          "isUnique": true,
+          "where": "\"printers\".\"kind\" = 'a4'"
         }
       },
       "foreignKeys": {
@@ -5604,6 +5656,19 @@
           "tableTo": "devices",
           "columnsFrom": [
             "held_by_device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "printers_agent_id_print_agents_id_fk": {
+          "name": "printers_agent_id_print_agents_id_fk",
+          "tableFrom": "printers",
+          "tableTo": "print_agents",
+          "columnsFrom": [
+            "agent_id"
           ],
           "columnsTo": [
             "id"
@@ -5621,7 +5686,7 @@
         },
         "printers_transport_ck": {
           "name": "printers_transport_ck",
-          "value": "\"printers\".\"transport\" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll')"
+          "value": "\"printers\".\"transport\" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll', 'ipp')"
         },
         "printers_paper_width_ck": {
           "name": "printers_paper_width_ck",
@@ -5645,7 +5710,27 @@
         },
         "printers_transport_fields_ck": {
           "name": "printers_transport_fields_ck",
-          "value": "(\"printers\".\"transport\" = 'usb' and \"printers\".\"local_key\" is not null)\n          or (\"printers\".\"transport\" = 'bluetooth' and \"printers\".\"local_key\" is not null)\n          or (\"printers\".\"transport\" = 'network_tcp' and \"printers\".\"host\" is not null)\n          or (\"printers\".\"transport\" = 'cloud_poll' and \"printers\".\"poll_id\" is not null)"
+          "value": "(\"printers\".\"transport\" = 'usb' and \"printers\".\"local_key\" is not null)\n          or (\"printers\".\"transport\" = 'bluetooth' and \"printers\".\"local_key\" is not null)\n          or (\"printers\".\"transport\" = 'network_tcp' and \"printers\".\"host\" is not null)\n          or (\"printers\".\"transport\" = 'cloud_poll' and \"printers\".\"poll_id\" is not null)\n          or (\"printers\".\"transport\" = 'ipp' and \"printers\".\"host\" is not null)"
+        },
+        "printers_kind_fields_ck": {
+          "name": "printers_kind_fields_ck",
+          "value": "(\"printers\".\"kind\" = 'receipt' and \"printers\".\"transport\" <> 'ipp'\n           and \"printers\".\"paper_width\" is not null and \"printers\".\"resolution\" is not null\n           and \"printers\".\"resource_path\" is null and \"printers\".\"document_format\" is null\n           and \"printers\".\"supported_formats\" is null and \"printers\".\"media\" is null\n           and \"printers\".\"resolution_dpi\" is null and \"printers\".\"agent_id\" is null)\n          or (\"printers\".\"kind\" = 'a4' and \"printers\".\"transport\" = 'ipp' and \"printers\".\"host\" is not null\n              and \"printers\".\"port\" is not null and \"printers\".\"resource_path\" is not null\n              and \"printers\".\"document_format\" is not null and \"printers\".\"supported_formats\" is not null\n              and \"printers\".\"media\" is not null and \"printers\".\"resolution_dpi\" is not null\n              and \"printers\".\"paper_width\" is null and \"printers\".\"resolution\" is null\n              and \"printers\".\"has_cash_drawer\" = 0 and \"printers\".\"portable\" = 0\n              and \"printers\".\"picks_up_receipts\" = 0 and \"printers\".\"picks_up_payment_slips\" = 0\n              and \"printers\".\"local_key\" is null and \"printers\".\"poll_id\" is null and \"printers\".\"poll_token_hash\" is null\n              and \"printers\".\"held_by_device_id\" is null and \"printers\".\"deleted_at\" is null)"
+        },
+        "printers_document_format_ck": {
+          "name": "printers_document_format_ck",
+          "value": "\"printers\".\"document_format\" in ('application/pdf', 'image/pwg-raster', 'image/urf')"
+        },
+        "printers_media_ck": {
+          "name": "printers_media_ck",
+          "value": "\"printers\".\"media\" in ('iso_a4_210x297mm', 'na_letter_8.5x11in')"
+        },
+        "printers_port_ck": {
+          "name": "printers_port_ck",
+          "value": "\"printers\".\"kind\" <> 'a4' or \"printers\".\"port\" between 1 and 65535"
+        },
+        "printers_resolution_dpi_ck": {
+          "name": "printers_resolution_dpi_ck",
+          "value": "\"printers\".\"resolution_dpi\" is null or \"printers\".\"resolution_dpi\" > 0"
         }
       }
     },

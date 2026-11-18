@@ -840,19 +840,26 @@ CREATE TABLE `printers` (
 	`port` integer DEFAULT 9100,
 	`poll_id` text,
 	`poll_token_hash` text,
-	`paper_width` text DEFAULT '80mm' NOT NULL,
-	`resolution` text DEFAULT '180dpi' NOT NULL,
+	`paper_width` text DEFAULT '80mm',
+	`resolution` text DEFAULT '180dpi',
 	`has_cash_drawer` integer DEFAULT false NOT NULL,
 	`portable` integer DEFAULT false NOT NULL,
 	`held_by_device_id` text,
 	`held_at` text,
 	`picks_up_receipts` integer DEFAULT true NOT NULL,
 	`picks_up_payment_slips` integer DEFAULT true NOT NULL,
+	`resource_path` text,
+	`document_format` text,
+	`supported_formats` text,
+	`media` text,
+	`resolution_dpi` integer,
+	`agent_id` text,
 	`active` integer DEFAULT true NOT NULL,
 	`deleted_at` text,
 	FOREIGN KEY (`held_by_device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`agent_id`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "printers_kind_ck" CHECK("printers"."kind" in ('receipt', 'a4')),
-	CONSTRAINT "printers_transport_ck" CHECK("printers"."transport" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll')),
+	CONSTRAINT "printers_transport_ck" CHECK("printers"."transport" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll', 'ipp')),
 	CONSTRAINT "printers_paper_width_ck" CHECK("printers"."paper_width" in ('58mm', '80mm')),
 	CONSTRAINT "printers_resolution_ck" CHECK("printers"."resolution" in ('180dpi', '203dpi')),
 	CONSTRAINT "printers_held_pair_ck" CHECK(("printers"."held_by_device_id" is null) = ("printers"."held_at" is null)),
@@ -861,10 +868,30 @@ CREATE TABLE `printers` (
 	CONSTRAINT "printers_transport_fields_ck" CHECK(("printers"."transport" = 'usb' and "printers"."local_key" is not null)
           or ("printers"."transport" = 'bluetooth' and "printers"."local_key" is not null)
           or ("printers"."transport" = 'network_tcp' and "printers"."host" is not null)
-          or ("printers"."transport" = 'cloud_poll' and "printers"."poll_id" is not null))
+          or ("printers"."transport" = 'cloud_poll' and "printers"."poll_id" is not null)
+          or ("printers"."transport" = 'ipp' and "printers"."host" is not null)),
+	CONSTRAINT "printers_kind_fields_ck" CHECK(("printers"."kind" = 'receipt' and "printers"."transport" <> 'ipp'
+           and "printers"."paper_width" is not null and "printers"."resolution" is not null
+           and "printers"."resource_path" is null and "printers"."document_format" is null
+           and "printers"."supported_formats" is null and "printers"."media" is null
+           and "printers"."resolution_dpi" is null and "printers"."agent_id" is null)
+          or ("printers"."kind" = 'a4' and "printers"."transport" = 'ipp' and "printers"."host" is not null
+              and "printers"."port" is not null and "printers"."resource_path" is not null
+              and "printers"."document_format" is not null and "printers"."supported_formats" is not null
+              and "printers"."media" is not null and "printers"."resolution_dpi" is not null
+              and "printers"."paper_width" is null and "printers"."resolution" is null
+              and "printers"."has_cash_drawer" = 0 and "printers"."portable" = 0
+              and "printers"."picks_up_receipts" = 0 and "printers"."picks_up_payment_slips" = 0
+              and "printers"."local_key" is null and "printers"."poll_id" is null and "printers"."poll_token_hash" is null
+              and "printers"."held_by_device_id" is null and "printers"."deleted_at" is null)),
+	CONSTRAINT "printers_document_format_ck" CHECK("printers"."document_format" in ('application/pdf', 'image/pwg-raster', 'image/urf')),
+	CONSTRAINT "printers_media_ck" CHECK("printers"."media" in ('iso_a4_210x297mm', 'na_letter_8.5x11in')),
+	CONSTRAINT "printers_port_ck" CHECK("printers"."kind" <> 'a4' or "printers"."port" between 1 and 65535),
+	CONSTRAINT "printers_resolution_dpi_ck" CHECK("printers"."resolution_dpi" is null or "printers"."resolution_dpi" > 0)
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `printers_local_key_key` ON `printers` (`local_key`) WHERE "printers"."local_key" is not null and "printers"."deleted_at" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX `printers_endpoint_uq` ON `printers` (`host`,`port`,`resource_path`) WHERE "printers"."kind" = 'a4';--> statement-breakpoint
 CREATE TABLE `print_jobs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`printer_id` text NOT NULL,
