@@ -7789,6 +7789,8 @@ describe("the publish job's concurrency group", () => {
 
 const RELEASE_PULL_STEP = "Pull the published release image";
 const RELEASE_ATTACH_STEP = "Attach the declaration to the GitHub Release";
+const RELEASE_SIGN_STEP = "Sign the release file";
+const RELEASE_UPLOAD_STEP = "Attach the signed file to the GitHub Release";
 
 describe("the release job", () => {
   const body = () => job("release").body;
@@ -7856,7 +7858,9 @@ describe("the release job", () => {
     const publish = job("publish").body;
     expect(publish).toContain("    outputs:");
     expect(publish).toContain("      release_version: ${{ steps.tags.outputs.release_version }}");
-    expect(publish).toContain("      release_image: ${{ steps.tags.outputs.release_image }}");
+    expect(publish).toContain(
+      "      release_image: ${{ format('{0}@{1}', steps.tags.outputs.release_repository, steps.push_app.outputs.digest) }}",
+    );
     expect(named(RELEASE_PULL_STEP).envOf("RELEASE_IMAGE")).toBe(
       "${{ needs.publish.outputs.release_image }}",
     );
@@ -7868,7 +7872,7 @@ describe("the release job", () => {
     );
   });
 
-  it("logs in to GHCR, pulls, then runs the release script with the token on that step alone", () => {
+  it("logs in to GHCR and pulls before attaching the declaration", () => {
     const login = steps().findIndex((step) => /uses: docker\/login-action@/.test(step.text));
     expect(login).toBeGreaterThan(-1);
     expect(steps()[login].text).toContain("registry: ghcr.io");
@@ -7883,8 +7887,47 @@ describe("the release job", () => {
       steps()
         .filter((step) => /GH_TOKEN/.test(step.text))
         .map((step) => step.name),
-    ).toEqual([RELEASE_ATTACH_STEP]);
+    ).toEqual([RELEASE_ATTACH_STEP, RELEASE_UPLOAD_STEP]);
     expect(attach.text).toMatch(/^ {8}timeout-minutes: [1-9]\d*\s*$/m);
+  });
+
+  it("signs with the digest of each pushed image in its own role", () => {
+    const publish = job("publish").body;
+    const pushes = workflowSteps(publish.join("\n")).filter((step) => step.with.push === "true");
+    const app = pushes.find((step) => step.with.tags === "${{ steps.tags.outputs.tags }}");
+    const printAgent = pushes.find((step) => step.with.target === "print-agent");
+    expect(app?.id).toBeTruthy();
+    expect(printAgent?.id).toBeTruthy();
+    expect(app.id).not.toBe(printAgent.id);
+    expect(app.with.platforms).toBe("linux/amd64");
+    expect(printAgent.with.platforms).toBe(app.with.platforms);
+    expect(publish).toContain("      app_digest: ${{ steps." + app.id + ".outputs.digest }}");
+    expect(publish).toContain(
+      "      print_agent_digest: ${{ steps." + printAgent.id + ".outputs.digest }}",
+    );
+    const sign = named(RELEASE_SIGN_STEP);
+    expect(sign.envOf("RELEASE_APP_DIGEST")).toBe("${{ needs.publish.outputs.app_digest }}");
+    expect(sign.envOf("RELEASE_PRINT_AGENT_DIGEST")).toBe(
+      "${{ needs.publish.outputs.print_agent_digest }}",
+    );
+    expect(sign.envOf("RELEASE_SOURCE_SHA")).toBe("${{ github.sha }}");
+    expect(sign.envOf("RELEASE_VERSION")).toBe("${{ needs.publish.outputs.release_version }}");
+  });
+
+  it("gives the release environment key to the bounded signing step and uploads after the declaration", () => {
+    expect(body()).toContain("    environment: release");
+    const sign = named(RELEASE_SIGN_STEP);
+    expect(sign.envOf("WAITRON_RELEASE_SIGNING_KEY")).toBe(
+      "${{ secrets.WAITRON_RELEASE_SIGNING_KEY }}",
+    );
+    expect(sign.script).toMatch(/timeout [1-9]\d* node scripts\/release\/sign-release-list\.mjs/);
+    const upload = named(RELEASE_UPLOAD_STEP);
+    expect(upload.envOf("GH_TOKEN")).toBe("${{ secrets.GITHUB_TOKEN }}");
+    expect(upload.script).toMatch(
+      /timeout [1-9]\d* scripts\/release\/github-release\.sh --signed-file/,
+    );
+    expect(at(RELEASE_UPLOAD_STEP)).toBeGreaterThan(at(RELEASE_ATTACH_STEP));
+    expect(at(RELEASE_UPLOAD_STEP)).toBeGreaterThan(at(RELEASE_SIGN_STEP));
   });
 
   describe("the pull", () => {
@@ -7908,7 +7951,7 @@ describe("the release job", () => {
         const result = runPublishScript(
           named(RELEASE_PULL_STEP).script,
           {
-            RELEASE_IMAGE: "ghcr.io/example/waitron:1.2.3",
+            RELEASE_IMAGE: "ghcr.io/example/waitron@sha256:" + "a".repeat(64),
             PULL_FAILURES: String(failures),
             STUB_DIR: dir,
           },
@@ -7925,7 +7968,7 @@ describe("the release job", () => {
     it("pulls the published image once when the first pull works, under a time limit", () => {
       const result = run(0);
       expect(result.status, result.stderr).toBe(0);
-      expect(result.docker).toBe("pull ghcr.io/example/waitron:1.2.3\n");
+      expect(result.docker).toBe("pull ghcr.io/example/waitron@sha256:" + "a".repeat(64) + "\n");
       expect(result.timeouts).toMatch(/^[1-9]\d*\n$/);
     });
 

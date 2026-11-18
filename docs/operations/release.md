@@ -29,6 +29,37 @@ publish a tag that is not on a commit of `main`, whose name is not `v` followed 
 `1.0.0`, whose declaration file is missing, still carries a blocker line or disagrees with the
 code, or whose version is already published.
 
+## Set up signing before the first signed release
+
+The repository owner sets up signing. Do it before cutting the release so its tag
+includes both trusted public keys.
+
+1. Generate two Ed25519 key pairs outside the checkout. Use one as the current key
+   and keep the spare private key offline. You can export the public half of either
+   pair with `openssl pkey -in <private-key.pem> -pubout`.
+2. In GitHub's repository settings, create the `release` environment. Under
+   **Deployment branches and tags**, select **Selected branches and tags** and add
+   a single **Tag** rule matching `v*`. Read both settings back from the checkout.
+
+   ```sh
+   gh api 'repos/{owner}/{repo}/environments/release' --jq '.deployment_branch_policy'
+   gh api 'repos/{owner}/{repo}/environments/release/deployment-branch-policies' --paginate --jq '.branch_policies[] | [.type, .name] | @tsv'
+   ```
+
+   The first command should show `custom_branch_policies: true` and
+   `protected_branches: false`. The second should show one row with `tag` and `v*`.
+   [GitHub's deployment branch and tag policies](https://docs.github.com/en/rest/deployments/branch-policies)
+3. Once those rules are in place, put the current private key in the `release`
+   environment's `WAITRON_RELEASE_SIGNING_KEY` secret. For example, run
+   `gh secret set WAITRON_RELEASE_SIGNING_KEY --env release < /path/to/current-private.pem`.
+4. Open a pull request with the public keys in
+   `deploy/box/release-keys/current.pem` and `deploy/box/release-keys/spare.pem`.
+   Cut the signed release from main after the keys land.
+
+The release job skips signing while both public keys and the secret are absent.
+After setup, a missing key or a secret that matches neither public key fails the
+release job.
+
 ## 1. Make the release worktree
 
 `prepare` runs only on a branch named `release/<version>` whose last commit is `main`'s latest,
@@ -161,10 +192,12 @@ two jobs make the release:
    `declarations/v1.0.0.md` is missing, carries a blocker line or disagrees with the code. It runs
    `check-release 1.0.0` inside the built image, refuses a version the registry already holds, and
    only then pushes the print agent's `:1.0.0` and, last, `ghcr.io/clintongormley/waitron:1.0.0`.
-2. **`release`** pulls that published image, copies its declaration's PDF and plain text out of
+2. **`release`** pulls the published app image by its digest, copies its declaration's PDF and plain text out of
    it, and attaches them to the GitHub Release `v1.0.0` as `waitron-1.0.0-declaration.pdf` and
    `waitron-1.0.0-declaration.txt`, making the Release if there is none. Because the files come
-   out of the published image, they are the same bytes every box running `1.0.0` serves.
+   out of the published image, they are the same bytes every box running that image serves.
+   When signing is configured, it also attaches `waitron-release.json`. The signed
+   payload names the release, the source commit and the digests of the two images.
 
 Check the Release once the run is green:
 
@@ -172,7 +205,7 @@ Check the Release once the run is green:
 gh release view v1.0.0
 ```
 
-It should list both files. Open the PDF and check that it names version `1.0.0`, the producer and
+Check for both declaration files and, after signing is set up, `waitron-release.json`. Open the PDF and check that it names version `1.0.0`, the producer and
 the date you signed.
 
 If `release` fails, for example on a network error, re-run only the failed job:
@@ -181,9 +214,10 @@ If `release` fails, for example on a network error, re-run only the failed job:
 gh run rerun <run id> --failed
 ```
 
-That repeats the upload and replaces the two files from the image the tag names. Do not re-run the
-whole workflow: its `publish` job stops, because the version is already published, and `release`
-never runs.
+That repeats the declaration upload from the same app digest. The signed file is
+kept if its bytes match and the job fails if they differ, including if the signing
+key changed between attempts. Re-run only the failed job because `publish` refuses
+to push a version the registry already holds.
 
 If `publish` fails while pushing, re-run it with `gh run rerun <run id> --failed`. The app image is
 pushed last, so a run that stopped before that push has not published the version, and the re-run
