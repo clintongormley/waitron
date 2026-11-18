@@ -157,6 +157,7 @@ export class WtRowActions extends LitElement {
     if (this.directDelete || popup === null || !this.isConnected || popup.matches(":popover-open"))
       return;
     popup.showPopover();
+    // A sibling can render before the browser's queued toggle event reaches this menu.
     this.#setExpanded(popup.matches(":popover-open"));
     this.positionPopup();
     this.#resize.observe(popup);

@@ -76,7 +76,7 @@ export class WtToast extends LitElement {
     const under = underModal(this);
     if (under === this.#underModal) return;
     this.#underModal = under;
-    // Being held removes the hovered element without a mouseleave, so the flag would stay set.
+    // A modal removes the hovered toast without a mouseleave.
     if (under) this.#hovered = false;
     this.requestUpdate();
     this.#schedule();
@@ -116,8 +116,6 @@ export class WtToast extends LitElement {
     super.disconnectedCallback();
   }
 
-  /** The one place a countdown starts: never off the page, where an update already queued still
-   * runs, while held, or while the pointer or keyboard focus is on it. */
   #schedule(): void {
     clearTimeout(this.#timer);
     this.#timer = undefined;
