@@ -2,7 +2,7 @@
 import "@waitron/shared";
 // Type-only, so it adds no runtime edge back to the module that side-effect-imports this file.
 import type { ProductUsingUnit } from "./unit-types.js";
-import type { MemberRef, HomeDevice, OvertakenEdition } from "@waitron/shared";
+import type { MemberRef, HomeDevice, OvertakenEdition, VatClass } from "@waitron/shared";
 
 /** @waitron/menu's contribution to the shared error registry — DOMAIN-CONCEPT prefixes. */
 declare module "@waitron/shared" {
@@ -80,9 +80,22 @@ declare module "@waitron/shared" {
     "menu.not_found": { menuId: string };
     "set_menu.invalid": {
       field:
-        "setPrice" | "setVatClass" | "lines" | "count" | "courseIds" | "variants" | "surcharge";
+        | "setPrice"
+        | "setVatClass"
+        | "lines"
+        | "count"
+        | "courseId"
+        | "courseIds"
+        | "variants"
+        | "surcharge";
     };
     "set_menu.not_found": { menuId: string };
+    "set_menu.vat_class_differs": {
+      productId: string;
+      productVatClass: VatClass;
+      setMenuVatClass: VatClass;
+    } & ({ field: "setVatClass"; requestedVatClass: VatClass } | { field?: never });
+    "set_menu.dish_sold_by_measure": { productId: string };
     "set_menu.dishes_only": { menuId: string };
     "set_menu.wrong_place": { menuId: string };
     "menu.name_taken": { field: "name" };

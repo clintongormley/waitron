@@ -65,8 +65,10 @@ import { addMember, sectionPatchValues } from "./sections.js";
 import { archiveProducts } from "./archive.js";
 import {
   refuseSetMenu,
+  refuseSetMenuVatClassChange,
   requireSetMenu,
   setMenuPriceCents,
+  setMenuSurchargeCents,
   setMenuVatClass,
   touchSetMenu,
 } from "./set-menus.js";
@@ -448,10 +450,14 @@ async function writeMenuItemSettings(
 ): Promise<void> {
   const { grossPrice } = patch;
   if (grossPrice === undefined) return;
-  await tx
-    .update(menuItems)
-    .set({ grossPrice: grossPrice === null ? null : stringToCents(grossPrice) })
-    .where(eq(menuItems.id, menuItemId));
+  const [menu] = await tx.select({ kind: menus.kind }).from(menus).where(eq(menus.id, menuId));
+  const cents =
+    grossPrice === null
+      ? null
+      : menu?.kind === "set_menu"
+        ? setMenuSurchargeCents(grossPrice)
+        : stringToCents(grossPrice);
+  await tx.update(menuItems).set({ grossPrice: cents }).where(eq(menuItems.id, menuItemId));
   await touchSetMenu(tx, menuId);
 }
 
@@ -876,6 +882,8 @@ export async function updateMenuDetails(
 ): Promise<void> {
   const changesTerms = patch.setPrice !== undefined || patch.setVatClass !== undefined;
   if (changesTerms) await requireSetMenu(tx, menuId);
+  const vatClass = patch.setVatClass === undefined ? undefined : setMenuVatClass(patch.setVatClass);
+  if (vatClass !== undefined) await refuseSetMenuVatClassChange(tx, menuId, vatClass);
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const [stored] =
     patch.names === undefined
@@ -902,8 +910,7 @@ export async function updateMenuDetails(
       .set({
         name: internalName,
         setPrice: patch.setPrice === undefined ? undefined : setMenuPriceCents(patch.setPrice),
-        setVatClass:
-          patch.setVatClass === undefined ? undefined : setMenuVatClass(patch.setVatClass),
+        setVatClass: vatClass,
         updatedAt: now(),
       })
       .where(eq(menus.id, menuId));

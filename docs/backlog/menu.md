@@ -984,7 +984,8 @@ it and stays there (revised 18 November 2026). A set-menu draft has storage for 
 lines and dish choices. Service periods and the venue default take ordinary menus.
 A full menu's structure can hold a set-menu reference and keeps its ordinary offers separate.
 Set-menu drafts can store dish and variant surcharges, leave variants out, copy dishes and
-add a line for each new course. Dish eligibility and course editing remain open.
+add a line for each new course. Draft writes enforce the dish's eat-in VAT class, portion-only
+units and the surcharge limit. A dish can have its own course in the draft.
 The dashboard editor and placement controls, publishing the full set-menu copy, till ordering,
 paying such a bill and its documents, and updating the demo and guides remain open.
 Takeaway/delivery VAT treatment remains with S10/Lane L and adviser question
