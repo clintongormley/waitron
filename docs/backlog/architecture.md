@@ -487,13 +487,6 @@ OPEN.
 - [Index and key names that still read `tenant`](#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone).
 - [`server.credential_unusable`'s domain prefix](#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself).
 
-## The `authorized_by` comment on `drawer_opens` says only a manual open sets it
-
-The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund's opening:
-  `enqueueTenderRefundDrawer` takes a required `authorizedBy` and writes it into the row
-  (`apps/server/src/receipt-print.ts:622`, `:645-653`). Correct the comment to name every reason
-  that sets it.
-
 ## A974. Finish the remaining English names in general code.
 
 - **A974. Finish the remaining English names in general code.**
@@ -972,8 +965,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   crosses the two files: SQLite refuses a trigger body that writes another attached database. A947
   slice 3a moved five tables with no change-log triggers; the question stays for `change_log`.
   [Detail](replication-cloud.md#if-a-later-slice-moves-local-tables-into-nodedb)
-- **The `authorized_by` comment on `drawer_opens` says only a manual open sets it**
-  [Detail](architecture.md#the-authorized_by-comment-on-drawer_opens-says-only-a-manual-open-sets-it)
 - **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
@@ -1029,9 +1020,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword
   the comment (a comment in a fiscal test, not the fiscal core).
 - **start-space.ts's `logDir: null` option is dead since A1042**; removing it deletes an existing case, so the owner approves the removal. [Detail](box.md#start-spacetss-logdir-null-option-is-dead-since-a1042)
-- **Server comment pruning notes** — found by
-  #656 while pruning comments. No production caller sets `skipSecrets` any more, so whether the
-  option should go is open.
+- **Server comment pruning notes** — found by #656 while pruning comments.
   [Detail](box.md#server-comment-pruning-notes)
 
 - **Schema files keep `v8 ignore` pairs with no stated reason.**

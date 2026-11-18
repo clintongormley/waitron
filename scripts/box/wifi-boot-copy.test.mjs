@@ -1919,10 +1919,11 @@ const testsIn = (suite) =>
 describe("the copy's states and failures match what the cases observe", () => {
   it("in both directions", (context) => {
     const others = testsIn(context.task.file).filter((test) => test !== context.task);
-    context.skip(
-      others.some((test) => test.mode !== "run"),
-      "needs every other case in the file to have run",
-    );
+    const allRan = others.every((test) => test.mode === "run");
+    if (process.env.CI) {
+      expect(allRan, "every other case in this file must run in CI").toBe(true);
+    }
+    context.skip(!allRan, "needs every other case in the file to have run");
     const states = new Set(observedStatuses.map(({ state }) => state));
     const failures = new Set(observedStatuses.map(({ failure }) => failure));
     failures.delete(null);
