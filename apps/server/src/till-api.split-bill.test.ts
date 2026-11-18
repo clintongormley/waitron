@@ -1,7 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound } from "./testing/order-writer-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
@@ -241,7 +241,7 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
       return id;
     });
     await withTransaction(suite.db, (tx) =>
-      addTabRound(tx, cfg, tabA, [{ menuItemId: offers.offerFor(coffeeId), quantity: "2" }]),
+      addGroupedTabRound(tx, cfg, tabA, [{ menuItemId: offers.offerFor(coffeeId), quantity: "2" }]),
     );
     const [ticket] = await ticketsOn(tabA);
     expect(ticket).toMatchObject({ lineNo: 2, quantity: 2000 });

@@ -5,7 +5,11 @@ import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js"
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
+import {
+  abandonHeldOrder,
+  addGroupedTabRound,
+  addTabRound,
+} from "./testing/order-writer-fixture.js";
 import {
   clearSavedOffer,
   sendLines,
@@ -3854,10 +3858,15 @@ async function addRound(
   cfg: DeviceRequestConfig,
   tabId: string,
   lines: (ProductLine & { courseId?: string | null; hold?: boolean })[],
+  add = addTabRound,
 ): Promise<void> {
   const offers = await tableOffers(tx, cfg);
-  await addTabRound(tx, cfg, tabId, offers.toOfferLines(lines));
+  await add(tx, cfg, tabId, offers.toOfferLines(lines));
 }
+
+/** {@link addRound} with each line stored as one row holding its whole quantity. */
+const addGroupedRound: typeof addRound = (tx, cfg, tabId, lines) =>
+  addRound(tx, cfg, tabId, lines, addGroupedTabRound);
 
 /** `createOpenOrder` for a basket named by product, sold through each product's counter-zone offer. */
 async function createOfferedOrder(
@@ -7765,7 +7774,7 @@ describe("a dish's extras children", () => {
       await attachModifierList(tx, coffeeId, { kind: "extras", id: list.id });
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
-      await addRound(tx, cfg, tabId, [
+      await addGroupedRound(tx, cfg, tabId, [
         {
           productId: coffeeId,
           quantity: "2",
@@ -7794,7 +7803,7 @@ describe("a dish's extras children", () => {
 
       const reducedTableId = await makeTable(tx, cfg);
       const { tabId: reducedTabId } = await openPartyTab(tx, cfg, { tableId: reducedTableId });
-      await addRound(tx, cfg, reducedTabId, [
+      await addGroupedRound(tx, cfg, reducedTabId, [
         {
           productId: coffeeId,
           quantity: "2",

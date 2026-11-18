@@ -1,5 +1,6 @@
 import { ADJUSTMENTS_PERMISSIONS } from "@waitron/adjustments";
 import { registerModulePermissions } from "@waitron/identity";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -180,7 +181,7 @@ describe("splitting a dish with split-off extras", () => {
       const party = await partyRevisionOfOrder(tx, venue.party.tabId);
       await transferItems(tx, venue.cfg, venue.party.tabId, destination, [{ lineNo: 1 }], {
         expectedPartyRevision: party!.revision,
-        operatorId: randomUUID(),
+        operatorId: await seedPerson(tx, { displayName: randomUUID() }),
       });
     });
     const before = await jobCounts();

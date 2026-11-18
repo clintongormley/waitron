@@ -1,6 +1,6 @@
 import { setMadeHere } from "./testing/made-here-fixture.js";
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -303,7 +303,7 @@ describe("sending split-off extras", () => {
   it("gives claimed chips their own record, with the extra line's quantity and the dish's fire time", async () => {
     const venue = await splitVenue.setupSplitExtrasVenue();
     const result = await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+      await addGroupedTabRound(tx, venue.cfg, venue.party.tabId, [
         {
           menuItemId: venue.tables.offerFor(venue.products.burger),
           quantity: "2",

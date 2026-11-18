@@ -39,7 +39,7 @@ import { createStation } from "./kitchen.js";
 import { seatTable } from "./parties.js";
 import { readHeldCounts } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { createTable } from "./testing/live-table.js";
@@ -654,8 +654,8 @@ async function command(tx: Transaction, partyId: string) {
   };
 }
 
-function sendRound(billId: string, lines: Line[]) {
-  return inTx(venue, (tx) => addTabRound(tx, venue.cfg, billId, lines));
+function sendRound(billId: string, lines: Line[], add = addTabRound) {
+  return inTx(venue, (tx) => add(tx, venue.cfg, billId, lines));
 }
 
 async function holdGroup(partyId: string, lines: Line[]): Promise<string> {
@@ -779,7 +779,7 @@ describe("readOrderStateCounts on a party's bill", () => {
 
   it("counts a fired dish waiting while queued or preparing, then ready, then by what is left to serve", async () => {
     const { partyId, billId } = await seatParty();
-    await sendRound(billId, [plain("Tarta", "3")]);
+    await sendRound(billId, [plain("Tarta", "3")], addGroupedTabRound);
     const { dish } = await kitchenItems(billId);
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 3, waiting: 3 });
 
@@ -915,7 +915,11 @@ describe("readOrderStateCounts on a party's bill", () => {
 
   it("counts cancellations out: one of three, and a weighed dish cancelled whole", async () => {
     const { billId } = await seatParty();
-    await sendRound(billId, [plain("Tarta", "3"), plain("House salad", "0.450")]);
+    await sendRound(
+      billId,
+      [plain("Tarta", "3"), plain("House salad", "0.450")],
+      addGroupedTabRound,
+    );
     const [cake, salad] = await dishLines(billId);
     await cancel(cake!.id, 1000);
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 3, waiting: 3 });

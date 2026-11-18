@@ -53,6 +53,7 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { unboundLineCohort } from "./testing/portion-bill.js";
 import "./errors.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
@@ -297,7 +298,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
         .where(eq(ticketItems.workingOrderLineId, burger!.id));
       await tx
         .insert(workingOrderLines)
-        .values({ ...burger!, id: randomUUID(), lineNo: 2, sentAt: sent });
+        .values({ ...burger!, ...unboundLineCohort, id: randomUUID(), lineNo: 2, sentAt: sent });
     });
 
     // Only the later-fired dish records who fired it.
@@ -790,9 +791,23 @@ describe("dishes arriving in a party (A96, P16)", () => {
         .set({ firedAt: null, requestedAt: null })
         .where(eq(ticketItems.workingOrderLineId, burger!.id));
       await tx.insert(workingOrderLines).values([
-        { ...burger!, id: randomUUID(), lineNo: 2 },
-        { ...burger!, id: randomUUID(), lineNo: 3, sentAt: null, courseId: dessertCourseId },
-        { ...burger!, id: randomUUID(), lineNo: 4, sentAt: null, courseId: dessertCourseId },
+        { ...burger!, ...unboundLineCohort, id: randomUUID(), lineNo: 2 },
+        {
+          ...burger!,
+          ...unboundLineCohort,
+          id: randomUUID(),
+          lineNo: 3,
+          sentAt: null,
+          courseId: dessertCourseId,
+        },
+        {
+          ...burger!,
+          ...unboundLineCohort,
+          id: randomUUID(),
+          lineNo: 4,
+          sentAt: null,
+          courseId: dessertCourseId,
+        },
       ]);
     });
 
@@ -831,6 +846,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await inTx(v, (tx) =>
       tx.insert(workingOrderLines).values({
         ...burger!,
+        ...unboundLineCohort,
         id: randomUUID(),
         lineNo: 2,
         parentLineId: burger!.id,
