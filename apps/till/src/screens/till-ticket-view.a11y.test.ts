@@ -473,7 +473,8 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with supplied text, QR, item table and tax table", async () => {
+  it.each([4, 5])("has no violations on a %i-column practice receipt", async (columns) => {
+    const withRate = columns === 5;
     const { el, host } = await mountWidget<TillTicketView>(
       "till-ticket-view",
       {
@@ -488,13 +489,26 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
             { kind: "qr", text: result.qr },
             { kind: "logo" },
             { kind: "rule" },
-            { kind: "amount", caption: "FACTURA", amount: "A/1", indent: 0 },
+            { kind: "align", alignment: "left" },
+            {
+              kind: "amount",
+              caption: "TOTAL",
+              amount: "4,00 €",
+              indent: 0,
+              style: { bold: true, double: true },
+            },
             {
               kind: "table",
               table: {
-                header: { units: "Uds.", item: "Artículo", price: "€/u", amount: "Importe" },
-                withRate: false,
-                rows: [{ units: "4", item: "Pan", price: "1,00", amount: "4,00" }],
+                header: {
+                  units: "Uds.",
+                  item: "Artículo",
+                  price: "€/u",
+                  amount: "Importe",
+                  rate: "IVA",
+                },
+                withRate,
+                rows: [{ units: "4", item: "Pan", price: "1,00", amount: "4,00", rate: "10%" }],
               },
             },
             {
@@ -502,12 +516,26 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
               header: { rate: "IVA", base: "Base imponible", tax: "Cuota", total: "Total" },
               rows: [{ rate: "10%", base: "5,82", tax: "0,58", total: "6,40" }],
             },
+            { kind: "text", text: "DOCUMENTO DE PRUEBA", indent: 0 },
           ],
         },
       },
       theme,
     );
-    expect(el.shadowRoot!.querySelectorAll("article table")).toHaveLength(2);
+    const article = el.shadowRoot!.querySelector("article")!;
+    const heading = getComputedStyle(article.querySelector("[data-bold][data-double]")!);
+    const plain = getComputedStyle(article.querySelector("p")!);
+    expect(Number(heading.fontWeight)).toBeGreaterThan(Number(plain.fontWeight));
+    expect(parseFloat(heading.fontSize)).toBeGreaterThan(parseFloat(plain.fontSize));
+    const tables = article.querySelectorAll("table");
+    expect(tables).toHaveLength(2);
+    const headings = tables[0]!.querySelectorAll("th[scope=col]");
+    expect(headings).toHaveLength(columns);
+    if (withRate) {
+      expect(headings[4]!.textContent).toBe("IVA");
+      expect(tables[0]!.querySelector("tbody td:last-child")!.textContent).toBe("10%");
+    }
+    expect(article.lastElementChild!.textContent!.trim()).toBe("DOCUMENTO DE PRUEBA");
     await expectNoA11yViolations(host);
   });
 });
