@@ -5,6 +5,7 @@ import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import {
   billPayments,
   invoiceSeries,
+  persons,
   sales,
   saleSettlements,
   saleSubstitutions,
@@ -12,6 +13,7 @@ import {
   tenderRefunds,
   workingOrders,
   parties,
+  withFoldedPersonChanges,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -534,11 +536,16 @@ describe("Find Transactions SQL paging", () => {
     ).toEqual([unzoned]);
   });
 
-  it("retains a missing historical operator", async () => {
-    const missingPerson = randomUUID();
-    const own = await invoice({ operatorId: missingPerson });
+  it("retains the saved name of a historical operator who was suspended", async () => {
+    const own = await invoice({ operatorId: venue.supervisorId });
+    await inTx(venue, (tx) =>
+      tx
+        .update(persons)
+        .set(withFoldedPersonChanges({ status: "suspended" }))
+        .where(eq(persons.id, venue.supervisorId)),
+    );
     expect((await list()).rows.map((r) => r.saleId)).toEqual([own]);
-    expect((await list()).rows[0]!.staff).toEqual({ id: missingPerson, name: null });
+    expect((await list()).rows[0]!.staff).toEqual({ id: venue.supervisorId, name: "Sophia" });
     expect(await inTx(venue, (tx) => resolveTransactionScope(tx, own))).toEqual({
       workingOrderIds: [],
     });
