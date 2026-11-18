@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, gt, lte, ne, or } from "drizzle-orm";
 import { menuReleases, menuVersions, now, recordActivity, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { buildMenuDocument, menuDocumentHash } from "./menu-document.js";
 import {
+  buildPublishableMenu,
   insertVersion,
   liveVersions,
   nextNumber,
@@ -44,10 +44,7 @@ export async function queueMenuPublication(
 ): Promise<QueuedEdition> {
   const at = options.at ?? now();
   await settleDue(tx, at, [menuId]);
-  const { document, clashes } = await buildMenuDocument(tx, menuId);
-  if (clashes.length > 0)
-    throw new AppError("menu.clashes_unresolved", { menuId, count: clashes.length });
-  const contentHash = menuDocumentHash(document);
+  const { document, workingHash: contentHash } = await buildPublishableMenu(tx, menuId);
   if (contentHash !== expectedHash) throw new AppError("menu.changed_since_preview", { menuId });
   if (activatesAt.getTime() <= at.getTime())
     throw new AppError("menu_publication.time_past", { activatesAt: activatesAt.toISOString() });

@@ -37,6 +37,7 @@ import type {
   PublishedMenuVersion,
   QueuedEdition,
 } from "@waitron/shared";
+import { refuseSetMenu } from "./set-menus.js";
 import "./errors.js";
 
 export type { MenuStatus } from "@waitron/shared";
@@ -650,6 +651,23 @@ export function refuseOvertaken(menuId: string, overtaken: readonly OvertakenEdi
     throw new AppError("menu_publication.overtakes_queued", { menuId, overtaken: [...overtaken] });
 }
 
+export async function buildPublishableMenu(
+  tx: Transaction,
+  menuId: string,
+): Promise<{ document: MenuDocument; workingHash: string }> {
+  await refuseSetMenu(tx, menuId);
+  const built = await buildMenuDocument(tx, menuId);
+  const first = built.setMenuProblems[0];
+  if (first !== undefined)
+    throw new AppError("set_menu.not_publishable", {
+      menuId: first.menuId,
+      count: first.problems.length,
+    });
+  if (built.clashes.length > 0)
+    throw new AppError("menu.clashes_unresolved", { menuId, count: built.clashes.length });
+  return { document: built.document, workingHash: built.workingHash };
+}
+
 /**
  * Makes the menu's working state its live version, inside the caller's one transaction: the
  * document is rebuilt here, and refused with `menu.changed_since_preview` unless it hashes to what
@@ -666,10 +684,7 @@ export async function publishMenu(
 ): Promise<PublishedMenuVersion> {
   const publishedAt = options.at ?? now();
   await settleDue(tx, publishedAt, [menuId]);
-  const { document, clashes } = await buildMenuDocument(tx, menuId);
-  if (clashes.length > 0)
-    throw new AppError("menu.clashes_unresolved", { menuId, count: clashes.length });
-  const contentHash = menuDocumentHash(document);
+  const { document, workingHash: contentHash } = await buildPublishableMenu(tx, menuId);
   if (contentHash !== expectedHash) throw new AppError("menu.changed_since_preview", { menuId });
   const current = (await liveVersions(tx, [menuId], "format", publishedAt)).get(menuId);
   if (current?.contentHash === contentHash)
@@ -739,6 +754,7 @@ export async function patchLiveMenu(
   personId: string,
   options: { at?: Date; fallbackLanguage?: string } = {},
 ): Promise<MenuPatchResult> {
+  await refuseSetMenu(tx, menuId);
   const at = options.at ?? now();
   await settleDue(tx, at, [menuId]);
   const live = (await liveVersions(tx, [menuId], "document", at)).get(menuId);

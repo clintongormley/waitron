@@ -7,6 +7,7 @@ import {
   now,
   products,
   sectionMembers,
+  sections,
   setMenuDishCourses,
   setMenuLineCourses,
   setMenuLines,
@@ -144,36 +145,54 @@ async function activeCourses(tx: Transaction): Promise<SetMenuDetails["courses"]
 
 type StoredLine = SetMenuLine & { position: number };
 
-async function storedLines(tx: Transaction, menuId: string): Promise<StoredLine[]> {
-  const rows = await tx
-    .select({
-      id: setMenuLines.id,
-      position: setMenuLines.position,
-      count: setMenuLines.count,
-      courseId: kitchenCourses.id,
-    })
-    .from(setMenuLines)
-    .leftJoin(setMenuLineCourses, eq(setMenuLineCourses.lineId, setMenuLines.id))
-    .leftJoin(
-      kitchenCourses,
-      and(eq(kitchenCourses.id, setMenuLineCourses.courseId), eq(kitchenCourses.active, true)),
-    )
-    .where(eq(setMenuLines.menuId, menuId))
-    .orderBy(
-      setMenuLines.position,
-      setMenuLines.id,
-      kitchenCourses.displayOrder,
-      kitchenCourses.name,
-      kitchenCourses.id,
-    );
-  const lines = new Map<string, StoredLine>();
-  for (const { id, position, count, courseId } of rows) {
-    const line = lines.get(id) ?? { id, position, count, courseIds: [] };
-    if (courseId !== null) line.courseIds.push(courseId);
-    lines.set(id, line);
+async function storedLinesByMenu(
+  tx: Transaction,
+  menuIds: readonly string[],
+): Promise<Map<string, Map<string, StoredLine>>> {
+  const byMenu = new Map<string, Map<string, StoredLine>>();
+  for (const batch of batches(menuIds)) {
+    const rows = await tx
+      .select({
+        id: setMenuLines.id,
+        menuId: setMenuLines.menuId,
+        position: setMenuLines.position,
+        count: setMenuLines.count,
+        courseId: kitchenCourses.id,
+      })
+      .from(setMenuLines)
+      .leftJoin(setMenuLineCourses, eq(setMenuLineCourses.lineId, setMenuLines.id))
+      .leftJoin(
+        kitchenCourses,
+        and(eq(kitchenCourses.id, setMenuLineCourses.courseId), eq(kitchenCourses.active, true)),
+      )
+      .where(inArray(setMenuLines.menuId, batch))
+      .orderBy(
+        setMenuLines.position,
+        setMenuLines.id,
+        kitchenCourses.displayOrder,
+        kitchenCourses.name,
+        kitchenCourses.id,
+      );
+    for (const { id, menuId, position, count, courseId } of rows) {
+      let lines = byMenu.get(menuId);
+      if (lines === undefined) {
+        lines = new Map();
+        byMenu.set(menuId, lines);
+      }
+      const line = lines.get(id) ?? { id, position, count, courseIds: [] };
+      if (courseId !== null) line.courseIds.push(courseId);
+      lines.set(id, line);
+    }
   }
-  return [...lines.values()];
+  return byMenu;
 }
+
+async function storedLines(tx: Transaction, menuId: string): Promise<StoredLine[]> {
+  return [...((await storedLinesByMenu(tx, [menuId])).get(menuId)?.values() ?? [])];
+}
+
+const linesForDraft = (lines: Iterable<StoredLine>): SetMenuLine[] =>
+  Array.from(lines, ({ id, count, courseIds }) => ({ id, count, courseIds }));
 
 async function insertLines(
   tx: Transaction,
@@ -220,44 +239,55 @@ export async function saveSetMenuLines(
   return saved;
 }
 
-async function dishSettings(
+async function dishSettingsByRoot(
   tx: Transaction,
-  menuId: string,
-  root: string,
+  rootIds: readonly string[],
   courses: SetMenuDetails["courses"],
-): Promise<SetMenuDishSetting[]> {
-  const rows = await tx
-    .select({
-      menuItemId: menuItems.id,
-      productId: products.id,
-      name: products.name,
-      surcharge: menuItems.grossPrice,
-      productCourseId: products.courseId,
-      courseOverrideId: setMenuDishCourses.courseId,
-      measure: units.measure,
-    })
-    .from(sectionMembers)
-    .innerJoin(
-      menuItems,
-      and(eq(menuItems.menuId, menuId), eq(menuItems.productId, sectionMembers.productId)),
-    )
-    .innerJoin(products, eq(products.id, menuItems.productId))
-    .leftJoin(units, eq(units.id, products.unitId))
-    .leftJoin(setMenuDishCourses, eq(setMenuDishCourses.menuItemId, menuItems.id))
-    .where(eq(sectionMembers.sectionId, root))
-    .orderBy(...memberOrder);
+): Promise<Map<string, SetMenuDishSetting[]>> {
   const active = new Set(courses.map(({ id }) => id));
   const activeCourse = (id: string | null) => (id !== null && active.has(id) ? id : null);
   const dishes = new Map<string, SetMenuDishSetting>();
-  for (const { measure, ...row } of rows) {
-    dishes.set(row.menuItemId, {
-      ...row,
-      surcharge: priceOrNull(row.surcharge),
-      productCourseId: activeCourse(row.productCourseId),
-      courseId: activeCourse(row.courseOverrideId ?? row.productCourseId),
-      soldByMeasure: measure === true,
-      variants: [],
-    });
+  const byRoot = new Map<string, SetMenuDishSetting[]>();
+  for (const batch of batches(rootIds)) {
+    const rows = await tx
+      .select({
+        sectionId: sectionMembers.sectionId,
+        menuItemId: menuItems.id,
+        productId: products.id,
+        name: products.name,
+        surcharge: menuItems.grossPrice,
+        productCourseId: products.courseId,
+        courseOverrideId: setMenuDishCourses.courseId,
+        measure: units.measure,
+      })
+      .from(sectionMembers)
+      .innerJoin(sections, eq(sections.id, sectionMembers.sectionId))
+      .innerJoin(
+        menuItems,
+        and(
+          eq(menuItems.menuId, sections.ownerMenuId),
+          eq(menuItems.productId, sectionMembers.productId),
+        ),
+      )
+      .innerJoin(products, eq(products.id, menuItems.productId))
+      .leftJoin(units, eq(units.id, products.unitId))
+      .leftJoin(setMenuDishCourses, eq(setMenuDishCourses.menuItemId, menuItems.id))
+      .where(inArray(sectionMembers.sectionId, batch))
+      .orderBy(...memberOrder);
+    for (const { sectionId, measure, ...row } of rows) {
+      const dish: SetMenuDishSetting = {
+        ...row,
+        surcharge: priceOrNull(row.surcharge),
+        productCourseId: activeCourse(row.productCourseId),
+        courseId: activeCourse(row.courseOverrideId ?? row.productCourseId),
+        soldByMeasure: measure === true,
+        variants: [],
+      };
+      dishes.set(row.menuItemId, dish);
+      const items = byRoot.get(sectionId);
+      if (items === undefined) byRoot.set(sectionId, [dish]);
+      else items.push(dish);
+    }
   }
   for (const batch of batches([...dishes.keys()])) {
     const variants = await tx
@@ -298,7 +328,61 @@ async function dishSettings(
       });
     }
   }
-  return [...dishes.values()];
+  return byRoot;
+}
+
+async function dishSettings(
+  tx: Transaction,
+  root: string,
+  courses: SetMenuDetails["courses"],
+): Promise<SetMenuDishSetting[]> {
+  return (await dishSettingsByRoot(tx, [root], courses)).get(root) ?? [];
+}
+
+export type SetMenuDraft = Pick<
+  SetMenuDetails,
+  "name" | "names" | "price" | "vatClass" | "takeawayVatClass" | "dishes" | "lines" | "problems"
+> & { changedAt: string };
+
+export async function readSetMenuDrafts(
+  tx: Transaction,
+  rows: readonly {
+    menuId: string;
+    rootSectionId: string;
+    menuName: string;
+    names: Record<string, string>;
+    setPrice: number | null;
+    setVatClass: string | null;
+    setTakeawayVatClass: string | null;
+    updatedAt: Date;
+  }[],
+): Promise<Map<string, SetMenuDraft>> {
+  if (rows.length === 0) return new Map();
+  const courses = await activeCourses(tx);
+  const dishes = await dishSettingsByRoot(
+    tx,
+    rows.map(({ rootSectionId }) => rootSectionId),
+    courses,
+  );
+  const lines = await storedLinesByMenu(
+    tx,
+    rows.map(({ menuId }) => menuId),
+  );
+  return new Map(
+    rows.map((row) => {
+      const draft = {
+        name: row.menuName,
+        names: row.names,
+        price: centsToDecimal(row.setPrice!),
+        vatClass: row.setVatClass as VatClass,
+        takeawayVatClass: row.setTakeawayVatClass as VatClass | null,
+        changedAt: row.updatedAt.toISOString(),
+        dishes: dishes.get(row.rootSectionId) ?? [],
+        lines: linesForDraft(lines.get(row.menuId)?.values() ?? []),
+      };
+      return [row.menuId, { ...draft, problems: setMenuProblems({ ...draft, courses }) }];
+    }),
+  );
 }
 
 export async function readSetMenu(
@@ -314,12 +398,8 @@ export async function readSetMenu(
     ...menu,
     id: menuId,
     names: graph.section(root)?.names ?? {},
-    dishes: await dishSettings(tx, menuId, root, courses),
-    lines: (await storedLines(tx, menuId)).map(({ id, count, courseIds }) => ({
-      id,
-      count,
-      courseIds,
-    })),
+    dishes: await dishSettings(tx, root, courses),
+    lines: linesForDraft(await storedLines(tx, menuId)),
     courses,
     heldBy: menusContaining(graph, root).flatMap((id) => {
       const parent = graph.menu(id);
@@ -344,7 +424,9 @@ function includedDishChoices(dish: SetMenuDishSetting): {
     .map(({ id, name, courseId }) => ({ id, name, courseId, parentName: dish.name }));
 }
 
-export function setMenuProblems(details: Omit<SetMenuDetails, "problems">): SetMenuProblem[] {
+export function setMenuProblems(
+  details: Pick<SetMenuDetails, "dishes" | "lines" | "courses">,
+): SetMenuProblem[] {
   const choices = details.dishes.flatMap(includedDishChoices);
   const problems: SetMenuProblem[] = [];
   if (choices.length === 0) problems.push({ kind: "no_dishes" });
@@ -386,7 +468,7 @@ export async function addLinesForCourses(
   const root = await requireMenuRoot(tx, menuId);
   const courses = await activeCourses(tx);
   const lines = await storedLines(tx, menuId);
-  const dishes = await dishSettings(tx, menuId, root, courses);
+  const dishes = await dishSettings(tx, root, courses);
   const added = new Set(productIds);
   const wanted = new Set(
     dishes
@@ -424,7 +506,7 @@ export async function saveSetMenuDishCourse(
   await requireSetMenu(tx, menuId);
   const root = await requireMenuRoot(tx, menuId);
   const courses = await activeCourses(tx);
-  const before = await dishSettings(tx, menuId, root, courses);
+  const before = await dishSettings(tx, root, courses);
   const dish = before.find((candidate) => candidate.menuItemId === menuItemId);
   if (dish === undefined) throw new AppError("set_menu.not_found", { menuId });
   if (courseId !== null && !courses.some(({ id }) => id === courseId))
@@ -445,7 +527,7 @@ export async function saveSetMenuDishCourse(
       });
 
   const lines = await storedLines(tx, menuId);
-  const after = await dishSettings(tx, menuId, root, courses);
+  const after = await dishSettings(tx, root, courses);
   const changedDish = after.find((candidate) => candidate.menuItemId === menuItemId)!;
   const previousByChoice = new Map(
     includedDishChoices(dish).map(({ id, courseId }) => [id, courseId]),

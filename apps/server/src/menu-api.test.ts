@@ -18,7 +18,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
-import { createMenu, menuReleases, menuVersions, sectionMembers } from "@waitron/menu";
+import { addMember, createMenu, menuReleases, menuVersions, sectionMembers } from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
 import { type ContentLanguageRules } from "@waitron/shared";
@@ -4664,6 +4664,30 @@ describe("publishing a menu", () => {
       error: { code: "menu.clashes_unresolved", params: { menuId: parent, count: 1 } },
     });
     expect(await versionsOf(parent)).toEqual([]);
+  });
+
+  it("answers 409 when a full menu holds a set menu with publishing problems", async () => {
+    const app = mountApp();
+    const full = await createMenuVia(app, "Full menu");
+    const root = await menuRootVia(app, full);
+    const set = await withTransaction(suite.db, async (tx) => {
+      const draft = await createMenu(tx, {
+        name: "Empty set menu",
+        kind: "set_menu",
+        setPrice: "14.00",
+        setVatClass: "reduced",
+      });
+      await addMember(tx, root, { kind: "set_menu", menuId: draft.id });
+      return draft.id;
+    });
+    const proposed = await preview(app, full);
+    const refused = await send(app, "POST", `/management-api/menus/${full}/publish`, {
+      body: { expectedHash: proposed.hash },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "set_menu.not_publishable", params: { menuId: set, count: 2 } },
+    });
   });
 
   it("previews, publishes and reports a menu as unpublished, current, then changed", async () => {

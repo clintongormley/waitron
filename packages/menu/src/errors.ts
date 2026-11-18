@@ -91,6 +91,7 @@ declare module "@waitron/shared" {
         | "surcharge";
     };
     "set_menu.not_found": { menuId: string };
+    "set_menu.not_publishable": { menuId: string; count: number };
     "set_menu.dish_sold_by_measure": { productId: string };
     "set_menu.dishes_only": { menuId: string };
     "set_menu.wrong_place": { menuId: string };

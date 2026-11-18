@@ -168,6 +168,7 @@ export {
   buildMenuDocument,
   diffMenuDocuments,
   documentOffers,
+  documentSetMenuOffers,
   menuDocumentHash,
   NO_LIVE_FIELDS,
   readLiveState,

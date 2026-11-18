@@ -4,24 +4,29 @@ function rootOf(graph: SectionGraph, menuId: string): string | undefined {
   return graph.roots().find((root) => root.menuId === menuId)?.sectionId;
 }
 
-/** Direct inclusions, discovered in the menu's own lists in depth-first member order. */
-export function directIncludedMenus(graph: SectionGraph, menuId: string): string[] {
-  const found = new Set<string>();
+/** Placements in the menu's own lists, in depth-first member order. */
+export function directMenuChildren(graph: SectionGraph, menuId: string) {
+  const included = new Set<string>();
+  const setMenus = new Set<string>();
   const visited = new Set<string>();
   const walk = (id: string): void => {
     if (visited.has(id)) return;
     visited.add(id);
     for (const { ref } of graph.children(id)) {
+      if (ref.kind === "set_menu") setMenus.add(ref.menuId);
       if (ref.kind !== "section") continue;
       if (graph.role(ref.sectionId) === "menu_root") {
-        const included = graph.ownerMenu(ref.sectionId)!;
-        found.add(included);
+        included.add(graph.ownerMenu(ref.sectionId)!);
       } else walk(ref.sectionId);
     }
   };
   const root = rootOf(graph, menuId);
   if (root !== undefined) walk(root);
-  return [...found];
+  return { included: [...included], setMenus: [...setMenus] };
+}
+
+export function directIncludedMenus(graph: SectionGraph, menuId: string): string[] {
+  return directMenuChildren(graph, menuId).included;
 }
 
 export function includedMenus(graph: SectionGraph, menuId: string): string[] {

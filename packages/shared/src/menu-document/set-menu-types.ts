@@ -29,6 +29,7 @@ export interface SetMenuTerms {
   /** Gross price per set menu, as a two-place decimal string. */
   price: string;
   vatClass: VatClass;
+  takeawayVatClass: VatClass;
   /** Customer-facing names by language, frozen at publish for receipts. */
   names: Record<string, string>;
   lines: SetMenuLine[];
