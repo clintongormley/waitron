@@ -1,5 +1,6 @@
 import { createServer, type AddressInfo, type Server } from "node:net";
 import type { ChildProcess } from "node:child_process";
+import { adoptRetainedListeners } from "./retained-http-adoption.mjs";
 
 export interface RetainedHttpListener {
   server: Server;
@@ -11,10 +12,11 @@ export interface RetainedHttpListener {
 export async function retainHttpListener(
   host = "127.0.0.1",
   server: Server = createServer((socket) => socket.destroy()),
+  port = 0,
 ): Promise<RetainedHttpListener> {
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, host, resolve);
+    server.listen(port, host, resolve);
   });
   return {
     server,
@@ -25,6 +27,24 @@ export async function retainHttpListener(
         server.close((error) => (error ? reject(error) : resolve()));
       }),
   };
+}
+
+export async function startWithRetainedListeners<T extends { close(): Promise<void> }>(
+  entries: readonly [RetainedHttpListener, ...RetainedHttpListener[]],
+  start: () => Promise<T>,
+): Promise<T> {
+  const adoption = adoptRetainedListeners(entries);
+  try {
+    const started = await start();
+    if (adoption.adopted.size !== entries.length) {
+      await started.close();
+      throw new Error("boot did not take every retained listener");
+    }
+    await adoption.bound;
+    return started;
+  } finally {
+    adoption.restore();
+  }
 }
 
 export const retainedHttpPreload = new URL("./retained-http-preload.mjs", import.meta.url).href;

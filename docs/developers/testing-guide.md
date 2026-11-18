@@ -536,6 +536,8 @@ its receiver and acknowledges receipt; the parent then closes its copies. Before
 adopts a socket, its holder destroys incoming connections. The preload redirects the matching
 positive-port bind to the held socket, checks its address and requested host, and restores the
 original `listen` after the reservations are consumed. It disconnects its temporary IPC channel.
+Node workers can inherit the preload argument. The preload receives handles only on the child’s
+main thread, which has the launcher’s IPC channel.
 Do not apply it to a process whose IPC channel belongs to another caller.
 
 Give each new child its own reservation and update the client destinations after a restart.
@@ -558,7 +560,8 @@ Production’s `WAITRON_HTTP_PORT` parser is unchanged; `src/config.test.ts` kee
 This fixture does not change a later waiting-start rebind inside one process, nor reserve a port
 that represents an unreachable peer.
 
-For an in-process adoption, close the retained holder only after any check that the server released
+For in-process starts, install one adoption scope at a time and use a fresh holder for a later bind.
+Close the retained holder only after any check that the server released
 its port. Closing the holder can close the adopted listener's shared socket and hide a server-close
 leak. A 17 November 2026 deletion control removed the upgrade checker's listener close: the old
 cleanup order passed, while leaving holder cleanup until after the rebind made that check fail

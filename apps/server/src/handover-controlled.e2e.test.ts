@@ -96,7 +96,11 @@ import { acceptedCopyPath } from "./handover-acceptance.js";
 import { HANDOVER_EVENT } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
-import { freePorts } from "./testing/free-ports.js";
+import {
+  retainHttpListener,
+  startWithRetainedListeners,
+  type RetainedHttpListener,
+} from "./testing/retained-http-listener.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { createHourTestClock, selectPastWaits } from "./testing/hour-test-clock.js";
 import type { FakeAeat } from "@waitron/verifactu/testing";
@@ -325,6 +329,7 @@ interface Box {
   venueFile: string;
   stateDir: string;
   env: Record<string, string>;
+  firstListener?: RetainedHttpListener;
   /** The server now running here, if any. */
   server?: StartedServer;
   /** The provider the running server's card sweep and till reach. */
@@ -392,14 +397,19 @@ let runEnded = false;
 let releaseAeat = (): void => {};
 // Teardown waits for these, however the stage ended, so it never removes a folder under a start.
 const startsRunning = new Set<Promise<void>>();
+const retained: RetainedHttpListener[] = [];
 
 async function start(box: Box): Promise<void> {
   if (runEnded) throw new Error(`${box.name} started after the run ended`);
   box.restartAsked = hold();
-  const starting = startServer(box.env, box.env, {
-    ...seamsFor(box),
-    timings: { minTickMs: 200, maxTickMs: 600_000 },
-  });
+  const boot = () =>
+    startServer(box.env, box.env, {
+      ...seamsFor(box),
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
+    });
+  const first = box.firstListener;
+  delete box.firstListener;
+  const starting = first === undefined ? boot() : startWithRetainedListeners([first], boot);
   let gaveUp = false;
   startsRunning.add(
     starting.then(
@@ -573,7 +583,12 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
     });
   }
 
-  const [m1Port, m2Port] = await freePorts(2);
+  const m1Listener = await retainHttpListener();
+  retained.push(m1Listener);
+  const m2Listener = await retainHttpListener();
+  retained.push(m2Listener);
+  const m1Port = m1Listener.port;
+  const m2Port = m2Listener.port;
   const m1Url = `https://localhost:${m1Port}`;
   const m2Url = `https://localhost:${m2Port}`;
   const makeState = async (name: string) => {
@@ -715,12 +730,13 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
   const m1: Box = {
     name: "M1",
     nodeId: m1Id,
-    port: m1Port!,
+    port: m1Port,
+    firstListener: m1Listener,
     url: m1Url,
     venueDir: dirname(m1File),
     venueFile: m1File,
     stateDir: m1State,
-    env: envFor(m1State, dirname(m1File), m1Id, m1Port!),
+    env: envFor(m1State, dirname(m1File), m1Id, m1Port),
     sweeps: 0,
     restartAsked: hold(),
     agent: new Agent({ connect: { ca: m1Ca } }),
@@ -728,13 +744,14 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
   const m2: Box = {
     name: "M2",
     nodeId: m2Id,
-    port: m2Port!,
+    port: m2Port,
+    firstListener: m2Listener,
     url: m2Url,
     venueDir: m2Dir,
     // The spelling SQLite reports, which is what a batch records.
     venueFile: await realpath(join(m2Dir, "venue.db")),
     stateDir: m2State,
-    env: envFor(m2State, m2Dir, m2Id, m2Port!),
+    env: envFor(m2State, m2Dir, m2Id, m2Port),
     sweeps: 0,
     restartAsked: hold(),
     agent: new Agent({ connect: { ca: m2Ca } }),
@@ -2020,6 +2037,13 @@ describe("a controlled handover between two boxes, simulated in one process", ()
       boxes?.m2.agent?.close(),
     ];
     const closed = await Promise.allSettled(closing);
+    closed.push(
+      ...(await Promise.allSettled(
+        retained.splice(0).map(async (held) => {
+          if (held.server.listening) await held.close();
+        }),
+      )),
+    );
     vi.useRealTimers();
     kill.mockRestore();
     if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });

@@ -45,7 +45,9 @@ import {
   type LogLine,
 } from "./boot-harness.js";
 import { enrolDeviceForTest } from "./enrol.js";
-import { freePorts } from "./free-ports.js";
+import { freePort } from "./free-ports.js";
+import { adoptRetainedListeners } from "./retained-http-adoption.mjs";
+import { retainHttpListener, type RetainedHttpListener } from "./retained-http-listener.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { settleWithin } from "./settle-within.js";
 import { stageClock, waitUntil, type StageEvent } from "./scenario-stages.js";
@@ -603,6 +605,8 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     releaseCopy = resolve;
   });
   const boxes: TestBox[] = [];
+  const retained: RetainedHttpListener[] = [];
+  let adoption: ReturnType<typeof adoptRetainedListeners> | undefined;
   let closeViaM: (() => Promise<void>) | undefined;
   let closeViaS: (() => Promise<void>) | undefined;
   const closeAll = (): Promise<unknown[]> => closeBoxes(boxes);
@@ -627,13 +631,16 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
   try {
     clock.begin("probe");
     const migrationsRoot = await copyMigrations(scratch);
-    // One draw: M's and S's HTTPS ports, then S's store and its versitygw's loopback port.
-    const [portM, portS, storeS, storeLoopbackS] = (await freePorts(4)) as [
-      number,
-      number,
-      number,
-      number,
-    ];
+    const mainListener = await retainHttpListener();
+    retained.push(mainListener);
+    const spareListener = await retainHttpListener();
+    retained.push(spareListener);
+    const storeListener = await retainHttpListener();
+    retained.push(storeListener);
+    const portM = mainListener.port;
+    const portS = spareListener.port;
+    const storeS = storeListener.port;
+    const storeLoopbackS = await freePort();
     const boxEnv = (dirs: BoxDirs, port: number): NodeJS.ProcessEnv => ({
       ...bootEnv(dirs, port, migrationsRoot, fixture.litestreamBin),
       WAITRON_VERSITYGW_BIN: fixture.versitygwBin,
@@ -676,6 +683,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
 
     const urlM = `https://127.0.0.1:${portM}`;
     const workingOrderId = randomUUID();
+    adoption = adoptRetainedListeners([mainListener, spareListener]);
     const sellingOnM = (async () => {
       await boundedStart(boxM.start(), "M's first start");
       const caM = await readFile(join(dirsM.state, "tls", "ca.crt"), "utf8");
@@ -713,6 +721,9 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     ]);
     if (selling.status === "rejected") throw selling.reason;
     if (settingUp.status === "rejected") throw settingUp.reason;
+    expect(adoption.adopted.size).toBe(2);
+    await adoption.bound;
+    adoption.restore();
     const { caM, viaM } = selling.value;
     const urlS = `https://127.0.0.1:${portS}`;
     const caS = await readFile(join(dirsS.state, "tls", "ca.crt"), "utf8");
@@ -810,6 +821,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     clock.begin("spare-join");
     const restartsBeforeJoin = boxS.restarts;
     const logAtJoin = logSoFar().length;
+    adoption = adoptRetainedListeners([storeListener]);
     const joined = await adopt();
     expect(joined.status, JSON.stringify(joined.body)).toBe(200);
     expect(joined.body).toMatchObject({ adopted: true, restarting: true });
@@ -822,6 +834,9 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       }),
     );
     expect(link.role).toBe("streams");
+    expect(adoption.adopted.has(storeListener.port)).toBe(true);
+    await adoption.bound;
+    adoption.restore();
     const nodeIdS = link.peerNodeId;
 
     clock.begin("main-restart-mid-join");
@@ -910,6 +925,10 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     signal?.removeEventListener("abort", onAbort);
     if (abortClose !== undefined) failures.push(...(await abortClose));
     failures.push(...(await closeAll()));
+    adoption?.restore();
+    for (const held of retained) {
+      if (held.server.listening) await held.close().catch((error: unknown) => failures.push(error));
+    }
     await closeViaM?.().catch(() => {});
     await closeViaS?.().catch(() => {});
   }

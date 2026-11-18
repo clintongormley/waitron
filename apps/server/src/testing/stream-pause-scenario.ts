@@ -58,7 +58,11 @@ import { seedTermZeroMembership } from "../membership-seed.js";
 import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity } from "../node-identity.js";
 import { writeStreamSettings, type StreamHostDeps } from "../stream-host.js";
-import { freePort } from "./free-ports.js";
+import {
+  retainHttpListener,
+  startWithRetainedListeners,
+  type RetainedHttpListener,
+} from "./retained-http-listener.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 import { bootEnv, copyMigrations } from "./stream-box.js";
 import {
@@ -240,6 +244,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     waitUntil(what, timeoutMs, probe, signal, POLL_MS);
   const sleep = (ms: number) => delay(ms, undefined, signal === undefined ? {} : { signal });
   let server: StartedServer | undefined;
+  let httpListener: RetainedHttpListener | undefined;
   let dispatcher: Agent | undefined;
   // The server leaves this slot before it is closed, so an abort and the finally never close it twice.
   const closeServer = async (): Promise<void> => {
@@ -270,7 +275,8 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     const stateDir = join(scratch, "state");
     const venueDir = join(stateDir, "venue");
     await mkdir(venueDir, { recursive: true });
-    const port = await freePort();
+    httpListener = await retainHttpListener();
+    const { port } = httpListener;
     await ensureBoxSecrets({
       stateDir,
       hostnames: ["waitron.local", "localhost"],
@@ -387,13 +393,15 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     );
 
     // 3. The server boots with a small side-file limit and opens its generation.
-    server = await startServer(
-      await loadBoxEnv(
-        bootEnv({ state: stateDir, venue: venueDir }, port, migrationsRoot, litestreamBin),
-        stateDir,
+    server = await startWithRetainedListeners([httpListener], async () =>
+      startServer(
+        await loadBoxEnv(
+          bootEnv({ state: stateDir, venue: venueDir }, port, migrationsRoot, litestreamBin),
+          stateDir,
+        ),
+        {},
+        { stream: { ...fixture.serverSeams, walLimitBytes: WAL_LIMIT_BYTES } },
       ),
-      {},
-      { stream: { ...fixture.serverSeams, walLimitBytes: WAL_LIMIT_BYTES } },
     );
     const running = server;
     const stream = (): StreamView => running.health.readStream();
@@ -815,6 +823,9 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         if (abortClose !== undefined) await abortClose;
       },
       closeServer,
+      async () => {
+        if (httpListener?.server.listening) await httpListener.close();
+      },
       async () => {
         if (dispatcher !== undefined) await dispatcher.close();
       },

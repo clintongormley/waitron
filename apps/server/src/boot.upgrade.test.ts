@@ -19,8 +19,12 @@ import * as firstSetupMode from "./first-fiscal-mode.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TEST_PRODUCER } from "./testing/test-producer.js";
 import { loadConfig } from "./config.js";
-import { freePort } from "./testing/free-ports.js";
-import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
+import {
+  retainHttpListener,
+  retainedHttpPreload,
+  transferRetainedListeners,
+  type RetainedHttpListener,
+} from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 
 vi.mock("node:child_process", { spy: true });
@@ -82,6 +86,42 @@ it("binds the configured TLS address and refuses health, sign-in and payment req
   const reclaimed = await openUpgradeListener(config, () => {});
   await reclaimed.close();
 });
+
+async function runUpgradeChild(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  held: RetainedHttpListener,
+): Promise<{ stdout: string; stderr: string }> {
+  const timeoutMs = 30_000;
+  const { spawn } = await vi.importActual<typeof childProcess>("node:child_process");
+  const child = spawn(process.execPath, ["--import", retainedHttpPreload, ...args], {
+    env: { ...env, WAITRON_HTTP_PORT: String(held.port), WAITRON_HTTP_HOST: held.host },
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
+    signal: AbortSignal.timeout(timeoutMs),
+    killSignal: "SIGKILL",
+  });
+  let stdout = "";
+  let stderr = "";
+  let launchError: Error | undefined;
+  child.stdout!.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
+  child.stderr!.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
+  child.on("error", (error) => (launchError = error));
+  const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+    child.once("close", (code, signal) => resolve({ code, signal })),
+  );
+  try {
+    await transferRetainedListeners(child, [held], timeoutMs);
+    const { code, signal } = await closed;
+    if (launchError !== undefined) throw launchError;
+    if (code !== 0)
+      throw new Error(`upgrade child exited with ${code ?? signal}: ${stderr}
+${stdout}`);
+    return { stdout, stderr };
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    await closed;
+  }
+}
 
 describe("contained upgrade data checks", () => {
   let venue: OrderVenue;
@@ -343,18 +383,20 @@ describe("contained upgrade data checks", () => {
     expect(cold).toMatchObject({ code: 1, stdout: "" });
     expect(cold.stderr).toBe("server.config_invalid\n");
     expect(await readdir(coldState)).toEqual([]);
-    const port = await freePort();
+    const first = await retainHttpListener();
+    retained.push(first);
+    const { port } = first;
     const script = `const {runUpgradeChecks}=await import(${JSON.stringify(pathToFileURL(entry).href)});
       console.log(JSON.stringify(await runUpgradeChecks(process.env,()=>{})));`;
-    const checked = await execute(process.execPath, ["--input-type=module", "--eval", script], {
-      env: {
+    const checked = await runUpgradeChild(
+      ["--input-type=module", "--eval", script],
+      {
         PATH: process.env.PATH,
         ...env,
         WAITRON_MIGRATIONS_DIR: join(artifact, "drizzle"),
-        WAITRON_HTTP_PORT: String(port),
       },
-      timeout: 30_000,
-    });
+      first,
+    );
     expect(JSON.parse(checked.stdout)).toEqual({
       mode: "trading",
       menus: 3,
@@ -362,15 +404,17 @@ describe("contained upgrade data checks", () => {
       fiscalRecords: 1,
     });
     expect(checked.stderr).toBe("");
-    const invoked = await execute(process.execPath, [entry, "readiness"], {
-      env: {
+    const second = await retainHttpListener(first.host, undefined, port);
+    retained.push(second);
+    const invoked = await runUpgradeChild(
+      [entry, "readiness"],
+      {
         PATH: process.env.PATH,
         ...env,
         WAITRON_MIGRATIONS_DIR: join(artifact, "drizzle"),
-        WAITRON_HTTP_PORT: String(port),
       },
-      timeout: 30_000,
-    });
+      second,
+    );
     expect(JSON.parse(invoked.stdout)).toEqual([
       {
         name: "readiness",

@@ -59,7 +59,8 @@ import type { PeerStatusBody } from "./peer-status-api.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
-import { freePorts } from "./testing/free-ports.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
 import { listener } from "./testing/ephemeral-listener.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -877,20 +878,55 @@ describe("the start check on a real start", () => {
     }, 60_000);
 
     it("on a fixed port, the normal start binds the port the waiting start released", async () => {
-      const [port] = await freePorts(1);
-      await boot(suite, {
-        spareUrl: OWN_URL,
-        joined: true,
-        port: port!,
-        seams: seams(waitThen({ result: "proceed", successorNodeId: null })),
-      });
-      await vi.waitFor(
-        async () => {
-          const node = await fetch(`http://127.0.0.1:${port}/api/node`);
-          expect(((await node.json()) as { acceptingSales: unknown }).acceptingSales).toBe(true);
-        },
-        { timeout: 30_000 },
-      );
+      const held = await retainHttpListener();
+      const { port } = held;
+      try {
+        const competitor = createServer();
+        try {
+          const bound = once(competitor, "listening");
+          competitor.listen(port, held.host);
+          await expect(bound).rejects.toMatchObject({ code: "EADDRINUSE" });
+        } finally {
+          if (competitor.listening) await new Promise((done) => competitor.close(done));
+        }
+
+        let answer!: (outcome: StartPeerCheckOutcome) => void;
+        const reply = new Promise<StartPeerCheckOutcome>((resolve) => (answer = resolve));
+        const peerCheck = waitThen().mockReturnValueOnce(reply);
+        const adoption = adoptRetainedListeners([held]);
+        try {
+          const waiting = await boot(suite, {
+            spareUrl: OWN_URL,
+            joined: true,
+            port,
+            seams: seams(peerCheck),
+          });
+          await adoption.bound;
+          expect(waiting.acceptingSales).toBe(false);
+          const page = await fetch(`http://127.0.0.1:${port}/`);
+          expect(await page.text()).toContain("This box is waiting for Spare");
+
+          answer({ result: "proceed", successorNodeId: null });
+          await vi.waitFor(
+            async () => {
+              const node = await fetch(`http://127.0.0.1:${port}/api/node`);
+              expect(((await node.json()) as { acceptingSales: unknown }).acceptingSales).toBe(
+                true,
+              );
+            },
+            { timeout: 30_000 },
+          );
+        } finally {
+          adoption.restore();
+          answer({ result: "wait", successorNodeId: null, waitingOn: [SPARE.nodeId] });
+        }
+      } finally {
+        if (server !== undefined) {
+          await server.close();
+          server = undefined;
+        }
+        if (held.server.listening) await held.close();
+      }
     }, 60_000);
 
     it("a step after the wait that fails rejects fullyStarted with its error", async () => {
