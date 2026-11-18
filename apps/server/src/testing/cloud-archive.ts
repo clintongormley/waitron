@@ -5,20 +5,36 @@ import type { Database, NodeDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
 import { runOnce } from "../backup-sweep.js";
 import { createCloudArchiveTarget } from "../cloud-archive-target.js";
-import type { CloudCaptureMetadata } from "../cloud-backup.js";
+import type { CloudCaptureGrant, CloudCaptureMetadata } from "../cloud-backup.js";
+
+interface CloudArchiveFixture {
+  db: Database;
+  node: NodeDatabase;
+  modules: readonly WaitronModule[];
+  environment: "preproduction" | "production";
+  stateDir: string;
+  stagingDir?: string;
+}
 
 export async function captureCloudArchive(
-  deps: {
-    db: Database;
-    node: NodeDatabase;
-    modules: readonly WaitronModule[];
-    environment: "preproduction" | "production";
-    stateDir: string;
-    stagingDir?: string;
-  },
+  deps: CloudArchiveFixture,
   recoveryKey: string,
   at: Date,
   signal: AbortSignal,
+) {
+  let bytes!: Buffer;
+  const { modules } = await runCloudArchive(deps, recoveryKey, at, signal, async (_, file) => {
+    bytes = await readFile(file);
+  });
+  return { bytes, modules };
+}
+
+export async function runCloudArchive(
+  deps: CloudArchiveFixture,
+  recoveryKey: string,
+  at: Date,
+  signal: AbortSignal,
+  upload: (grant: CloudCaptureGrant, file: string, metadata: CloudCaptureMetadata) => Promise<void>,
 ) {
   const nodeId = randomUUID();
   const registration = {
@@ -27,7 +43,6 @@ export async function captureCloudArchive(
     organisationId: randomUUID(),
     legalBusinessId: randomUUID(),
   };
-  let bytes: Buffer | undefined;
   let metadata: CloudCaptureMetadata | undefined;
   let errorCode: string | null | undefined;
   const target = createCloudArchiveTarget({
@@ -62,14 +77,14 @@ export async function captureCloudArchive(
         ...registration,
         recoveryKey,
         keyVersion: 1,
-        incomingKey: id,
+        incomingKey: "incoming/" + id,
         location: { endpoint: "https://storage.example", bucket: "backup", region: "test" },
         credentials: {
           accessKeyId: "fixture",
           secretAccessKey: "fixture",
           sessionToken: "fixture",
         },
-        expiresAt: at.toISOString(),
+        expiresAt: new Date(Date.now() + 900_000).toISOString(),
       }),
       publishCapture: async (id, metadata) => ({
         id,
@@ -79,8 +94,8 @@ export async function captureCloudArchive(
         verification: "pending",
       }),
     },
-    upload: async (_grant, file, uploaded) => {
-      bytes = await readFile(file);
+    upload: async (grant, file, uploaded) => {
+      await upload(grant, file, uploaded);
       metadata = uploaded;
     },
   });
@@ -106,8 +121,10 @@ export async function captureCloudArchive(
       errorCode = result.uploadErrorCode;
     },
   });
-  if (!bytes || !metadata || errorCode !== null) {
-    throw Object.assign(new Error("Cloud archive was not stored"), { code: errorCode });
+  if (!metadata || errorCode !== null) {
+    throw Object.assign(new Error(`Cloud archive was not stored (${errorCode})`), {
+      code: errorCode,
+    });
   }
-  return { bytes, modules: metadata.modules };
+  return metadata;
 }

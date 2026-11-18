@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
 import { decryptArtifactFile } from "./artifact-cipher-file.js";
+import { MAX_CLOUD_EXPANDED_BYTES } from "./cloud-backup-limits.js";
 import { decodeArchiveFile } from "./backup-compression.js";
 import { unpackArchiveFile } from "./backup-archive-file.js";
 import { BackupManifestReadError, readBackupManifest } from "./backup-manifest-reader.js";
@@ -49,7 +50,9 @@ export async function validateBackupArtifactFile(
   const plaintext = join(scratch, "plaintext");
   try {
     await decryptArtifactFile(input.artifactPath, plaintext, input.recoveryKey);
-    const archive = await decodeArchiveFile(plaintext, join(scratch, "decoded"));
+    const archive = await decodeArchiveFile(plaintext, join(scratch, "decoded"), {
+      maxBytes: MAX_CLOUD_EXPANDED_BYTES,
+    });
     const unpacked = await unpackArchiveFile(archive, scratch, { requireExactEnd: true });
     await rm(archive);
     const entries = unpacked.flatMap((entry) => (entry.kind === "bytes" ? [entry.entry] : []));

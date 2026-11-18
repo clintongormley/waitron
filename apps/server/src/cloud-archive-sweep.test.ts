@@ -1,6 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm, readdir, stat } from "node:fs/promises";
 import { join, dirname } from "node:path";
+import { createHash } from "node:crypto";
+import { createServer } from "node:https";
 import { tmpdir } from "node:os";
 import { gunzipSync } from "node:zlib";
 import { withTransaction } from "@waitron/db";
@@ -12,7 +14,9 @@ import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
-import { captureCloudArchive } from "./testing/cloud-archive.js";
+import { captureCloudArchive, runCloudArchive } from "./testing/cloud-archive.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 const db = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   resetPerTest: false,
@@ -148,7 +152,7 @@ it("lets a node copy still writing into staging finish before it clears staging 
 });
 
 it.runIf(process.env.WAITRON_LARGE_CLOUD_BACKUP_TEST === "1")(
-  "publishes a Cloud capture from a real SQLite copy over 512 MiB",
+  "uploads and publishes ciphertext over 512 MiB from a real SQLite copy",
   async () => {
     const root = await mkdtemp(join(tmpdir(), "snapshot-large-sqlite-"));
     dirs.push(root);
@@ -159,18 +163,47 @@ it.runIf(process.env.WAITRON_LARGE_CLOUD_BACKUP_TEST === "1")(
     await withTransaction(db.db, async (tx) => {
       await tx.run(sql`create table large_capture_fixture (payload blob)`);
       for (let row = 0; row < 65; row++)
-        await tx.run(sql`insert into large_capture_fixture values (zeroblob(${8 * 1024 * 1024}))`);
+        await tx.run(
+          sql`insert into large_capture_fixture values (randomblob(${8 * 1024 * 1024}))`,
+        );
     });
+    const fixtureRssKiB = process.resourceUsage().maxRSS;
+    if (process.env.WAITRON_LARGE_CLOUD_BACKUP_BASELINE === "1") {
+      console.log("SQLite fixture peak RSS (KiB)", fixtureRssKiB);
+      return;
+    }
+
+    const tls = mintSelfSignedServerCert({
+      hostnames: ["localhost"],
+      ipAddresses: ["127.0.0.1"],
+      now: new Date(),
+    });
+    let receipt: { size: number; digest: string } | undefined;
+    const server = createServer(
+      { key: tls.serverKeyPem, cert: tls.serverCertPem },
+      async (request, response) => {
+        const hash = createHash("sha256");
+        let size = 0;
+        for await (const chunk of request) {
+          size += chunk.length;
+          hash.update(chunk);
+        }
+        receipt = { size, digest: hash.digest("hex") };
+        response.end();
+      },
+    );
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const endpoint = `https://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const stagingDir = join(root, BACKUP_STAGING_DIR);
     const copy = db.db.archiveTo.bind(db.db);
-    let copyBytes = 0;
     const archive = vi.spyOn(db.db, "archiveTo").mockImplementationOnce(async (path) => {
       await copy(path);
-      copyBytes = (await stat(path)).size;
-      expect(copyBytes).toBeGreaterThan(512 * 1024 * 1024);
+      const bytes = (await stat(path)).size;
+      expect(bytes).toBeGreaterThan(512 * 1024 ** 2);
+      console.log("SQLite copy", { bytes, peakRssKiB: process.resourceUsage().maxRSS });
     });
-    const stagingDir = join(root, BACKUP_STAGING_DIR);
     try {
-      const captured = await captureCloudArchive(
+      const captured = await runCloudArchive(
         {
           db: db.db,
           node: db.node,
@@ -182,13 +215,30 @@ it.runIf(process.env.WAITRON_LARGE_CLOUD_BACKUP_TEST === "1")(
         "recovery key",
         new Date(),
         new AbortController().signal,
+        async (grant, file, metadata) => {
+          await uploadCloudCaptureFile(
+            { ...grant, location: { ...grant.location, endpoint } },
+            file,
+            metadata,
+            { ca: tls.caCertPem },
+          );
+        },
       );
-      expect(captured.bytes.length).toBeGreaterThan(0);
+      expect(captured.size).toBeGreaterThan(512 * 1024 ** 2);
+      expect(receipt).toEqual({ size: captured.size, digest: captured.digest });
+      expect(await readdir(join(root, "cloud/snapshots"))).toEqual(["state.json"]);
+      console.log("Ciphertext received over HTTPS", receipt);
+      console.log("Peak RSS (KiB)", {
+        fixture: fixtureRssKiB,
+        end: process.resourceUsage().maxRSS,
+      });
     } finally {
-      console.log("Cloud capture SQLite copy bytes", copyBytes);
       archive.mockRestore();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
       expect(await readdir(stagingDir)).toEqual([]);
+      expect(await readdir(join(root, "scratch"))).toEqual(["backup"]);
     }
   },
-  60_000,
+  120_000,
 );

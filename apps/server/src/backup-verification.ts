@@ -39,6 +39,7 @@ import {
   verifyBackupStateSecrets,
 } from "./backup-verification-secrets.js";
 import { buildBackupVerificationTarget } from "./backup-verification-target.js";
+import { MAX_CLOUD_ARCHIVE_BYTES } from "./cloud-backup-limits.js";
 import { errnoOf } from "./errno.js";
 import { readCopyNode } from "./restore.js";
 
@@ -62,7 +63,8 @@ class Refusal extends Error {
 function refuse(status: Verdict["status"], reason: BackupVerificationReason): never {
   throw new Refusal({ status, reason });
 }
-const SCRATCH_BYTES = 256 * 1024 * 1024;
+const SCRATCH_BYTES = 16 * 1024 ** 3;
+const MAX_ATTEMPT_MS = 5 * 60_000;
 
 async function scratchBytes(path: string): Promise<number> {
   let total = 0;
@@ -158,7 +160,7 @@ export async function verifyBackupArtifact(
   const check = () => {
     if (deps.signal.aborted) refuse("unavailable", "cancelled");
     const now = deps.now().getTime();
-    if (!Number.isFinite(now) || now >= deadline || performance.now() - started >= 30_000)
+    if (!Number.isFinite(now) || now >= deadline || performance.now() - started >= MAX_ATTEMPT_MS)
       refuse("unavailable", "deadline");
   };
   let scratch: string | undefined;
@@ -189,7 +191,9 @@ export async function verifyBackupArtifact(
     const sealed = join(scratch, "sealed-input");
     const input = await open(deps.artifactPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     close.push(() => input.close());
-    if (!(await input.stat()).isFile()) refuse("unavailable", "unexpected");
+    const source = await input.stat();
+    if (!source.isFile()) refuse("unavailable", "unexpected");
+    if (source.size > MAX_CLOUD_ARCHIVE_BYTES) refuse("unavailable", "resource_limit");
     const output = await open(sealed, "wx", 0o600);
     close.push(() => output.close());
     const hash = createHash("sha256");
@@ -200,7 +204,7 @@ export async function verifyBackupArtifact(
       const read = await input.read(buffer, 0, buffer.length, null);
       if (read.bytesRead === 0) break;
       bytes += read.bytesRead;
-      if (bytes > SCRATCH_BYTES) refuse("unavailable", "resource_limit");
+      if (bytes > MAX_CLOUD_ARCHIVE_BYTES) refuse("unavailable", "resource_limit");
       const chunk = buffer.subarray(0, read.bytesRead);
       hash.update(chunk);
       for (let offset = 0; offset < chunk.length;) {

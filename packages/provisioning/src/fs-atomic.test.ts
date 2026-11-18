@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   failedAtFolderSync,
   mkdirDurable,
+  publishFileDurable,
   stageFileDurable,
   writeFileDurable,
 } from "./fs-atomic.js";
@@ -52,6 +53,23 @@ async function syncsAndRenames(run: () => Promise<void>): Promise<string[]> {
   }
   return events;
 }
+
+it("publishes a prepared file after flushing its bytes and syncs the destination folder", async () => {
+  const scratch = await newDir();
+  const state = await newDir();
+  const source = join(scratch, "prepared");
+  const target = join(state, "archive");
+  await writeFile(source, "archive bytes", { mode: 0o600 });
+
+  expect(await syncsAndRenames(() => publishFileDurable(source, target))).toEqual([
+    `sync ${source}`,
+    `rename ${source} ${target}`,
+    `sync ${state}`,
+  ]);
+  expect(await readFile(target, "utf8")).toBe("archive bytes");
+  expect((await stat(target)).mode & 0o777).toBe(0o600);
+  await expect(stat(source)).rejects.toMatchObject({ code: "ENOENT" });
+});
 
 describe("writeFileDurable", () => {
   it("syncs the working copy before renaming it onto the target, then syncs the folder", async () => {

@@ -5,7 +5,11 @@ import { Agent } from "node:https";
 import { createHash } from "node:crypto";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { AppError } from "@waitron/shared";
-import { MAX_CLOUD_ARCHIVE_BYTES } from "./cloud-backup-limits.js";
+import {
+  CLOUD_GRANT_MARGIN_MS,
+  MAX_CLOUD_ARCHIVE_BYTES,
+  MAX_CLOUD_TRANSFER_MS,
+} from "./cloud-backup-limits.js";
 import type { CloudCaptureGrant } from "./cloud-backup.js";
 import "./errors.js";
 
@@ -122,7 +126,10 @@ export async function uploadCloudCaptureFile(
       await handle.close();
     }
     // A retry opens a fresh stream with renewed credentials. The SDK never replays a consumed stream.
-    const timeout = Math.min(14 * 60000, Date.parse(grant.expiresAt) - Date.now() - 5000);
+    const timeout = Math.min(
+      MAX_CLOUD_TRANSFER_MS,
+      Date.parse(grant.expiresAt) - Date.now() - CLOUD_GRANT_MARGIN_MS,
+    );
     if (!Number.isFinite(timeout) || timeout <= 0) throw Error();
     const source = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const body = source.createReadStream();

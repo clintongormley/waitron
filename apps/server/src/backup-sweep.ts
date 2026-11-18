@@ -1,3 +1,4 @@
+import { publishFileDurable } from "@waitron/provisioning";
 import { SCRATCH_DIR } from "@waitron/store";
 import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -189,13 +190,19 @@ async function localFoldersOnDisk(
   }
 }
 
-/**
- * One backup. A failure to build the manifest or collect state throws before the database copy, and
- * no partial archive is ever put to a destination.
- */
-export async function runOnce(
-  deps: Omit<BackupSweepDeps, "schedule" | "sleep" | "jitterSeed" | "readClock">,
-): Promise<void> {
+type BackupRunDeps = Omit<BackupSweepDeps, "schedule" | "sleep" | "jitterSeed" | "readClock">;
+
+export async function runOnce(deps: BackupRunDeps): Promise<void> {
+  const stage = () => stageBackup(deps);
+  const deliver = deps.stagingTurn
+    ? await deps.stagingTurn.runBackup(async () => {
+        if (!deps.signal.aborted) return stage();
+      })
+    : await stage();
+  await deliver?.();
+}
+
+async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) | undefined> {
   const now = deps.now ?? (() => new Date());
   const nowMs = now().getTime();
   const buildBackupManifest = deps.buildManifest ?? buildManifest;
@@ -211,7 +218,7 @@ export async function runOnce(
     const held = await readClockStepHold(deps.latestClockStep, nowMs, deps.retainDays, deps.log);
     // Collected before the copy, so a broken state folder fails the tick without copying the
     // whole database.
-    const [manifest, parts] = await Promise.all([
+    const [manifestRead, partsRead] = await Promise.allSettled([
       buildBackupManifest({
         db: deps.db,
         node: deps.node,
@@ -232,6 +239,11 @@ export async function runOnce(
         budget,
       ),
     ]);
+
+    if (manifestRead.status === "rejected") throw manifestRead.reason;
+    if (partsRead.status === "rejected") throw partsRead.reason;
+    const manifest = manifestRead.value;
+    const parts = partsRead.value;
 
     budget.addEntry("manifest.json", Buffer.byteLength(JSON.stringify(manifest)));
     budget.addEntry("db.dump", 0);
@@ -345,48 +357,79 @@ export async function runOnce(
         });
       }),
     );
-    if (deps.cloud && !deps.signal.aborted) {
-      const { target, readClock } = deps.cloud;
-      const result = await (async () => {
-        try {
-          // WBA1 has a 9-byte header and 12 bytes of length fields per entry.
-          const plaintextBytes = entries.reduce(
-            (size, entry) =>
-              size +
-              12 +
-              (entry.kind === "file"
-                ? Buffer.byteLength(entry.name) + stagedSize
-                : Buffer.byteLength(entry.entry.name) + entry.entry.bytes.length),
-            9,
-          );
-          return await target.store({
-            entries: () => packArchiveStream(entries),
-            plaintextBytes,
-            modules: manifest.modules,
-            at: stamp,
-            clock: await readClock(),
-            signal: deps.signal,
-          });
-        } catch (error) {
-          return { stored: false, errorCode: codeOf(error) };
-        }
-      })();
-      if (result.stored || !deps.signal.aborted) {
-        if (deps.outcomes)
-          recordBackupOutcome(deps.outcomes, target.id, result.stored, stamp.toISOString());
-        deps.log(
-          result.stored ? "info" : "warn",
-          result.stored ? "backup.destination_completed" : "backup.destination_failed",
-          { destination: target.id, errorCode: result.errorCode },
-        );
-        deps.onDestinationResult?.({
-          id: target.id,
-          stored: result.stored,
-          uploadErrorCode: result.errorCode,
-          pruneErrorCode: null,
-        });
-      }
+    if (!deps.cloud || deps.signal.aborted) return;
+    const { target, readClock } = deps.cloud;
+    const report = (result: Awaited<ReturnType<CloudArchiveTarget["store"]>>) => {
+      if (!result.stored && deps.signal.aborted) return;
+      if (deps.outcomes)
+        recordBackupOutcome(deps.outcomes, target.id, result.stored, stamp.toISOString());
+      deps.log(
+        result.stored ? "info" : "warn",
+        result.stored ? "backup.destination_completed" : "backup.destination_failed",
+        { destination: target.id, errorCode: result.errorCode },
+      );
+      deps.onDestinationResult?.({
+        id: target.id,
+        stored: result.stored,
+        uploadErrorCode: result.errorCode,
+        pruneErrorCode: null,
+      });
+    };
+    // WBA1 has a 9-byte header and 12 bytes of length fields per entry.
+    const plaintextBytes = entries.reduce(
+      (size, entry) =>
+        size +
+        12 +
+        (entry.kind === "file"
+          ? Buffer.byteLength(entry.name) + stagedSize
+          : Buffer.byteLength(entry.entry.name) + entry.entry.bytes.length),
+      9,
+    );
+    if (encryptedDir) {
+      await rm(encryptedDir, { recursive: true, force: true });
+      encryptedDir = undefined;
     }
+    let cloudCopyDir: string | undefined;
+    try {
+      if (room) {
+        const neededBytes = await target.roomNeeded(plaintextBytes);
+        if (neededBytes > 0)
+          await checkStagingSpace(
+            deps,
+            neededBytes + (deps.spaceFloorBytes ?? START_FREE_SPACE_FLOOR),
+          );
+      }
+      const scratch = join(deps.stateDir, SCRATCH_DIR);
+      cloudCopyDir = await mkdtemp(join(scratch, "cloud-copy-"));
+      const cloudCopy = join(cloudCopyDir, dumpName);
+      // Box status can clear shared backup staging while Cloud uses its private copy.
+      await publishFileDurable(staged, cloudCopy);
+      dumped = false;
+      entries[1] = { kind: "file", name: "db.dump", path: cloudCopy };
+    } catch (error) {
+      if (cloudCopyDir) await rm(cloudCopyDir, { recursive: true, force: true });
+      report({ stored: false, errorCode: codeOf(error) });
+      return;
+    }
+    const cleanup = cloudCopyDir;
+    return async () => {
+      try {
+        if (deps.signal.aborted) return;
+        const result = await target.store({
+          entries: () => packArchiveStream(entries),
+          plaintextBytes,
+          modules: manifest.modules,
+          at: stamp,
+          clock: await readClock(),
+          signal: deps.signal,
+        });
+        report(result);
+      } catch (error) {
+        report({ stored: false, errorCode: codeOf(error) });
+      } finally {
+        await rm(cleanup, { recursive: true, force: true });
+      }
+    };
   } catch (err) {
     // Setup failures stop the run before it can store an archive.
     if (!deps.signal.aborted && deps.outcomes) {
@@ -582,14 +625,7 @@ export function createBackupSchedule(deps: Omit<BackupSweepDeps, "sleep">) {
 
 async function tick(deps: Omit<BackupSweepDeps, "sleep">): Promise<void> {
   try {
-    if (deps.stagingTurn)
-      await deps.stagingTurn.runBackup(async () => {
-        // A stop that landed while this tick waited for the turn: `runOnce` would copy the whole
-        // database before it reads the signal.
-        if (deps.signal.aborted) return;
-        await runOnce(deps);
-      });
-    else await runOnce(deps);
+    await runOnce(deps);
   } catch (err) {
     if (deps.signal.aborted) return;
     deps.log("warn", "backup.failed", { errorCode: codeOf(err) });
