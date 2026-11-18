@@ -147,9 +147,10 @@ second amendment are marked **my call (plan writer)**:
     copy is the orderable one with the latest `changedAt`, ties going to the smaller `key` in code
     units (**my call (plan writer)**). Not the version's `menu_versions.created_at`: a live correction writes a new
     version with `createdAt: at` (`packages/menu/src/menu-publication.ts:770-777`) that carries the
-    full menu's OLD copy unchanged, which would make an older price newest again. The stamp is part
-    of the copy, so a working hash changes only when the set menu does, and a correction carries it
-    over unchanged. A tie happens only when two copies differ by something changed on a product's
+    full menu's OLD copy unchanged, which would make an older price newest again. The copy's stamp
+    contributes to the working hash, and a correction carries it over unchanged. A direct draft
+    request that saves the same value can still move the stamp. The editor's Save action stays
+    disabled until the draft changes. A tie happens only when two copies differ by something changed on a product's
     own page (a name, a course), never by a price or surcharge, which are the set menu's own
     writes.
     Serving also reads a copy from a version that is no longer live (Task 6b), so piece 2 can draw

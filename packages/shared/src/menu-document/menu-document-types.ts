@@ -110,7 +110,7 @@ export interface PublishedSetMenu {
   terms: SetMenuTerms;
   root: DocumentList;
   offers: Record<string, SetMenuFrozenOffer>;
-  /** The draft's last change when the full menu took this copy. */
+  /** The draft row's stored updatedAt when the full menu took this copy. */
   changedAt: string;
 }
 
