@@ -160,8 +160,8 @@ second amendment are marked **my call (plan writer)**:
     its own page is not refused there: the set menu shows the problem `dish_vat_class_differs`,
     which stops publishing (**my call (plan writer)**: refusing on the product page would reach
     into every product save for a rule that lasts only until the adviser answers).
-12. **A product sold by measure cannot be in a set menu** (**my call (plan writer)**; Fable's
-    proposal P2, which the owner has not yet answered). A set-menu dish is stored one unit per line
+12. **A product sold by measure cannot be in a set menu** (owner, 18 November 2026: "no" when
+    asked whether a set menu can include dishes sold by weight). A set-menu dish is stored one unit per line
     (spec section 3, "What is stored"), and a dish sold by weight has a fraction for its quantity.
     Lane M's run behind F6: a stored line of unit price 5.00 and quantity 0.300 files 1.50, so a
     +€5.00 surcharge on 0.300 kg would be billed as €1.50 (`packages/menu/src/pricing.ts:144-169`,
