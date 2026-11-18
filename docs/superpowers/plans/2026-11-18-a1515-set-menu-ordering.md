@@ -159,10 +159,15 @@ writer)** here and where they first appear in a task.
     Such a dish does not fill its place, does not count as "holds dishes" for − or Cancel, is never
     moved, and its link to the set-menu line is cleared by the link's `on delete set null` when
     that set menu is removed. A cancel that keeps the charge leaves the dish in its place.
-13. **− may take a set menu a draft dish was going to use; the till shows the change** (**my call
-    (plan writer)**). The removal is the waiter's own tap, and Send is the guard (owner, Q6). After
-    it, the summary marks any draft dish left with no place, and the question (Task 16a) opens for
-    the first one, as when a later choice leaves a dish with no place (owner, Q10).
+13. **− and Cancel are refused while an unsent dish is counting on that set menu** (**owner**,
+    18 November: "refuse the -", chosen over allowing it and then asking about the dish). A dish
+    counts on a set menu when it has a place with that set menu in the bill's set menus and would
+    have none without it: `placeInOrder` over the bill's unsent set-menu dishes (with their
+    reservations) is run with and without the set menus being removed, and any dish placed before
+    and unplaced after is named in `set_menu.needed_by_draft`; nothing is removed. A dish that
+    merely moves to another set menu of the same type does not block the removal. The till makes
+    the same check from its own draft (`draftPlacements`) before sending the tap, so a dish not yet
+    saved is covered too; the server's check covers saved drafts from every till at the table.
 
 ## What this piece stores, for piece 4
 
@@ -237,6 +242,7 @@ writer)** here and where they first appear in a task.
   | `set_menu.takeaway`            | `{ setMenuName: string }`                | 409    | a set menu on a takeaway bill, or switching a bill holding one to takeaway |
   | `set_menu.not_selling`         | `{ setMenuName: string }`                | 409    | adding a set menu the bill holds no copy of while none is on sale         |
   | `set_menu.holds_dishes`        | `{ setMenuName: string; dishNames: string[] }` | 409 | − or Cancel on set menus that hold dishes                                 |
+  | `set_menu.needed_by_draft`     | `{ setMenuName: string; dishNames: string[] }` | 409 | − or Cancel that would leave an unsent dish with no place (decision 13)   |
   | `set_menu.no_place`            | `{ dishName: string }`                   | 409    | Send meets a set-menu dish with no open place                             |
   | `set_menu.place_taken`         | `{ dishName: string }`                   | 409    | a chosen move whose target place is no longer open                        |
   | `set_menu.no_place_on_target`  | `{ dishName: string }`                   | 409    | a set-menu dish moved alone to a bill where it has no place               |
@@ -675,7 +681,10 @@ export function setMenuOfferLookup(
   asked → `set_menu.holds_dishes` naming the dishes on the set menus of that type, and nothing is
   removed.
 - `removeSetMenuLines(tx, workingOrderId, lineIds)` is the only code that deletes a set-menu line.
-  It refuses `set_menu.holds_dishes` when any of them holds a dish (checked in the transaction).
+  It refuses `set_menu.holds_dishes` when any of them holds a dish, then `set_menu.needed_by_draft`
+  when removing them would leave an unsent dish with no place (decision 13; it reads the bill's
+  open-draft set-menu lines and their reservations as Task 7b does), both checked in the
+  transaction.
   Piece 4 adds its own refusal here.
 - Refusals at the start of each write: `refuseUnlessSetMenuBill`, then `refusePaymentInFlight`
   (as every draft write does, `apps/server/src/order-drafts.ts:161,301,431,646,756`). A raised
@@ -702,6 +711,9 @@ export function setMenuOfferLookup(
   - `"lowering the count removes the last empty set menu"`, and `"refuses when the set menus hold
     dishes, naming them, and removes nothing"`.
   - `"Cancel removes one empty set menu, and refuses one holding a dish"`.
+  - `"− is refused while a saved draft sea bass has its only place on that set menu, naming it"`;
+    control: `"− succeeds when the draft sea bass can move to another set menu of that type"`
+    (two empty Specials, one draft Sea bass → one Special removed, the dish still placed).
   - `"a repeated tap with the same revision is refused as stale and adds nothing"`.
   - `"a count tap is refused while a payment is in progress"`; `"a count past the simplified
     invoice limit is refused"`.
@@ -1154,16 +1166,16 @@ export function draftPlacements(
   per set menu, each place filled with its dish (a draft dish drawn as not yet sent) or shown open.
   Each row offers **Cancel** (Task 6's route) and each placed dish **Move**, which lists the open
   places `checkMoves` accepts, with their prices (decision 10).
-- After − or Cancel, a draft dish whose preview or reservation no longer has a place is marked
-  "no place" in the summary and the basket, and Task 16a's question opens for the first such dish
-  (decision 13).
+- Before sending − or Cancel, the till runs decision 13's check on its own draft; when a draft
+  dish would lose its place it shows `set_menu.needed_by_draft`'s wording beside the stepper and
+  sends nothing. The server's refusal (Task 6) is shown the same way.
 
 - [ ] **Step 1: Write the failing tests:** `"a tap saves at once and a refusal puts the count back
   with its reason"`; `"the counts list held set menus and those on sale"`; `"the folded summary
   names the set menus and the open places"`; `"unfolded, each set menu shows its dishes, draft
   dishes and open places"`; `"Cancel on an empty set menu removes it; on one holding dishes it
   shows the refusal naming them"`; `"Move shows the open places with their prices and saves the
-  move"`; `"− on the Daily a draft sea bass was previewed on marks it and asks"`; `"a counter order
+  move"`; `"− on the Special a draft sea bass is previewed on is refused, naming it, and sends nothing"`; `"a counter order
   shows no counts"`; a11y for the counts and the summary, folded and
   unfolded, in both themes.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/set-menu-counts.test.ts src/widgets/set-menu-counts.a11y.test.ts src/widgets/set-menu-summary.test.ts src/widgets/set-menu-summary.a11y.test.ts src/screens/till-table-order-screen.set-menus.test.ts`; they fail.
@@ -1252,6 +1264,10 @@ export function draftPlacements(
     à la carte if the table still wants them), or move them to another set menu with Move." /
     «{setMenuName} tiene {dishNames}. Anula esos platos (y pídelos a la carta si la mesa aún los
     quiere) o pásalos a otro menú con Mover.»
+  - `set_menu.needed_by_draft`: "Not sent yet, and only this {setMenuName} has a place for it:
+    {dishNames}. Remove those dishes from the order first, or keep the set menu." / «Sin enviar, y
+    solo este {setMenuName} tiene sitio para ellos: {dishNames}. Quita primero esos platos del
+    pedido o mantén el menú.»
   - `set_menu.payment_not_ready`: "Bills with set menus can't be paid on this version yet. À la
     carte dishes can be moved to another bill and paid there." / «Las cuentas con menús aún no se
     pueden cobrar en esta versión. Los platos a la carta se pueden pasar a otra cuenta y cobrar
