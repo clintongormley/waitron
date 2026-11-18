@@ -668,11 +668,6 @@ function validateVenueServiceConfiguration(
     readonly holidayArea?: Readonly<Record<string, unknown>> | null;
   },
 ): void {
-  const screenProfiles = new Set<unknown>();
-  for (const row of tables.device_profile_kitchen_screens ?? []) {
-    if (screenProfiles.has(row.device_profile_id)) refuse("device_profile_kitchen_screens.screen");
-    screenProfiles.add(row.device_profile_id);
-  }
   validateOrderStarts(tables);
   validateDepartmentDining(tables);
   validateServiceHierarchy(tables);
@@ -692,9 +687,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "departments", leaveBehindWhenFalse: "active" },
     { name: "service_steps" },
     { name: "department_courses" },
-    { name: "device_profile_kitchen_screens" },
-    { name: "device_profile_kitchen_screen_stations" },
-    { name: "device_profile_kitchen_screen_zones" },
     { name: "department_transfer_destinations" },
     { name: "routing_cells" },
     { name: "menu_periods", jsonReferences: [{ column: "staff_menu_ids", paths: [["*"]] }] },

@@ -4,8 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   departments,
-  deviceProfileKitchenScreens,
-  deviceProfileKitchenScreenStations,
+  deviceProfiles,
   floorZones,
   withTransaction,
   menus,
@@ -610,21 +609,23 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         .values({ name: `Bar ${randomUUID()}` })
         .returning({ id: kitchenStations.id });
       await db
-        .insert(deviceProfileKitchenScreens)
-        .values({ deviceProfileId: profiles.till, screen: "pass", everyZone: true });
-      await db.insert(deviceProfileKitchenScreenStations).values([
-        { deviceProfileId: profiles.till, screen: "pass", stationId: grill!.id },
-        { deviceProfileId: profiles.till, screen: "pass", stationId: bar!.id },
-      ]);
+        .update(deviceProfiles)
+        .set({
+          kitchenViews: {
+            pass: { stationIds: [grill!.id, bar!.id], zoneIds: null, showNonPassStations: true },
+          },
+        })
+        .where(eq(deviceProfiles.id, profiles.till));
 
-      const bindings = () =>
-        db
-          .select()
-          .from(deviceProfileKitchenScreenStations)
-          .where(eq(deviceProfileKitchenScreenStations.deviceProfileId, profiles.till))
-          .orderBy(deviceProfileKitchenScreenStations.stationId);
+      const bindings = async () =>
+        (
+          await db
+            .select({ views: deviceProfiles.kitchenViews })
+            .from(deviceProfiles)
+            .where(eq(deviceProfiles.id, profiles.till))
+        )[0]!.views.pass!.stationIds;
       const before = await bindings();
-      expect(before.map((row) => row.stationId)).toEqual([grill!.id, bar!.id].sort());
+      expect(before).toEqual([grill!.id, bar!.id]);
 
       await runSeed();
 

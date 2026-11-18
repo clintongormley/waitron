@@ -14,6 +14,7 @@ import {
   tsString,
 } from "./columns.js";
 import { floorZones } from "./floor-zones.js";
+import type { StoredKitchenViews } from "./venue-service/kitchen-screens.js";
 import { departments } from "./venue-service/service.js";
 
 /**
@@ -66,6 +67,7 @@ export const deviceProfiles = table(
     orderZoneIds: json<string[]>("order_zone_ids"),
     // Printer ids have no foreign key. The product's Delete clears them before retiring a printer.
     printerLists: json<StoredPrinterLists>("printer_lists").notNull().default({}),
+    kitchenViews: json<StoredKitchenViews>("kitchen_views").notNull().default({}),
     cardReaders: json<DeviceProfileCardReaders>("card_readers").notNull().default({}),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
@@ -77,6 +79,7 @@ export const deviceProfiles = table(
       .where(sql`${t.retiredAt} is null`),
     check("device_profiles_form_factor_ck", enumCheck(t.formFactor)),
     check("device_profiles_printer_lists_ck", jsonShapeCheck(t.printerLists, "object")),
+    check("device_profiles_kitchen_views_ck", jsonShapeCheck(t.kitchenViews, "object")),
     check("device_profiles_card_readers_ck", jsonShapeCheck(t.cardReaders, "object")),
     check(
       "device_profiles_kds_timeout_ck",

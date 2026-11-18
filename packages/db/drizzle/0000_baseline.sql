@@ -1174,6 +1174,7 @@ CREATE TABLE `device_profiles` (
 	`order_starting_zone_id` text,
 	`order_zone_ids` text,
 	`printer_lists` text DEFAULT '{}' NOT NULL,
+	`kitchen_views` text DEFAULT '{}' NOT NULL,
 	`card_readers` text DEFAULT '{}' NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
@@ -1182,6 +1183,7 @@ CREATE TABLE `device_profiles` (
 	FOREIGN KEY (`order_starting_zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "device_profiles_form_factor_ck" CHECK("device_profiles"."form_factor" in ('till', 'phone-portrait', 'tablet-landscape', 'kds')),
 	CONSTRAINT "device_profiles_printer_lists_ck" CHECK(json_valid("device_profiles"."printer_lists") and json_type("device_profiles"."printer_lists") = 'object'),
+	CONSTRAINT "device_profiles_kitchen_views_ck" CHECK(json_valid("device_profiles"."kitchen_views") and json_type("device_profiles"."kitchen_views") = 'object'),
 	CONSTRAINT "device_profiles_card_readers_ck" CHECK(json_valid("device_profiles"."card_readers") and json_type("device_profiles"."card_readers") = 'object'),
 	CONSTRAINT "device_profiles_kds_timeout_ck" CHECK("device_profiles"."form_factor" <> 'kds' or "device_profiles"."inactivity_timeout_seconds" is null),
 	CONSTRAINT "device_profiles_order_scope_ck" CHECK(("device_profiles"."order_department_id" is null) = ("device_profiles"."order_starting_zone_id" is null)
@@ -2496,39 +2498,6 @@ CREATE TABLE `department_transfer_requests` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `department_transfer_requests_one_pending_key` ON `department_transfer_requests` (`tab_id`) WHERE "department_transfer_requests"."status" = 'pending';--> statement-breakpoint
-CREATE TABLE `device_profile_kitchen_screen_stations` (
-	`device_profile_id` text NOT NULL,
-	`screen` text NOT NULL,
-	`station_id` text NOT NULL,
-	PRIMARY KEY(`device_profile_id`, `screen`, `station_id`),
-	FOREIGN KEY (`device_profile_id`,`screen`) REFERENCES `device_profile_kitchen_screens`(`device_profile_id`,`screen`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "device_profile_kitchen_screen_stations_screen_ck" CHECK("device_profile_kitchen_screen_stations"."screen" in ('station', 'pass', 'pass_monitor'))
-);
---> statement-breakpoint
-CREATE TABLE `device_profile_kitchen_screen_zones` (
-	`device_profile_id` text NOT NULL,
-	`screen` text NOT NULL,
-	`zone_id` text NOT NULL,
-	PRIMARY KEY(`device_profile_id`, `screen`, `zone_id`),
-	FOREIGN KEY (`device_profile_id`,`screen`) REFERENCES `device_profile_kitchen_screens`(`device_profile_id`,`screen`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "device_profile_kitchen_screen_zones_screen_ck" CHECK("device_profile_kitchen_screen_zones"."screen" in ('station', 'pass', 'pass_monitor')),
-	CONSTRAINT "device_profile_kitchen_screen_zones_not_station_ck" CHECK("device_profile_kitchen_screen_zones"."screen" <> 'station')
-);
---> statement-breakpoint
-CREATE TABLE `device_profile_kitchen_screens` (
-	`device_profile_id` text PRIMARY KEY NOT NULL,
-	`screen` text NOT NULL,
-	`every_station` integer DEFAULT false NOT NULL,
-	`every_zone` integer DEFAULT false NOT NULL,
-	`show_non_pass_stations` integer DEFAULT true NOT NULL,
-	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "device_profile_kitchen_screens_screen_ck" CHECK("device_profile_kitchen_screens"."screen" in ('station', 'pass', 'pass_monitor')),
-	CONSTRAINT "device_profile_kitchen_screens_station_zones_ck" CHECK("device_profile_kitchen_screens"."screen" <> 'station' or "device_profile_kitchen_screens"."every_zone" = 0)
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `device_profile_kitchen_screens_kind_key` ON `device_profile_kitchen_screens` (`device_profile_id`,`screen`);--> statement-breakpoint
 CREATE TABLE `seasons` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,

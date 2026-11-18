@@ -1,12 +1,12 @@
-import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import {
   deviceNotDeleted,
-  deviceProfileKitchenScreenStations,
   deviceProfiles,
   devices,
   kitchenStations,
   routingCellPeriods,
   routingCells,
+  removeIdFromJson,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -44,12 +44,10 @@ async function settings(tx: Transaction, id: string) {
     );
   const profiles = await tx
     .select({ id: deviceProfiles.id, name: deviceProfiles.name })
-    .from(deviceProfileKitchenScreenStations)
-    .innerJoin(
-      deviceProfiles,
-      eq(deviceProfiles.id, deviceProfileKitchenScreenStations.deviceProfileId),
-    )
-    .where(eq(deviceProfileKitchenScreenStations.stationId, id));
+    .from(deviceProfiles).where(sql`exists (
+      select 1 from json_tree(${deviceProfiles.kitchenViews}) as station
+      where station.path glob '$.*.stationIds' and station.value = ${id}
+    )`);
   const daily = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
@@ -146,9 +144,7 @@ export async function clearStationDeleteSettings(tx: Transaction, id: string): P
         rows.cells.map((row) => row.id),
       ),
     );
-  await tx
-    .delete(deviceProfileKitchenScreenStations)
-    .where(eq(deviceProfileKitchenScreenStations.stationId, id));
+  await removeIdFromJson(tx, deviceProfiles.kitchenViews, id);
   await tx
     .update(kitchenStations)
     .set({ closedOnDay: null, closedSendsToStationId: null, whenClosedSendsToStationId: null })

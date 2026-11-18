@@ -124,11 +124,9 @@ async function snapshot() {
     for (const name of [
       "kitchen_stations",
       "devices",
+      "device_profiles",
       "routing_cells",
       "routing_cell_periods",
-      "device_profile_kitchen_screens",
-      "device_profile_kitchen_screen_stations",
-      "device_profile_kitchen_screen_zones",
       "working_orders",
       "working_order_lines",
       "ticket_items",

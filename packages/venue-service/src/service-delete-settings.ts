@@ -1,11 +1,10 @@
 import { deleteServiceSteps } from "./service-steps.js";
-import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import {
   floorPlanSets,
   departments,
   departmentCourses,
   departmentTransferDestinations,
-  deviceProfileKitchenScreenZones,
   deviceProfiles,
   devices,
   deviceZoneSelections,
@@ -103,13 +102,19 @@ async function settings(
       return permitted === undefined ? [] : [{ profile, zoneId: permitted.id }];
     });
   const screenProfiles = await tx
-    .select()
-    .from(deviceProfileKitchenScreenZones)
+    .select({
+      id: deviceProfiles.id,
+      name: deviceProfiles.name,
+      retiredAt: deviceProfiles.retiredAt,
+    })
+    .from(deviceProfiles)
     .innerJoin(
-      deviceProfiles,
-      eq(deviceProfiles.id, deviceProfileKitchenScreenZones.deviceProfileId),
-    )
-    .where(inArray(deviceProfileKitchenScreenZones.zoneId, zoneIds));
+      sql`json_tree(${deviceProfiles.kitchenViews}) as screen_zone`,
+      and(
+        sql`screen_zone.path glob '$.*.zoneIds'`,
+        inArray(sql<string>`screen_zone.value`, zoneIds),
+      ),
+    );
   const sets = await tx
     .select()
     .from(floorPlanSets)
@@ -222,9 +227,7 @@ async function settings(
             name: row.name,
             ...(row.active ? {} : { deleted: true }),
           })),
-        ...screenProfiles
-          .filter((row) => row.device_profiles.retiredAt === null)
-          .map((row) => row.device_profiles),
+        ...screenProfiles.filter((row) => row.retiredAt === null),
       ]),
     },
     { key: "floor_plan_sets", count: sets.length, targets: [] },
@@ -306,10 +309,7 @@ export async function clearServiceDeleteSettings(
     .update(deviceZoneSelections)
     .set({ startingZoneId: null })
     .where(inArray(deviceZoneSelections.startingZoneId, selected.zoneIds));
-  // Keep explicit parents: zero zone memberships must continue to mean no zones.
-  await tx
-    .delete(deviceProfileKitchenScreenZones)
-    .where(inArray(deviceProfileKitchenScreenZones.zoneId, selected.zoneIds));
+  await removeIdsFromJson(tx, deviceProfiles.kitchenViews, selected.zoneIds);
   await tx
     .update(floorZones)
     .set({

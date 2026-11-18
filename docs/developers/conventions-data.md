@@ -2204,6 +2204,12 @@ from service. A role can become empty after Delete. An empty role and an absent 
 no printer. The printer round trip in `apps/server/src/configuration-transfer.test.ts` checks
 order, defaults and a deleted printer.
 
+Configuration format 52 carries a profile's kitchen view in `device_profiles.kitchen_views`.
+A profile has one station, pass or pass monitor view, or none. A view's null list covers all
+stations or zones and an empty list covers none. Deleting a station or zone clears it from the
+list in the same transaction. Export drops inactive stations and zones from the lists, and import
+remaps the remaining IDs. A pass view with no display choice shows other stations.
+
 The export leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
 device profile, `retired_at`), or whose `leaveBehindWhenFalse` column holds false or 0
 (a deleted course or station, `active`). Archived products still travel: their `active` field

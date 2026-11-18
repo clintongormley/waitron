@@ -343,6 +343,9 @@ const REMOVED_TABLES = [
   "device_kitchen_screen_stations",
   "device_kitchen_screen_zones",
   "device_kitchen_screen_removals",
+  "device_profile_kitchen_screens",
+  "device_profile_kitchen_screen_stations",
+  "device_profile_kitchen_screen_zones",
   "device_profile_admission_persons",
   "floor_plan_table_parts",
   "floor_plan_table_sizes",
@@ -1353,17 +1356,6 @@ for (const locale of ["en", "es"] as const) {
           "order_groups",
           { name: "request_kind", type: "TEXT", notnull: 1, dflt_value: "'new_order'", pk: 0 },
           "new_order",
-        ],
-        [
-          "device_profile_kitchen_screens",
-          {
-            name: "show_non_pass_stations",
-            type: "INTEGER",
-            notnull: 1,
-            dflt_value: "true",
-            pk: 0,
-          },
-          1,
         ],
         [
           "payments",
@@ -2409,6 +2401,7 @@ for (const locale of ["en", "es"] as const) {
         profileTable.columns.findIndex(({ name }) => name === "card_readers"),
         0,
         { name: "printer_lists", type: "TEXT", notnull: 1, dflt_value: "'{}'", pk: 0 },
+        { name: "kitchen_views", type: "TEXT", notnull: 1, dflt_value: "'{}'", pk: 0 },
       );
       const printerLinks = Object.values(expected[phase].tables.device_profile_printers!.rows);
       for (const profile of Object.values(profileTable.rows)) {
@@ -2422,6 +2415,7 @@ for (const locale of ["en", "es"] as const) {
           if (row.is_default === 1) list.defaultId = id;
         }
         profile.printer_lists = lists;
+        profile.kitchen_views = {};
       }
       delete expected[phase].tables.device_profile_printers;
       delete phases[phase]!.device_profile_printers;
@@ -2480,11 +2474,6 @@ for (const locale of ["en", "es"] as const) {
       expected[phase] = madridWithProductUnits(expected[phase]);
       expected[phase] = madridWithOptionDefaults(expected[phase]);
       delete phases[phase]!.product_units;
-      const screenKind = expected[phase].tables.device_profile_kitchen_screens!.columns.find(
-        (column) => column.name === "screen",
-      )!;
-      expect(screenKind.pk).toBe(2);
-      screenKind.pk = 0;
       expected[phase] = madridWithFoldedTables(expected[phase], [
         {
           from: "menu_details",

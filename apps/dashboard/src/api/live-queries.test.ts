@@ -406,18 +406,7 @@ it.each([
   ["getReaderDeleteImpact", ["r1"], ["card_readers", "payments", "devices", "device_profiles"]],
   // `readProfileKitchenScreens` (packages/venue-service/src/kitchen-screens.ts): each profile's
   // rows and lists, joined to the stations and zones they name.
-  [
-    "listProfileKitchenScreens",
-    [],
-    [
-      "device_profiles",
-      "device_profile_kitchen_screens",
-      "device_profile_kitchen_screen_stations",
-      "device_profile_kitchen_screen_zones",
-      "kitchen_stations",
-      "floor_zones",
-    ],
-  ],
+  ["listProfileKitchenScreens", [], ["device_profiles", "kitchen_stations", "floor_zones"]],
   // `GET /management-api/devices` (apps/server/src/device-api.ts): each device with its profile,
   // equipment and kitchen screens, which `readDevicesKitchenScreens`
   // (packages/venue-service/src/kitchen-screens.ts) resolves against the profile's lists, the
@@ -432,9 +421,6 @@ it.each([
       "device_approved_profiles",
       "printers",
       "card_readers",
-      "device_profile_kitchen_screens",
-      "device_profile_kitchen_screen_stations",
-      "device_profile_kitchen_screen_zones",
       "floor_zones",
     ],
   ],
@@ -1021,9 +1007,6 @@ const stationDeleteReads = [
   "printers",
   "devices",
   "device_profiles",
-  "device_profile_kitchen_screens",
-  "device_profile_kitchen_screen_stations",
-  "device_profile_kitchen_screen_zones",
   "routing_cells",
   "routing_cell_periods",
   "floor_zones",
@@ -1112,9 +1095,6 @@ it.each(["Zone", "Department"] as const)(
       "departments",
       "device_profiles",
       "devices",
-      "device_profile_kitchen_screens",
-      "device_profile_kitchen_screen_stations",
-      "device_profile_kitchen_screen_zones",
       "routing_cells",
       "routing_cell_periods",
       "service_steps",

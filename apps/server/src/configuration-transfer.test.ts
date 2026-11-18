@@ -473,7 +473,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 51,
+  version: 52,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -5134,25 +5134,45 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       name: "Terrace",
       departmentId: restaurant.id,
     });
-    const [grill] = await tx
+    const inactiveZone = await createServiceZone(tx, {
+      name: "Former dining room",
+      departmentId: restaurant.id,
+    });
+    const [grill, inactive] = await tx
       .insert(kitchenStations)
-      .values({ name: "Grill" })
+      .values([{ name: "Grill" }, { name: "Old station" }])
       .returning({ id: kitchenStations.id });
-    const [till, wall, retired] = await seedDeviceProfiles(tx, [
+    const [till, wall, station, retired] = await seedDeviceProfiles(tx, [
       { name: "Pass till", formFactor: "till" },
       { name: "Pass wall", formFactor: "kds" },
+      { name: "Station wall", formFactor: "kds" },
       { name: "Old till", formFactor: "till" },
     ]);
     await VENUE_SERVICE.setProfileKitchenScreens(tx, till!.id, {
-      pass: { stationIds: [grill!.id], zoneIds: [terrace.id] },
+      pass: { stationIds: [grill!.id, inactive!.id], zoneIds: [terrace.id, inactiveZone.id] },
     });
     await VENUE_SERVICE.setProfileKitchenScreens(tx, wall!.id, {
       pass_monitor: { stationIds: null, zoneIds: null },
     });
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, station!.id, {
+      station: { stationIds: null, zoneIds: null },
+    });
+    await tx
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, inactive!.id));
+    await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, inactiveZone.id));
     await VENUE_SERVICE.setProfileKitchenScreens(tx, retired!.id, {
       station: { stationIds: [grill!.id], zoneIds: null },
     });
-    return { till: till!.id, wall: wall!.id, retired: retired!.id };
+    return {
+      till: till!.id,
+      wall: wall!.id,
+      station: station!.id,
+      retired: retired!.id,
+      grill: grill!.id,
+      terrace: terrace.id,
+    };
   });
   await retireProfile(original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -5163,15 +5183,16 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     new Date("2026-10-09T12:00:00Z"),
     versions,
   );
-  const exported = (table: string) =>
-    transferred.tables[table]!.map(
-      (row) => `${String(row.device_profile_id)}:${String(row.screen)}`,
-    ).sort();
-  expect(exported("device_profile_kitchen_screens")).toEqual(
-    [`${original.till}:pass`, `${original.wall}:pass_monitor`].sort(),
-  );
-  expect(exported("device_profile_kitchen_screen_stations")).toEqual([`${original.till}:pass`]);
-  expect(exported("device_profile_kitchen_screen_zones")).toEqual([`${original.till}:pass`]);
+  const profiles = new Map(transferred.tables.device_profiles!.map((row) => [row.id, row]));
+  const exported = (id: string) => JSON.parse(String(profiles.get(id)?.kitchen_views));
+  expect(profiles.has(original.retired)).toBe(false);
+  expect(exported(original.till)).toEqual({
+    pass: { stationIds: [original.grill], zoneIds: [original.terrace], showNonPassStations: true },
+  });
+  expect(exported(original.wall)).toEqual({
+    pass_monitor: { stationIds: null, zoneIds: null, showNonPassStations: true },
+  });
+  expect(exported(original.station)).toEqual({ station: { stationIds: null, zoneIds: null } });
   await applyVenue(planVenue(venue("B46802357"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -5213,6 +5234,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
       },
     },
     { profile: "Pass wall", screens: { pass_monitor: { stations: null, zones: null } } },
+    { profile: "Station wall", screens: { station: { stations: null, zones: null } } },
   ]);
 });
 
@@ -5987,7 +6009,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(51);
+  expect(exported.version).toBe(52);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -7615,20 +7637,15 @@ it("round-trips deleted kitchen configuration and preserves archived products an
   expect(archived).toBeDefined();
   expect(archived.active).toBe(0);
   expect(archived.course_id).toBeNull();
-  expect(transferred.tables.device_profile_kitchen_screen_stations).toEqual([]);
   expect(
-    transferred.tables.device_profile_kitchen_screens!.filter(
-      (row) => row.device_profile_id === ids.profile,
+    JSON.parse(
+      String(
+        transferred.tables.device_profiles!.find((row) => row.id === ids.profile)?.kitchen_views,
+      ),
     ),
-  ).toEqual([
-    {
-      device_profile_id: ids.profile,
-      screen: "station",
-      every_station: 0,
-      every_zone: 0,
-      show_non_pass_stations: 1,
-    },
-  ]);
+  ).toEqual({
+    station: { stationIds: [], zoneIds: null },
+  });
   for (const table of ["kitchen_courses", "kitchen_stations"]) {
     const forged = {
       ...transferred,
@@ -8588,14 +8605,27 @@ describe("A773 pass display policy", () => {
   }
 
   async function importedPassValues() {
-    return (
-      await targetSuite.db.execute(sql`
-        select s.screen, s.show_non_pass_stations as shown
-        from device_profile_kitchen_screens s
-        join device_profiles p on p.id = s.device_profile_id
-        where p.name = 'Hidden pass'
-        order by s.screen`)
-    ).rows;
+    return withTransaction(targetSuite.db, async (tx) => {
+      const [profile] = await tx
+        .select({ id: deviceProfiles.id })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.name, "Hidden pass"));
+      return (await VENUE_SERVICE.readProfileKitchenScreens(tx)).find(
+        ({ profileId }) => profileId === profile!.id,
+      )!.screens;
+    });
+  }
+
+  function changeHiddenPass(bundle: ConfigurationBundle, views: object) {
+    return {
+      ...bundle,
+      tables: {
+        ...bundle.tables,
+        device_profiles: bundle.tables.device_profiles!.map((row) =>
+          row.name === "Hidden pass" ? { ...row, kitchen_views: JSON.stringify(views) } : row,
+        ),
+      },
+    };
   }
 
   it("carries a profile's hidden choice through export and import, and no device's rows", async () => {
@@ -8608,33 +8638,41 @@ describe("A773 pass display policy", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
-    expect(await importedPassValues()).toEqual([{ screen: "pass", shown: 0 }]);
+    expect(await importedPassValues()).toEqual({
+      pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
+    });
     expect((await targetSuite.db.execute(sql`select count(*) as n from devices`)).rows).toEqual([
       { n: 0 },
     ]);
   });
 
-  it("imports a profile row exported before the choice existed as showing other stations", async () => {
+  it("imports a pass view without a display choice as showing other stations", async () => {
     const { transferred, versions } = await exportPassProfile("B35792468");
-    const older = {
-      ...transferred,
-      tables: {
-        ...transferred.tables,
-        device_profile_kitchen_screens: transferred.tables.device_profile_kitchen_screens!.map(
-          (row) => {
-            const stripped: Record<string, unknown> = { ...row };
-            delete stripped.show_non_pass_stations;
-            return stripped;
-          },
-        ),
-      },
-    };
+    const omitted = changeHiddenPass(transferred, { pass: { stationIds: null, zoneIds: null } });
     await applyVenue(planVenue(venue("B46802468"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx) => importConfigurationTables(tx, older, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, omitted, ALL_MODULES, versions),
     });
-    expect(await importedPassValues()).toEqual([{ screen: "pass", shown: 1 }]);
+    expect(await importedPassValues()).toEqual({
+      pass: { stationIds: null, zoneIds: null, showNonPassStations: true },
+    });
+  });
+
+  it("refuses a configuration bundle with two views on one profile", async () => {
+    const { transferred, versions } = await exportPassProfile("B35792468");
+    const bound = { stationIds: null, zoneIds: null };
+    const forged = changeHiddenPass(transferred, { pass: bound, station: bound });
+    await expect(
+      applyVenue(planVenue(venue("B46802468"), ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx) => importConfigurationTables(tx, forged, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "device_profiles.kitchen_views" },
+    });
   });
 });
 

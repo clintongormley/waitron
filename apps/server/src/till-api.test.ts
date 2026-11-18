@@ -2106,9 +2106,6 @@ it.each([
       expect(body).toHaveProperty("inactivityTimeoutSeconds", inactivityTimeoutSeconds);
       expect(body).not.toHaveProperty("startingScreen");
     } finally {
-      await suite.db.execute(
-        sql`delete from device_profile_kitchen_screens where device_profile_id = ${profile!.id}`,
-      );
       await suite.db.execute(sql`delete from devices where device_profile_id = ${profile!.id}`);
       await suite.db.delete(deviceProfiles).where(eq(deviceProfiles.id, profile!.id));
     }

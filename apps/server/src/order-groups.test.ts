@@ -4163,7 +4163,7 @@ describe("a paper-only station (Review Focus 6, server half)", () => {
   it("leaves every fired item queued and the group not ready, when no kitchen screen is enrolled", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    expect(db.all(sql`select device_profile_id from device_profile_kitchen_screens`)).toEqual([]);
+    expect(db.all(sql`select id from device_profiles where kitchen_views <> '{}'`)).toEqual([]);
 
     await fire(v, s.partyId, s.warm);
 

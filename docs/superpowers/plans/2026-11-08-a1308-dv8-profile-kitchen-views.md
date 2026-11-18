@@ -6,9 +6,9 @@
 
 **Goal:** The three tables that hold what a profile allows its kitchen screens to show
 (`device_profile_kitchen_screens`, `…_stations`, `…_zones`) fold into one JSON column,
-`device_profiles.kitchen_views`. Up to three views (station, pass, pass monitor), each with its
-stations and zones (`null` for every one) and, for the two pass views, whether to show other
-stations' dishes. The device side is dv9.
+`device_profiles.kitchen_views`. A profile has at most one view (station, pass or pass monitor),
+with its stations and zones (`null` for every one) and, for either pass view, whether to show other
+stations' dishes. Devices inherit the profile's view. The device side is dv9.
 
 **Spec:** [tables-devices.md](../specs/2026-11-02-rationalisation/tables-devices.md) §1 (lists
 table rows `kitchen_views`; the value shape; "Separate columns rather than one document"), §1.2,
@@ -52,8 +52,7 @@ kitchenViews: json<StoredKitchenViews>("kitchen_views").notNull().default({}),
   `:179`) and writes the column in one update; `insertScreen` and `insertLists` (`:252-295`) go.
   `addProfileKitchenScreen` (`:297-343`, test set-up only) merges into the column.
   `readProfileKitchenScreens`, `setProfileKitchenScreens`, `copyProfileKitchenScreens` keep their
-  signatures and results. `narrowDevices` keeps reading the profile through `profileScreens` (the
-  device side is unchanged until dv9).
+  signatures and results. Device reads keep inheriting the profile's single view.
 - A station's or zone's delete removes its id from every profile's views with dv0's
   `removeIdFromJson(tx, deviceProfiles.kitchenViews, id)`
   (`packages/venue-service/src/station-delete-settings.ts:146-148`;
@@ -66,11 +65,10 @@ kitchenViews: json<StoredKitchenViews>("kitchen_views").notNull().default({}),
 
 ## Decisions this plan makes
 
-1. **A view's keys are only the three kinds**, enforced by the writer's types and by
-   `replaceProfileKitchenScreens`' loop over `KITCHEN_SCREEN_KINDS`. No database CHECK on keys
-   (§1: a CHECK cannot look inside JSON). The old `*_screen_ck` CHECKs are given up (§5).
-2. **`showNonPassStations` is stored only on the two pass views**, as `hasDisplay` decides today
-   (`kitchen-screens.ts:48-49`); a station view's object has no such key.
+1. **A profile has at most one of the three view kinds**, enforced by Save and Import. SQLite
+   checks that the column is an object. The old profile key and screen CHECKs are given up (§5).
+2. **Save stores `showNonPassStations` only on the two pass views.** An imported pass view with
+   the field absent shows other stations. Import refuses an explicit null or another non-boolean.
 3. **The stored object keeps the writer's id order;** readers sort for display as today.
 
 ## What it leaves out
@@ -138,7 +136,8 @@ Under all six headers:
 ```text
 missing index device_profile_kitchen_screen_stations.primary key(device_profile_id,screen,station_id)
 missing index device_profile_kitchen_screen_zones.primary key(device_profile_id,screen,zone_id)
-missing index device_profile_kitchen_screens.primary key(device_profile_id,screen)
+missing index device_profile_kitchen_screens.primary key(device_profile_id)
+missing index device_profile_kitchen_screens_kind_key
 missing table device_profile_kitchen_screen_stations
 missing table device_profile_kitchen_screen_zones
 missing table device_profile_kitchen_screens
@@ -147,13 +146,13 @@ extra table device_profiles.checks[device_profiles_kitchen_views_ck]
 extra table device_profiles.columns[kitchen_views]
 ```
 
-(The primary keys' column lists are as the base list prints them; Task 0 copies them from it.)
+The named kind index holds `(device_profile_id, screen)`. This index and the single-column parent
+key reflect #3323, as cleared by the watcher on 2026-11-18 at 15:58.
 Under the two `change-feed` headers, also the nine `waitron_change_device_profile_kitchen_screen*`
 triggers `missing` (three per table) and `changed trigger waitron_change_device_profiles_update.when`.
 
-Reasons (`tables-devices.md` §5): "`device_profile_kitchen_screens`: composite PKs, screen CHECKs,
-`*_station_zones_ck` — one view per kind is the object's keys; the kinds and 'a station view has no
-zone list' move to the writers"; "`*_kitchen_screen_stations`, `*_kitchen_screen_zones`: PKs,
+Reasons (`tables-devices.md` §5): the parent key and screen CHECKs become Save and Import's
+one-view, kind and station-zone checks; "`*_kitchen_screen_stations`, `*_kitchen_screen_zones`: PKs,
 cascades, station and zone FKs, screen CHECKs, not-station CHECK — **given up**: `checkedStations`
 and `checkedZones` validate ids; a dead id drops at read".
 
@@ -161,8 +160,7 @@ and `checkedZones` validate ids; a dead id drops at read".
 
 1. A case's resolved screens (stations, zones, their order, `showNonPassStations`) differ from
    today's for the same set-up.
-2. The dashboard's narrowing notice on a profile save (`NarrowedDevice[]` from
-   `setProfileKitchenScreens`) changes for the same set-up.
+2. A device no longer inherits its profile's only view after a profile save.
 3. M4's kitchen part fails.
 
 ## Needs
@@ -180,12 +178,12 @@ dv7 (last change to `device_profiles`' transfer declaration), dv0.
 ### Task 0: base protection list
 
 - [ ] `pnpm protection-list list --out <empty absolute dir A>` in a throwaway worktree of the base;
-  copy the three primary keys' exact names from it into the prediction.
+  copy the profile tables' exact index names from it into the prediction.
 
 ### Task 1: M4's kitchen part, against today's tables
 
 - [ ] Extend dv6's M4 `describe`: profile P1's pass view lists stations `[S1, S2]` and zones
-  `[Z1]`; its station view lists every station (`null`); then S2 is switched off **by a raw write**
+  `[Z1]`; a separate profile's station view lists every station (`null`); then S2 is switched off **by a raw write**
   (`update kitchen_stations set active = 0`). The product never reaches this state for a deleted
   station (`station-delete-settings.ts:145-147` clears it from every view), and a switched-off one is
   dropped at read; this part tests the export's defence against a state the product prevents, and
@@ -211,4 +209,4 @@ dv7 (last change to `device_profiles`' transfer declaration), dv0.
 
 - [ ] Protection list after; `compare`; mark each line. `docs/developers/conventions-data.md`,
   dv0's section: add `kitchen_views`. Commit; `/finish-branch`; reset dev slots and Santet after
-  landing.
+  landing. Santet remains owner-reset only.

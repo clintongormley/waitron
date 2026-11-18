@@ -1,15 +1,12 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
-  deviceProfileKitchenScreens,
-  deviceProfileKitchenScreenStations,
-  deviceProfileKitchenScreenZones,
   deviceProfiles,
   devices,
   floorZones,
   KITCHEN_SCREEN_KINDS,
   kitchenStations,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { StoredKitchenViews, Transaction } from "@waitron/db";
 import type {
   DeviceKitchenScreen,
   KitchenScreenKind,
@@ -40,86 +37,54 @@ function refuse(field: Field, reason: Reason): never {
 
 type MutableScreens = Partial<Record<KitchenScreenKind, ProfileKitchenScreen>>;
 
-/** The kinds whose rows' `show_non_pass_stations` is read; a station row keeps its default. */
 const hasDisplay = (kind: KitchenScreenKind) => kind !== "station";
 
 export async function readProfileKitchenScreens(
   tx: Transaction,
 ): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]> {
   const profiles = await tx
-    .select({ id: deviceProfiles.id })
+    .select({ id: deviceProfiles.id, views: deviceProfiles.kitchenViews })
     .from(deviceProfiles)
     .where(isNull(deviceProfiles.retiredAt))
     .orderBy(asc(deviceProfiles.id));
-  const stored = await readStored(tx);
+  const stored = await visibleViews(tx, profiles);
   return profiles.map(({ id }) => ({ profileId: id, screens: stored.get(id) ?? {} }));
 }
 
 async function readStored(
   tx: Transaction,
-  profileIds?: readonly string[],
+  profileIds: readonly string[],
 ): Promise<Map<string, MutableScreens>> {
-  const rows = await tx
-    .select()
-    .from(deviceProfileKitchenScreens)
-    .where(
-      profileIds === undefined
-        ? undefined
-        : inArray(deviceProfileKitchenScreens.deviceProfileId, [...profileIds]),
-    );
-  const stations = await tx
-    .select({
-      profileId: deviceProfileKitchenScreenStations.deviceProfileId,
-      screen: deviceProfileKitchenScreenStations.screen,
-      id: kitchenStations.id,
-      name: kitchenStations.name,
-    })
-    .from(deviceProfileKitchenScreenStations)
-    .innerJoin(
-      kitchenStations,
-      eq(kitchenStations.id, deviceProfileKitchenScreenStations.stationId),
-    )
-    .where(
-      and(
-        eq(kitchenStations.active, true),
-        profileIds === undefined
-          ? undefined
-          : inArray(deviceProfileKitchenScreenStations.deviceProfileId, [...profileIds]),
-      ),
-    )
-    .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
-  stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
-  const zones = await tx
-    .select({
-      profileId: deviceProfileKitchenScreenZones.deviceProfileId,
-      screen: deviceProfileKitchenScreenZones.screen,
-      id: floorZones.id,
-    })
-    .from(deviceProfileKitchenScreenZones)
-    .innerJoin(floorZones, eq(floorZones.id, deviceProfileKitchenScreenZones.zoneId))
-    .where(
-      and(
-        eq(floorZones.active, true),
-        profileIds === undefined
-          ? undefined
-          : inArray(deviceProfileKitchenScreenZones.deviceProfileId, [...profileIds]),
-      ),
-    )
-    .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
+  const profiles = await tx
+    .select({ id: deviceProfiles.id, views: deviceProfiles.kitchenViews })
+    .from(deviceProfiles)
+    .where(inArray(deviceProfiles.id, [...profileIds]));
+  return visibleViews(tx, profiles);
+}
 
+async function visibleViews(
+  tx: Transaction,
+  profiles: readonly { id: string; views: StoredKitchenViews }[],
+  places?: { stations: Place[]; zones: Place[] },
+): Promise<Map<string, MutableScreens>> {
   const byProfile = new Map<string, MutableScreens>();
-  for (const row of rows) {
-    const of = (list: readonly { profileId: string; screen: KitchenScreenKind; id: string }[]) =>
-      list
-        .filter((entry) => entry.profileId === row.deviceProfileId && entry.screen === row.screen)
-        .map((entry) => entry.id);
-    const screens = byProfile.get(row.deviceProfileId) ?? {};
-    screens[row.screen] = {
-      stationIds: row.everyStation ? null : of(stations),
-      zoneIds: row.screen === "station" || row.everyZone ? null : of(zones),
-      ...(hasDisplay(row.screen) ? { showNonPassStations: row.showNonPassStations } : {}),
-    };
-    byProfile.set(row.deviceProfileId, screens);
+  const configured = profiles.filter(({ views }) => Object.keys(views).length > 0);
+  if (configured.length === 0) return byProfile;
+  const { stations, zones } = places ?? (await placesHere(tx));
+  const visible = (ids: readonly string[] | null, places: readonly Place[]) =>
+    ids === null ? null : places.filter(({ id }) => ids.includes(id)).map(({ id }) => id);
+  for (const { id, views } of configured) {
+    const screens: MutableScreens = {};
+    for (const kind of KITCHEN_SCREEN_KINDS) {
+      const view = views[kind];
+      if (view === undefined) continue;
+      screens[kind] = {
+        stationIds: visible(view.stationIds, stations),
+        zoneIds: kind === "station" ? null : visible(view.zoneIds, zones),
+        ...(hasDisplay(kind) ? { showNonPassStations: view.showNonPassStations ?? true } : {}),
+      };
+    }
+    byProfile.set(id, screens);
   }
   return byProfile;
 }
@@ -163,7 +128,7 @@ async function replaceProfileKitchenScreens(
   await liveFormFactor(tx, profileId);
   const kinds = KITCHEN_SCREEN_KINDS.filter((kind) => screens[kind] !== undefined);
   if (kinds.length > 1) refuse("kitchenScreens", "one_only");
-  const checked: { kind: KitchenScreenKind; scope: ProfileKitchenScreen }[] = [];
+  const views: StoredKitchenViews = {};
   for (const kind of kinds) {
     const scope = screens[kind]!;
     const fields = LIST_FIELDS[kind];
@@ -173,13 +138,13 @@ async function replaceProfileKitchenScreens(
     const showNonPassStations = hasDisplay(kind)
       ? (scope.showNonPassStations ?? kept[kind]?.showNonPassStations ?? true)
       : undefined;
-    checked.push({ kind, scope: { stationIds, zoneIds, showNonPassStations } });
+    views[kind] = { stationIds, zoneIds, showNonPassStations };
   }
 
   await tx
-    .delete(deviceProfileKitchenScreens)
-    .where(eq(deviceProfileKitchenScreens.deviceProfileId, profileId));
-  for (const { kind, scope } of checked) await insertScreen(tx, profileId, kind, scope);
+    .update(deviceProfiles)
+    .set({ kitchenViews: views })
+    .where(eq(deviceProfiles.id, profileId));
 }
 
 async function checkedStations(
@@ -220,93 +185,33 @@ async function checkedZones(
   return unique;
 }
 
-async function insertScreen(
-  tx: Transaction,
-  profileId: string,
-  kind: KitchenScreenKind,
-  scope: ProfileKitchenScreen,
-): Promise<void> {
-  const zoneIds = kind === "station" ? [] : scope.zoneIds;
-  await tx.insert(deviceProfileKitchenScreens).values({
-    deviceProfileId: profileId,
-    screen: kind,
-    everyStation: scope.stationIds === null,
-    everyZone: zoneIds === null,
-    showNonPassStations: scope.showNonPassStations ?? true,
-  });
-  await insertLists(tx, profileId, kind, scope.stationIds ?? [], zoneIds ?? []);
-}
-
-async function insertLists(
-  tx: Transaction,
-  profileId: string,
-  kind: KitchenScreenKind,
-  stationIds: readonly string[],
-  zoneIds: readonly string[],
-): Promise<void> {
-  if (stationIds.length > 0) {
-    await tx
-      .insert(deviceProfileKitchenScreenStations)
-      .values(
-        stationIds.map((stationId) => ({ deviceProfileId: profileId, screen: kind, stationId })),
-      )
-      .onConflictDoNothing();
-  }
-  if (zoneIds.length > 0) {
-    await tx
-      .insert(deviceProfileKitchenScreenZones)
-      .values(zoneIds.map((zoneId) => ({ deviceProfileId: profileId, screen: kind, zoneId })))
-      .onConflictDoNothing();
-  }
-}
-
 export async function addProfileKitchenScreen(
   tx: Transaction,
   profileId: string,
   screen: DeviceKitchenScreen,
 ): Promise<void> {
-  const screens = (await readStored(tx, [profileId])).get(profileId) ?? {};
-  if (KITCHEN_SCREEN_KINDS.some((kind) => kind !== screen.kind && screens[kind] !== undefined)) {
+  const [profile] = await tx
+    .select({ views: deviceProfiles.kitchenViews })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, profileId));
+  if (profile === undefined) refuse("profileId", "not_found");
+  const { views } = profile;
+  const { kind } = screen;
+  if (KITCHEN_SCREEN_KINDS.some((other) => other !== kind && views[other] !== undefined)) {
     refuse("kitchenScreens", "one_only");
   }
-  const current = screens[screen.kind];
-  if (current === undefined) {
-    await insertScreen(tx, profileId, screen.kind, screen);
-    return;
-  }
-  const where = and(
-    eq(deviceProfileKitchenScreens.deviceProfileId, profileId),
-    eq(deviceProfileKitchenScreens.screen, screen.kind),
-  );
-  if (current.stationIds !== null && screen.stationIds === null) {
-    await tx.update(deviceProfileKitchenScreens).set({ everyStation: true }).where(where);
-    await tx
-      .delete(deviceProfileKitchenScreenStations)
-      .where(
-        and(
-          eq(deviceProfileKitchenScreenStations.deviceProfileId, profileId),
-          eq(deviceProfileKitchenScreenStations.screen, screen.kind),
-        ),
-      );
-  }
-  if (screen.kind !== "station" && current.zoneIds !== null && screen.zoneIds === null) {
-    await tx.update(deviceProfileKitchenScreens).set({ everyZone: true }).where(where);
-    await tx
-      .delete(deviceProfileKitchenScreenZones)
-      .where(
-        and(
-          eq(deviceProfileKitchenScreenZones.deviceProfileId, profileId),
-          eq(deviceProfileKitchenScreenZones.screen, screen.kind),
-        ),
-      );
-  }
-  await insertLists(
-    tx,
-    profileId,
-    screen.kind,
-    current.stationIds === null ? [] : (screen.stationIds ?? []),
-    screen.kind === "station" || current.zoneIds === null ? [] : (screen.zoneIds ?? []),
-  );
+  const current = views[kind];
+  const merge = (before: readonly string[] | undefined | null, added: readonly string[] | null) =>
+    before === null || added === null ? null : [...new Set([...(before ?? []), ...added])];
+  views[kind] = {
+    stationIds: merge(current?.stationIds, screen.stationIds),
+    zoneIds: kind === "station" ? null : merge(current?.zoneIds, screen.zoneIds),
+    ...(hasDisplay(kind) ? { showNonPassStations: current?.showNonPassStations ?? true } : {}),
+  };
+  await tx
+    .update(deviceProfiles)
+    .set({ kitchenViews: views })
+    .where(eq(deviceProfiles.id, profileId));
 }
 
 interface Place {
@@ -357,10 +262,12 @@ async function resolveDevices(
   targets: readonly { id: string; profileId: string }[],
 ): Promise<Map<string, ResolvedKitchenScreen[]>> {
   if (targets.length === 0) return new Map();
-  const offeredByProfile = await readStored(tx, [
-    ...new Set(targets.map((device) => device.profileId)),
-  ]);
+  const profiles = await tx
+    .select({ id: deviceProfiles.id, views: deviceProfiles.kitchenViews })
+    .from(deviceProfiles)
+    .where(inArray(deviceProfiles.id, [...new Set(targets.map((device) => device.profileId))]));
   const places = await placesHere(tx);
+  const offeredByProfile = await visibleViews(tx, profiles, places);
   const slotsOf = (places: readonly Place[], ids: readonly string[] | null): ScreenSlot[] =>
     places
       .filter((place) => ids === null || ids.includes(place.id))
@@ -424,14 +331,13 @@ export async function readStationScreens(
     .select({ id: devices.id, profileId: devices.deviceProfileId })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .innerJoin(
-      deviceProfileKitchenScreens,
+    .where(
       and(
-        eq(deviceProfileKitchenScreens.deviceProfileId, devices.deviceProfileId),
-        eq(deviceProfileKitchenScreens.screen, "station"),
+        eq(devices.active, true),
+        eq(deviceProfiles.formFactor, SHARED_DISPLAY),
+        sql`json_type(${deviceProfiles.kitchenViews}, '$.station') = 'object'`,
       ),
     )
-    .where(and(eq(devices.active, true), eq(deviceProfiles.formFactor, SHARED_DISPLAY)))
     .orderBy(asc(devices.id));
   const resolved = await resolveDevices(tx, displays);
   return displays.map(({ id }) => ({

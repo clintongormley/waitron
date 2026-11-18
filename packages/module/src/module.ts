@@ -575,9 +575,8 @@ export interface DeviceZoneSelectionInput {
 export type KitchenScreenKind = "station" | "pass" | "pass_monitor";
 
 /**
- * null stationIds = every station; null zoneIds = every zone. A station screen never filters by
- * zone: it is stored with every_zone 0 and no zone rows, and read back with zoneIds null. On a
- * device, the profile supplies both lists.
+ * A null list covers every station or zone. A station screen always has null zoneIds.
+ * On a device, the profile supplies both lists.
  */
 export interface KitchenScreenScope {
   readonly stationIds: readonly string[] | null;

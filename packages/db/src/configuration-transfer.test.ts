@@ -59,6 +59,53 @@ describe("validateCoreConfiguration", () => {
     });
   });
 
+  describe("profile kitchen views", () => {
+    const station = { stationIds: null, zoneIds: null };
+    const pass = { stationIds: ["grill"], zoneIds: ["dining"], showNonPassStations: false };
+
+    function validateViews(...values: unknown[]) {
+      validateCoreConfiguration({
+        device_profiles: values.map((kitchen_views) => ({ kitchen_views })),
+        kitchen_stations: [{ id: "grill" }],
+        floor_zones: [{ id: "dining" }],
+      });
+    }
+
+    it("accepts no view and one view on each of several profiles", () => {
+      expect(() =>
+        validateViews(undefined, "{}", JSON.stringify({ station }), JSON.stringify({ pass })),
+      ).not.toThrow();
+    });
+
+    it.each([
+      ["a non-text column", {}],
+      ["invalid JSON", "{"],
+      ["an array instead of views", "[]"],
+      ["two views", JSON.stringify({ station, pass })],
+      ["an unknown kind", JSON.stringify({ floor: station })],
+      ["a scalar view", JSON.stringify({ station: false })],
+      ["zones on a station view", JSON.stringify({ station: { ...station, zoneIds: ["dining"] } })],
+      [
+        "a station from the wrong table",
+        JSON.stringify({ pass: { ...pass, stationIds: ["dining"] } }),
+      ],
+      ["a zone from the wrong table", JSON.stringify({ pass: { ...pass, zoneIds: ["grill"] } })],
+      ["a repeated station", JSON.stringify({ pass: { ...pass, stationIds: ["grill", "grill"] } })],
+      ["a null display choice", JSON.stringify({ pass: { ...pass, showNonPassStations: null } })],
+      [
+        "a display choice on a station view",
+        JSON.stringify({ station: { ...station, showNonPassStations: false } }),
+      ],
+    ])("refuses %s", (_label, views) => {
+      expect(() => validateViews(views)).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: "device_profiles.kitchen_views" },
+        }),
+      );
+    });
+  });
+
   describe.each(["picks_up_receipts", "picks_up_payment_slips"])("%s", (field) => {
     it.each([[null], [-1], [2], [0.5], ["1"], [true], [[]], [{}]])(
       "refuses a malformed flag %j",
