@@ -499,9 +499,19 @@ describe("updateBooking", () => {
       return { id, window };
     }
 
-    it("takes an edit that resends its own table", async () => {
+    it("takes the form's edit, which resends its own date and table", async () => {
       const { id, window } = await bookingAtOffFloorWindow();
-      await scoped((tx) => updateBooking(tx, id, { partySize: 6, tableId: window }));
+      await scoped((tx) =>
+        updateBooking(tx, id, {
+          bookingDate: "2026-08-20",
+          bookingTime: "20:00",
+          partySize: 6,
+          contactName: "Taylor",
+          contactPhone: null,
+          notes: null,
+          tableId: window,
+        }),
+      );
       expect(await scoped((tx) => getBooking(tx, id))).toMatchObject({
         partySize: 6,
         tableId: window,
