@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
-import { currentLocale, setLocale, LiveData } from "@waitron/dashboard-kit";
+import { codeMessage, currentLocale, setLocale, LiveData } from "@waitron/dashboard-kit";
 import type { ImageApi, LibraryImage } from "./client.js";
 import type { ImageLibrary } from "./image-library.js";
 import "./image-library.js";
+import { MEDIA_STRINGS } from "./strings.js";
 
 const image: LibraryImage = {
   id: "photo",
@@ -310,18 +311,132 @@ function formError() {
     "wt-modal wt-form-actions",
   )!.error;
 }
-
-it("a reload that fails says why and keeps the draft", async () => {
-  const { api, file } = await conflictedDraft();
-  api.getImage.mockRejectedValueOnce({ code: "image.busy" });
+const conflict =
+  "The image could not be saved. This photo has changed. Reload it before saving again.";
+const reloadBusy = "The photo could not be reloaded. The photo service is busy. Try again shortly.";
+const photoDeleted = "This photo has been deleted in the meantime. Cancel to close this editor.";
+function nameField() {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-en]")!;
+}
+function filename() {
+  return el.shadowRoot!.querySelector("[data-test=photo-filename]")?.textContent;
+}
+async function pressReload() {
   await userEvent.click(page.elementLocator(reloadButton()!));
-  await vi.waitFor(() =>
-    expect(formError()).toContain("The photo service is busy. Try again shortly."),
-  );
-  expect(el.shadowRoot!.querySelector("[data-test=photo-filename]")?.textContent).toContain(
-    file.name,
-  );
+}
+async function reloadFails(api: Awaited<ReturnType<typeof mount>>) {
+  api.getImage.mockRejectedValueOnce({ code: "image.busy" });
+  await pressReload();
+  await vi.waitFor(() => expect(formError()).toBe(`${conflict} ${reloadBusy}`));
+}
+async function cancel() {
+  el.shadowRoot!.querySelector<HTMLElement>("wt-modal wt-button[slot=cancel]")!.click();
+  await expect.poll(() => el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+}
+
+it("a reload that fails keeps the conflict and the draft, says why, and can be tried again", async () => {
+  const { api, file } = await conflictedDraft();
+  await reloadFails(api);
+  expect(reloadButton()).not.toBeNull();
+  expect(reloadButton()!.disabled).toBe(false);
+  expect(filename()).toContain(file.name);
+  expect(nameField().value).toBe("Spicy potatoes");
   expect(save().disabled).toBe(false);
+  api.getImage.mockResolvedValueOnce({
+    image: { ...image, names: { en: "Newer" }, revision: 7 },
+    uses: [],
+  });
+  await pressReload();
+  await vi.waitFor(() => expect(nameField().value).toBe("Newer"));
+  expect(filename()).not.toContain(file.name);
+  expect(formError()).toBe("");
+  expect(reloadButton()).toBeNull();
+});
+
+it("a failed reload is worded in Spanish too", async () => {
+  const { api } = await conflictedDraft();
+  setLocale("es");
+  api.getImage.mockRejectedValueOnce({ code: "image.busy" });
+  await pressReload();
+  await vi.waitFor(() =>
+    expect(formError()).toBe(
+      [
+        MEDIA_STRINGS.es["image.save_error"],
+        codeMessage("image.changed", "es"),
+        MEDIA_STRINGS.es["image.reload_error"],
+        codeMessage("image.busy", "es"),
+      ].join(" "),
+    ),
+  );
+  expect(formError()).not.toContain(MEDIA_STRINGS.en["image.reload_error"]);
+});
+
+it("a new reload takes the last reload's failure away while it runs", async () => {
+  const { api } = await conflictedDraft();
+  await reloadFails(api);
+  let fail!: (reason: unknown) => void;
+  api.getImage.mockReturnValueOnce(
+    new Promise((_resolve, reject) => {
+      fail = reject;
+    }),
+  );
+  await pressReload();
+  await vi.waitFor(() => expect(reloadButton()!.disabled).toBe(true));
+  expect(formError()).toBe(conflict);
+  fail({ code: "image.busy" });
+  await vi.waitFor(() => expect(formError()).toBe(`${conflict} ${reloadBusy}`));
+  expect(reloadButton()!.disabled).toBe(false);
+});
+
+it("pressing Save takes a reload's failure away", async () => {
+  const { api } = await conflictedDraft();
+  await reloadFails(api);
+  api.updateImage.mockRejectedValueOnce({ code: "image.changed" });
+  save().click();
+  await vi.waitFor(() => expect(api.updateImage).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(formError()).toBe(conflict));
+  expect(reloadButton()).not.toBeNull();
+});
+
+it("a reload that finds the photo deleted keeps the conflict and the reload button, says so, and Cancel still closes", async () => {
+  const { api, file } = await conflictedDraft();
+  api.getImage.mockRejectedValueOnce({ code: "image.not_found" });
+  await pressReload();
+  await vi.waitFor(() =>
+    expect(formError()).toBe(`${conflict} The photo could not be reloaded. ${photoDeleted}`),
+  );
+  expect(reloadButton()).not.toBeNull();
+  expect(filename()).toContain(file.name);
+  expect(nameField().value).toBe("Spicy potatoes");
+  await cancel();
+});
+
+it("the deleted photo's sentence names the editor's Cancel button in each language", () => {
+  for (const language of ["en", "es"] as const)
+    expect(MEDIA_STRINGS[language]["image.reload_deleted"]).toContain(
+      MEDIA_STRINGS[language]["image.cancel"],
+    );
+});
+
+it("Save refused with image.not_found does not claim the photo was deleted", async () => {
+  const api = await mount();
+  await replace();
+  api.updateImage.mockRejectedValueOnce({ code: "image.not_found" });
+  save().click();
+  await vi.waitFor(() =>
+    expect(formError()).toBe("The image could not be saved. Something went wrong, try again"),
+  );
+});
+
+it("closing the editor takes a reload's failure away", async () => {
+  const { api } = await conflictedDraft();
+  await reloadFails(api);
+  await cancel();
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-photo]")!.click();
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+  expect(formError()).toBe("");
+  expect(reloadButton()).toBeNull();
 });
 
 it("a reload that fails after the editor moved on leaves the editor's message alone", async () => {
