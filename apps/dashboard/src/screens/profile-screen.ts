@@ -162,6 +162,8 @@ export class ProfileScreen extends LitElement {
       .action-row .labelled {
         position: relative;
         align-self: flex-start;
+        /* Half a badge of room after the label, so the badge starts where the words end. */
+        padding-inline-end: calc(var(--wt-help-badge-target) / 2);
       }
       .field-label {
         font-size: var(--wt-font-size-sm);

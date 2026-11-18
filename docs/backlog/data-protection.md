@@ -143,14 +143,6 @@ by the answers):
   adjustments histories.
   Options: give a module's part write-lock turns of its own, as the actions part has, or narrow the
   working-time read further.
-- **The Profile page's help badge covers the end of its label** — at 1280 and 390 px, the "?"
-  badge sits over the last letter of "Copy of your data" / "Copia de tus datos". The placement
-  came from S2a2 (#2049), whose test in
-  `apps/dashboard/src/screens/profile-screen.personal-data.test.ts` puts the badge's centre on the
-  label's top trailing corner. The shared rule in
-  [design-system.md](../developers/design-system.md) (`wt-help-tooltip`) hangs the badge over the
-  top trailing corner of the nearest positioned box, so the fix is likely which box is positioned
-  on the Profile row, not the shared rule (not measured). Place it so it never covers the label.
 - **What the box keeps with a tax number outside issued sales is not in the invoice customer's
   download** (S3 decision 19): the customer typed for a full invoice on a bill
   (`working_orders.recipient_tax_id`, `recipient_legal_name`, `recipient_address` and
