@@ -50,19 +50,6 @@ certificate export. The existing walkthrough above remains open.
 setup languages render three FNMT links under `/en/` and retain the three article identifiers.
 It does not fetch FNMT or check its translations.
 
-## The Venue details edit accepts a time zone outside the country pack's list (A166, owner 2026-10-01)
-
-**OPEN.** The owner: _"in fact this should be chosen from a dropdown, and the options specified in
-the country package, eg Spain has two time zones, one for mainland and one for las canarias"_.
-Each pack now lists its zones (Spain: `Europe/Madrid` and `Atlantic/Canary`), and setup's plan,
-provisioning, configuration import and zone repair refuse a zone off that list
-(`requireCountryTimeZone`, `packages/country-packs/src/registry.ts`). The Venue details edit
-(`writeVenueDetails`, `apps/server/src/venue-details.ts`, behind `PATCH
-/management-api/venue-details`) checks only that the zone is a valid named zone, A261's named-zone
-override permitted before sales or dated history: the case "uses an eligible committed zone edit for
-the next sale without restarting admission" in `apps/server/src/venue-details.test.ts` saves `UTC`
-for a Spanish venue and passes. Whether that edit should also keep to the country's list is open.
-
 ## The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN
 
 Every customer-facing text

@@ -195,7 +195,7 @@ the executing runtime resolves to a named zone; normalize accepted input, reject
 and compute the offset at each finite instant. Keep name rejection distinct from conversion failure.
 Never fall back to Madrid, UTC or the process. Cache formatters by zone if useful, never offsets.
 
-[A166](../../backlog/setup.md#the-venue-details-edit-accepts-a-time-zone-outside-the-country-packs-list-a166-owner-2026-10-01)
+[A166](../plans/2026-11-18-d-a166-venue-time-zone-dropdown.md)
 also requires creation/provisioning choices to come from the country pack. The current country
 contract has a default and per-area zones (`packages/country/src/country.ts:28`, `:115`), not an
 explicit allowed list. Spain supplies Madrid/Canary (`packages/country-es/src/spain.ts:271`),

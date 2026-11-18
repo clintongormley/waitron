@@ -1024,7 +1024,7 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
             await withTransaction(suite.db, (tx) =>
               writeVenueDetails(tx, {
                 expected: initial.details,
-                changes: { timeZone: "UTC" },
+                changes: { timeZone: "Atlantic/Canary" },
               }),
             );
             edited = true;
@@ -1037,7 +1037,7 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
     expect(archivedAt).toEqual([
       "2026-10-06T00:00:00.000Z",
       "2026-10-06T03:36:00.000Z",
-      "2026-10-06T05:36:00.000Z",
+      "2026-10-06T04:36:00.000Z",
     ]);
     expect(sleeps.slice(0, 6)).toEqual([3600000, 3600000, 3600000, 2160000, 3600000, 3600000]);
     expect(backend.objects.size).toBe(3);

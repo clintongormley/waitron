@@ -1317,7 +1317,8 @@ export const en = {
   "venue_details.required": "Enter a value.",
   "venue_details.length": "Use at most 200 characters.",
   "venue_details.cutover": "Enter a time from 00:00 to 23:59.",
-  "venue_details.time_zone": "Enter a recognised named time zone.",
+  "venue_details.time_zone": "Choose a time zone for the venue’s country.",
+  "venue_details.time_zone_current": "{zone} (current)",
   "venue_details.review": "Review these changes before saving.",
   "venue_details.acknowledge": "I have reviewed these changes",
   "venue_details.name_warning":
@@ -5721,7 +5722,8 @@ export const es: Record<StringKey, string> = {
   "venue_details.required": "Introduce un valor.",
   "venue_details.length": "Usa como máximo 200 caracteres.",
   "venue_details.cutover": "Introduce una hora entre 00:00 y 23:59.",
-  "venue_details.time_zone": "Introduce una zona horaria reconocida por su nombre.",
+  "venue_details.time_zone": "Elige una zona horaria del país del local.",
+  "venue_details.time_zone_current": "{zone} (actual)",
   "venue_details.review": "Revisa estos cambios antes de guardar.",
   "venue_details.acknowledge": "He revisado estos cambios",
   "venue_details.name_warning":

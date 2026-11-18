@@ -1,15 +1,17 @@
+import { classifySavedTimeZone } from "@waitron/shared";
 import type { VenueDetailsModel, VenueDetailValues, VenueClockPreview } from "../api/client.js";
 
 export function venueDetailsFixture(details: Partial<VenueDetailValues> = {}): VenueDetailsModel {
+  const timeZone = details.timeZone ?? "Europe/Madrid";
   return {
     businessDayClock: {
       clock: {
-        timeZone: details.timeZone ?? "Europe/Madrid",
+        timeZone,
         dayCutover: details.dayCutover ?? "06:00",
         cutoverChanges: [],
       },
       revision: 0,
-      currentBusinessDay: "2026-10-06",
+      currentBusinessDay: classifySavedTimeZone(timeZone).kind === "valid" ? "2026-10-06" : null,
       pending: null,
     },
     details: {
@@ -41,6 +43,7 @@ export function venueDetailsFixture(details: Partial<VenueDetailValues> = {}): V
       dayCutover: { decision: "allow_with_warning", reasons: ["clock_effects"] },
     },
     provinces: [{ code: "28", name: "Madrid" }],
+    timeZones: ["Europe/Madrid", "Atlantic/Canary"],
   };
 }
 
@@ -69,11 +72,11 @@ export function venueClockPreviewFixture(): VenueClockPreview {
       ],
     },
     proposed: {
-      timeZone: "UTC",
+      timeZone: "Atlantic/Canary",
       dayCutover: "02:30",
       civilDate: "2026-10-06",
-      timeOfDay: "02:00",
-      businessDay: "2026-10-05",
+      timeOfDay: "03:00",
+      businessDay: "2026-10-06",
       transitions: [],
     },
     backupDeadlines: { archive: "2026-10-06T03:36:00.000Z", cloud: null },

@@ -17,7 +17,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-address-lookup.js";
 import "./business-day-start-editor.js";
-import { foldForSearch } from "@waitron/shared";
+import { getCountryPack } from "@waitron/country-packs";
+import { classifySavedTimeZone, foldForSearch } from "@waitron/shared";
 import { DashboardQueries } from "../api/query-controller.js";
 import { readAfterSave } from "../widgets/read-after-save.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
@@ -568,6 +569,30 @@ export class VenueDetailsPanel extends LitElement {
     if (details.province) lines.push(html`<div>${details.province}</div>`);
     return lines.length ? lines : [html`<div>${t("venue_details.unset")}</div>`];
   }
+  #timeZoneChoice(value: string) {
+    const { issuer, timeZones } = this.model!;
+    const names = getCountryPack(issuer.country)?.timeZoneNames;
+    const locale = currentLocale();
+    const options = timeZones.map((zone) => {
+      const name = names?.[zone]?.[locale];
+      return { value: zone, label: name ? `${name} (${zone})` : zone };
+    });
+    const saved = classifySavedTimeZone(value);
+    const equivalent =
+      saved.kind === "valid" &&
+      options.find((option) => {
+        const zone = classifySavedTimeZone(option.value);
+        return zone.kind === "valid" && zone.timeZone === saved.timeZone;
+      });
+    if (equivalent) return { value: equivalent.value, options };
+    return {
+      value,
+      options: [
+        { value, label: fill("venue_details.time_zone_current", { zone: value }), disabled: true },
+        ...options,
+      ],
+    };
+  }
   #field(field: VenueDetailField): TemplateResult {
     const expected = this.#expected;
     const generation = this.#generation;
@@ -588,6 +613,24 @@ export class VenueDetailsPanel extends LitElement {
     const required =
       field !== "addressLine2" &&
       (this.#expected![field] !== null || this.#patch()[field] !== undefined);
+    if (field === "timeZone") {
+      const choice = this.#timeZoneChoice(value);
+      return html`<div class="field">
+        <wt-combobox
+          name="timeZone"
+          label=${t(LABELS[field])}
+          search="auto"
+          preserve-order
+          .value=${choice.value}
+          .options=${choice.options}
+          ?required=${required}
+          ?disabled=${this.submitting}
+          .error=${this.errors[field] ?? ""}
+          @wt-change=${change}
+        ></wt-combobox>
+        ${this.#lockReason(field)}
+      </div>`;
+    }
     return html`<div class="field">
       ${
         field === "province"

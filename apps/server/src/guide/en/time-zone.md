@@ -1,5 +1,11 @@
 # Confirm the venue time zone
 
+## Change the time zone in Venue details {#venue-details}
+
+Before the venue has trading history, open **Venue settings → Venue details** and choose **Edit**. Pick your time zone from the **Time zone** list. For a Spanish venue, choose **Mainland Spain** or **Canary Islands**.
+
+Check the proposed local time and business date, then choose **I have reviewed these changes** and **Save**.
+
 ## When trading is stopped {#stopped}
 
 If the venue's saved time zone is missing or invalid, Waitron stops trading before starting its payment and invoice work. Sign in to the dashboard. If your account cannot configure the venue, choose **Sign in as a manager**. This signs you out and opens sign-in. Use an account with permission to configure the venue to confirm its time zone.

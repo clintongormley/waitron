@@ -642,7 +642,7 @@ describe("transaction-time and persisted history checks", () => {
     const model = await inTx((tx) => readVenueDetails(tx));
     const timezone = await request("PATCH", "", {
       expected: model.details,
-      changes: { timeZone: "UTC", name: "Must roll back" },
+      changes: { timeZone: "Atlantic/Canary", name: "Must roll back" },
     });
     await expectRefusal(timezone, 409, "venue.detail_locked");
     expect((await inTx((tx) => readVenueDetails(tx))).details).toEqual(model.details);

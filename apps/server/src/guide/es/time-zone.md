@@ -1,5 +1,11 @@
 # Confirmar la zona horaria del local
 
+## Cambiar la zona horaria en los datos del local {#venue-details}
+
+Antes de que el local tenga un historial de actividad, abre **Ajustes del local → Datos del local** y pulsa **Editar**. Elige tu zona en la lista **Zona horaria**. Para un local en España, elige **España peninsular** o **Islas Canarias**.
+
+Comprueba la hora local y la jornada propuestas, pulsa **He revisado estos cambios** y después **Guardar**.
+
 ## Cuando las ventas están detenidas {#stopped}
 
 Si la zona horaria guardada del local falta o no es válida, Waitron detiene las ventas antes de iniciar los cobros y la facturación. Inicia sesión en el panel. Si tu cuenta no puede configurar el local, pulsa **Iniciar sesión como responsable**. Esto cierra tu sesión y abre el inicio de sesión. Usa una cuenta con permiso para configurar el local para confirmar su zona horaria.

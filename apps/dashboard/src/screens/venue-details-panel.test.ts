@@ -1,7 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { LitElement } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { WtInput, WtButton, WtFormActions } from "@waitron/ui";
 import {
   cleanupWidgets,
@@ -38,20 +38,20 @@ function rig(model = venueDetailsFixture()) {
     liveData,
     getVenueDetails: vi.fn(async () => structuredClone(current)),
     getVenueClockPreview: vi.fn(async (clock: { timeZone: string; dayCutover: string }) => ({
-      at: "2026-10-06T02:00:00.000Z",
+      at: "2026-10-06T04:30:00.000Z",
       current: {
         timeZone: "Europe/Madrid",
         dayCutover: "06:00",
         civilDate: "2026-10-06",
-        timeOfDay: "04:00",
-        businessDay: "2026-10-05",
+        timeOfDay: "06:30",
+        businessDay: "2026-10-06",
         transitions: [],
       },
       proposed: {
         ...clock,
         civilDate: "2026-10-06",
-        timeOfDay: "02:00",
-        businessDay: "2026-10-06",
+        timeOfDay: "05:30",
+        businessDay: "2026-10-05",
         transitions: [
           {
             at: "2026-10-25T01:00:00.000Z",
@@ -121,13 +121,58 @@ it("draws semantic shared fields, explicit unset text and a locked province expl
   const el = await editing(rig(venueDetailsFixture({ province: null, addressLine2: null })).api);
   expect(
     [...el.shadowRoot!.querySelectorAll("wt-input")].map((input) => input.getAttribute("name")),
-  ).toEqual(["venueName", "addressLine1", "addressLine2", "city", "timeZone"]);
+  ).toEqual(["venueName", "addressLine1", "addressLine2", "city"]);
   expect(q(el, "[data-test=locked-province]")?.textContent).toContain("Not set");
   expect(q(el, "[data-test=locked-postalCode]")?.textContent).toContain("28001");
   for (const name of ["province", "postalCode"])
     expect(q(el, `[data-test=reason-${name}]`)?.textContent?.split("setup")).toHaveLength(2);
   expect(field(el, "venueName").required).toBe(true);
   expect(q(el, "wt-help-tooltip")).toBeNull();
+});
+
+it("uses the country-pack dropdown to preview and save Canary Islands time", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const el = await editing(r.api);
+  const zone = q(el, 'wt-combobox[name="timeZone"]')!;
+  expect(zone).not.toBeNull();
+  await userEvent.click(page.getByRole("combobox", { name: /Time zone/ }));
+  expect(
+    [...zone.shadowRoot!.querySelectorAll('[role="option"]')].map((option) =>
+      option.textContent?.trim(),
+    ),
+  ).toEqual(["Mainland Spain (Europe/Madrid)", "Canary Islands (Atlantic/Canary)"]);
+  await userEvent.click(page.getByRole("option", { name: "Canary Islands (Atlantic/Canary)" }));
+  await flush(el);
+  expect(r.api.getVenueClockPreview).toHaveBeenCalledWith({
+    timeZone: "Atlantic/Canary",
+    dayCutover: "06:00",
+  });
+  expect(q(el, "[data-test=clock-preview]")?.textContent).toContain("Atlantic/Canary");
+  expect(save(el).disabled).toBe(true);
+  await click(el, "[data-test=acknowledge]");
+  await click(el, "[data-test=save]");
+  expect(r.api.patchVenueDetails).toHaveBeenCalledExactlyOnceWith({
+    changes: { timeZone: "Atlantic/Canary" },
+    expected: r.model.details,
+  });
+});
+
+it("shows the off-list saved zone as a disabled choice and keeps Save quiet", async () => {
+  setLocale("es-ES");
+  const r = rig(venueDetailsFixture({ timeZone: " Europe/Madrid " }));
+  const el = await editing(r.api);
+  const picker = page.getByRole("combobox", { name: /Zona horaria/ });
+  await expect.element(picker).toHaveTextContent("Europe/Madrid");
+  await userEvent.click(picker);
+  await expect
+    .element(page.getByRole("option", { name: /Europe\/Madrid.*actual/i }))
+    .toHaveAttribute("aria-disabled", "true");
+  await expect
+    .element(page.getByRole("option", { name: "Islas Canarias (Atlantic/Canary)" }))
+    .toBeVisible();
+  expect(save(el).disabled).toBe(true);
+  expect(r.api.getVenueClockPreview).not.toHaveBeenCalled();
 });
 it("requires acknowledgement of a changed normalized patch and resets it on a later edit", async () => {
   setLocale("en-GB");
@@ -239,7 +284,7 @@ it("a first sale updates locks without discarding the proposed clock value", asy
   setLocale("en-GB");
   const r = rig();
   const el = await editing(r.api);
-  change(el, "timeZone", "UTC");
+  change(el, "timeZone", "Atlantic/Canary");
   await flush(el);
   const locked = venueDetailsFixture();
   locked.hasSales = true;
@@ -247,12 +292,12 @@ it("a first sale updates locks without discarding the proposed clock value", asy
   locked.policy.dayCutover = { decision: "refuse", reasons: ["sales"] };
   r.set(locked);
   await r.notify(el, "sales");
-  expect(field(el, "timeZone").value).toBe("UTC");
+  expect(field(el, "timeZone").value).toBe("Atlantic/Canary");
   expect(q(el, "[data-test=reason-timeZone]")?.textContent).toContain("sales");
   await click(el, "[data-test=acknowledge]");
   await click(el, "[data-test=save]");
   expect(r.api.patchVenueDetails).toHaveBeenCalledWith({
-    changes: { timeZone: "UTC" },
+    changes: { timeZone: "Atlantic/Canary" },
     expected: r.model.details,
   });
 });
@@ -435,7 +480,7 @@ it("explains the consequences of a changed name and clock in the review box", as
   setLocale("en-GB");
   const el = await editing(rig().api);
   change(el, "venueName", "Renamed");
-  change(el, "timeZone", "UTC");
+  change(el, "timeZone", "Atlantic/Canary");
   await flush(el);
   const review = q(el, "[data-test=warnings]")!;
   expect(review.textContent?.toLowerCase()).toContain("departments");
@@ -454,7 +499,7 @@ it.each([
 ])("names opening hours and special dates in the clock warning (%s)", async (locale, sentence) => {
   setLocale(locale);
   const el = await editing(rig().api);
-  change(el, "timeZone", "UTC");
+  change(el, "timeZone", "Atlantic/Canary");
   await flush(el);
   expect(q(el, "[data-test=warnings]")?.textContent).toContain(sentence);
 });
@@ -463,14 +508,17 @@ it("shows captured old/new civil and business dates, transition boundaries and r
   setLocale("en-GB");
   const r = rig();
   const el = await editing(r.api);
-  change(el, "timeZone", "UTC");
+  change(el, "timeZone", "Atlantic/Canary");
   await flush(el);
-  expect(r.api.getVenueClockPreview).toHaveBeenCalledWith({ timeZone: "UTC", dayCutover: "06:00" });
+  expect(r.api.getVenueClockPreview).toHaveBeenCalledWith({
+    timeZone: "Atlantic/Canary",
+    dayCutover: "06:00",
+  });
   const preview = q(el, "[data-test=clock-preview]")!;
-  expect(preview.textContent).toContain("2026-10-06T02:00:00.000Z");
+  expect(preview.textContent).toContain("2026-10-06T04:30:00.000Z");
   expect(preview.textContent).toContain("2026-10-05");
-  expect(preview.textContent).toContain("04:00");
-  expect(preview.textContent).toContain("02:00");
+  expect(preview.textContent).toContain("06:30");
+  expect(preview.textContent).toContain("05:30");
   expect(preview.textContent).toContain("2026-10-25T01:30:00.000Z");
   expect(preview.textContent).toContain("02:30");
   expect(preview.textContent).toContain("2026-10-06T03:36:00.000Z");
@@ -480,9 +528,12 @@ it("shows captured old/new civil and business dates, transition boundaries and r
   expect(save(el).disabled).toBe(false);
 });
 it("blocks acknowledgement and Enter while the matching clock preview is pending, and ignores an obsolete reply", async () => {
-  const r = rig();
+  const r = rig(venueDetailsFixture({ timeZone: "Europe/London" }));
   let oldReply!: (value: Awaited<ReturnType<DashboardApi["getVenueClockPreview"]>>) => void;
-  const answer = await r.api.getVenueClockPreview({ timeZone: "UTC", dayCutover: "06:00" });
+  const answer = await r.api.getVenueClockPreview({
+    timeZone: "Atlantic/Canary",
+    dayCutover: "06:00",
+  });
   vi.mocked(r.api.getVenueClockPreview)
     .mockClear()
     .mockImplementationOnce(
@@ -492,27 +543,27 @@ it("blocks acknowledgement and Enter while the matching clock preview is pending
         }),
     );
   const el = await editing(r.api);
-  change(el, "timeZone", "UTC");
+  change(el, "timeZone", "Atlantic/Canary");
   await flush(el);
   expect(q<WtButton>(el, "[data-test=acknowledge]")!.disabled).toBe(true);
   await click(el, "[data-test=acknowledge]");
   el.shadowRoot!.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
   expect(r.api.patchVenueDetails).not.toHaveBeenCalled();
-  change(el, "timeZone", "Europe/London");
+  change(el, "timeZone", "Europe/Madrid");
   await flush(el);
-  expect(q(el, "[data-test=clock-proposed]")!.textContent).toContain("Europe/London");
+  expect(q(el, "[data-test=clock-proposed]")!.textContent).toContain("Europe/Madrid");
   oldReply(answer);
   await flush(el);
-  expect(q(el, "[data-test=clock-proposed]")!.textContent).toContain("Europe/London");
+  expect(q(el, "[data-test=clock-proposed]")!.textContent).toContain("Europe/Madrid");
 });
 it("allows a failed clock preview to retry without losing the draft", async () => {
   setLocale("en-GB");
   const r = rig();
   vi.mocked(r.api.getVenueClockPreview).mockRejectedValueOnce({ code: "connection.failed" });
   const el = await editing(r.api);
-  change(el, "timeZone", "UTC");
+  change(el, "timeZone", "Atlantic/Canary");
   await flush(el);
-  expect(field(el, "timeZone").value).toBe("UTC");
+  expect(field(el, "timeZone").value).toBe("Atlantic/Canary");
   expect(q(el, "[data-test=clock-error]")).not.toBeNull();
   expect(save(el).disabled).toBe(true);
   await click(el, "[data-test=preview-retry]");
@@ -525,13 +576,13 @@ it("allows a failed clock preview to retry without losing the draft", async () =
 it("previews the latest saved start when only the zone is changed, preserving the opening draft", async () => {
   const r = rig();
   const el = await editing(r.api);
-  change(el, "timeZone", "UTC");
+  change(el, "timeZone", "Atlantic/Canary");
   await flush(el);
   r.set(venueDetailsFixture({ dayCutover: "02:30" }));
   await r.notify(el);
-  expect(field(el, "timeZone").value).toBe("UTC");
+  expect(field(el, "timeZone").value).toBe("Atlantic/Canary");
   expect(r.api.getVenueClockPreview).toHaveBeenLastCalledWith({
-    timeZone: "UTC",
+    timeZone: "Atlantic/Canary",
     dayCutover: "02:30",
   });
   expect(save(el).disabled).toBe(true);
@@ -655,7 +706,7 @@ it.each([
   setLocale(locale);
   const r = rig();
   const el = await editing(r.api);
-  change(el, "timeZone", "UTC");
+  change(el, "timeZone", "Atlantic/Canary");
   await flush(el);
   const locked = venueDetailsFixture();
   locked.hasSales = true;
@@ -1142,7 +1193,7 @@ it.each(["en-GB", "es"])("explains a business-day-history save refusal in %s", a
     params: { field: "timeZone", reason: "business_day_history" },
   });
   const el = await editing(api);
-  change(el, "timeZone", "UTC");
+  change(el, "timeZone", "Atlantic/Canary");
   await flush(el);
   await click(el, "[data-test=acknowledge]");
   await click(el, "[data-test=save]");

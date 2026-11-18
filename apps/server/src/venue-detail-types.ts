@@ -33,6 +33,7 @@ export interface VenueDetailsModel {
     { decision: "allow" | "allow_with_warning" | "refuse"; reasons: DetailReason[] }
   >;
   provinces: { code: string; name: string }[];
+  timeZones: readonly string[];
 }
 export interface VenueDetailWrite {
   changes: VenueDetailPatch;
