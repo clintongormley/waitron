@@ -1752,6 +1752,8 @@ export const en = {
   "meal_end.unserved_heading": "Not served yet:",
   "meal_end.mark_served": "Mark served",
   "meal_end.print_anyway": "Print anyway",
+  "meal_end.not_admitted":
+    "This device's profile no longer lets you work on it, so it cannot print the bill for you. Sign in on a device whose profile admits you.",
   "meal_end.unserved_no_mark":
     "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
   "meal_end.unconfirmed":
@@ -3877,6 +3879,8 @@ export const es: Record<StringKey, string> = {
   "meal_end.unserved_heading": "Aún sin servir:",
   "meal_end.mark_served": "Marcar como servidos",
   "meal_end.print_anyway": "Imprimir igualmente",
+  "meal_end.not_admitted":
+    "El perfil de este dispositivo ya no te deja trabajar en él, así que no puede imprimir la cuenta por ti. Inicia sesión en un dispositivo cuyo perfil te admita.",
   "meal_end.unserved_no_mark":
     "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
   "meal_end.unconfirmed":

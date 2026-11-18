@@ -1176,3 +1176,47 @@ it("words Print the bill's other refusals, in both languages", () => {
     "Esta factura completa no puede ir adonde se eligió. Elige otra impresora u otro correo y luego imprime la cuenta.",
   );
 });
+
+it("words the table refusals Print the bill shows in their own words, in both languages", () => {
+  const pins: [string, string, string][] = [
+    [
+      "draft.out_of_date",
+      "This order has changed since you opened it. Reload it and make your change again",
+      "Este pedido ha cambiado desde que lo abriste. Vuelve a cargarlo y repite el cambio",
+    ],
+    [
+      "invoice.recipient_invalid",
+      "Check the customer's invoice details and try again",
+      "Revisa los datos de facturación del cliente e inténtalo de nuevo",
+    ],
+    [
+      "fiscal.taxpayer_domicile_missing",
+      "The venue's legal address is missing. Ask a manager before issuing a full invoice",
+      "Falta el domicilio fiscal del local. Avisa a un responsable antes de emitir una factura completa",
+    ],
+    [
+      "session.required",
+      "Your shift session has ended — please log in again",
+      "Tu sesión ha terminado. Vuelve a iniciar sesión",
+    ],
+    [
+      "till.origin_refused",
+      "This page cannot change the till. Open the till from the venue's address and try again.",
+      "Esta página no puede hacer cambios en el TPV. Abre el TPV desde la dirección del local e inténtalo de nuevo.",
+    ],
+    [
+      "submission.id_reused",
+      "This request could not be matched to what was sent before. Reload and try again",
+      "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",
+    ],
+    [
+      "clock.unusable",
+      "Can't be recorded: the server's clock is wrong. It can be set in the dashboard, under Box status.",
+      "No se puede registrar: la hora del servidor es incorrecta. Se puede poner en hora en el panel, en Estado del servidor.",
+    ],
+  ];
+  for (const [code, en, es] of pins) {
+    expect(codeMessage(code, "en")).toBe(en);
+    expect(codeMessage(code, "es")).toBe(es);
+  }
+});

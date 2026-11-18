@@ -499,4 +499,17 @@ describe("Print the bill's own sentences", () => {
   ])("offers no Mark served where none is drawn, in %s", (locale, message) => {
     expect(catalogues[locale]?.["meal_end.unserved_no_mark"]).toBe(message);
   });
+
+  it.each([
+    [
+      "en-GB",
+      "This device's profile no longer lets you work on it, so it cannot print the bill for you. Sign in on a device whose profile admits you.",
+    ],
+    [
+      "es-ES",
+      "El perfil de este dispositivo ya no te deja trabajar en él, así que no puede imprimir la cuenta por ti. Inicia sesión en un dispositivo cuyo perfil te admita.",
+    ],
+  ])("says the profile no longer admits the person, in %s", (locale, message) => {
+    expect(catalogues[locale]?.["meal_end.not_admitted"]).toBe(message);
+  });
 });

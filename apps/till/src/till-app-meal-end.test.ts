@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
-import { setLocale, t } from "./i18n/t.js";
+import { clockUnusableText, overLimitText, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { EndedMeal, PartyBill, TillApi } from "./api/client.js";
 import type { CapabilityFlag } from "./layout.js";
@@ -308,6 +308,129 @@ describe("till-app: Print the bill", () => {
     expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
     expect(printedNotice(el)).toBeNull();
   });
+
+  it.each([
+    "clock.unconfirmed",
+    "clock.unusable",
+    "draft.out_of_date",
+    "device.unauthorized",
+    "service_zone.not_allowed",
+    "handover.stepping_down",
+    "fiscal.chain_handed_over",
+    "storage.disk_full",
+    "order.payment_in_flight",
+    "bill.refund_in_progress",
+    "working_order.not_open",
+    "product.unavailable",
+    "invoice.recipient_invalid",
+    "fiscal.taxpayer_domicile_missing",
+    "printer.not_found",
+    "session.required",
+    "till.origin_refused",
+    "submission.id_reused",
+  ])("says %s in its own words, not as a failed table change", async (code) => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({ code, status: 409, workingOrderId: "wo-4" }),
+    });
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage(code));
+    expect(banner(el)!.textContent).not.toContain(t("table.error"));
+  });
+
+  it("says a table no longer open in its own words, as Finish does, and prints nothing", async () => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409, partyId: "v1" }),
+    });
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
+    expect(printedNotice(el)).toBeNull();
+  });
+
+  it("says a person the device's profile no longer admits cannot print the bill there", async () => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({ code: "device_profile.not_admitted", status: 403 }),
+    });
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(t("meal_end.not_admitted"));
+  });
+
+  it("says a closed session as ended when the server finds it not open", async () => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({ code: "session.not_open", status: 401 }),
+    });
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("session.required"));
+  });
+
+  it("dates a clock.unusable refusal by the server's reading, as a payment does", async () => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({
+        code: "clock.unusable",
+        status: 409,
+        clockAt: "2024-01-05T10:00:00.000Z",
+        offsetMinutes: 60,
+      }),
+    });
+
+    await printBill(el);
+
+    const said = banner(el)!.textContent!;
+    expect(
+      [false, true].some((checkTime) =>
+        said.includes(clockUnusableText("2024-01-05T10:00:00.000Z", 60, checkTime)),
+      ),
+    ).toBe(true);
+  });
+
+  it("says the time zone refusal by its reason", async () => {
+    const { el } = await openBill({
+      endMeal: vi
+        .fn()
+        .mockRejectedValue({ code: "venue.time_zone_not_ready", status: 409, reason: "missing" }),
+    });
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(
+      codeMessage("venue.time_zone_not_ready", undefined, { reason: "missing" }),
+    );
+  });
+
+  it("names the simplified-invoice limit a bill would pass", async () => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({
+        code: "sale.total_exceeds_simplified_limit",
+        status: 409,
+        total: "3200.00",
+        limit: "3000.00",
+      }),
+    });
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(overLimitText("3000.00"));
+  });
+
+  it.each(["fiscal.record_invalid", "fiscal.foreign_recipient_unsupported"])(
+    "says %s cannot be filed and that trying again will not help, as placing an order does",
+    async (code) => {
+      const { el } = await openBill({
+        endMeal: vi.fn().mockRejectedValue({ code, status: 409 }),
+      });
+
+      await printBill(el);
+
+      expect(banner(el)!.textContent).toContain(t("place.refused"));
+    },
+  );
 
   it.each([
     ["Marta", t("table.draft_taken_over_unsent").replace("{name}", "Marta")],

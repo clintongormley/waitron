@@ -721,7 +721,13 @@ const PERMANENT_SALE_REFUSALS = new Set([
   "sale.number_reused",
 ]);
 
-/** Print the bill's refusals shown in their code's own words, beside the table refusals. */
+/**
+ * Print the bill's refusals shown in their code's own words, beside the table refusals
+ * (`tableWriteError`). The route's other codes are said as a failed table change on purpose: the
+ * till has no sentence for them (`node.read_only`, `series.no_*_for_node`, `chain.append_contention`,
+ * `session.person_not_signed_in`), or they mean a fault in the till's request
+ * (`management.request_invalid`) or in Waitron's own data, which staff cannot act on.
+ */
 const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
   "meal_end.already_issued",
   "meal_end.no_printer",
@@ -729,7 +735,43 @@ const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
   "bill.unsent_dishes",
   "bill.nothing_outstanding",
   "device.forbidden_action",
+  "service_zone.not_allowed",
+  "handover.stepping_down",
+  "draft.out_of_date",
+  "product.unavailable",
+  "invoice.recipient_invalid",
+  "fiscal.taxpayer_domicile_missing",
+  "printer.not_found",
+  "session.required",
+  "till.origin_refused",
+  "submission.id_reused",
 ]);
+
+/** A refused Print the bill as said, the party, draft and not-served refusals aside. Nobody approves
+ * Print the bill, so a refused permission is the signed-in person's own; a ticket refused by the tax
+ * agency's rules is said as a refused order, as nothing was taken. */
+function mealEndError(error: unknown): CounterError {
+  const refusal = (error ?? {}) as {
+    code?: unknown;
+    reason?: unknown;
+    clockAt?: unknown;
+    offsetMinutes?: unknown;
+  };
+  const code = typeof refusal.code === "string" ? refusal.code : undefined;
+  if (code === "authorization.not_permitted") return "take_payment.not_permitted";
+  if (code === "device_profile.not_admitted") return "meal_end.not_admitted";
+  if (code === "session.not_open") return { code: "session.required" };
+  if (code === "venue.time_zone_not_ready")
+    return typeof refusal.reason === "string" ? { code, reason: refusal.reason } : { code };
+  if (code === "clock.unusable") {
+    const reading = clockReadingOf(refusal);
+    return reading === undefined ? { code } : { clockUnusable: reading };
+  }
+  if (isPermanentSaleRefusal(error)) return "place.refused";
+  const overLimit = overLimitOf(error);
+  if (overLimit !== undefined) return overLimit;
+  return code !== undefined && MEAL_END_REFUSALS.has(code) ? { code } : tableWriteError(error);
+}
 
 /** Table refusals shown in their code's own words. */
 const TABLE_REFUSALS = new Set([
@@ -20124,8 +20166,7 @@ export class TillApp extends LitElement {
   }
 
   /** Not served lists the dishes; a changed party reloads the table and a closed one is said, as
-   * Finish does; any other refusal is said, and the party's bills are read again. A refused
-   * permission is the signed-in person's own, as nobody approves Print the bill. */
+   * Finish does; any other refusal is said, and the party's bills are read again. */
   async #onMealEndRefused(
     partyId: string,
     request: EndMealRequest,
@@ -20151,16 +20192,12 @@ export class TillApp extends LitElement {
       return;
     }
     this.errorKey =
-      refusal?.code === "authorization.not_permitted"
-        ? "take_payment.not_permitted"
-        : refusal?.code === "draft.taken_over"
-          ? draftRefusalError(
-              { refused: refusal.code, ownerName: refusal.ownerName ?? undefined },
-              true,
-            )
-          : typeof refusal?.code === "string" && MEAL_END_REFUSALS.has(refusal.code)
-            ? { code: refusal.code }
-            : tableWriteError(error);
+      refusal?.code === "draft.taken_over"
+        ? draftRefusalError(
+            { refused: refusal.code, ownerName: refusal.ownerName ?? undefined },
+            true,
+          )
+        : mealEndError(error);
     if (!this.#hasLeftParty(partyId, sent)) await this.#loadPartyBills();
   }
 
