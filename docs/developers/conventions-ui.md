@@ -991,8 +991,8 @@ same status — `password.invalid` for a password login, `pin.invalid` for a PIN
 same hashing work, and a screen shows it as one sentence for every cause — "the login failed"
 as the form's bottom message on the dashboard and the setup wizard's Connect, "Wrong PIN" on the till, where
 the PIN is the only thing typed. The one answer that differs, `totp.required`, comes only after the
-right password, on the dashboard's email sign-in and on the setup wizard's Connect (the join), and
-asks for the authenticator code. A refused sign-in marks no field on any sign-in form, the setup
+right password of an account with an authenticator, when no code was sent, and asks for that code
+(`completeManagerLogin` in `packages/identity/src/manager-login.ts`). A refused sign-in marks no field on any sign-in form, the setup
 wizard's Reset form included (`apps/setup/src/screens/reset-screen.ts`); there a field is marked
 only when its value is missing or malformed (owner, 2026-09-30, A153).
 The same hashing work is not enough when attempts arrive together. `withAuthenticatedOperation`
@@ -1033,8 +1033,8 @@ invalid credential-header JSON and a setup Reset proof mismatch; the standby's r
 Passkey and Google refusals still carry no reason. Validation that does not depend
 on the account (an empty required field, a malformed code) may still sit under its field; a
 signed-in person re-checking their OWN password, PIN or code may be told which one was wrong. These
-answers are reachable only after a credential was proved and stay: `totp.required` (the
-dashboard's code step and the setup wizard's Connect asking for the code, after a right password), `google.second_factor_required` (after a valid
+answers are reachable only after a credential was proved and stay: `totp.required` (asking
+for the authenticator code, after a right password), `google.second_factor_required` (after a valid
 Google sign-in) and `authorization.not_permitted` (403 from standby connect, promote, the waiting
 box's carry-on (`apps/server/src/carry-on.ts`) and `GET /management-api/membership` when the password and code are right but the person lacks the
 permission, and from the drawer, refund, unpaid-departure, cancel and late-send overrides (`authorize`,

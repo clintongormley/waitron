@@ -27,10 +27,14 @@ const body: AdoptBody = {
 };
 
 /**
- * `step: "login"` opens the login fields on a clean form, as a confirmed comparison would. The main
- * server is taken to have asked for the authenticator code already, so the code field is drawn.
+ * `step: "login"` opens the login fields on a clean form, as a confirmed comparison would.
+ * `askForCode` draws the code field, as if the main server had already asked for it.
  */
-async function mount(request?: AdoptBody, step: "address" | "login" = "address") {
+async function mount(
+  request?: AdoptBody,
+  step: "address" | "login" = "address",
+  { askForCode = false } = {},
+) {
   const api = {
     firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
     firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
@@ -43,7 +47,7 @@ async function mount(request?: AdoptBody, step: "address" | "login" = "address")
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });
   await vi.waitFor(() => expect(screen(el)).toBe("mode"));
-  Object.assign(el, { screen: "connect", connectRequest: request, connectAskForCode: true });
+  Object.assign(el, { screen: "connect", connectRequest: request, connectAskForCode: askForCode });
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector<SetupConnectScreen>("setup-connect-screen")!;
   await form.updateComplete;
@@ -90,7 +94,9 @@ describe("setup Connect unsaved changes", () => {
   it.each(["primaryUrl", "email", "password", "totp"])(
     "Back keeps the edited %s until Discard, restoring only the child",
     async (key) => {
-      const { el, form } = await mount(undefined, key === "primaryUrl" ? "address" : "login");
+      const { el, form } = await mount(undefined, key === "primaryUrl" ? "address" : "login", {
+        askForCode: key === "totp",
+      });
       form.dispatchEvent(
         new CustomEvent("setup-patch", {
           detail: { patch: { admin: { email: "root@example.test" } } },
@@ -124,7 +130,9 @@ describe("setup Connect unsaved changes", () => {
   it.each(["primaryUrl", "email", "totp"])(
     "%s compares its trimmed request value and clears unload after a revert",
     async (key) => {
-      const { el, form } = await mount(undefined, key === "primaryUrl" ? "address" : "login");
+      const { el, form } = await mount(undefined, key === "primaryUrl" ? "address" : "login", {
+        askForCode: key === "totp",
+      });
       await edit(form, key, "edited");
       expect(unload()).toBe(true);
       await edit(form, key, "   ");
@@ -169,7 +177,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("Connect sends the existing exact body without asking and success clears unload", async () => {
-    const { el, form, api } = await mount();
+    const { el, form, api } = await mount(undefined, "address", { askForCode: true });
     const requests: unknown[] = [];
     form.addEventListener("adopt-requested", (event) =>
       requests.push((event as CustomEvent).detail),
@@ -185,7 +193,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("a refused Connect protects the returned credentials while the one-time code stays empty", async () => {
-    const { el, form, api } = await mount();
+    const { el, form, api } = await mount(undefined, "address", { askForCode: true });
     vi.mocked(api.adopt).mockRejectedValue({ code: "password.invalid" });
     await fill(form);
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
@@ -232,7 +240,7 @@ describe("setup Connect unsaved changes", () => {
   });
 
   it("a replacement request cancels an old Back question", async () => {
-    const { el, form } = await mount(undefined, "login");
+    const { el, form } = await mount(undefined, "login", { askForCode: true });
     await edit(form, "password", "first");
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);

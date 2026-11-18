@@ -105,6 +105,8 @@ export const shellEn = {
     "The primary server's certificate wasn't compared, so nothing was sent. This is a fault in Waitron. Check the address and compare the certificate again.",
   "shell.adopt.login_failed":
     "The login failed. Check the admin email, password and authenticator code, then try again.",
+  "shell.adopt.login_failed_no_code":
+    "The login failed. Check the admin email and password, then try again.",
   "shell.adopt.generic":
     "Couldn't connect to the primary. Check the address and login, then try again.",
   "shell.adopt.bucket_stream_active":
@@ -339,6 +341,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Es un fallo de Waitron. Revisa la dirección y vuelve a comparar el certificado.",
   "shell.adopt.login_failed":
     "No se ha podido iniciar sesión. Revisa el correo, la contraseña y el código del autenticador del administrador, e inténtalo de nuevo.",
+  "shell.adopt.login_failed_no_code":
+    "No se ha podido iniciar sesión. Revisa el correo y la contraseña del administrador, e inténtalo de nuevo.",
   "shell.adopt.generic":
     "No se ha podido conectar con el servidor principal. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.bucket_stream_active":

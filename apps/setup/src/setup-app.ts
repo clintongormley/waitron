@@ -2297,7 +2297,10 @@ export class SetupApp extends LitElement {
         ADOPT_FIELD_PATHS,
       );
       if (this.connectInvalidField === undefined) {
-        this.connectError = adoptErrorWords(code, error.params);
+        this.connectError =
+          code === "password.invalid" && !this.connectAskForCode
+            ? say("shell.adopt.login_failed_no_code")
+            : adoptErrorWords(code, error.params);
         this.connectErrorAboutLogin = code === "password.invalid" || code === "password.throttled";
       }
       this.connectRequest = body;

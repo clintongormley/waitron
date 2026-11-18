@@ -2673,7 +2673,9 @@ describe("setup-app", () => {
       const el = await mountSetupApp(stubApi({ adopt }));
       await typeLoginAndConnect(el);
       const connect = await screenHost(el, "connect");
-      expect(await bottomOf(connect)).toContain("The login failed.");
+      expect(await bottomOf(connect)).toBe(
+        "The login failed. Check the admin email and password, then try again.",
+      );
       expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
       expect(connect.shadowRoot!.querySelector("[data-test=totp-notice]")).toBeNull();
     });
