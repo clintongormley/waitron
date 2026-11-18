@@ -33,11 +33,16 @@ export const startEn = {
   "emergency.source_contact": "Cloud last heard from the old box at",
   "emergency.source_contact_unknown": "Cloud does not know when it last heard from the old box.",
   "emergency.status_unavailable": "Cloud status is unavailable.",
-  "emergency.status_source_recent": "Cloud heard from the old box in the last two minutes.",
-  "emergency.status_setting_off": "Emergency hosting is switched off in Cloud.",
-  "emergency.status_level_inactive": "The Connected plan is inactive.",
-  "emergency.status_no_payment_method": "A payment method is missing in Cloud.",
-  "emergency.status_not_provisioned": "Cloud cannot start this venue yet.",
+  "emergency.status_source_recent":
+    "Cloud heard from the old box within two minutes of this check. Reload this page to check again.",
+  "emergency.status_setting_off":
+    "Emergency start is switched off. Switch it on in the Cloud account.",
+  "emergency.status_level_inactive":
+    "Emergency start needs an active Connected plan. Check the plan in the Cloud account.",
+  "emergency.status_no_payment_method":
+    "Emergency start needs a payment method. Add one in the Cloud account.",
+  "emergency.status_not_provisioned":
+    "Cloud cannot start this venue yet. Check availability in the Cloud account.",
   "emergency.status_state_not_ready":
     "Cloud could not check whether emergency hosting is available.",
   "emergency.check_status": "Check again",
@@ -201,11 +206,15 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "emergency.source_contact_unknown": "Se desconoce el último contacto con el servidor anterior.",
   "emergency.status_unavailable": "No se pudo consultar el estado en Cloud.",
   "emergency.status_source_recent":
-    "Cloud recibió noticias del servidor anterior en los últimos dos minutos.",
-  "emergency.status_setting_off": "El alojamiento de emergencia está desactivado en Cloud.",
-  "emergency.status_level_inactive": "El plan Conectado no está activo.",
-  "emergency.status_no_payment_method": "Falta un método de pago en Cloud.",
-  "emergency.status_not_provisioned": "Cloud aún no puede iniciar este local.",
+    "El servidor anterior se comunicó con Cloud en los dos minutos previos a esta comprobación. Recarga la página para volver a comprobarlo.",
+  "emergency.status_setting_off":
+    "El inicio de emergencia está desactivado. Actívalo en la cuenta de Cloud.",
+  "emergency.status_level_inactive":
+    "El inicio de emergencia necesita un plan Conectado activo. Consulta el plan en la cuenta de Cloud.",
+  "emergency.status_no_payment_method":
+    "El inicio de emergencia necesita un método de pago. Añádelo en la cuenta de Cloud.",
+  "emergency.status_not_provisioned":
+    "Cloud aún no puede iniciar este local. Consulta la disponibilidad en la cuenta de Cloud.",
   "emergency.status_state_not_ready":
     "Cloud no pudo comprobar si el alojamiento de emergencia está disponible.",
   "emergency.check_status": "Volver a comprobar",

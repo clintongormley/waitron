@@ -200,6 +200,7 @@ export async function startLockedCopy(
         "management_session.required": 401,
         "management_session.expired": 401,
         "cloud.unavailable": 503,
+        "cloud.request_invalid": 503,
       },
       "cloud-locked.session_failed",
     );

@@ -259,7 +259,7 @@ it("shows the source contact and reason after retrying an unavailable status rea
     expect(time?.getAttribute("datetime")).toBe(contact);
     expect(time?.textContent?.trim()).toBeTruthy();
     expect(el.shadowRoot!.textContent).toContain(
-      "Cloud heard from the old box in the last two minutes.",
+      "Cloud heard from the old box within two minutes of this check.",
     );
   });
   expect(el.shadowRoot!.textContent).toContain("Nora");
@@ -274,6 +274,19 @@ it("shows an unknown source contact and a known closure in Spanish", async () =>
     expect(el.shadowRoot!.textContent).toContain(
       "Se desconoce el último contacto con el servidor anterior.",
     );
-    expect(el.shadowRoot!.textContent).toContain("Falta un método de pago en Cloud.");
+    expect(el.shadowRoot!.textContent).toContain("Añádelo en la cuenta de Cloud.");
   });
+});
+
+it("returns to sign-in if the session ends before the Cloud status arrives", async () => {
+  const { el } = await mount("management_session.required", true, () =>
+    Response.json({ error: { code: "management_session.expired" } }, { status: 401 }),
+  );
+  await vi.waitFor(() => {
+    expect(el.shadowRoot!.querySelector("[name=email]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-form-actions")?.shadowRoot?.textContent).toContain(
+      startEn["emergency.expired"],
+    );
+  });
+  expect(el.shadowRoot!.textContent).not.toContain("Nora");
 });

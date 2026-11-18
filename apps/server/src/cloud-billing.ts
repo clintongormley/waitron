@@ -283,7 +283,6 @@ export async function fetchCloudDisplay<T>(
       body: JSON.stringify(
         billingEnvelope(state, randomUUID(), used, sentAt, action, options.signedBody),
       ),
-      cache: "no-store",
       redirect: "error",
       signal: options.signal ? AbortSignal.any([options.signal, bound]) : bound,
     });

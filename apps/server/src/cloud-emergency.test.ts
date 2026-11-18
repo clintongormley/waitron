@@ -312,15 +312,32 @@ it("reports an unavailable eligibility check without losing the source contact",
 });
 
 it.each([
+  { version: 2 },
+  { installationId: "other-installation" },
+  { venueId: "other-venue" },
+  { sourceNodeId: "other-source-node" },
+  { copyNodeId: "other-copy-node" },
+  { startedAt: "2026-11-17T10:00:01.000Z" },
   { copyOperationId: "other-copy" },
   { sourceInstallationId: "other-source" },
   { environment: "production" },
   { expiresAt: "2026-11-17T10:31:00.000Z" },
+  { asOf: "2026-11-17T09:59:59.999Z" },
+  { asOf: "2026-11-17T10:30:00.000Z" },
   { unexpected: true },
   { eligibility: { status: "ready", open: true, closedReason: "setting_off" } },
+  { eligibility: { status: "unavailable", reason: "other" } },
   { sourceLastHeardAt: "2026-11-17T10:10:00.001Z" },
+  { sourceLastHeardAt: "2026-11-17T10:09:00Z" },
 ])("refuses an invalid status reply %j", (patch) => {
   expect(() => readEmergencyCopyStatus({ ...copyStatus, ...patch }, copy)).toThrowError(
     expect.objectContaining({ code: "cloud.unavailable" }),
   );
+});
+
+it("refuses a status read whose as-of time predates the exchange window", () => {
+  const sentAt = Date.parse(asOf) + 60001;
+  expect(() =>
+    readEmergencyCopyStatus(copyStatus, copy, { sentAt, receivedAt: sentAt }),
+  ).toThrowError(expect.objectContaining({ code: "cloud.unavailable" }));
 });

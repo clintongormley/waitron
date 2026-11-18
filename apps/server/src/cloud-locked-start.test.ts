@@ -431,6 +431,7 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
   const origin = `https://127.0.0.1:${held.port}`;
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(deps.now());
+  const log = vi.fn();
   let running: Awaited<ReturnType<typeof startLockedCopy>> | undefined;
   try {
     running = await startLockedCopy({
@@ -441,7 +442,7 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
       origin,
       hostname: held.host,
       port: held.port,
-      log: () => {},
+      log,
       totpPurposeKeys: [{ version: 7, key: purposeKey(sourceRing.current, "totp") }],
     } as Parameters<typeof startLockedCopy>[0]);
     await adoption.bound;
@@ -532,6 +533,12 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
     ]);
     expect(proof![4]).not.toBe(deps.binding.copyOperationId);
     expect(f.proofs).toEqual([true, true]);
+    f.refuse(400);
+    const rejected = await fetch(statusUrl, { headers: { cookie } });
+    expect(await rejected.json()).toMatchObject({ error: { code: "cloud.request_invalid" } });
+    expect(log).toHaveBeenCalledWith("warn", "cloud.request_invalid", expect.any(Object));
+    expect(rejected.status).toBe(503);
+    f.refuse(200);
     vi.setSystemTime(new Date("2026-11-17T10:15:00.000Z"));
     expect((await request("GET", undefined, cookie)).body.remainingMs).toBe(300000);
     vi.setSystemTime(new Date("2026-11-17T10:20:00.000Z"));
@@ -545,7 +552,25 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
       error: { code: "password.invalid" },
     });
     const recoveredCookie = recovered.cookie!.split(";")[0]!;
-    expect((await request("DELETE", undefined, recoveredCookie)).status).toBe(200);
+    let releaseStatus: (() => void) | undefined;
+    f.delay(
+      () =>
+        new Promise((resolve) => {
+          releaseStatus = resolve;
+        }),
+    );
+    const pendingStatus = fetch(statusUrl, { headers: { cookie: recoveredCookie } });
+    try {
+      await vi.waitFor(() => expect(releaseStatus).toBeDefined());
+      expect((await request("DELETE", undefined, recoveredCookie)).status).toBe(200);
+    } finally {
+      releaseStatus?.();
+    }
+    const signedOutWhileWaiting = await pendingStatus;
+    expect(signedOutWhileWaiting.status).toBe(401);
+    expect(await signedOutWhileWaiting.json()).toMatchObject({
+      error: { code: "management_session.expired" },
+    });
     expect((await request("GET", undefined, recoveredCookie)).body).toMatchObject({
       error: { code: "management_session.expired" },
     });
