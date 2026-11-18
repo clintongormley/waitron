@@ -652,6 +652,89 @@ describe("till-app: one bill's print waiting for its answer", () => {
   );
 });
 
+describe("till-app: a print's answer arriving after staff moved on", () => {
+  async function pressThenSwitchToBillTwo(overrides: Record<string, unknown>) {
+    const opened = await openBill({ getPartyBills: twoBills(), ...overrides });
+    await printBill(opened.el);
+    emit(tableOrder(opened.el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(opened.el, 6);
+    expect(tableOrder(opened.el).orderId).toBe("wo-9");
+    return { ...opened, billReads: vi.mocked(api.getPartyBills).mock.calls.length };
+  }
+
+  async function pressThenReopen(overrides: Record<string, unknown>) {
+    const opened = await openBill(overrides);
+    await printBill(opened.el);
+    emit(shell(opened.el), "screen-select", { screen: "floor" });
+    await flush(opened.el);
+    emit(floor(opened.el), "open-table", { tableId: "t4", seated: true });
+    await flush(opened.el, 6);
+    expect(tableOrder(opened.el).orderId).toBe("wo-4");
+    return { ...opened, billReads: vi.mocked(api.getPartyBills).mock.calls.length };
+  }
+
+  it("shows a refusal of the first bill under neither bill once staff are on the second, and reads the bills again", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const { el, billReads } = await pressThenSwitchToBillTwo({ endMeal: () => answer.promise });
+
+    answer.reject({ code: "meal_end.no_printer", status: 409, workingOrderId: "wo-4" });
+    await flush(el, 6);
+
+    expect(banner(el)).toBeNull();
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
+  });
+
+  it("shows no refusal once the table was left and opened again", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const { el, billReads } = await pressThenReopen({ endMeal: () => answer.promise });
+
+    answer.reject({ code: "meal_end.no_printer", status: 409, workingOrderId: "wo-4" });
+    await flush(el, 6);
+
+    expect(banner(el)).toBeNull();
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
+  });
+
+  it("shows a print with no answer under neither bill once staff are on the second, and reads the bills again", async () => {
+    const deadlines = deadlinesByHand();
+    const { el, billReads } = await pressThenSwitchToBillTwo({
+      endMeal: unansweredUntilDeadline,
+    });
+
+    deadlines.expire();
+    await flush(el, 6);
+
+    expect(banner(el)).toBeNull();
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
+  });
+
+  it("reloads a table that changed elsewhere without saying so under the second bill", async () => {
+    let moved = false;
+    const answer = heldAnswer<EndedMeal>();
+    const { el } = await pressThenSwitchToBillTwo({
+      endMeal: () => answer.promise,
+      getTablesState: vi.fn(async () => [heldTable(moved ? { revision: 5 } : {})]),
+    });
+    moved = true;
+
+    answer.reject({ code: "party.out_of_date", partyId: "v1", revision: 5 });
+    await flush(el, 6);
+
+    expect(tableOrder(el).party!.revision).toBe(5);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("does not say the table closed under the second bill", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const { el } = await pressThenSwitchToBillTwo({ endMeal: () => answer.promise });
+
+    answer.reject({ code: "party.not_open", status: 409, partyId: "v1" });
+    await flush(el, 6);
+
+    expect(banner(el)).toBeNull();
+  });
+});
+
 describe("till-app: Print the bill with dishes not served", () => {
   it("shows the dishes by name, and Mark served serves those the kitchen has; Print the bill then prints", async () => {
     const endMeal = vi.fn().mockRejectedValueOnce(unservedRefusal).mockResolvedValue(ended);

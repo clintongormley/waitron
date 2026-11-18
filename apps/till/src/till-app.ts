@@ -20148,6 +20148,11 @@ export class TillApp extends LitElement {
     const live = () => this.api === asked.api && this.#operatorSession === asked.session;
     const visit = this.#orderVisit;
     const sent = this.#sentNow();
+    const stillOnBill = () =>
+      live() &&
+      !this.#hasLeftParty(party.id, sent) &&
+      this.#orderVisit === visit &&
+      this.activeTabId === workingOrderId;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     this.mealEnd = null;
     this.mealEndPrinting = workingOrderId;
@@ -20162,10 +20167,10 @@ export class TillApp extends LitElement {
       // An invoice number on the bill proves nothing here: another till's payment may have issued it.
       if (isNetworkFailure(error)) {
         await this.#loadPartyBills();
-        if (live() && !this.#hasLeftParty(party.id, sent)) this.errorKey = "meal_end.unconfirmed";
+        if (stillOnBill()) this.errorKey = "meal_end.unconfirmed";
         return;
       }
-      await this.#onMealEndRefused(party.id, request, error, live, sent, visit);
+      await this.#onMealEndRefused(party.id, request, error, stillOnBill, sent, visit);
       return;
     } finally {
       limit.done();
@@ -20183,12 +20188,13 @@ export class TillApp extends LitElement {
   }
 
   /** Not served lists the dishes; a changed party reloads the table and a closed one is said, as
-   * Finish does; any other refusal is said, and the party's bills are read again. */
+   * Finish does; any other refusal is said, and the party's bills are read again. Words appear only
+   * while `stillOnBill`: under another bill or a later visit they would describe the wrong thing. */
   async #onMealEndRefused(
     partyId: string,
     request: EndMealRequest,
     error: unknown,
-    live: () => boolean,
+    stillOnBill: () => boolean,
     sent: Sent,
     visit: number,
   ): Promise<void> {
@@ -20204,14 +20210,19 @@ export class TillApp extends LitElement {
       };
       return;
     }
-    if (isPartyOutOfDate(error) || refusal?.code === "party.not_open") {
-      await this.#onTableRefusal(error, live);
+    if (isPartyOutOfDate(error)) {
+      await this.#onPartyOutOfDate(error, stillOnBill);
       return;
     }
-    this.errorKey =
-      refusal?.code === "draft.taken_over"
-        ? { printTakenOver: refusal.ownerName ?? "" }
-        : mealEndError(error);
+    if (refusal?.code === "party.not_open") {
+      if (stillOnBill()) this.errorKey = tableWriteError(error);
+      return;
+    }
+    if (stillOnBill())
+      this.errorKey =
+        refusal?.code === "draft.taken_over"
+          ? { printTakenOver: refusal.ownerName ?? "" }
+          : mealEndError(error);
     if (!this.#hasLeftParty(partyId, sent)) await this.#loadPartyBills();
   }
 
