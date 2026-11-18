@@ -4598,6 +4598,10 @@ export class DashboardApi {
     );
   }
 
+  putPrinterOnEveryStation(printerId: string): Promise<void> {
+    return this.#request<void>(`/management-api/printers/${printerId}/stations`, "POST");
+  }
+
   // ── Shift planning (roster authoring) ──────────────────────────────────────────────────────────
 
   getRoster(period: string): Promise<RosterSnapshot> {

@@ -624,10 +624,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   records, and screen refresh.**
   [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
 
-- **A new pass printer, or a venue's second station, needs the pass printer chosen on each station
-  by hand.** **Add a station** starts with the printers every station uses only once there are two
-  or more stations; a station without the pass printer drops its dishes from the pass ticket. Left
-  open by A366 slice 5 Part B (decision P2), #3723.
+- **A venue's second station does not start on the pass printer.** **Add a station** starts with the
+  printers every station uses only once there are two or more stations, so a manager has to choose
+  **Put on every station** again after adding the second; a station without the pass printer drops
+  its dishes from the pass ticket. Left open by A366 slice 5 Part B (decision P2), #3723.
 
 - **KDS corrections deferred from #191** — owner, 2026-09-01.
   [Detail](backlog/kitchen.md#kds-corrections-deferred-from-191)

@@ -2630,6 +2630,32 @@ describe("dashboard-app", () => {
     },
   );
 
+  it.each([
+    { permissions: ["booking.manage"], canManageStationPrinters: false },
+    { permissions: ["booking.manage", "hardware.manage"], canManageStationPrinters: false },
+    { permissions: ["booking.manage", "venue.configure"], canManageStationPrinters: false },
+    {
+      permissions: ["booking.manage", "hardware.manage", "venue.configure"],
+      canManageStationPrinters: true,
+    },
+  ])(
+    "tells the printers screen whether the session holds both permissions the Prep stations editor requires ($permissions)",
+    async ({ permissions, canManageStationPrinters }) => {
+      const api = stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      navItem(el, "printers")!.click();
+      await flush(el);
+      const printers = el.shadowRoot!.querySelector("dashboard-printers-screen") as HTMLElement & {
+        canManageStationPrinters: boolean;
+      };
+      expect(printers.canManageStationPrinters).toBe(canManageStationPrinters);
+    },
+  );
+
   it("tells the printers screen which screens the session may open, for its Used by links", async () => {
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),

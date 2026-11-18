@@ -753,6 +753,9 @@ export class PrintersScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   /** The session holds `hardware.manage`: A4 printers offer their actions. */
   @property({ type: Boolean }) canManage = false;
+  /** The session holds `hardware.manage` and `venue.configure`, as the Prep stations editor
+   *  requires: Put on every station is offered. */
+  @property({ type: Boolean }) canManageStationPrinters = false;
   /** Whether the person may open a dashboard screen; a Used by name links only to one they may. */
   @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;
   /** How long to wait between reads of an A4 test page that is still out. */
@@ -1260,6 +1263,13 @@ export class PrintersScreen extends LitElement {
   @state() private deleteSubmitting = false;
   @state() private deleteReadError = "";
   @state() private deleteActionError = "";
+  @state() private everyStationId: string | null = null;
+  @state() private everyStationSending = false;
+  @state() private everyStationRefusal: string | null = null;
+  /** The printer last put on every station, while its notice shows. */
+  @state() private everyStationDone: string | null = null;
+  #everyStationOpener: HTMLElement | null = null;
+  #everyStationOpening = 0;
   #deleteGeneration = 0;
   #deleteOpener: HTMLElement | null = null;
   readonly #impactQueries = new DashboardQueries(
@@ -1313,10 +1323,19 @@ export class PrintersScreen extends LitElement {
         )
           this.#pairedReports.set(d.printerId, d);
     }
+    // The dialog's own close report comes a task later, or never if it was not yet drawn, and a
+    // printer active again by then would bring the dialog back.
+    if (
+      changed.has("printers") &&
+      this.everyStationId !== null &&
+      this.#everyStationPrinter === undefined
+    )
+      this.#closeEveryStation();
   }
 
   override disconnectedCallback(): void {
     this.#closeDelete();
+    this.#closeEveryStation();
     this.#disposeDetailDrafts();
     this.#disposeCalibrationDraft();
     this.editingPrinter = null;
@@ -3050,6 +3069,102 @@ export class PrintersScreen extends LitElement {
     >`;
   }
 
+  #renderEveryStationNotice(): TemplateResult | typeof nothing {
+    if (this.everyStationDone === null) return nothing;
+    return html`<wt-notice
+      class="sent"
+      data-test="every-station-notice"
+      .duration=${NOTICE_MS}
+      @wt-notice-gone=${() => {
+        this.everyStationDone = null;
+      }}
+      >${fill("printers.every_station_done", { name: this.everyStationDone })}</wt-notice
+    >`;
+  }
+
+  get #everyStationPrinter(): Printer | undefined {
+    return this.printers.find((p) => p.id === this.everyStationId && p.active);
+  }
+
+  #openEveryStation(p: Printer, opener: HTMLElement): void {
+    if (!p.active) return;
+    this.#closeEveryStation();
+    this.#everyStationOpener = opener;
+    this.errorKey = null;
+    this.everyStationDone = null;
+    this.everyStationId = p.id;
+  }
+
+  #closeEveryStation(): void {
+    this.#everyStationOpening++;
+    this.everyStationId = null;
+    this.everyStationSending = false;
+    this.everyStationRefusal = null;
+  }
+
+  async #confirmEveryStation(): Promise<void> {
+    const printer = this.#everyStationPrinter;
+    if (printer === undefined || this.everyStationSending) return;
+    const opening = this.#everyStationOpening;
+    this.everyStationSending = true;
+    this.everyStationRefusal = null;
+    try {
+      await this.api.putPrinterOnEveryStation(printer.id);
+    } catch (error) {
+      if (opening !== this.#everyStationOpening) return;
+      const code = codeOf(error);
+      if (code === "printer.not_found") {
+        this.#closeEveryStation();
+        await this.#load();
+        // A switched-off printer is refused this way too, and its row already explains itself.
+        if (this.everyStationId === null && !this.printers.some(({ id }) => id === printer.id))
+          this.errorKey = code;
+        return;
+      }
+      this.everyStationSending = false;
+      this.everyStationRefusal = code;
+      return;
+    }
+    if (opening !== this.#everyStationOpening) return;
+    this.#closeEveryStation();
+    this.everyStationDone = this.printers.find(({ id }) => id === printer.id)?.name ?? printer.name;
+    await this.#load();
+  }
+
+  #renderEveryStationDialog(): TemplateResult {
+    const printer = this.#everyStationPrinter;
+    return html`<wt-dialog
+      data-test="every-station-dialog"
+      .open=${printer !== undefined}
+      .dismissible=${!this.everyStationSending}
+      .opener=${this.#everyStationOpener}
+      heading=${printer ? fill("printers.every_station_heading", { name: printer.name }) : ""}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.#closeEveryStation();
+      }}
+    >
+      <p>${t("printers.every_station_body")}</p>
+      <wt-form-actions slot="footer" .error=${bottomMessage(refusal(this.everyStationRefusal))}>
+        <wt-button
+          slot="cancel"
+          data-test="every-station-cancel"
+          ?disabled=${this.everyStationSending}
+          @click=${(event: Event) =>
+            void (event.currentTarget as HTMLElement).closest("wt-dialog")?.requestClose("cancel")}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          data-test="every-station-confirm"
+          ?loading=${this.everyStationSending}
+          @click=${() => void this.#confirmEveryStation()}
+          >${t("printers.every_station")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-dialog>`;
+  }
+
   #printerActions(p: Printer): TemplateResult {
     const unpair = this.#forgetAction(p);
     return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: p.name })}>
@@ -3069,6 +3184,19 @@ export class PrintersScreen extends LitElement {
         @click=${() => void this.#printTestPage(p)}
         >${t("printers.print_test_page")}</wt-button
       >
+      ${
+        this.canManageStationPrinters
+          ? html`<wt-button
+              data-test=${`every-station-${p.id}`}
+              ?disabled=${!p.active}
+              @click=${(event: Event) => {
+                const button = event.currentTarget as HTMLElement;
+                this.#openEveryStation(p, this.#rowMenuButton(button) ?? button);
+              }}
+              >${t("printers.every_station")}</wt-button
+            >`
+          : nothing
+      }
       ${unpair} ${this.#pairAgainAction(p)}
       <wt-button
         variant="danger"
@@ -5366,9 +5494,10 @@ export class PrintersScreen extends LitElement {
   }
 
   /**
-   * Ends everything still open on a printer that no longer exists — its delete dialog, its details
-   * window and the form in it, its calibration wizard and its label — without asking to keep their
-   * drafts, and drops its row. `refuse` says so where something was open on it.
+   * Ends everything still open on a printer that no longer exists — its delete dialog, its Put on
+   * every station dialog, its details window and the form in it, its calibration wizard and its
+   * label — without asking to keep their drafts, and drops its row. `refuse` says so where something
+   * was open on it.
    */
   #printerGone(id: string, refuse: boolean): void {
     const ours = this.deleteSubmitting && this.deleteTarget === id;
@@ -5376,6 +5505,10 @@ export class PrintersScreen extends LitElement {
     if (this.deleteTarget === id) {
       open = true;
       this.#closeDelete();
+    }
+    if (this.everyStationId === id) {
+      open = true;
+      this.#closeEveryStation();
     }
     if (this.editingPrinter?.id === id) {
       open = true;
@@ -5469,10 +5602,10 @@ export class PrintersScreen extends LitElement {
       ${
         dialogOpen
           ? nothing
-          : html`${this.#renderTestPageSent()}${this.#renderReprintSent()}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${this.#bluetoothRefusal(this.errorKey)}</p>` : nothing}
+          : html`${this.#renderTestPageSent()}${this.#renderEveryStationNotice()}${this.#renderReprintSent()}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${this.#bluetoothRefusal(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}${this.#renderReprint()}
+      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}${this.#renderEveryStationDialog()}${this.#renderReprint()}
       <dashboard-print-job-preview
         .preview=${this.preview}
         .open=${this.previewOpen}

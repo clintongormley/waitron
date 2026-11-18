@@ -16,6 +16,7 @@ import {
   printers,
   stationPrinterPairs,
   taxpayer,
+  triggerRaised,
   withTransaction,
   installChangeFeed,
   subscribeToChanges,
@@ -37,6 +38,7 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
+import { sessionHolding } from "./testing/session-holding.js";
 import type { TradingContext } from "./trading-context.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -110,7 +112,7 @@ function cfgOf(): TradingContext {
   };
 }
 
-function mountApp(now?: () => Date): Hono {
+function mountApp(now?: () => Date, log: Logger = noopLog): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
   pairingMode.open();
@@ -126,7 +128,7 @@ function mountApp(now?: () => Date): Hono {
       venueLocale: "es-ES",
       ...(now === undefined ? {} : { now }),
     },
-    noopLog,
+    log,
   );
   return app;
 }
@@ -1286,6 +1288,7 @@ describe("printer delete routes (hardware.manage)", () => {
           `/management-api/stations/${p.stationId}/printers/${p.printerId}`,
         ],
         ["stations by printer", "GET", `/management-api/printers/${p.printerId}/stations`],
+        ["every station", "POST", `/management-api/printers/${p.printerId}/stations`],
         ["test print", "POST", `${printer}/test-print`],
         ["test page", "POST", `${printer}/print-test-page`],
         [
@@ -1365,5 +1368,217 @@ describe("printer delete routes (hardware.manage)", () => {
           .where(eq(stationPrinterPairs.printerId, p.printerId)),
       ).toEqual([]);
     });
+  });
+});
+
+describe("Putting a printer on every station (hardware.manage and venue.configure)", () => {
+  const everyStation = (printerId: string) => `/management-api/printers/${printerId}/stations`;
+
+  async function stationRows() {
+    return suite.db
+      .select({
+        id: kitchenStations.id,
+        active: kitchenStations.active,
+        printerIds: kitchenStations.printerIds,
+      })
+      .from(kitchenStations)
+      .orderBy(kitchenStations.id);
+  }
+
+  async function printersOf(stationId: string): Promise<readonly string[]> {
+    const rows = await stationRows();
+    return rows.find(({ id }) => id === stationId)!.printerIds;
+  }
+
+  async function newPrinter(app: Hono, label: string): Promise<string> {
+    const agent = await joinAndAccept(app, `${label} agent ${randomUUID()}`);
+    return createPrinter(app, agent.agentId, `${label} ${randomUUID()}`);
+  }
+
+  it("adds the printer to each active station lacking it and keeps what each already prints to", async () => {
+    const app = mountApp();
+    const pass = await newPrinter(app, "Pass");
+    const grillPrinter = await newPrinter(app, "Grill printer");
+    const empty = await seedStation(`Empty ${randomUUID()}`);
+    const withOther = await seedStation(`With other ${randomUUID()}`);
+    const holding = await seedStation(`Holding ${randomUUID()}`);
+    const deleted = await seedStation(`Deleted ${randomUUID()}`);
+    await attachStationPrinterForTest(suite.db, withOther, grillPrinter);
+    await attachStationPrinterForTest(suite.db, holding, pass);
+    await attachStationPrinterForTest(suite.db, holding, grillPrinter);
+    await attachStationPrinterForTest(suite.db, deleted, grillPrinter);
+    await suite.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, deleted));
+    const holdingBefore = await printersOf(holding);
+
+    const res = await send(app, "POST", everyStation(pass), { cookie: managerCookie });
+
+    expect(res.status).toBe(204);
+    expect(await res.text()).toBe("");
+    expect(await printersOf(empty)).toEqual([pass]);
+    expect(await printersOf(withOther)).toEqual([pass, grillPrinter].sort());
+    expect(await printersOf(holding)).toEqual(holdingBefore);
+    expect(await printersOf(deleted)).toEqual([grillPrinter]);
+    for (const station of await stationRows()) {
+      if (station.active) expect(station.printerIds).toContain(pass);
+      else expect(station.printerIds).not.toContain(pass);
+    }
+  });
+
+  it("refuses an unknown printer and changes no station", async () => {
+    const app = mountApp();
+    await seedStation(`Unknown printer ${randomUUID()}`);
+    const before = await stationRows();
+
+    const res = await send(app, "POST", everyStation(randomUUID()), { cookie: managerCookie });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    expect(await stationRows()).toEqual(before);
+  });
+
+  it("refuses a deleted printer and changes no station", async () => {
+    const app = mountApp();
+    const printerId = await newPrinter(app, "Deleted");
+    await seedStation(`Deleted printer ${randomUUID()}`);
+    const removed = await send(app, "DELETE", `/management-api/printers/${printerId}`, {
+      cookie: managerCookie,
+    });
+    expect(removed.status).toBe(200);
+    const before = await stationRows();
+
+    const res = await send(app, "POST", everyStation(printerId), { cookie: managerCookie });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    expect(await stationRows()).toEqual(before);
+  });
+
+  it("refuses a switched-off printer that is still listed and changes no station", async () => {
+    const app = mountApp();
+    const printerId = await newPrinter(app, "Switched off");
+    await seedStation(`Switched off ${randomUUID()}`);
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, printerId));
+    const before = await stationRows();
+
+    const res = await send(app, "POST", everyStation(printerId), { cookie: managerCookie });
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    expect(await stationRows()).toEqual(before);
+  });
+
+  it("refuses a malformed printer id", async () => {
+    const res = await send(mountApp(), "POST", everyStation("not-a-uuid"), {
+      cookie: managerCookie,
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+  });
+
+  it("refuses nobody signed in and a session without hardware.manage, changing no station", async () => {
+    const app = mountApp();
+    const printerId = await newPrinter(app, "Refused");
+    await seedStation(`Refused ${randomUUID()}`);
+    const before = await stationRows();
+
+    const unauth = await send(app, "POST", everyStation(printerId));
+    expect(unauth.status).toBe(401);
+    expect(await unauth.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+
+    const staff = await send(app, "POST", everyStation(printerId), { cookie: staffCookie });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+    expect(await stationRows()).toEqual(before);
+  });
+
+  it.each([["hardware.manage"], ["venue.configure"]])(
+    "refuses a session holding only %s and changes no station",
+    async (permission) => {
+      const app = mountApp();
+      const printerId = await newPrinter(app, "One permission");
+      await seedStation(`One permission ${randomUUID()}`);
+      const before = await stationRows();
+      const { cookie } = await sessionHolding(suite.db, [permission]);
+
+      const res = await send(app, "POST", everyStation(printerId), { cookie });
+
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+      expect(await stationRows()).toEqual(before);
+    },
+  );
+
+  it("serves a session holding exactly both permissions", async () => {
+    const app = mountApp();
+    const printerId = await newPrinter(app, "Both permissions");
+    const station = await seedStation(`Both permissions ${randomUUID()}`);
+    const { cookie } = await sessionHolding(suite.db, ["hardware.manage", "venue.configure"]);
+
+    const res = await send(app, "POST", everyStation(printerId), { cookie });
+
+    expect(res.status).toBe(204);
+    expect(await printersOf(station)).toEqual([printerId]);
+  });
+
+  it("keeps no station's change when a later station's write fails", async () => {
+    const log = vi.fn<Logger>();
+    const app = mountApp(undefined, log);
+    const printerId = await newPrinter(app, "Rollback");
+    const first = await seedStation(`Rollback one ${randomUUID()}`);
+    const second = await seedStation(`Rollback two ${randomUUID()}`);
+    const before = await stationRows();
+    // Refuses a write only while a different station already holds the printer being added.
+    await suite.db.execute(sql`
+      create temp trigger refuse_second_station before update of printer_ids on kitchen_stations
+      when exists (
+        select 1 from kitchen_stations as earlier, json_each(earlier.printer_ids) as held
+        where earlier.id != new.id and held.value in (
+          select value from json_each(new.printer_ids)
+          except select value from json_each(old.printer_ids)
+        )
+      )
+      begin select raise(abort, 'second station refused'); end
+    `);
+    try {
+      const written: string[] = [];
+      const refusal: unknown = await withTransaction(suite.db, async (tx) => {
+        for (const id of [first, second]) {
+          await tx
+            .update(kitchenStations)
+            .set({ printerIds: [printerId] })
+            .where(eq(kitchenStations.id, id));
+          written.push(id);
+        }
+      }).catch((error: unknown) => error);
+      expect(triggerRaised(refusal, "second station refused")).toBe(true);
+      expect(written).toEqual([first]);
+      expect(await stationRows()).toEqual(before);
+
+      const res = await send(app, "POST", everyStation(printerId), { cookie: managerCookie });
+
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+      expect(log).toHaveBeenCalledWith(
+        "error",
+        "print.failed",
+        expect.objectContaining({ errorCode: "unknown" }),
+      );
+      expect(await stationRows()).toEqual(before);
+    } finally {
+      await suite.db.execute(sql`drop trigger refuse_second_station`);
+    }
+
+    const retried = await send(app, "POST", everyStation(printerId), { cookie: managerCookie });
+    expect(retried.status).toBe(204);
+    expect(await printersOf(first)).toEqual([printerId]);
+    expect(await printersOf(second)).toEqual([printerId]);
   });
 });

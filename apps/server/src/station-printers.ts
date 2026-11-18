@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
-// The station → printer mapping verbs. The `hardware.manage` gate is applied at the route, not here.
+// The station → printer mapping verbs. The permission gates are applied at the routes, not here.
 
 export interface StationPrinter {
   stationId: string;
@@ -39,6 +39,26 @@ export async function attachPrinterToStation(
     .update(kitchenStations)
     .set({ printerIds: withPrinter(live.printerIds, printerId) })
     .where(eq(kitchenStations.id, stationId));
+}
+
+export async function putPrinterOnEveryStation(tx: Transaction, printerId: string): Promise<void> {
+  const [printer] = await tx
+    .select({ id: printers.id })
+    .from(printers)
+    .where(and(eq(printers.id, printerId), eq(printers.active, true)));
+  if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
+
+  const stations = await tx
+    .select({ id: kitchenStations.id, printerIds: kitchenStations.printerIds })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.active, true));
+  for (const station of stations) {
+    if (station.printerIds.includes(printerId)) continue;
+    await tx
+      .update(kitchenStations)
+      .set({ printerIds: withPrinter(station.printerIds, printerId) })
+      .where(eq(kitchenStations.id, station.id));
+  }
 }
 
 export async function detachPrinterFromStation(

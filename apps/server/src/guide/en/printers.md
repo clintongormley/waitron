@@ -21,8 +21,10 @@ printer**, then **Add** beside it. A recognised printer keeps its name and calib
 do not need to name or calibrate it again. Assign its devices and prep stations again.
 
 To print station tickets, choose the printer on each station in **Prep stations**. A printer
-chosen on every station prints the whole send, for the pass. Once you have two or more stations,
-**Add a station** starts with the printers every station already uses.
+chosen on every station prints the whole send, for the pass. To add a printer to all stations at
+once, choose **Put on every station** in its row menu. Once you have two or more stations, **Add
+a station** starts with the printers every station already uses. A second station starts with
+none, so choose **Put on every station** again after adding it.
 
 ## Calibrate a receipt printer {#calibrate}
 

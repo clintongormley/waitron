@@ -25,8 +25,10 @@ estaciones de preparación.
 
 Para imprimir comandas de estación, elige la impresora en cada estación en **Estaciones de
 preparación**. Una impresora elegida en todas las estaciones imprime todo lo que se envía, para el
-pase. Cuando tienes dos o más estaciones, **Añadir una estación** empieza con las impresoras que
-ya usan todas las estaciones.
+pase. Para añadir una impresora a todas a la vez, elige **Poner en todas las estaciones** en su
+menú. Cuando tienes dos o más estaciones, **Añadir una estación** empieza con las impresoras que
+ya usan todas las estaciones. La segunda estación empieza sin ninguna, así que vuelve a elegir
+**Poner en todas las estaciones** después de añadirla.
 
 ## Calibrar una impresora de recibos {#calibrate}
 
