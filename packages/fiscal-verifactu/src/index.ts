@@ -13,7 +13,7 @@ export { VERIFACTU_HANDOVER } from "./handover-summary.js";
 export type { ChainSummary, EnvioState } from "./handover-summary.js";
 export { FISCAL_RECOVERY_PACK } from "./recovery-pack.js";
 export { FISCAL_RECOVERY_PACK_PAGE } from "./completed-recovery-document.js";
-export { FISCAL_SERVER_KEY_AS_TYPED } from "./recovery-key-code.js";
+export { encodeRecoveryKey, FISCAL_SERVER_KEY_AS_TYPED } from "./recovery-key-code.js";
 export { readCloudAllocationReceipt, verifyCloudAllocationEvidence } from "./cloud-evidence.js";
 export type { CloudAllocationReceipt, ReceiptTrust } from "./cloud-evidence.js";
 export { FISCAL_SLOT } from "./slot.js";

@@ -127,6 +127,7 @@ export class SetupDoneScreen extends LitElement {
    * operator's only chance to record it. */
   @property({ attribute: false }) breakGlassSecret?: string;
   @property({ attribute: false }) breakGlassKeyName?: string;
+  @property({ type: Boolean }) breakGlassKeyInBackups = false;
 
   /**
    * True after a successful adopt, where the box restarts as a joining spare, not a trading
@@ -426,11 +427,16 @@ export class SetupDoneScreen extends LitElement {
 
   #breakGlass(): TemplateResult | null {
     if (this.breakGlassSecret === undefined) return null;
+    const preparation = this.onboardingIntent === "prepare" && !this.mirrorJoin;
     return html`<div class="break-glass" data-test="break-glass">
       <h2>${t("done.break_glass.heading")}</h2>
       <p class="break-glass-warning" data-test="break-glass-warning">
-        ${t("done.break_glass.warning")}
-        ${t(this.mirrorJoin ? "done.break_glass.take_over" : "done.break_glass.promote")}
+        ${
+          preparation
+            ? t("done.break_glass.restore")
+            : html`${t("done.break_glass.warning")}
+              ${t(this.mirrorJoin ? "done.break_glass.take_over" : "done.break_glass.promote")}`
+        }
       </p>
       ${this.breakGlassKeyName === undefined ? nothing : html`<p data-test="break-glass-key-name">${this.#keyName(this.breakGlassKeyName)}</p>`}
       <code class="break-glass-secret" data-test="break-glass-secret"
@@ -441,6 +447,7 @@ export class SetupDoneScreen extends LitElement {
   }
 
   #renderTrading(): TemplateResult {
+    const needsReplacement = this.breakGlassKeyInBackups && this.breakGlassSecret === undefined;
     return html`
       <h1>${t(HEADINGS[this.restored ?? "none"])}</h1>
       ${
@@ -467,8 +474,10 @@ export class SetupDoneScreen extends LitElement {
         this.onboardingIntent === "demo" || this.restored === "bucket" || this.startFailed
           ? nothing
           : html`<wt-card data-test="backup-nudge">
-              <p>${t("done.backup_nudge")}</p>
-              <a href=${BACKUP_SETUP_URL}>${t("done.backup_link")}</a>
+              <p>${t(needsReplacement ? "done.break_glass.replacement" : "done.backup_nudge")}</p>
+              <a href=${BACKUP_SETUP_URL}
+                >${t(needsReplacement ? "done.break_glass.open_backups" : "done.backup_link")}</a
+              >
             </wt-card>`
       }
     `;

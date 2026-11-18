@@ -70,6 +70,9 @@ import type { FiscalContribution } from "@waitron/fiscal";
 import type { FiscalReadinessResult } from "./fiscal-readiness.js";
 import { mountSetupEmailTest } from "./setup-email-api.js";
 import { parseEmailSettings } from "./email-settings-api.js";
+import { mintBreakGlassKey } from "./break-glass.js";
+import { isSecure } from "./encrypted-connection.js";
+import { sentFromThisOrigin } from "./own-page.js";
 import type { sendSmtpTestMessage } from "./smtp-test-message.js";
 import "./errors.js";
 
@@ -281,6 +284,8 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
   "setup.certificate_refused": 422,
   "setup.owner_required": 403,
+  "setup.connection_insecure": 403,
+  "setup.not_ready": 503,
   "setup.provisioning_secret_required": 400,
   "setup.fiscal_test_required": 409,
   // A present-but-malformed `admin.email` (see `parseVenue`).
@@ -891,16 +896,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    const execute = async (operation?: ActiveSetupOperation): Promise<Response> => {
-      // An unparseable or `null` body is refused as field "body"; any other read failure is
-      // rethrown, not masked as a client fault.
-      const parsed: unknown = await readRawJsonBody<unknown>(c);
-      const payload = await parseProvisionPayload(
-        parsed,
-        deps.environment,
-        deps.devMode === true,
-        c.req.header("Accept-Language"),
-      );
+    const execute = async (
+      payload: Awaited<ReturnType<typeof parseProvisionPayload>>,
+      rawEmail: unknown,
+      keyOutput: { node: NodeDatabase; format: (secret: string) => string } | undefined,
+      operation?: ActiveSetupOperation,
+    ): Promise<Response> => {
       if (deps.environment === "production" && payload.mode !== "live") {
         throw new AppError("setup.mode_not_allowed", { environment: "production" });
       }
@@ -915,7 +916,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       )
         throw new AppError("setup.owner_required", {});
       const { environment, venue } = request;
-      const rawEmail = (parsed as Record<string, unknown>).email;
       if (
         (mode === "prepare" || mode === "live") &&
         deps.devMode !== true &&
@@ -981,7 +981,15 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         await operation?.advance("secret_sealed");
       }
 
+      let key: { secret: string; name: string } | undefined;
       if (!setupPhaseReached(operation, "publishing")) {
+        if (keyOutput !== undefined) {
+          const minted = await mintBreakGlassKey(
+            { venue: db, node: keyOutput.node },
+            result.nodeId,
+          );
+          key = { secret: keyOutput.format(minted.secret), name: minted.name };
+        }
         await persistTrading({
           nodeId: result.nodeId,
           environment,
@@ -998,16 +1006,17 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       } catch {
         log("warn", "setup.opening_hours_read_failed", {});
       }
-      const response = c.json(
-        {
-          provisioned: true,
-          restarting: true,
-          ...(openingHours === undefined ? {} : { openingHours }),
-        },
-        200,
-      );
+      const publicResult = {
+        provisioned: true,
+        restarting: true,
+        ...(openingHours === undefined ? {} : { openingHours }),
+        ...(keyOutput === undefined ? {} : { breakGlassKeyInBackups: true }),
+      };
+      await operation?.complete(publicResult);
       setTimeout(() => requestRestart(), 0);
-      return response;
+      if (key === undefined) return c.json(publicResult);
+      c.header("Cache-Control", "no-store");
+      return c.json({ ...publicResult, breakGlassSecret: key.secret, breakGlassKeyName: key.name });
     };
     return runProvision(c, log, async () => {
       let succeeded = false;
@@ -1015,20 +1024,35 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const requestHash = createHash("sha256")
           .update(await c.req.raw.clone().text())
           .digest("hex");
+        const parsed = await readRawJsonBody<unknown>(c);
+        const payload = await parseProvisionPayload(
+          parsed,
+          deps.environment,
+          deps.devMode === true,
+          c.req.header("Accept-Language"),
+        );
+        const rawEmail = (parsed as Record<string, unknown>).email;
+        const formatServerKey =
+          payload.mode === "prepare" && deps.environment !== "production"
+            ? ALL_MODULES.find((module) => module.fiscal === payload.contribution)?.backup
+                ?.formatServerKey
+            : undefined;
+        const node = deps.node;
+        let keyOutput: Parameters<typeof execute>[2];
+        if (formatServerKey !== undefined) {
+          if (!isSecure(c)) throw new AppError("setup.connection_insecure", {});
+          if (!sentFromThisOrigin(c)) throw new AppError("setup.owner_required", {});
+          if (node === undefined) throw new AppError("setup.not_ready", {});
+          keyOutput = { node, format: formatServerKey };
+        }
         const response =
           deps.operations === undefined
-            ? await execute()
+            ? await execute(payload, rawEmail, keyOutput)
             : await runOperation(c.req.raw, "provision", requestHash, async (operation) => {
                 if (operation.phase === "complete") {
                   return c.json(operation.data as { provisioned: true; restarting: true });
                 }
-                const response = await execute(operation);
-                if (response.ok) {
-                  await operation.complete(
-                    (await response.clone().json()) as Record<string, unknown>,
-                  );
-                }
-                return response;
+                return execute(payload, rawEmail, keyOutput, operation);
               });
         succeeded = response.ok;
         return response;

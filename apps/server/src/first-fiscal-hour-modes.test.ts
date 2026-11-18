@@ -1,5 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -19,6 +21,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
 const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
+let socket: TLSSocket;
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
   observeTimeServiceHourClock: async () => ({
     source: "internet",
@@ -38,8 +41,12 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
   time.clock = createFakeTimersHourClock();
+  socket = new TLSSocket(new Socket());
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  socket.destroy();
+  vi.useRealTimers();
+});
 
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 const roots: string[] = [];
@@ -130,11 +137,15 @@ it.each(["demo", "prepare"])(
   "%s still prepares automatically without ownership or a recovery document",
   async (mode) => {
     const { app, stateDir } = await fixture();
-    const response = await app.request("/setup-api/provision", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode, venue: request }),
-    });
+    const response = await app.request(
+      "https://box.test/setup-api/provision",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, venue: request }),
+      },
+      { incoming: { socket } },
+    );
     expect({ status: response.status, body: await response.json() }).toMatchObject({
       status: 200,
       body: { provisioned: true, restarting: true },
@@ -203,11 +214,15 @@ it("a Demo stopped after its venue committed is not resumed by a Prepare request
   const { mount, stateDir } = await fixture();
   const demo = JSON.stringify({ mode: "demo", venue: { ...request, taxId: "B00000000" } });
   const post = (app: Hono, body: string) =>
-    app.request("/setup-api/provision", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
+    app.request(
+      "https://box.test/setup-api/provision",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      },
+      { incoming: { socket } },
+    );
   const stopped = mount({
     operations: createSetupOperationStore(stateDir),
     persistTrading: async () => {

@@ -419,6 +419,9 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   can no longer be sent before Review backup (#3691), the setup page no longer says the server is
   ready when its start failed, and the restore forms take the copy's own environment from Review
   (#3702).
+  On 2026-11-18, the Preparation rerun restored a fresh venue using the recovery pack and the
+  named server key shown at setup. Its name and 05:15 business-day cutover survived, and it
+  started in Preparation.
 
 - **A restore through setup always needs Review backup's recovery details** (watcher, 2026-11-17
   19:30, lane B questions, option (b); not the owner's). The file, bucket and Cloud restore pages

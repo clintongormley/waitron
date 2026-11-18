@@ -89,6 +89,11 @@ export const finishEn = {
   "done.break_glass.warning":
     "Write this down and store it offline. It is shown once and will not be shown again.",
   "done.break_glass.promote": "You need it to promote this server if the primary is unreachable.",
+  "done.break_glass.restore":
+    "Write the name and key on paper and keep it with your recovery pack. The key is shown once. You need it to restore this venue from its bucket.",
+  "done.break_glass.replacement":
+    "The server key was issued when setup finished. If you did not save it, sign in to Backups and make a recovery pack with a new server key before taking your first bucket copy.",
+  "done.break_glass.open_backups": "Open Backups",
   "done.break_glass.take_over":
     "You will need it if this server ever has to take over from the primary.",
   "done.joining.heading": "This server is joining",
@@ -191,6 +196,11 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
     "Anótala y guárdala fuera de línea. Se muestra una sola vez y no se volverá a mostrar.",
   "done.break_glass.promote":
     "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
+  "done.break_glass.restore":
+    "Anota el nombre y la clave en papel y guárdalo con tu paquete de recuperación. La clave se muestra una sola vez. La necesitas para restaurar este local desde su bucket.",
+  "done.break_glass.replacement":
+    "La clave del servidor se generó al terminar la configuración. Si no la guardaste, inicia sesión en Copias de seguridad y crea un paquete de recuperación con una clave nueva antes de hacer la primera copia en el bucket.",
+  "done.break_glass.open_backups": "Abrir Copias de seguridad",
   "done.break_glass.take_over":
     "La necesitarás si algún día este servidor tiene que sustituir al principal.",
   "done.joining.heading": "Este servidor se está uniendo",

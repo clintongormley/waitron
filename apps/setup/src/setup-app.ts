@@ -936,15 +936,12 @@ export class SetupApp extends LitElement {
   #fiscalTestGeneration = 0;
   @state() private emailError?: Message;
 
-  /**
-   * The adopt response carries this once, so the done screen is the operator's only chance to see and
-   * record it before the box restarts.
-   */
   @state() private breakGlassSecret?: string;
   @state() private breakGlassKeyName?: string;
+  @state() private breakGlassKeyInBackups = false;
 
   /**
-   * Kept apart from {@link SetupApp.breakGlassSecret}, which is also set only by an adopt, because
+   * Kept apart from {@link SetupApp.breakGlassSecret} because
    * that is a value to display and this is a statement about which path ran.
    */
   @state() private mirrorJoin = false;
@@ -1711,6 +1708,9 @@ export class SetupApp extends LitElement {
       this.#rootBaseline = submitted;
       this.#rootScope?.commit(submitted);
       this.openingHours = result.openingHours;
+      this.breakGlassSecret = result.breakGlassSecret;
+      this.breakGlassKeyName = result.breakGlassKeyName;
+      this.breakGlassKeyInBackups = result.breakGlassKeyInBackups === true;
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected || generation !== this.#rootGeneration) return;
@@ -1791,6 +1791,13 @@ export class SetupApp extends LitElement {
       case "setup.email_required":
         this.emailError = say("email.required");
         this.screen = "email";
+        return;
+      case "setup.connection_insecure":
+        this.connectionFailure = {
+          message: say("shell.connection.provision_secure"),
+          canRetry: true,
+        };
+        this.screen = "connection";
         return;
       case "setup.provisioning_secret_required":
         this.screen = "cert";
@@ -2297,6 +2304,9 @@ export class SetupApp extends LitElement {
   /** Every flag the provisioning screen reads, so no answer outlives the request it answered. */
   #clearProvisionOutcome(): void {
     this.openingHours = undefined;
+    this.breakGlassSecret = undefined;
+    this.breakGlassKeyName = undefined;
+    this.breakGlassKeyInBackups = false;
     this.provisionMessage = undefined;
     this.provisionCanRetry = false;
     this.provisionReloadLabel = undefined;
@@ -2816,6 +2826,7 @@ export class SetupApp extends LitElement {
           .api=${this.api}
           .breakGlassSecret=${this.breakGlassSecret}
           .breakGlassKeyName=${this.breakGlassKeyName}
+          .breakGlassKeyInBackups=${this.breakGlassKeyInBackups}
           .mirrorJoin=${this.mirrorJoin}
           .onboardingIntent=${this.draft.mode}
           .restored=${this.restored}

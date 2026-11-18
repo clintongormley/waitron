@@ -1428,6 +1428,8 @@ export interface ModuleBackupContribution {
   /** The secret a server key typed as printed on this module's recovery pack stands for, or
    * undefined when the text is not one. */
   readonly serverKeyAsTyped?: (typed: string) => string | undefined;
+  /** Prints a new key in the format this module accepts on Restore. */
+  readonly formatServerKey?: (secret: string) => string;
 }
 
 /** What `recoveryPackPage` answers: the page, and the key file when it was asked for a new key. */

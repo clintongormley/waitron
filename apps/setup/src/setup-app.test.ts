@@ -1406,6 +1406,68 @@ describe("setup-app", () => {
     ).toBe("/opening-hours/view/year");
   });
 
+  it("shows the named Preparation key with instructions to use it for restore", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi.fn().mockResolvedValue({
+          provisioned: true,
+          restarting: true,
+          breakGlassSecret: "key-on-paper",
+          breakGlassKeyName: "2026-10-15 · K7QF",
+          breakGlassKeyInBackups: true,
+        }),
+      }),
+    );
+    patch(el, { mode: "prepare" });
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "done", "[data-test=break-glass-key-name]")).toBe(
+      "Server key 15 Oct 2026 · K7QF",
+    );
+    expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
+    expect(await screenText(el, "done", "[data-test=break-glass-warning]")).toContain(
+      "restore this venue from its bucket",
+    );
+  });
+
+  it("points to Backups when a retried Preparation setup returns no key", async () => {
+    const provision = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "setup.provision_failed", params: {} })
+      .mockResolvedValue({
+        provisioned: true,
+        restarting: true,
+        breakGlassKeyInBackups: true,
+      });
+    const el = await mountSetupApp(stubApi({ provision }));
+    patch(el, { mode: "prepare" });
+    provisionRequest(el);
+    await flush(el);
+    const pending = await screenHost(el, "provisioning");
+    pending.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
+    await flush(el);
+    const done = await screenHost(el, "done");
+    expect(done.shadowRoot!.querySelector("[data-test=break-glass-secret]")).toBeNull();
+    expect(done.shadowRoot!.querySelectorAll('a[href="/backup"]')).toHaveLength(1);
+    const link = done.shadowRoot!.querySelector("[data-test=backup-nudge] a");
+    expect(link?.textContent).toBe("Open Backups");
+    expect(link?.getAttribute("href")).toBe("/backup");
+  });
+
+  it("returns to secure connection setup when the server refuses to send the Preparation key", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.connection_insecure", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    patch(el, { mode: "prepare" });
+    provisionRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).toBeNull();
+    const connection = await screenHost(el, "connection");
+    expect(connection.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      "needs a secure connection to show your server key",
+    );
+    expect(connection.shadowRoot!.querySelector("[data-test=trust-help]")).not.toBeNull();
+  });
+
   it("provisions on provision-requested and, on the 200, advances to done", async () => {
     const provision = vi.fn().mockResolvedValue({
       provisioned: true,
