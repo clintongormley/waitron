@@ -373,7 +373,6 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "backup.recovery_key_missing": "shell.adopt.recovery_key_missing",
 };
 
-/** Refusals that can arrive before the main server asked for the code, worded without it. */
 const ADOPT_NO_CODE_MESSAGES: Record<string, StringKey> = {
   "password.invalid": "shell.adopt.login_failed_no_code",
   "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed_no_code",
@@ -1239,7 +1238,6 @@ export class SetupApp extends LitElement {
     this.connectErrorAboutLogin = false;
     this.connectInvalidField = undefined;
     this.connectRequest = undefined;
-    this.connectAskForCode = false;
     this.restoreError = undefined;
     this.restoreInvalidField = undefined;
     // An answer belongs to the copy it was given for; leaving the screen may mean another kit or file.

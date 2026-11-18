@@ -266,6 +266,9 @@ export class SetupConnectScreen extends LitElement {
   #onField(key: ConnectField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.values = { ...this.values, [key]: event.detail.value };
+    // A one-time code typed for the asked-about login may have expired by the time it comes back.
+    if ((key === "email" || key === "primaryUrl") && !this.#codeAsked())
+      this.values = { ...this.values, totp: "" };
     this.#scope?.changed();
     if (key === this.invalidField) this.fieldRefusalDismissed = true;
     if (key === "primaryUrl") {

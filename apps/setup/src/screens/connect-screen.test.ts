@@ -1017,6 +1017,7 @@ describe("setup-connect-screen: the authenticator code, drawn only once the main
 
     await type(el, "email", "  op7@example.com ");
     expect(q(el, "[data-test=totp]")!.hasAttribute("required")).toBe(true);
+    expect((q(el, "[data-test=totp]") as HTMLElement & { value: string }).value).toBe("");
   });
 
   it("keeps the code field when the address is checked again and left as it was", async () => {
