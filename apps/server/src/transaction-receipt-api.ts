@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
+  isReceiptPrinter,
   printers,
   printJobs,
   receiptReprints,
@@ -94,7 +95,7 @@ export function mountTransactionReceiptApi(
         const [printer] = await tx
           .select({ id: printers.id, name: printers.name })
           .from(printJobs)
-          .innerJoin(printers, eq(printers.id, printJobs.printerId))
+          .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
           .where(eq(printJobs.id, state.receipt.jobId));
         return {
           ...state.receipt,

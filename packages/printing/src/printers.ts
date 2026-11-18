@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers } from "@waitron/db";
+import { UNIQUE_VIOLATION, checkFailed, isRefusal, isReceiptPrinter, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
 import type { PaperWidth, Resolution } from "./layout.js";
@@ -74,7 +74,7 @@ export async function createPrinter(
   const [retained] = await tx
     .select()
     .from(printers)
-    .where(and(eq(printers.transport, input.transport), endpoint))
+    .where(and(isReceiptPrinter(), eq(printers.transport, input.transport), endpoint))
     .orderBy(
       desc(sql`${printers.deletedAt} is null`),
       desc(printers.deletedAt),
@@ -85,7 +85,7 @@ export async function createPrinter(
     await tx
       .update(printers)
       .set({ active: true, deletedAt: null })
-      .where(eq(printers.id, retained.id));
+      .where(and(isReceiptPrinter(), eq(printers.id, retained.id)));
     return { id: retained.id };
   }
 
@@ -93,6 +93,7 @@ export async function createPrinter(
     const [row] = await tx
       .insert(printers)
       .values({
+        kind: "receipt",
         name: input.name,
         transport: input.transport,
         // drizzle omits an undefined field, so it takes its column default.
@@ -163,7 +164,7 @@ export async function updatePrinter(
   id: string,
   patch: UpdatePrinterInput,
 ): Promise<void> {
-  const liveId = and(eq(printers.id, id), isNull(printers.deletedAt));
+  const liveId = and(isReceiptPrinter(), eq(printers.id, id), isNull(printers.deletedAt));
   const { pickupRoles, ...fields } = patch;
   // Undefined keys are dropped here so a `{ name: undefined }` patch still takes the empty-patch path.
   const set: Record<string, unknown> = Object.fromEntries(
@@ -206,7 +207,7 @@ export async function listPrinters(tx: Transaction): Promise<PrinterRow[]> {
       active: printers.active,
     })
     .from(printers)
-    .where(isNull(printers.deletedAt))
+    .where(and(isReceiptPrinter(), isNull(printers.deletedAt)))
     .orderBy(printers.name);
   return rows.map(({ picksUpReceipts, picksUpPaymentSlips, ...row }) => ({
     ...row,
@@ -227,7 +228,7 @@ export async function refuseDeletedPrinters(
   const deleted = await tx
     .select({ id: printers.id })
     .from(printers)
-    .where(and(inArray(printers.id, named), isNotNull(printers.deletedAt)));
+    .where(and(isReceiptPrinter(), inArray(printers.id, named), isNotNull(printers.deletedAt)));
   const first = named.find((id) => deleted.some((row) => row.id === id));
   if (first !== undefined) throw new AppError("printer.not_found", { id: first });
 }

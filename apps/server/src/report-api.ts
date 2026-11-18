@@ -18,6 +18,7 @@ import {
 import {
   devices,
   handoverActivations,
+  isReceiptPrinter,
   printers,
   readHistoryNodes,
   readTaxpayer,
@@ -225,7 +226,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     );
   };
 
-  const activePrinters = () => eq(printers.active, true);
+  const activePrinters = () => and(isReceiptPrinter(), eq(printers.active, true));
 
   app.get("/management-api/reports/handover-warning", (c) =>
     run(c, log, async () => {

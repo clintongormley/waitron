@@ -9,6 +9,7 @@ import {
   deviceProfiles,
   kitchenStations,
   printAgents,
+  isReceiptPrinter,
   printers,
   withPrinter,
   withTransaction,
@@ -36,7 +37,13 @@ export async function configureDemoPrinter(
     const [existing] = await tx
       .select({ id: printers.id })
       .from(printers)
-      .where(and(eq(printers.localKey, DEMO_PRINTER_KEY), isNull(printers.deletedAt)));
+      .where(
+        and(
+          isReceiptPrinter(),
+          eq(printers.localKey, DEMO_PRINTER_KEY),
+          isNull(printers.deletedAt),
+        ),
+      );
     if (!practiceMode) {
       if (existing !== undefined) {
         await deletePrinter(tx, existing.id);
@@ -54,7 +61,10 @@ export async function configureDemoPrinter(
         })
       ).id;
     if (existing !== undefined)
-      await tx.update(printers).set({ active: true }).where(eq(printers.id, printerId));
+      await tx
+        .update(printers)
+        .set({ active: true })
+        .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
 
     const [agent] = await tx
       .select({ id: printAgents.id })
@@ -82,7 +92,7 @@ export async function routeToDemoPrinter(tx: Transaction, printerId: string): Pr
   const [printer] = await tx
     .select({ hasCashDrawer: printers.hasCashDrawer })
     .from(printers)
-    .where(and(eq(printers.id, printerId), isNull(printers.deletedAt)));
+    .where(and(isReceiptPrinter(), eq(printers.id, printerId), isNull(printers.deletedAt)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
   // `setProfilePrinterLists` refuses a newly listed drawer printer without a drawer.
   const opensDrawer = printer.hasCashDrawer;

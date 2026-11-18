@@ -7,6 +7,7 @@ import {
   kitchenPrintJobs,
   kitchenPrintJobLines,
   printJobs,
+  isReceiptPrinter,
   printers,
   stationPrinterPairs,
   ticketItems,
@@ -69,7 +70,7 @@ export function stationPrintersDownQuery(
     })
     .from(stationPrinterPairs)
     .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinterPairs.stationId))
-    .innerJoin(printers, eq(printers.id, stationPrinterPairs.printerId))
+    .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, stationPrinterPairs.printerId)))
     .innerJoin(
       sql`${printJobs} indexed by print_jobs_pull_idx`,
       eq(printJobs.printerId, printers.id),

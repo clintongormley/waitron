@@ -1,6 +1,13 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
-import { devices, invoiceSeries, pagePrinters, printers, sales } from "@waitron/db";
+import {
+  devices,
+  invoiceSeries,
+  pagePrinters,
+  isReceiptPrinter,
+  printers,
+  sales,
+} from "@waitron/db";
 import { persons, tillSessions, resolveManagementSession, holds } from "@waitron/identity";
 import { readPrinterEquipment } from "@waitron/layouts";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -132,7 +139,7 @@ export async function readDocumentOffers(
   const thermal = await tx
     .select({ id: printers.id, name: printers.name })
     .from(printers)
-    .where(eq(printers.active, true));
+    .where(and(isReceiptPrinter(), eq(printers.active, true)));
   const pages = await tx
     .select({ id: pagePrinters.id, name: pagePrinters.name })
     .from(pagePrinters)

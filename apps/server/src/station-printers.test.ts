@@ -8,6 +8,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -120,6 +121,15 @@ describe("station→printer mapping verbs", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "printer.not_found", params: { id: missing } });
+  });
+
+  it("refuses attaching an office printer", async () => {
+    const cfg = await setupVenue();
+    const stationId = await station(cfg, "Main kitchen");
+    const printerId = await asApp(cfg, insertA4Printer);
+    await expect(
+      asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId, printerId })),
+    ).rejects.toMatchObject({ code: "printer.not_found", params: { id: printerId } });
   });
 
   it("filters the listing by stationId and by printerId", async () => {

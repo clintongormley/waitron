@@ -3451,6 +3451,14 @@ it("transfers a printer's pick-up flags, leaves the holder behind and refuses an
   expect(exportedPrinter).toMatchObject({ picks_up_receipts: 0, picks_up_payment_slips: 1 });
   expect(exportedPrinter).not.toHaveProperty("held_by_device_id");
   expect(exportedPrinter).not.toHaveProperty("held_at");
+  expect(exportedPrinter).not.toHaveProperty("kind");
+  const withKind = {
+    ...transferred,
+    tables: { ...transferred.tables, printers: [{ ...exportedPrinter, kind: "a4" }] },
+  };
+  expect(() => validateConfigurationBundle(withKind, ALL_MODULES, versions)).toThrowError(
+    expect.objectContaining({ code: "setup.request_invalid", params: { field: "printers.kind" } }),
+  );
   const malformed = {
     ...transferred,
     tables: {

@@ -80,7 +80,7 @@ async function endStaleDrawerJobs(tx: Transaction): Promise<void> {
     where j.id in (
       select pending.id from printers p
       cross join print_jobs pending indexed by print_jobs_pull_idx
-      where pending.printer_id = p.id and p.deleted_at is null
+      where p.kind = 'receipt' and pending.printer_id = p.id and p.deleted_at is null
         and pending.status in ('queued', 'printing') and pending.kind = 'drawer'
         and ((pending.status = 'queued'
               and (pending.created_at <= ${queueCutoff} or pending.created_at > ${queueAhead}))
@@ -130,7 +130,7 @@ export async function claimPrintJobs(
     claimable: sql`j.id in (
         select pending.id from printers p
         cross join print_jobs pending indexed by print_jobs_pull_idx
-        where pending.printer_id = p.id
+        where p.kind = 'receipt' and pending.printer_id = p.id
           and pending.status in ('queued', 'failed', 'printing')
           and p.active = true and p.deleted_at is null
           and (p.transport = 'network_tcp' or ${usbBt})
@@ -150,10 +150,10 @@ export async function claimPrintJobs(
     set: sql`status = 'printing', claimed_at = ${claimedAt}, claimed_by = ${agentId}`,
     // Correlated subqueries: SQLite refuses a RETURNING column from a table an `UPDATE … FROM` joins.
     returning: sql`print_jobs.id, print_jobs.printer_id, print_jobs.payload,
-      (select transport from printers where printers.id = print_jobs.printer_id) as transport,
-      (select host from printers where printers.id = print_jobs.printer_id) as host,
-      (select port from printers where printers.id = print_jobs.printer_id) as port,
-      (select local_key from printers where printers.id = print_jobs.printer_id) as local_key`,
+      (select transport from printers where printers.id = print_jobs.printer_id and printers.kind = 'receipt') as transport,
+      (select host from printers where printers.id = print_jobs.printer_id and printers.kind = 'receipt') as host,
+      (select port from printers where printers.id = print_jobs.printer_id and printers.kind = 'receipt') as port,
+      (select local_key from printers where printers.id = print_jobs.printer_id and printers.kind = 'receipt') as local_key`,
   });
 }
 
@@ -186,7 +186,7 @@ export async function endUnpairedPrinterJobs(
       claimed_at = ${claimedAt}, claimed_by = ${agentId}
     where j.printer_id in (
         select p.id from printers p
-        where p.transport = 'bluetooth' and p.local_key in ${addresses}
+        where p.kind = 'receipt' and p.transport = 'bluetooth' and p.local_key in ${addresses}
           and p.deleted_at is null)
       and (${due} or (j.status = 'printing' and j.claimed_by = ${agentId}))
     returning id`);

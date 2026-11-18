@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, invoiceSeries, printers } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, printers, withTransaction } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { TrustedReading } from "@waitron/fiscal";
@@ -174,6 +175,7 @@ describe("collectBoxHealth", () => {
   it("lists only printers that are switched on and not deleted", async () => {
     await seedFixtureVenue();
     const active = await seedPrinter("Bar");
+    await withTransaction(suite.db, insertA4Printer);
     await seedPrinter("Off", { active: false });
     await seedPrinter("Gone", { active: false, deletedAt: "2026-10-01T00:00:00.000Z" });
     const health = await collectBoxHealth(suite.db, stubReaders());

@@ -20,6 +20,7 @@ import {
   pagePrinters,
   printAgents,
   printJobs,
+  isReceiptPrinter,
   printers,
   sales,
   type Transaction,
@@ -602,7 +603,13 @@ function noCompletedOriginal(tx: Transaction) {
       tx
         .select({ one: sql`1` })
         .from(originalPrinted)
-        .innerJoin(originalPrinter, eq(originalPrinter.id, originalPrinted.printerId))
+        .innerJoin(
+          originalPrinter,
+          and(
+            eq(originalPrinter.id, originalPrinted.printerId),
+            eq(originalPrinter.kind, "receipt"),
+          ),
+        )
         .where(
           and(
             eq(originalPrinted.saleId, sales.id),
@@ -646,6 +653,7 @@ async function undeliveredCandidates(tx: Transaction) {
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(
       and(
+        isReceiptPrinter(),
         eq(printJobs.status, "failed"),
         eq(printJobs.kind, "document"),
         eq(printJobs.receiptCopy, false),

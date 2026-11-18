@@ -22,6 +22,7 @@ import {
   orderDraftLines,
   orderDraftEvents,
 } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedDevice,
@@ -162,6 +163,15 @@ async function snapshot(v: PartyVenue) {
 }
 
 describe("permanent station deletion", () => {
+  it("does not report an office printer as a kitchen output", async () => {
+    const { v, id } = await fixture();
+    await inTx(v, async (tx) => {
+      await attachStationPrinterForTest(tx, id, await insertA4Printer(tx));
+    });
+    const impact = await inTx(v, (tx) => readStationDeleteImpact(tx, id));
+    expect(impact.removes).toEqual([]);
+  });
+
   it("reports all refusals in fixed order and refuses before changing any settings", async () => {
     const { v, id } = await fixture();
     await inTx(v, (tx) => setDefaultStation(tx, id));

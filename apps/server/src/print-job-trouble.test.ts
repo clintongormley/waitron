@@ -11,6 +11,7 @@ import {
   withTransaction,
   workingOrders,
 } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
@@ -103,6 +104,8 @@ describe("printersInTrouble", () => {
     await prepareVenue();
     const id = await seedPrinter({ name: "Bar" });
     await seedJob({ printerId: id, createdAt: minsAgo(10), status: "done" });
+    const office = await withTransaction(suite.db, insertA4Printer);
+    await seedJob({ printerId: office, createdAt: minsAgo(6) });
     await seedJob({ printerId: id, createdAt: minsAgo(5) });
     await seedJob({ printerId: id, createdAt: minsAgo(3) });
 

@@ -6,6 +6,7 @@ import {
   devices,
   nowIso,
   pagePrinters,
+  isReceiptPrinter,
   printers,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -178,7 +179,7 @@ async function readStatesWith(
         isDefault: deviceProfilePrinters.isDefault,
       })
       .from(deviceProfilePrinters)
-      .leftJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
+      .leftJoin(printers, and(isReceiptPrinter(), eq(printers.id, deviceProfilePrinters.printerId)))
       .leftJoin(pagePrinters, eq(pagePrinters.id, deviceProfilePrinters.pagePrinterId))
       .where(
         and(
@@ -187,7 +188,10 @@ async function readStatesWith(
         ),
       )
       .orderBy(asc(deviceProfilePrinters.position))
-  ).map(({ printer, page, ...row }) => ({ ...row, ...(printer ?? page)! }));
+  ).flatMap(({ printer, page, ...row }) => {
+    const target = printer ?? page;
+    return target === null ? [] : [{ ...row, ...target }];
+  });
   const defaultsOf = new Map<string, Map<ProfilePrinterRole, string>>();
   for (const device of deviceRows) {
     defaultsOf.set(
@@ -222,7 +226,7 @@ async function readStatesWith(
             holderDeviceId: printers.heldByDeviceId,
           })
           .from(printers)
-          .where(inArray(printers.id, ids));
+          .where(and(isReceiptPrinter(), inArray(printers.id, ids)));
   const found = new Set(printerRows.map((row) => row.id));
   const unfound = ids.filter((id) => !found.has(id));
   const pageRows =
@@ -403,7 +407,7 @@ export async function checkDevicePrinterChoice(
       holderDeviceId: printers.heldByDeviceId,
     })
     .from(deviceProfilePrinters)
-    .leftJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
+    .leftJoin(printers, and(isReceiptPrinter(), eq(printers.id, deviceProfilePrinters.printerId)))
     .leftJoin(pagePrinters, eq(pagePrinters.id, deviceProfilePrinters.pagePrinterId))
     .where(
       and(
@@ -459,7 +463,7 @@ export async function selectDevicePrinter(
     await tx
       .update(printers)
       .set({ heldByDeviceId: deviceId, heldAt: nowIso() })
-      .where(eq(printers.id, heldPrinterId));
+      .where(and(isReceiptPrinter(), eq(printers.id, heldPrinterId)));
     if (previousHolderDeviceId !== null) {
       for (const held of HELD_ROLES) {
         await tx
@@ -508,7 +512,7 @@ export async function settleDevicePrinters(
         await tx
           .update(printers)
           .set({ heldByDeviceId: deviceId, heldAt: nowIso() })
-          .where(eq(printers.id, chosenId));
+          .where(and(isReceiptPrinter(), eq(printers.id, chosenId)));
         state.holderOf.set(chosenId, deviceId);
         used.push(chosenId);
         continue;
@@ -525,7 +529,9 @@ export async function settleDevicePrinters(
       await tx
         .update(printers)
         .set({ heldByDeviceId: deviceId, heldAt: nowIso() })
-        .where(and(eq(printers.id, defaultId), isNull(printers.heldByDeviceId)));
+        .where(
+          and(isReceiptPrinter(), eq(printers.id, defaultId), isNull(printers.heldByDeviceId)),
+        );
       state.holderOf.set(defaultId, deviceId);
     }
   }
@@ -533,9 +539,12 @@ export async function settleDevicePrinters(
     .update(printers)
     .set(NO_HOLDER)
     .where(
-      used.length === 0
-        ? eq(printers.heldByDeviceId, deviceId)
-        : and(eq(printers.heldByDeviceId, deviceId), notInArray(printers.id, used)),
+      and(
+        isReceiptPrinter(),
+        used.length === 0
+          ? eq(printers.heldByDeviceId, deviceId)
+          : and(eq(printers.heldByDeviceId, deviceId), notInArray(printers.id, used)),
+      ),
     );
 }
 
@@ -557,7 +566,10 @@ async function clearPrinterChoices(
 export async function clearDeletedPrinter(tx: Transaction, printerId: string): Promise<void> {
   await clearPrinterChoices(tx, printerId, ROLES);
   await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.printerId, printerId));
-  await tx.update(printers).set(NO_HOLDER).where(eq(printers.id, printerId));
+  await tx
+    .update(printers)
+    .set(NO_HOLDER)
+    .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
 }
 
 /** Clears a deleted page printer from every device's invoice choice and every profile's lists. */
@@ -576,7 +588,10 @@ export async function clearDeletedPagePrinter(
 
 /** Lets go of every printer the device holds; keeps its choices. */
 export async function releaseDevicePrinters(tx: Transaction, deviceId: string): Promise<void> {
-  await tx.update(printers).set(NO_HOLDER).where(eq(printers.heldByDeviceId, deviceId));
+  await tx
+    .update(printers)
+    .set(NO_HOLDER)
+    .where(and(isReceiptPrinter(), eq(printers.heldByDeviceId, deviceId)));
 }
 
 type ChoiceRow = Choices & { id: string };
@@ -698,12 +713,15 @@ export async function settleProfilePrinterDevices(
   const held = await tx
     .select({ printerId: printers.id, deviceId: printers.heldByDeviceId })
     .from(printers)
-    .where(inArray(printers.heldByDeviceId, [...usedBy.keys()]));
+    .where(and(isReceiptPrinter(), inArray(printers.heldByDeviceId, [...usedBy.keys()])));
   const released = held
     .filter((row) => !usedBy.get(row.deviceId!)!.includes(row.printerId))
     .map((row) => row.printerId);
   if (released.length > 0) {
-    await tx.update(printers).set(NO_HOLDER).where(inArray(printers.id, released));
+    await tx
+      .update(printers)
+      .set(NO_HOLDER)
+      .where(and(isReceiptPrinter(), inArray(printers.id, released)));
   }
 }
 
@@ -720,12 +738,12 @@ export async function setPrinterPortable(
   const [printer] = await tx
     .select({ portable: printers.portable })
     .from(printers)
-    .where(and(eq(printers.id, printerId), isNull(printers.deletedAt)));
+    .where(and(isReceiptPrinter(), eq(printers.id, printerId), isNull(printers.deletedAt)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
   if (printer.portable === portable) return;
   await tx
     .update(printers)
     .set(portable ? { portable } : { portable, ...NO_HOLDER })
-    .where(eq(printers.id, printerId));
+    .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
   if (portable) await clearPrinterChoices(tx, printerId, HELD_ROLES);
 }

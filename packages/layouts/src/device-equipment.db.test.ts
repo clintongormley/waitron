@@ -9,6 +9,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   readPrinterHoldsForTest,
@@ -489,6 +490,23 @@ describe("which printer each of a device's roles resolves to", () => {
     expect(await inTx((tx) => resolveDevicePrinterIds(tx, [], "receipt"))).toEqual(new Map());
     expect(await inTx((tx) => resolveDevicePrinterIds(tx, [unknown], "receipt"))).toEqual(
       new Map(),
+    );
+  });
+
+  it("does not offer an office printer from a receipt profile link", async () => {
+    await inTx(async (tx) => {
+      const office = await insertA4Printer(tx);
+      await tx.insert(deviceProfilePrinters).values({
+        deviceProfileId: profile,
+        printerId: office,
+        role: "receipt",
+        position: 0,
+        isDefault: true,
+      });
+    });
+    expect(await resolve(a, "receipt")).toBeNull();
+    expect((await inTx((tx) => readPrinterEquipment(tx, [a], { lists: true }))).printers.size).toBe(
+      0,
     );
   });
 

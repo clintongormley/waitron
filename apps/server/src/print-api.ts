@@ -25,6 +25,7 @@ import {
   printJobs,
   printPaperWidth,
   printResolution,
+  isReceiptPrinter,
   printers,
   printTransport,
   readVenue,
@@ -661,7 +662,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             claimedAt: printJobs.claimedAt,
           })
           .from(printJobs)
-          .innerJoin(printers, eq(printers.id, printJobs.printerId))
+          .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
           .where(
             and(isNull(printers.deletedAt), inArray(printJobs.status, ["printing", "queued"])),
           );
@@ -951,6 +952,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               .set({ active: false })
               .where(
                 and(
+                  isReceiptPrinter(),
                   eq(printers.transport, "bluetooth"),
                   inArray(printers.localKey, addresses),
                   isNull(printers.deletedAt),
@@ -1203,6 +1205,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             deletedAt: printers.deletedAt,
           })
           .from(printers)
+          .where(isReceiptPrinter())
           .orderBy(
             desc(sql`${printers.deletedAt} is null`),
             desc(printers.deletedAt),
@@ -1470,7 +1473,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           const [current] = await tx
             .select({ transport: printers.transport, localKey: printers.localKey })
             .from(printers)
-            .where(eq(printers.id, id));
+            .where(and(isReceiptPrinter(), eq(printers.id, id)));
           const key = patch.localKey === undefined ? current?.localKey : patch.localKey;
           const transport = patch.transport ?? current?.transport;
           if (typeof key === "string" && transport !== undefined) {
@@ -1535,7 +1538,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
           .from(printers)
           .where(
-            and(eq(printers.id, printerId), eq(printers.active, true), isNull(printers.deletedAt)),
+            and(
+              isReceiptPrinter(),
+              eq(printers.id, printerId),
+              eq(printers.active, true),
+              isNull(printers.deletedAt),
+            ),
           );
         if (target === undefined) throw new AppError("printer.not_found", { id: printerId });
         const [label] =
@@ -1543,7 +1551,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             ? await tx
                 .select({ name: printers.name })
                 .from(printers)
-                .where(and(eq(printers.id, id), isNull(printers.deletedAt)))
+                .where(and(isReceiptPrinter(), eq(printers.id, id), isNull(printers.deletedAt)))
             : await tx
                 .select({ name: cardReaders.name })
                 .from(cardReaders)
@@ -1591,7 +1599,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             resolution: printers.resolution,
           })
           .from(printers)
-          .where(and(eq(printers.id, id), eq(printers.active, true)));
+          .where(and(isReceiptPrinter(), eq(printers.id, id), eq(printers.active, true)));
         if (printer === undefined) throw new AppError("printer.not_found", { id });
         const venue = await readVenue(tx);
         const locale = await resolveSessionLocale(
@@ -1648,7 +1656,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
                 resolution: printers.resolution,
               })
               .from(printJobs)
-              .innerJoin(printers, eq(printJobs.printerId, printers.id))
+              .innerJoin(printers, and(isReceiptPrinter(), eq(printJobs.printerId, printers.id)))
               .where(
                 and(
                   eq(printers.localKey, DEMO_PRINTER_KEY),
@@ -1722,7 +1730,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             linked: sql<number>`case when ${printJobs.saleId} is null then ${linkedPrintoutSql(sql`coalesce(${printJobs.resendOf}, ${printJobs.id})`)} else 0 end`,
           })
           .from(printJobs)
-          .innerJoin(printers, eq(printers.id, printJobs.printerId))
+          .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
           .where(
             or(
               and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
@@ -1773,7 +1781,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               resolution: printers.resolution,
             })
             .from(printers)
-            .where(and(eq(printers.active, true), isNull(printers.deletedAt)))
+            .where(and(isReceiptPrinter(), eq(printers.active, true), isNull(printers.deletedAt)))
         ).map((printer) => ({
           id: printer.id,
           dots: textGrid(printer.paperWidth, printer.resolution).widthDots,
@@ -1875,7 +1883,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             resolution: printers.resolution,
           })
           .from(printJobs)
-          .innerJoin(printers, eq(printers.id, printJobs.printerId))
+          .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
           .where(eq(printJobs.id, id)),
       );
       if (job === undefined) throw new AppError("print_job.not_found", { id });

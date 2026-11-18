@@ -573,6 +573,9 @@ called weaker than its name, the topic file lists what it does not see.
   `taxpayer_singleton_ck`), and a query that wants it reads that row.** Guard:
   `scripts/no-tenant-column.test.ts`, weaker than its name.
   [Receipt](docs/developers/conventions-data.md#nothing-is-scoped-by-a-taxpayer-column).
+- **Every read of `printers` names its kind** with `isReceiptPrinter()` or the matching kind condition.
+  A read that wants both says why at the query. Nothing guards it.
+  [Receipt](docs/developers/conventions-data.md#every-read-of-printers-names-its-kind).
 - **Declare table/column types through `packages/db/src/schema/columns.ts`, never direct engine
   builders.** Exception: `text` in `packages/fiscal-verifactu/src/schema/registros.ts`. Guard:
   `scripts/column-vocabulary.test.ts`, weaker than its name: reads imports and forbids only listed builders.

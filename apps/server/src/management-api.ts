@@ -39,6 +39,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   floorZones,
   pagePrinters,
+  isReceiptPrinter,
   printers,
   readNodeMembership,
   withTransaction,
@@ -658,7 +659,7 @@ async function requireListedPrinters(
   const found = await tx
     .select({ id: printers.id })
     .from(printers)
-    .where(and(inArray(printers.id, all), isNull(printers.deletedAt)));
+    .where(and(isReceiptPrinter(), inArray(printers.id, all), isNull(printers.deletedAt)));
   const known = new Set(found.map((row) => row.id));
   const missing = ids.find((id) => !known.has(id));
   if (missing !== undefined) throw new AppError("printer.not_found", { id: missing });

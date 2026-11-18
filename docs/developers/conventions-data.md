@@ -4040,6 +4040,12 @@ An env or prompt value set to `""` falls back to its default exactly as an unset
 `resolveLogDir` in `packages/db/src/venue-holder-identity.ts`), and a reader with no default refuses
 `""` explicitly, as `resolveVenueDir` does with `provisioning.venue_dir_missing`.
 
+## Every read of printers names its kind
+
+Use `isReceiptPrinter()` from `@waitron/db`, or test the kind on the alias in raw SQL and aliased joins.
+The condition keeps office printers out of receipt queries once both kinds share the table.
+Find reads and writes with `git grep -niw printers -- apps packages ':!*.test.ts' ':!*/testing/*' ':!*/drizzle/*'` and follow them to their callers.
+
 **Migrations**
 
 ## A schema change rebuilds the set's one starting migration

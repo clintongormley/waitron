@@ -4,6 +4,7 @@ import {
   devices,
   drawerOpens,
   invoiceDeliveries,
+  isReceiptPrinter,
   printers,
   printJobs,
   readTaxpayer,
@@ -145,7 +146,10 @@ async function readDevicePrinters(
     })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .innerJoin(printers, and(inArray(printers.id, ids), eq(printers.active, true)))
+    .innerJoin(
+      printers,
+      and(isReceiptPrinter(), inArray(printers.id, ids), eq(printers.active, true)),
+    )
     .where(eq(devices.id, origin.deviceId));
   const byId = new Map(
     rows.map(({ formFactor, capabilities, ...printer }) => [
@@ -472,7 +476,7 @@ export async function readOriginalReceiptPrints(
       printerDeletedAt: printers.deletedAt,
     })
     .from(printJobs)
-    .innerJoin(printers, eq(printers.id, printJobs.printerId))
+    .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
     .where(
       and(
         inArray(printJobs.saleId, [...saleIds]),

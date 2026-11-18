@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, flag, id, label, newId, table, tsString } from "./columns.js";
 import { devices } from "./devices.js";
@@ -68,3 +68,5 @@ export const printers = table(
     ),
   ],
 );
+
+export const isReceiptPrinter = (): SQL => eq(printers.kind, "receipt");

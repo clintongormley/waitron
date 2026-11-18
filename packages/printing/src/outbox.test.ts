@@ -11,6 +11,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter, updatePrinter } from "./printers.js";
@@ -101,6 +102,20 @@ describe("enqueuePrintJob (never-block outbox)", () => {
     });
   });
 
+  it.each(["document", "drawer"] as const)(
+    "refuses a %s job on an office printer",
+    async (kind) => {
+      await setup();
+      const printerId = await withTransaction(suite.db, insertA4Printer);
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          enqueuePrintJob(tx, printerId, new Uint8Array([1]), kind),
+        ),
+      ).rejects.toMatchObject({ code: "printer.not_found" });
+      expect(await suite.db.select({ id: printJobs.id }).from(printJobs)).toEqual([]);
+    },
+  );
+
   it("throws printer.not_found for an absent printer, still opening no socket", async () => {
     await setup();
     const noNet = spyOnNoSocketOpened();
@@ -142,6 +157,26 @@ describe("enqueuePrintJob (never-block outbox)", () => {
 });
 
 describe("resendPrintJob", () => {
+  it("refuses a receipt resend whose original job names an office printer", async () => {
+    await setup();
+    const { printerId, jobId } = await withTransaction(suite.db, async (tx) => {
+      const printerId = await insertA4Printer(tx);
+      const [job] = await tx
+        .insert(printJobs)
+        .values({
+          printerId,
+          payload: new Uint8Array([1]),
+          status: "failed",
+          attempts: MAX_DELIVERY_ATTEMPTS,
+        })
+        .returning({ id: printJobs.id });
+      return { printerId, jobId: job!.id };
+    });
+    await expect(
+      withTransaction(suite.db, (tx) => resendPrintJob(tx, jobId)),
+    ).rejects.toMatchObject({ code: "printer.not_found", params: { id: printerId } });
+  });
+
   it.each(["done", "failed"] as const)("refuses a terminal %s drawer command", async (status) => {
     await setup();
     await withTransaction(suite.db, async (tx) => {

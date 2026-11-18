@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { EquipmentField } from "./errors.js";
 import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
-import { devices, deviceProfilePrinters, printers } from "@waitron/db";
+import { devices, deviceProfilePrinters, isReceiptPrinter, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons, tillSessions } from "@waitron/identity";
 import {
@@ -92,7 +92,7 @@ export async function readPrinterHolders(tx: Transaction): Promise<Map<string, H
   const held = await tx
     .select({ itemId: printers.id, deviceId: printers.heldByDeviceId })
     .from(printers)
-    .where(isNotNull(printers.heldByDeviceId));
+    .where(and(isReceiptPrinter(), isNotNull(printers.heldByDeviceId)));
   return namedHolders(
     tx,
     held.map((row) => ({ itemId: row.itemId, deviceId: row.deviceId! })),
@@ -372,7 +372,9 @@ export async function selectDeviceEquipment(
         active: printers.active,
       })
       .from(printers)
-      .where(and(eq(printers.id, input.selection.id), isNull(printers.deletedAt)));
+      .where(
+        and(isReceiptPrinter(), eq(printers.id, input.selection.id), isNull(printers.deletedAt)),
+      );
     if (printer === undefined) throw new AppError("printer.not_found", { id: input.selection.id });
     const [device] = await tx
       .select({ profileId: devices.deviceProfileId })

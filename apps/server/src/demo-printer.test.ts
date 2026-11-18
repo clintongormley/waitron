@@ -16,6 +16,7 @@ import {
   stationPrinterPairs,
   withTransaction,
 } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -256,6 +257,14 @@ describe("the Demo printer", () => {
 
     await expect(
       withTransaction(suite.db, (tx) => routeToDemoPrinter(tx, gone)),
+    ).rejects.toMatchObject({ code: "printer.not_found" });
+  });
+
+  it("refuses to route demo jobs to an office printer", async () => {
+    await venue();
+    const office = await withTransaction(suite.db, insertA4Printer);
+    await expect(
+      withTransaction(suite.db, (tx) => routeToDemoPrinter(tx, office)),
     ).rejects.toMatchObject({ code: "printer.not_found" });
   });
 

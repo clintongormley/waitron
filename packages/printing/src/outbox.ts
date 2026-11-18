@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { printJobs, printers } from "@waitron/db";
+import { printJobs, isReceiptPrinter, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
@@ -44,7 +44,14 @@ async function insertPrintJob(
   const [printer] = await tx
     .select({ id: printers.id })
     .from(printers)
-    .where(and(eq(printers.id, printerId), eq(printers.active, true), isNull(printers.deletedAt)));
+    .where(
+      and(
+        isReceiptPrinter(),
+        eq(printers.id, printerId),
+        eq(printers.active, true),
+        isNull(printers.deletedAt),
+      ),
+    );
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
 
   const [job] = await tx
@@ -110,8 +117,9 @@ export async function resendPrintJob(
   const [target] = await tx
     .select({ deletedAt: printers.deletedAt })
     .from(printers)
-    .where(eq(printers.id, job.printerId));
-  if (target!.deletedAt !== null) throw new AppError("printer.not_found", { id: job.printerId });
+    .where(and(isReceiptPrinter(), eq(printers.id, job.printerId)));
+  if (target === undefined || target.deletedAt !== null)
+    throw new AppError("printer.not_found", { id: job.printerId });
   if (!canResendPrintJob(job)) throw new AppError("print_job.not_resendable", { id: jobId });
   if (job.receiptCopy === false && job.saleId !== null) {
     const [reserved] = await tx

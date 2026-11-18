@@ -859,6 +859,7 @@ also qualifies the historical operation-description references in this section.
   The remaining jobs still need moving onto the runner.
   Devices hold their assigned station and invoice printer choice revision on the device row.
   Printers now store the device holding them and which documents they pick up on the printer row.
+  Receipt printer queries use the kind column. Office printers still use their separate table.
   Kitchen tickets now read their bill through the order line, with no copied bill id to update on a move.
   Each order line now carries its recorded offer and first-send facts, which stay with the line when it is split or moved.
   Floor splits now check the parties the till read, separately from the room layout revision;

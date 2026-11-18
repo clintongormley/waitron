@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
-import { printers, receiptReprints, sales, type Transaction } from "@waitron/db";
+import { isReceiptPrinter, printers, receiptReprints, sales, type Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { enqueueReceiptCopy } from "./receipt-print.js";
@@ -23,7 +23,7 @@ export async function reprintOrderReceipt(
   const [printer] = await tx
     .select({ id: printers.id, paperWidth: printers.paperWidth, resolution: printers.resolution })
     .from(printers)
-    .where(and(eq(printers.id, printerId), eq(printers.active, true)));
+    .where(and(isReceiptPrinter(), eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
   const ticket = await readSettledTicket(deps.backend, tx, deps.tradingContext, billId);
   const copy = await enqueueReceiptCopy(
