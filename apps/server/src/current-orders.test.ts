@@ -61,6 +61,7 @@ import {
   fireHeldLine,
   moveLinesToGroup,
   readCurrentOrders,
+  recordMissingGroupActor,
   listOrderGroups,
   releaseReminder,
   reorderHeldGroups,
@@ -1460,15 +1461,18 @@ describe("readCurrentOrders (spec §4)", () => {
       .where(eq(workingOrders.id, s.tabId));
     expect(bill!.status).toBe("settled");
 
-    // These historical group senders are missing; the party's opening person exists separately.
-    await suite.db
-      .update(orderGroups)
-      .set({ submittedBy: randomUUID() })
-      .where(eq(orderGroups.partyId, s.partyId));
-    await suite.db
-      .update(orderGroups)
-      .set({ firedBy: randomUUID() })
-      .where(and(eq(orderGroups.partyId, s.partyId), isNotNull(orderGroups.firedBy)));
+    recordMissingGroupActor(
+      suite.db,
+      "submittedBy",
+      randomUUID(),
+      eq(orderGroups.partyId, s.partyId),
+    );
+    recordMissingGroupActor(
+      suite.db,
+      "firedBy",
+      randomUUID(),
+      and(eq(orderGroups.partyId, s.partyId), isNotNull(orderGroups.firedBy))!,
+    );
     const read = await currentOrders(s.partyId);
 
     expect(read).toEqual({
@@ -2072,10 +2076,8 @@ describe("when each group was sent and who sent it (spec §4; owner 2026-09-28)"
       submitAs(v, s.partyId, operator, "hold", [line(v, "steak")]),
     );
     const nobody = randomUUID();
-    await inTx(async (tx) => {
-      await tx.update(orderGroups).set({ firedBy: nobody }).where(eq(orderGroups.id, starters.id));
-      await tx.update(orderGroups).set({ submittedBy: nobody }).where(eq(orderGroups.id, mains.id));
-    });
+    recordMissingGroupActor(suite.db, "firedBy", nobody, eq(orderGroups.id, starters.id));
+    recordMissingGroupActor(suite.db, "submittedBy", nobody, eq(orderGroups.id, mains.id));
 
     expect(await sent(s.partyId)).toEqual([
       [starters.id, T(0), null],

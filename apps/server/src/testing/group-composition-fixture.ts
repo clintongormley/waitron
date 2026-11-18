@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { inArray } from "drizzle-orm";
-import { workingOrderLines, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { inArray, sql, type SQL } from "drizzle-orm";
+import {
+  orderGroups,
+  workingOrderLines,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { readBillEditState } from "../bill-editing.js";
 import {
   moveLinesToGroup as move,
@@ -13,6 +19,24 @@ import type { OrderAttendance } from "../working-order.js";
 import { observedGroupSubmitBody } from "./group-submit-fixture.js";
 export * from "../order-groups.js";
 export { placeGroupedRound, placeGroups, submitGroups } from "./group-submit-fixture.js";
+
+// Exercise read recovery from a dangling reference with foreign keys enabled for the read.
+export function recordMissingGroupActor(
+  db: Database,
+  column: "firedBy" | "submittedBy",
+  id: string,
+  where: SQL,
+): void {
+  db.run(sql`pragma foreign_keys = off`);
+  try {
+    db.update(orderGroups)
+      .set({ [column]: id })
+      .where(where)
+      .run();
+  } finally {
+    db.run(sql`pragma foreign_keys = on`);
+  }
+}
 
 export function observedGroupSender(
   database: () => Database,

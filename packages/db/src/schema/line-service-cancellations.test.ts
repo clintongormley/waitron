@@ -1,15 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { checkFailed } from "../constraint-target.js";
+import { checkFailed, restrictRefused } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedVenue, seedWorkingOrder } from "../testing/seed.js";
+import { seedPerson, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
+import { persons } from "./identity/persons.js";
 
 const ACTOR = "cccccccc-2222-4000-8000-000000000001";
 const AT = "2026-10-17T10:00:00.000Z";
@@ -18,6 +19,7 @@ describe("charged service cancellations", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   beforeAll(async () => {
+    await seedPerson(suite.db, { id: ACTOR });
     await seedVenue(suite.db, {
       name: "Dining room",
       invoiceLocales: ["en"],
@@ -46,14 +48,27 @@ describe("charged service cancellations", () => {
     });
   }
 
-  function record(lineId: string, quantity = 2000, started = false) {
+  function record(lineId: string, quantity = 2000, started = false, actorId = ACTOR) {
     return withTransaction(suite.db, (tx) =>
       tx.execute(sql`
       insert into line_service_cancellations (line_id, quantity, cancelled_at, was_started, actor_id)
-      values (${lineId}, ${quantity}, ${AT}, ${started ? 1 : 0}, ${ACTOR}) returning *
+      values (${lineId}, ${quantity}, ${AT}, ${started ? 1 : 0}, ${actorId}) returning *
     `),
     );
   }
+
+  it("requires a person as cancellation actor and restricts deleting them", async () => {
+    const { line } = await fixture();
+    const error = await captureError(() => record(line.id, 2000, false, randomUUID()));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+
+    const personId = await seedPerson(suite.db, { displayName: "Cancelling operator" });
+    await record(line.id, 2000, false, personId);
+    const deletion = await captureError(() =>
+      withTransaction(suite.db, (tx) => tx.delete(persons).where(eq(persons.id, personId))),
+    );
+    expect(restrictRefused(deletion)).toBe(true);
+  });
 
   it("stores cancelled service separately from the full bill charge", async () => {
     const tables = await suite.db.execute(sql`

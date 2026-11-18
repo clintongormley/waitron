@@ -10,7 +10,7 @@ import { withTransaction } from "../tenancy.js";
 import { drawerOpens } from "./drawer-opens.js";
 import { printers } from "./printers.js";
 import { randomUUID } from "node:crypto";
-import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 import { tenderRefunds } from "./tender-refunds.js";
@@ -208,6 +208,7 @@ describe("settled-tender refund drawer targets", () => {
       name: "Return drawer",
       invoiceLocales: ["en"],
     });
+    await seedPerson(db, { id: PERSON });
     const nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));
     const [series] = await db

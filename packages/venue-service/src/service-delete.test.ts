@@ -17,6 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedDevice,
   seedDeviceProfiles,
+  seedPerson,
   seedVenue,
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
@@ -229,14 +230,14 @@ describe("service deletion", () => {
             tabId: orders[0]!.id,
             sourceDepartmentId: f.dining,
             destinationDepartmentId: f.bar,
-            senderId: randomUUID(),
+            senderId: await seedPerson(tx, { displayName: "Dining sender" }),
             destinationZoneId: f.gamma,
           },
           {
             tabId: orders[1]!.id,
             sourceDepartmentId: f.bar,
             destinationDepartmentId: f.dining,
-            senderId: randomUUID(),
+            senderId: await seedPerson(tx, { displayName: "Bar sender" }),
             destinationZoneId: f.alpha,
           },
         ])
@@ -595,7 +596,7 @@ describe("service deletion", () => {
           sourceDepartmentId: f.bar,
           destinationDepartmentId: f.dining,
           destinationZoneId: f.alpha,
-          senderId: randomUUID(),
+          senderId: await seedPerson(tx),
         })
         .returning({ id: departmentTransferRequests.id });
       return request!.id;

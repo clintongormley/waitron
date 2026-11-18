@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "959941d6-7c89-4e8b-937c-338ea89efdd8",
+  "id": "5f4c5536-1f57-464b-9ba0-ae860fde0dc4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1632,6 +1632,19 @@
           "tableTo": "nodes",
           "columnsFrom": [
             "captured_by_node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "order_amendments_actor_fk": {
+          "name": "order_amendments_actor_fk",
+          "tableFrom": "order_amendments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "actor_id"
           ],
           "columnsTo": [
             "id"
@@ -3560,6 +3573,32 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "order_groups_fired_by_fk": {
+          "name": "order_groups_fired_by_fk",
+          "tableFrom": "order_groups",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "fired_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "order_groups_submitted_by_fk": {
+          "name": "order_groups_submitted_by_fk",
+          "tableFrom": "order_groups",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "submitted_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3978,6 +4017,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "order_drafts_owner_fk": {
+          "name": "order_drafts_owner_fk",
+          "tableFrom": "order_drafts",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4041,6 +4093,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "line_service_cancellations_actor_fk": {
+          "name": "line_service_cancellations_actor_fk",
+          "tableFrom": "line_service_cancellations",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -8357,6 +8422,32 @@
           "tableTo": "working_orders",
           "columnsFrom": [
             "working_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bill_payments_requested_by_fk": {
+          "name": "bill_payments_requested_by_fk",
+          "tableFrom": "bill_payments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "requested_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bill_payments_attested_by_fk": {
+          "name": "bill_payments_attested_by_fk",
+          "tableFrom": "bill_payments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "attested_by"
           ],
           "columnsTo": [
             "id"
@@ -16402,6 +16493,32 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "department_transfer_requests_sender_fk": {
+          "name": "department_transfer_requests_sender_fk",
+          "tableFrom": "department_transfer_requests",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "sender_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "department_transfer_requests_resolved_by_fk": {
+          "name": "department_transfer_requests_resolved_by_fk",
+          "tableFrom": "department_transfer_requests",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "resolved_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },

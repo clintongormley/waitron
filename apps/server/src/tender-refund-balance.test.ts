@@ -44,6 +44,7 @@ beforeEach(async () => {
     name: "Refund venue",
     invoiceLocales: ["en-GB"],
   });
+  await seedPerson(db, { id: PERSON, displayName: "Approver" });
   const nodeId = await seedNode(db);
   ({ deviceId } = await seedDevice(db));
   const [series] = await db
@@ -229,7 +230,6 @@ describe("settled-tender refundable balances", () => {
 
   it("does not offer a voided invoice", async () => {
     const target = await paid();
-    await seedPerson(store.db, { id: PERSON, displayName: "Approver" });
     await store.db
       .insert(saleVoids)
       .values({ saleId: target.saleId, reason: "Duplicate", voidedBy: PERSON, voidedAt: AT });

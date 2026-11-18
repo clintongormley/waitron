@@ -26,7 +26,7 @@ import { verifyAmendmentChain, type VerifiableAmendment } from "./order-amendmen
 import { FOREIGN_KEY_VIOLATION } from "./sql-state.js";
 import { isRefusal } from "./unique-violation.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
-import { seedDevice, seedNode, seedVenue } from "./testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 import { orderAmendments } from "./schema/order-amendments.js";
@@ -50,6 +50,7 @@ describe("order_amendments append helper", () => {
   // Working orders are seeded per-test (see openOrder).
   beforeAll(async () => {
     const admin = suite.db;
+    await seedPerson(admin, { id: OPERATOR_A });
     await seedVenue(admin, {
       name: "Fixture Venue A",
       invoiceLocales: ["es"],

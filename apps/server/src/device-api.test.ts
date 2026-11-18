@@ -1,7 +1,11 @@
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { personStaffRoles, staffRoles, persons } from "@waitron/db";
-import { seedDeviceProfiles, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
+import {
+  seedDeviceProfiles,
+  seedPerson,
+  attachStationPrinterForTest,
+} from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -116,6 +120,7 @@ beforeAll(() => {
 /** Park + place a two-line order (coffee, water) so both lines FIRE to the default station, returning the
  *  ticket item ids in `line_no` order. The per-line bump / foreign-station targets. */
 async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string[] }> {
+  await seedPerson(suite.db, { id: OPERATOR, displayName: "Order operator" });
   const orderId = randomUUID();
   const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
   await parkOrder({ db: suite.db }, venue.cfg, {

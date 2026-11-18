@@ -81,6 +81,7 @@ useVenueDb({
   setup: async (db) => {
     v = await setupPartyVenue(db);
     await seedPerson(db, { id: MOVER, displayName: "Moving operator" });
+    await seedPerson(db, { id: FIRER, displayName: "Firing operator" });
     ticketThenPayZone = await inTx(v, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Invoice counter" })];
       return (

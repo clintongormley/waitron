@@ -15,6 +15,7 @@ import {
   tsString,
 } from "./columns.js";
 import { devices } from "./devices.js";
+import { persons } from "./identity/persons.js";
 import { workingOrders } from "./orders.js";
 import { originChecks, saleSourceColumn } from "./origin.js";
 
@@ -31,8 +32,6 @@ export const billPaymentRefundState = enumType(["pending", "completed", "failed"
  * tender names it. Only the pending-to-received card transition can revise applied money and tip;
  * received amounts stay fixed. `bill_payments_guard_update` and `bill_payments_no_delete` enforce
  * these rules (`triggers/core.sql`).
- *
- * `requested_by` and `attested_by` are plain person ids with no key.
  */
 export const billPayments = table(
   "bill_payments",
@@ -68,6 +67,16 @@ export const billPayments = table(
       columns: [t.workingOrderId],
       foreignColumns: [workingOrders.id],
       name: "bill_payments_working_order_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.requestedBy],
+      foreignColumns: [persons.id],
+      name: "bill_payments_requested_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.attestedBy],
+      foreignColumns: [persons.id],
+      name: "bill_payments_attested_by_fk",
     }).onDelete("restrict"),
     unique("bill_payments_submission_key").on(t.workingOrderId, t.submissionId),
     check("bill_payments_kind_ck", enumCheck(t.kind)),
@@ -137,8 +146,7 @@ export const billPaymentLines = table(
  * rules are the `bill_payment_refunds_guard_update` and `bill_payment_refunds_no_delete` triggers
  * (`triggers/core.sql`).
  *
- * `authorized_by`, `requested_by` and `attested_by` are plain person ids, as `requested_by` is on
- * `bill_payments`.
+ * `authorized_by`, `requested_by` and `attested_by` are plain person ids.
  */
 export const billPaymentRefunds = table(
   "bill_payment_refunds",

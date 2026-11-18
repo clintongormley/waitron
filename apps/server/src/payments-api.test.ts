@@ -30,6 +30,7 @@ import {
   seedNode,
   seedVenue,
   seedWorkingOrder,
+  seedPerson,
 } from "@waitron/db/testing/seed.js";
 import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
@@ -3124,7 +3125,7 @@ describe("manager-ended practice uncertainty", () => {
             method: "card",
             applied: 1000,
             state: "pending",
-            requestedBy: randomUUID(),
+            requestedBy: await seedPerson(suite.db),
             source: "device",
             deviceId,
           })

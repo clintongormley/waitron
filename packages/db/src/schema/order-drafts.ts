@@ -15,6 +15,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { persons } from "./identity/persons.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { menuItems } from "./menu/menu.js";
@@ -24,7 +25,6 @@ import { parties } from "./parties.js";
 
 export const orderDraftState = enumType(["open", "submitted", "discarded"]);
 
-// owner_id: no key yet.
 export const orderDrafts = table(
   "order_drafts",
   {
@@ -48,6 +48,11 @@ export const orderDrafts = table(
       foreignColumns: [workingOrders.id],
       name: "order_drafts_bill_fk",
     }),
+    foreignKey({
+      columns: [t.ownerId],
+      foreignColumns: [persons.id],
+      name: "order_drafts_owner_fk",
+    }).onDelete("restrict"),
     index("order_drafts_party_idx").on(t.partyId),
     uniqueIndex("order_drafts_open_owner_uq")
       .on(t.billId)

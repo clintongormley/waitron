@@ -12,7 +12,7 @@ import { invoiceSeries } from "./schema/series.js";
 import { ticketItems } from "./schema/ticket-items.js";
 import { withTransaction } from "./tenancy.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
-import { seedDevice, seedNode, seedVenue } from "./testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import {
   DINING_FIXED_REFUSAL,
@@ -190,6 +190,7 @@ describe("an order's way of selling, once the kitchen has it or money is taken",
   beforeAll(async () => {
     const db = suite.db;
     await seedVenue(db, { invoiceLocales: ["es", "ca"] });
+    await seedPerson(db, { id: "person" });
     nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));
     const [product] = await db

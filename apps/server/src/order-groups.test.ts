@@ -93,6 +93,7 @@ import {
   listOrderGroups,
   placeGroupedRound,
   readCurrentOrders,
+  recordMissingGroupActor,
   moveLinesToGroup,
   splitHeldLineIntoUnits,
   reorderHeldGroups,
@@ -3026,8 +3027,7 @@ describe("a device as the firer", () => {
       .from(orderEvents)
       .where(and(eq(orderEvents.groupId, s.mains), eq(orderEvents.kind, "group.fired")));
     expect(event).toMatchObject({ actorId: null, actorDeviceId: device.id });
-    // The missing historical firer is distinct from the party's checked opening person.
-    await db.update(orderGroups).set({ firedBy: randomUUID() }).where(eq(orderGroups.id, s.drinks));
+    recordMissingGroupActor(db, "firedBy", randomUUID(), eq(orderGroups.id, s.drinks));
     const read = await inTx((tx) => readCurrentOrders(tx, s.partyId));
     expect(read.groups.find((g) => g.id === s.mains)?.sentBy).toBe(device.label);
     expect(read.groups.find((g) => g.id === s.drinks)?.sentBy).toBeNull();

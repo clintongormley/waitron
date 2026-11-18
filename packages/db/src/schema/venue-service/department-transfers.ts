@@ -12,6 +12,7 @@ import {
   tsString,
 } from "../columns.js";
 import { floorZones } from "../floor-zones.js";
+import { persons } from "../identity/persons.js";
 import { workingOrders } from "../orders.js";
 import { departments } from "./service.js";
 
@@ -52,7 +53,6 @@ export const departmentTransferRequests = table(
     tabId: id("tab_id").notNull(),
     sourceDepartmentId: id("source_department_id").notNull(),
     destinationDepartmentId: id("destination_department_id").notNull(),
-    // Person ids: no key yet.
     senderId: id("sender_id").notNull(),
     resolvedBy: id("resolved_by"),
     destinationZoneId: id("destination_zone_id"),
@@ -83,6 +83,16 @@ export const departmentTransferRequests = table(
       foreignColumns: [floorZones.id],
       name: "department_transfer_requests_zone_fk",
     }),
+    foreignKey({
+      columns: [t.senderId],
+      foreignColumns: [persons.id],
+      name: "department_transfer_requests_sender_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.resolvedBy],
+      foreignColumns: [persons.id],
+      name: "department_transfer_requests_resolved_by_fk",
+    }).onDelete("restrict"),
     uniqueIndex("department_transfer_requests_one_pending_key")
       .on(t.tabId)
       .where(sql`${t.status} = 'pending'`),

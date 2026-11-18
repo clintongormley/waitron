@@ -733,7 +733,7 @@ async function billPayment(db: Database, id: string) {
     applied: 200,
     tendered: 200,
     state: "received",
-    requestedBy: "operator",
+    requestedBy: await seedPerson(db, { id: "operator" }),
     source: "device",
     deviceId: db.all<{ id: string }>(sql`select id from devices limit 1`)[0]!.id,
     receivedAt: "2026-07-20T17:21:00.000Z",

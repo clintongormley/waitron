@@ -298,7 +298,7 @@ export async function seedBillPayment(
       tip: stringToCents(tip),
       tendered: opts.method === "cash" ? stringToCents(opts.tendered ?? owed) : null,
       state: opts.state,
-      requestedBy: PERSON,
+      requestedBy: await seedPerson(db, { id: PERSON, displayName: "Bill payment operator" }),
       source: "device",
       deviceId: ref.deviceId,
       receivedAt: moved ? opts.at! : null,
