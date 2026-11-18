@@ -11,7 +11,7 @@ export default defineConfig({
       "**/.stryker-tmp/**",
       // Under Stryker `src` holds instrumented copies, which conventions.test.ts would read as this
       // package's source text and fail on.
-      // Instrumentation also distorts the fit's wall-clock timings.
+      // set-menu-fit.bound.test.ts measures wall-clock times that instrumentation distorts.
       ...(process.env.STRYKER_MUTATOR_WORKER === undefined
         ? []
         : ["src/conventions.test.ts", "src/set-menu-fit.bound.test.ts"]),
