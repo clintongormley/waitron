@@ -236,6 +236,13 @@ checked on the box).
 
 - **The virtual PDF printer.** The virtual PDF output remains to be built. Print-payload retention is handled by the daily housekeeping job.
 
+**Print payload measurement (A1308 dv11 M1, 2026-11-18).** Santet contained zero print jobs.
+The 366-day synthetic venue held 452,520 jobs with 9,179,818,278 payload bytes before
+housekeeping, averaging 20,286 bytes per job. Its 422,874 document jobs held 9,179,670,048
+bytes (21,708 bytes each on average) and its 29,646 drawer jobs held 148,230 bytes (5 bytes
+each). The [A1544 bench](../superpowers/plans/2026-11-16-a1544-memory-measurement.md) built this
+venue at commit `30c1c1c564` with 250 bills a day and seed 1.
+
 ## Reprint kitchen tickets and other printouts laid out again for any printer
 
 - **Reprint kitchen tickets and other printouts laid out again for any printer (left open by A405
