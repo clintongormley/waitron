@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { products, withTransaction, type Transaction } from "@waitron/db";
+import { kitchenCourses, products, withTransaction, type Transaction } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
 import { createExtraList } from "./extras.js";
@@ -9,6 +9,10 @@ import {
   extraOfferUsageForUnitChange,
   extraOfferUsageForUnitPrecisionChange,
 } from "./extra-usage.js";
+import { requireMenuRoot } from "./menu-structure.js";
+import { createMenu } from "./operations.js";
+import { addMember } from "./sections.js";
+import { addSetMenuDishes } from "./set-menus.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { assignProductUnit, createUnit } from "./units.js";
 
@@ -125,4 +129,30 @@ it("still warns for a variant with a retained unit row when its parent's unit ch
       lists: [{ id: listId, name: "Sizes", menus: [{ id: f.lunch, name: "Lunch Menu" }] }],
     },
   ]);
+});
+
+it("names a full menu whose set menu alone offers the extras list", async () => {
+  const f = await menusFixture(fx.db);
+  const usage = await run(async (tx) => {
+    const course = await tx.insert(kitchenCourses).values({ name: "Mains" }).returning();
+    const menu = await createMenu(tx, { name: "Weekend" });
+    const set = await createMenu(tx, {
+      name: "Daily menu",
+      kind: "set_menu",
+      setPrice: "14.00",
+      setVatClass: "reduced",
+    });
+    const list = await createExtraList(
+      tx,
+      { name: "Weekend options", items: [{ productId: f.extraLemon }] },
+      "en",
+    );
+    await tx.update(products).set({ courseId: course[0]!.id }).where(eq(products.id, f.soup));
+    await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: list.id }]);
+    await addSetMenuDishes(tx, set.id, [{ productId: f.soup, excludedVariantIds: [] }]);
+    await addMember(tx, await requireMenuRoot(tx, menu.id), { kind: "set_menu", menuId: set.id });
+    const [lemon] = await extraOfferUsage(tx, [f.extraLemon]);
+    return lemon!.lists.find(({ id }) => id === list.id)!.menus;
+  });
+  expect(usage.map(({ name }) => name)).toContain("Weekend");
 });

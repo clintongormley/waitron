@@ -1407,6 +1407,7 @@ describe("allergen warning product links with a dirty schedule", () => {
       scheduleMenuPublication: schedule,
     } as unknown as DashboardApi;
     panel.preview = {
+      setMenuProblems: [],
       hash: "draft",
       changes: [],
       clashes: [],

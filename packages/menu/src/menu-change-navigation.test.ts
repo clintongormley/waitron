@@ -43,6 +43,15 @@ function navigateMenuChanges(
           expect(node).toBeDefined();
           members = node!.members;
         }
+        if (target.kind === "set_menu") {
+          expect(members).toContainEqual(
+            expect.objectContaining({
+              kind: "set_menu",
+              menuId: target.menuId,
+            }),
+          );
+          continue;
+        }
         if (target.kind === "list" || target.kind === "section") continue;
         expect(members).toContainEqual({
           kind: "product",

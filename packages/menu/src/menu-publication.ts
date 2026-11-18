@@ -16,6 +16,7 @@ import {
   buildMenuDocuments,
   diffEntries,
   documentImages,
+  documentSetMenuOffers,
   MENU_DOCUMENT_FORMAT,
   menuDocumentHash,
   removedExtraOnlyProducts,
@@ -394,6 +395,10 @@ function changeSubject({ change, section }: DiffEntry): string {
     case "extra_portion_changed":
     case "extra_max_quantity_changed":
       return `${change.kind}:${change.listId}:${change.productId}`;
+    case "set_menu_changed":
+    case "set_menu_added":
+    case "set_menu_removed":
+      return `${change.kind}:${change.setMenu.id}:${section}`;
     case "section_added":
     case "section_removed":
     case "section_changed":
@@ -404,9 +409,7 @@ function changeSubject({ change, section }: DiffEntry): string {
 }
 
 function fieldsOf(change: MenuChangeBody): readonly string[] | undefined {
-  return change.kind === "product_changed" || change.kind === "section_changed"
-    ? change.fields
-    : undefined;
+  return "fields" in change ? change.fields : undefined;
 }
 
 /** One shared edit shows up in two menus as the same change from the same source. */
@@ -416,11 +419,17 @@ function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
   // credited to this menu in both is two includes' separate settings.
   if (a.change.kind === "section_changed" && a.change.source === "this_menu") return false;
   const fields = fieldsOf(a.change);
-  return fields === undefined || fields.some((field) => fieldsOf(b.change)!.includes(field));
+  if (fields === undefined) return true;
+  const otherFields = fieldsOf(b.change)!;
+  return fields.length === 0
+    ? otherFields.length === 0
+    : fields.some((field) => otherFields.includes(field));
 }
 
 export async function previewMenu(tx: Transaction, menuId: string): Promise<MenuPreview> {
   const { graph, menus, sectionNames } = await buildMenuDocuments(tx, [menuId]);
+  if (graph.menu(menuId)?.kind === "set_menu")
+    throw new AppError("set_menu.wrong_place", { menuId });
   const mine = menus.get(menuId);
   if (mine === undefined) throw new AppError("menu.not_found", { menuId: menuId });
   const own = (await liveVersions(tx, [menuId], "document")).get(menuId);
@@ -537,7 +546,10 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   const unreviewed = new Map(mine.unreviewed.map((product) => [product.id, product]));
   const precisionWarnings: MenuPreview["warnings"] = [];
   const warned = new Set<string>();
-  for (const offer of Object.values(mine.document.offers))
+  for (const offer of [
+    ...Object.values(mine.document.offers),
+    ...documentSetMenuOffers(mine.document),
+  ])
     for (const list of offer.offeredModifiers) {
       if (list.kind !== "extras") continue;
       for (const item of list.items) {
@@ -560,6 +572,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   return {
     hash,
     clashes: mine.clashes,
+    setMenuProblems: mine.setMenuProblems,
     changes: navigateMenuChanges(
       ownDocument,
       mine.document,

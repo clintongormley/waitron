@@ -68,6 +68,7 @@ async function mount(
     await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
       menuName: "Working title",
       preview: {
+        setMenuProblems: [],
         document: doc,
         live: live === null ? null : { versionId: "v2", document: live },
         changes,

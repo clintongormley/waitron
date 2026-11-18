@@ -61,6 +61,7 @@ async function open(to: typeof from, theme: "light" | "dark" = "light") {
       menuName: "Lunch",
       status,
       preview: {
+        setMenuProblems: [],
         live: null,
         clashes: [],
         hash: "b".repeat(64),

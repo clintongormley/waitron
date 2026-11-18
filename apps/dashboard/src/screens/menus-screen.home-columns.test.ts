@@ -41,6 +41,7 @@ it.each(["en", "es-ES"])(
         includedBy: [],
       };
       const preview: MenuPreview = {
+        setMenuProblems: [],
         live: null,
         hash: "hash",
         clashes: [],

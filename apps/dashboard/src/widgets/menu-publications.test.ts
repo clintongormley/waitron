@@ -87,6 +87,7 @@ const DRAFT_HASH = "d".repeat(64);
 /** The open menu's preview: no clashes, v1 live, and a draft unlike every listed edition. */
 function draftPreview(overrides: Partial<MenuPreview> = {}): MenuPreview {
   return {
+    setMenuProblems: [],
     clashes: [],
     hash: DRAFT_HASH,
     changes: [],

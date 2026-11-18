@@ -180,6 +180,7 @@ function previewOf(id: string): MenuPreview {
         )
       : menuDocument([], {}, "Dinner Menu");
   return {
+    setMenuProblems: [],
     live: null,
     clashes: [],
     hash: "b".repeat(64),

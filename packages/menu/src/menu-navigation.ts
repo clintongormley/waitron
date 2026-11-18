@@ -16,7 +16,10 @@ import type {
   MenuTarget,
 } from "@waitron/shared";
 
-export function indexMenuOccurrences(document: MenuDocument): MenuOccurrence[] {
+export function indexMenuOccurrences(
+  document: MenuDocument,
+  { includeSetMenus = false } = {},
+): MenuOccurrence[] {
   const occurrences: MenuOccurrence[] = [];
   const walk = (members: readonly DocumentMember[], path: string[]): void => {
     for (const member of members) {
@@ -28,6 +31,11 @@ export function indexMenuOccurrences(document: MenuDocument): MenuOccurrence[] {
           ancestorSectionIds: [...path],
         });
         walk(member.members, sectionIds);
+      } else if (member.kind === "set_menu" && includeSetMenus) {
+        occurrences.push({
+          target: { kind: "set_menu", menuId: member.menuId, sectionIds: [...path] },
+          ancestorSectionIds: [...path],
+        });
       } else if (member.kind === "product") {
         occurrences.push({
           target: {
@@ -61,6 +69,8 @@ export function menuTargetKey(target: MenuTarget): string {
   switch (target.kind) {
     case "title":
       return JSON.stringify([target.kind, target.menuId]);
+    case "set_menu":
+      return JSON.stringify([target.kind, target.menuId, target.sectionIds]);
     case "list":
       return JSON.stringify([target.kind, target.sectionIds]);
     case "section":
@@ -374,8 +384,12 @@ export function navigateMenuChanges(
   proposed: MenuDocument,
   changes: readonly MenuChangeBody[],
 ): MenuChange[] {
-  const beforeOccurrences = live === null ? [] : indexMenuOccurrences(live).map((o) => o.target);
-  const afterOccurrences = indexMenuOccurrences(proposed).map((o) => o.target);
+  const targetsOf = (document: MenuDocument) =>
+    indexMenuOccurrences(document, { includeSetMenus: true }).map(
+      (occurrence) => occurrence.target,
+    );
+  const beforeOccurrences = live === null ? [] : targetsOf(live);
+  const afterOccurrences = targetsOf(proposed);
   const sectionSources = new Map<string, Set<MenuChangeSource>>();
   for (const change of changes)
     if (change.kind === "section_changed")
@@ -433,6 +447,21 @@ export function navigateMenuChanges(
       }
     };
     switch (change.kind) {
+      case "set_menu_added":
+      case "set_menu_removed":
+        targets[change.kind === "set_menu_added" ? "after" : "before"].push({
+          kind: "list",
+          sectionIds: change.sectionIds,
+        });
+        break;
+      case "set_menu_changed":
+        for (const side of ["before", "after"] as const)
+          targets[side].push(
+            ...(side === "before" ? beforeOccurrences : afterOccurrences).filter(
+              (target) => target.kind === "set_menu" && target.menuId === change.setMenu.id,
+            ),
+          );
+        break;
       case "product_added":
         productTargets("after", change.productId, [{ kind: "summary" }]);
         break;
@@ -644,6 +673,7 @@ export function navigateMenuChanges(
       "fields" in change ? [...new Set(change.fields)].sort() : null,
       keys("before"),
       keys("after"),
+      ...("setMenu" in change ? [change.setMenu.id] : []),
     ]);
     return { ...change, id, targets };
   });

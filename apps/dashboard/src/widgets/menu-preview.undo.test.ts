@@ -110,6 +110,7 @@ const ownRename: MenuChange = {
 
 function preview(changes: MenuChange[]): MenuPreview {
   return {
+    setMenuProblems: [],
     live: null,
     clashes: [],
     hash: "b".repeat(64),

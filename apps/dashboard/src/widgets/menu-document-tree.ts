@@ -105,7 +105,8 @@ export class MenuDocumentTree extends LitElement {
       this.document !== document ||
       this.inspectionKey !== inspectionKey ||
       this.#snapshot === null ||
-      target.kind === "home"
+      target.kind === "home" ||
+      target.kind === "set_menu"
     )
       return false;
     const occurrences = indexMenuOccurrences(this.#snapshot);

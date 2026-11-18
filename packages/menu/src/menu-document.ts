@@ -36,12 +36,13 @@ import type {
   MenuChangeBody,
   MenuChangeSource,
   MenuDocument,
+  MenuPreview,
   MenuUnavailable,
   ProductChangeField,
   SectionChangeField,
   PublishedSetMenu,
   SetMenuFrozenOffer,
-  SetMenuProblem,
+  SetMenuChangeField,
 } from "@waitron/shared";
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
@@ -108,7 +109,7 @@ export interface OmittedShortcut {
 
 interface BuiltMenu {
   workingHash: string;
-  setMenuProblems: { menuId: string; name: string; problems: SetMenuProblem[] }[];
+  setMenuProblems: MenuPreview["setMenuProblems"];
   clashes: MenuClash[];
   combined: Map<string, CombinedOffer>;
   document: MenuDocument;
@@ -358,16 +359,28 @@ export async function buildMenuDocuments(
         omittedShortcuts.push({ ref });
       }
     }
+    const setMenuUnreviewed = Object.entries(setMenus).flatMap(([id, copy]) => {
+      const offeredIds = new Set(
+        Object.values(copy.offers).flatMap((offer) => [
+          offer.productId,
+          ...offer.variants.map((variant) => variant.id),
+        ]),
+      );
+      return menuRows.get(id)!.unreviewed.filter((product) => offeredIds.has(product.id));
+    });
     const built = {
       setMenuProblems,
-      unreviewed: (offersByMenu.get(row.menuId) ?? []).flatMap((offer) => [
-        ...(offer.allergens === null
-          ? [{ id: offer.productId, name: offer.name, parentName: null }]
-          : []),
-        ...offer.variants
-          .filter((variant) => variant.allergens === null)
-          .map((variant) => ({ id: variant.id, name: variant.name, parentName: offer.name })),
-      ]),
+      unreviewed: [
+        ...(offersByMenu.get(row.menuId) ?? []).flatMap((offer) => [
+          ...(offer.allergens === null
+            ? [{ id: offer.productId, name: offer.name, parentName: null }]
+            : []),
+          ...offer.variants
+            .filter((variant) => variant.allergens === null)
+            .map((variant) => ({ id: variant.id, name: variant.name, parentName: offer.name })),
+        ]),
+        ...setMenuUnreviewed,
+      ],
       rootSectionId: row.rootSectionId,
       clashes: (offersByMenu.get(row.menuId) ?? []).flatMap((offer) => clashesOf(offer.combined)),
       combined: new Map(
@@ -851,6 +864,10 @@ export interface DiffEntry {
 }
 
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
+type SetMenuPlacement = {
+  member: Extract<DocumentMember, { kind: "set_menu" }>;
+  path: string[];
+};
 
 interface Shape {
   document: MenuDocument;
@@ -858,6 +875,7 @@ interface Shape {
   sections: Map<string, { node: SectionNode; parents: string[][] }>;
   /** Every copy of every section, by the path of section ids ending at it. */
   copies: Map<string, SectionNode>;
+  setMenuPlacements: Map<string, SetMenuPlacement>;
   /** Each offer in menu order, by product id. */
   offers: Map<string, FrozenOffer>;
   /** Each extras item's product, at its first appearance. */
@@ -870,10 +888,12 @@ type FrozenExtraItemFacts = Extract<FrozenOfferedModifier, { kind: "extras" }>["
 function shapeOf(document: MenuDocument): Shape {
   const sections = new Map<string, { node: SectionNode; parents: string[][] }>();
   const copies = new Map<string, SectionNode>();
+  const setMenuPlacements = new Map<string, SetMenuPlacement>();
   const walk = (members: readonly DocumentMember[], path: string[]): void => {
     for (const member of members) {
-      if (member.kind !== "section") continue;
-      if (path.includes(member.sectionId)) continue;
+      if (member.kind === "set_menu")
+        setMenuPlacements.set(pathKey([...path, member.menuId]), { member, path });
+      if (member.kind !== "section" || path.includes(member.sectionId)) continue;
       const known = sections.get(member.sectionId);
       if (known !== undefined) known.parents.push(path);
       else sections.set(member.sectionId, { node: member, parents: [path] });
@@ -899,7 +919,7 @@ function shapeOf(document: MenuDocument): Shape {
             item,
           });
         }
-  return { document, sections, copies, offers, extras, extraItemsByList };
+  return { document, sections, copies, setMenuPlacements, offers, extras, extraItemsByList };
 }
 
 /** Products that disappeared from this menu's extras and were not dishes in its live version. */
@@ -1132,6 +1152,47 @@ export function diffEntries(
 
   if (live !== null && live.menuName !== proposed.menuName)
     push({ kind: "menu_renamed", from: live.menuName, to: proposed.menuName, source: "this_menu" });
+
+  for (const [before, after, kind] of [
+    [prev, next, "set_menu_removed"],
+    [next, prev, "set_menu_added"],
+  ] as const)
+    for (const [key, { member, path }] of before.setMenuPlacements) {
+      if (after.setMenuPlacements.has(key)) continue;
+      const { section, ...source } = listSource(path, before, after);
+      push(
+        {
+          kind,
+          setMenu: { id: member.menuId, name: member.name },
+          sectionIds: path,
+          under: namesOf(before, path),
+          ...source,
+        },
+        section,
+      );
+    }
+
+  for (const [id, copy] of Object.entries(proposed.setMenus ?? {})) {
+    const was = live?.setMenus?.[id];
+    if (was === undefined) continue;
+    const fields: SetMenuChangeField[] = [];
+    if (was.terms.price !== copy.terms.price) fields.push("price");
+    if (
+      was.terms.vatClass !== copy.terms.vatClass ||
+      was.terms.takeawayVatClass !== copy.terms.takeawayVatClass
+    )
+      fields.push("vat");
+    if (was.name !== copy.name || !same(was.terms.names, copy.terms.names)) fields.push("names");
+    if (!same(was.terms.lines, copy.terms.lines)) fields.push("lines");
+    if (!same(was.offers, copy.offers) || !same(was.root, copy.root)) fields.push("dishes");
+    if (fields.length > 0 || copy.changedAt !== was.changedAt)
+      push({
+        kind: "set_menu_changed",
+        setMenu: { id, name: copy.name },
+        fields,
+        source: "set_menu",
+      });
+  }
 
   for (const [sectionId, { node, parents }] of prev.sections) {
     const held = new Set(next.sections.get(sectionId)?.parents.map(pathKey));

@@ -23,6 +23,7 @@ const live: MenuStatus = {
 };
 
 const changes: MenuPreview = {
+  setMenuProblems: [],
   live: null,
   clashes: [],
   hash: "b".repeat(64),

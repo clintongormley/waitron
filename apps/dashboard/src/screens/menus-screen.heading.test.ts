@@ -89,6 +89,7 @@ function api(
   ],
 ): DashboardApi {
   const preview: MenuPreview = {
+    setMenuProblems: [],
     live: null,
     clashes: [],
     hash: "b".repeat(64),

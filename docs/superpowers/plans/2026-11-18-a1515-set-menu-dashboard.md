@@ -939,7 +939,7 @@ export interface PublishedSetMenu {
   its menus in one pass.
 - `BuiltMenu` gains `setMenuProblems: { menuId: string; name: string; problems: SetMenuProblem[] }[]`:
   on a full menu, one entry per held set menu that has problems; on a set menu, `[]` (the editor
-  reads its problems from `readSetMenu`). Task 5b shows it in the Preview.
+  reads its problems from `readSetMenu`). Task 5b returns the problems in Preview and Task 8a shows them.
 - Refusals, at the point that refuses clashes (`menu-publication.ts:670-671`): publishing a set
   menu itself → `set_menu.wrong_place` `{ menuId }`; a full menu whose `setMenuProblems` is not
   empty → `set_menu.not_publishable`
@@ -1022,15 +1022,16 @@ export interface PublishedSetMenu {
 - `diffEntries` emits one `set_menu_changed` per set menu whose copy differs between the live and
   proposed documents, naming the fields that differ (`"dishes"` covers dishes added, removed,
   re-priced, re-coursed or with variants changed). The change carries `source: "set_menu"`,
-  `setMenu: { id, name }`, `alsoOn` naming the other published full menus that hold the set menu,
-  and the target `navigateMenuChanges` (`menu-navigation.ts`) gives the set-menu member. It has no
-  undo: `menu-undo.ts` treats it as not undoable, and the preview links to the set menu's page
-  instead (**my call**: the change is made there). Compare set-menu members in each list and
-  show their placement or removal in Preview here. The ordinary member diff handles products and
+  `setMenu: { id, name }`, `alsoOn` naming the other published full menus with the same field change
+  or with a save that changed only the stamp in both menus, and the target `navigateMenuChanges` (`menu-navigation.ts`) gives the set-menu member. It has no
+  undo: `menu-undo.ts` treats it as not undoable. Task 8a adds the editor link when that tab exists.
+  If only the saved time differs, show that the set menu was saved again. Compare set-menu members
+  in each list and show their placement or removal in Preview here. The ordinary member diff handles products and
   sections. Extend `MenuChangeBody` to identify each set-menu placement change and its list.
   Add English and Spanish words for the placement, removal, copy change and source in
   `widgets/menu-preview.ts` and `strings.ts` alongside the shared types. Check the wording,
-  editor link and absence of an undo in the Preview test.
+  navigation target and absence of an undo in the Preview test. Include copy-only offers in the
+  existing allergen review and extras-portion warnings.
 
 - [ ] **Step 1: Write the failing tests** in `set-menu-document.changes.test.ts`, on Task 5a's
   fixture with Lunch published:
@@ -1046,8 +1047,8 @@ export interface PublishedSetMenu {
     `previewMenu(Lunch)` has exactly one `set_menu_changed` naming Daily menu with
     `fields: ["dishes"]`.
   - `"a price change shows as set_menu_changed with fields price"`: €14 → €15.
-  - `"the change names the other menus that hold the set menu"`: Daily menu also placed in a
-    published "Weekend" menu → `alsoOn` names Weekend.
+  - The same surcharge change or save with no field difference also appears against the published
+    "Weekend" menu → `alsoOn` names Weekend. Different changed fields do not match.
   - `"the change leads to the set-menu member and cannot be undone"`: `navigateMenuChanges` gives
     the member's target, and the undo read reports it as not undoable.
 - [ ] **Step 2: Run; they fail.** `pnpm --filter @waitron/menu exec vitest run src/set-menu-document.changes.test.ts`
@@ -1070,6 +1071,8 @@ export interface PublishedSetMenu {
   dish's own price, which changes only the full menu's own offer: in a copy that price is a
   surcharge, changed on the set menu's page (**my call**). Apply the walk `menu-patch.ts:160-200`
   uses for `offers` to `setMenus[*].offers` too. Every copy keeps its `changedAt` unchanged.
+- The live correction dialog starts from the full menu's own dishes and modifiers. The API can
+  address a copied dish that appears only in a set menu.
 - A live correction can change a copied dish's `vatClass` or `takeawayVatClass` fields.
   The copied set menu's own `terms` determine its rates and stay as published.
 - **Other readers of a published document's offers** do not see the copies unless changed. Decide
@@ -1376,7 +1379,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   address naming one of those for a set menu opens **Set menu**. Under its heading the editor says
   where its changes go: "Changes reach the tills when you publish a menu that holds this set menu:
   Lunch, Dinner", each name linking to that menu's Preview, or "Place it in a menu to sell it" when
-  no menu holds it (from `SetMenuDetails.heldBy`; **my call** on wording).
+  no menu holds it (from `SetMenuDetails.heldBy`; **my call** on wording). The full menu's Preview
+  links a set-menu change to this editor.
 
 - [ ] **Step 1: Write the failing tests** in `menus-screen.set-menu.test.ts`:
   `"the list shows a set menu's kind and price"`;
@@ -1526,7 +1530,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   the set menu (on a bill it counts as that course in this set menu, and a dish ordered from this
   set menu's folder is sent with it), variants, how to choose eat-in and takeaway VAT, which
   dishes are sold separately by weight, what one set menu includes, placing it in a menu, and that its
-  changes reach the tills only when a menu that holds it is published. Remove any "set lunch" wording A1515-REMOVE left behind in these two files.
+  changes reach the tills only when a menu that holds it is published. Explain how to see placements
+  and edits in the full menu's Preview. Remove any "set lunch" wording A1515-REMOVE left behind in these two files.
   Short; a sentence earns its place by changing what staff do (CLAUDE.md §3).
 
 - [ ] **Step 1: Write the failing tests:** `"Add offers Set menu and places the chosen one"`;

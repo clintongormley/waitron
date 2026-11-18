@@ -1,6 +1,6 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import { extraListItems, extraLists, products, type Transaction } from "@waitron/db";
-import { buildMenuDocuments } from "./menu-document.js";
+import { buildMenuDocuments, documentSetMenuOffers } from "./menu-document.js";
 import { productsUsingUnit } from "./units.js";
 
 export interface ExtraOfferUsage {
@@ -32,7 +32,7 @@ export async function extraOfferUsage(
   const { menus } = await buildMenuDocuments(tx);
   for (const { document } of menus.values()) {
     const offeredLists = new Set(
-      Object.values(document.offers).flatMap((offer) =>
+      [...Object.values(document.offers), ...documentSetMenuOffers(document)].flatMap((offer) =>
         offer.offeredModifiers
           .filter((modifier) => modifier.kind === "extras")
           .map((list) => list.id),
