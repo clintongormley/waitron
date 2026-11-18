@@ -1,45 +1,47 @@
 # Choose the venue time zone from its country pack
 
-**Finish line.** In Venue settings → Venue details, a manager can choose the venue's
-time zone from the country pack, review the clock preview and save. Spain offers
+**Finish line.** In Venue settings → Venue details, a manager can choose a time
+zone from the country pack, review the clock preview and save. Spain offers
 `Europe/Madrid` and `Atlantic/Canary`. A direct attempt to save another zone gets
-a field error. The source is A166 in [the setup backlog](../../backlog/setup.md)
-and the Lane D queue's instruction to enforce the same list on save.
+a field error. The owner asked for the dropdown in A166 on 1 October 2026. The
+watcher's Lane D queue entry (18 November 2026, 02:15) directs the save check too.
 
 - [ ] **Read and save.** Add `timeZones: readonly string[]` beside `provinces`
   in `apps/server/src/venue-detail-types.ts` and `apps/dashboard/src/api/client.ts`.
-  In `apps/server/src/venue-details.ts`, return the taxpayer country's pack list.
-  Use `requireCountryTimeZone` for a genuine edit and map its own refusal to the
-  existing `venue.detail_invalid` with `field: "timeZone"` and `reason: "time_zone"`.
-  With no pack, use the existing geography lock and `country_unavailable` refusal.
-  Use `classifySavedTimeZone` for the stored spelling and the expected snapshot
-  in no-op and stale checks. Keep the existing history checks and the single
-  transaction for a save. A saved off-list zone can stay while you edit other
-  fields, or be replaced explicitly when the time zone is editable. Scope the
-  list enforcement to the Venue details write. The clock preview calculates with
-  the proposal it receives.
-- [ ] **Choose in the dashboard.** Use the existing `wt-combobox` in
-  `apps/dashboard/src/screens/venue-details-panel.ts`, with the picker pattern
-  and zone names from `venue-zone-repair.ts`. A zone absent from the options can
-  still appear as the current text without becoming a selectable option or
-  choosing another zone on open. Keep the existing preview, acknowledgement and
-  explicit Save. In `venue-details-form.ts`, compare the saved spelling as stored
-  and normalize a proposed value separately. Update field wording in
-  `apps/dashboard/src/i18n/strings.ts` and the shared `venue-details-fixture.ts`.
-- [ ] **Test first.** In `venue-details-api.test.ts`, pin the GET options and a
-  PATCH for `UTC` that returns the field error and leaves a bundled name edit
-  unsaved. In `venue-details.test.ts`, keep the lock, revision and next-sale
-  assertions using a permitted change, and cover an unavailable pack plus an
-  explicit choice of Madrid when the stored spelling is padded. In
-  `venue-details-panel.test.ts`, choose Canary through the dropdown, check the
-  preview and saved patch, and verify an off-list initial value leaves Save
-  quiet. Adapt the affected save-state, leave, accessibility and form tests to
-  the new field. See the new assertions fail for the expected reasons before
-  implementing. Run all changed test files, and inspect the panel in English
-  and Spanish, in both themes and at phone and desktop widths.
-- [ ] **Guide.** Add the dashboard steps with a shared section ID in
-  `apps/server/src/guide/{en,es}/time-zone.md`, run the guide checks and remove
-  A166 from `docs/backlog/setup.md` once the dropdown and save validation work.
+  In `apps/server/src/venue-details.ts`, return the taxpayer country's pack list
+  or an empty list. At the existing input check, before stale and history
+  checks, use `requireCountryTimeZone`. Translate only its
+  `venue.time_zone_invalid` AppError into `venue.detail_invalid` with
+  `field: "timeZone", reason: "time_zone"`. Save in the existing transaction.
+  Apply the country check to new values in the Venue details write.
+- [ ] **Compare and choose.** In the writer and dashboard's
+  `venue-details-form.ts`, exact equality comes first. Classify the saved
+  spelling as stored, including the expected snapshot in the writer, and
+  normalize the proposed spelling separately. A padded saved value stays
+  visible and quiet until explicitly replaced. In `venue-details-panel.ts`,
+  reuse the labelled `wt-combobox` from zone repair with pack order and automatic
+  search. Show an equivalent valid alias as its listed option and an off-list
+  saved value as a disabled current option. Keep the existing preview and
+  explicit Save flow. Update `i18n/strings.ts` in English and Spanish.
+- [ ] **Test first.** In `venue-details-api.test.ts`, assert the GET list and a
+  PATCH for `UTC` that refuses both the zone and a bundled name edit. In
+  `venue-details.test.ts`, exercise explicit replacement of padded Madrid and
+  an exact padded no-op bundled with a name edit. Use legal Canary changes
+  in the existing lock, revision, concurrency and consumer tests. Move the
+  station/booking and workforce instants where needed to preserve the
+  business-day boundary. Keep the lock and downstream assertions in
+  `business-day-start.test.ts`, `boot.venue-details.test.ts`, `print-api.test.ts`
+  and `backup-sweep.test.ts` with eligible inputs. Use the shared dashboard
+  `venue-details-fixture.ts`. In `venue-details-panel.test.ts`, choose Canary
+  through the dropdown, verify the preview and saved patch, and check that an
+  off-list initial value keeps Save quiet. Adapt affected save-state, leave,
+  accessibility and form tests. Observe the new assertions fail, then pass.
+  Run the changed suites and inspect English and Spanish in both themes at
+  phone and desktop widths.
+- [ ] **Guide and backlog.** Add the dashboard steps with a shared section ID
+  in `apps/server/src/guide/{en,es}/time-zone.md` and run the guide checks.
+  Remove A166 from `docs/backlog/setup.md` and its open-status reference from
+  `docs/backlog/fiscal.md`. Link the historical A696 design to this plan.
 
-**Expected size.** About 70–110 lines of product code, 130–230 lines of tests
-and fixture edits, and a short guide update. One pull request.
+**Expected size.** About 70–110 lines of product code, 160–260 lines of tests
+and fixture edits, and short guide and backlog edits. One pull request.
