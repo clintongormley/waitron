@@ -560,3 +560,17 @@ export { normalisePrefix } from "./bucket-prefix.js";
 export { steadyNow } from "./steady-clock.js";
 
 export { matchLanguage } from "./language-match.js";
+export {
+  fitSetMenus,
+  MAX_SET_MENU_AMOUNT_CENTS,
+  MAX_SET_MENU_MIXES,
+  type SetMenuDish,
+  type SetMenuFit,
+  type SetMenuFitInput,
+  type SetMenuFitPrevious,
+  type SetMenuOffer,
+  type SetMenuOfferDish,
+  type SetMenuOfferLine,
+  type SetMenuOnBill,
+  type SetMenuPlace,
+} from "./set-menu-fit.js";

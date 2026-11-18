@@ -987,6 +987,9 @@ ordinary order lines and whose bill picks the cheapest mix of set menus:
 [set-menu design](../superpowers/specs/2026-11-17-set-menus-design.md). The set-lunch build below
 is being removed first (A1515-REMOVE, lane D).
 
+The remaining set-menu work covers dashboard setup, till ordering, applying the fit to bills and
+their documents, and updating the demo and guides.
+
 The owner's A1515 decisions, recorded in the [proposal](../superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md),
 keep one lunch per diner, permit later choices and independent course sends, and price each premium
 supplement separately. Table service is one 10% service; takeaway/delivery VAT treatment remains
