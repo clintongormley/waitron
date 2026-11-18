@@ -150,18 +150,11 @@ function structuresIn(graph: SectionGraph): (menuId: string) => MenuStructure {
       rootSectionId: roots.get(id)!,
     }));
     const details = graph.section(rootSectionId)!;
-    const placed = new Set(
-      graph
-        .children(rootSectionId)
-        .flatMap(({ ref }) => (ref.kind === "set_menu" ? [ref.menuId] : [])),
-    );
     const placeableSetMenus =
       graph.menu(menuId)?.kind === "menu"
         ? graph.roots().flatMap(({ menuId: id }) => {
             const menu = graph.menu(id);
-            return menu?.kind === "set_menu" && menu.active && !placed.has(id)
-              ? [{ id, name: menu.name }]
-              : [];
+            return menu?.kind === "set_menu" && menu.active ? [{ id, name: menu.name }] : [];
           })
         : [];
     const root: SectionDetails = {

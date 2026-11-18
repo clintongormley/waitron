@@ -9,7 +9,7 @@ import {
 import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
 import { readTaxpayer, readVenue, type Transaction } from "@waitron/db";
 import { checkedContentLanguages } from "./content-languages.js";
-import { checkIncludeFolderRows } from "./include-folder.js";
+import { checkSectionMemberRows } from "./include-folder.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { unitStaffText, validateUnitPrecision } from "./unit-validation.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
@@ -200,7 +200,7 @@ export function validateMenuConfiguration(
   checkColors(tables.products, "products");
   checkColors(tables.categories, "categories");
   checkColors(tables.sections, "sections");
-  checkIncludeFolderRows(tables.section_members, tables.sections, tables.menus);
+  checkSectionMemberRows(tables.section_members, tables.sections, tables.menus);
   const parentOf = new Map((tables.categories ?? []).map((row) => [row.id, row.parent_id ?? null]));
   const byParent = new Map<unknown, string[]>();
   for (const category of tables.categories ?? []) {

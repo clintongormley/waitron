@@ -168,7 +168,7 @@ function importedOverrides(row: Record<string, unknown>): IncludeFolderOverrides
   };
 }
 
-export function checkIncludeFolderRows(
+export function checkSectionMemberRows(
   members: Rows | undefined,
   sections: Rows | undefined,
   menus: Rows | undefined,

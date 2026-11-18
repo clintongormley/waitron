@@ -501,7 +501,8 @@ export interface SetMenuTerms {
   (`PUT .../members/:memberId/folder`) on a set-menu member are refused with
   `set_menu.wrong_place`.
 - `includableMenus` leaves set menus out; `readMenuStructure` adds
-  `placeableSetMenus: { id: string; name: string }[]` (active set menus not already in this list).
+  `placeableSetMenus: { id: string; name: string }[]` with active set menus for ordinary-menu
+  structures. Task 11 filters the choices by the list being viewed.
 
 - [ ] **Step 1: Write the failing tests** in `set-menu-placement.test.ts`:
   - `"a set menu placed in a full menu adds none of its dishes to the full menu's offers"`: Sirloin
@@ -519,7 +520,8 @@ export interface SetMenuTerms {
     Home shortcut, is refused `set_menu.wrong_place`. A direct set-menu ref is also refused as a
     Home shortcut. Folder settings on the placed member are refused with `set_menu.wrong_place`.
     `includableMenus` and `readMenuStructure(fullMenu).includable` omit it.
-    `placeableSetMenus` lists it until placed.
+    `placeableSetMenus` still lists an active set menu after placing it at the root so it can
+    be placed in another list.
 - [ ] **Step 2: Run; they fail.**
 - [ ] **Step 3: Implement.** Run `pnpm --filter @waitron/menu typecheck` and fix the sites in the
   files this task lists. Sites the new ref kind breaks in other packages are Task 3b's: 3a and 3b
@@ -1056,9 +1058,10 @@ export interface PublishedSetMenu {
   undo: `menu-undo.ts` treats it as not undoable, and the preview links to the set menu's page
   instead (**my call**: the change is made there). Compare set-menu members in each list and
   show their placement or removal in Preview here. The ordinary member diff handles products and
-  sections. The dashboard's `widgets/menu-preview.ts` and `strings.ts` word the
-  new kind and source in the same change as the shared types. Check the change words, editor
-  link and absence of an undo in the Preview test.
+  sections. Extend `MenuChangeBody` to identify each set-menu placement change and its list.
+  Add English and Spanish words for the placement, removal, copy change and source in
+  `widgets/menu-preview.ts` and `strings.ts` alongside the shared types. Check the wording,
+  editor link and absence of an undo in the Preview test.
 
 - [ ] **Step 1: Write the failing tests** in `set-menu-document.changes.test.ts`, on Task 5a's
   fixture with Lunch published:
@@ -1071,7 +1074,7 @@ export interface PublishedSetMenu {
   - `"a set menu has no preview"`: `previewMenu(dailyMenu)` refuses `set_menu.wrong_place`.
   - `"placing or removing a set menu shows in Preview"`: publish Lunch, place Daily menu in Deals
     and preview, publish again, then remove that placement and preview. Each preview names the
-    placement change.
+    placement change. It does not report a copy edit for either placement change.
   - `"a surcharge change shows as set_menu_changed with fields dishes"`: Sirloin +€5 → +€6 →
     `previewMenu(Lunch)` has exactly one `set_menu_changed` naming Daily menu with
     `fields: ["dishes"]`.
@@ -1080,8 +1083,6 @@ export interface PublishedSetMenu {
     published "Weekend" menu → `alsoOn` names Weekend.
   - `"the change leads to the set-menu member and cannot be undone"`: `navigateMenuChanges` gives
     the member's target, and the undo read reports it as not undoable.
-  - `"placing a set menu shows as a member change only"`: no `set_menu_changed` for a set menu
-    newly placed in Lunch.
 - [ ] **Step 2: Run; they fail.** `pnpm --filter @waitron/menu exec vitest run src/set-menu-document.changes.test.ts`
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run the file, `menu-schedule.test.ts`, `menu-document.test.ts`, the navigation and

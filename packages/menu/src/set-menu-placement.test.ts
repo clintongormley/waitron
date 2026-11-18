@@ -4,6 +4,7 @@ import { menuItems, menus, sectionMembers, withTransaction, type Transaction } f
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { listTranslationGapReport } from "./content-translation-report.js";
+import { readTranslationRows, resolveTranslationRow } from "./content-translation-targets.js";
 import { validateMenuConfiguration } from "./configuration-transfer.js";
 import { buildMenuDocument, documentOffers } from "./menu-document.js";
 import { setIncludeFolder } from "./include-folder.js";
@@ -152,7 +153,7 @@ it("refuses folder settings for a placed set menu", async () => {
   ).rejects.toMatchObject({ code: "set_menu.wrong_place", params: { menuId: set.id } });
 });
 
-it("offers active set menus for placement separately from ordinary includes", async () => {
+it("keeps active set menus available for a different list after placing them at the root", async () => {
   await app(async (tx) => {
     const { full, fullRoot, set, setRoot } = await menusFixture(tx);
     expect(includableMenus(await loadSectionGraph(tx), full.id)).not.toContain(set.id);
@@ -163,7 +164,12 @@ it("offers active set menus for placement separately from ordinary includes", as
     await tx
       .insert(sectionMembers)
       .values({ sectionId: fullRoot, childSectionId: setRoot, position: 0 });
-    expect(await readMenuStructure(tx, full.id)).toMatchObject({ placeableSetMenus: [] });
+    expect((await readMenuStructure(tx, full.id)).placeableSetMenus).toEqual([
+      { id: set.id, name: "Daily menu" },
+    ]);
+    expect((await readMenuStructure(tx, set.id)).placeableSetMenus).toEqual([]);
+    await tx.update(menus).set({ active: false }).where(eq(menus.id, set.id));
+    expect((await readMenuStructure(tx, full.id)).placeableSetMenus).toEqual([]);
   });
 });
 
@@ -220,7 +226,6 @@ const importMenus = {
     { id: "lunch-root", owner_menu_id: "lunch", role: "menu_root" },
     { id: "lunch-home", owner_menu_id: "lunch", role: "home_layout", internal_name: "Home" },
     { id: "daily-root", owner_menu_id: "daily", role: "menu_root" },
-    { id: "daily-section", owner_menu_id: "daily", role: "section", internal_name: "Desserts" },
   ],
 };
 
@@ -232,6 +237,18 @@ it.each([
   expect(() =>
     validateMenuConfiguration({
       ...importMenus,
+      sections:
+        child_section_id === "daily-section"
+          ? [
+              ...importMenus.sections,
+              {
+                id: "daily-section",
+                owner_menu_id: "daily",
+                role: "section",
+                internal_name: "Desserts",
+              },
+            ]
+          : importMenus.sections,
       section_members: [{ section_id, child_section_id, position: 0 }],
     }),
   ).toThrowError(
@@ -285,13 +302,18 @@ it("does not offer translations for a set-menu placement as an included menu", a
         folderNames: { en: "An ordinary include's translated name" },
       })
       .returning({ id: sectionMembers.id });
-    const gaps = await listTranslationGapReport(tx, {
-      defaultLanguage: "en",
-      languages: ["en", "es"],
-    });
+    const config = { defaultLanguage: "en", languages: ["en", "es"] };
+    const gaps = await listTranslationGapReport(tx, config);
     expect(gaps.find(({ language }) => language === "es")!.gaps).not.toContainEqual(
       expect.objectContaining({ id: placement!.id, kind: "included_menu" }),
     );
+    const ref = { id: placement!.id, kind: "included_menu" } as const;
+    const rows = await readTranslationRows(tx, [ref]);
+    const target = resolveTranslationRow(rows.get(`included_menu:${ref.id}`)!, "es", {
+      config,
+      required: ["en"],
+    }).target;
+    expect(target).toMatchObject({ eligible: false, unavailableReason: "role" });
   });
 });
 
