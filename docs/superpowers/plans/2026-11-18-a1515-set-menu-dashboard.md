@@ -91,8 +91,8 @@ further than that and are marked **my call** where they first appear in a task:
 7. **The document format stays 4.** The change is additive: every stored format-4 document is still
    valid, so no `menu.reset_required`. The `setMenus` block is optional on `MenuDocument`.
 8. **The set-up guide section and the editor's help bubble land with the screen** (CLAUDE.md §3: a
-   screen change updates its guide in English and Spanish). Piece 5 keeps the table-service guide,
-   the help bubble on the order panel and the demo.
+   screen change updates its guide in English and Spanish). Piece 2 takes the table-service guide
+   and the help bubble on the order panel's count, for the same reason; piece 5 keeps the demo.
 
 ## Global Constraints
 
@@ -729,12 +729,12 @@ export type ServedSetMenuOffer = LiveOffer & {
   variantCountsAs: Record<string, string>;
 };
 export interface ServedSetMenu {
-  /** `${versionIds[0]}:${menuId}`; piece 2 uses it as the fit's `SetMenuOffer.id` and records
-   * it on the bill. */
+  /** `${menuId}:${hash}`, `hash` the `menuDocumentHash` of the `PublishedSetMenu`, so the same
+   * copy has the same key whichever versions hold it; piece 2 uses it as the fit's
+   * `SetMenuOffer.id` and stores it on the bill. */
   key: string;
   menuId: string;
-  /** The live versions of the served full menus holding this same copy, orderable ones first,
-   * then by code units. */
+  /** The live versions of the served full menus holding this same copy, by code units. */
   versionIds: string[];
   /** True when a full menu holding this copy is orderable in the zone now. Piece 2 offers a new
    * set menu only from an orderable copy. */
@@ -772,7 +772,7 @@ export interface ServedSetMenu {
 
 - [ ] **Step 1: Write the failing tests:**
   - `"a zone selling Lunch serves its copy of Daily menu"`: `setMenus` has one entry with
-    `versionIds` `[Lunch's live version]`, `key` `${that}:${dailyMenu}`, `orderable: true`,
+    `versionIds` `[Lunch's live version]`, `key` `${dailyMenu}:${hash of the copy}`, `orderable: true`,
     `terms.price "14.00"`, Soup's offer at `"0.00"` counting as Starters; `offers` holds no set-menu
     menu-item id.
   - `"a copy held only by a menu not selling now is served as not orderable"`.

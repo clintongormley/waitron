@@ -405,12 +405,16 @@ line with no course is sent straight away. So:
    and the published document carrying set-menu offers.
 2. **Ordering:** the count, fixed types, set-menu folders on the till, the set-menu-dish mark and
    counts-as course on the line, the uncovered-dish question and refusal, the summary, the
-   count-reduction refusal, moves between bills.
+   count-reduction refusal, moves between bills, and storing the outcome on the open bill (moved
+   here from piece 4 on 18 November 2026, because the till's total reads it). Until piece 4 lands,
+   a bill holding set menus cannot be paid, comped or discounted.
 3. **The fit:** the shared function, its tests (including the worked example and the owner's
    per-person example), stability, and its performance bound.
-4. **Bill, receipt and invoice:** storing the outcome, freezing it, the receipt and invoice
-   layout, VAT on the set-menu line. Passes lane L; the owner lands it.
-5. **Demo and guides**, including the courses in section 6.
+4. **Bill, receipt and invoice:** freezing the outcome at the first payment, discount or comp,
+   letting such a bill be paid, the receipt and invoice layout, VAT on the set-menu line. Passes
+   lane L; the owner lands it.
+5. **Demo**, including the courses in section 6. (The set-up guide lands with piece 1 and the
+   table-service guide with piece 2, with their screens.)
 
 Order: A1515-REMOVE lands first. Then 1 and 3 can go side by side; 2 needs both; 4 needs 2; 5 last.
 
