@@ -281,6 +281,30 @@ BEGIN
     );
 END;
 --> statement-breakpoint
+CREATE TRIGGER devices_receipt_printer_kind_insert
+BEFORE INSERT ON devices
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a receipt, slip or drawer printer must be a receipt printer')
+  WHERE EXISTS (
+    SELECT 1 FROM printers
+    WHERE id IN (new.receipt_printer_id, new.payment_slip_printer_id, new.cash_drawer_printer_id)
+      AND kind <> 'receipt'
+  );
+END;
+--> statement-breakpoint
+CREATE TRIGGER devices_receipt_printer_kind_update
+BEFORE UPDATE OF receipt_printer_id, payment_slip_printer_id, cash_drawer_printer_id ON devices
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a receipt, slip or drawer printer must be a receipt printer')
+  WHERE EXISTS (
+    SELECT 1 FROM printers
+    WHERE id IN (new.receipt_printer_id, new.payment_slip_printer_id, new.cash_drawer_printer_id)
+      AND kind <> 'receipt'
+  );
+END;
+--> statement-breakpoint
 CREATE TRIGGER tender_refunds_guard_update
 BEFORE UPDATE ON tender_refunds
 FOR EACH ROW

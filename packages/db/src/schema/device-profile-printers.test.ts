@@ -1,9 +1,9 @@
 import { insertA4Printer } from "../testing/printers.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { restrictRefused } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION } from "../sql-state.js";
+import { FOREIGN_KEY_VIOLATION, NOT_NULL_VIOLATION } from "../sql-state.js";
 import { isRefusal, isUniqueViolation } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDeviceProfiles, seedVenue } from "../testing/seed.js";
@@ -108,25 +108,25 @@ describe("device_profile_printers defaults", () => {
     expect(row).toEqual({ role: "cash_drawer", isDefault: false });
   });
 
-  it("page_printer_id accepts a page printer and refuses an unknown id", async () => {
+  it("printer_id accepts an office printer and refuses an unknown id", async () => {
     await withTransaction(suite.db, (tx) =>
       tx.insert(deviceProfilePrinters).values({
         deviceProfileId: profile,
-        pagePrinterId: pagePrinter,
+        printerId: pagePrinter,
         role: "invoice",
         position: 0,
       }),
     );
     const [row] = await suite.db
-      .select({ pagePrinterId: deviceProfilePrinters.pagePrinterId })
+      .select({ printerId: deviceProfilePrinters.printerId })
       .from(deviceProfilePrinters)
       .where(eq(deviceProfilePrinters.deviceProfileId, profile));
-    expect(row!.pagePrinterId).toBe(pagePrinter);
+    expect(row!.printerId).toBe(pagePrinter);
     const e = await captureError(() =>
       withTransaction(suite.db, (tx) =>
         tx.insert(deviceProfilePrinters).values({
           deviceProfileId: profile,
-          pagePrinterId: "unknown-printer",
+          printerId: "unknown-printer",
           role: "invoice",
           position: 1,
         }),
@@ -139,7 +139,7 @@ describe("device_profile_printers defaults", () => {
     await withTransaction(suite.db, (tx) =>
       tx.insert(deviceProfilePrinters).values({
         deviceProfileId: profile,
-        pagePrinterId: pagePrinter,
+        printerId: pagePrinter,
         role: "invoice",
         position: 0,
       }),
@@ -151,8 +151,7 @@ describe("device_profile_printers defaults", () => {
   });
 
   const targetRefusal = async (row: {
-    printerId?: string | null;
-    pagePrinterId?: string | null;
+    printerId: string;
     role: "receipt" | "payment_slip" | "cash_drawer" | "invoice";
   }): Promise<unknown> =>
     captureError(() =>
@@ -165,7 +164,7 @@ describe("device_profile_printers defaults", () => {
     await withTransaction(suite.db, (tx) =>
       tx.insert(deviceProfilePrinters).values({
         deviceProfileId: profile,
-        pagePrinterId: pagePrinter,
+        printerId: pagePrinter,
         role: "invoice",
         position: 0,
         isDefault: true,
@@ -174,58 +173,44 @@ describe("device_profile_printers defaults", () => {
     const rows = await suite.db
       .select({
         printerId: deviceProfilePrinters.printerId,
-        pagePrinterId: deviceProfilePrinters.pagePrinterId,
         role: deviceProfilePrinters.role,
       })
       .from(deviceProfilePrinters)
       .where(eq(deviceProfilePrinters.deviceProfileId, profile));
-    expect(rows).toEqual([{ printerId: null, pagePrinterId: pagePrinter, role: "invoice" }]);
+    expect(rows).toEqual([{ printerId: pagePrinter, role: "invoice" }]);
   });
 
-  it("refuses a row naming both targets or neither, on device_profile_printers_target_ck", async () => {
-    for (const row of [
-      { printerId: printer1, pagePrinterId: pagePrinter, role: "invoice" as const },
-      { printerId: null, pagePrinterId: null, role: "invoice" as const },
-      { printerId: null, pagePrinterId: null, role: "receipt" as const },
-    ]) {
-      const e = await targetRefusal(row);
-      expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
-      expect(engineErrorMessage(e)).toBe(
-        "CHECK constraint failed: device_profile_printers_target_ck",
-      );
-    }
-  });
-
-  it("refuses a page printer on any role but invoice", async () => {
-    for (const role of ["receipt", "payment_slip", "cash_drawer"] as const) {
-      const e = await targetRefusal({ pagePrinterId: pagePrinter, role });
-      expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
-      expect(engineErrorMessage(e)).toBe(
-        "CHECK constraint failed: device_profile_printers_target_ck",
-      );
-    }
+  it.each(["invoice", "receipt"])("requires a printer on the %s role", async (role) => {
+    const error = await captureError(() =>
+      suite.db.run(sql`insert into device_profile_printers
+        (id, device_profile_id, role, position) values ('missing-printer', ${profile}, ${role}, 0)`),
+    );
+    expect(isRefusal(error, NOT_NULL_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe(
+      "NOT NULL constraint failed: device_profile_printers.printer_id",
+    );
   });
 
   it("refuses one page printer twice on a profile's invoice role", async () => {
     await withTransaction(suite.db, (tx) =>
       tx.insert(deviceProfilePrinters).values({
         deviceProfileId: profile,
-        pagePrinterId: pagePrinter,
+        printerId: pagePrinter,
         role: "invoice",
         position: 0,
       }),
     );
-    const e = await targetRefusal({ pagePrinterId: pagePrinter, role: "invoice" });
+    const e = await targetRefusal({ printerId: pagePrinter, role: "invoice" });
     expect(isUniqueViolation(e)).toBe(true);
     expect(engineErrorMessage(e)).toBe(
-      "UNIQUE constraint failed: device_profile_printers.device_profile_id, device_profile_printers.role, device_profile_printers.page_printer_id",
+      "UNIQUE constraint failed: device_profile_printers.device_profile_id, device_profile_printers.role, device_profile_printers.printer_id",
     );
   });
 
   it("accepts a page printer and a receipt printer as two invoice rows", async () => {
     await withTransaction(suite.db, (tx) =>
       tx.insert(deviceProfilePrinters).values([
-        { deviceProfileId: profile, pagePrinterId: pagePrinter, role: "invoice", position: 0 },
+        { deviceProfileId: profile, printerId: pagePrinter, role: "invoice", position: 0 },
         {
           deviceProfileId: profile,
           printerId: printer1,
@@ -238,15 +223,14 @@ describe("device_profile_printers defaults", () => {
     const rows = await suite.db
       .select({
         printerId: deviceProfilePrinters.printerId,
-        pagePrinterId: deviceProfilePrinters.pagePrinterId,
         isDefault: deviceProfilePrinters.isDefault,
       })
       .from(deviceProfilePrinters)
       .where(eq(deviceProfilePrinters.deviceProfileId, profile))
       .orderBy(deviceProfilePrinters.position);
     expect(rows).toEqual([
-      { printerId: null, pagePrinterId: pagePrinter, isDefault: false },
-      { printerId: printer1, pagePrinterId: null, isDefault: true },
+      { printerId: pagePrinter, isDefault: false },
+      { printerId: printer1, isDefault: true },
     ]);
   });
 });

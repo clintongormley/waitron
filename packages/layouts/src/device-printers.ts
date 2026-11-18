@@ -53,23 +53,20 @@ export function emptyPrinterLists(): ProfilePrinterLists {
 }
 
 /**
- * Folds `device_profile_printers` rows, already in position order, into one profile's lists. A row
- * names exactly one of its two targets (`device_profile_printers_target_ck`).
+ * Folds `device_profile_printers` rows, already in position order, into one profile's lists.
  */
 export function foldPrinterLists(
   rows: {
-    printerId: string | null;
-    pagePrinterId: string | null;
+    printerId: string;
     role: ProfilePrinterRole;
     isDefault: boolean;
   }[],
 ): ProfilePrinterLists {
   const lists = emptyPrinterLists();
-  for (const { printerId, pagePrinterId, role, isDefault } of rows) {
+  for (const { printerId, role, isDefault } of rows) {
     const keys = LIST_KEYS[role];
-    const id = (printerId ?? pagePrinterId)!;
-    lists[keys.ids].push(id);
-    if (isDefault) lists[keys.defaultId] = id;
+    lists[keys.ids].push(printerId);
+    if (isDefault) lists[keys.defaultId] = printerId;
   }
   return lists;
 }
@@ -81,7 +78,6 @@ export async function readProfilePrinterLists(
   const rows = await tx
     .select({
       printerId: deviceProfilePrinters.printerId,
-      pagePrinterId: deviceProfilePrinters.pagePrinterId,
       role: deviceProfilePrinters.role,
       isDefault: deviceProfilePrinters.isDefault,
     })
@@ -118,7 +114,7 @@ export async function setProfilePrinterLists(
     .from(deviceProfiles)
     .where(eq(deviceProfiles.id, profileId));
   if (profile?.formFactor === "kds") lists = emptyPrinterLists();
-  const pageIds = await refuseUnknownPrinters(tx, lists);
+  await refuseUnknownPrinters(tx, lists);
   for (const role of PROFILE_PRINTER_ROLES) {
     const keys = LIST_KEYS[role];
     const defaultId = lists[keys.defaultId];
@@ -154,8 +150,7 @@ export async function setProfilePrinterLists(
     const keys = LIST_KEYS[role];
     return lists[keys.ids].map((id, position) => ({
       deviceProfileId: profileId,
-      printerId: role === "invoice" && pageIds.has(id) ? null : id,
-      pagePrinterId: role === "invoice" && pageIds.has(id) ? id : null,
+      printerId: id,
       role,
       position,
       isDefault: id === lists[keys.defaultId],
@@ -167,14 +162,10 @@ export async function setProfilePrinterLists(
 
 /**
  * Refuses with `printer.not_found` the first id on a list or default that names a deleted printer,
- * then the first listed id that names no printer its list may hold, and returns the invoice list's
- * ids that name a page printer. The lookup is by id alone: switched-off state is
+ * then the first listed id that names no printer its list may hold. Switched-off state is
  * judged where a device resolves the role.
  */
-async function refuseUnknownPrinters(
-  tx: Transaction,
-  lists: ProfilePrinterLists,
-): Promise<Set<string>> {
+async function refuseUnknownPrinters(tx: Transaction, lists: ProfilePrinterLists): Promise<void> {
   const named = [
     ...new Set(
       PROFILE_PRINTER_ROLES.flatMap((role) => [
@@ -183,7 +174,7 @@ async function refuseUnknownPrinters(
       ]).filter((id): id is string => id !== null),
     ),
   ];
-  if (named.length === 0) return new Set();
+  if (named.length === 0) return;
   // The invoice role can use either kind.
   const rows = await tx
     .select({ id: printers.id, kind: printers.kind, deletedAt: printers.deletedAt })
@@ -201,5 +192,4 @@ async function refuseUnknownPrinters(
     );
     if (unknown !== undefined) throw new AppError("printer.not_found", { id: unknown });
   }
-  return pageIds;
 }

@@ -904,7 +904,6 @@ describe("management: a device's equipment", () => {
       paymentSlipPrinterId: null,
       cashDrawerPrinterId: null,
       invoicePrinterId: null,
-      invoicePagePrinterId: null,
     });
     const read = await send(deviceApp, managerCookie, "GET", "/management-api/devices");
     expect(read.status).toBe(200);

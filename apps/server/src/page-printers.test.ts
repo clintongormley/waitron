@@ -409,17 +409,17 @@ describe("deleting a page printer", () => {
     });
     await suite.db
       .update(devices)
-      .set({ invoicePagePrinterId: office.id })
+      .set({ invoicePrinterId: office.id })
       .where(eq(devices.id, deviceId));
     await suite.db.insert(deviceProfilePrinters).values([
       {
         deviceProfileId: profile!.id,
-        pagePrinterId: office.id,
+        printerId: office.id,
         role: "invoice",
         position: 0,
         isDefault: true,
       },
-      { deviceProfileId: profile!.id, pagePrinterId: other.id, role: "invoice", position: 1 },
+      { deviceProfileId: profile!.id, printerId: other.id, role: "invoice", position: 1 },
     ]);
     const impact = await withTransaction(suite.db, (tx) => deletePagePrinter(tx, office.id));
     expect(impact).toMatchObject({
@@ -436,11 +436,10 @@ describe("deleting a page printer", () => {
       ],
     });
     expect(
-      (await suite.db.select().from(devices).where(eq(devices.id, deviceId)))[0]!
-        .invoicePagePrinterId,
+      (await suite.db.select().from(devices).where(eq(devices.id, deviceId)))[0]!.invoicePrinterId,
     ).toBeNull();
     expect(await suite.db.select().from(deviceProfilePrinters)).toEqual([
-      expect.objectContaining({ pagePrinterId: other.id, isDefault: false }),
+      expect.objectContaining({ printerId: other.id, isDefault: false }),
     ]);
     const afterDelete = await suite.db.select().from(deviceProfilePrinters);
     expect(await register(entry(v.agentTwo, { office: urfReport }))).toEqual({
@@ -449,8 +448,7 @@ describe("deleting a page printer", () => {
     });
     expect(await suite.db.select().from(deviceProfilePrinters)).toEqual(afterDelete);
     expect(
-      (await suite.db.select().from(devices).where(eq(devices.id, deviceId)))[0]!
-        .invoicePagePrinterId,
+      (await suite.db.select().from(devices).where(eq(devices.id, deviceId)))[0]!.invoicePrinterId,
     ).toBeNull();
   });
 

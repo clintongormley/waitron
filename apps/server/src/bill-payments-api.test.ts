@@ -2192,9 +2192,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     beforeEach(async () => {
       await inTx((tx) => tx.update(printers).set({ active: false }).where(eq(printers.kind, "a4")));
       await unlistFromTill();
-      suite.db.run(
-        sql`update devices set invoice_printer_id = null, invoice_page_printer_id = null where id = ${venue.deviceId}`,
-      );
+      suite.db.run(sql`update devices set invoice_printer_id = null where id = ${venue.deviceId}`);
     });
 
     it("answers no invoice printer when the device's profile lists none, or only a disabled one", async () => {
@@ -2242,9 +2240,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         status: 200,
         json: { invoicePrinter: null, emailAvailable: false },
       });
-      suite.db.run(
-        sql`update devices set invoice_page_printer_id = ${a4} where id = ${venue.deviceId}`,
-      );
+      suite.db.run(sql`update devices set invoice_printer_id = ${a4} where id = ${venue.deviceId}`);
       expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
         status: 200,
         json: { invoicePrinter: { id: a4, name: "Invoices" }, emailAvailable: false },

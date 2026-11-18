@@ -1433,13 +1433,23 @@ for (const locale of ["en", "es"] as const) {
           table.foreignKeys.filter((key) => key.id === capturedId).map((key) => ({ ...key, id })),
         );
       }
-      for (const [table, column] of [
-        ["devices", "invoice_page_printer_id"],
-        ["device_profile_printers", "page_printer_id"],
+      for (const [name, previous, current] of [
+        ["devices", "invoice_page_printer_id", "invoice_printer_id"],
+        ["device_profile_printers", "page_printer_id", "printer_id"],
       ] as const) {
-        const key = expected[phase].tables[table]!.foreignKeys.find((row) => row.from === column)!;
-        key.table = "printers";
+        const table = expected[phase].tables[name]!;
+        table.columns = table.columns.filter((column) => column.name !== previous);
+        table.foreignKeys = table.foreignKeys
+          .filter((key) => key.from !== previous)
+          .map((key, id) => ({ ...key, id }));
+        for (const row of Object.values(table.rows)) {
+          row[current] ??= row[previous];
+          delete row[previous];
+        }
       }
+      expected[phase].tables.device_profile_printers!.columns.find(
+        (column) => column.name === "printer_id",
+      )!.notnull = 1;
       const deliveries = expected[phase].tables.invoice_deliveries!;
       deliveries.columns.find(({ name }) => name === "page_printer_id")!.name = "printer_id";
       const deliveryPrinter = deliveries.foreignKeys.find(

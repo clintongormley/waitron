@@ -671,7 +671,7 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
       formFactor: "till",
     });
     await suite.db.insert(deviceProfilePrinters).values([
-      { deviceProfileId: invoices!.id, pagePrinterId: officeId, role: "invoice", position: 0 },
+      { deviceProfileId: invoices!.id, printerId: officeId, role: "invoice", position: 0 },
       { deviceProfileId: invoices!.id, printerId: counter, role: "invoice", position: 1 },
     ]);
 

@@ -41,10 +41,7 @@ export const devices = table(
       onDelete: "restrict",
     }),
     /* v8 ignore stop */
-    // The invoice choice names a receipt printer or a page printer. Every write that stores an
-    // invoice choice takes its columns from `choiceColumns` (`packages/layouts/src/device-equipment.ts`),
-    // which sets one and clears the other; there is no CHECK because a CHECK would make drizzle-kit
-    // rebuild `devices`.
+    // An invoice choice can name either printer kind.
     /* v8 ignore start */
     invoicePrinterId: id("invoice_printer_id").references(() => printers.id, {
       onDelete: "restrict",
@@ -52,11 +49,6 @@ export const devices = table(
     /* v8 ignore stop */
     // No key into the switchable payments set; selectDeviceReader checks it and reader deletion clears it.
     cardReaderId: id("card_reader_id"),
-    /* v8 ignore start */
-    invoicePagePrinterId: id("invoice_page_printer_id").references(() => printers.id, {
-      onDelete: "restrict",
-    }),
-    /* v8 ignore stop */
     label: label("label").notNull(),
     // `hashDeviceToken` of the device token, never the plaintext; "" once the device is deleted.
     tokenHash: label("token_hash").notNull(),

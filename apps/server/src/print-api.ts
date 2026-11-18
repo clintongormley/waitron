@@ -2000,28 +2000,30 @@ async function readPrinterProfileUses(tx: Transaction): Promise<PrinterProfileUs
   const rows = await tx
     .select({
       printerId: deviceProfilePrinters.printerId,
-      pagePrinterId: deviceProfilePrinters.pagePrinterId,
+      kind: printers.kind,
       profileId: deviceProfiles.id,
       profileName: deviceProfiles.name,
       role: deviceProfilePrinters.role,
     })
     .from(deviceProfilePrinters)
+    // The wire response carries both receipt and A4 printer usage.
+    .innerJoin(printers, eq(printers.id, deviceProfilePrinters.printerId))
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
     .where(isNull(deviceProfiles.retiredAt))
     .orderBy(
       deviceProfiles.name,
       deviceProfiles.id,
+      printers.kind,
       deviceProfilePrinters.printerId,
-      deviceProfilePrinters.pagePrinterId,
     );
   const uses = new Map<string, PrinterProfileUse>();
   for (const row of rows) {
-    const key = `${row.profileId}/${row.printerId ?? ""}/${row.pagePrinterId ?? ""}`;
+    const key = `${row.profileId}/${row.printerId}`;
     const use = uses.get(key);
     if (use === undefined) {
       uses.set(key, {
-        printerId: row.printerId,
-        pagePrinterId: row.pagePrinterId,
+        printerId: row.kind === "receipt" ? row.printerId : null,
+        pagePrinterId: row.kind === "a4" ? row.printerId : null,
         profileId: row.profileId,
         profileName: row.profileName,
         roles: [row.role],

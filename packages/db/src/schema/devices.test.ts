@@ -180,10 +180,7 @@ describe("devices schema (columns, FKs, unique)", () => {
       });
     });
 
-    async function setChoice(
-      id: string,
-      choice: { invoicePrinterId?: string; invoicePagePrinterId?: string },
-    ): Promise<void> {
+    async function setChoice(id: string, choice: { invoicePrinterId: string }): Promise<void> {
       await inTx((tx) => tx.update(devices).set(choice).where(eq(devices.id, id)));
     }
 
@@ -201,27 +198,25 @@ describe("devices schema (columns, FKs, unique)", () => {
       expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
     });
 
-    it("invoice_page_printer_id accepts a page printer and refuses an unknown id", async () => {
+    it("invoice_printer_id accepts a page printer and refuses an unknown id", async () => {
       const id = await seedDevice("Till 1");
-      await setChoice(id, { invoicePagePrinterId: PAGE_PRINTER });
+      await setChoice(id, { invoicePrinterId: PAGE_PRINTER });
       const [row] = await inTx((tx) =>
         tx
-          .select({ invoicePagePrinterId: devices.invoicePagePrinterId })
+          .select({ invoicePrinterId: devices.invoicePrinterId })
           .from(devices)
           .where(eq(devices.id, id)),
       );
-      expect(row!.invoicePagePrinterId).toBe(PAGE_PRINTER);
-      const e = await captureError(() =>
-        setChoice(id, { invoicePagePrinterId: "unknown-printer" }),
-      );
+      expect(row!.invoicePrinterId).toBe(PAGE_PRINTER);
+      const e = await captureError(() => setChoice(id, { invoicePrinterId: "unknown-printer" }));
       expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
     });
 
-    it("refuses deleting a printer either invoice column names, as a restrict", async () => {
+    it("refuses deleting either kind of chosen invoice printer, as a restrict", async () => {
       const receiptChoice = await seedDevice("Till 1");
       const pageChoice = await seedDevice("Till 2");
       await setChoice(receiptChoice, { invoicePrinterId: RECEIPT_PRINTER });
-      await setChoice(pageChoice, { invoicePagePrinterId: PAGE_PRINTER });
+      await setChoice(pageChoice, { invoicePrinterId: PAGE_PRINTER });
       const receipt = await captureError(() =>
         inTx((tx) => tx.delete(printers).where(eq(printers.id, RECEIPT_PRINTER))),
       );

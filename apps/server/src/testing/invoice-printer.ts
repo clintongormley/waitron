@@ -21,8 +21,7 @@ export async function listInvoicePrinter(
   await tx.insert(deviceProfilePrinters).values({
     deviceProfileId: input.profileId,
     role: "invoice",
-    printerId: input.printerId ?? null,
-    pagePrinterId: input.pagePrinterId ?? null,
+    printerId: input.printerId ?? input.pagePrinterId,
     position: listed?.n ?? 0,
     isDefault: input.isDefault,
   });

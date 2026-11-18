@@ -186,7 +186,7 @@ it("a sole Invoice offer without choice or default still requires a deliberate c
     .where(eq(deviceProfilePrinters.deviceProfileId, till.deviceProof.device.deviceProfileId));
   await suite.db.insert(deviceProfilePrinters).values({
     deviceProfileId: till.deviceProof.device.deviceProfileId,
-    pagePrinterId: office,
+    printerId: office,
     role: "invoice",
     position: 0,
   });
