@@ -6616,11 +6616,19 @@ describe("held print pulls", () => {
     expect(forgotten.status).toBe(202);
   });
 
-  it("queued USB work refreshes inventory within two seconds so a returning printer can print", async () => {
+  it("queued USB work refreshes inventory while another printer waits to retry", async () => {
     const r = await rig();
     const printer = await createUsbPrinter(r.app, "returning-usb");
+    const network = await createNetworkPrinter(r.app, "192.0.2.16", 9100);
+    const failed = await enqueue(network, new Uint8Array([3]));
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    expect((await pull(r.app, r.token)).jobs).toMatchObject([{ id: failed }]);
+    const report = await send(r.app, "POST", `/print-api/agent/jobs/${failed}/result`, {
+      bearer: r.token,
+      body: { status: "failed", error: "printer offline" },
+    });
+    expect(report.status).toBe(204);
     const id = await enqueue(printer, new Uint8Array([4]));
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const pending = r.request();
     await held(r.bus);
     await vi.advanceTimersByTimeAsync(2_000);

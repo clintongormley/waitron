@@ -9,6 +9,7 @@ requests because the combined estimate exceeds three hours. Part A ships the han
 retry spacing with the existing agent message. Part B follows it. Each part gets its own protection
 comparison. At 20:40 the watcher cleared waking a held pull at the next retry, moving two retry
 tests' clocks to the retry boundary, and pointing exact handover tests at the two new columns.
+At 21:04 the watcher cleared removing the retry time when a job is moved or its printer is deleted.
 Part B keeps the tested receipt delivery due-time check until dv14 and uses one expiry predicate
 for the job's claim and the till's read-only checks. M1 was recorded separately in the
 [printers backlog](../../backlog/printers.md#the-virtual-pdf-printer).

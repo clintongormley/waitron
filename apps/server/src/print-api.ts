@@ -704,7 +704,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             continue;
           }
           if (job.status === "queued" && job.kind === "document") {
-            // A retry already tells us this printer is reachable.
+            // This printer's retry wakes the hold while later documents wait behind it.
             if (!retryingPrinters.has(job.printerId)) remaining = Math.min(remaining, 2_000);
             continue;
           }
