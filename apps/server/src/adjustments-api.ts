@@ -27,6 +27,7 @@ import {
   parseDrawerOverride,
   requireRevision,
   requireTabParam,
+  runBodyIds,
   type Run,
   type TillApiDeps,
 } from "./till-api.js";
@@ -138,6 +139,7 @@ export function mountAdjustmentsApi(
   run: Run,
   pinThrottle: PinThrottle,
 ): void {
+  const runAsk = runBodyIds("tab.line_not_found");
   const fiscal = {
     db: deps.db,
     backend: deps.backend,
@@ -189,7 +191,7 @@ export function mountAdjustmentsApi(
   );
 
   app.post("/api/working-orders/:id/adjustments", (c) =>
-    run(c, log, async () => {
+    runAsk(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
@@ -254,7 +256,7 @@ export function mountAdjustmentsApi(
   );
 
   app.post("/api/working-orders/:id/adjustments/preview", (c) =>
-    run(c, log, async () => {
+    runAsk(c, log, async () => {
       const session = await requireSession(deps, c);
       const { personId } = session;
       const id = requireBill(c.req.param("id"));

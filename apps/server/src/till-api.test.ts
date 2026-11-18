@@ -4285,7 +4285,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields", () =>
     }
   });
 
-  it("served POST naming a line that is not on the party's bills is 404 group.not_found", async () => {
+  it("served POST naming a line that is not on the party's bills is 400 group.not_found", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -4309,7 +4309,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields", () =>
 
     for (const lineId of [randomUUID(), "99"]) {
       const res = await mark(app, cookie, partyId, "served", [{ lineId, quantity: "1" }]);
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
         error: { code: "group.not_found", params: { lineId } },
       });

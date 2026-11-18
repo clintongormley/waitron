@@ -1315,12 +1315,12 @@ describe("A803 split: the route", () => {
       return answer;
     }
 
-    it("a dish the bill does not hold: 404 tab.line_not_found", async () => {
+    it("a dish the bill does not hold: 400 tab.line_not_found", async () => {
       const { anna, second } = await annaWith("Tarta", "Caña");
 
       const answer = await refusal(anna, second, randomUUID());
 
-      expect(answer.status).toBe(404);
+      expect(answer.status).toBe(400);
       expect(answer.json).toMatchObject({ code: "tab.line_not_found" });
     });
 

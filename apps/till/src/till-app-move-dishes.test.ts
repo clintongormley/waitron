@@ -670,7 +670,7 @@ describe("A803 move dishes app:", () => {
         const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
         const { el, order } = await open({
           getTabLines,
-          moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 404 }),
+          moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 400 }),
         });
         setLocale(language);
         getTabLines.mockResolvedValue({ lines: [OTHER_DISH], revision: 1 });
@@ -748,7 +748,7 @@ describe("A803 move dishes app:", () => {
       const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
       const { el, order } = await open({
         getTabLines,
-        moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 404 }),
+        moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 400 }),
       });
       getTabLines.mockRejectedValue(new TypeError("Failed to fetch"));
 
@@ -762,7 +762,7 @@ describe("A803 move dishes app:", () => {
       const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
       const { el, order } = await open({
         getTabLines,
-        moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 404 }),
+        moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 400 }),
       });
       const read = heldRead<TabLines>();
       getTabLines.mockImplementationOnce(read.call);
@@ -782,7 +782,7 @@ describe("A803 move dishes app:", () => {
       const getTabLines = vi.fn().mockResolvedValue({ lines: [DISH], revision: 0 });
       const { el, order } = await open({
         getTabLines,
-        moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 404 }),
+        moveDishes: vi.fn().mockRejectedValue({ code: "tab.line_not_found", status: 400 }),
       });
       const read = heldRead<TabLines>();
       getTabLines.mockImplementationOnce(read.call);

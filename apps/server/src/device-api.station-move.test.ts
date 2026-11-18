@@ -350,7 +350,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
       lineIds: [own.item.workingOrderLineId, other.item.workingOrderLineId],
       stationId: grill,
     });
-    expect(answer.status).toBe(404);
+    expect(answer.status).toBe(400);
     expect(answer.json).toMatchObject({ code: "tab.line_not_found" });
     const after = await inTx(venue, (tx) =>
       tx
@@ -370,7 +370,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
       lineIds: [item.workingOrderLineId],
       stationId: off,
     });
-    expect(inactive.status).toBe(404);
+    expect(inactive.status).toBe(400);
     expect(inactive.json).toMatchObject({ code: "station.not_found", params: { stationId: off } });
     await inTx(venue, (tx) =>
       tx.update(ticketItems).set({ state: "preparing" }).where(eq(ticketItems.id, item.id)),
@@ -400,10 +400,10 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
       params: { field: "lineIds" },
     });
     const badLine = await move(screen.cookie, tabId, { lineIds: ["bad"], stationId: grill });
-    expect(badLine.status).toBe(404);
+    expect(badLine.status).toBe(400);
     expect(badLine.json).toMatchObject({ code: "tab.line_not_found" });
     const badStation = await move(screen.cookie, tabId, { lineIds: [lineId], stationId: "bad" });
-    expect(badStation.status).toBe(404);
+    expect(badStation.status).toBe(400);
     expect(badStation.json).toMatchObject({ code: "station.not_found" });
     const noSubmission = await send(
       app,
@@ -413,6 +413,22 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
       { lineIds: [lineId], stationId: grill },
     );
     expect(noSubmission.status).toBe(400);
+  });
+
+  it("answers 404 for an unknown order in the address, and 400 when only the body misses", async () => {
+    const screen = await display(stationScreen(bar));
+    const { tabId } = await sentDish();
+    const unknownOrder = randomUUID();
+    const body = { lineIds: [randomUUID()], stationId: grill };
+    const missedAddress = await move(screen.cookie, unknownOrder, body);
+    expect(missedAddress.status).toBe(404);
+    expect(missedAddress.json).toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: unknownOrder },
+    });
+    const missedBody = await move(screen.cookie, tabId, body);
+    expect(missedBody.status).toBe(400);
+    expect(missedBody.json).toMatchObject({ code: "tab.line_not_found" });
   });
 
   it("replays a retried submission without a second move", async () => {

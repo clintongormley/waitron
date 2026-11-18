@@ -2572,13 +2572,13 @@ describe("TillApi", () => {
   it("setLineCourse surfaces { code } for an unknown/retired course or an already-fired line", async () => {
     const fetchStub = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: { code: "course.not_found" } }), {
-        status: 404,
+        status: 400,
       }),
     );
 
     await expect(
       new TillApi("", fetchStub).setLineCourse("wo-1", 2, "gone", null),
-    ).rejects.toMatchObject({ code: "course.not_found" });
+    ).rejects.toMatchObject({ code: "course.not_found", status: 400 });
   });
 
   it("sendLines POSTs { lineNos } to the tab's /lines/send route (empty 200 body)", async () => {

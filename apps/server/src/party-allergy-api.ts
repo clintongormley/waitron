@@ -19,7 +19,7 @@ import {
 } from "./party-allergy.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { requestCfg } from "./request-config.js";
-import type { Run, TillApiDeps } from "./till-api.js";
+import { runBodyIds, type Run, type TillApiDeps } from "./till-api.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
 import "./errors.js";
@@ -89,10 +89,12 @@ function command(input: unknown): AllergyCommand {
 }
 
 export function mountPartyAllergyApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
+  const runSendPreview = runBodyIds("group.not_found");
   for (const method of ["get", "put", "post"] as const) {
     const path = `/api/parties/:id/allergy${method === "post" ? "/send-preview" : ""}`;
+    const boundary = method === "post" ? runSendPreview : run;
     app[method](path, (c) =>
-      run(c, log, async () => {
+      boundary(c, log, async () => {
         const session = await requireSession(deps, c, {
           action: "take-orders",
           passive: method === "get",

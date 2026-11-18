@@ -238,6 +238,12 @@ const runDeviceEdit = createErrorBoundary(
   { ...STATUS, "device_profile.not_found": 400, "station.not_found": 400 },
   "device.failed",
 );
+/** A kitchen screen's move names its dishes and destination station only in the body
+ * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
+const runDeviceStationMove = createErrorBoundary(
+  { ...LEVER_STATUS, "tab.line_not_found": 400, "station.not_found": 400 },
+  "device.failed",
+);
 
 /** The device's own housekeeping: none is a sale, an order, a kitchen send or a clock-in. */
 const DEVICE_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
@@ -708,7 +714,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
 
   // ── Move dishes from the screen's stations to another (DEVICE-GUARDED, kitchen displays only) ──────
   app.post("/api/device/working-orders/:id/lines/move-station", (c) =>
-    leverRun(c, log, async () => {
+    runDeviceStationMove(c, log, async () => {
       const device = await requireKitchenDisplay(deps, c, "take-orders");
       const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id").toLowerCase();

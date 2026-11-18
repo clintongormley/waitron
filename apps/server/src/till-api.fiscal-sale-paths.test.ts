@@ -463,6 +463,31 @@ describe("POST /api/session (PIN login body handling)", () => {
 });
 
 describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
+  it("answers 400 course.not_found for a course only the body names", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((product) => product.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg);
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    const courseId = randomUUID();
+
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        dining: "eat_in",
+        lines: [{ menuItemId: each.menuItemId, quantity: "1", courseId }],
+        tender: { method: "cash", amount: "1.50" },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId } },
+    });
+    expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(0);
+  });
   it.each(["sale", "collect"])(
     "manual tip validates at the HTTP boundary for %s",
     async (route) => {
@@ -1012,6 +1037,33 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
 // `payWorkingOrderIntegrated` over a `FakeStripe`-backed provider. These cases pin the reader
 // ROUTING: which reader a collect drives, and which id lands on `payments.reader_id`.
 describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
+  it("answers 400 course.not_found for a course only the body names", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((product) => product.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    await connectStripe();
+    const reader = await seedReader();
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
+    const courseId = randomUUID();
+
+    const response = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        dining: "eat_in",
+        id: randomUUID(),
+        lines: [{ menuItemId: each.menuItemId, quantity: "1", courseId }],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId } },
+    });
+  });
   it.each([
     { tip: undefined, tipsEnabled: true, charged: 150, recordedTip: 0 },
     { tip: "0", tipsEnabled: true, charged: 150, recordedTip: 0 },

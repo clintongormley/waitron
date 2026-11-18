@@ -447,6 +447,7 @@ for (const mode of ["new draft", "new basket", "new line"] as const)
                 groups: [{ release: "hold", lines: [{ ...v.line(), retainedCourse: true }] }],
               }),
       "course.not_found",
+      400,
     );
     expect(await v.db.select().from(ticketItems)).toEqual([]);
   });
@@ -490,7 +491,7 @@ for (const mode of [
           mode === "wrong party" ? otherParty.partyId : undefined,
         ),
       code,
-      ["draft.out_of_date", "draft.taken_over"].includes(code) ? 409 : 404,
+      ["draft.out_of_date", "draft.taken_over"].includes(code) ? 409 : 400,
     );
   });
 it("new product choice after its default clears is course-free and fires earliest", async () => {

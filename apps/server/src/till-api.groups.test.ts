@@ -372,7 +372,7 @@ describe("POST /api/parties/:id/groups", () => {
     expect(await snapshot(party)).toEqual(before);
   });
 
-  it("joins a held group named by joinGroupId, and refuses a fired one 409 group.not_held and an unknown one 404 group.not_found", async () => {
+  it("joins a held group named by joinGroupId, and refuses a fired one 409 group.not_held and an unknown one 400 group.not_found", async () => {
     const party = await withGroups();
 
     const joined = await submit(party.partyId, [{ lines: [dish("Octopus")], release: "hold" }], {
@@ -393,7 +393,7 @@ describe("POST /api/parties/:id/groups", () => {
     ]);
     expect(toFired.status).toBe(409);
     expect(toFired.json).toEqual(refusal("group.not_held", { groupId: party.fired.id }));
-    expect(toMissing.status).toBe(404);
+    expect(toMissing.status).toBe(400);
     expect(toMissing.json).toEqual(refusal("group.not_found", { groupId: missing }));
     expect(await snapshot(party)).toEqual(before);
   });
@@ -627,7 +627,7 @@ describe("PUT /api/parties/:id/groups/order", () => {
     expect(await snapshot(party)).toEqual(before);
   });
 
-  it("refuses a stale revision 409 party.out_of_date, a fired group 409 group.not_held and an unknown one 404 group.not_found", async () => {
+  it("refuses a stale revision 409 party.out_of_date, a fired group 409 group.not_held and an unknown one 400 group.not_found", async () => {
     const party = await withGroups();
     const before = await snapshot(party);
     const path = `/api/parties/${party.partyId}/groups/order`;
@@ -656,7 +656,7 @@ describe("PUT /api/parties/:id/groups/order", () => {
     );
     expect(fired.status).toBe(409);
     expect(fired.json).toEqual(refusal("group.not_held", { groupId: party.fired.id }));
-    expect(unknown.status).toBe(404);
+    expect(unknown.status).toBe(400);
     expect(unknown.json).toEqual(refusal("group.not_found", { groupId: missing }));
     expect(await snapshot(party)).toEqual(before);
   });
@@ -758,7 +758,7 @@ describe("POST /api/parties/:id/groups/move", () => {
     expect(await snapshot(party)).toEqual(before);
   });
 
-  it("refuses a stale revision 409 party.out_of_date, a fired target 409 group.not_held and an unknown line 404 group.not_found", async () => {
+  it("refuses a stale revision 409 party.out_of_date, a fired target 409 group.not_held and an unknown line or target 400 group.not_found", async () => {
     const party = await withGroups();
     const before = await snapshot(party);
     const path = `/api/parties/${party.partyId}/groups/move`;
@@ -784,6 +784,12 @@ describe("POST /api/parties/:id/groups/move", () => {
       moves: [{ lineId: missing, quantity: "1" }],
       target: "new",
     });
+    const unknownTarget = await call("POST", path, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: current,
+      moves,
+      target: { groupId: missing },
+    });
 
     expect(stale.status).toBe(409);
     expect(stale.json).toEqual(
@@ -791,8 +797,10 @@ describe("POST /api/parties/:id/groups/move", () => {
     );
     expect(toFired.status).toBe(409);
     expect(toFired.json).toEqual(refusal("group.not_held", { groupId: party.fired.id }));
-    expect(unknownLine.status).toBe(404);
+    expect(unknownLine.status).toBe(400);
     expect(unknownLine.json).toEqual(refusal("group.not_found", { lineId: missing }));
+    expect(unknownTarget.status).toBe(400);
+    expect(unknownTarget.json).toEqual(refusal("group.not_found", { groupId: missing }));
     expect(await snapshot(party)).toEqual(before);
   });
 
@@ -1265,7 +1273,13 @@ describe("POST /api/parties/:id/served, /unserved and /groups/:gid/served", () =
       [
         `${base}/served`,
         at({ items: [{ lineId: randomUUID(), quantity: "1" }] }),
-        404,
+        400,
+        refusal("group.not_found"),
+      ],
+      [
+        `${base}/unserved`,
+        at({ items: [{ lineId: randomUUID(), quantity: "1" }] }),
+        400,
         refusal("group.not_found"),
       ],
       [
@@ -2548,6 +2562,19 @@ describe("POST one held dish's Fire now", () => {
       expect(await snapshot(party)).toEqual(before);
     },
   );
+  it("refuses 400 group.not_found for a held line only the body names", async () => {
+    const party = await seated();
+    const missing = randomUUID();
+    const before = await snapshot(party);
+    const refused = await call("POST", `/api/parties/${party.partyId}/groups/fire-line`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      lineId: missing,
+    });
+    expect(refused.status).toBe(400);
+    expect(refused.json).toEqual(refusal("group.not_found", { lineId: missing }));
+    expect(await snapshot(party)).toEqual(before);
+  });
   it("requires a session without touching the kitchen", async () => {
     const party = await withGroups();
     const before = await snapshot(party);

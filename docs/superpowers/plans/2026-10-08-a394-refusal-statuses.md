@@ -154,6 +154,8 @@ names and 404 for a zone in the path, and `route.subject_not_found` and `route.s
 management-api (`management-api.ts:247`) and venue-service (`packages/venue-service/src/routes.ts:100`).
 The catalogue's other body-id changes, and the routes that keep 404, are under
 `apps/server/src/catalogue-api.ts` below.
+**2026-11-18 (A394-10):** on the till, `course.not_found` now answers 400 on the routes whose body
+names the course; A394-10 below lists them and the routes that keep 404.
 
 ## Client contract: clients branch on the code, not the status
 
@@ -192,7 +194,8 @@ Representative code branches a status change leaves alone:
 `packages/venue-service/src/dashboard/prep-stations-screen.ts:1820,2015,2027`.
 
 One promise to update: a doc comment at `apps/till/src/api/client.ts:2723` says
-`course.not_found` is 404 (part 1).
+`course.not_found` is 404 (part 1). **2026-11-18:** nothing left to update; #1944 deleted that
+comment along with `markCourseAway`.
 
 So, as far as grep shows, every status renumbering below is a change to the number only, not to
 a contract a client reads. **The contract that moves is the tests that pin today's number.** A
@@ -479,6 +482,41 @@ Status changes:
   `till-api.courses.test.ts:440-442`, `till-api.groups.test.ts:328-329,595-596,730-731`,
   `till-api.test.ts:3693-3695`, `location-settings-api.orders-open.test.ts:495`. Size M. Depends on:
   A394-9 (same table; run them one after the other).
+  **2026-11-18 (A394-10):** done — on the till, a line, group, draft, course, station or adjustment
+  reason that only the request body names now answers 400 with the same code. The routes:
+  `POST /api/working-orders/:id/lines/move-station` and the kitchen screen's
+  `POST /api/device/working-orders/:id/lines/move-station` (`lineIds`, `stationId`);
+  `POST /api/bills/:id/move-dishes` and `POST /api/parties/:id/split-table` (body lines; these replace
+  the audit's bill split and transfer, and the audit's `lines/recall` no longer exists);
+  `POST /api/working-orders/:id/payments` and its preview (`lineNo`);
+  `POST /api/working-orders/:id/adjustments` and its preview (`lineId`, `reasonId`);
+  `POST …/lines/:lineId/cancel-item` (`reasonId`); `PATCH …/lines/:lineNo/course` (`courseId`); the
+  `courseId` on the lines of `POST /api/working-orders`, `PUT /api/working-orders/:id`,
+  `POST /api/sales`, `POST /api/pay`, `POST /api/dead-ends/sale`, `POST /api/parties/:id/groups` and
+  `PUT /api/parties/:id/drafts`; `draftId` on that `PUT` and on `POST /api/dead-ends/draft`; and
+  `group.not_found` on `PUT …/groups/order`, `POST …/groups/move`, `…/groups/fire-line`, `…/served`,
+  `…/unserved`, `…/allergy/send-preview`, `POST /api/parties/:id/groups` and `…/drafts/:did/submit`
+  (`…/groups/split-line` and the draft save already answered 400 for `group.not_found`).
+  `adjustment_reason.not_found` is 400 in the shared `STATUS`, because no till address holds a reason
+  id. For the other five codes each route has its own boundary, built by `runBodyIds`
+  (`apps/server/src/till-api.ts`) or, for the kitchen route, `runDeviceStationMove`
+  (`apps/server/src/device-api.ts`); the shared `STATUS` keeps them at 404 for routes whose address
+  names the thing. Left at 404, because the body does not name the id: `course.not_found` for a course
+  a stored draft or bill line already holds (`…/drafts/:did/submit`, `/api/dead-ends/draft`,
+  `PUT …/lines/:lineNo`). `PUT /api/working-orders/:id` answers 400 for this code and also re-checks
+  the courses of the lines it keeps: deleting a course that lines still use keeps its row
+  (`course-delete.ts`), and a review's run (park an order, delete its course, change the line's
+  quantity) answered 200.
+  Not moved: on `cancel-item`, a line in the address that does not exist answers 400
+  `management.request_invalid` with `field: "lineId"`, before and after this change; following the rule
+  there needs a different code, so the row is under A394-20.
+  The till compares one of these routes' refusals with a number: `bill-payment.ts` treats a payment
+  refusal of 500 or above as an unknown outcome. 400 and 404 both fall below that, and a review's run
+  of both took the same path. The client grep above, re-run on 2026-11-18, finds no comparison with
+  400 or 404 on these routes. The doc comment this entry names no longer exists (see "One promise to
+  update" above). Of this entry's tests to change, `till-api.transfer.test.ts` went with its routes in
+  #2897, and `location-settings-api.orders-open.test.ts` is now
+  `venue-settings-api.orders-open.test.ts`.
 - **A394-11 — Catalogue statuses: body ids answer 400.** Files: `apps/server/src/catalogue-api.ts`
   (`STATUS`, `runFolder`). Changes `catalogue.not_found`, `category.not_found`,
   `menu_section.not_found`, `course.not_found`, `product.not_found` from bodies → 400; question 9
@@ -634,8 +672,10 @@ Status changes:
   {field:"providerId"}` and the `payment.provider_unknown` a stored provider raises (enable,
   disable, delete, status, unpair, and the stuck and bill-payment resolves; left by A394-15), and
   the swap routes' `swap.not_permitted` 403 for a `toShiftId` its `toPersonId` does not own (question
-  13, left by A394-17). Statuses per questions 4, 5, 8, 9, 10, 11, 13, 14. Tests listed per row in the parts.
-  Size M; split by file if it grows. Depends on: those questions.
+  13, left by A394-17), and `cancel-item`'s `management.request_invalid {field:"lineId"}` 400 for a
+  line in its address that does not exist (`apps/server/src/line-cancel-context.ts`; left by A394-10,
+  and no question holds it up). Statuses per questions 4, 5, 8, 9, 10, 11, 13, 14. Tests listed per row
+  in the parts. Size M; split by file if it grows. Depends on: those questions.
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
   `configuration-transfer.ts`, `email-settings-api.ts`, `backup-api.ts`, `location-settings-api.ts`,
   `mirror-bundle-api.ts`, catalogue's `menu.reset_required` and the two `time_zone.unreadable`

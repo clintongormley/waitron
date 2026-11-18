@@ -526,7 +526,7 @@ describe("a receipt-language change while orders are open", () => {
       expectedPartyRevision: revisionOf(party.partyId),
       items: [{ lineId: line!.id, quantity: "1" }],
     });
-    expect(serve).toMatchObject({ status: 404, json: { code: "group.not_found" } });
+    expect(serve).toMatchObject({ status: 400, json: { code: "group.not_found" } });
   });
 
   it("accepts a change while a seated party's bill holds no dish", async () => {
