@@ -2348,6 +2348,43 @@ for (const locale of ["en", "es"] as const) {
         .filter((key) => key.from !== "card_reader_id")
         .map((key) => ({ ...key, id: key.id - 1 }));
       const profileTable = expected[phase].tables.device_profiles!;
+      const scopes = expected[phase].tables.device_profile_service_access!;
+      const profileZones = expected[phase].tables.device_profile_zones!;
+      const scopeByProfile = new Map(
+        Object.values(scopes.rows).map((row) => [row.device_profile_id, row]),
+      );
+      profileTable.columns.splice(
+        profileTable.columns.findIndex((column) => column.name === "created_at"),
+        0,
+        ...["order_department_id", "order_starting_zone_id", "order_zone_ids"].map((name) => ({
+          name,
+          type: "TEXT",
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        })),
+      );
+      profileTable.foreignKeys = ["starting_zone_id", "department_id"].map((from, id) => ({
+        ...scopes.foreignKeys.find((key) => key.from === from)!,
+        from: "order_" + from,
+        id,
+      }));
+      for (const row of Object.values(profileTable.rows)) {
+        const scope = scopeByProfile.get(row.id);
+        row.order_department_id = scope?.department_id ?? null;
+        row.order_starting_zone_id = scope?.starting_zone_id ?? null;
+        row.order_zone_ids =
+          scope === undefined || scope.every_zone === 1
+            ? null
+            : Object.values(profileZones.rows)
+                .filter((link) => link.device_profile_id === row.id)
+                .map((link) => link.zone_id)
+                .sort();
+      }
+      delete expected[phase].tables.device_profile_service_access;
+      delete expected[phase].tables.device_profile_zones;
+      delete phases[phase]!.device_profile_service_access;
+      delete phases[phase]!.device_profile_zones;
       profileTable.columns.splice(
         profileTable.columns.findIndex((column) => column.name === "created_at"),
         0,

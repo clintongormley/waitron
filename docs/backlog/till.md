@@ -2654,6 +2654,9 @@ behind one Pay button, as a handheld already has (its D16, Owner question 7).
 
 2026-11-12: fk1 folds zone policies into `floor_zones`; see the current [department and zone service settings](../developers/conventions-data.md#department-and-zone-service-settings) and [permanent hierarchy deletion](../developers/conventions-data.md#permanent-hierarchy-deletion).
 
+2026-11-18: dv6 moves the profile's ordering department, starting zone and zone list onto
+`device_profiles`. The two profile scope tables named in the October inventory below are retired.
+
 Board 5. Read on 2026-10-15: a zone's menus, prices, trading name and default menu all come from
 its **department** (`zonePeriodMembership`, `packages/venue-service/src/operations.ts`), so every
 zone of a department shows the same menus at the same prices. What a zone sets itself: its sale

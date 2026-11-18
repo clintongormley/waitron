@@ -1,5 +1,5 @@
 import { deleteServiceSteps } from "./service-steps.js";
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import {
   floorPlanSets,
   departments,
@@ -7,8 +7,6 @@ import {
   departmentTransferDestinations,
   deviceProfileKitchenScreenZones,
   deviceProfiles,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
   devices,
   deviceZoneSelections,
   deviceZoneSelectionZones,
@@ -16,6 +14,7 @@ import {
   menuPeriods,
   routingCellPeriods,
   routingCells,
+  removeIdFromJson,
   serviceSteps,
   openingHours,
   type Transaction,
@@ -58,30 +57,22 @@ async function settings(
             ),
       ),
     );
-  const memberships = await tx
-    .select()
-    .from(deviceProfileZones)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfileZones.deviceProfileId));
   const scopes = await tx
     .select()
-    .from(deviceProfileServiceAccess)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfileServiceAccess.deviceProfileId));
+    .from(deviceProfiles)
+    .where(isNotNull(deviceProfiles.orderDepartmentId));
   const obsolete = scopes.filter(
-    ({ device_profile_service_access: scope, device_profiles: profile }) =>
+    (profile) =>
       (profile.retiredAt !== null || profile.formFactor === "kds") &&
-      (scope.departmentId === departmentId ||
-        zoneIds.includes(scope.startingZoneId) ||
-        memberships.some(
-          (row) =>
-            row.device_profile_zones.deviceProfileId === profile.id &&
-            zoneIds.includes(row.device_profile_zones.zoneId),
-        )),
+      (profile.orderDepartmentId === departmentId ||
+        (profile.orderStartingZoneId !== null && zoneIds.includes(profile.orderStartingZoneId)) ||
+        profile.orderZoneIds?.some((zoneId) => zoneIds.includes(zoneId))),
   );
-  const obsoleteIds = obsolete.map((row) => row.device_profiles.id);
-  const profileZones = memberships.filter(
-    (row) =>
-      zoneIds.includes(row.device_profile_zones.zoneId) ||
-      obsoleteIds.includes(row.device_profiles.id),
+  const obsoleteIds = obsolete.map((profile) => profile.id);
+  const profileZones = scopes.flatMap((profile) =>
+    (profile.orderZoneIds ?? [])
+      .filter((zoneId) => obsoleteIds.includes(profile.id) || zoneIds.includes(zoneId))
+      .map(() => profile),
   );
   const candidates = await tx
     .select({
@@ -98,25 +89,18 @@ async function settings(
   );
   const starts = scopes
     .filter(
-      (row) =>
-        !obsoleteIds.includes(row.device_profiles.id) &&
-        zoneIds.includes(row.device_profile_service_access.startingZoneId),
+      (profile) =>
+        !obsoleteIds.includes(profile.id) &&
+        profile.orderStartingZoneId !== null &&
+        zoneIds.includes(profile.orderStartingZoneId),
     )
-    .flatMap((row) => {
-      const scope = row.device_profile_service_access;
+    .flatMap((profile) => {
       const permitted = surviving.find(
         (zone) =>
-          zone.departmentId === scope.departmentId &&
-          (scope.everyZone ||
-            memberships.some(
-              (member) =>
-                member.device_profile_zones.deviceProfileId === scope.deviceProfileId &&
-                member.device_profile_zones.zoneId === zone.id,
-            )),
+          zone.departmentId === profile.orderDepartmentId &&
+          (profile.orderZoneIds === null || profile.orderZoneIds.includes(zone.id)),
       );
-      return permitted === undefined
-        ? []
-        : [{ profile: row.device_profiles, zoneId: permitted.id }];
+      return permitted === undefined ? [] : [{ profile, zoneId: permitted.id }];
     });
   const screenProfiles = await tx
     .select()
@@ -220,11 +204,7 @@ async function settings(
     {
       key: "profile_zones",
       count: profileZones.length,
-      targets: targets(
-        profileZones
-          .filter((row) => liveProfile(row.device_profiles))
-          .map((row) => row.device_profiles),
-      ),
+      targets: targets(profileZones.filter(liveProfile)),
     },
     {
       key: "profile_starting_zones",
@@ -311,13 +291,15 @@ export async function clearServiceDeleteSettings(
   await tx.delete(openingHours).where(inArray(openingHours.zoneId, selected.zoneIds));
   for (const start of selected.starts)
     await tx
-      .update(deviceProfileServiceAccess)
-      .set({ startingZoneId: start.zoneId })
-      .where(eq(deviceProfileServiceAccess.deviceProfileId, start.profile.id));
-  await tx.delete(deviceProfileZones).where(inArray(deviceProfileZones.zoneId, selected.zoneIds));
+      .update(deviceProfiles)
+      .set({ orderStartingZoneId: start.zoneId })
+      .where(eq(deviceProfiles.id, start.profile.id));
   await tx
-    .delete(deviceProfileServiceAccess)
-    .where(inArray(deviceProfileServiceAccess.deviceProfileId, selected.obsoleteIds));
+    .update(deviceProfiles)
+    .set({ orderDepartmentId: null, orderStartingZoneId: null, orderZoneIds: null })
+    .where(inArray(deviceProfiles.id, selected.obsoleteIds));
+  for (const zoneId of selected.zoneIds)
+    await removeIdFromJson(tx, deviceProfiles.orderZoneIds, zoneId);
   await tx
     .delete(deviceZoneSelectionZones)
     .where(inArray(deviceZoneSelectionZones.zoneId, selected.zoneIds));

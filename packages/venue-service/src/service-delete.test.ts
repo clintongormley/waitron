@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   departments,
   departmentTransferRequests,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
+  deviceProfiles,
   diningTables,
   devices,
   floorZones,
@@ -309,19 +308,15 @@ describe("service deletion", () => {
         { name: randomUUID(), formFactor: "kds" },
         { name: randomUUID(), formFactor: "till", retiredAt: NOW.toISOString() },
       ]);
-      await tx.insert(deviceProfileServiceAccess).values(
-        rows.map((row, index) => ({
-          deviceProfileId: row.id,
-          departmentId: f.dining,
-          everyZone: index === 0,
-          startingZoneId: f.alpha,
-        })),
-      );
-      await tx.insert(deviceProfileZones).values([
-        { deviceProfileId: rows[1]!.id, zoneId: f.alpha },
-        { deviceProfileId: rows[2]!.id, zoneId: f.alpha },
-        { deviceProfileId: rows[3]!.id, zoneId: f.alpha },
-      ]);
+      for (const [index, profile] of rows.entries())
+        await tx
+          .update(deviceProfiles)
+          .set({
+            orderDepartmentId: f.dining,
+            orderStartingZoneId: f.alpha,
+            orderZoneIds: index === 0 ? null : [f.alpha],
+          })
+          .where(eq(deviceProfiles.id, profile.id));
       const { deviceId } = await seedDevice(tx, { profileId: rows[1]!.id, label: "Off till" });
       await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
       return rows;
@@ -349,13 +344,14 @@ describe("service deletion", () => {
     const f = await fixture();
     const profile = await run(async (tx) => {
       const [row] = await seedDeviceProfiles(tx, { name: "Selected Alpha", formFactor: "till" });
-      await tx.insert(deviceProfileServiceAccess).values({
-        deviceProfileId: row!.id,
-        departmentId: f.dining,
-        everyZone: false,
-        startingZoneId: f.beta,
-      });
-      await tx.insert(deviceProfileZones).values({ deviceProfileId: row!.id, zoneId: f.alpha });
+      await tx
+        .update(deviceProfiles)
+        .set({
+          orderDepartmentId: f.dining,
+          orderStartingZoneId: f.beta,
+          orderZoneIds: [f.alpha],
+        })
+        .where(eq(deviceProfiles.id, row!.id));
       return row!;
     });
     const impact = await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW));
@@ -390,12 +386,14 @@ describe("service deletion", () => {
     const f = await fixture();
     const profileId = await run(async (tx) => {
       const [profile] = await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" });
-      await tx.insert(deviceProfileServiceAccess).values({
-        deviceProfileId: profile!.id,
-        departmentId: f.dining,
-        everyZone: true,
-        startingZoneId: f.alpha,
-      });
+      await tx
+        .update(deviceProfiles)
+        .set({
+          orderDepartmentId: f.dining,
+          orderStartingZoneId: f.alpha,
+          orderZoneIds: null,
+        })
+        .where(eq(deviceProfiles.id, profile!.id));
       await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.beta));
       return profile!.id;
     });
@@ -414,12 +412,14 @@ describe("service deletion", () => {
     const f = await fixture();
     const profileId = await run(async (tx) => {
       const [profile] = await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" });
-      await tx.insert(deviceProfileServiceAccess).values({
-        deviceProfileId: profile!.id,
-        departmentId: f.dining,
-        everyZone: false,
-        startingZoneId: f.alpha,
-      });
+      await tx
+        .update(deviceProfiles)
+        .set({
+          orderDepartmentId: f.dining,
+          orderStartingZoneId: f.alpha,
+          orderZoneIds: [],
+        })
+        .where(eq(deviceProfiles.id, profile!.id));
       return profile!.id;
     });
     const impact = await run((tx) =>
@@ -446,9 +446,11 @@ describe("service deletion", () => {
     expect(
       await run((tx) =>
         tx
-          .select({ deviceProfileId: deviceProfileServiceAccess.deviceProfileId })
-          .from(deviceProfileServiceAccess)
-          .where(eq(deviceProfileServiceAccess.deviceProfileId, profileId)),
+          .select({ deviceProfileId: deviceProfiles.id })
+          .from(deviceProfiles)
+          .where(
+            and(eq(deviceProfiles.id, profileId), isNotNull(deviceProfiles.orderDepartmentId)),
+          ),
       ),
     ).toEqual([{ deviceProfileId: profileId }]);
   });
@@ -457,12 +459,14 @@ describe("service deletion", () => {
     const f = await fixture();
     const profileId = await run(async (tx) => {
       const [profile] = await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" });
-      await tx.insert(deviceProfileServiceAccess).values({
-        deviceProfileId: profile!.id,
-        departmentId: f.dining,
-        everyZone: false,
-        startingZoneId: f.alpha,
-      });
+      await tx
+        .update(deviceProfiles)
+        .set({
+          orderDepartmentId: f.dining,
+          orderStartingZoneId: f.alpha,
+          orderZoneIds: [],
+        })
+        .where(eq(deviceProfiles.id, profile!.id));
       return profile!.id;
     });
     const impact = await run((tx) => serviceDelete.readZoneDeleteImpact(tx, noFloor, f.alpha, NOW));
@@ -610,13 +614,14 @@ describe("service deletion", () => {
     ).toEqual([]);
     const profileId = await run(async (tx) => {
       const [profile] = await seedDeviceProfiles(tx, { name: randomUUID(), formFactor: "till" });
-      await tx.insert(deviceProfileServiceAccess).values({
-        deviceProfileId: profile!.id,
-        departmentId: f.dining,
-        everyZone: false,
-        startingZoneId: f.alpha,
-      });
-      await tx.insert(deviceProfileZones).values({ deviceProfileId: profile!.id, zoneId: f.alpha });
+      await tx
+        .update(deviceProfiles)
+        .set({
+          orderDepartmentId: f.dining,
+          orderStartingZoneId: f.alpha,
+          orderZoneIds: [f.alpha],
+        })
+        .where(eq(deviceProfiles.id, profile!.id));
       return profile!.id;
     });
     expect(await refusal(run((tx) => serviceDelete.deleteZone(tx, noFloor, f.alpha, NOW)))).toBe(
@@ -636,9 +641,11 @@ describe("service deletion", () => {
       (
         await run((tx) =>
           tx
-            .select({ deviceProfileId: deviceProfileServiceAccess.deviceProfileId })
-            .from(deviceProfileServiceAccess)
-            .where(eq(deviceProfileServiceAccess.deviceProfileId, profileId)),
+            .select({ deviceProfileId: deviceProfiles.id })
+            .from(deviceProfiles)
+            .where(
+              and(eq(deviceProfiles.id, profileId), isNotNull(deviceProfiles.orderDepartmentId)),
+            ),
         )
       ).length,
     ).toBe(1);

@@ -409,8 +409,6 @@ export {
   deviceProfileKitchenScreens,
   deviceProfileKitchenScreenStations,
   deviceProfileKitchenScreenZones,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
   deviceZoneSelections,
   deviceZoneSelectionZones,
   kitchenNoticeKind,

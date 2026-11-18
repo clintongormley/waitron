@@ -479,7 +479,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 48,
+  version: 49,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -4658,6 +4658,27 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
 });
 
 describe("device profile scope round trip (M4)", () => {
+  it("exports a zone list without its deleted zone id", async () => {
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "Profile with a stale zone",
+      formFactor: "till",
+      admitted: [],
+    });
+    const start = await seedZone(suite.db, { name: "Profile starting zone" });
+    await suite.db
+      .update(deviceProfiles)
+      .set({
+        orderDepartmentId: start.departmentId,
+        orderStartingZoneId: start.id,
+        orderZoneIds: [start.id, "7e260e77-2ec3-4dd4-a510-a9f11837c563"],
+      })
+      .where(eq(deviceProfiles.id, profile!.id));
+
+    const { tables } = await exportConfigurationTables(suite.db, ALL_MODULES);
+    const exported = tables.device_profiles!.find((row) => row.id === profile!.id);
+    expect(exported?.order_zone_ids).toBe(JSON.stringify([start.id]));
+  });
+
   it("keeps the profile and remaps its scope after a list member switches off", async () => {
     const source = await applyVenue(planVenue(venue("B24680136"), ALL_MODULES), {
       db: suite.db,
@@ -4784,12 +4805,14 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
     new Date("2026-10-06T12:00:00Z"),
     versions,
   );
-  for (const table of ["device_profile_service_access", "device_profile_zones"]) {
-    expect(
-      transferred.tables[table]!.map((row) => row.device_profile_id),
-      table,
-    ).toEqual([original.live]);
-  }
+  const profiles = transferred.tables.device_profiles!;
+  expect(profiles.filter((row) => row.order_department_id !== null).map((row) => row.id)).toEqual([
+    original.live,
+  ]);
+  expect(profiles.filter((row) => row.order_zone_ids !== null).map((row) => row.id)).toEqual([
+    original.live,
+  ]);
+  expect(profiles.map((row) => row.id)).not.toContain(original.retired);
   await applyVenue(planVenue(venue("B13570246"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -5692,7 +5715,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(48);
+  expect(exported.version).toBe(49);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -8209,8 +8232,15 @@ it("exports profile zone settings but leaves enrolled device zone selections beh
     ).toBe(1);
   });
   const exported = await exportConfigurationTables(suite.db, ALL_MODULES);
-  expect(exported.tables).toHaveProperty("device_profile_service_access");
-  expect(exported.tables).toHaveProperty("device_profile_zones");
+  expect(exported.tables.device_profiles).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        order_department_id: expect.any(String),
+        order_starting_zone_id: expect.any(String),
+        order_zone_ids: null,
+      }),
+    ]),
+  );
   expect(exported.tables).not.toHaveProperty("device_zone_selections");
   expect(exported.tables).not.toHaveProperty("device_zone_selection_zones");
 });

@@ -1,11 +1,9 @@
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import {
   floorPlanSets,
   departments,
   departmentTransferRequests,
   deviceProfiles,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
   floorZones,
   menuPeriods,
   workingOrders,
@@ -194,14 +192,13 @@ async function selection(
       name: deviceProfiles.name,
       retiredAt: deviceProfiles.retiredAt,
       formFactor: deviceProfiles.formFactor,
-      departmentId: deviceProfileServiceAccess.departmentId,
-      everyZone: deviceProfileServiceAccess.everyZone,
-      startingZoneId: deviceProfileServiceAccess.startingZoneId,
+      departmentId: deviceProfiles.orderDepartmentId,
+      zoneIds: deviceProfiles.orderZoneIds,
+      startingZoneId: deviceProfiles.orderStartingZoneId,
     })
-    .from(deviceProfileServiceAccess)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfileServiceAccess.deviceProfileId))
+    .from(deviceProfiles)
+    .where(isNotNull(deviceProfiles.orderDepartmentId))
     .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
-  const memberships = await tx.select().from(deviceProfileZones);
   const candidates = await tx
     .select({ id: floorZones.id, departmentId: floorZones.departmentId })
     .from(floorZones)
@@ -219,16 +216,13 @@ async function selection(
       continue;
     }
     const affected =
-      zoneIds.includes(profile.startingZoneId) ||
-      memberships.some((row) => row.deviceProfileId === profile.id && zoneIds.includes(row.zoneId));
+      (profile.startingZoneId !== null && zoneIds.includes(profile.startingZoneId)) ||
+      profile.zoneIds?.some((zoneId) => zoneIds.includes(zoneId));
     if (!affected) continue;
     const allowed = candidates.filter(
       (candidate) =>
         candidate.departmentId === profile.departmentId &&
-        (profile.everyZone ||
-          memberships.some(
-            (row) => row.deviceProfileId === profile.id && row.zoneId === candidate.id,
-          )),
+        (profile.zoneIds === null || profile.zoneIds.includes(candidate.id)),
     );
     if (allowed.some((candidate) => !zoneIds.includes(candidate.id))) continue;
     refusals.push({

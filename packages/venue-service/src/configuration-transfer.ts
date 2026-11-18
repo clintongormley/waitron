@@ -690,8 +690,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "departments", leaveBehindWhenFalse: "active" },
     { name: "service_steps" },
     { name: "department_courses" },
-    { name: "device_profile_service_access" },
-    { name: "device_profile_zones" },
     { name: "device_profile_kitchen_screens" },
     { name: "device_profile_kitchen_screen_stations" },
     { name: "device_profile_kitchen_screen_zones" },

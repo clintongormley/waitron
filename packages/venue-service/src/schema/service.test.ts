@@ -2,8 +2,6 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   departments,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
   kitchenNotices,
   routingCellPeriods,
   routingCells,
@@ -54,26 +52,6 @@ const EXPECTED: Record<
     indexes: [],
     uniqueConstraints: [],
     primaryKeys: [],
-  },
-  device_profile_service_access: {
-    table: deviceProfileServiceAccess,
-    foreignKeys: [
-      "device_profile_service_access_profile_fk",
-      "device_profile_service_access_department_fk",
-      "device_profile_service_access_starting_zone_fk",
-    ],
-    checks: [],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: ["device_profile_service_access_pk"],
-  },
-  device_profile_zones: {
-    table: deviceProfileZones,
-    foreignKeys: ["device_profile_zones_access_fk", "device_profile_zones_zone_fk"],
-    checks: [],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: ["device_profile_zones_pk"],
   },
   routing_cells: {
     table: routingCells,
@@ -146,7 +124,7 @@ const EXPECTED: Record<
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
   it("covers the remaining service tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(7);
+    expect(Object.keys(EXPECTED)).toHaveLength(5);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

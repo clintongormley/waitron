@@ -1,10 +1,9 @@
 import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { mediaImages } from "../media/images.js";
 import { enumCheck, flag, id, json, label, newId, nowIso, table, tsString } from "../columns.js";
 import { deviceProfiles } from "../device-profiles.js";
-import { floorZones } from "../floor-zones.js";
 import { sales } from "../sales.js";
 import {
   collectionNumber,
@@ -82,63 +81,6 @@ export const saleReceiptHeaders = table(
       columns: [t.departmentId],
       foreignColumns: [departments.id],
       name: "sale_receipt_headers_department_fk",
-    }),
-  ],
-);
-
-/**
- * The department a device profile orders for and the zone it starts in. A profile with no row has no
- * department restriction. `every_zone` false with no `device_profile_zones` rows allows no zone,
- * so deleting those rows narrows the profile rather than widening it to the whole department.
- * `setProfileServiceAccess` checks the department and zones against the venue's live rows; the
- * keys only refuse an id that exists nowhere.
- */
-export const deviceProfileServiceAccess = table(
-  "device_profile_service_access",
-  {
-    deviceProfileId: id("device_profile_id").notNull(),
-    departmentId: id("department_id").notNull(),
-    everyZone: flag("every_zone").notNull().default(false),
-    startingZoneId: id("starting_zone_id").notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.deviceProfileId], name: "device_profile_service_access_pk" }),
-    foreignKey({
-      columns: [t.deviceProfileId],
-      foreignColumns: [deviceProfiles.id],
-      name: "device_profile_service_access_profile_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.departmentId],
-      foreignColumns: [departments.id],
-      name: "device_profile_service_access_department_fk",
-    }),
-    foreignKey({
-      columns: [t.startingZoneId],
-      foreignColumns: [floorZones.id],
-      name: "device_profile_service_access_starting_zone_fk",
-    }),
-  ],
-);
-
-/** The explicit subset of zones a profile with `every_zone` false may order in. */
-export const deviceProfileZones = table(
-  "device_profile_zones",
-  {
-    deviceProfileId: id("device_profile_id").notNull(),
-    zoneId: id("zone_id").notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.deviceProfileId, t.zoneId], name: "device_profile_zones_pk" }),
-    foreignKey({
-      columns: [t.deviceProfileId],
-      foreignColumns: [deviceProfileServiceAccess.deviceProfileId],
-      name: "device_profile_zones_access_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.zoneId],
-      foreignColumns: [floorZones.id],
-      name: "device_profile_zones_zone_fk",
     }),
   ],
 );

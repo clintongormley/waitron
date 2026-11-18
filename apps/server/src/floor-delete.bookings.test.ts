@@ -75,8 +75,6 @@ for (const enabled of [true, false]) {
         "departments",
         "device_profiles",
         "devices",
-        "device_profile_service_access",
-        "device_profile_zones",
         "device_profile_kitchen_screens",
         "device_profile_kitchen_screen_stations",
         "device_profile_kitchen_screen_zones",
