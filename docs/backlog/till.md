@@ -1591,8 +1591,8 @@ except that it no longer waits on the retired split and transfer routes (A1196).
 
 - **A copy of a deleted device's cookie can still ask to come back first, and so make the real
   device's cookie stop working (watcher, 2026-11-18, lane B, not the owner; the owner may overrule;
-  decided before review showed that on a box serving plain HTTP the cookie crosses the network
-  unencrypted).** Each ask to come back gives the asking browser a new cookie and makes the old one
+  confirmed the same day after review showed that on a box serving plain HTTP the cookie crosses
+  the network unencrypted).** Each ask to come back gives the asking browser a new cookie and makes the old one
   worthless (`createJoinRequest` in `apps/server/src/join-requests.ts`), so the real tablet's next
   ask joins as a new device, and a manager gives it its name and profile again. It stays because a
   copy taken while the device was enabled already let its holder act as the device, and keeping the
@@ -1600,7 +1600,14 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   cannot read the cookie (`httpOnly`, `setDeviceCookie` in `apps/server/src/device-session.ts`). It
   is marked `Secure` only when the box serves the tills over HTTPS (`secureCookies` in
   `apps/server/src/boot.ts`); on a box serving plain HTTP it crosses the venue's network
-  unencrypted. Outside development mode a copy can ask only while the venue's join window is open,
+  unencrypted, where anyone reading that traffic could copy it and act as the device while it is
+  enabled: that is the wider exposure, and a second lasting proof would not close it. One function
+  decides HTTPS or plain HTTP for both the tills' listener and these cookies (`resolveTradingTls`,
+  `apps/server/src/trading-tls.ts:10`, read at `apps/server/src/boot.ts:917` and `:2443`): the
+  certificate and key named in `WAITRON_TLS_CERT_FILE` and `WAITRON_TLS_KEY_FILE`
+  (`apps/server/src/config.ts:425`), else the box's own certificate in its state folder
+  (`mintedBoxLeaf`, `apps/server/src/box-secrets.ts:70`); with neither, plain HTTP. Whether a
+  set-up production box can start with neither was not established here. Outside development mode a copy can ask only while the venue's join window is open,
   "held open by the dashboard dialogs that are open" (`apps/server/src/pairing-mode.ts`); with it
   shut the ask is refused `device.pairing_closed` and replaces nothing ("with no Add a device dialog
   open, a disabled device's knock is refused and changes nothing" in
