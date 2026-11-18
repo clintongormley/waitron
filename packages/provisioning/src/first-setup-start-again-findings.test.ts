@@ -109,8 +109,8 @@ it("collects every finding of a box, in the finisher's order", async () => {
 
 it("a file whose size differs from its marked size is reported changed without reading it; one of the same size is read and compared", async () => {
   const { roots } = await fourFindings();
-  const read = () => vi.mocked(fs.readFile).mock.calls.map(([path]) => String(path));
-  vi.mocked(fs.readFile).mockClear();
+  const read = () => vi.mocked(fs.open).mock.calls.map(([path]) => String(path));
+  vi.mocked(fs.open).mockClear();
   const collected = await collectStartAgainFindings(roots);
   expect(collected!.findings.map((finding) => finding.kind)).toEqual([
     "refused-artifact",
@@ -122,7 +122,7 @@ it("a file whose size differs from its marked size is reported changed without r
   expect(read()).not.toContain(join(roots.venueDir, "venue.db-wal"));
 
   await writeFile(join(roots.venueDir, "venue.db"), "attempt databasX");
-  vi.mocked(fs.readFile).mockClear();
+  vi.mocked(fs.open).mockClear();
   expect((await collectStartAgainFindings(roots))!.findings).toContainEqual({
     kind: "changed",
     root: "venue",
@@ -206,5 +206,24 @@ it("the marker's hash is of the bytes its marker was parsed from, even when the 
   } finally {
     vi.mocked(fs.open).mockReset();
     vi.mocked(fs.readFile).mockReset();
+  }
+});
+
+it("a marked file that fails while it is being read is a blocker naming the file", async () => {
+  const { roots } = await fourFindings();
+  const path = join(roots.venueDir, "venue.db");
+  await writeFile(path, "attempt databasX");
+  const actual = await vi.importActual<typeof fs>("node:fs/promises");
+  vi.mocked(fs.open).mockImplementation(async (...args) =>
+    String(args[0]) === path ? actual.open(roots.venueDir) : actual.open(...args),
+  );
+  try {
+    const collected = await collectStartAgainFindings(roots);
+    expect(collected!.blocker).toMatchObject({
+      code: "setup.start_again_incomplete",
+      reason: `check failed: EISDIR ${path}`,
+    });
+  } finally {
+    vi.mocked(fs.open).mockReset();
   }
 });
