@@ -31,8 +31,6 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import "@waitron/ui/src/components/wt-notice.js";
-import "@waitron/ui/src/components/wt-delete-dialog.js";
-import type { DeleteImpact } from "@waitron/shared";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import "../widgets/page-printer-add.js";
@@ -41,6 +39,7 @@ import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import "../widgets/equipment-label.js";
 import "../widgets/print-job-reprint-dialog.js";
 import { holderText } from "../i18n/equipment.js";
+import { HardwareDeleteDialog } from "../widgets/hardware-delete-dialog.js";
 import { printerDeleteCopy } from "../widgets/printer-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -1253,16 +1252,7 @@ export class PrintersScreen extends LitElement {
   @state() private labelPrinterId: string | null = null;
   #labelOpener: HTMLElement | null = null;
 
-  /** The id of the printer the delete dialog is open on. Each opening and close is a new generation, so a
-   * delete's answer for an earlier one is never applied; an impact read for an earlier one is
-   * dropped by its query slot, which the next `watch` or `release` replaces. */
-  @state() private deleteIsPage = false;
-  @state() private deleteTarget: string | null = null;
-  @state() private deleteImpact: DeleteImpact | null = null;
-  @state() private deleteLoading = false;
-  @state() private deleteSubmitting = false;
-  @state() private deleteReadError = "";
-  @state() private deleteActionError = "";
+  #deleteIsPage = false;
   @state() private everyStationId: string | null = null;
   @state() private everyStationSending = false;
   @state() private everyStationRefusal: string | null = null;
@@ -1270,13 +1260,26 @@ export class PrintersScreen extends LitElement {
   @state() private everyStationDone: string | null = null;
   #everyStationOpener: HTMLElement | null = null;
   #everyStationOpening = 0;
-  #deleteGeneration = 0;
-  #deleteOpener: HTMLElement | null = null;
-  readonly #impactQueries = new DashboardQueries(
-    this,
-    () => this.api,
-    (error) => this.#impactFailed(error),
-  );
+  readonly #deleteDialog = new HardwareDeleteDialog(this, () => this.api, {
+    notFound: ["printer.not_found", "page_printer.not_found"],
+    send: (id) =>
+      this.#deleteIsPage ? this.api.deletePagePrinter(id) : this.api.deletePrinter(id),
+    onGone: (id, source) => {
+      this.#printerGone(id, true);
+      if (source === "send" && this.isConnected) return this.#load();
+    },
+    beforeDeleted: (id) => {
+      if (this.selectedPrinterId !== id) return;
+      this.#resetPrinterSections();
+      this.selectedPrinterId = null;
+      void this.#url.write({ printer: null, editor: null, step: null }, true);
+      return this.updateComplete;
+    },
+    onDeleted: (id) => {
+      this.#printerGone(id, false, this.#tabAction("open-add-printer"));
+      if (this.isConnected) return this.#load();
+    },
+  });
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -1334,7 +1337,7 @@ export class PrintersScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    this.#closeDelete();
+    this.#deleteDialog.close();
     this.#closeEveryStation();
     this.#disposeDetailDrafts();
     this.#disposeCalibrationDraft();
@@ -5392,105 +5395,16 @@ export class PrintersScreen extends LitElement {
   // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
 
   #openDelete(p: { id: string }, opener: HTMLElement, page = false): void {
-    this.deleteIsPage = page;
-    this.#deleteGeneration++;
-    this.#deleteOpener = opener;
-    this.deleteTarget = p.id;
-    this.deleteImpact = null;
-    this.deleteLoading = true;
-    this.deleteSubmitting = false;
-    this.deleteReadError = "";
-    this.deleteActionError = "";
-    this.#readImpact(p.id);
-  }
-
-  #readImpact(id: string): void {
-    this.#impactQueries
-      .watch(
-        this.deleteIsPage ? "getPagePrinterDeleteImpact" : "getPrinterDeleteImpact",
-        [id],
-        (impact) => {
-          this.deleteImpact = impact;
-          this.deleteLoading = false;
-          this.deleteReadError = "";
-        },
-      )
-      // A failure has already reached `#impactFailed`.
-      .catch(() => undefined);
-  }
-
-  #impactFailed(error: unknown): void {
-    const target = this.deleteTarget;
-    if (target === null) return;
-    const code = codeOf(error);
-    if (code === "printer.not_found" || code === "page_printer.not_found") {
-      // The delete in flight may be what removed it; its own answer decides what is shown.
-      if (!this.deleteSubmitting) this.#printerGone(target, true);
-      return;
-    }
-    this.deleteLoading = false;
-    this.deleteReadError = codeMessage(code);
-  }
-
-  #retryImpact(): void {
-    const target = this.deleteTarget;
-    if (target === null || this.deleteSubmitting) return;
-    this.deleteLoading = true;
-    this.deleteReadError = "";
-    this.#readImpact(target);
-  }
-
-  #closeDelete(): void {
-    this.#deleteGeneration++;
-    this.#impactQueries.release(
-      this.deleteIsPage ? "getPagePrinterDeleteImpact" : "getPrinterDeleteImpact",
+    this.#deleteIsPage = page;
+    this.#deleteDialog.open(
+      p.id,
+      opener,
+      page ? "getPagePrinterDeleteImpact" : "getPrinterDeleteImpact",
     );
-    this.deleteTarget = null;
-    this.deleteImpact = null;
-    this.deleteLoading = false;
-    this.deleteSubmitting = false;
-    this.deleteReadError = "";
-    this.deleteActionError = "";
   }
 
   #requestDetailDelete(p: Printer, opener: HTMLElement): void {
     this.#openDelete(p, opener);
-  }
-
-  async #confirmDelete(id: string): Promise<void> {
-    const target = this.deleteTarget;
-    if (target === null || id !== target || this.deleteSubmitting) return;
-    const generation = this.#deleteGeneration;
-    this.deleteSubmitting = true;
-    this.deleteActionError = "";
-    try {
-      if (this.deleteIsPage) await this.api.deletePagePrinter(id);
-      else await this.api.deletePrinter(id);
-    } catch (error) {
-      if (generation !== this.#deleteGeneration) return;
-      this.deleteSubmitting = false;
-      const code = codeOf(error);
-      if (code !== "printer.not_found" && code !== "page_printer.not_found") {
-        this.deleteActionError = codeMessage(code);
-        return;
-      }
-      this.#printerGone(id, true);
-      if (this.isConnected) await this.#load();
-      return;
-    }
-    if (generation !== this.#deleteGeneration) return;
-    // What opened the dialog goes with the printer, and the dialog hands focus to its opener as it
-    // closes, so the list is drawn first and its Add printer becomes the opener.
-    if (this.selectedPrinterId === id) {
-      this.#resetPrinterSections();
-      this.selectedPrinterId = null;
-      void this.#url.write({ printer: null, editor: null, step: null }, true);
-      await this.updateComplete;
-      if (generation !== this.#deleteGeneration) return;
-    }
-    this.#deleteOpener = this.#tabAction("open-add-printer") ?? this.#deleteOpener;
-    this.#printerGone(id, false);
-    if (this.isConnected) await this.#load();
   }
 
   /**
@@ -5499,12 +5413,12 @@ export class PrintersScreen extends LitElement {
    * label — without asking to keep their drafts, and drops its row. `refuse` says so where something
    * was open on it.
    */
-  #printerGone(id: string, refuse: boolean): void {
-    const ours = this.deleteSubmitting && this.deleteTarget === id;
+  #printerGone(id: string, refuse: boolean, focusTo?: HTMLElement | null): void {
+    const ours = this.#deleteDialog.submitting && this.#deleteDialog.target === id;
     let open = false;
-    if (this.deleteTarget === id) {
+    if (this.#deleteDialog.target === id) {
       open = true;
-      this.#closeDelete();
+      this.#deleteDialog.close(focusTo);
     }
     if (this.everyStationId === id) {
       open = true;
@@ -5529,24 +5443,6 @@ export class PrintersScreen extends LitElement {
     this.printers = this.printers.filter((p) => p.id !== id);
     this.pagePrinters = this.pagePrinters.filter((p) => p.id !== id);
     if (refuse && open && !ours) this.errorKey = "printer.not_found";
-  }
-
-  #renderDeleteDialog(): TemplateResult {
-    return html`<wt-delete-dialog
-      data-test="delete-printer-dialog"
-      .open=${this.deleteTarget !== null}
-      .impact=${this.deleteImpact}
-      .loading=${this.deleteLoading}
-      .submitting=${this.deleteSubmitting}
-      .readError=${this.deleteReadError}
-      .actionError=${this.deleteActionError}
-      .copy=${printerDeleteCopy(this.deleteIsPage)}
-      .opener=${this.#deleteOpener}
-      @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) =>
-        void this.#confirmDelete(event.detail.id)}
-      @wt-delete-retry=${() => this.#retryImpact()}
-      @wt-close=${() => this.#closeDelete()}
-    ></wt-delete-dialog>`;
   }
 
   #renderEquipmentLabel(): TemplateResult | typeof nothing {
@@ -5605,7 +5501,7 @@ export class PrintersScreen extends LitElement {
           : html`${this.#renderTestPageSent()}${this.#renderEveryStationNotice()}${this.#renderReprintSent()}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${this.#bluetoothRefusal(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}${this.#renderEveryStationDialog()}${this.#renderReprint()}
+      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#deleteDialog.render("delete-printer-dialog", printerDeleteCopy(this.#deleteIsPage))}${this.#renderEveryStationDialog()}${this.#renderReprint()}
       <dashboard-print-job-preview
         .preview=${this.preview}
         .open=${this.previewOpen}

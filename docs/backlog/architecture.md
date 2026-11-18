@@ -453,9 +453,6 @@ reset and operator gates; this entry does not start that job.
 - Several printer queries that already require an active printer or a live job also filter
   `deleted_at`; one test pinning "deleted means switched off with no live jobs" could replace
   the copies.
-- The devices and payments screens copy the printers screen's delete-dialog logic
-  (`apps/dashboard/src/screens/devices-screen.ts`, and since A435 step 3 `payments-screen.ts`).
-  Pull it into one shared piece. Left open by A435 step 4 (#1519) and step 3.
 
 ## Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519)
 
