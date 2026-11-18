@@ -909,7 +909,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect((await res.json()).error.code).toBe("password.invalid");
   });
 
-  it("answers every login that fails identically, whatever the cause, and reserves nothing", async () => {
+  it("answers every login that fails identically on the module-operation path, whatever the cause, and reserves nothing", async () => {
     const { designated, adminPersonId } = await setupVenue();
     const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
     await withTransaction(db, async (tx) => {
@@ -953,16 +953,19 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
   it("asks on the plain path for the authenticator code only once the password is right, and reserves nothing", async () => {
     const { designated, adminPersonId } = await setupVenue();
     const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-    await withTransaction(db, (tx) =>
-      seedPersons(tx, {
+    const suspendedPersonId = await withTransaction(db, async (tx) => {
+      const [row] = await seedPersons(tx, {
         displayName: "Suspended administrator",
         email: SUSPENDED_EMAIL,
         pinHash: fixturePinHash("1234"),
         passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
         role: "admin",
-        status: "suspended",
-      }),
-    );
+      });
+      return row!.id;
+    });
+    // Enrolment needs an active account, so the suspension follows it.
+    await enrolAuthenticator(db, suspendedPersonId, TOTP_KEY_RING);
+    await db.execute(sql`update persons set status = 'suspended' where id = ${suspendedPersonId}`);
     const app = mountApp(designated);
     const counterBefore = await allocationSnapshot();
 
@@ -970,6 +973,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       unknown: { email: "nobody@example.test", password: ADMIN_PASSWORD },
       suspended: { email: SUSPENDED_EMAIL, password: ADMIN_PASSWORD },
       wrongPassword: { email: ADMIN_EMAIL, password: "wrong", totp: generateSync({ secret }) },
+      wrongPasswordNoCode: { email: ADMIN_EMAIL, password: "wrong" },
       wrongCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, totp: wrongTotpCode(secret) },
       missingCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
     };
@@ -983,6 +987,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       unknown: refused,
       suspended: refused,
       wrongPassword: refused,
+      wrongPasswordNoCode: refused,
       wrongCode: refused,
       missingCode: { status: 401, body: { error: { code: "totp.required", params: {} } } },
     });

@@ -460,9 +460,18 @@ describe("the manager logins' refusals", () => {
   it("ask by id for the authenticator code only once the password is right, when asked to", async () => {
     const missingCode = await seedPersonWithPassword(suite.db, "admin");
     await withAuthenticator(missingCode);
+    const wrongPasswordNoCode = await seedPersonWithPassword(suite.db, "admin");
+    await withAuthenticator(wrongPasswordNoCode);
+    const suspendedNoCode = await seedManager(suite.db, {
+      email: `suspended-${crypto.randomUUID()}@x.com`,
+      status: "suspended",
+    });
+    await withAuthenticator(suspendedNoCode);
     const causes: Record<string, LoginAttempt> = {
       ...(await refusalCauses()),
       missingCode: { personId: missingCode, email: "", password: "correct horse" },
+      wrongPasswordNoCode: { personId: wrongPasswordNoCode, email: "", password: "wrong" },
+      suspendedNoCode: { personId: suspendedNoCode, email: "", password: "correct horse" },
     };
     const refusals: Record<string, unknown> = {};
     for (const [cause, { personId, password, totp, recoveryCode }] of Object.entries(causes)) {
@@ -482,6 +491,8 @@ describe("the manager logins' refusals", () => {
     expect(refusals).toEqual({
       ...EVERY_CAUSE_REFUSED,
       missingCode: { code: "totp.required", params: {}, reason: "missing_code" },
+      wrongPasswordNoCode: refused("wrong_password"),
+      suspendedNoCode: refused("suspended"),
     });
   });
 });
