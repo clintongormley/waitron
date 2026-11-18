@@ -273,15 +273,26 @@ a spare of a venue that files with Veri*Factu does too; nothing yet delivers a r
 changes after the join (A1273). Re-encrypting the certificate when restoring onto Cloud also
 remains open.
 
-## Adding a mirror while the internet is down
+## A1549. Run the two-box test again for the spare's watch of the main box and the emergency-switch prompt
 
-Owner, 2026-10-02. A second machine can rebuild from the owner's bucket
-(`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
-A joining spare now receives a copy from the primary over the venue's network, puts it in place at
-its next start and finishes joining as a standby; since 3b-F that includes a venue that files
-with Veri*Factu, and a joined spare takes over by handover or by emergency switch in
-`apps/server/src/handover-two-boxes.test.ts` (separate databases, no restarts). Wanted: adding
-a mirror works with the internet down, which is the very case an on-prem mirror exists for. Left: the owner measures it on two boxes with the internet unplugged (3b plan Task 6.11). A cloud mirror needs the internet anyway and is outside this item.
+Left open by the owner's two-box test of 18 November 2026 (3b plan Task 6.11), which is recorded
+in the [A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), §11, under
+slice 3b. That test showed a spare joining with the internet blocked, and the main box restarting
+without waiting for it.
+
+Still to test: the spare's watch of the main box, which the spare's own page reports (the guide's
+"When you open the spare box"), and the prompt to make an emergency switch that depends on it. On
+18 November the main box ran in development mode (`WAITRON_ENV=dev`), which switches off the
+service that answers the box's own `.local` name, so the spare never reached
+`box-158e.waitron.local` and its page said "This spare cannot reach the main server" throughout.
+
+The one precondition: a main box that is not in development mode, so that its own `.local` name
+answers on the venue's network.
+
+Two things that test did differently from Task 6.11's wording, for whoever runs it again. The main
+box held a test venue of 4,063,232 bytes, not a venue's real data, so the first copy's measured
+time (12,095 ms) is for that size only. And the internet was blocked at the gateway, not
+unplugged, so outside names still resolved.
 
 ## A stop made while `cloud/replacement.json` is unreadable is not recorded in it
 

@@ -1815,6 +1815,57 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
   the main box's stream targets the spare; the first full copy over the LAN, measured on the pinned Litestream
   with the internet unplugged; the main box writes the spare's `nodes` row and adoption-pending
   closes; joining refuses while the venue streams to a bucket (until 5e). Not fiscal.
+
+  **18 November 2026, the owner's two-box test
+  ([3b plan](../plans/2026-11-04-a947-3b-spare-hosts-store.md), Task 6.11).** Run from 13:44 to
+  19:19 by the owner with a guiding session. Both boxes ran build 7cf65e7eea, both pre-production.
+  - **The main box** was the test box, `waitron.local`: Debian 13, 4 cores, 7.7 GB of memory, an
+    86 GB disk with 13 GB free. It held a test venue that lane B had set up the day before, not
+    the owner's venue and not a venue's real data, which is what Task 6.11 asked for. Its database
+    was 4,063,232 bytes, plus about 0.9 MB of changes not yet folded into it.
+  - **The spare** was a Lenovo ThinkCentre M710q Tiny: i7-7700T (4 cores, 8 threads), 16 GB of
+    memory, a 238.5 GB NVMe disk, Debian 13.7.
+  - **The internet was blocked, not unplugged.** A rule on the UniFi gateway blocked the two boxes
+    from the internet, for both IP versions. Checked at 18:54 from both boxes: two outside
+    addresses failed, and each box reached the other. Unlike unplugging, outside names still
+    resolved through the gateway. The outside time servers could not be reached, but both boxes
+    went on reporting their clocks as synchronised for the whole test, and the main box's restart
+    took its time as confirmed that way (`clock_start.confirmed`, source "internet").
+  - **Measured: the spare joined with the internet blocked.** Its `spare.first_copy_ready` line
+    read `bytes` 4,063,232 and `ms` 12,095 (the 3b plan's D14 says where that count starts and
+    ends). The spare put the copy in place and finished joining at 19:04:02, then restarted by
+    itself as the spare. The main box's Servers page listed it as "Standby", its delay seen
+    between 1 and 32 seconds, with "Last copy received" updating.
+  - **Measured: the main box's restart did not wait.** Restarted at 19:09:37, it was healthy at
+    19:09:44, and its `handover.start_check` line read `proceed` with the spare answered and
+    counted. After the spare was removed at 19:17:14, a restart at 19:17:31 carried on with no
+    other box to ask and was healthy at 19:17:38.
+  - **Clocks.** Read at 18:54:44 and at 19:10:59: the main box and the spare were each within
+    about 1 second of the Mac used for the test, both times.
+  - **Not tested: the spare's watch of the main box, and so the emergency-switch prompt.** The
+    main box's container ran with `WAITRON_ENV=dev`, set by lane B's test set-up.
+    Development mode switches off Waitron's mDNS responder, the service that answers the box's
+    own `.local` name on the venue's network. So the main box's own name,
+    `box-158e.waitron.local`, answered nowhere, and the spare's page said "This spare cannot reach
+    the main server" throughout. The join still worked only because the main box's operating
+    system announces `waitron.local` itself. The session judged this an effect of the test
+    set-up, not shown to be a product fault. A rerun needs a main box that is not in development
+    mode: A1549 in [the backlog](../../backlog.md).
+  - **Where the screens differed from the guide.** Entered as the main box's address,
+    `https://192.168.10.10` was refused (`mirror.primary_url_invalid`) and only the name
+    `https://waitron.local` worked; neither the guide, the field's hint nor the refusal says an
+    address in numbers is refused. After the spare restarted, the page the join was started from
+    stayed on "This server is joining" and never moved on, because the address it was opened at
+    had stopped answering.
+  - **The faults it found, and where each went.** Three in the install script
+    (`deploy/waitron.sh`) were fixed the same evening in pull request
+    [#3789](https://github.com/clintongormley/waitron/pull/3789), lane B's item
+    WAITRON-SH-FRESH-BOX; two of the three fixes were run on a Debian 13 container, and no whole
+    install on a real fresh box was run. Still open when this note was written: a joined spare that
+    reports itself unhealthy from then on, and a normal first step of joining logged as an error,
+    both lane J's item SPARE-AFTER-JOIN; and the joining screens' wording and the joining page
+    that never moves on, lane B's item TWO-BOX-TEST-FOLLOWUPS.
+
 - **3c. The spare follows.** The waiting start mode; `restore -f` into the follower copy (follow mode
   exists at tag v0.5.18, `cmd/litestream/restore.go:38`, but has never been run in this repository —
   measure lag and a byte-identical restore against a direct one); the three alerts; the "Spare box"

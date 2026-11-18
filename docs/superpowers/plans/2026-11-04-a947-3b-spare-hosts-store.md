@@ -840,6 +840,10 @@ the A1018 plan, not run.
 
   **18 November 2026.** During the join, follow progress at `/api/box/status`. After the spare
   restarts, read `bytes` and `ms` in its `spare.first_copy_ready` log line.
+
+  **18 November 2026, measured.** The owner's figures are in the design's §11, under slice 3b, and
+  that backlog entry is deleted. What the run left untested is A1549 in
+  [the backlog](../../backlog.md).
 - **D15 — The spare tells the main box where its store is.** The joining request gains
   `standbyStoreUrl` beside today's `standbyContactUrl` (`mirror-bundle-fetch.ts`, the request body;
   `mirror-bundle-api.ts:80-113`, the check). Adopt sends `https://<this box's own name>:<its
@@ -3495,6 +3499,12 @@ to follow progress. After the spare restarts, read `bytes` and `ms` in `spare.fi
 **The session running this plan** then records the figures, the box hardware and the database size
 in a dated note in the design (§11's 3b line), and deletes the backlog entry, turning anything the
 measurement leaves open into its own short entry (CLAUDE.md §6, the docs rule).
+
+**18 November 2026, run.** The owner ran it, with the internet blocked at the gateway and not
+unplugged, and with a test venue on the main box and not the venue's real data. The figures are in
+the [design](../specs/2026-10-21-a947-two-box-failover-design.md)'s §11, under slice 3b, and the
+backlog entry is deleted. The run left the spare's watch of the main box untested: A1549 in
+[the backlog](../../backlog.md).
 
 ---
 

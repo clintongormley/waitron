@@ -1139,6 +1139,11 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   Design it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
   [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)
 
+- **A1550. Offer the server key as a download, with an explanation of what it is for (owner,
+  2026-11-18; wanted, not built).** The owner's point from the two-box test of 18 November, as
+  that session recorded it: not a key to read in the moment. Today setup's done screen shows it
+  once and says to write it down. A1323 would replace this key with one master key.
+
 - **A1187 part 3: the recovery pack's disk key page.** B3's development startup now creates and retains the key through `scripts/box/disk-key.mjs`; the protected host delivery and pack integration remain to be built. A pack
   that cannot carry the disk key is refused rather than drawn without it.
   [Design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
@@ -1435,6 +1440,21 @@ this section records the remaining build and real-box qualification.
   check refused Servers, alerts and disk-stop reads with `ERR_CERT_AUTHORITY_INVALID`.
   [Detail](backlog/replication-cloud.md#a1282-browser-trust-after-a-connection-repair-replaces-the-certificate-authority)
 
+- **A1549. Run the two-box test again for the spare's watch of the main box and the
+  emergency-switch prompt.** The owner's test of 18 November 2026 did not exercise them. The one
+  precondition: a main box that is not in development mode, so that its own `.local` name answers.
+  [Detail](backlog/replication-cloud.md#a1549-run-the-two-box-test-again-for-the-spares-watch-of-the-main-box-and-the-emergency-switch-prompt)
+
+- **A1551. Each box offers to print its own switch label after setup, with a simple link (owner,
+  2026-11-18; wanted, not built).** The owner's point from the two-box test of 18 November, as
+  that session recorded it: labels should be automatic, not a chore. Today both labels are printed
+  from the main box's **System → Servers**, one row at a time (the guide's "Print a switch label").
+
+- **A1552. The Servers page is complicated and hard to read (owner, 2026-11-18; needs the owner
+  before anything is built).** The owner's point from the two-box test of 18 November, as that
+  session recorded it. A redesign needs the owner to say what the page should show. Seen at that
+  test: the spare's delay moving between 1 and 32 seconds, which is how that figure is built.
+
 The membership, promotion and rejoin arc remains in the tree. What remains, largest first:
 
 - **Status, alarms and the operator surface for replication.** An operator needs to see whether the
@@ -1449,12 +1469,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **The mirror as a backup destination**, and the mirror's print agent (gated on B6's cross-box
   TLS).
-
-- **Adding a mirror while the internet is down** (owner, 2026-10-02). Since 3b-6a a spare takes its
-  first copy over the venue's network, and since 3b-F so does a Veri*Factu venue's; left: the
-  owner's measurement with the internet unplugged (3b plan Task 6.11). Read the completed copy's
-  size and time in the spare's `spare.first_copy_ready` log line after it restarts.
-  [Detail](backlog/replication-cloud.md#adding-a-mirror-while-the-internet-is-down)
 
 **Cloud integration and SQLite work.**
 
