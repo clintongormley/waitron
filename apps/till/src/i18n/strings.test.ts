@@ -513,3 +513,18 @@ describe("Print the bill's own sentences", () => {
     expect(catalogues[locale]?.["meal_end.not_admitted"]).toBe(message);
   });
 });
+
+describe("Print the bill's refused wording", () => {
+  it.each([
+    [
+      "en-GB",
+      "The bill was not printed and no ticket was issued. Nothing on the bill has changed.",
+    ],
+    [
+      "es-ES",
+      "La cuenta no se ha impreso y no se ha emitido ningún ticket. La cuenta no ha cambiado.",
+    ],
+  ])("says in %s that nothing happened", (locale, message) => {
+    expect(catalogues[locale]?.["meal_end.refused"]).toBe(message);
+  });
+});

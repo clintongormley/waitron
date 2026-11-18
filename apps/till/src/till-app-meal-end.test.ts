@@ -527,18 +527,60 @@ describe("till-app: Print the bill", () => {
     expect(banner(el)!.textContent).toContain(overLimitText("3000.00"));
   });
 
-  it.each(["fiscal.record_invalid", "fiscal.foreign_recipient_unsupported"])(
-    "says %s cannot be filed and that trying again will not help, as placing an order does",
-    async (code) => {
-      const { el } = await openBill({
-        endMeal: vi.fn().mockRejectedValue({ code, status: 409 }),
-      });
+  it.each([
+    "fiscal.record_invalid",
+    "fiscal.foreign_recipient_unsupported",
+    "sale.number_reused",
+    "management.request_invalid",
+    "some.refusal_the_till_has_no_words_for",
+  ])("says %s printed nothing and issued no ticket, sending nobody elsewhere", async (code) => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({ code, status: 409 }),
+    });
+
+    await printBill(el);
+
+    const said = banner(el)!.textContent!;
+    expect(said).toContain(t("meal_end.refused"));
+    expect(said).not.toContain(t("place.refused"));
+    expect(said).not.toContain(t("table.error"));
+  });
+
+  it.each([
+    ["an error carrying no code", new Error("unexpected")],
+    ["a server failure", { code: "server.internal", status: 500 }],
+    ["a gateway's answer with no Waitron error in it", { code: "server.internal", status: 502 }],
+  ])(
+    "says the bill may have been printed after %s, and reads the bills again",
+    async (_case, error) => {
+      const { el } = await openBill({ endMeal: vi.fn().mockRejectedValue(error) });
+      const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
 
       await printBill(el);
 
-      expect(banner(el)!.textContent).toContain(t("place.refused"));
+      const said = banner(el)!.textContent!;
+      expect(said).toContain(t("meal_end.unconfirmed"));
+      expect(said).not.toContain(t("meal_end.refused"));
+      expect(said).not.toContain(t("table.error"));
+      expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
     },
   );
+
+  it("does not say no ticket was issued when a resend is refused after an earlier send got no answer", async () => {
+    const endMeal = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValue({ code: "session.person_not_signed_in", status: 401 });
+    const { el } = await openBill({ endMeal });
+
+    await printBill(el);
+    await expect
+      .poll(() => banner(el)?.textContent ?? "", { timeout: GIVE_UP_MS })
+      .toContain(t("meal_end.unconfirmed"));
+
+    expect(endMeal).toHaveBeenCalledTimes(2);
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.refused"));
+  });
 
   it.each([
     ["Marta", "Marta has taken over this order, so the bill was not printed."],

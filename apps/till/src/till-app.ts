@@ -721,13 +721,8 @@ const PERMANENT_SALE_REFUSALS = new Set([
   "sale.number_reused",
 ]);
 
-/**
- * Print the bill's refusals shown in their code's own words, beside the table refusals
- * (`tableWriteError`). The route's other codes are said as a failed table change on purpose: the
- * till has no sentence for them (`node.read_only`, `series.no_*_for_node`, `chain.append_contention`),
- * or they mean a fault in the till's request
- * (`management.request_invalid`) or in Waitron's own data, which staff cannot act on.
- */
+/** Print the bill's refusals shown in their code's own words, beside the table refusals
+ * (`tableWriteError`). */
 const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
   "meal_end.already_issued",
   "meal_end.no_printer",
@@ -747,10 +742,17 @@ const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
   "submission.id_reused",
 ]);
 
-/** A refused Print the bill as said, the party, draft and not-served refusals aside. Nobody approves
- * Print the bill, so a refused permission is the signed-in person's own; a ticket refused by the tax
- * agency's rules is said as a refused order, as nothing was taken. */
-function mealEndError(error: unknown): CounterError {
+/**
+ * A refused Print the bill as said, the party, draft and not-served refusals aside. Nobody approves
+ * Print the bill, so a refused permission is the signed-in person's own.
+ *
+ * `meal_end.refused` says no ticket was issued, which the server's own refusal can say: its
+ * transaction rolled back or never began. `server.internal` is not such a refusal: the client also
+ * names any failed response without Waitron's error body that way. Nor is a refusal after a send
+ * went unanswered: the server checks the session and device before it looks for that send, so a
+ * resend can be refused while the first send's ticket stands.
+ */
+function mealEndError(error: unknown, earlierSendUnanswered: boolean): CounterError {
   const refusal = (error ?? {}) as {
     code?: unknown;
     reason?: unknown;
@@ -758,6 +760,7 @@ function mealEndError(error: unknown): CounterError {
     offsetMinutes?: unknown;
   };
   const code = typeof refusal.code === "string" ? refusal.code : undefined;
+  const nothingIssued = earlierSendUnanswered ? "meal_end.unconfirmed" : "meal_end.refused";
   if (code === "authorization.not_permitted") return "take_payment.not_permitted";
   if (code === "device_profile.not_admitted") return "meal_end.not_admitted";
   if (code === "session.not_open") return { code: "session.required" };
@@ -767,10 +770,13 @@ function mealEndError(error: unknown): CounterError {
     const reading = clockReadingOf(refusal);
     return reading === undefined ? { code } : { clockUnusable: reading };
   }
-  if (isPermanentSaleRefusal(error)) return "place.refused";
+  if (isPermanentSaleRefusal(error)) return nothingIssued;
   const overLimit = overLimitOf(error);
   if (overLimit !== undefined) return overLimit;
-  return code !== undefined && MEAL_END_REFUSALS.has(code) ? { code } : tableWriteError(error);
+  const said =
+    code !== undefined && MEAL_END_REFUSALS.has(code) ? { code } : tableWriteError(error);
+  if (said !== "table.error") return said;
+  return code === undefined || code === "server.internal" ? "meal_end.unconfirmed" : nothingIssued;
 }
 
 /** Table refusals shown in their code's own words. */
@@ -20156,11 +20162,15 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     this.mealEnd = null;
     this.mealEndPrinting = workingOrderId;
+    let earlierSendUnanswered = false;
     try {
       await this.#resend(
         (signal) => asked.api.endMeal(party.id, request, { signal }),
         limit.signal,
         live,
+        () => {
+          earlierSendUnanswered = true;
+        },
       );
     } catch (error) {
       if (!live() || this.#hasLeftParty(party.id, sent)) return;
@@ -20170,7 +20180,7 @@ export class TillApp extends LitElement {
         if (stillOnBill()) this.errorKey = "meal_end.unconfirmed";
         return;
       }
-      await this.#onMealEndRefused(asked, request, error, stillOnBill);
+      await this.#onMealEndRefused(asked, request, error, stillOnBill, earlierSendUnanswered);
       return;
     } finally {
       limit.done();
@@ -20196,6 +20206,7 @@ export class TillApp extends LitElement {
     request: EndMealRequest,
     error: unknown,
     stillOnBill: () => boolean,
+    earlierSendUnanswered: boolean,
   ): Promise<void> {
     const refusal = error as
       { code?: unknown; dishes?: unknown; ownerName?: string | null } | undefined;
@@ -20221,7 +20232,7 @@ export class TillApp extends LitElement {
       this.errorKey =
         refusal?.code === "draft.taken_over"
           ? { printTakenOver: refusal.ownerName ?? "" }
-          : mealEndError(error);
+          : mealEndError(error, earlierSendUnanswered);
     if (!this.#hasLeftParty(asked.partyId, asked.sent)) {
       await this.#loadPartyBills();
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();

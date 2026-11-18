@@ -1761,6 +1761,8 @@ export const en = {
     "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
   "meal_end.unconfirmed":
     "Print the bill got no answer, so the bill may have been printed. Check this bill before trying again.",
+  "meal_end.refused":
+    "The bill was not printed and no ticket was issued. Nothing on the bill has changed.",
   // The confirmation before closing a whole bill as a deferred payment.
   "deferred_close.title": "Close as deferred payment",
   "deferred_close.bill": "Bill",
@@ -3891,6 +3893,8 @@ export const es: Record<StringKey, string> = {
     "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
   "meal_end.unconfirmed":
     "Imprimir la cuenta no obtuvo respuesta, así que puede que se haya impreso. Revisa esta cuenta antes de volver a intentarlo.",
+  "meal_end.refused":
+    "La cuenta no se ha impreso y no se ha emitido ningún ticket. La cuenta no ha cambiado.",
   "deferred_close.title": "Cerrar como pago aplazado",
   "deferred_close.bill": "Cuenta",
   "deferred_close.invoice": "Factura",
