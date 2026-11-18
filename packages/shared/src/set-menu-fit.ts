@@ -363,11 +363,16 @@ export function fitSetMenus(input: SetMenuFitInput): SetMenuFit {
       classes: classes.map(({ dishes, arcs }) => ({ count: dishes.length, arcs })),
     },
   };
-  const result = searchMixes(search);
-  const missing = result.placement.uncovered;
-  if (missing > 0) {
-    const probe = {
+  const offerPlaces = offers.map(({ lines }) => lines.reduce((sum, { count }) => sum + count, 0));
+  const mostPlaces = offerPlaces.reduce((most, count) => Math.max(most, count), 0);
+  const billPlaces = fixed.reduce(
+    (total, count, offer) => total + count * offerPlaces[offer]!,
+    unfixed * mostPlaces,
+  );
+  function coverageSearch(count: number): MixSearchResult {
+    return searchMixes({
       ...search,
+      unfixed: count,
       mixCost: () => 0,
       placement: {
         uncoveredCost: 1,
@@ -376,20 +381,24 @@ export function fitSetMenus(input: SetMenuFitInput): SetMenuFit {
           arcs: arcs.map(({ pair }) => ({ pair, cost: 0 })),
         })),
       },
-    };
+    });
+  }
+  // When the bill has too few places, only the number of unplaced dishes matters.
+  const result = dishes.length > billPlaces ? coverageSearch(unfixed) : searchMixes(search);
+  const missing = result.placement.uncovered;
+  if (missing > 0) {
     // A separate new menu for each unplaced dish is sufficient. Adding menus preserves a fit.
     let sufficient = unfixed + missing;
-    let low = unfixed + 1;
+    let low = unfixed + Math.max(1, Math.ceil((dishes.length - billPlaces) / mostPlaces));
     let high = sufficient;
-    while (low < high) {
-      const count = Math.floor((low + high) / 2);
+    for (let count = low; low < high; count = Math.floor((low + high) / 2)) {
       const total = menus.length + count - unfixed;
       if (
         mixCount(count, offers.length) === Infinity ||
         !Number.isSafeInteger(1 + dishes.length + placesPerMenu * total)
       ) {
         high = count;
-      } else if (searchMixes({ ...probe, unfixed: count }).placement.uncovered === 0) {
+      } else if (coverageSearch(count).placement.uncovered === 0) {
         sufficient = count;
         high = count;
       } else {

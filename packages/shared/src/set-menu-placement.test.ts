@@ -3,17 +3,10 @@ import { describe, expect, it } from "vitest";
 import { solvePlacement, type PlacementProblem } from "./set-menu-placement.js";
 
 describe("set-menu placement", () => {
+  const cheap = { pair: 0, cost: 0 };
   const twoPlaces = {
     capacities: [1, 1],
-    classes: [
-      {
-        count: 2,
-        arcs: [
-          { pair: 0, cost: 0 },
-          { pair: 1, cost: 5 },
-        ],
-      },
-    ],
+    classes: [{ count: 2, arcs: [cheap, { pair: 1, cost: 5 }] }],
     uncoveredCost: 1000,
   };
 
@@ -35,14 +28,8 @@ describe("set-menu placement", () => {
       solvePlacement({
         ...twoPlaces,
         classes: [
-          {
-            count: 1,
-            arcs: [
-              { pair: 0, cost: 0 },
-              { pair: 1, cost: 3 },
-            ],
-          },
-          { count: 1, arcs: [{ pair: 0, cost: 0 }] },
+          { count: 1, arcs: [cheap, { pair: 1, cost: 3 }] },
+          { count: 1, arcs: [cheap] },
         ],
       }),
     ).toMatchObject({
@@ -56,7 +43,7 @@ describe("set-menu placement", () => {
     expect(
       solvePlacement({
         capacities: [0],
-        classes: [{ count: 1, arcs: [{ pair: 0, cost: 0 }] }],
+        classes: [{ count: 1, arcs: [cheap] }],
         uncoveredCost: 1000,
       }),
     ).toEqual({ cost: 1000, uncovered: 1, flows: [[]], capacityPrices: [1000] });

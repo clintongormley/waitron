@@ -58,6 +58,16 @@ function smallBill(input: Partial<SetMenuFitInput> = {}): SetMenuFitInput {
   return { offers: [daily, special], setMenus: menus(2), dishes: [], previous: null, ...input };
 }
 
+function expectNeeded(input: SetMenuFitInput, setMenusNeeded: number | null): void {
+  expect(fitSetMenus(input)).toEqual({ kind: "uncovered", setMenusNeeded });
+}
+
+function expectInvalid(input: SetMenuFitInput, reason: string, id: string): void {
+  expect(() => fitSetMenus(input)).toThrow(
+    expect.objectContaining({ code: "set_menu.fit_invalid_input", params: { reason, id } }),
+  );
+}
+
 function checkPlacement(
   input: SetMenuFitInput,
   fit: Extract<SetMenuFit, { kind: "fitted" }>,
@@ -152,17 +162,8 @@ describe("fitSetMenus", () => {
   });
 
   it("keeps a fixed set menu's offer even though a cheaper one covers its dish", () => {
-    expect(
-      fitSetMenus(
-        smallBill({
-          setMenus: [
-            { id: "s1", fixedOfferId: "special" },
-            { id: "s2", fixedOfferId: null },
-          ],
-          dishes: [dish("a", "soup")],
-        }),
-      ),
-    ).toMatchObject({
+    const setMenus = [...menus(1, "special"), { id: "s2", fixedOfferId: null }];
+    expect(fitSetMenus(smallBill({ setMenus, dishes: [dish("a", "soup")] }))).toMatchObject({
       kind: "fitted",
       totalCents: 3400,
       setMenus: [
@@ -182,10 +183,7 @@ describe("fitSetMenus", () => {
       ],
     });
     for (const variantId of ["bottle", null]) {
-      expect(fitSetMenus({ ...input, dishes: [{ ...dish("wine", "wine"), variantId }] })).toEqual({
-        kind: "uncovered",
-        setMenusNeeded: null,
-      });
+      expectNeeded({ ...input, dishes: [{ ...dish("wine", "wine"), variantId }] }, null);
     }
     expect(
       fitSetMenus({ ...input, dishes: [{ ...dish("wine", "wine"), variantId: "glass" }] }),
@@ -193,17 +191,11 @@ describe("fitSetMenus", () => {
   });
 
   it("cannot cover a course that no line accepts", () => {
-    expect(fitSetMenus(smallBill({ dishes: [dish("a", "soup", "drink")] }))).toEqual({
-      kind: "uncovered",
-      setMenusNeeded: null,
-    });
+    expectNeeded(smallBill({ dishes: [dish("a", "soup", "drink")] }), null);
   });
 
   it("cannot price menus without offers", () => {
-    expect(fitSetMenus(smallBill({ offers: [] }))).toEqual({
-      kind: "uncovered",
-      setMenusNeeded: null,
-    });
+    expectNeeded(smallBill({ offers: [] }), null);
   });
 
   it("fits an empty bill without offers", () => {
@@ -224,59 +216,39 @@ describe("fitSetMenus", () => {
     });
   });
 
+  const listedTwice = { ...daily, dishes: [daily.dishes[0]!, daily.dishes[0]!] };
   it.each<[string, Partial<SetMenuFitInput>, string, string]>([
     ["offers", { offers: [daily, daily] }, "duplicate_id", "daily"],
-    [
-      "listed dishes",
-      { offers: [{ ...daily, dishes: [daily.dishes[0]!, daily.dishes[0]!] }] },
-      "duplicate_id",
-      "daily",
-    ],
+    ["listed dishes", { offers: [listedTwice] }, "duplicate_id", "daily"],
     ["menus", { setMenus: [...menus(1), ...menus(1)] }, "duplicate_id", "s1"],
     ["dishes", { dishes: [dish("a", "soup"), dish("a", "hake")] }, "duplicate_id", "a"],
     ["unknown fixed offers", { setMenus: menus(1, "gone") }, "unknown_offer", "s1"],
-    [
-      "menu price",
-      { offers: [{ ...daily, priceCents: MAX_SET_MENU_AMOUNT_CENTS + 1 }] },
-      "invalid_amount",
-      "daily",
-    ],
-    [
-      "dish surcharge",
-      { offers: [offer("invalid", 0, [["soup", -1]])] },
+  ])("rejects invalid %s", (_label, input, reason, id) => {
+    expectInvalid(smallBill(input), reason, id);
+  });
+
+  it.each([10.5, MAX_SET_MENU_AMOUNT_CENTS + 1])(
+    "rejects an invalid menu price %s",
+    (priceCents) => {
+      expectInvalid(smallBill({ offers: [{ ...daily, priceCents }] }), "invalid_amount", "daily");
+    },
+  );
+
+  it("rejects a negative dish surcharge", () => {
+    expectInvalid(
+      smallBill({ offers: [offer("invalid", 0, [["soup", -1]])] }),
       "invalid_amount",
       "invalid",
-    ],
-    ["fractional price", { offers: [{ ...daily, priceCents: 10.5 }] }, "invalid_amount", "daily"],
-    [
-      "unsafe count",
-      {
-        offers: [
-          { ...daily, lines: [{ count: Number.MAX_SAFE_INTEGER + 1, courseIds: ["main"] }] },
-        ],
-      },
-      "invalid_line",
-      "daily",
-    ],
-    [
-      "zero count",
-      { offers: [{ ...daily, lines: [{ count: 0, courseIds: ["main"] }] }] },
-      "invalid_line",
-      "daily",
-    ],
-    [
-      "empty line",
-      { offers: [{ ...daily, lines: [{ count: 1, courseIds: [] }] }] },
-      "invalid_line",
-      "daily",
-    ],
-  ])("rejects invalid %s", (_label, input, reason, id) => {
-    expect(() => fitSetMenus(smallBill(input))).toThrow(
-      expect.objectContaining({
-        code: "set_menu.fit_invalid_input",
-        params: { reason, id },
-      }),
     );
+  });
+
+  it.each([
+    [0, ["main"]],
+    [Number.MAX_SAFE_INTEGER + 1, ["main"]],
+    [1, []],
+  ])("rejects an invalid line with count %s and courses %j", (count, courseIds) => {
+    const offers = [{ ...daily, lines: [{ count, courseIds }] }];
+    expectInvalid(smallBill({ offers }), "invalid_line", "daily");
   });
 
   it("matches an exhaustive fit and returns a valid placement", () => {
@@ -429,19 +401,14 @@ describe("refitting set menus", () => {
 
   it("changes the menu that lost its hake rather than a menu with both dishes", () => {
     const offerBySetMenu = new Map(
-      menus(4).map(({ id }, i) => [id, i === 3 ? "special" : "daily"]),
+      worked.setMenus.map(({ id }) => [id, id === "s4" ? "special" : "daily"]),
     );
     const placeByDish = new Map(
-      worked.dishes.slice(0, 4).map(({ id }, i) => [id, { setMenuId: `s${i + 1}`, lineIndex: 0 }]),
+      worked.dishes.map(({ id }, i) => [
+        id,
+        { setMenuId: worked.setMenus[i % 4]!.id, lineIndex: Math.floor(i / 4) },
+      ]),
     );
-    for (const [id, setMenuId] of [
-      ["hake", "s1"],
-      ["sirloin-a", "s2"],
-      ["sirloin-b", "s3"],
-      ["bass", "s4"],
-    ]) {
-      placeByDish.set(id!, { setMenuId: setMenuId!, lineIndex: 1 });
-    }
     const dishes = worked.dishes
       .filter(({ id }) => id !== "hake")
       .concat(dish("bass-new", "sea bass", "main"));
@@ -461,33 +428,17 @@ describe("refitting set menus", () => {
     }
   });
 
-  it("charges pinned surcharges and places new dishes around the pins", () => {
-    const pinned = {
-      ...dish("pinned", "sirloin", "main"),
-      pinnedTo: { setMenuId: "s1", lineIndex: 1 },
-    };
-    expect(fitSetMenus({ ...frozen, dishes: [pinned, dish("new", "soup")] })).toMatchObject({
-      totalCents: 1900,
+  it("charges pinned surcharges and places a newcomer around the pins", () => {
+    const pinnedTo = { setMenuId: "s1", lineIndex: 1 };
+    const sirloin = { ...dish("sirloin", "sirloin", "main"), pinnedTo };
+    const dishes = [...frozen.dishes, sirloin, dish("new", "soup")];
+    expectNeeded({ ...frozen, dishes }, 2);
+    expect(fitSetMenus({ ...frozen, setMenus: menus(2, "daily"), dishes })).toMatchObject({
+      totalCents: 3300,
       dishes: [
-        { id: "new", place: { setMenuId: "s1", lineIndex: 0 } },
-        { id: "pinned", place: pinned.pinnedTo, surchargeCents: 500 },
-      ],
-    });
-    expect(fitSetMenus({ ...frozen, dishes: [...frozen.dishes, dish("new", "soup")] }).kind).toBe(
-      "uncovered",
-    );
-  });
-
-  it("keeps a pinned dish on its own menu even when it sorts after a newcomer", () => {
-    const fit = fitSetMenus({
-      ...frozen,
-      setMenus: menus(2, "daily"),
-      dishes: [...frozen.dishes, dish("new", "soup")],
-    });
-    expect(fit).toMatchObject({
-      dishes: [
-        { id: "new", place: { setMenuId: "s2" } },
-        { id: "pinned", place: { setMenuId: "s1" } },
+        { id: "new", place: { setMenuId: "s2", lineIndex: 0 } },
+        { id: "pinned", place: { setMenuId: "s1", lineIndex: 0 } },
+        { id: "sirloin", place: pinnedTo, surchargeCents: 500 },
       ],
     });
   });
@@ -500,21 +451,9 @@ describe("refitting set menus", () => {
     ["s1", 1, "soup", "pinned_place_invalid"],
     ["s1", 0, "soup", "pinned_place_invalid"],
   ])("rejects a bad pin to %s line %i for %s", (setMenuId, lineIndex, productId, reason) => {
-    expect(() =>
-      fitSetMenus({
-        ...frozen,
-        setMenus: [...frozen.setMenus, { id: "s2", fixedOfferId: null }],
-        dishes: [
-          ...frozen.dishes,
-          { ...dish("second", productId), pinnedTo: { setMenuId, lineIndex } },
-        ],
-      }),
-    ).toThrow(
-      expect.objectContaining({
-        code: "set_menu.fit_invalid_input",
-        params: { id: "second", reason },
-      }),
-    );
+    const setMenus = [...frozen.setMenus, { id: "s2", fixedOfferId: null }];
+    const second = { ...dish("second", productId), pinnedTo: { setMenuId, lineIndex } };
+    expectInvalid({ ...frozen, setMenus, dishes: [...frozen.dishes, second] }, reason, "second");
   });
 
   it.each([false, true])(
@@ -527,15 +466,8 @@ describe("refitting set menus", () => {
         [{ count: wide ? 1_000_000 : 1, courseIds: ["starter"] }],
       );
       const setMenus = menus(wide ? 40 : 1000, "capped");
-      expect(
-        fitSetMenus(
-          smallBill({
-            offers: [capped],
-            setMenus,
-            dishes: setMenus.map(({ id }) => dish(id, "soup")),
-          }),
-        ).kind,
-      ).toBe("too_large");
+      const dishes = setMenus.map(({ id }) => dish(id, "soup"));
+      expect(fitSetMenus(smallBill({ offers: [capped], setMenus, dishes })).kind).toBe("too_large");
     },
   );
 
@@ -572,36 +504,19 @@ describe("additional set menus", () => {
       const dishes = menus(dishCount).map(({ id }) =>
         dish(id, product, product === "soup" ? "starter" : "main"),
       );
-      expect(fitSetMenus(smallBill({ offers, setMenus: menus(menuCount, fixed), dishes }))).toEqual(
-        { kind: "uncovered", setMenusNeeded: needed },
-      );
+      expectNeeded(smallBill({ offers, setMenus: menus(menuCount, fixed), dishes }), needed);
     },
   );
-
-  it("keeps pins when counting extra menus", () => {
-    const pinnedTo = { setMenuId: "s1", lineIndex: 0 };
-    const dishes = [{ ...dish("pinned", "soup"), pinnedTo }, dish("new", "soup")];
-    expect(fitSetMenus(smallBill({ setMenus: menus(1, "daily"), dishes }))).toEqual({
-      kind: "uncovered",
-      setMenusNeeded: 2,
-    });
-  });
 
   it("returns a sufficient total when the first covering count exceeds the mix cap", () => {
     const offers = Array.from({ length: 5 }, (_, i) => ({ ...daily, id: String(i) }));
     const dishes = menus(50).map(({ id }) => dish(id, "soup"));
-    expect(fitSetMenus(smallBill({ offers, setMenus: menus(46), dishes }))).toEqual({
-      kind: "uncovered",
-      setMenusNeeded: 50,
-    });
+    expectNeeded(smallBill({ offers, setMenus: menus(46), dishes }), 50);
   });
 });
 
 it("uses the smallest sufficient count when a new menu can take more than one dish", () => {
   const offers = [offer("daily", 1400, ["soup"], [{ count: 2, courseIds: ["starter"] }])];
   const dishes = menus(5).map(({ id }) => dish(id, "soup"));
-  expect(fitSetMenus(smallBill({ offers, setMenus: menus(1), dishes }))).toEqual({
-    kind: "uncovered",
-    setMenusNeeded: 3,
-  });
+  expectNeeded(smallBill({ offers, setMenus: menus(1), dishes }), 3);
 });
