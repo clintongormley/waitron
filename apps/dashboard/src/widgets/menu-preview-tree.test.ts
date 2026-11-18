@@ -61,6 +61,7 @@ function fixture(changes: MenuChange[] = [change()]): MenuPreview {
   );
   document.offers.mi!.customerName = { en: "House lemonade", es: "Limonada" };
   return {
+    setMenuProblems: [],
     document,
     live: { versionId: "v2", document: structuredClone(document) },
     changes,
@@ -312,6 +313,7 @@ it("places every change kind in its named group and keeps the groups in working 
     abbreviation: { en: "g" },
     precision: 0,
   };
+  const setMenu = { id: "daily", name: "Daily menu" };
   const kinds: Record<MenuChange["kind"], MenuChange> = {
     menu_renamed: { ...shared, id: "rename", kind: "menu_renamed", from: "Old", to: "New" },
     section_added: { ...shared, ...section, id: "section-add", kind: "section_added" },
@@ -339,6 +341,30 @@ it("places every change kind in its named group and keeps the groups in working 
       kind: "product_moved",
       from: [[]],
       to: [["Cold"]],
+    },
+    set_menu_added: {
+      ...shared,
+      id: "set-add",
+      kind: "set_menu_added",
+      setMenu,
+      sectionIds: [],
+      under: [],
+    },
+    set_menu_removed: {
+      ...shared,
+      id: "set-remove",
+      kind: "set_menu_removed",
+      setMenu,
+      sectionIds: [],
+      under: [],
+    },
+    set_menu_changed: {
+      ...shared,
+      id: "set-change",
+      kind: "set_menu_changed",
+      setMenu,
+      fields: ["price"],
+      source: "set_menu",
     },
     price_changed: {
       ...shared,
@@ -403,6 +429,7 @@ it("places every change kind in its named group and keeps the groups in working 
     ["Products added", ["product-add"]],
     ["Products removed", ["product-delete", "product-remove"]],
     ["Products moved", ["product-move"]],
+    ["Set menus", ["set-change", "set-remove", "set-add"]],
     ["Prices", ["price"]],
     ["Product details", ["extra-max", "extra-portion", "extra-unit", "details"]],
     ["Order", ["order"]],
@@ -517,3 +544,85 @@ it.each([false, true])(
     }
   },
 );
+
+it.each(
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].flatMap((width) => [
+      {
+        theme,
+        width,
+        language: "en",
+        edit: "Edit Daily menu",
+        source: "set menu",
+        added: "Daily menu added under Counter drinks",
+        removed: "Daily menu removed from Counter cold",
+        changed: "Daily menu: dishes",
+      },
+      {
+        theme,
+        width,
+        language: "es-ES",
+        edit: "Editar Daily menu",
+        source: "carta a precio fijo",
+        added: "Se ha añadido Daily menu en Counter drinks",
+        removed: "Se ha quitado Daily menu de Counter cold",
+        changed: "Daily menu: platos",
+      },
+    ]),
+  ),
+)("shows set-menu changes in $language $theme at $width px", async (display) => {
+  const { width, theme, language } = display;
+  await page.viewport(width, 900);
+  setLocale(language);
+  const setMenu = { id: "daily", name: "Daily menu" };
+  const targets = { before: [], after: [] };
+  const preview = fixture([
+    {
+      id: "add",
+      kind: "set_menu_added",
+      setMenu,
+      under: ["Counter drinks"],
+      sectionIds: ["outer"],
+      source: "this_menu",
+      targets,
+    },
+    {
+      id: "remove",
+      kind: "set_menu_removed",
+      setMenu,
+      under: ["Counter cold"],
+      sectionIds: ["inner"],
+      source: "this_menu",
+      targets,
+    },
+    {
+      id: "copy",
+      kind: "set_menu_changed",
+      setMenu,
+      fields: ["dishes"],
+      source: "set_menu",
+      targets,
+      alsoOn: ["Weekend"],
+    },
+  ]);
+  const { el, host } = await mountWidget<MenuPreviewPanel>(
+    "dashboard-menu-preview",
+    { preview, menuName: "Lunch" },
+    theme,
+  );
+  const row = (id: string) => el.shadowRoot!.querySelector(`[data-change-row="${id}"]`);
+  expect(row("add")?.textContent).toContain(display.added);
+  expect(row("remove")?.textContent).toContain(display.removed);
+  expect(row("copy")?.textContent).toContain(display.changed);
+  expect(row("copy")?.textContent).toContain(display.source);
+  expect(row("copy")?.textContent).toContain("Weekend");
+  const editor = row("copy")?.querySelector<HTMLAnchorElement>("a[data-edit-change]");
+  expect(editor?.textContent).toBe(display.edit);
+  expect(editor?.getAttribute("href")).toBe("/menus/menu/daily/view/set-menu");
+  expect(row("copy")?.querySelector("[data-undo-change]")).toBeNull();
+  await expectNoA11yViolations(host);
+  await page.screenshot({
+    element: host,
+    path: `__screenshots__/look/a1515-set-menu-changes-${language}-${theme}-${width}.png`,
+  });
+});

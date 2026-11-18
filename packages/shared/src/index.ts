@@ -383,6 +383,7 @@ export type {
   MenuChange,
   ProductChangeField,
   SectionChangeField,
+  SetMenuChangeField,
   MenuStatus,
   MenuPreview,
   PublishedMenuVersion,

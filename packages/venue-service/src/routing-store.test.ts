@@ -4,11 +4,13 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { beforeEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  addMember,
   createMenu,
   createCategory,
   addProductToMenu,
   buildMenuDocument,
   removeMember,
+  requireMenuRoot,
   createExtraList,
   createProduct,
   menuDocumentHash,
@@ -24,6 +26,7 @@ import {
   categories,
   departments,
   floorZones,
+  kitchenCourses,
   kitchenStations,
   products,
   routingCellPeriods,
@@ -1648,6 +1651,29 @@ describe("routing previews", () => {
         await writeProductModifiers(tx, f.burger, []);
         const moves = await previewRoutingChange(tx, cheeseToBar(f));
         expect(extraMoves(moves)).toEqual([
+          expect.objectContaining({ productId: f.cheese, zoneId: f.terrace }),
+        ]);
+      }));
+
+    it("lists an extra from a published set-menu copy only in a zone that serves it", async () =>
+      scoped(async (tx) => {
+        const f = await withExtras(tx);
+        const course = await tx.insert(kitchenCourses).values({ name: "Mains" }).returning();
+        await tx.update(products).set({ courseId: course[0]!.id }).where(eq(products.id, f.burger));
+        const set = await createMenu(tx, {
+          name: "Daily menu",
+          kind: "set_menu",
+          setPrice: "14.00",
+          setVatClass: "reduced",
+        });
+        await addProductToMenu(tx, { menuId: set.id, productId: f.burger });
+        await addMember(tx, await requireMenuRoot(tx, f.menu), {
+          kind: "set_menu",
+          menuId: set.id,
+        });
+        await serveAndPublish(tx, f, []);
+        await writeProductModifiers(tx, f.burger, []);
+        expect(extraMoves(await previewRoutingChange(tx, cheeseToBar(f)))).toEqual([
           expect.objectContaining({ productId: f.cheese, zoneId: f.terrace }),
         ]);
       }));

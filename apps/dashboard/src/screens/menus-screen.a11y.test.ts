@@ -203,6 +203,7 @@ function api(state: State): DashboardApi {
         [documentSection("s-drinks", "Drinks", [documentProduct("mi-lager", "p-lager")])],
         { "p-lager": "Lager" },
       ),
+      setMenuProblems: [],
     } satisfies MenuPreview),
     getMenuPublications: vi
       .fn()

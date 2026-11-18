@@ -5,7 +5,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
-import type { MenuView, MenuTarget } from "@waitron/shared";
+import type { MenuView, MenuTarget, SetMenuChangeField } from "@waitron/shared";
 import { menuTargetKey } from "@waitron/menu/src/menu-navigation.js";
 import { menuChangeActions, type MenuChangeAction } from "@waitron/menu/src/menu-undo.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -53,6 +53,7 @@ const CHANGE_GROUP_ORDER = [
   "products_added",
   "products_removed",
   "products_moved",
+  "set_menus",
   "prices",
   "details",
   "order",
@@ -68,6 +69,9 @@ const CHANGE_GROUPS: Record<MenuChange["kind"], ChangeGroup> = {
   product_removed: "products_removed",
   product_deleted: "products_removed",
   product_moved: "products_moved",
+  set_menu_added: "set_menus",
+  set_menu_removed: "set_menus",
+  set_menu_changed: "set_menus",
   price_changed: "prices",
   product_changed: "details",
   extra_unit_changed: "details",
@@ -85,6 +89,7 @@ const GROUP_LABELS: Record<ChangeGroup, StringKey> = {
   products_added: "menu_preview.group_products_added",
   products_removed: "menu_preview.group_products_removed",
   products_moved: "menu_preview.group_products_moved",
+  set_menus: "menu_preview.group_set_menus",
   prices: "menu_preview.group_prices",
   details: "menu_preview.group_details",
   order: "menu_preview.group_order",
@@ -111,10 +116,19 @@ const SECTION_FIELDS: Record<SectionChangeField, StringKey> = {
   direct: "menu_preview.field_direct",
 };
 
+const SET_MENU_FIELDS: Record<SetMenuChangeField, StringKey> = {
+  price: "menu_preview.field_price",
+  vat: "menu_preview.field_vat",
+  names: "menu_preview.field_names",
+  lines: "menu_preview.field_included",
+  dishes: "menu_preview.field_dishes",
+};
+
 const SOURCES: Record<MenuChange["source"], StringKey> = {
   this_menu: "menu_preview.source_this_menu",
   shared_product: "menu_preview.source_shared_product",
   included_menu: "menu_preview.source_included_menu",
+  set_menu: "menu_preview.source_set_menu",
 };
 
 /** A menu's publication state in words, for the menus list and the editor: what it is, and the live
@@ -359,8 +373,10 @@ export class MenuPreviewPanel extends LitElement {
       target =
         change.targets.after.find((target) => !oldKeys.has(menuTargetKey(target))) ??
         change.targets.after[0];
-    } else target = change.targets.after[0];
-    if (target === undefined) return null;
+    } else if (change.kind === "set_menu_removed")
+      target = { kind: "list", sectionIds: change.sectionIds };
+    else target = change.targets.after[0];
+    if (target === undefined || target.kind === "set_menu") return null;
     if (target.kind === "title" || target.kind === "home") return target;
     let members = document.root.members;
     for (const id of target.sectionIds) {
@@ -368,7 +384,11 @@ export class MenuPreviewPanel extends LitElement {
         (member) => member.kind === "section" && member.sectionId === id,
       );
       if (section?.kind !== "section") {
-        if (change.kind === "section_removed" || change.kind === "product_removed")
+        if (
+          change.kind === "section_removed" ||
+          change.kind === "product_removed" ||
+          change.kind === "set_menu_removed"
+        )
           return {
             kind: "list",
             sectionIds: target.sectionIds.slice(0, target.sectionIds.indexOf(id)),
@@ -568,6 +588,25 @@ export class MenuPreviewPanel extends LitElement {
 
   #words(change: MenuChange): string {
     switch (change.kind) {
+      case "set_menu_added":
+        return this.#at(
+          "menu_preview.product_added",
+          "menu_preview.product_added_top",
+          change.under,
+          { name: change.setMenu.name },
+        );
+      case "set_menu_removed":
+        return this.#at(
+          "menu_preview.product_removed",
+          "menu_preview.product_removed_top",
+          change.under,
+          { name: change.setMenu.name },
+        );
+      case "set_menu_changed":
+        return fill("menu_preview.changed_fields", {
+          name: change.setMenu.name,
+          fields: change.fields.map((field) => t(SET_MENU_FIELDS[field])).join(", "),
+        });
       case "product_added":
         return this.#at(
           "menu_preview.product_added",
@@ -855,6 +894,12 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   #renderEdit(change: MenuChange) {
+    if (change.kind === "set_menu_changed")
+      return html`<a
+        data-edit-change=${change.id}
+        href=${`/menus/menu/${encodeURIComponent(change.setMenu.id)}/view/set-menu`}
+        >${fill("menu_preview.edit_menu", { menu: change.setMenu.name })}</a
+      >`;
     const action = this.#actions.get(change.id);
     switch (action?.kind) {
       case "edit_product":

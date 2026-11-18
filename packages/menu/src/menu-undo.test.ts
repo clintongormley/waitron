@@ -31,6 +31,7 @@ function change(id: string, body: MenuChangeBody): MenuChange {
 
 function preview(changes: MenuChange[], { published = true } = {}): MenuPreview {
   return {
+    setMenuProblems: [],
     clashes: [],
     hash: "hash-now",
     changes,

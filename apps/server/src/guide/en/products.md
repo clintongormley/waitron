@@ -279,6 +279,9 @@ place that refuses it does not undo the save. The window names the places that f
 them ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
+Open **Preview** on the full menu to see where set menus were added or removed and what changed in
+each set menu. Check the changes before publishing.
+
 ## Check the menu's home page {#menu-home}
 
 Open a menu's **Home page** tab to arrange its shortcuts and choose its tile layout.

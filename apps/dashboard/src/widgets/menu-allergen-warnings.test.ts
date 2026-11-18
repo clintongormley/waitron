@@ -31,6 +31,7 @@ const WARNINGS: MenuPreview["warnings"] = [
 ];
 function preview(): MenuPreview {
   return {
+    setMenuProblems: [],
     hash: "new",
     changes: [],
     clashes: [],

@@ -290,6 +290,9 @@ entonces el producto ya está guardado, así que un sitio que lo rechaza no desh
 ventana nombra los sitios que fallaron y los deja marcados para que puedas volver a intentarlo. Las
 secciones de una carta se crean en **Productos y cartas → Cartas**.
 
+Abre **Vista previa** en la carta completa para ver dónde se han añadido o quitado cartas a precio
+fijo y qué ha cambiado en cada una. Revisa los cambios antes de publicar.
+
 ## Revisa la página de inicio de la carta {#menu-home}
 
 Abre la pestaña **Página de inicio** de una carta para ordenar sus accesos directos y elegir

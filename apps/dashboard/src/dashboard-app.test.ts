@@ -9262,6 +9262,7 @@ it("lets Preview View and Hide links handle native activation inside the applica
   const preview = window.document.createElement("dashboard-menu-preview") as MenuPreviewPanel;
   preview.menuName = "Lunch";
   preview.preview = {
+    setMenuProblems: [],
     document,
     live: null,
     hash: "proposed",
@@ -9314,6 +9315,7 @@ it.each(["home", "clash"] as const)(
     const document = menuDocument([], {}, "Proposed lunch");
     const preview = window.document.createElement("dashboard-menu-preview") as MenuPreviewPanel;
     preview.preview = {
+      setMenuProblems: [],
       document,
       live: null,
       hash: "proposed",

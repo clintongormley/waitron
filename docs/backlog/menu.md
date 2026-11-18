@@ -988,8 +988,11 @@ add a line for each new course. Drafts can store an eat-in and an optional takea
 Dishes and variants can have different rates from the set menu. Draft writes still enforce
 portion-only units and the surcharge limit. A dish can have its own course in the draft.
 Publishing or scheduling a full menu freezes each set menu it holds and refuses drafts with
-problems. Published copies protect their dishes and photos.
-The dashboard editor and placement controls, Preview and live corrections, serving the copies,
+problems. Published copies protect their dishes and photos. Preview reports set-menu placements
+and edits. Live corrections reach copied dishes and modifiers. Extras usage and routing include
+set-menu dishes.
+The dashboard editor and placement controls, showing draft problems in the dashboard,
+serving the copies,
 till ordering and payment, bill documents, and the demo and guides remain open.
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer

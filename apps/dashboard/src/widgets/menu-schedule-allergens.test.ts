@@ -22,6 +22,7 @@ const WARNINGS: MenuPreview["warnings"] = [
 ];
 function preview(): MenuPreview {
   return {
+    setMenuProblems: [],
     hash: "draft",
     changes: [],
     warnings: structuredClone(WARNINGS),

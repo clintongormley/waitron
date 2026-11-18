@@ -163,27 +163,42 @@ function locate(
   field: string,
   languages?: ContentLanguages,
 ): Located | undefined {
-  const modifiers = () => Object.values(document.offers).flatMap((offer) => offer.offeredModifiers);
-  // The id comes from the request: an inherited key such as "__proto__" names no dish.
-  const offerOf = (menuItemId: string) =>
-    Object.hasOwn(document.offers, menuItemId) ? document.offers[menuItemId] : undefined;
+  const setMenuOffers = () =>
+    Object.values(document.setMenus ?? {}).flatMap((copy) => Object.values(copy.offers));
+  const modifiers = () =>
+    [...Object.values(document.offers), ...setMenuOffers()].flatMap(
+      (offer) => offer.offeredModifiers,
+    );
+  const offersOf = (menuItemId: string) => {
+    // The id comes from the request: an inherited key such as "__proto__" names no dish.
+    const ordinary = Object.hasOwn(document.offers, menuItemId)
+      ? document.offers[menuItemId]
+      : undefined;
+    // A set menu's dish or variant price is its surcharge, set on the set menu.
+    if (field === "price") return ordinary === undefined ? [] : [ordinary];
+    const copies = setMenuOffers();
+    const selected = ordinary ?? copies.find(({ id }) => id === menuItemId);
+    if (selected === undefined) return [];
+    return [
+      selected,
+      ...copies.filter((offer) => offer !== selected && offer.productId === selected.productId),
+    ];
+  };
   let located: Located;
   switch (target.kind) {
     case "offer": {
-      const offer = offerOf(target.menuItemId);
       located = {
-        copies: offer === undefined ? [] : [offer],
+        copies: offersOf(target.menuItemId),
         priceKey: "unitPrice",
         priceMirror: "grossPrice",
       };
       break;
     }
     case "variant": {
-      const variant = offerOf(target.menuItemId)?.variants.find(
-        (candidate) => candidate.id === target.variantId,
-      );
       located = {
-        copies: variant === undefined ? [] : [variant],
+        copies: offersOf(target.menuItemId).flatMap((offer) =>
+          offer.variants.filter(({ id }) => id === target.variantId),
+        ),
         priceKey: "unitPrice",
         priceMirror: "menuPrice",
       };

@@ -1,4 +1,4 @@
-import type { SetMenuTerms } from "./set-menu-types.js";
+import type { SetMenuProblem, SetMenuTerms } from "./set-menu-types.js";
 import type { Unit } from "./product-types.js";
 import type { MenuClash } from "./menu-combine-types.js";
 import type {
@@ -205,6 +205,7 @@ export type MenuField =
 export type MenuTarget =
   | { kind: "title"; menuId: string }
   | { kind: "list"; sectionIds: string[] }
+  | { kind: "set_menu"; menuId: string; sectionIds: string[] }
   | { kind: "section"; sectionIds: string[]; field: MenuField }
   | {
       kind: "product";
@@ -229,7 +230,9 @@ export interface MenuOccurrence {
 }
 
 /** Where a change came from (spec §11.1). */
-export type MenuChangeSource = "this_menu" | "shared_product" | "included_menu";
+export type MenuChangeSource = "this_menu" | "shared_product" | "included_menu" | "set_menu";
+
+export type SetMenuChangeField = "price" | "vat" | "names" | "lines" | "dishes";
 
 export type MenuChangeBody = {
   source: MenuChangeSource;
@@ -299,6 +302,17 @@ export type MenuChangeBody = {
       name: string;
       under: string[];
     }
+  | {
+      kind: "set_menu_added" | "set_menu_removed";
+      setMenu: { id: string; name: string };
+      sectionIds: string[];
+      under: string[];
+    }
+  | {
+      kind: "set_menu_changed";
+      setMenu: { id: string; name: string };
+      fields: SetMenuChangeField[];
+    }
   | { kind: "section_changed"; sectionId: string; name: string; fields: SectionChangeField[] }
   | { kind: "order_changed"; listSectionId: string | null; list: string[] }
   | { kind: "home_shortcuts_changed" }
@@ -338,6 +352,7 @@ export type MenuStatus =
 /** What publishing the menu's working state now would change, and the hash a publish must match. */
 export interface MenuPreview {
   clashes: MenuClash[];
+  setMenuProblems: { menuId: string; name: string; problems: SetMenuProblem[] }[];
   hash: string;
   changes: MenuChange[];
   warnings: (

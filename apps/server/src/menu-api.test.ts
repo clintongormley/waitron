@@ -4727,6 +4727,7 @@ describe("publishing a menu", () => {
     const current = await status(app, menuId);
     expect(await preview(app, menuId)).toEqual({
       clashes: [],
+      setMenuProblems: [],
       hash: first.hash,
       changes: [],
       warnings: [

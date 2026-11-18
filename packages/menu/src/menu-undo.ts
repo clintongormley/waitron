@@ -136,6 +136,8 @@ class Plan {
 
 function actionFor(plan: Plan, change: MenuChange): MenuChangeAction {
   switch (change.source) {
+    case "set_menu":
+      return NONE;
     case "shared_product":
       return sharedProductAction(change);
     case "included_menu":

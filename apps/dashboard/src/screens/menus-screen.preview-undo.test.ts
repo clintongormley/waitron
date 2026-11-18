@@ -66,6 +66,7 @@ const mains = (color: string | null) => {
 
 function previewOf(changes: MenuChange[]): MenuPreview {
   return {
+    setMenuProblems: [],
     live: { versionId: "v-2", document: menuDocument([mains(null)], {}, "Lunch") },
     clashes: [],
     hash: "b".repeat(64),

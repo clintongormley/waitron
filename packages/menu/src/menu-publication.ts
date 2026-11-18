@@ -394,6 +394,10 @@ function changeSubject({ change, section }: DiffEntry): string {
     case "extra_portion_changed":
     case "extra_max_quantity_changed":
       return `${change.kind}:${change.listId}:${change.productId}`;
+    case "set_menu_changed":
+    case "set_menu_added":
+    case "set_menu_removed":
+      return `${change.kind}:${change.setMenu.id}:${section}`;
     case "section_added":
     case "section_removed":
     case "section_changed":
@@ -404,9 +408,7 @@ function changeSubject({ change, section }: DiffEntry): string {
 }
 
 function fieldsOf(change: MenuChangeBody): readonly string[] | undefined {
-  return change.kind === "product_changed" || change.kind === "section_changed"
-    ? change.fields
-    : undefined;
+  return "fields" in change ? change.fields : undefined;
 }
 
 /** One shared edit shows up in two menus as the same change from the same source. */
@@ -421,6 +423,8 @@ function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
 
 export async function previewMenu(tx: Transaction, menuId: string): Promise<MenuPreview> {
   const { graph, menus, sectionNames } = await buildMenuDocuments(tx, [menuId]);
+  if (graph.menu(menuId)?.kind === "set_menu")
+    throw new AppError("set_menu.wrong_place", { menuId });
   const mine = menus.get(menuId);
   if (mine === undefined) throw new AppError("menu.not_found", { menuId: menuId });
   const own = (await liveVersions(tx, [menuId], "document")).get(menuId);
@@ -560,6 +564,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   return {
     hash,
     clashes: mine.clashes,
+    setMenuProblems: mine.setMenuProblems,
     changes: navigateMenuChanges(
       ownDocument,
       mine.document,

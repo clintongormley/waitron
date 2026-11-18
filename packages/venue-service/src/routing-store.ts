@@ -15,6 +15,7 @@ import {
   projectProductItems,
   type ProductItemsChange,
   documentOffers,
+  documentSetMenuOffers,
   effectiveProductColumns,
   parentJoin,
   parentProducts,
@@ -761,7 +762,10 @@ async function readExtraOffers(
     for (const itemId of itemIds) offer(dishId, itemId, everyZone);
   // A variant is never an offer of its own, and routes exactly as its parent, the offer's product.
   for (const [zoneId, menus] of await liveDocumentsByZone(tx))
-    for (const served of menus.flatMap((menu) => documentOffers(menu.document)))
+    for (const served of menus.flatMap(({ document }) => [
+      ...documentOffers(document),
+      ...documentSetMenuOffers(document),
+    ]))
       for (const modifier of served.offeredModifiers)
         if (modifier.kind === "extras")
           for (const item of modifier.items) offer(served.productId, item.productId, [zoneId]);

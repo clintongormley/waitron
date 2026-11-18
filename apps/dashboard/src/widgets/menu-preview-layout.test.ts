@@ -21,6 +21,7 @@ afterEach(async () => {
 });
 
 const preview: MenuPreview = {
+  setMenuProblems: [],
   document: menuDocument([documentProduct("beer", "lager")], { lager: "Lager" }),
   live: null,
   hash: "b".repeat(64),
