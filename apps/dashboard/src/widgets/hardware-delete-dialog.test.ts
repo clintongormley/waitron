@@ -28,8 +28,8 @@ const tag = "test-hardware-delete-dialog";
 async function mount() {
   const liveData = new LiveData();
   const read = vi.fn(async (id: string) => impact(id));
-  const send = vi.fn(async (_id: string, _impact: DeleteImpact | null) => {});
-  const beforeDeleted = vi.fn((_id: string): Promise<void> | undefined => undefined);
+  const send = vi.fn<(id: string, impact: DeleteImpact | null) => Promise<void>>(async () => {});
+  const beforeDeleted = vi.fn<(id: string) => Promise<void> | undefined>(() => undefined);
 
   class Harness extends LitElement {
     readonly hardware = new HardwareDeleteDialog(this, () => api, {

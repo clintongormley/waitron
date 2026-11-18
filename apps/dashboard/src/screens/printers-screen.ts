@@ -1269,7 +1269,6 @@ export class PrintersScreen extends LitElement {
       if (source === "send" && this.isConnected) return this.#load();
     },
     beforeDeleted: (id) => {
-      // The Add button can receive focus only after the printer list has redrawn.
       if (this.selectedPrinterId !== id) return;
       this.#resetPrinterSections();
       this.selectedPrinterId = null;
