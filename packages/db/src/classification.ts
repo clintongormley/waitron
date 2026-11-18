@@ -346,7 +346,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("device_profile_kitchen_screen_zones", "state", SERVICE_STATE),
   classify("routing_cells", "state", SERVICE_STATE),
   classify("routing_cell_periods", "state", SERVICE_STATE),
-  classify("order_service_contexts", "state", SERVICE_STATE),
   classify("working_line_contexts", "state", SERVICE_STATE),
   classify("kitchen_notices", "state", SERVICE_STATE),
   classify("order_kitchen_notes", "state", SERVICE_STATE),

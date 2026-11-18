@@ -2857,7 +2857,6 @@ describe("A803 split", () => {
       "allergy_line_ticks",
       "kitchen_notices",
       "print_jobs",
-      "order_service_contexts",
     ];
 
     /** Every row of {@link SPLIT_TABLES}, whoever's: a refusal may leave a new party behind. */
@@ -3253,7 +3252,6 @@ describe("A803 split", () => {
         "order_groups",
         "order_group_events",
         "kitchen_notices",
-        "order_service_contexts",
       ]);
       const firedAt = async (billId: string, lineId: string) =>
         (await ticketsOf(billId)).find((item) => item.lineId === lineId)!.firedAt;

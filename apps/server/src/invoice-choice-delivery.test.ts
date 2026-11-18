@@ -12,7 +12,7 @@ import {
   seedDepartmentReceipt,
 } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
-import { departments, orderServiceContexts, saleReceiptHeaders } from "@waitron/venue-service";
+import { departments, saleReceiptHeaders } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { checkedInvoiceChoiceDelivery } from "./invoice-choice-delivery.js";
 import type { InvoicePrinter } from "./receipt-print.js";
@@ -47,12 +47,14 @@ async function fixture(nullHeader = false) {
     status: "open",
   });
   const zone = await seedZone(suite.db, { name: "Dining zone" });
-  await suite.db.insert(orderServiceContexts).values({
-    workingOrderId: order!.id,
-    zoneId: zone!.id,
-    departmentId: primary!.id,
-    serviceMode: "prepay",
-  });
+  await suite.db
+    .update(workingOrders)
+    .set({
+      zoneId: zone!.id,
+      departmentId: primary!.id,
+      serviceMode: "prepay",
+    })
+    .where(eq(workingOrders.id, order!.id));
   const [series] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
   const [sale] = await suite.db
     .insert(sales)

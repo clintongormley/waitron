@@ -129,7 +129,9 @@ describe("orderWatchZones", () => {
     const noZone = randomUUID();
     await inTx(v, async (tx) => {
       await createOpenOrder(tx, v.cfg, noZone, [], null);
-      await tx.run(sql`delete from order_service_contexts where working_order_id = ${noZone}`);
+      await tx.run(
+        sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${noZone}`,
+      );
     });
     const { partyId, tabId } = await seat(v, await v.table("Watch party"));
     const batch = vi.spyOn(VENUE_SERVICE, "findOrderZones");

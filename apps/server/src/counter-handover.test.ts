@@ -814,7 +814,9 @@ describe("GET /api/orders/counter-waiting", () => {
   it("reports prepay for a placed order without a frozen zone mode", async () => {
     const id = await placed("prepay", "Tarta");
     await inTx(venue, async (tx) => {
-      await tx.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
+      await tx.execute(
+        sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${id}`,
+      );
     });
 
     const rows = await listCounterWaiting({ db: venue.db });

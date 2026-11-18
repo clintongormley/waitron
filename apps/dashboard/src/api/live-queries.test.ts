@@ -1122,7 +1122,6 @@ it.each(["Zone", "Department"] as const)(
       "working_orders",
       "working_order_lines",
       "ticket_items",
-      "order_service_contexts",
       "departments",
       "device_profiles",
       "devices",

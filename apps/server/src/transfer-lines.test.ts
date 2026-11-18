@@ -205,7 +205,9 @@ async function openBeside(
       zoneId: context!.zoneId,
     });
     if (zoneless) {
-      await tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`);
+      await tx.run(
+        sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${id}`,
+      );
     }
     return id;
   });

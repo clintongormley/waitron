@@ -27,7 +27,6 @@ import {
   floorZones,
   insertInChunks,
   menuPeriods,
-  orderServiceContexts,
   refusalOn,
   routingCellPeriods,
   routingCells,
@@ -36,6 +35,7 @@ import {
   kitchenStations,
   workingLineContexts,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -1027,13 +1027,15 @@ export async function recordOrderServiceContext(
   workingOrderId: string,
   zoneId: string,
 ): Promise<void> {
-  const context = await resolveZoneContext(tx, zoneId);
-  await tx.insert(orderServiceContexts).values({
-    workingOrderId,
-    zoneId: context.zoneId,
-    departmentId: context.departmentId,
-    serviceMode: context.serviceMode,
-  });
+  const {
+    zoneId: resolvedZoneId,
+    departmentId,
+    serviceMode,
+  } = await resolveZoneContext(tx, zoneId);
+  await tx
+    .update(workingOrders)
+    .set({ zoneId: resolvedZoneId, departmentId, serviceMode })
+    .where(eq(workingOrders.id, workingOrderId));
 }
 
 /** Adopt a new zone's current department and service mode while retaining existing line snapshots. */
@@ -1049,14 +1051,14 @@ export async function retargetOrderServiceContext(
     await applyDepartmentDining(tx, workingOrderId, context);
   }
   const updated = await tx
-    .update(orderServiceContexts)
+    .update(workingOrders)
     .set({
       zoneId: context.zoneId,
       departmentId: context.departmentId,
       serviceMode: context.serviceMode,
     })
-    .where(eq(orderServiceContexts.workingOrderId, workingOrderId))
-    .returning({ workingOrderId: orderServiceContexts.workingOrderId });
+    .where(eq(workingOrders.id, workingOrderId))
+    .returning({ workingOrderId: workingOrders.id });
   if (updated.length === 0) {
     throw new AppError("order.service_context_missing", { workingOrderId });
   }
@@ -1077,19 +1079,24 @@ export async function findOrderServiceContext(
 ): Promise<{ zoneId: string; departmentId: string; serviceMode: ServiceMode } | null> {
   const [row] = await tx
     .select({
-      zoneId: orderServiceContexts.zoneId,
-      departmentId: orderServiceContexts.departmentId,
-      serviceMode: orderServiceContexts.serviceMode,
+      zoneId: workingOrders.zoneId,
+      departmentId: workingOrders.departmentId,
+      serviceMode: workingOrders.serviceMode,
     })
-    .from(orderServiceContexts)
-    .where(eq(orderServiceContexts.workingOrderId, workingOrderId));
-  return row === undefined ? null : { ...row, serviceMode: row.serviceMode as ServiceMode };
+    .from(workingOrders)
+    .where(eq(workingOrders.id, workingOrderId));
+  if (row?.zoneId == null || row.departmentId === null || row.serviceMode === null) return null;
+  return {
+    zoneId: row.zoneId,
+    departmentId: row.departmentId,
+    serviceMode: row.serviceMode as ServiceMode,
+  };
 }
 
 /** `orderId` must be table-qualified so a base-table query correlates to its outer order. */
 export function orderZoneIdSql(orderId: SQL): SQL {
-  return sql`(select osc.zone_id from order_service_contexts osc
-    where osc.working_order_id = ${orderId})`;
+  return sql`(select wz.zone_id from working_orders wz
+    where wz.id = ${orderId})`;
 }
 
 /**
@@ -1100,12 +1107,12 @@ export function orderInZones(orderId: SQL, zoneIds: readonly string[]): SQL {
   const outside =
     zoneIds.length === 0
       ? sql``
-      : sql` and osc.zone_id not in (${sql.join(
+      : sql` and wz.zone_id not in (${sql.join(
           zoneIds.map((zoneId) => sql`${zoneId}`),
           sql`, `,
         )})`;
-  return sql`not exists (select 1 from order_service_contexts osc
-    where osc.working_order_id = ${orderId}${outside})`;
+  return sql`not exists (select 1 from working_orders wz
+    where wz.id = ${orderId} and wz.zone_id is not null${outside})`;
 }
 
 /** Each named order's frozen service mode, read at once; an order with no context is absent. */
@@ -1116,12 +1123,16 @@ export async function findOrderServiceModes(
   if (workingOrderIds.length === 0) return new Map();
   const rows = await tx
     .select({
-      workingOrderId: orderServiceContexts.workingOrderId,
-      serviceMode: orderServiceContexts.serviceMode,
+      workingOrderId: workingOrders.id,
+      serviceMode: workingOrders.serviceMode,
     })
-    .from(orderServiceContexts)
-    .where(inArray(orderServiceContexts.workingOrderId, [...workingOrderIds]));
-  return new Map(rows.map((row) => [row.workingOrderId, row.serviceMode as ServiceMode]));
+    .from(workingOrders)
+    .where(inArray(workingOrders.id, [...workingOrderIds]));
+  return new Map(
+    rows.flatMap(({ workingOrderId, serviceMode }) =>
+      serviceMode === null ? [] : [[workingOrderId, serviceMode as ServiceMode]],
+    ),
+  );
 }
 
 /** Each named order's recorded service zone in one read; an order with no context is absent. */
@@ -1132,12 +1143,16 @@ export async function findOrderServiceZones(
   if (workingOrderIds.length === 0) return new Map();
   const rows = await tx
     .select({
-      workingOrderId: orderServiceContexts.workingOrderId,
-      zoneId: orderServiceContexts.zoneId,
+      workingOrderId: workingOrders.id,
+      zoneId: workingOrders.zoneId,
     })
-    .from(orderServiceContexts)
-    .where(inArray(orderServiceContexts.workingOrderId, [...workingOrderIds]));
-  return new Map(rows.map((row) => [row.workingOrderId, row.zoneId]));
+    .from(workingOrders)
+    .where(inArray(workingOrders.id, [...workingOrderIds]));
+  return new Map(
+    rows.flatMap(({ workingOrderId, zoneId }) =>
+      zoneId === null ? [] : [[workingOrderId, zoneId]],
+    ),
+  );
 }
 
 /** Whether any of the order's lines is a set lunch, as {@link readLunchLineIds} reads it. */
@@ -1481,12 +1496,7 @@ export async function copyOrderServiceContext(
 ): Promise<void> {
   const context = await findOrderServiceContext(tx, fromWorkingOrderId);
   if (context === null) return;
-  await tx.insert(orderServiceContexts).values({
-    workingOrderId: toWorkingOrderId,
-    zoneId: context.zoneId,
-    departmentId: context.departmentId,
-    serviceMode: context.serviceMode,
-  });
+  await tx.update(workingOrders).set(context).where(eq(workingOrders.id, toWorkingOrderId));
 }
 
 /** Copy a line's immutable selling snapshot when a quantity is split onto a new line id. */

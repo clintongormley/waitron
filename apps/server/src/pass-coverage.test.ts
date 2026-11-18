@@ -594,7 +594,9 @@ const counterDishInNoZone = (venue: Venue) =>
     const counterId = await fireNewOrder(tx, venue.cfg, [
       { productId: venue.products.burger, quantity: "1" },
     ]);
-    await tx.execute(sql`delete from order_service_contexts where working_order_id = ${counterId}`);
+    await tx.execute(
+      sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${counterId}`,
+    );
     return counterId;
   });
 

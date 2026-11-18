@@ -1,3 +1,4 @@
+import { workingOrders } from "@waitron/db";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
@@ -13,7 +14,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createDepartment,
   createServiceZone,
-  orderServiceContexts,
   setProfileServiceAccess,
 } from "@waitron/venue-service";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -147,12 +147,12 @@ async function contextOf(billId: string) {
   const [row] = await inTx(venue, (tx) =>
     tx
       .select({
-        zoneId: orderServiceContexts.zoneId,
-        departmentId: orderServiceContexts.departmentId,
-        serviceMode: orderServiceContexts.serviceMode,
+        zoneId: workingOrders.zoneId,
+        departmentId: workingOrders.departmentId,
+        serviceMode: workingOrders.serviceMode,
       })
-      .from(orderServiceContexts)
-      .where(eq(orderServiceContexts.workingOrderId, billId)),
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId)),
   );
   return row;
 }

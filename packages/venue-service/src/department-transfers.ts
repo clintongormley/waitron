@@ -3,12 +3,11 @@ import type {
   DepartmentTransferActor,
   DepartmentTransferReceiver,
 } from "@waitron/module";
-import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   departments,
   departmentTransferDestinations,
   departmentTransferRequests,
-  orderServiceContexts,
   orderTableLabels,
   tableInService,
   billPayments,
@@ -461,7 +460,7 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
   const identities = await tx
     .select({
       id: departmentTransferRequests.id,
-      currentDepartmentId: orderServiceContexts.departmentId,
+      currentDepartmentId: workingOrders.departmentId,
       orderNumber: workingOrders.orderNumber,
       tabLabel: workingOrders.label,
       orderId: workingOrders.id,
@@ -473,13 +472,15 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
     })
     .from(departmentTransferRequests)
     .innerJoin(workingOrders, eq(workingOrders.id, departmentTransferRequests.tabId))
-    .innerJoin(orderServiceContexts, eq(orderServiceContexts.workingOrderId, workingOrders.id))
     .innerJoin(source, eq(source.id, departmentTransferRequests.sourceDepartmentId))
     .innerJoin(destination, eq(destination.id, departmentTransferRequests.destinationDepartmentId))
     .where(
-      inArray(
-        departmentTransferRequests.id,
-        rows.map((row) => row.id),
+      and(
+        inArray(
+          departmentTransferRequests.id,
+          rows.map((row) => row.id),
+        ),
+        isNotNull(workingOrders.departmentId),
       ),
     );
   const labels = await orderTableLabels(
@@ -498,7 +499,7 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
       return [
         row.id,
         {
-          currentDepartmentId: row.currentDepartmentId,
+          currentDepartmentId: row.currentDepartmentId!,
           summary: {
             orderNumber: row.orderNumber,
             tabLabel: row.tabLabel,

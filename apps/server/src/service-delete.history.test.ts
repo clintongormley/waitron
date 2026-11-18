@@ -21,7 +21,6 @@ import {
   departments,
   deviceProfileServiceAccess,
   departmentTransferRequests,
-  orderServiceContexts,
   workingLineContexts,
   saleReceiptHeaders,
   readDepartmentTransfer,
@@ -107,7 +106,7 @@ it("deleted department reprints its original receipt configuration and frozen he
     sales: await tx.select().from(sales),
     lines: await tx.select().from(saleLines),
     orders: await tx.select().from(workingOrders),
-    contexts: await tx.select().from(orderServiceContexts),
+
     lineContexts: await tx.select().from(workingLineContexts),
     headers: await tx.select().from(saleReceiptHeaders),
     receipt: await tx
@@ -214,7 +213,7 @@ it("deleted department reprints its original receipt configuration and frozen he
     sales: await tx.select().from(sales),
     lines: await tx.select().from(saleLines),
     orders: await tx.select().from(workingOrders),
-    contexts: await tx.select().from(orderServiceContexts),
+
     lineContexts: await tx.select().from(workingLineContexts),
     headers: await tx.select().from(saleReceiptHeaders),
     receipt: await tx

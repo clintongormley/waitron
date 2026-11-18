@@ -252,6 +252,47 @@ describe("core backup source binding", () => {
     expect(after.db.all(sql`select * from daily_close_chain`)).toEqual([]);
   });
 
+  function seedOrderContext() {
+    seed();
+    for (const db of [before.db, after.db]) {
+      db.run(sql`insert into departments (id, name, trading_name, created_at)
+        values ('department', 'Dining', 'Dining', '2026-10-20T00:00:00Z')`);
+      db.run(sql`insert into floor_zones (id, name, department_id, created_at)
+        values ('zone', 'Room', 'department', '2026-10-20T00:00:00Z')`);
+      db.run(sql`insert into working_orders
+        (id, source, order_number, opened_at, dining, zone_id, department_id, service_mode)
+        values ('order', 'operator_script', 1, '2026-10-20T00:00:00Z', 'eat_in',
+          'zone', 'department', 'table_tab')`);
+    }
+  }
+
+  it.each([
+    "update working_orders set service_mode = 'prepay'",
+    "update working_orders set zone_id = null, department_id = null, service_mode = null",
+  ])("refuses lost or changed service context on a restored bill: %s", async (statement) => {
+    seedOrderContext();
+    expect(await verify()).toBe(true);
+    after.db.run(sql.raw(statement));
+    expect(await verify()).toBe(false);
+  });
+
+  it.each(["zone_id", "department_id"])(
+    "refuses the same broken bill context reference on both copies: %s",
+    async (column) => {
+      seedOrderContext();
+      expect(await verify()).toBe(true);
+      for (const db of [before.db, after.db]) {
+        db.run(sql`pragma foreign_keys = off`);
+        try {
+          db.run(sql`update working_orders set ${sql.identifier(column)} = 'missing'`);
+        } finally {
+          db.run(sql`pragma foreign_keys = on`);
+        }
+      }
+      expect(await verify()).toBe(false);
+    },
+  );
+
   it.each(["node_membership", "order_amendments", "purchase_invoice_vat", "purchase_invoices"])(
     "accepts an explicitly empty new target table absent from the source: %s",
     async (table) => {

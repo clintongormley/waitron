@@ -1,7 +1,7 @@
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   kitchenStations,
@@ -41,7 +41,7 @@ import { billWith, provisionAdjustmentVenue } from "./testing/adjustment-venue.j
 import { readBillEditState } from "./bill-editing.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem } from "./line-cancel.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { fireDishesAtPayment, payWorkingOrder } from "./testing/whole-payment-fixture.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -242,12 +242,19 @@ describe("A773 lifetime", () => {
   it("a dish with no recorded zone is visible only under every-zone scope", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await counterOrder(v, "Burger");
-    await pay(v, id, "12.00");
-    const [item] = await inTx(v, (tx) =>
-      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id)),
-    );
-    await inTx(v, async (tx) => {
-      await tx.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
+    const [item] = await inTx(v, async (tx) => {
+      await fireDishesAtPayment(tx, v.cfg, id);
+      await tx
+        .update(workingOrders)
+        .set({
+          zoneId: null,
+          departmentId: null,
+          serviceMode: null,
+          status: "settled",
+          settledAt: new Date().toISOString(),
+        })
+        .where(eq(workingOrders.id, id));
+      return ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id));
     });
     const expected = [{ id: item!.id, qty: "1.000" }];
     expect(await boards(v)).toEqual({ screen: expected, monitor: expected });

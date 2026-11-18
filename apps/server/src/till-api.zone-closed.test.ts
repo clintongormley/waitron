@@ -19,7 +19,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   configureZone,
   createServiceZone,
-  orderServiceContexts,
   menuPeriods,
   replaceMenuWeek,
   replaceZoneClosedWeek,
@@ -663,7 +662,6 @@ describe("moving into closed zones", () => {
       bills: await orderRows(),
       parties: await suite.db.select().from(parties),
       tables: await suite.db.select().from(partyTables),
-      contexts: await suite.db.select().from(orderServiceContexts),
     };
   }
   it.each(["free table", "held table", "counter"])(
@@ -745,8 +743,8 @@ describe("moving into closed zones", () => {
     expect(answer).toMatchObject({ status: 200 });
     const [context] = await suite.db
       .select()
-      .from(orderServiceContexts)
-      .where(eq(orderServiceContexts.workingOrderId, source.tabId));
+      .from(workingOrders)
+      .where(eq(workingOrders.id, source.tabId));
     expect(context!.zoneId).toBe(zoneId);
     const links = await suite.db
       .select()
@@ -773,8 +771,8 @@ describe("moving into closed zones", () => {
     expect(answer.status).toBe(200);
     const [context] = await suite.db
       .select()
-      .from(orderServiceContexts)
-      .where(eq(orderServiceContexts.workingOrderId, source.tabId));
+      .from(workingOrders)
+      .where(eq(workingOrders.id, source.tabId));
     expect(context!.zoneId).toBe(v.zoneId);
     const links = await suite.db
       .select()

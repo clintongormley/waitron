@@ -666,8 +666,8 @@ describe("recordTillSale", () => {
       department_name: string;
     }>(sql`
       select o.zone_id, l.menu_item_id, l.menu_name, l.department_name
-      from order_service_contexts o
-      join working_order_lines w on w.working_order_id = o.working_order_id
+      from working_orders o
+      join working_order_lines w on w.working_order_id = o.id
       join working_line_contexts l on l.working_order_line_id = w.id
       `);
     const attribution = {

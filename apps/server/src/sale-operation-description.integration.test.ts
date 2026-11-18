@@ -141,7 +141,7 @@ it("a counter sale sent without a zone records the selected zone and files that 
   expect(result.status).toBe(200);
   expect(
     venue.db.all(
-      sql`select zone_id as zoneId, department_id as departmentId from order_service_contexts where working_order_id = ${id}`,
+      sql`select zone_id as zoneId, department_id as departmentId from working_orders where id = ${id}`,
     ),
   ).toEqual([{ zoneId: counter.zoneId, departmentId: counter.departmentId }]);
   expect(records(id)).toEqual([{ description: "Counter drinks" }]);
@@ -460,7 +460,9 @@ it.each(["cash", "integrated"] as const)(
   "a fiscal contribution with no description field still refuses a damaged %s order before money or filing",
   async (method) => {
     const id = await open();
-    await venue.db.run(sql`delete from order_service_contexts where working_order_id = ${id}`);
+    await venue.db.run(
+      sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${id}`,
+    );
     const modules = enabledModules(
       ALL_MODULES,
       venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat"),
@@ -580,7 +582,9 @@ it.each(["cash", "card"] as const)(
   "a missing department refuses a %s bill payment with its own code and unchanged records",
   async (method) => {
     const id = await tabWith(venue, "Caña");
-    await venue.db.run(sql`delete from order_service_contexts where working_order_id = ${id}`);
+    await venue.db.run(
+      sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${id}`,
+    );
     const before = facts();
     const calls = venue.card.collectCalls.length;
     const answer = await payBill(id, method, method === "card" ? "reader" : undefined);

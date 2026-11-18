@@ -1339,7 +1339,9 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       zoneId,
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
-    await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
+    await suite.db.execute(
+      sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${id}`,
+    );
 
     await withTransaction(suite.db, (tx) => fireDishesAtPayment(tx, { ...cfg }, id));
 
@@ -1354,8 +1356,8 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       zoneId,
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
-    await suite.db.execute(sql`update order_service_contexts
-      set service_mode = 'ticket_then_pay' where working_order_id = ${id}`);
+    await suite.db.execute(sql`update working_orders
+      set service_mode = 'ticket_then_pay' where id = ${id}`);
 
     const placed = await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -1380,7 +1382,9 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       zoneId,
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
-    await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
+    await suite.db.execute(
+      sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${id}`,
+    );
 
     const placed = await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -1696,7 +1700,7 @@ describe("prepare & collect — zone payment timing", () => {
       lines: [{ menuItemId: collectZone.offerFor(coffee.id), quantity: "1" }],
     });
     const { rows: contexts } = await suite.db.execute<{ service_mode: string }>(sql`
-      select service_mode from order_service_contexts where working_order_id = ${collectId}`);
+      select service_mode from working_orders where id = ${collectId}`);
     expect(contexts).toEqual([{ service_mode: "ticket_then_pay" }]);
     const placed = await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },

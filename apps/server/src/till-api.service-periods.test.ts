@@ -38,7 +38,6 @@ import {
   createServiceZone,
   departments,
   menuPeriods,
-  orderServiceContexts,
   replaceMenuWeek,
   routingCellPeriods,
   routingCells,
@@ -294,9 +293,9 @@ describe("ordering uses period membership while browsing follows the timetable",
     expect(parked.status).toBe(200);
     const recorded = await withTransaction(suite.db, async (tx) => ({
       order: await tx
-        .select({ departmentId: orderServiceContexts.departmentId })
-        .from(orderServiceContexts)
-        .where(eq(orderServiceContexts.workingOrderId, parked.id)),
+        .select({ departmentId: workingOrders.departmentId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, parked.id)),
       lines: await linesOf(tx, parked.id),
     }));
     expect(recorded.order).toEqual([{ departmentId: v.restaurant }]);

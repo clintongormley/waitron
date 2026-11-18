@@ -54,7 +54,7 @@ import {
   enqueueOriginalReceipt,
   readOriginalReceiptPrint,
 } from "./receipt-print.js";
-import { departments, orderServiceContexts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import {
@@ -2526,10 +2526,7 @@ describe("the invoice at full payment", () => {
       async (_label, contacts, stages) => {
         const billId = await tabWith("Beer");
         const [context] = await inTx((tx) =>
-          tx
-            .select()
-            .from(orderServiceContexts)
-            .where(eq(orderServiceContexts.workingOrderId, billId)),
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
         );
         const [fallback] = await inTx((tx) =>
           tx
@@ -2551,9 +2548,9 @@ describe("the invoice at full payment", () => {
         try {
           await inTx(async (tx) => {
             await tx
-              .update(orderServiceContexts)
+              .update(workingOrders)
               .set({ departmentId: own!.id })
-              .where(eq(orderServiceContexts.workingOrderId, billId));
+              .where(eq(workingOrders.id, billId));
             await tx.update(departments).set({
               receiptText: null,
               receiptLogoImageId: null,
@@ -2580,9 +2577,9 @@ describe("the invoice at full payment", () => {
         } finally {
           await inTx(async (tx) => {
             await tx
-              .update(orderServiceContexts)
+              .update(workingOrders)
               .set({ departmentId: context!.departmentId })
-              .where(eq(orderServiceContexts.workingOrderId, billId));
+              .where(eq(workingOrders.id, billId));
             await tx.update(departments).set({
               receiptText: null,
               receiptLogoImageId: null,

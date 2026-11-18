@@ -330,7 +330,7 @@ describe("A773 pass release: set and stamps", () => {
         { productId: venue.products.burger, quantity: "1" },
       ]);
       await tx.execute(
-        sql`delete from order_service_contexts where working_order_id = ${counterId}`,
+        sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${counterId}`,
       );
       const [counterItem] = await tx
         .select({ id: ticketItems.id })

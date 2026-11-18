@@ -60,7 +60,7 @@ function diningOf(id: string): Dining {
 
 function zoneOf(id: string): string {
   return venue.db.all<{ zone_id: string }>(
-    sql`select zone_id from order_service_contexts where working_order_id = ${id}`,
+    sql`select zone_id from working_orders where id = ${id}`,
   )[0]!.zone_id;
 }
 

@@ -50,12 +50,6 @@ beforeEach(() => {
       sql`insert into floor_zones (id,name,department_id,created_at) values ('zone','Room','department','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into working_orders (id,source,order_number,opened_at,dining) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z','eat_in')`,
-    );
-    db.run(
-      sql`insert into order_service_contexts (working_order_id, zone_id, department_id, service_mode) values ('order', 'zone', 'department', 'table_tab')`,
-    );
-    db.run(
       sql`insert into menus (id,name,created_at,updated_at) values ('menu','Current menu','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
@@ -155,8 +149,6 @@ describe("service backup evidence", () => {
     "update sale_receipt_headers set department_id='other'",
     "delete from sale_receipt_headers",
     "update departments set trading_name='Changed business'",
-    "update order_service_contexts set service_mode='prepay'",
-    "delete from order_service_contexts",
     "update menu_periods set name='Changed period'",
   ])("never replaces historical context with current config: %s", async (statement) => {
     expect(await run()).toEqual(passed);
@@ -165,9 +157,6 @@ describe("service backup evidence", () => {
   });
   it.each([
     "update sale_receipt_headers set sale_id='missing'",
-    "update order_service_contexts set working_order_id='missing'",
-    "update order_service_contexts set zone_id='missing'",
-    "update order_service_contexts set department_id='missing'",
     "update menu_periods set menu_id='missing'",
   ])("checks live and staged service references on both copies: %s", async (statement) => {
     expect(await run()).toEqual(passed);
@@ -191,12 +180,7 @@ describe("service backup evidence", () => {
     expect((await run({ sourceSchema: 0 })).status).toBe("invalid");
   });
   it("accepts empty target-only service but refuses invented state", async () => {
-    for (const table of [
-      "menu_periods",
-      "order_service_contexts",
-      "sale_receipt_headers",
-      "departments",
-    ])
+    for (const table of ["menu_periods", "sale_receipt_headers", "departments"])
       await corrupt(restored.db, `delete from "${table}"`);
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
     restored.db.run(sql`insert into special_days (id,name) values ('invented','Invented day')`);

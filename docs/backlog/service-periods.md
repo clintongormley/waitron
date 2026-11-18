@@ -14,7 +14,7 @@ consumer. Left open by A366 slice 6 Part A. This entry does not establish when t
 ## Split an order's recorded service mode into two facts
 
 The owner requested this future change on 2026-10-09 while answering slice 6 decision 4.
-`order_service_contexts.service_mode` combines where service happens and when payment is due.
+`working_orders.service_mode` combines where service happens and when payment is due.
 Replace it later with two plain facts: served-at (`table/counter`) and payment-due
 (`before-kitchen/collection/end-tab`). The split is outside slice 6: keep its existing three
 modes (`table_tab/prepay/ticket_then_pay`), recorded orders and till behaviour unchanged there.

@@ -152,16 +152,24 @@ CREATE TABLE `working_orders` (
 	`editor_id` text,
 	`editor_version` integer DEFAULT 0 NOT NULL,
 	`dining` text NOT NULL,
+	`zone_id` text,
+	`department_id` text,
+	`service_mode` text,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`delivery_table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`editor_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "working_orders_bill_number_ck" CHECK("working_orders"."bill_number" is null or ("working_orders"."party_id" is not null and typeof("working_orders"."bill_number") = 'integer' and "working_orders"."bill_number" >= 1)),
 	CONSTRAINT "working_orders_bill_name_ck" CHECK("working_orders"."bill_name" is null or (length("working_orders"."bill_name") between 1 and 40 and "working_orders"."bill_name" = trim("working_orders"."bill_name"))),
 	CONSTRAINT "working_orders_editor_version_ck" CHECK("working_orders"."editor_version" >= 0),
 	CONSTRAINT "working_orders_status_ck" CHECK("working_orders"."status" in ('open', 'placed', 'settled', 'abandoned')),
 	CONSTRAINT "working_orders_dining_ck" CHECK("working_orders"."dining" in ('eat_in', 'takeaway')),
+	CONSTRAINT "working_orders_service_mode_ck" CHECK("working_orders"."service_mode" is null or "working_orders"."service_mode" in ('table_tab','prepay','ticket_then_pay')),
+	CONSTRAINT "working_orders_service_context_ck" CHECK(("working_orders"."zone_id" is null and "working_orders"."department_id" is null and "working_orders"."service_mode" is null)
+        or ("working_orders"."zone_id" is not null and "working_orders"."department_id" is not null and "working_orders"."service_mode" is not null)),
 	CONSTRAINT "working_orders_source_ck" CHECK("working_orders"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')),
 	CONSTRAINT "working_orders_source_device_ck" CHECK(("working_orders"."source" = 'device') = ("working_orders"."device_id" is not null)),
 	CONSTRAINT "working_orders_settled_at_ck" CHECK(("working_orders"."status" = 'settled') = ("working_orders"."settled_at" is not null))
@@ -2293,17 +2301,6 @@ CREATE TABLE `device_profile_zones` (
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE `order_service_contexts` (
-	`working_order_id` text PRIMARY KEY NOT NULL,
-	`zone_id` text NOT NULL,
-	`department_id` text NOT NULL,
-	`service_mode` text NOT NULL,
-	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "order_service_contexts_mode_ck" CHECK("order_service_contexts"."service_mode" in ('table_tab','prepay','ticket_then_pay'))
-);
---> statement-breakpoint
 CREATE TABLE `sale_receipt_headers` (
 	`sale_id` text PRIMARY KEY NOT NULL,
 	`department_id` text,
@@ -3460,6 +3457,9 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.dining IS old.dining
+        AND new.zone_id IS old.zone_id
+        AND new.department_id IS old.department_id
+        AND new.service_mode IS old.service_mode
         AND new."party_id" IS old."party_id"
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name
@@ -3489,6 +3489,9 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.dining IS old.dining
+        AND new.zone_id IS old.zone_id
+        AND new.department_id IS old.department_id
+        AND new.service_mode IS old.service_mode
         AND new."party_id" IS old."party_id"
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name
@@ -3508,6 +3511,9 @@ BEGIN
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label
+        AND new.zone_id IS old.zone_id
+        AND new.department_id IS old.department_id
+        AND new.service_mode IS old.service_mode
         AND new.status IS old.status
         AND new.opened_at IS old.opened_at
         AND new.settled_at IS old.settled_at
@@ -3550,6 +3556,9 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.dining IS old.dining
         AND new.payment_attempt_at IS old.payment_attempt_at
+        AND new.zone_id IS old.zone_id
+        AND new.department_id IS old.department_id
+        AND new.service_mode IS old.service_mode
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name

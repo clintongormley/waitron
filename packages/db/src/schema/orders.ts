@@ -18,6 +18,7 @@ import {
 import { products } from "./menus.js";
 import { devices } from "./devices.js";
 import { diningTables } from "./dining-tables.js";
+import { floorZones } from "./floor-zones.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { nodes } from "./nodes.js";
@@ -26,6 +27,7 @@ import { originChecks, sourceColumn } from "./origin.js";
 import { persons } from "./identity/persons.js";
 import { parties } from "./parties.js";
 import { dining } from "./sale-rule-types.js";
+import { departments } from "./venue-service/service.js";
 
 export const workingOrderStatus = enumType([
   "open",
@@ -106,6 +108,9 @@ export const workingOrders = table(
     editorVersion: count("editor_version").notNull().default(0),
     // Eaten here or taken away. No default: whoever opens an order decides it.
     dining: dining("dining").notNull(),
+    zoneId: id("zone_id"),
+    departmentId: id("department_id"),
+    serviceMode: label("service_mode").$type<"table_tab" | "prepay" | "ticket_then_pay">(),
   },
   (t) => [
     uniqueIndex("working_orders_party_bill_number_key")
@@ -139,6 +144,25 @@ export const workingOrders = table(
     index("working_orders_party_idx").on(t.partyId),
     check("working_orders_status_ck", enumCheck(t.status)),
     check("working_orders_dining_ck", enumCheck(t.dining)),
+    foreignKey({
+      columns: [t.zoneId],
+      foreignColumns: [floorZones.id],
+      name: "working_orders_zone_fk",
+    }),
+    foreignKey({
+      columns: [t.departmentId],
+      foreignColumns: [departments.id],
+      name: "working_orders_department_fk",
+    }),
+    check(
+      "working_orders_service_mode_ck",
+      sql`${t.serviceMode} is null or ${t.serviceMode} in ('table_tab','prepay','ticket_then_pay')`,
+    ),
+    check(
+      "working_orders_service_context_ck",
+      sql`(${t.zoneId} is null and ${t.departmentId} is null and ${t.serviceMode} is null)
+        or (${t.zoneId} is not null and ${t.departmentId} is not null and ${t.serviceMode} is not null)`,
+    ),
     ...originChecks("working_orders", t.source, t.deviceId),
     // Biconditional, not two one-way checks: a settled order always carries a
     // timestamp and a non-settled one never does.

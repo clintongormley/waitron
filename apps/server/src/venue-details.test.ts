@@ -1624,7 +1624,6 @@ describe("open kitchen work during venue corrections", () => {
       orders: suite.db.all(sql`select * from working_orders order by id`),
       lines: suite.db.all(sql`select * from working_order_lines order by id`),
       tickets: suite.db.all(sql`select * from ticket_items order by id`),
-      contexts: suite.db.all(sql`select * from order_service_contexts order by working_order_id`),
     });
     const before = retained();
     expect(before.tickets).toHaveLength(1);

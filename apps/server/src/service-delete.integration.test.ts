@@ -699,7 +699,7 @@ describe("mounted authenticated service deletion races", () => {
           expect(committed.working_order_lines).toHaveLength(
             beforeWriter.working_order_lines!.length + 1,
           );
-          expect(committed.order_service_contexts).toContainEqual(
+          expect(committed.working_orders).toContainEqual(
             expect.objectContaining({ zone_id: zoneId }),
           );
         }
@@ -858,7 +858,6 @@ const HISTORY_ROWS = [
   "cadenas",
   "order_amendments",
   "working_order_lines",
-  "order_service_contexts",
   "working_line_contexts",
   "department_transfer_requests",
   "time_entries",
@@ -866,9 +865,16 @@ const HISTORY_ROWS = [
   "daily_close_chain",
 ] as const;
 
-async function retainedHistory(tx: Transaction) {
+async function retainedHistory(tx: Transaction): Promise<Record<string, unknown[]>> {
   const all = await completeSnapshot(tx);
-  return Object.fromEntries(HISTORY_ROWS.map((name) => [name, all[name]!]));
+  const orderContexts = await tx.execute(sql`
+    select id as working_order_id, zone_id, department_id, service_mode
+    from working_orders where zone_id is not null order by rowid
+  `);
+  return {
+    ...Object.fromEntries(HISTORY_ROWS.map((name) => [name, all[name]!])),
+    orderContexts: orderContexts.rows,
+  };
 }
 
 it.each(["zone", "department"] as const)(
@@ -1120,9 +1126,7 @@ it.each(["zone", "department"] as const)(
     const history = await run(retainedHistory);
     const rows = (name: string) => history[name] as Record<string, unknown>[];
     for (const orderId of [delivery, contributed]) {
-      expect(
-        rows("order_service_contexts").find((row) => row.working_order_id === orderId),
-      ).toMatchObject({
+      expect(rows("orderContexts").find((row) => row.working_order_id === orderId)).toMatchObject({
         zone_id: f.zoneId,
         department_id: f.departmentId,
       });
@@ -1143,7 +1147,7 @@ it.each(["zone", "department"] as const)(
           department_id: f.departmentId,
         });
     }
-    const unaffectedContext = rows("order_service_contexts").find(
+    const unaffectedContext = rows("orderContexts").find(
       (row) => row.working_order_id === unaffected,
     )!;
     expect(unaffectedContext).toMatchObject({ zone_id: venue.counter.zoneId });
@@ -1173,7 +1177,7 @@ it.each(["zone", "department"] as const)(
       "cadenas",
       "order_amendments",
       "working_order_lines",
-      "order_service_contexts",
+      "orderContexts",
       "working_line_contexts",
       "sale_receipt_headers",
       "department_transfer_requests",
@@ -1185,7 +1189,7 @@ it.each(["zone", "department"] as const)(
     const before = await run(completeSnapshot);
     await remove();
     const retained = await run(retainedHistory);
-    expect(retained.order_service_contexts).toContainEqual(unaffectedContext);
+    expect(retained.orderContexts).toContainEqual(unaffectedContext);
     expect(retained.sale_receipt_headers).toContainEqual(unaffectedHeader);
     for (const context of unaffectedLineContexts)
       expect(retained.working_line_contexts).toContainEqual(context);

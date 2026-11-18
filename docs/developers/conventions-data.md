@@ -5432,8 +5432,9 @@ department. Earlier exports are refused as outdated because their two side table
 
 `resolveZoneContext` and the order-context writers in
 `packages/venue-service/src/operations.ts` work out an order's flow as `table_tab` for table
-service, otherwise its effective paid-when (`prepay` or `ticket_then_pay`). The order's recorded
-`order_service_contexts.service_mode` keeps those three values. Splitting the recorded fact
+service, otherwise its effective paid-when (`prepay` or `ticket_then_pay`). The bill keeps this
+value in `working_orders.service_mode` alongside its recorded zone and department. A settled bill
+keeps those three values. Splitting the recorded mode
 is [future work](../backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts).
 
 The department editor saves its name, trading name, service settings and transfers. The receipt

@@ -5,7 +5,6 @@ import {
   deviceProfileServiceAccess,
   deviceProfileZones,
   kitchenNotices,
-  orderServiceContexts,
   routingCellPeriods,
   routingCells,
   saleReceiptHeaders,
@@ -115,18 +114,6 @@ const EXPECTED: Record<
     uniqueConstraints: [],
     primaryKeys: [],
   },
-  order_service_contexts: {
-    table: orderServiceContexts,
-    foreignKeys: [
-      "order_service_contexts_order_fk",
-      "order_service_contexts_zone_fk",
-      "order_service_contexts_department_fk",
-    ],
-    checks: ["order_service_contexts_mode_ck"],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: ["order_service_contexts_pk"],
-  },
   working_line_contexts: {
     table: workingLineContexts,
     foreignKeys: [
@@ -176,7 +163,7 @@ const EXPECTED: Record<
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
   it("covers the remaining service tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(9);
+    expect(Object.keys(EXPECTED)).toHaveLength(8);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

@@ -1,3 +1,4 @@
+import { workingOrders } from "@waitron/db";
 import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
@@ -6,7 +7,6 @@ import {
   departments,
   invoiceSeries,
   mediaImages,
-  orderServiceContexts,
   saleReceiptHeaders,
   sales,
   withTransaction,
@@ -592,12 +592,14 @@ describe("receipt department lookups", () => {
     });
     expect(await scoped((tx) => receipts.receiptDepartmentForOrder(tx, order.id))).toBeNull();
     const zone = await seedZone(suite.db, { name: "Bar" });
-    await suite.db.insert(orderServiceContexts).values({
-      workingOrderId: order.id,
-      zoneId: zone!.id,
-      departmentId: f.id,
-      serviceMode: "prepay",
-    });
+    await suite.db
+      .update(workingOrders)
+      .set({
+        zoneId: zone!.id,
+        departmentId: f.id,
+        serviceMode: "prepay",
+      })
+      .where(eq(workingOrders.id, order.id));
     expect(
       await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForOrder(tx, order.id)),
     ).toBe(f.id);
