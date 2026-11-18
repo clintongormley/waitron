@@ -497,7 +497,18 @@ they used the same disposable guest image build remains unverified.
 An earlier stream job passed all 13 files after setting loopback MTU to 1500 and
 `TMPDIR=/dev/shm`. [Stream job 128812851413](https://github.com/clintongormley/waitron/actions/runs/42506794616/job/128812851413)
 
-Server coverage remains open. Successful nightly
+On 18 November, a full run dispatched on main selected the server route. All 24 server
+shards and all seven coverage merges passed on disposable runners. The server merge
+enforced its coverage thresholds on runner `29092` (version `2.338.2`). The final CI
+check passed on GitHub runner `1000364914`, and image smoke passed on GitHub runner
+`1000364858`. The source and workflow commit was
+`34be41f995bc67b6d963e47d56d48391970af6ee`.
+[Full run 44254371098/1](https://github.com/clintongormley/waitron/actions/runs/44254371098/attempts/1),
+[server coverage merge](https://github.com/clintongormley/waitron/actions/runs/44254371098/job/134641626520),
+[final CI check](https://github.com/clintongormley/waitron/actions/runs/44254371098/job/134642443589),
+[image smoke](https://github.com/clintongormley/waitron/actions/runs/44254371098/job/134632612875).
+
+Successful nightly
 [43545365252](https://github.com/clintongormley/waitron/actions/runs/43545365252) ran its seven
 coverage merges and aggregate on GitHub. Three executed idle checks in six scheduled health
 runs `43743762173` through `43747449175` reported recent server traffic and dispatched no
