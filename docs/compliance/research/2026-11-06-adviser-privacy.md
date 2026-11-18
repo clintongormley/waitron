@@ -190,6 +190,8 @@ RGPD for breaches [S22].
 - The bucket keeps 168 hours of history (`packages/stream/src/litestream.ts`). Scheduled backups keep
   the newest 7 and nothing older than 30 days by default, and a venue can change that
   (`apps/server/src/backup-config.ts`). Turning the copy off leaves what is stored.
+  2026-11-18: superseded — the bucket copy now takes one full copy a week and keeps two weeks; see
+  [the plan](../../superpowers/plans/2026-11-18-weekly-full-copy.md).
 
 ### Q48-1. Basis for using the notes during the meal: NARROWED
 

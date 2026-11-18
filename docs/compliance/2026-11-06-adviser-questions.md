@@ -371,6 +371,8 @@ tell customers which allergens a dish contains.
   person. The EDPB's 2026 report asks for that kind of list and sets no safe number, and half the
   authorities raised concerns. Today's defaults are 7 days for the bucket and 30 for scheduled backups.
   The copies are not inaccessible: anyone with the bucket's login or a recovery pack can read them.
+  2026-11-18: superseded for the bucket — it now takes one full copy a week and keeps two weeks; see
+  [the plan](../superpowers/plans/2026-11-18-weekly-full-copy.md).
 - **P5. What assessment a single restaurant needs.** We think a written risk analysis, plus a short
   reasoned note on why no DPIA is needed (a DPIA is a formal impact assessment). The AEPD's list asks for
   one in most cases that meet two or more criteria. One restaurant clearly meets one, health data. A
