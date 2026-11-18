@@ -4749,8 +4749,8 @@ describe("device profile scope round trip (M4)", () => {
             ? []
             : [
                 {
-                  code: "department.profile_in_use",
-                  params: { departmentId: ids.other, profileId: ids.desk },
+                  code: "zone.profile_in_use",
+                  params: { zoneId: ids.moved, profileId: ids.desk },
                   targets: [{ id: ids.desk, name: "Transfer desk" }],
                 },
               ],
@@ -4763,11 +4763,8 @@ describe("device profile scope round trip (M4)", () => {
       if (hasFallback) await remove;
       else
         await expect(remove).rejects.toMatchObject({
-          code: department ? "department.profile_in_use" : "zone.profile_in_use",
-          params: {
-            ...(department ? { departmentId: ids.other } : { zoneId: ids.moved }),
-            profileId: ids.desk,
-          },
+          code: "zone.profile_in_use",
+          params: { zoneId: ids.moved, profileId: ids.desk },
         });
 
       const { tables } = await exportConfigurationTables(suite.db, ALL_MODULES);

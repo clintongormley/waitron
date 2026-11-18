@@ -62,8 +62,7 @@ import type {
 import { AppError } from "@waitron/shared";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
-import { readProfileZones } from "./profile-access.js";
-import { profilesBlockedByZoneChange } from "./service-delete.js";
+import { profilesBlockedByZoneChange, readProfileZones } from "./profile-access.js";
 import "./errors.js";
 import { readDefaultMenuId } from "@waitron/menu";
 

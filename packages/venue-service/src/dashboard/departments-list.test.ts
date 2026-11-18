@@ -156,7 +156,9 @@ describe("department list", () => {
 
     await expect
       .poll(() => find(el, "[role=alert]")?.textContent)
-      .toBe("Choose another allowed zone in the device profile, then move this zone.");
+      .toBe(
+        "Add another allowed zone or change the device profile’s department, then move this zone.",
+      );
     expect(request).toHaveBeenCalledWith("/management-api/venue-service/zones/z1", "PUT", {
       departmentId: "d2",
     });

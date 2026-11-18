@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { departments, deviceProfiles, floorZones } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError, type ErrorParams } from "@waitron/shared";
@@ -273,6 +273,52 @@ export async function readProfileDepartments(
     .from(deviceProfiles)
     .innerJoin(departments, eq(departments.id, deviceProfiles.orderDepartmentId))
     .where(inArray(deviceProfiles.id, [...profileIds]));
+}
+
+type BlockedProfile = { id: string; name: string; zoneId: string | null };
+
+export async function profilesBlockedByZoneChange(
+  tx: Transaction,
+  zoneIds: readonly string[],
+  options: { deletingDepartmentId?: string | null; movingToDepartmentId?: string },
+): Promise<BlockedProfile[]> {
+  const scopes = await tx
+    .select({
+      id: deviceProfiles.id,
+      name: deviceProfiles.name,
+      retiredAt: deviceProfiles.retiredAt,
+      formFactor: deviceProfiles.formFactor,
+      departmentId: deviceProfiles.orderDepartmentId,
+      zoneIds: deviceProfiles.orderZoneIds,
+      startingZoneId: deviceProfiles.orderStartingZoneId,
+    })
+    .from(deviceProfiles)
+    .where(isNotNull(deviceProfiles.orderDepartmentId))
+    .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
+  const candidates = await tx
+    .select({ id: floorZones.id, departmentId: floorZones.departmentId })
+    .from(floorZones)
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+    .where(and(eq(floorZones.active, true), eq(departments.active, true)));
+  return scopes.flatMap<BlockedProfile>((profile) => {
+    if (profile.retiredAt !== null || profile.formFactor === "kds") return [];
+    if (profile.departmentId === options.movingToDepartmentId) return [];
+    const target = { id: profile.id, name: profile.name };
+    if (profile.departmentId === options.deletingDepartmentId) return [{ ...target, zoneId: null }];
+    // A moved zone can still be named by a profile that orders for its previous department.
+    const zoneId =
+      profile.startingZoneId !== null && zoneIds.includes(profile.startingZoneId)
+        ? profile.startingZoneId
+        : zoneIds.find((id) => profile.zoneIds?.includes(id));
+    if (zoneId === undefined) return [];
+    const hasSurvivingZone = candidates.some(
+      (candidate) =>
+        candidate.departmentId === profile.departmentId &&
+        !zoneIds.includes(candidate.id) &&
+        (profile.zoneIds === null || profile.zoneIds.includes(candidate.id)),
+    );
+    return hasSurvivingZone ? [] : [{ ...target, zoneId }];
+  });
 }
 
 async function liveFormFactor(tx: Transaction, profileId: string): Promise<string> {

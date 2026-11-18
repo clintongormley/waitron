@@ -178,7 +178,7 @@ y pulsa **Guardar**.
 Para imprimir comandas, elige la impresora en **Estaciones de preparación**.
 
 Si al mover o eliminar una zona un perfil de dispositivo se queda sin zonas para tomar pedidos,
-elige otra zona permitida en el perfil y vuelve a intentarlo.
+elige otra zona permitida o cambia el departamento del perfil y vuelve a intentarlo.
 
 ## Quién puede iniciar sesión en un dispositivo {#device-profile-sign-in}
 

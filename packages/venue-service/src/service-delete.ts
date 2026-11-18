@@ -1,9 +1,8 @@
-import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import {
   floorPlanSets,
   departments,
   departmentTransferRequests,
-  deviceProfiles,
   floorZones,
   menuPeriods,
   workingOrders,
@@ -22,6 +21,7 @@ import {
   clearServiceDeleteSettings,
   readServiceDeleteSettings,
 } from "./service-delete-settings.js";
+import { profilesBlockedByZoneChange } from "./profile-access.js";
 import "./errors.js";
 
 type Kind = "zone" | "department";
@@ -46,46 +46,6 @@ function uniqueRefusals(rows: readonly DeleteImpactRefusal[]): DeleteImpactRefus
     ...row,
     targets: ordered([...new Map(row.targets.map((target) => [target.id, target])).values()]),
   }));
-}
-
-export async function profilesBlockedByZoneChange(
-  tx: Transaction,
-  zoneIds: readonly string[],
-  options: { deletingDepartmentId?: string | null; movingToDepartmentId?: string },
-): Promise<DeleteTarget[]> {
-  const scopes = await tx
-    .select({
-      id: deviceProfiles.id,
-      name: deviceProfiles.name,
-      retiredAt: deviceProfiles.retiredAt,
-      formFactor: deviceProfiles.formFactor,
-      departmentId: deviceProfiles.orderDepartmentId,
-      zoneIds: deviceProfiles.orderZoneIds,
-      startingZoneId: deviceProfiles.orderStartingZoneId,
-    })
-    .from(deviceProfiles)
-    .where(isNotNull(deviceProfiles.orderDepartmentId));
-  const candidates = await tx
-    .select({ id: floorZones.id, departmentId: floorZones.departmentId })
-    .from(floorZones)
-    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .where(and(eq(floorZones.active, true), eq(departments.active, true)));
-  return ordered(scopes).filter((profile) => {
-    if (profile.retiredAt !== null || profile.formFactor === "kds") return false;
-    if (profile.departmentId === options.movingToDepartmentId) return false;
-    if (profile.departmentId === options.deletingDepartmentId) return true;
-    // A moved zone can still be named by a profile that orders for its previous department.
-    const affected =
-      (profile.startingZoneId !== null && zoneIds.includes(profile.startingZoneId)) ||
-      profile.zoneIds?.some((zoneId) => zoneIds.includes(zoneId));
-    if (!affected) return false;
-    return !candidates.some(
-      (candidate) =>
-        candidate.departmentId === profile.departmentId &&
-        !zoneIds.includes(candidate.id) &&
-        (profile.zoneIds === null || profile.zoneIds.includes(candidate.id)),
-    );
-  });
 }
 
 async function selection(
@@ -226,19 +186,24 @@ async function selection(
       });
   }
 
-  for (const profile of await profilesBlockedByZoneChange(tx, zoneIds, {
+  const blocked = await profilesBlockedByZoneChange(tx, zoneIds, {
     deletingDepartmentId: departmentId,
-  })) {
+  });
+  for (const profile of ordered(blocked)) {
     const targets = [{ id: profile.id, name: profile.name }];
-    refusals.push(
-      departmentId === null
-        ? { code: "zone.profile_in_use", params: { zoneId: id, profileId: profile.id }, targets }
-        : {
-            code: "department.profile_in_use",
-            params: { departmentId, profileId: profile.id },
-            targets,
-          },
-    );
+    if (profile.zoneId !== null) {
+      refusals.push({
+        code: "zone.profile_in_use",
+        params: { zoneId: profile.zoneId, profileId: profile.id },
+        targets,
+      });
+    } else if (departmentId !== null) {
+      refusals.push({
+        code: "department.profile_in_use",
+        params: { departmentId, profileId: profile.id },
+        targets,
+      });
+    }
   }
 
   const removes = [...floorImpact.removes, ...settings];

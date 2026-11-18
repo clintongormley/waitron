@@ -152,7 +152,9 @@ it("tells the manager how to move a zone still needed by a device profile", asyn
   save(el).click();
   await expect
     .poll(() => bottom(el))
-    .toBe("Choose another allowed zone in the device profile, then move this zone.");
+    .toBe(
+      "Add another allowed zone or change the device profile’s department, then move this zone.",
+    );
   expect(save(el).disabled).toBe(false);
 });
 
