@@ -1708,6 +1708,17 @@ it("refuses a named Etc zone outside the country pack", async () => {
   expect((await read()).details).toEqual(initial.details);
 });
 
+it("reads a saved signed Etc zone in the reporting clock", async () => {
+  await suite.db.execute(
+    sql`update settings set doc = json_set(doc, '$.timeZone', 'Etc/GMT+2') where module = 'business_day'`,
+  );
+  const { businessDayClock } = await read();
+  expect(businessDayClock.clock.timeZone).toBe("Etc/GMT+2");
+  expect(businessDayStart(new Date("2026-10-06T12:00:00Z"), businessDayClock.clock)).toBe(
+    "2026-10-06T07:00:00.000Z",
+  );
+});
+
 describe("reviewed legacy geography and clock repairs", () => {
   it.each([null, "Unknown legacy province"])(
     "does not offer postcode edits without a resolved province: %s",

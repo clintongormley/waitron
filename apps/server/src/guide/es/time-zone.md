@@ -2,7 +2,7 @@
 
 ## Cambiar la zona horaria en los datos del local {#venue-details}
 
-Antes de que el local tenga un historial de actividad, abre **Ajustes del local → Datos del local** y pulsa **Editar**. Elige tu zona en la lista **Zona horaria**. Para un local en España, elige **España peninsular** o **Islas Canarias**.
+Abre **Ajustes del local → Datos del local** y pulsa **Editar**. Si puedes editar **Zona horaria**, elige tu zona en la lista. Para un local en España, elige **España peninsular** o **Islas Canarias**.
 
 Comprueba la hora local y la jornada propuestas, pulsa **He revisado estos cambios** y después **Guardar**.
 
