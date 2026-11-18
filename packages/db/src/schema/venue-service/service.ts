@@ -2,17 +2,7 @@ import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/share
 import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { mediaImages } from "../media/images.js";
-import {
-  enumCheck,
-  flag,
-  id,
-  json,
-  label,
-  newId,
-  nowIso,
-  table,
-  tsString,
-} from "../columns.js";
+import { enumCheck, flag, id, json, label, newId, nowIso, table, tsString } from "../columns.js";
 import { deviceProfiles } from "../device-profiles.js";
 import { floorZones } from "../floor-zones.js";
 import { sales } from "../sales.js";
