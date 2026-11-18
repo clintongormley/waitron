@@ -553,3 +553,36 @@ describe("imported option and extras lists", () => {
     ).not.toThrow();
   });
 });
+
+describe("set menus in a configuration bundle", () => {
+  const setMenu = { id: "set", kind: "set_menu", set_price: 1400, set_vat_class: "reduced" };
+  const menu = { id: "ordinary", kind: "menu" };
+  const invalid = (field: string) =>
+    expect.objectContaining({ code: "setup.request_invalid", params: { field } });
+
+  it.each([1_000_001, -1, 1400.5, "1400", null])("refuses a set-menu price of %j", (setPrice) => {
+    expect(() =>
+      validateMenuConfiguration({ menus: [{ ...setMenu, set_price: setPrice }] }),
+    ).toThrow(invalid("menus.set_price"));
+  });
+
+  it.each([0, 1_000_000])("accepts a whole-cent set-menu price of %i", (setPrice) => {
+    expect(() =>
+      validateMenuConfiguration({ menus: [menu, { ...setMenu, set_price: setPrice }] }),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ["set_menu_lines", "menu_id", "ordinary"],
+    ["set_menu_dish_courses", "menu_item_id", "ordinary-item"],
+    ["set_menu_variant_exclusions", "menu_item_id", "ordinary-item"],
+  ])("refuses %s attached to an ordinary menu", (table, column, id) => {
+    expect(() =>
+      validateMenuConfiguration({
+        menus: [menu, setMenu],
+        menu_items: [{ id: "ordinary-item", menu_id: "ordinary" }],
+        [table]: [{ [column]: id }],
+      }),
+    ).toThrow(invalid(`${table}.${column}`));
+  });
+});
