@@ -5581,6 +5581,11 @@ describe("advance HOLD tickets (Task 6)", () => {
         const moving = await Promise.all(
           (["steak", "fish", "flan"] as const).map((dish) => lineOf(s, group, dish, v)),
         );
+        const [screenTicket] = await db
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderLineId, moving[2]!.id));
+        expect(screenTicket).toMatchObject({ stationId: screenId, holdPaperQueued: false });
 
         await move(
           v,
@@ -5604,6 +5609,11 @@ describe("advance HOLD tickets (Task 6)", () => {
         expect(await recorded(second!.id)).toEqual([
           { groupId: second!.id, stationId: v.stationId },
         ]);
+        const [steak] = await db
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderLineId, moving[0]!.id));
+        expect(steak).toMatchObject({ stationId: v.stationId, holdPaperQueued: true });
       });
 
       it("a station with no printer is not recorded for a dish joining there", async () => {

@@ -1803,7 +1803,6 @@ async function onHeldPaper(
     .select({
       id: workingOrderLines.id,
       groupId: workingOrderLines.groupId,
-      stationId: ticketItems.stationId,
       holdPaperQueued: ticketItems.holdPaperQueued,
     })
     .from(workingOrderLines)
@@ -1823,7 +1822,7 @@ async function onHeldPaper(
     const line = byId.get(item.workingOrderLineId);
     if (line === undefined || item.stationId === null) return false;
     return line.groupId === null
-      ? line.holdPaperQueued && line.stationId === item.stationId
+      ? line.holdPaperQueued
       : recorded.get(line.groupId)?.has(item.stationId) === true;
   };
 }
