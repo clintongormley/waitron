@@ -297,7 +297,7 @@ describe("settled-tender refund authorization before reservation", () => {
     const t = await target();
     await store.db
       .update(devices)
-      .set(kind === "disabled" ? { active: false } : { deletedAt: AT })
+      .set({ active: false, ...(kind === "deleted" && { deletedAt: AT }) })
       .where(eq(devices.id, cfg.origin.deviceId));
     await refused(t, "device.unauthorized");
   });

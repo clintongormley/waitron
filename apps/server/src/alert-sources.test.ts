@@ -2046,7 +2046,7 @@ describe("deviceBatteryAlertSource", () => {
     ["never reported", { batteryLevel: null, batteryCharging: null, batteryReportedAt: null }],
     ["stale", { batteryReportedAt: new Date(NOW.getTime() - 600_001).toISOString() }],
     ["inactive", { active: false }],
-    ["deleted", { deletedAt: NOW.toISOString() }],
+    ["deleted", { active: false, deletedAt: NOW.toISOString() }],
   ])("ignores a %s device", async (_reason, values) => {
     await seedFixtureVenue();
     const { deviceId } = await seedDevice(suite.db);

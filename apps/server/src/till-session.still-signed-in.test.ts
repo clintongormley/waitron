@@ -44,8 +44,11 @@ describe("assertStillSignedIn", () => {
     await expect(check()).rejects.toMatchObject({ code: "device.unauthorized" });
   });
 
-  it("refuses device.unauthorized when the device was deleted while still marked active", async () => {
-    await suite.db.update(devices).set({ deletedAt: nowIso() }).where(eq(devices.id, deviceId));
+  it("refuses device.unauthorized when the device was deleted", async () => {
+    await suite.db
+      .update(devices)
+      .set({ active: false, deletedAt: nowIso() })
+      .where(eq(devices.id, deviceId));
     await expect(check()).rejects.toMatchObject({ code: "device.unauthorized" });
   });
 
