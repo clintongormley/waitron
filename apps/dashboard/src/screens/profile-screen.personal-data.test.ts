@@ -331,9 +331,12 @@ describe("profile-screen copy of your data help placement", () => {
         await page.viewport(width, 800);
         const { el } = await mount(stubApi());
         await document.fonts.ready;
+        expect(window.innerWidth).toBe(width);
+        const labelText = row(el).querySelector(".text .field-value")!;
+        expect(labelText.textContent).toBe((locale === "en" ? en : es)["profile.data_copy"]);
         const help = tooltip(el)!;
         const badge = help.getBoundingClientRect();
-        const label = row(el).querySelector(".text .field-value")!.getBoundingClientRect();
+        const label = labelText.getBoundingClientRect();
         const box = row(el).getBoundingClientRect();
         const download = button(el).getBoundingClientRect();
         expect(badge.width).toBeGreaterThan(0);
