@@ -1,4 +1,5 @@
 import { customerOptionSnapshotLabels } from "@waitron/menu";
+import type { CardDetails } from "@waitron/payments";
 import type { ReceiptLabels } from "@waitron/country";
 import {
   recipientIdentifierLabel,
@@ -16,6 +17,7 @@ import {
   perDishOptionQuantity,
   resolveSnapshotText,
   subtractDecimal,
+  type Decimal,
   type ReceiptElement,
   type ReceiptIndent,
   type ReceiptLogoRaster,
@@ -544,6 +546,23 @@ export function buildReceiptDocument({
   }
   rule();
   const t = result.tender;
+  const cardRows = (card: CardDetails | undefined, amount: Decimal): void => {
+    if (card === undefined) {
+      row(label.card, formatMoney(amount, locale));
+      return;
+    }
+    const scheme = card.scheme
+      .toLowerCase()
+      .replace(/(^|\s)\p{L}/gu, (initial) => initial.toUpperCase());
+    const presented = {
+      contactless: ` (${label.paymentContactless})`,
+      chip: ` (${label.paymentChip})`,
+      swipe: ` (${label.paymentSwipe})`,
+      unknown: "",
+    }[card.entryMode];
+    row(`${scheme} ****${card.last4}${presented}`, formatMoney(amount, locale));
+    if (card.authCode !== null) text(`${label.paymentAuthorization} ${card.authCode}`);
+  };
   if (result.payments !== undefined && result.payments.length > 0) {
     for (const payment of result.payments) {
       if (payment.method === "cash") {
@@ -554,7 +573,7 @@ export function buildReceiptDocument({
           (sum, refund) => addDecimal(addDecimal(sum, decimal(refund.amount)), decimal(refund.tip)),
           decimal(payment.amount),
         );
-        row(label.card, formatMoney(charged, locale));
+        cardRows(payment.card, charged);
         if (payment.reference !== null) text(`${label.reference} ${payment.reference}`);
       }
       if (payment.tip !== "0.00") row(label.tip, formatMoney(payment.tip, locale));
@@ -569,7 +588,8 @@ export function buildReceiptDocument({
   } else if (t.method === "deferred") {
     text(label.deferredPayment);
   } else if (t.method === "card") {
-    text(label.card);
+    if (t.card === undefined) text(label.card);
+    else cardRows(t.card, subtractDecimal(decimal(t.charged), decimal(t.tip)));
     if (t.reference !== null) text(`${label.reference} ${t.reference}`);
     if (t.tip !== "0.00") {
       row(label.tip, formatMoney(t.tip, locale));

@@ -1235,6 +1235,33 @@ describe("a takeaway sale's A4 invoice", () => {
   });
 });
 
+describe("the A4 page names the card", () => {
+  it("the A4 page names the card", () => {
+    const [page] = layoutInvoicePages({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      result: {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        tender: {
+          method: "card",
+          charged: "19.69",
+          tip: "0.00",
+          reference: null,
+          card: { scheme: "VISA", last4: "4034", entryMode: "contactless", authCode: "354739" },
+        },
+      },
+    });
+    const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
+    const caption = texts.findIndex(({ text }) => text === "Visa ****4034 (Sin contacto)");
+    expect(caption).toBeGreaterThanOrEqual(0);
+    const amount = texts.find(
+      ({ text, y }, index) => index > caption && y === texts[caption]!.y && text === "19,69 €",
+    );
+    expect(amount).toBeDefined();
+    const authorisation = texts.find(({ text }) => text === "Autorización 354739");
+    expect(authorisation!.y).toBeGreaterThan(texts[caption]!.y);
+  });
+});
+
 describe("the simplified receipt's A4 tax table", () => {
   it("draws the simplified tax table on A4", () => {
     const [page] = layoutInvoicePages({
