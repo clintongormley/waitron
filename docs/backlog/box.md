@@ -1360,6 +1360,46 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 The owner chose to fix correction validation and keep event-time pairing. See the
 [workforce decision](workforce.md#a1268-corrections-after-a-backward-clock-step).
 
+### The bucket copy takes one full copy a week and keeps two weeks (2026-11-18)
+
+Owner, 17 November 2026, 23:18 (picker, "Full copy"): "Weekly, two weeks kept (Recommended)". It
+replaces the 23 September 2026 decision "One full copy a day, and a 7-day history window". The box
+uploads its whole database to the bucket once a week (Litestream times it at Monday 00:00 UTC,
+computed from its source, not run) and uploads each change once in between. The bucket holds two
+full copies and reaches back between one and two weeks (`packages/stream/src/litestream.ts`,
+`interval: 168h`, `retention: 335h`; how Litestream 0.5.18 applies them is read from its source,
+not run for these values). Two other windows move with it to two weeks: an older
+generation is deleted after two weeks untouched (`PRUNE_WINDOW_MS`,
+`packages/stream/src/supervisor.ts`), and a recovery pack under an older key is listed as worth
+keeping for at least two weeks after the key changed (`BUCKET_COPY_KEEP`,
+`apps/server/src/backup-recovery-pack-status.ts`).
+
+The cost is a longer restore from the bucket: it downloads up to a week of change files on top of
+the full copy, where it used to download up to a day. Measured once on the bench server on
+18 November 2026, on a year-old venue's database of 3.3 GB (print payloads older than seven days
+emptied) trading 250 bills a day, time compressed by 12:
+
+| Line        | Full copy + one day | Full copy + a week |
+| ----------- | ------------------- | ------------------ |
+| unthrottled | 17 s                | 21 s               |
+| 20 Mbit/s   | 15.8 min            | 24.5 min           |
+| 5 Mbit/s    | not run             | 98 min             |
+
+The week's restore downloaded 3.66 GB in 88 files against 2.35 GB in 15, and on the throttled lines
+the download decided the time. Not measured: a box's own processor and disk (the restores ran on
+the bench server), a restore while the venue trades, a real line, and a bucket that encrypts with
+the venue's key. The figures, the method and where the run differed from its plan are in
+[the plan](../superpowers/plans/2026-11-18-weekly-full-copy.md#step-1-results-run-2026-11-18-0151-to-1120-cet).
+
+A spare follows with the same settings (`packages/stream/src/follow.ts`), so a spare catching up
+from scratch also reads up to a week of change files.
+
+The owner's idea of comparing hashes so that unchanged data is not uploaded again is not built.
+Lane M measured that one day's trading touched 11,126 of 11,926 fixed 1 MiB pieces of the database
+and recommended dropping it from this item; the owner set content-named pieces aside to revisit
+after time-ordered ids and real venue measurements (17 November 2026, 23:16 and 23:19, recorded in
+[setup.md](setup.md)).
+
 ### Local-copy growth uses the existing backup and disk warnings
 
 The watcher decided on 16 November 2026, after the two Claude run-it reviews, to keep the existing

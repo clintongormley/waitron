@@ -1,7 +1,8 @@
 # WEEKLY-FULL-COPY — one full copy a week in the bucket copy, two weeks kept
 
-Status: plan, 2026-11-18, lane B. Read once by a fresh-context Claude reviewer (2026-11-18); its
-seven findings are folded in below.
+Status: step 1 was measured on 2026-11-18 and passed its three tests (results under step 1); step 2
+is the pull request that carries this line. Plan by lane B, read once by a fresh-context Claude
+reviewer (2026-11-18); its seven findings are folded in below.
 
 **What a person gets when it lands.** A box streaming to a bucket uploads its whole database once a
 week instead of once a day. For a year-old busy venue that is about 1.6 GB a day instead of 3.2 GB
@@ -15,8 +16,10 @@ Monday, so it lands at Monday 00:00 UTC: late Sunday night in Spain (computed, n
 **Authority.** Owner, 2026-11-17 23:18 (picker, "Full copy"): "Weekly, two weeks kept
 (Recommended)", replacing the 23 September decision "One full copy a day, and a 7-day history
 window" (slice-2 design §0 item 9; that file was deleted in #711, the decision survives in git at
-4e1033a120). Recorded in lane B's queue heading for this item. The owner also said to drop the hash
-idea (same heading: "drop the hash part"); lane M's report answers it.
+4e1033a120). Recorded in lane B's queue heading for this item. The hash idea is not part of
+this item: lane M's report answers it and recommends dropping it ("Drop from the item: its part
+(2), the hash idea"), and the owner set content-named pieces aside to revisit later (17 November
+2026, 23:16 and 23:19, `docs/backlog/setup.md`).
 
 **Should this exist, and the simplest way.** Yes: two numbers in one config function. The only
 thing that could make it wrong is a restore across a week of change files being much slower than
@@ -78,6 +81,70 @@ Not a pull request. Results go into this plan as its receipt, and one line into
   finishes inside the 6 hours. If merging many small files costs more than their bytes, the first
   test fails; if the files download slowly in parallel, the second does. Both outcomes are possible
   before the run.
+
+### Step 1 results (run 2026-11-18, 01:51 to 11:20 CET)
+
+One run of each restore, on the bench server. The run's scripts, logs and `results.md` are kept
+outside the repository, in lane B's campaign folder (`receipts/weekly-full-copy-20261118/`); each
+figure in `results.md` sits beside the command that produced it.
+
+**What was run.** Lane J's 366-day year at 30c1c1c564 with print payloads older than seven days
+emptied, compacted: 3,297,202,176 bytes. Litestream 0.5.18 against versitygw 1.8.0, levels at
+2.5 s, 25 s and 5 min. Seven paced days of 250 bills, one bill about every 14.4 s (the first day
+16.5 s). The full copy was 1,916,395,730 bytes as Litestream stores it. Litestream logged no warning
+or error in any of its runs. Lane J's year was unchanged afterwards (every file's size and time
+compared).
+
+**The restore plans** (`litestream restore -dry-run`). Each holds one full copy and nothing written
+before it.
+
+| Restore from             | Files | Bytes         | Of which change files                |
+| ------------------------ | ----- | ------------- | ------------------------------------ |
+| the full copy + one day  | 15    | 2,351,899,510 | 14 files, 435,503,780 bytes          |
+| the full copy + the week | 88    | 3,660,881,982 | 87 files, 1,744,486,252 bytes        |
+
+**The restores** (`litestream restore`, wall time). Every result passed `pragma quick_check` and
+held the same number of sales as the live database at that point (91,750 after one day, 93,250
+after the week).
+
+| Line        | Full copy + one day | Full copy + the week |
+| ----------- | ------------------- | -------------------- |
+| unthrottled | 17.1 s              | 21.1 s               |
+| 20 Mbit/s   | 947.7 s (15.8 min)  | 1,471.8 s (24.5 min) |
+| 5 Mbit/s    | not run             | 5,878.9 s (98.0 min) |
+
+**The three tests.**
+
+- Unthrottled: the one-day restore took 7.272 s per GB of its plan; twice the week's plan at that
+  rate is 53.2 s; the week took 21.1 s. Pass.
+- At 20 Mbit/s the week took 8.7 minutes longer than the one-day restore, against a limit of about
+  15 and the "about nine more minutes" the owner was told. Pass.
+- At 5 Mbit/s the week finished in 98 minutes, inside the 6 hours, and was never stopped by the
+  2-minute no-growth rule. Pass.
+
+On the throttled lines each restore took within 22 seconds of its plan's bytes divided by the line's
+rate (for the week at 20 Mbit/s, 1,464.4 s computed against 1,471.8 s measured), so on this machine
+the download decided the time and merging 88 files instead of 15 added almost nothing.
+
+**Where the run differed from the plan above.**
+
+- Two full copies were taken on the idle database before trading, not one. Litestream's own first
+  change after its first full copy left a whole-database file at level 3, so a second full copy was
+  taken past it. Both restore plans start from the second and hold nothing older.
+- The local bucket was not given the customer-held encryption key production sets
+  (`sse-customer-key`, `packages/stream/src/litestream.ts`), so the bucket encrypting and decrypting
+  each file was not part of the measurement.
+- Litestream's working files were kept outside the bench's folder.
+
+**What the run does not show.**
+
+- A box's processor and disk. The restores ran on the bench server (32 cores, shared with other
+  virtual machines). The unthrottled figures are the whole cost of merging there, 21 s for the week;
+  a box would take longer by an amount not measured.
+- A restore while the venue trades: nothing else used the machine or the line during a restore.
+- A real line: the proxy shares one download rate between all connections and adds no delay or
+  loss.
+- A week at real speed: time was compressed by 12, as planned.
 
 ## Step 2 — the change (one pull request, full review path: recovery data)
 

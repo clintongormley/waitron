@@ -546,6 +546,9 @@ measured:
   replays more of the changes recorded since the last full copy, which takes longer; how much longer
   is not measured.
 
+2026-11-18: the second route was taken and its restore measured — the bucket copy now takes one full
+copy a week; see [the plan](../plans/2026-11-18-weekly-full-copy.md).
+
 **Recommended:** land A1533 and the trim first, then measure the year's copies and choose between
 these two before considering the archive.
 
