@@ -62,6 +62,7 @@ const MIN_KEY_LENGTH = 12;
 
 interface ArchiveDraft {
   mode: "configure" | "settings" | "rotate";
+  cloudOn: boolean;
   folderOn: boolean;
   bucket: BucketChoice;
   folder: string;
@@ -85,6 +86,7 @@ function archivePayload(value: ArchiveDraft): unknown {
   const pastedKey = value.advancedPaste ? value.pastedKey : "";
   if (value.mode === "rotate") return { pastedKey };
   return {
+    cloud: value.cloudOn,
     destinations: destinationsBody(value.folderOn, value.folder, value.bucket, value.custom),
     days: value.daysMode === "daily" ? "daily" : [...value.weekdays].sort((a, b) => a - b),
     at: value.timeMode === "auto" ? "auto" : value.atTime,
@@ -291,6 +293,8 @@ export class BackupScreen extends LitElement {
   @state() private refreshErrorKey: string | null = null;
 
   // The configure and rotate forms share this draft: only ONE of them renders at a time.
+  @state() private cloudOn = false;
+  @state() private cloudRefused: "cloud" | "schedule" | null = null;
   @state() private folderOn = true;
   @state() private bucket: BucketChoice = "none";
   @state() private folder = "";
@@ -389,6 +393,7 @@ export class BackupScreen extends LitElement {
 
   #fields(): FormFields {
     return {
+      cloudOn: this.#effectiveCloud,
       folderOn: this.folderOn,
       bucket: this.bucket,
       folder: this.folder,
@@ -429,6 +434,7 @@ export class BackupScreen extends LitElement {
       }),
       equal: (a, b) => sameValue(archivePayload(a), archivePayload(b)),
       restore: (value) => {
+        this.cloudOn = value.cloudOn;
         this.folderOn = value.folderOn;
         this.bucket = value.bucket;
         this.folder = value.folder;
@@ -449,6 +455,7 @@ export class BackupScreen extends LitElement {
     this.#trackArchive();
     if (
       [
+        "cloudOn",
         "folderOn",
         "bucket",
         "folder",
@@ -638,8 +645,16 @@ export class BackupScreen extends LitElement {
     return this.bucket === "custom-s3" && endpoint !== "" && !isPlainWebAddress(endpoint);
   }
 
+  get #cloudAvailable(): boolean {
+    return this.status?.cloudBackups === "available";
+  }
+
+  get #effectiveCloud(): boolean {
+    return this.#cloudAvailable ? this.cloudOn : (this.status?.cloud ?? false);
+  }
+
   get #nothingChosen(): boolean {
-    return !this.folderOn && this.bucket === "none";
+    return !this.#effectiveCloud && !this.folderOn && this.bucket === "none";
   }
 
   get #destinationInvalid(): boolean {
@@ -685,6 +700,7 @@ export class BackupScreen extends LitElement {
     this.#feedback.press();
     this.retentionRefused = false;
     this.folderRefused = false;
+    this.cloudRefused = null;
     this.customRefused = null;
     this.formRefusal = null;
     if (!this.#retentionInvalid && !this.#timeMissing && !this.#destinationInvalid) return true;
@@ -709,6 +725,14 @@ export class BackupScreen extends LitElement {
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
     if (code === "backup.request_invalid" && field === "recoveryKey") {
       this.formRefusal = { code: "backup.recovery_key_missing", reason: null };
+    } else if (code === "backup.cloud_needs_daily" && field === "schedule") {
+      this.cloudRefused = "schedule";
+      this.#focusFirstInvalidBox();
+    } else if (code === "backup.cloud_unavailable" && field === "cloud" && this.#cloudAvailable) {
+      this.cloudRefused = "cloud";
+      void this.updateComplete.then(() =>
+        this.renderRoot.querySelector<HTMLElement>("[data-test=archive-cloud]")?.focus(),
+      );
     } else if (code === "backup.request_invalid") {
       // A refusal naming the folder or a custom-bucket field not shown when it answers goes to
       // the bottom message.
@@ -765,6 +789,9 @@ export class BackupScreen extends LitElement {
   #applyBody(recoveryKey?: string): BackupApplyBody {
     return {
       destinations: destinationsBody(this.folderOn, this.folder, this.bucket, this.custom),
+      ...(this.#cloudAvailable && this.cloudOn !== (this.status?.cloud ?? false)
+        ? { cloud: this.cloudOn }
+        : {}),
       ...(recoveryKey === undefined ? {} : { recoveryKey }),
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
@@ -972,6 +999,7 @@ export class BackupScreen extends LitElement {
     this.#feedback.reset();
     this.retentionRefused = false;
     this.folderRefused = false;
+    this.cloudRefused = null;
     this.customRefused = null;
     this.formRefusal = null;
     this.secretVisible = false;
@@ -1055,6 +1083,7 @@ export class BackupScreen extends LitElement {
     this.#policyReplaced = s.schedule?.kind !== "wall-clock" || !s.retention;
     this.secretDemanded = false;
     const f = this.#fieldsFrom(s);
+    this.cloudOn = f.cloudOn;
     this.folderOn = f.folderOn;
     this.bucket = f.bucket;
     this.folder = f.folder;
@@ -1073,6 +1102,7 @@ export class BackupScreen extends LitElement {
     const opened = openingDestinations(s);
     const fields: FormFields = {
       ...this.#fields(),
+      cloudOn: s.cloud ?? false,
       folderOn: opened.folderOn,
       bucket: opened.bucket,
       folder: opened.folder,
@@ -1200,7 +1230,13 @@ export class BackupScreen extends LitElement {
     }
   }
 
+  #setDaysMode(mode: "daily" | "weekdays"): void {
+    this.daysMode = mode;
+    if (this.cloudRefused === "schedule") this.cloudRefused = null;
+  }
+
   #toggleWeekday(n: number): void {
+    if (this.cloudRefused === "schedule") this.cloudRefused = null;
     this.weekdays = this.weekdays.includes(n)
       ? this.weekdays.filter((d) => d !== n)
       : [...this.weekdays, n];
@@ -1378,6 +1414,9 @@ export class BackupScreen extends LitElement {
   }
 
   #renderStatus(s: BackupStatusView): TemplateResult {
+    const cloud = s.backupStatus.configured
+      ? s.backupStatus.destinations.find((d) => d.id === "cloud")
+      : undefined;
     return html`
       <dl class="status" data-test="status">
         <div>
@@ -1410,12 +1449,20 @@ export class BackupScreen extends LitElement {
           </dd>
         </div>
         ${
-          s.destinations.length > 0
-            ? s.destinations.map((d) => this.#renderDestinationRow(s, d))
-            : html`<div>
+          s.destinations.length === 0 && cloud === undefined
+            ? html`<div>
                 <dt>${t("backup.status.last")}</dt>
                 <dd>${t("backup.status.never")}</dd>
               </div>`
+            : s.destinations.map((d) => this.#renderDestinationRow(s, d))
+        }
+        ${
+          cloud
+            ? html`<div data-test="destination-row" data-destination="cloud" data-place="off-box">
+                <dt>${t("backup.destination.choice_cloud")}</dt>
+                <dd>${this.#renderOutcome(cloud)}</dd>
+              </div>`
+            : nothing
         }
         ${
           s.keyFingerprint
@@ -1507,6 +1554,8 @@ export class BackupScreen extends LitElement {
   }
 
   #renderDestinationField(): TemplateResult {
+    const cloudMessage =
+      this.cloudRefused === "cloud" ? codeMessage("backup.cloud_unavailable") : "";
     const folderMessage = this.folderRefused
       ? this.folderRefusalReason === "scratch"
         ? fill("backup.destination.folder_scratch_refused", { folder: this.folderScratchRoot })
@@ -1567,6 +1616,25 @@ export class BackupScreen extends LitElement {
         }}
       ></wt-combobox>
       ${this.bucket === "custom-s3" ? this.#renderCustomChoice() : nothing}
+      ${
+        this.#cloudAvailable
+          ? html`<div>
+              <wt-switch
+                data-test="archive-cloud"
+                name="backup-cloud"
+                label=${t("backup.destination.choice_cloud")}
+                .checked=${this.cloudOn}
+                .description=${cloudMessage}
+                @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+                  e.stopPropagation();
+                  this.cloudOn = e.detail.checked;
+                  this.cloudRefused = null;
+                }}
+              ></wt-switch>
+              ${cloudMessage ? html`<div class="error">${cloudMessage}</div>` : nothing}
+            </div>`
+          : nothing
+      }
     `;
   }
 
@@ -1803,9 +1871,23 @@ export class BackupScreen extends LitElement {
           { value: "weekdays", label: t("backup.schedule.days_pick") },
         ]}
         .value=${this.daysMode}
-        @wt-change=${(e: CustomEvent<{ value: string }>) =>
-          (this.daysMode = e.detail.value as "daily" | "weekdays")}
+        .error=${this.cloudRefused === "schedule" ? codeMessage("backup.cloud_needs_daily") : ""}
+        @wt-change=${(e: CustomEvent<{ value: "daily" | "weekdays" }>) =>
+          this.#setDaysMode(e.detail.value)}
       ></wt-combobox>
+      ${
+        this.cloudRefused === "schedule"
+          ? html`<wt-button
+              data-test="cloud-daily"
+              variant="secondary"
+              @click=${() => {
+                this.#setDaysMode("daily");
+                this.renderRoot.querySelector<HTMLElement>("[data-test=days-mode]")?.focus();
+              }}
+              >${t("backup.schedule.use_daily")}</wt-button
+            >`
+          : nothing
+      }
       ${
         this.daysMode === "weekdays"
           ? html`<div class="weekdays">
@@ -1864,7 +1946,10 @@ export class BackupScreen extends LitElement {
   }
 
   #policyBottom(): string {
+    const cloudChoiceRefused = this.cloudRefused === "cloud";
     const marked =
+      this.cloudRefused === "schedule" ||
+      (cloudChoiceRefused && this.#cloudAvailable) ||
       this.#policyHeld ||
       this.#pastedKeyInvalid ||
       this.retentionRefused ||
@@ -1878,6 +1963,9 @@ export class BackupScreen extends LitElement {
         ? []
         : [refusal.sentence === undefined ? codeMessage(refusal.code) : t(refusal.sentence)]),
       ...(reasonKey === undefined ? [] : [t(reasonKey)]),
+      ...(cloudChoiceRefused && !this.#cloudAvailable
+        ? [codeMessage("backup.cloud_unavailable")]
+        : []),
       ...(marked ? [t("form.fix_fields")] : []),
     ].join(" ");
   }

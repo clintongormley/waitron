@@ -415,6 +415,33 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it("renders the Cloud schedule correction accessibly", async () => {
+    const api = stubApi(
+      { ...ENABLED, cloud: true, cloudBackups: "available" },
+      {
+        applyBackup: vi.fn().mockRejectedValue({
+          code: "backup.cloud_needs_daily",
+          params: { field: "schedule" },
+        }),
+      },
+    );
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { onboardingIntent: "live", api },
+      theme,
+    );
+    await flush(el);
+    q(el, "[data-test=edit-settings]")!.click();
+    await flush(el);
+    await chooseOption(q(el, "[data-test=days-mode]")!, "weekdays");
+    q(el, "[data-test=weekday-1]")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=save-settings]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=cloud-daily]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders a retention box the form refused accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",

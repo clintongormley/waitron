@@ -14,9 +14,11 @@ To reuse your setup for a new venue, enter and confirm an export passphrase of a
 
 ## Scheduled backups {#archives}
 
-Choose a folder on the box, an S3-compatible bucket, or both. For a bucket, enter its connection details.
+You can keep copies in a folder on the box or in an S3-compatible bucket. For a bucket, enter its connection details.
 
 Choose the days and time, then set how many backups to keep and how old they may be. Leave **Let the box choose** selected if you want backups after close and the day's reports. Save the recovery key as described below, then choose **Turn on backups**.
+
+If you can choose **Waitron Cloud**, select **Every day** so Cloud can receive backups on your venue's schedule. Waitron Cloud decides when its old copies expire.
 
 Once backups are on, use **Change destination or schedule** and **Save changes** to adjust them. Check the last backup shown for each destination and act on any failure shown there.
 

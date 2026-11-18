@@ -1713,6 +1713,60 @@ describe("backup admin routes", () => {
     };
     const cloudOnly = { ...archiveSettings, cloud: true };
 
+    it.each([
+      ["test", "active", "ready", "available"],
+      ["production", "active", "ready", "unavailable"],
+      ["test", "revoked", "ready", "unavailable"],
+      ["test", "active", "unconfigured", "unavailable"],
+    ] as const)(
+      "reports Cloud capability for %s / %s / %s",
+      async (environment, state, service, expected) => {
+        const { status } = await primaryApp({
+          readCloudStatus: async () => ({
+            state: "complete",
+            environment,
+            code: "",
+            registration: {
+              installationId: "box",
+              venueId: "venue",
+              organisationId: "org",
+              legalBusinessId: "business",
+            },
+            installation: {
+              state,
+              revision: 1,
+              lastContactAt: null,
+              leaseExpiresAt: null,
+              services: [
+                {
+                  service: "retained_snapshots",
+                  state: service,
+                  health: "unknown",
+                  failure: null,
+                  observedAt: null,
+                },
+              ],
+            },
+          }),
+        });
+        expect(await status()).toMatchObject({ cloudBackups: expected });
+      },
+    );
+
+    it("reports Cloud unavailable when its state cannot be read, including after a local save", async () => {
+      const { post } = await primaryApp({
+        readCloudStatus: async () => {
+          throw new AppError("cloud.state_invalid", {});
+        },
+      });
+      const response = await post(
+        "/api/backup/apply",
+        applyBody({ kind: "local-fs", dir: makeDestDir() }),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ cloudBackups: "unavailable", enabled: true });
+    });
+
     it("refuses Cloud with a weekly schedule, naming the schedule", async () => {
       const { post } = await primaryApp({
         readCloudStatus: async () => ({ state: "complete", environment: "test", code: "" }),

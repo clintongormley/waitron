@@ -1951,6 +1951,8 @@ export interface BackupStatusView {
   /** Why the stored settings could not be used, which leaves archives off. */
   loadErrorCode: string | null;
   destinations: BackupDestinationView[];
+  cloud?: boolean;
+  cloudBackups?: "available" | "unavailable";
   schedule?: BackupSchedule;
   retention?: { count: number; days: number };
   keyFingerprint?: string;
@@ -2196,6 +2198,7 @@ export type BackupWriteAnswer = BackupStatusView & { reloadErrorCode?: string };
 
 export interface BackupApplyBody {
   destinations: ArchiveChoice[];
+  cloud?: boolean;
   /** Omitted when the box already holds a key: the server uses that one. */
   recoveryKey?: string;
   schedule: BackupSchedule;

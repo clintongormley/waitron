@@ -141,6 +141,18 @@ it("default configuration and generated-key output leave without warning", async
   expect(await leave(app)).toBe("proceeded");
   expect(unload()).toBe(false);
 });
+it("warns before leaving with a different Cloud choice and restores it on discard", async () => {
+  const { app, screen } = await mount({ ...on, cloudBackups: "available" });
+  await edit(screen);
+  const cloud = page.getByRole("switch", { name: "Waitron Cloud" });
+  await cloud.click();
+  expect(unload()).toBe(true);
+  const discarded = leave(app);
+  await choose(app, "discard");
+  expect(await discarded).toBe("proceeded");
+  await expect.element(cloud).not.toBeChecked();
+});
+
 it("stored settings switched off open filled in without warning, and a changed folder warns", async () => {
   const { app, screen } = await mount({ ...on, enabled: false, storedDisabled: true });
   await expect.poll(() => field(screen, "destination")?.value).toBe("/mnt/usb/waitron");
