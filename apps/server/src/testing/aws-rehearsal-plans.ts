@@ -6,7 +6,7 @@ type ScenarioApi = (typeof SCENARIO_APIS)[number];
 
 /**
  * The in-process servers' stream stores, the bucket probe and the restore. No `DeleteObjects`: pruning
- * deletes only generations older than `PRUNE_WINDOW_MS` (fourteen days), which a new bucket never holds.
+ * deletes only generations older than `PRUNE_WINDOW_MS` (seven days), which a new bucket never holds.
  */
 export const LOOP_APIS: readonly ScenarioApi[] = [
   "GetObject",

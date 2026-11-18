@@ -26,7 +26,7 @@ import type { StoredObject } from "./common.ts";
 
 const PROBE = "m3-restore-points";
 const PREFIX = "venues/v1/gen-1-box-a-20260923T000000Z";
-/** Seconds. Production: L1 30, L2 300, L3 3600, full copy 86400, kept 604800. */
+/** Seconds. Production: L1 30, L2 300, L3 3600, full copy 604800, kept 1206000. */
 const SCHEDULE = { l1: 2, l2: 10, l3: 30, snapshot: 60, retention: 180, l0Retention: 2 };
 const GLOBAL_LINES = [
   `snapshot:`,

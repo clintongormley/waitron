@@ -180,6 +180,10 @@ smaller. The spare box follows that same stream (`apps/server/src/spare-follow.t
 (`apps/server/src/handover-source-api.ts:263-268`); no measurement of a handover copy's size or
 time exists.
 
+**2026-11-18 update:** the bucket stream now takes one full copy a week (`interval: 168h`,
+`retention: 335h`); see
+[the decision](../../backlog/box.md#the-bucket-copy-takes-one-full-copy-a-week-2026-11-18).
+
 So after A1533 and the trim, each backup, each daily full copy and each handover copy would still
 carry somewhere between about 2.6 GB (if all 3.5 GB a year of bookkeeping turned out to be
 trimmable) and 6.1 GB a year of history, every time. The archive as designed below would carry only
@@ -546,8 +550,9 @@ measured:
   replays more of the changes recorded since the last full copy, which takes longer; how much longer
   is not measured.
 
-2026-11-18: the second route was taken and its restore measured — the bucket copy now takes one full
-copy a week; see [the plan](../plans/2026-11-18-weekly-full-copy.md).
+**2026-11-18 update:** the second route was taken and its restore measured — the bucket copy now
+takes one full copy a week; see
+[the decision](../../backlog/box.md#the-bucket-copy-takes-one-full-copy-a-week-2026-11-18).
 
 **Recommended:** land A1533 and the trim first, then measure the year's copies and choose between
 these two before considering the archive.

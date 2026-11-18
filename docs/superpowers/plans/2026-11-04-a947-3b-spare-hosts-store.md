@@ -1292,6 +1292,9 @@ request for this revision; none is claimed approved here.
    pause at 256 MiB of unsent changes (`packages/stream/src/supervisor.ts:172`, whose suites set
    `walLimitBytes`) and, after 15 minutes, `backup.stream_behind` (Task 6.1 keeps that rule). Task
    6.1's sale-delay case is dropped; a refused pipe still shows in the stream's status (focus 3).
+   **2026-11-18:** the store now takes one full copy a week (`interval: 168h`, `retention: 335h`);
+   how long it keeps them is in
+   [the decision](../../backlog/box.md#the-bucket-copy-takes-one-full-copy-a-week-2026-11-18).
 5. **A box whose certificate authority changes** (a connection repair, `box-tls-repair.ts`) while a
    spare is joined breaks the pair's trust. 3b does not build a repair for this; Task G.1 makes the
    refusal visible.

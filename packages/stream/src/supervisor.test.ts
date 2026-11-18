@@ -1791,10 +1791,10 @@ describe("generation housekeeping", () => {
 
   it("prunes an old generation from the streaming tick, at most once a day, and never the live one", async () => {
     const h = await streaming();
-    const old = generationName(1, "node-old", new Date(Date.parse(START) - 16 * DAY));
-    oldGeneration(h, old, Date.parse(START) - 15 * DAY);
-    // Fifteen days on, the live generation's own objects are as old as the window too.
-    h.clock.advance(15 * DAY);
+    const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+    oldGeneration(h, old, Date.parse(START) - 8 * DAY);
+    // Eight days on, the live generation's own objects are as old as the window too.
+    h.clock.advance(8 * DAY);
     await h.clock.next(); // the streaming tick
     await vi.waitFor(() => expect(h.store.has(fullCopyOf(old))).toBe(false));
     expect(h.store.has(fullCopyOf(h.generation))).toBe(true);
@@ -1821,16 +1821,20 @@ describe("generation housekeeping", () => {
     ["400 days fast", 400 * DAY],
     ["400 days slow", -400 * DAY],
   ])(
-    "ages old generations by the bucket's clock, so a box clock %s deletes only what the bucket dates over two weeks old",
+    "ages old generations by the bucket's clock, so a box clock %s deletes only what the bucket dates over a week old",
     async (_label, stepMs) => {
       const h = await streaming();
-      const old = generationName(1, "node-old", new Date(Date.parse(START) - 16 * DAY));
-      oldGeneration(h, old, Date.parse(START) - 15 * DAY);
-      const recent = generationName(1, "node-recent", new Date(Date.parse(START) - 13 * DAY));
-      oldGeneration(h, recent, Date.parse(START) - 12 * DAY);
+      // The bucket's time at the first prune, which the tick after the day's advance runs.
+      const sweepAt = h.clock.trueNow().getTime() + PRUNE_EVERY_MS;
+      const halfHour = 30 * 60_000;
+      const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+      oldGeneration(h, old, sweepAt - 7 * DAY - halfHour);
+      const recent = generationName(1, "node-recent", new Date(Date.parse(START) - 7 * DAY));
+      oldGeneration(h, recent, sweepAt - 7 * DAY + halfHour);
       h.clock.step(stepMs);
       h.clock.advance(PRUNE_EVERY_MS);
       await h.clock.next(); // the streaming tick
+      expect(h.clock.trueNow().getTime()).toBe(sweepAt);
       await vi.waitFor(() => expect(h.store.has(fullCopyOf(old))).toBe(false));
       expect(h.store.has(fullCopyOf(recent))).toBe(true);
       expect(h.store.has(fullCopyOf(h.generation))).toBe(true);
@@ -1931,8 +1935,8 @@ describe("generation housekeeping", () => {
     expect(h.listed.filter((prefix) => prefix === markerOf(first))).toHaveLength(1);
     h.store.upload(fullCopyOf(generation));
     await h.clock.until(() => h.supervisor.status().state === "streaming");
-    const old = generationName(1, "node-old", new Date(Date.parse(START) - 16 * DAY));
-    oldGeneration(h, old, Date.parse(START) - 15 * DAY);
+    const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+    oldGeneration(h, old, Date.parse(START) - 8 * DAY);
     await h.clock.next();
     await vi.waitFor(() => expect(laterMarkerReads).toBe(2));
     await new Promise((resolve) => setImmediate(resolve));
@@ -1953,8 +1957,8 @@ describe("generation housekeeping", () => {
     await h.clock.until(() => h.litestream.running() !== undefined);
     h.store.upload(fullCopyOf(h.supervisor.status().generation!));
     await h.clock.until(() => h.supervisor.status().state === "streaming");
-    const old = generationName(1, "node-old", new Date(Date.parse(START) - 16 * DAY));
-    oldGeneration(h, old, Date.parse(START) - 15 * DAY);
+    const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+    oldGeneration(h, old, Date.parse(START) - 8 * DAY);
     const recent = generationName(1, "node-recent", new Date(Date.parse(START) - 2 * DAY));
     oldGeneration(h, recent, Date.parse(START) - DAY);
     h.clock.advance(PRUNE_EVERY_MS);

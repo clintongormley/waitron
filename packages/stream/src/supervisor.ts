@@ -148,8 +148,8 @@ const VERSION_TIMEOUT_MS = 10_000;
 const STOP_WAIT_MS = 1_000;
 /** How often old generations are pruned, at most. */
 export const PRUNE_EVERY_MS = 24 * 60 * 60_000;
-/** A generation untouched for this long, and not the live one, is deleted: the two weeks of history. */
-export const PRUNE_WINDOW_MS = 336 * 60 * 60_000;
+/** A generation untouched for this long, and not the live one, is deleted. */
+export const PRUNE_WINDOW_MS = 168 * 60 * 60_000;
 /** Level 0's retention as the configuration sets it (`l0-retention: 5m`, `./litestream.ts`). */
 export const L0_RETENTION_MS = 5 * 60_000;
 /** How often, while streaming, the bucket's safe-write check is repeated. */
@@ -879,7 +879,7 @@ export class StreamSupervisor {
   }
 
   /**
-   * Deletes this venue's generations older than two weeks, never `live`, at most once a day. Litestream
+   * Deletes this venue's generations older than a week, never `live`, at most once a day. Litestream
    * tidies only the generation it writes. Ages are the bucket's own times measured against the
    * bucket's clock, so a step or a wrong setting of this box's clock deletes nothing early or late;
    * nothing is pruned while the bucket's clock cannot be read. Not awaited: a bucket that never

@@ -256,8 +256,9 @@ which Printers shows._
 | Browser storage | dashboard: remembered email, only when Remember is ticked; till: last operator's person id, unfinished refund drafts with their typed reason, the "make now" list with dish names and free-text notes; table views keep sort and filter choices for the tab | the venue's own devices | cookies are httpOnly; the device cookie lasts a year | r11 |
 | Paper | full invoice customer block; kitchen ticket allergy block; card slip | the venue's printers and bins | the venue's own handling | r12 |
 
-2026-11-18: the backup bucket row is superseded — the bucket copy now takes one full copy a week and
-keeps two weeks; see [the plan](../plans/2026-11-18-weekly-full-copy.md).
+_2026-11-18: the backup bucket row is superseded — the bucket copy now takes one full copy a week, and
+data can stay in it about four weeks (computed, not run); see
+[the decision](../../backlog/box.md#the-bucket-copy-takes-one-full-copy-a-week-2026-11-18)._
 
 - r1 `docs/developers/conventions-data.md:1412`; "a bucket you own" (`apps/dashboard/src/i18n/strings.ts:1787`); config at `packages/stream/src/litestream.ts:71-89`, history at `:79-80`; vault `packages/credentials/src/cipher.ts:3`; sealed secrets `apps/server/src/sealed-state.ts:24-30`; objects left at `apps/server/src/stream-api.ts:259`
 - r2 `apps/server/src/backup-config.ts:264-268`, defaults at `:42-43`; staging at `apps/server/src/backup-sweep.ts:159-162`

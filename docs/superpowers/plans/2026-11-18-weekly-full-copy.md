@@ -11,7 +11,8 @@ recommendation"), and the nightly window in which a slow line can fall behind (t
 the daily full copy does besides using the line") comes seven times less often. A restore still
 reaches the latest point; it downloads up to a week of change files on top of the full copy. The
 full copy is timed by Litestream from Go's zero time (`compaction_level.go:33-35` at v0.5.18), a
-Monday, so it lands at Monday 00:00 UTC: late Sunday night in Spain (computed, not run).
+Monday, so it lands at Monday 00:00 UTC, which is 01:00 or 02:00 on Monday in mainland Spain
+(computed, not run).
 
 **Authority.** Owner, 2026-11-17 23:18 (picker, "Full copy"): "Weekly, two weeks kept
 (Recommended)", replacing the 23 September decision "One full copy a day, and a 7-day history
@@ -124,7 +125,7 @@ after the week).
 
 On the throttled lines each restore took within 22 seconds of its plan's bytes divided by the line's
 rate (for the week at 20 Mbit/s, 1,464.4 s computed against 1,471.8 s measured), so on this machine
-the download decided the time and merging 88 files instead of 15 added almost nothing.
+the download decided the time.
 
 **Where the run differed from the plan above.**
 
@@ -141,7 +142,7 @@ the download decided the time and merging 88 files instead of 15 added almost no
 - A box's processor and disk. The restores ran on the bench server (32 cores, shared with other
   virtual machines). The unthrottled figures are the whole cost of merging there, 21 s for the week;
   a box would take longer by an amount not measured.
-- A restore while the venue trades: nothing else used the machine or the line during a restore.
+- A restore while the venue trades.
 - A real line: the proxy shares one download rate between all connections and adds no delay or
   loss.
 - A week at real speed: time was compressed by 12, as planned.
@@ -154,9 +155,10 @@ Lands only if step 1 passes. Otherwise the figures go to the watcher before anyt
   "One full copy a day and a week of history" becomes the weekly words. Retention must exceed the
   interval: with both at 168 h Litestream deletes the previous full copy as soon as the next lands
   (`db.go:3096-3108`, `store.go:617-620` at v0.5.18: retention is applied just after a new full copy
-  and keeps at least one). 335 h, not 336 h, so the copy from two weeks before is always gone when the
-  third lands, whatever the uploads took; the bucket then holds two full copies and reaches back
-  between one and two weeks. (Exactly 336 h leaves it to the upload times whether a third copy stays.)
+  and keeps at least one). 335 h, not 336 h, leaves an hour's margin for the copy from two weeks
+  before to be past retention when a new one lands. (Exactly 336 h leaves it to the upload times
+  whether a third copy stays.) How many copies the bucket then holds is under "What the review's run
+  of Litestream showed" below.
 - The week of history is written in two more places, which move with it so the bucket copy has one
   window: `packages/stream/src/supervisor.ts:151-152` (`PRUNE_WINDOW_MS`, an old generation deleted
   after a week untouched) and `apps/server/src/backup-recovery-pack-status.ts:6` (`BUCKET_COPY_KEEP`,
@@ -164,6 +166,8 @@ Lands only if step 1 passes. Otherwise the figures go to the watcher before anyt
   generation, `stream-host.ts:509`). Both become two weeks (336 h; generations are not timed by
   Litestream's boundaries). Trace every consumer of each before changing it (`.test.ts:381` pins
   the second), and if either has its own reason for a week, keep it and say why in the PR.
+  **2026-11-18, at review:** both stay at a week; the reasons are under "What the review's run of
+  Litestream showed" below.
 - Test first: `packages/stream/src/litestream.test.ts:53-54` pins the two lines; change them to the
   new values and watch them fail before the source changes (a check the owner's decision changes,
   listed under "Changed test checks" in the PR).
@@ -173,8 +177,8 @@ Lands only if step 1 passes. Otherwise the figures go to the watcher before anyt
   (`docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md:542`); the changed
   decision, with the owner's words and step 1's figures, in `docs/backlog/box.md` → Decisions and
   deliberate limits. The privacy guide says "the bucket copy keeps a week of history"
-  (`apps/server/src/guide/en/data-protection.md:397`, `es/data-protection.md:432`): it becomes two
-  weeks, in both. Dated pointers, not rewrites, in
+  (`apps/server/src/guide/en/data-protection.md:397`, `es/data-protection.md:432`): it becomes the
+  period worked out under "What the review's run of Litestream showed" below, in both. Dated pointers, not rewrites, in
   `docs/superpowers/specs/2026-10-22-a980-data-protection-design.md:246` and
   `docs/compliance/research/2026-11-06-adviser-privacy.md:190`. Then grep `apps/server/src/guide/`,
   the dashboard's Backups strings (EN and ES), `packages/stream`, `apps/server/src` and `docs/` for
@@ -183,6 +187,42 @@ Lands only if step 1 passes. Otherwise the figures go to the watcher before anyt
   catch-up from scratch also reads up to a week of change files; say so in the box.md decision.
 - Checks: `pnpm --filter @waitron/stream exec vitest run src/litestream.test.ts`; the stream
   loop/pause suites run in CI (they need the Litestream and versitygw binaries).
+
+### What the review's run of Litestream showed (2026-11-18)
+
+The run-it review of this change ran the pinned Litestream 0.5.18 against versitygw 1.8.0 on a
+compressed schedule: 16.8 s for the week, 33.5 s kept, six full copies, with a control keeping
+16.8 s. The real values were not run. Its two reports are kept beside the measurement's record, in
+lane B's campaign folder (`receipts/weekly-full-copy-20261118/`).
+
+- The bucket held 1, 2, 3, 2, 2 and 2 full copies after each of the six; the control held 1, 2, 1,
+  1, 1 and 1. A generation's first copy is made when it opens, not on the boundary, so in the run it
+  was not yet past retention at the third copy and went at the fourth. From a generation's fourth
+  full copy (its third Monday one) it holds two full copies, the older one to two weeks old; before
+  that, up to three copies, the oldest up to three weeks old.
+- Litestream also applies retention when it starts: restarted after its retention had passed, it
+  deleted the older of two full copies without taking a new one.
+- At the end of each run, and after the restart, a restore to the latest point returned every row
+  (290 of 290, `quick_check` ok).
+- Run while finishing the branch: `litestream databases -config` refuses `retention: 14d`
+  (`cannot unmarshal !!str 14d into time.Duration`) and accepts `335h` and `1206000s`.
+- Computed, not run: each start of the box opens a new generation
+  (`packages/stream/src/supervisor.ts`, `#open`), and the one it leaves is deleted by the first
+  daily sweep more than 168 h after its last upload (`PRUNE_WINDOW_MS`). Litestream keeps change
+  files back to the last full copy it deleted (`db.go:3110-3120`), so a generation holds up to three
+  weeks of data. Data can therefore stay in the bucket about four weeks: up to three in a
+  generation, then 7 to 8 days, when every Monday's copy and clean-up succeed; a missed one is not
+  tried again until the next Monday and adds a week (`store.go:598-646`, read).
+
+**The two other windows stay at a week.** Step 2 moved `PRUNE_WINDOW_MS` and `BUCKET_COPY_KEEP` to
+two weeks unless either had its own reason for a week. Two were found while finishing the branch,
+by the reviewers who asked whether the two changes should exist; the first run-it report had found
+none. At two weeks, data
+would stay in the bucket about five weeks, past the 30 days adviser question P4 proposes
+(`docs/compliance/2026-11-06-adviser-questions.md`). And in the Backups screen's starting setup
+(the newest 7, daily) the bucket's two weeks, not the archives' eight days, would set the date
+beside "Keep pack", which that sentence explains by the archives. Neither window changes how far
+back a restore can reach in the generation the box is writing. Both are as they were.
 
 ## Not in this item
 

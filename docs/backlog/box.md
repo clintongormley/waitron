@@ -1360,36 +1360,37 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 The owner chose to fix correction validation and keep event-time pairing. See the
 [workforce decision](workforce.md#a1268-corrections-after-a-backward-clock-step).
 
-### The bucket copy takes one full copy a week and keeps two weeks (2026-11-18)
+### The bucket copy takes one full copy a week (2026-11-18)
 
 Owner, 17 November 2026, 23:18 (picker, "Full copy"): "Weekly, two weeks kept (Recommended)". It
 replaces the 23 September 2026 decision "One full copy a day, and a 7-day history window". The box
 uploads its whole database to the bucket once a week (Litestream times it at Monday 00:00 UTC,
-computed from its source, not run) and uploads each change once in between. The bucket holds two
-full copies and reaches back between one and two weeks (`packages/stream/src/litestream.ts`,
-`interval: 168h`, `retention: 335h`; how Litestream 0.5.18 applies them is read from its source,
-not run for these values). Two other windows move with it to two weeks: an older
-generation is deleted after two weeks untouched (`PRUNE_WINDOW_MS`,
-`packages/stream/src/supervisor.ts`), and a recovery pack under an older key is listed as worth
-keeping for at least two weeks after the key changed (`BUCKET_COPY_KEEP`,
-`apps/server/src/backup-recovery-pack-status.ts`).
+computed from its source, not run) and keeps sending changes in between
+(`packages/stream/src/litestream.ts`, `interval: 168h`, `retention: 335h`). From a generation's
+fourth full copy (its third Monday one) it holds two full copies, the older one to two weeks old.
+Before that it also holds the copy made when it opened: up to three copies, the oldest up to three
+weeks old. The run-it review of this change saw those counts on a compressed run of Litestream
+0.5.18, not at the real values.
 
-The cost is a longer restore from the bucket: it downloads up to a week of change files on top of
+Two other windows stay at a week: a generation the box has left is deleted after a week untouched
+(`PRUNE_WINDOW_MS`, `packages/stream/src/supervisor.ts`), and a recovery pack under an older key
+is listed as worth keeping for at least a week after the key changed (`BUCKET_COPY_KEEP`,
+`apps/server/src/backup-recovery-pack-status.ts`). The plan moved both to two weeks. The review
+found nothing in the owner's answer that asks for it, and with them data would stay in the bucket
+about five weeks, past the 30 days
+[adviser question P4](../compliance/2026-11-06-adviser-questions.md) proposes. As built it can
+stay about four weeks (28 to 29 days, a day or two inside P4's 30; one missed Monday pass goes past
+it): up to three in a generation, then 7 to 8 days once the box leaves it (computed, not run).
+
+One cost is a longer restore from the bucket: it downloads up to a week of change files on top of
 the full copy, where it used to download up to a day. Measured once on the bench server on
-18 November 2026, on a year-old venue's database of 3.3 GB (print payloads older than seven days
-emptied) trading 250 bills a day, time compressed by 12:
-
-| Line        | Full copy + one day | Full copy + a week |
-| ----------- | ------------------- | ------------------ |
-| unthrottled | 17 s                | 21 s               |
-| 20 Mbit/s   | 15.8 min            | 24.5 min           |
-| 5 Mbit/s    | not run             | 98 min             |
-
-The week's restore downloaded 3.66 GB in 88 files against 2.35 GB in 15, and on the throttled lines
-the download decided the time. Not measured: a box's own processor and disk (the restores ran on
-the bench server), a restore while the venue trades, a real line, and a bucket that encrypts with
-the venue's key. The figures, the method and where the run differed from its plan are in
+18 November 2026, on a year-old venue's 3.3 GB database, the full copy plus a week took 24.5
+minutes at 20 Mbit/s, against 15.8 for the full copy plus one day, and 98 minutes at 5 Mbit/s. The
+figures, the method, where the run differed from its plan, what it does not show and the review's
+run are in
 [the plan](../superpowers/plans/2026-11-18-weekly-full-copy.md#step-1-results-run-2026-11-18-0151-to-1120-cet).
+Lane M's report names another cost: a damaged change file blocks restoring past it for up to a
+week, not a day, and the scheduled backup is the fallback.
 
 A spare follows with the same settings (`packages/stream/src/follow.ts`), so a spare catching up
 from scratch also reads up to a week of change files.
