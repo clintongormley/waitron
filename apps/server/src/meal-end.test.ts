@@ -37,6 +37,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { printOrderForTest } from "./testing/issue-order.js";
+import { addFixtureExtra } from "./testing/portion-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { markServed } from "./working-order.js";
@@ -418,6 +419,24 @@ describe("Print the bill", () => {
       params: {
         workingOrderId: party.tabId,
         dishes: [{ lineId: tarta!.id, dishName: "Tarta", quantity: "1.000", released: true }],
+      },
+    });
+  });
+
+  it("warns of an unserved dish with an extra by the dish alone", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    const [wine] = await linesOf(party.tabId);
+    await inTx(venue, (tx) =>
+      addFixtureExtra(tx, venue.cfg, party.tabId, wine!.id, venue.offerFor("Tarta")),
+    );
+
+    await refused(end(party), party.tabId, {
+      code: "meal_end.unserved_dishes",
+      params: {
+        workingOrderId: party.tabId,
+        dishes: [
+          { lineId: wine!.id, dishName: "Red wine bottle", quantity: "1.000", released: true },
+        ],
       },
     });
   });
