@@ -9,7 +9,8 @@ import type { AllergyCommand, AllergyPatch } from "@waitron/module";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { readBillEditState } from "./bill-editing.js";
 import { fireGroup, fireHeldLine } from "./order-groups.js";
-import { addTabRound, fireLines, fireOrderLines, sendLines } from "./working-order.js";
+import { fireLines, fireOrderLines, sendLines } from "./working-order.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import {

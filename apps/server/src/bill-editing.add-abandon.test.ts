@@ -14,7 +14,8 @@ import {
 } from "./order-drafts.js";
 import { createPartyBill, partyRevisionOfOrder } from "./parties.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { addTabRound, abandonHeldOrder, parkOrder } from "./working-order.js";
+import { abandonHeldOrder, parkOrder } from "./working-order.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { inTx, provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 let venue: BillVenue;

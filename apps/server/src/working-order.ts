@@ -3010,46 +3010,6 @@ export type TabRoundLine = {
 } & LineExtras &
   RetainedCourseLine;
 
-/**
- * APPEND a priced round to an OPEN tab, locking each new line's gross unit price at add time, WITHOUT
- * deleting or re-pricing existing lines: a tab does not re-price.
- */
-export async function addTabRound(
-  tx: Transaction,
-  cfg: TradingContext,
-  tabId: string,
-  lines: TabRoundLine[],
-  stamp: { groupId?: string; creditedTo?: string } & OrderEditAuthority,
-): Promise<void> {
-  await assertPartyBillOpen(tx, tabId);
-  await requireOrderBillEditor(tx, tabId, stamp);
-  const round = await priceTabRound(tx, cfg, tabId, lines, "checked");
-  const appendedLines = await insertTabRound(
-    tx,
-    cfg,
-    round,
-    round.rows.map((row) => ({
-      ...row,
-      groupId: stamp.groupId ?? null,
-      creditedTo: stamp.creditedTo ?? null,
-    })),
-  );
-  // The k-th parent row by `line_no` is input line k. Correlated on `line_no`, not on the
-  // `RETURNING` array position, so the mapping does not depend on the insert's row order.
-  const requestByParentId = new Map<string, TabRoundLine | undefined>();
-  appendedLines
-    .filter((row) => row.parentLineId === null)
-    .sort((a, b) => a.lineNo - b.lineNo)
-    .forEach((row, k) => requestByParentId.set(row.id, lines[k]));
-  const withHold = appendedLines.map((row) => ({
-    ...row,
-    hold: requestByParentId.get(row.id)?.hold === true,
-    release: requestByParentId.get(row.id)?.release === true,
-  }));
-  await fireLines(tx, cfg, tabId, withHold);
-  await bumpRevision(tx, [tabId]);
-}
-
 /** A round priced for an open tab and numbered after its last line, not yet written. */
 export interface PricedTabRound {
   /** The bill the round goes on. */

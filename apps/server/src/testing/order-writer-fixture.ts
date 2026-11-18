@@ -2,7 +2,13 @@ import { ensureOperator } from "./cancel-line.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { eq, sql } from "drizzle-orm";
 import { withTransaction, workingOrders, type Transaction, type Database } from "@waitron/db";
-import { readBillEditState } from "../bill-editing.js";
+import {
+  readBillEditState,
+  requireOrderBillEditor,
+  type OrderEditAuthority,
+} from "../bill-editing.js";
+import { pricePortionRound } from "./portion-bill.js";
+import type { TradingContext } from "../trading-context.js";
 import {
   sendLines as send,
   setLineCourse as course,
@@ -12,7 +18,11 @@ import {
   setOrderReceiptLanguage as language,
   setOrderInvoiceChoice as invoice,
   placeOrder as place,
-  addTabRound as add,
+  assertPartyBillOpen,
+  bumpRevision,
+  fireLines,
+  insertTabRound,
+  type TabRoundLine,
   abandonHeldOrder as abandon,
 } from "../working-order.js";
 import type { OrderAttendance, UpdateHeldOrderRequest } from "../working-order.js";
@@ -162,14 +172,53 @@ export async function placeOrder(
   return place(deps, cfg, id, operatorId, observed.expectedEdit);
 }
 
+/**
+ * A round appended to an open party bill as the product's add writes it: priced once, one row per
+ * dish, fired with each request line's `hold` and `release`. A `stamp` carrying `expectedEdit` is
+ * the editing authority as given; otherwise the bill's current one is observed.
+ */
 export async function addTabRound(
   tx: Transaction,
-  cfg: Parameters<typeof add>[1],
+  cfg: TradingContext,
   id: string,
-  lines: Parameters<typeof add>[3],
-  stamp: { groupId?: string; creditedTo?: string } = {},
+  lines: TabRoundLine[],
+  stamp: { groupId?: string; creditedTo?: string } & Partial<OrderEditAuthority> = {},
 ) {
-  return add(tx, cfg, id, lines, { ...stamp, ...(await authority(tx, id, stamp.creditedTo)) });
+  await assertPartyBillOpen(tx, id);
+  await requireOrderBillEditor(
+    tx,
+    id,
+    "expectedEdit" in stamp
+      ? { operatorId: stamp.operatorId, expectedEdit: stamp.expectedEdit ?? null }
+      : await authority(tx, id, stamp.creditedTo),
+  );
+  const { round, requestOfRow } = await pricePortionRound(tx, cfg, id, lines);
+  const inserted = await insertTabRound(
+    tx,
+    cfg,
+    round,
+    round.rows.map((row) => ({
+      ...row,
+      groupId: stamp.groupId ?? null,
+      creditedTo: stamp.creditedTo ?? null,
+    })),
+  );
+  const requestOfDish = new Map(
+    round.rows.flatMap((row, i) =>
+      row.parentLineId == null ? [[row.id!, lines[requestOfRow[i]!]] as const] : [],
+    ),
+  );
+  await fireLines(
+    tx,
+    cfg,
+    id,
+    inserted.map((row) => ({
+      ...row,
+      hold: requestOfDish.get(row.id)?.hold === true,
+      release: requestOfDish.get(row.id)?.release === true,
+    })),
+  );
+  await bumpRevision(tx, [id]);
 }
 
 export async function abandonHeldOrder(
