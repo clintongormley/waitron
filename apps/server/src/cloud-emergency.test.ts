@@ -2,7 +2,13 @@ import { createPrivateKey, createPublicKey, verify } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { fetchEmergencyDisplay, readEmergencyDisplay } from "./cloud-emergency.js";
+import {
+  fetchEmergencyDisplay,
+  readEmergencyCopyStatus,
+  readEmergencyDisplay,
+} from "./cloud-emergency.js";
+import { lockedCopyStatusReply } from "./testing/cloud-locked-fixture.js";
+import { bindingFor } from "./testing/emergency-copy-source.js";
 import { billingEnvelope } from "./cloud-billing.js";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { emergencyReply } from "../test/cloud-emergency-fixture.js";
@@ -261,4 +267,60 @@ it("bounds the whole body read and refuses redirects", async () => {
   } finally {
     await f.close();
   }
+});
+
+const copy = bindingFor("a".repeat(64));
+const asOf = "2026-11-17T10:10:00.000Z";
+const copyStatus = lockedCopyStatusReply(copy, asOf);
+
+it.each([
+  [null, null],
+  ["2026-11-17T10:07:59.999Z", null],
+  ["2026-11-17T10:08:00.000Z", "source_recent"],
+  [asOf, "source_recent"],
+])("interprets source contact %s as %s", (sourceLastHeardAt, reason) => {
+  expect(readEmergencyCopyStatus({ ...copyStatus, sourceLastHeardAt }, copy)).toEqual({
+    sourceLastHeardAt,
+    reason,
+  });
+});
+
+it("reports a known closure even if the source was recently heard from", () => {
+  expect(
+    readEmergencyCopyStatus(
+      {
+        ...copyStatus,
+        eligibility: { status: "ready", open: false, closedReason: "no_payment_method" },
+        sourceLastHeardAt: asOf,
+      },
+      copy,
+    ),
+  ).toEqual({ sourceLastHeardAt: asOf, reason: "no_payment_method" });
+});
+
+it("reports an unavailable eligibility check without losing the source contact", () => {
+  expect(
+    readEmergencyCopyStatus(
+      {
+        ...copyStatus,
+        eligibility: { status: "unavailable", reason: "state_not_ready" },
+        sourceLastHeardAt: asOf,
+      },
+      copy,
+    ),
+  ).toEqual({ sourceLastHeardAt: asOf, reason: "state_not_ready" });
+});
+
+it.each([
+  { copyOperationId: "other-copy" },
+  { sourceInstallationId: "other-source" },
+  { environment: "production" },
+  { expiresAt: "2026-11-17T10:31:00.000Z" },
+  { unexpected: true },
+  { eligibility: { status: "ready", open: true, closedReason: "setting_off" } },
+  { sourceLastHeardAt: "2026-11-17T10:10:00.001Z" },
+])("refuses an invalid status reply %j", (patch) => {
+  expect(() => readEmergencyCopyStatus({ ...copyStatus, ...patch }, copy)).toThrowError(
+    expect.objectContaining({ code: "cloud.unavailable" }),
+  );
 });

@@ -1040,6 +1040,12 @@ Build the separate emergency page with `pnpm --filter @waitron/setup build:emerg
 starting the locked entry. Its default directory is `apps/setup/emergency/dist`; set
 `emergencyAppDir` in the launch object to use a packaged copy. The ordinary setup build is separate.
 Open the copy's HTTPS origin to sign in with your password and authenticator or recovery code.
-After sign-in, you see your name and the copy's latest stop time. The page offers no activation yet.
+After sign-in, you see your name, the copy's latest stop time, Cloud's last known contact with
+the old box and any reason Cloud would refuse to start the venue. **Check again** retries an
+unavailable status. The page offers no activation yet.
+
+GET `/locked-api/status` requires the same locked session and checks the current copy against
+Cloud's signed `emergency-copy-status` exchange. The HTTPS listener test uses a local Cloud
+stand-in. A real venue needs Cloud P6's launcher and copy status endpoint.
 Its owner-account link comes from `/locked-api/context`, using the server's configured Cloud origin.
 The page uses the server's remaining session time, so a fast device clock does not end sign-in early.

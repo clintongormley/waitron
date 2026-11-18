@@ -343,4 +343,4 @@ En **Copias de seguridad**, elige **Hacer paquete de recuperación** en el servi
 
 Elige **Imprimir paquete de recuperación** en la tarjeta de Cloud para abrir el formulario en **Copias de seguridad**. El estado muestra cuándo se emitió el código impreso. Si ha cambiado, haz un paquete nuevo antes de necesitarlo. Si no se pudo comprobar, vuelve a intentarlo más tarde; eso por sí solo no significa que necesites otro paquete.
 
-En la copia bloqueada, entra con tu correo de Waitron, contraseña y código del autenticador, o elige **Usar un código de recuperación**. Comprueba tu nombre y la hora de cierre de la copia al entrar. Esta página aún no ofrece la declaración ni inicia el local.
+En la copia bloqueada, entra con tu correo de Waitron, contraseña y código del autenticador, o elige **Usar un código de recuperación**. Al entrar, comprueba tu nombre, la hora de cierre de la copia y cuándo fue el último contacto de Cloud con el servidor anterior. Si el estado de Cloud no está disponible, elige **Volver a comprobar**. Esta página aún no ofrece la declaración ni inicia el local.

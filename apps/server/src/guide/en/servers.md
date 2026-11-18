@@ -311,4 +311,4 @@ From **Backups**, choose **Make recovery pack** on the main box while Cloud is a
 
 Choose **Print recovery pack** on the Cloud card to open the maker on **Backups**. Its status shows the printed code’s issue date. If the code changed, make a new pack before you need it. If the code could not be checked, try again later; this alone does not mean you need another pack.
 
-On the locked copy, sign in with your Waitron email, password and authenticator code, or choose **Use a recovery code**. Check your name and the copy’s stop time after signing in. This page does not yet offer the declaration or start the venue.
+On the locked copy, sign in with your Waitron email, password and authenticator code, or choose **Use a recovery code**. After signing in, check your name, the copy’s stop time and when Cloud last heard from the old box. If Cloud status is unavailable, choose **Check again**. This page does not yet offer the declaration or start the venue.

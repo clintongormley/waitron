@@ -475,6 +475,13 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
     expect((await request("GET")).body).toMatchObject({
       error: { code: "management_session.required" },
     });
+    const statusUrl = origin + "/locked-api/status";
+    const signedOut = await fetch(statusUrl);
+    expect(signedOut.status).toBe(401);
+    expect(await signedOut.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    expect(f.requests.map((proof) => proof[2])).toEqual(["renew"]);
     const input = {
       email: " COPY@example.test ",
       password: "correct horse",
@@ -502,6 +509,29 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
       copyExpiresAt: deps.binding.expiresAt,
     });
     expect((await request("GET", undefined, cookie)).body).toEqual(signed.body);
+    const foreign = await fetch(statusUrl, {
+      headers: { cookie, origin: "https://foreign.example" },
+    });
+    expect(foreign.status).toBe(403);
+    await foreign.json();
+    expect(f.requests.map((proof) => proof[2])).toEqual(["renew"]);
+    const status = await fetch(statusUrl, { headers: { cookie } });
+    expect(status.status).toBe(200);
+    expect(status.headers.get("cache-control")).toBe("no-store");
+    expect(await status.json()).toEqual({ sourceLastHeardAt: null, reason: null });
+    const [, proof] = f.requests;
+    expect(proof).toEqual([
+      "waitron-cloud-machine-v1",
+      f.state.origin,
+      "emergency-copy-status",
+      deps.binding.installationId,
+      expect.any(String),
+      deps.now().getTime(),
+      JSON.stringify(f.state.lifecycle!.lease),
+      JSON.stringify({ version: 1, copyOperationId: deps.binding.copyOperationId }),
+    ]);
+    expect(proof![4]).not.toBe(deps.binding.copyOperationId);
+    expect(f.proofs).toEqual([true, true]);
     vi.setSystemTime(new Date("2026-11-17T10:15:00.000Z"));
     expect((await request("GET", undefined, cookie)).body.remainingMs).toBe(300000);
     vi.setSystemTime(new Date("2026-11-17T10:20:00.000Z"));

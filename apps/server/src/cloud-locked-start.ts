@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { serve, type ServerType } from "@hono/node-server";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import {
   checkLockedCopyLogin,
@@ -19,6 +19,7 @@ import { NODE_FILE, openBackupQuery, VENUE_FILE } from "@waitron/store";
 import { AppError, isAppError } from "@waitron/shared";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import type { CloudInstallationCredentials } from "./cloud-client.js";
+import { fetchEmergencyCopyStatus } from "./cloud-emergency.js";
 import {
   hasLiveLease,
   installationClient,
@@ -198,16 +199,31 @@ export async function startLockedCopy(
         "authorization.not_permitted": 403,
         "management_session.required": 401,
         "management_session.expired": 401,
+        "cloud.unavailable": 503,
       },
       "cloud-locked.session_failed",
     );
     const cookieName = "__Host-waitron-locked";
+    function requireCopyPage(c: Context) {
+      requireNodeOperationHttps(c);
+      if (new URL(c.req.url).origin !== deps.origin)
+        throw new AppError("node.operation_page_required", {});
+      assertEmergencyCopyBindingUnexpired(deps.binding, new Date());
+    }
+    function requireSession(c: Context) {
+      const token = getCookie(c, cookieName);
+      if (!token) throw new AppError("management_session.required", {});
+      const hash = hashSessionToken(token);
+      const session = sessions.get(hash);
+      if (!session || Date.parse(session.expiresAt) <= Date.now()) {
+        sessions.delete(hash);
+        throw new AppError("management_session.expired", {});
+      }
+      return { hash, session };
+    }
     app.all("/locked-api/session", (c) =>
       boundary(c, deps.log, async () => {
-        requireNodeOperationHttps(c);
-        if (new URL(c.req.url).origin !== deps.origin)
-          throw new AppError("node.operation_page_required", {});
-        assertEmergencyCopyBindingUnexpired(deps.binding, new Date());
+        requireCopyPage(c);
         c.header("Cache-Control", "no-store");
         if (c.req.method === "POST") {
           const body = await readRawJsonBody<Record<string, unknown>>(c);
@@ -271,14 +287,7 @@ export async function startLockedCopy(
             finishAttempt(outcome);
           }
         }
-        const token = getCookie(c, cookieName);
-        if (!token) throw new AppError("management_session.required", {});
-        const hash = hashSessionToken(token);
-        const session = sessions.get(hash);
-        if (!session || Date.parse(session.expiresAt) <= Date.now()) {
-          sessions.delete(hash);
-          throw new AppError("management_session.expired", {});
-        }
+        const { hash, session } = requireSession(c);
         if (c.req.method === "GET")
           return c.json({
             ...session,
@@ -290,6 +299,18 @@ export async function startLockedCopy(
           return c.json({ ok: true });
         }
         return c.notFound();
+      }),
+    );
+    app.get("/locked-api/status", (c) =>
+      boundary(c, deps.log, async () => {
+        c.header("Cache-Control", "no-store");
+        requireCopyPage(c);
+        requireSession(c);
+        const signal = AbortSignal.any([abort.signal, c.req.raw.signal]);
+        const status = await fetchEmergencyCopyStatus(deps.cloud, deps.binding, signal);
+        assertEmergencyCopyBindingUnexpired(deps.binding, new Date());
+        requireSession(c);
+        return c.json(status);
       }),
     );
     let membership: SignedMembershipDocument | null = null;

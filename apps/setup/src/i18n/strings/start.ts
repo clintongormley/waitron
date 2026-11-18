@@ -30,6 +30,17 @@ export const startEn = {
   "emergency.required": "Enter this value.",
   "emergency.loading": "Reading this copy…",
   "emergency.retry": "Try again",
+  "emergency.source_contact": "Cloud last heard from the old box at",
+  "emergency.source_contact_unknown": "Cloud does not know when it last heard from the old box.",
+  "emergency.status_unavailable": "Cloud status is unavailable.",
+  "emergency.status_source_recent": "Cloud heard from the old box in the last two minutes.",
+  "emergency.status_setting_off": "Emergency hosting is switched off in Cloud.",
+  "emergency.status_level_inactive": "The Connected plan is inactive.",
+  "emergency.status_no_payment_method": "A payment method is missing in Cloud.",
+  "emergency.status_not_provisioned": "Cloud cannot start this venue yet.",
+  "emergency.status_state_not_ready":
+    "Cloud could not check whether emergency hosting is available.",
+  "emergency.check_status": "Check again",
 
   "connection.heading": "Is this page secure?",
   "connection.check_address_bar": "Look at your browser's address bar. If it says",
@@ -186,6 +197,18 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "emergency.required": "Introduce este valor.",
   "emergency.loading": "Leyendo esta copia…",
   "emergency.retry": "Volver a intentar",
+  "emergency.source_contact": "Último contacto de Cloud con el servidor anterior:",
+  "emergency.source_contact_unknown": "Se desconoce el último contacto con el servidor anterior.",
+  "emergency.status_unavailable": "No se pudo consultar el estado en Cloud.",
+  "emergency.status_source_recent":
+    "Cloud recibió noticias del servidor anterior en los últimos dos minutos.",
+  "emergency.status_setting_off": "El alojamiento de emergencia está desactivado en Cloud.",
+  "emergency.status_level_inactive": "El plan Conectado no está activo.",
+  "emergency.status_no_payment_method": "Falta un método de pago en Cloud.",
+  "emergency.status_not_provisioned": "Cloud aún no puede iniciar este local.",
+  "emergency.status_state_not_ready":
+    "Cloud no pudo comprobar si el alojamiento de emergencia está disponible.",
+  "emergency.check_status": "Volver a comprobar",
 
   "connection.heading": "¿Es segura esta página?",
   "connection.check_address_bar": "Mira la barra de direcciones de tu navegador. Si pone",

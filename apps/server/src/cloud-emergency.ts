@@ -8,9 +8,20 @@ import {
   unavailable,
   type BillingPrices,
 } from "./cloud-billing.js";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
+import type { EmergencyCopyBinding } from "./emergency-copy-binding.js";
 import type { OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
+
+const closureReasons = [
+  "setting_off",
+  "level_inactive",
+  "no_payment_method",
+  "not_provisioned",
+] as const;
+type ClosureReason = (typeof closureReasons)[number];
+const isClosureReason = (value: unknown): value is ClosureReason =>
+  closureReasons.some((reason) => reason === value);
 
 export interface EmergencyCode {
   version: 1;
@@ -79,13 +90,8 @@ export function fetchEmergencyCode(
       refusal: (status, value, retryAfter) => {
         if (status === 403 && object(value) && value.error === "emergency_hosting_closed") {
           exactKeys(value, ["error", "reason"]);
-          if (
-            !["setting_off", "level_inactive", "no_payment_method", "not_provisioned"].includes(
-              value.reason as string,
-            )
-          )
-            unavailable();
-          return new AppError("cloud.emergency_hosting_closed", { reason: value.reason as string });
+          if (!isClosureReason(value.reason)) unavailable();
+          return new AppError("cloud.emergency_hosting_closed", { reason: value.reason });
         }
         const seconds =
           retryAfter !== null && /^[1-9]\d*$/.test(retryAfter) ? Number(retryAfter) : NaN;
@@ -110,8 +116,7 @@ export type EmergencyFacts =
   | {
       status: "ready";
       open: boolean;
-      closedReason:
-        null | "setting_off" | "level_inactive" | "no_payment_method" | "not_provisioned";
+      closedReason: null | ClosureReason;
       address: string | null;
       codeIssuedAt: string | null;
     }
@@ -187,9 +192,7 @@ export function readEmergencyDisplay(
       typeof e.open !== "boolean" ||
       (e.open
         ? e.closedReason !== null || e.address === null || e.codeIssuedAt === null
-        : !["setting_off", "level_inactive", "no_payment_method", "not_provisioned"].includes(
-            e.closedReason as string,
-          )) ||
+        : !isClosureReason(e.closedReason)) ||
       (e.address !== null &&
         !validEmergencyAddress(e.address, expected.cloudOrigin, expected.staffOrigin)) ||
       (e.codeIssuedAt !== null && (!instant(e.codeIssuedAt) || e.codeIssuedAt > value.asOf))
@@ -221,5 +224,73 @@ export function fetchEmergencyDisplay(
         exchange,
       ),
     options,
+  );
+}
+
+interface EmergencyCopyStatus {
+  sourceLastHeardAt: string | null;
+  reason: ClosureReason | "state_not_ready" | "source_recent" | null;
+}
+
+export function readEmergencyCopyStatus(
+  value: unknown,
+  binding: EmergencyCopyBinding,
+  exchange?: { sentAt: number; receivedAt: number },
+): EmergencyCopyStatus {
+  const boundKeys = [
+    "installationId",
+    "venueId",
+    "environment",
+    "sourceInstallationId",
+    "sourceNodeId",
+    "copyNodeId",
+    "copyOperationId",
+    "startedAt",
+    "expiresAt",
+  ] as const;
+  exactKeys(value, [...boundKeys, "version", "asOf", "eligibility", "sourceLastHeardAt"]);
+  const { asOf, eligibility, sourceLastHeardAt } = value;
+  if (
+    value.version !== 1 ||
+    boundKeys.some((key) => value[key] !== binding[key]) ||
+    !instant(asOf) ||
+    (sourceLastHeardAt !== null && !instant(sourceLastHeardAt))
+  )
+    unavailable();
+  const checkedAt = Date.parse(asOf);
+  if (
+    checkedAt < Date.parse(binding.startedAt) ||
+    checkedAt >= Date.parse(binding.expiresAt) ||
+    (exchange && (checkedAt < exchange.sentAt - 60000 || checkedAt > exchange.receivedAt + 60000))
+  )
+    unavailable();
+  const age = sourceLastHeardAt === null ? Infinity : checkedAt - Date.parse(sourceLastHeardAt);
+  if (age < 0) unavailable();
+  if (object(eligibility) && eligibility.status === "unavailable") {
+    exactKeys(eligibility, ["status", "reason"]);
+    if (eligibility.reason !== "state_not_ready") unavailable();
+    return { sourceLastHeardAt, reason: eligibility.reason };
+  }
+  exactKeys(eligibility, ["status", "open", "closedReason"]);
+  if (eligibility.status !== "ready") unavailable();
+  if (eligibility.open === false && isClosureReason(eligibility.closedReason))
+    return { sourceLastHeardAt, reason: eligibility.closedReason };
+  if (eligibility.open !== true || eligibility.closedReason !== null) unavailable();
+  return { sourceLastHeardAt, reason: age <= 120000 ? "source_recent" : null };
+}
+
+export function fetchEmergencyCopyStatus(
+  state: CloudInstallationCredentials,
+  binding: EmergencyCopyBinding,
+  signal: AbortSignal,
+): Promise<EmergencyCopyStatus> {
+  return fetchCloudDisplay(
+    state,
+    "emergency-copy-status",
+    (value, exchange) => readEmergencyCopyStatus(value, binding, exchange),
+    {
+      signal,
+      signedBody: JSON.stringify({ version: 1, copyOperationId: binding.copyOperationId }),
+    },
   );
 }

@@ -2,7 +2,7 @@ import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request
 import { randomUUID } from "node:crypto";
 import type { MachineAction } from "@waitron/contract";
 import { AppError } from "@waitron/shared";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
 import { machinePayload } from "./cloud-installation.js";
 import type { OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
@@ -54,6 +54,7 @@ export interface BillingDisplay {
 /** A refusal that carries Cloud's `Retry-After` hint, so the caller can wait that long. */
 export type BillingRefusal = AppError & { retryAfterMs?: number };
 
+type DisplayAction = MachineAction | "emergency-copy-status";
 const SIGNED_BODY = JSON.stringify({ version: 1 });
 // Contract: "limits the complete response read to eight seconds/16,384 bytes".
 const REPLY_BYTES = 16_384;
@@ -231,13 +232,14 @@ export function readBillingDisplay(
 }
 
 export function billingEnvelope(
-  state: Pick<SavedCloudState, "origin" | "view" | "privateKey">,
+  state: Pick<CloudInstallationCredentials, "origin" | "view" | "privateKey">,
   operationId: string,
   lease: string,
   now = Date.now(),
-  action: MachineAction = "billing-display",
+  action: DisplayAction = "billing-display",
+  body = SIGNED_BODY,
 ): { payload: string; signature: string } {
-  const bytes = machinePayload(state, { action, operationId, lease, body: SIGNED_BODY }, now);
+  const bytes = machinePayload(state, { action, operationId, lease, body }, now);
   return {
     payload: bytes.toString("base64url"),
     signature: signCloudPayload(bytes, state.privateKey),
@@ -256,13 +258,14 @@ function refusal(status: number, retryAfter: string | null): BillingRefusal {
 /** One signed read. It writes nothing itself; `onRefusal` decides what a refusal means for the
  * connection. */
 export async function fetchCloudDisplay<T>(
-  state: SavedCloudState,
-  action: MachineAction,
+  state: CloudInstallationCredentials,
+  action: DisplayAction,
   read: (value: unknown, exchange: { sentAt: number; receivedAt: number }) => T,
   options: {
     signal?: AbortSignal;
     onRefusal?: OnRefusal;
     timeoutMs?: number;
+    signedBody?: string;
     refusal?: (status: number, value: unknown, retryAfter: string | null) => AppError;
   } = {},
 ): Promise<T> {
@@ -277,7 +280,10 @@ export async function fetchCloudDisplay<T>(
     const response = await fetch(`${state.origin}/api/installations/${action}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(billingEnvelope(state, randomUUID(), used, sentAt, action)),
+      body: JSON.stringify(
+        billingEnvelope(state, randomUUID(), used, sentAt, action, options.signedBody),
+      ),
+      cache: "no-store",
       redirect: "error",
       signal: options.signal ? AbortSignal.any([options.signal, bound]) : bound,
     });
