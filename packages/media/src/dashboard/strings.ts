@@ -13,6 +13,9 @@ const en = {
   "image.photo_loading": "Loading photo…",
   "image.photo_load_error": "The photo could not be loaded.",
   "image.reload_photo": "Discard changes and reload photo",
+  "image.reload_error": "The photo could not be reloaded.",
+  "image.reload_deleted":
+    "This photo has been deleted in the meantime. Cancel to close this editor.",
 
   "nav.images": "Image library",
   "image.upload": "Upload photo",
@@ -99,6 +102,9 @@ const es: Record<keyof typeof en, string> = {
   "image.photo_loading": "Cargando foto…",
   "image.photo_load_error": "No se pudo cargar la foto.",
   "image.reload_photo": "Descartar cambios y volver a cargar la foto",
+  "image.reload_error": "No se pudo volver a cargar la foto.",
+  "image.reload_deleted":
+    "Mientras tanto, esta foto se ha eliminado. Pulsa Cancelar para cerrar este editor.",
 
   "nav.images": "Biblioteca de imágenes",
   "image.upload": "Subir foto",
