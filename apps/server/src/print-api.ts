@@ -192,22 +192,10 @@ function readInvoicePrintClaim(value: unknown): InvoicePrintClaim | undefined {
     throw new AppError("management.request_invalid", { field: "invoiceClaim" });
   }
   const claim = value as Record<string, unknown>;
-  if (
-    typeof claim.deliveryId !== "string" ||
-    !isUuid(claim.deliveryId) ||
-    typeof claim.token !== "string" ||
-    !isUuid(claim.token) ||
-    typeof claim.generation !== "number" ||
-    !Number.isSafeInteger(claim.generation) ||
-    claim.generation < 1
-  ) {
+  if (typeof claim.token !== "string" || !isUuid(claim.token) || Object.keys(claim).length !== 1) {
     throw new AppError("management.request_invalid", { field: "invoiceClaim" });
   }
-  return {
-    deliveryId: claim.deliveryId,
-    generation: claim.generation,
-    token: claim.token,
-  };
+  return { token: claim.token };
 }
 
 function optionalAgentSetupUrl(value: unknown): string | null | undefined {

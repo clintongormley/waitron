@@ -1,7 +1,7 @@
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
@@ -27,12 +27,13 @@ import {
   reportPrintJob,
   runAgentOnce,
   endDeletedPrinterJobs,
+  endUnpairedPrinterJobs,
   MAX_DELIVERY_ATTEMPTS,
   PRINTER_DELETED,
 } from "@waitron/printing";
 import { hashDeviceToken, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { createClient, createAgent, FakeSink } from "@waitron/print-agent";
+import { createClient, createAgent, FakeSink, type InvoicePrintClaim } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
@@ -42,11 +43,15 @@ import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
   reserveInvoiceDelivery,
-  claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
+  invoiceDeliveryClaimsDue,
 } from "./invoice-delivery.js";
 import { clearOldPrintPayloads } from "./housekeeping.js";
-import { endInvoicePrintDeliveries, resendInvoicePrintJob } from "./invoice-print.js";
+import {
+  claimInvoicePrintJobs,
+  endInvoicePrintDeliveries,
+  resendInvoicePrintJob,
+} from "./invoice-print.js";
 import { mountPrintApi } from "./print-api.js";
 import { reprintJobOn } from "./print-job-reprint.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -124,7 +129,6 @@ async function issue(full = true) {
   );
 }
 
-type ClaimWire = { deliveryId: string; generation: number; token: string };
 const inventory = { visible: [], scanned: [], pairedBluetooth: [], bluetoothOutcomes: [] };
 const MAC = "5A:4A:45:D4:FB:BB";
 async function setup(bluetooth = false) {
@@ -219,6 +223,7 @@ async function setup(bluetooth = false) {
     job,
     delivery,
     agentId: agent!.id,
+    otherId: other!.id,
     otherToken: `${other!.id}.${secret}`,
     token,
     client,
@@ -235,34 +240,35 @@ async function setup(bluetooth = false) {
   };
 }
 async function held(ctx: Awaited<ReturnType<typeof setup>>) {
-  await withTransaction(suite.db, (tx) =>
-    claimPrintJobs(tx, ctx.agentId, {
-      visibleKeys: [],
-      invoiceReceiptsAt: ctx.now().toISOString(),
-    }),
+  const [job] = await withTransaction(suite.db, (tx) =>
+    claimInvoicePrintJobs(tx, ctx.agentId, { visibleKeys: [] }, ctx.now()),
   );
-  return (await withTransaction(suite.db, (tx) =>
-    claimInvoiceDelivery(tx, ctx.delivery.id, ctx.agentId, ctx.now()),
-  ))!;
+  return job!.invoiceClaim!;
 }
 describe("invoice receipt API attempt boundary", () => {
   it("round-trips a fresh claim through the real client and commits completion", async () => {
     const ctx = await setup();
     const jobs = await ctx.pull();
     expect(jobs).toHaveLength(1);
-    const invoiceClaim = (jobs[0] as unknown as { invoiceClaim?: ClaimWire }).invoiceClaim;
-    expect(invoiceClaim).toMatchObject({
-      deliveryId: ctx.delivery.id,
-      generation: 1,
-      token: expect.any(String),
+    const invoiceClaim = jobs[0]!.invoiceClaim!;
+    expect(await ctx.jobRow()).toMatchObject({
+      claimedBy: ctx.agentId,
+      claimTokenHash: createHash("sha256").update(invoiceClaim.token).digest("hex"),
     });
-    expect(await ctx.row()).toMatchObject({ status: "sending", claimedAgentId: ctx.agentId });
-    expect((await ctx.row()).claimTokenHash).not.toBe(invoiceClaim!.token);
+    expect(await ctx.row()).toMatchObject({
+      status: "sending",
+      attempts: 1,
+      claimTokenHash: null,
+      claimedAgentId: null,
+      claimedBy: null,
+      claimedAt: null,
+    });
+    expect(invoiceClaim).toEqual({ token: expect.any(String) });
     expect(
       await ctx.client.report("http://box.test", ctx.token, ctx.job.jobId, {
         status: "done",
         invoiceClaim,
-      } as never),
+      }),
     ).toEqual({ ok: true, value: undefined });
     expect(await ctx.row()).toMatchObject({ status: "sent", reportedOutcome: "sent" });
     expect(await ctx.jobRow()).toMatchObject({ status: "done" });
@@ -287,6 +293,27 @@ describe("invoice receipt API attempt boundary", () => {
     expect(await ctx.row()).toMatchObject({ status: "unknown", failureCode: "timeout" });
     expect(await ctx.jobRow()).toMatchObject({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
   });
+  it.each([-60_000, 400 * 86_400_000])(
+    "detects and expires a receipt with a job claim %s ms from now",
+    async (offset) => {
+      const ctx = await setup();
+      expect(await ctx.pull()).toHaveLength(1);
+      expect(await invoiceDeliveryClaimsDue(suite.db, ctx.now())).toBe(false);
+      await suite.db
+        .update(printJobs)
+        .set({ claimedAt: new Date(ctx.now().getTime() + offset).toISOString() })
+        .where(eq(printJobs.id, ctx.job.jobId));
+      expect(await invoiceDeliveryClaimsDue(suite.db, ctx.now())).toBe(true);
+      expect((await ctx.row()).status).toBe("sending");
+      expect(await ctx.pull()).toHaveLength(0);
+      expect(await ctx.row()).toMatchObject({ status: "unknown", failureCode: "timeout" });
+      expect(await ctx.jobRow()).toMatchObject({
+        status: "failed",
+        attempts: MAX_DELIVERY_ATTEMPTS,
+      });
+      expect(await invoiceDeliveryClaimsDue(suite.db, ctx.now())).toBe(false);
+    },
+  );
   it("records a sanitised current printer failure instead of transport text", async () => {
     const ctx = await setup();
     const invoiceClaim = await held(ctx);
@@ -355,20 +382,17 @@ describe("invoice receipt API attempt boundary", () => {
         printerId: ctx.printer.id,
       }),
     ).toBe(1);
-    expect(await ctx.row()).toMatchObject({ status: "sent", claimedAgentId: ctx.agentId });
-    expect(await ctx.jobRow()).toMatchObject({ status: "done" });
+    expect(await ctx.row()).toMatchObject({ status: "sent" });
+    expect(await ctx.jobRow()).toMatchObject({ status: "done", claimedBy: ctx.agentId });
   });
   it.each([
     null,
     [],
     1,
     {},
-    { deliveryId: "bad", generation: 1, token: randomUUID() },
-    { deliveryId: randomUUID(), generation: 0, token: randomUUID() },
-    { deliveryId: randomUUID(), generation: 1.5, token: randomUUID() },
-    { deliveryId: randomUUID(), generation: "1", token: randomUUID() },
-    { deliveryId: randomUUID(), generation: Number.MAX_SAFE_INTEGER + 1, token: randomUUID() },
-    { deliveryId: randomUUID(), generation: 1, token: "bad" },
+    { token: "bad" },
+    { token: null },
+    { deliveryId: randomUUID(), generation: 1, token: randomUUID() },
   ])("refuses a malformed invoice claim without changing delivery (%j)", async (invoiceClaim) => {
     const ctx = await setup();
     await held(ctx);
@@ -380,15 +404,13 @@ describe("invoice receipt API attempt boundary", () => {
     expect(await ctx.row()).toMatchObject({ status: "sending", reportedOutcome: null });
     expect(await ctx.jobRow()).toMatchObject({ status: "printing" });
   });
-  it.each(["token", "generation", "delivery", "agent", "job"] as const)(
+  it.each(["token", "agent", "job"] as const)(
     "ignores another attempt's %s and accepts the authenticated current result",
     async (wrong) => {
       const ctx = await setup();
       const original = await held(ctx);
       const claim = { ...original };
       if (wrong === "token") claim.token = randomUUID();
-      if (wrong === "generation") claim.generation++;
-      if (wrong === "delivery") claim.deliveryId = randomUUID();
       const other = await withTransaction(suite.db, (tx) =>
         enqueuePrintJob(tx, ctx.printer.id, new Uint8Array([2])),
       );
@@ -455,12 +477,13 @@ describe("invoice receipt API attempt boundary", () => {
         .update(invoiceDeliveries)
         .set({ nextAttemptAt: ctx.now().toISOString() })
         .where(eq(invoiceDeliveries.id, retry.id));
-      let retryClaim: ClaimWire | undefined;
+      let retryClaim: InvoicePrintClaim | undefined;
       if (stage !== "queued") {
         const jobs = await ctx.pull();
         expect(jobs).toHaveLength(1);
-        retryClaim = (jobs[0] as unknown as { invoiceClaim: ClaimWire }).invoiceClaim;
-        expect(retryClaim).toMatchObject({ deliveryId: retry.id, generation: 2 });
+        expect(jobs[0]!.id).toBe(retryJob.jobId);
+        retryClaim = jobs[0]!.invoiceClaim;
+        expect(retryClaim).toEqual({ token: expect.any(String) });
         if (stage === "failed" || stage === "sent")
           expect(
             (
@@ -625,15 +648,17 @@ describe("invoice receipt API attempt boundary", () => {
       status: "queued",
       claimedBy: null,
       claimedAt: null,
+      claimTokenHash: null,
     });
-    expect(await ctx.row()).toMatchObject({ status: "queued", claimTokenHash: null });
+    expect(await ctx.row()).toMatchObject({ status: "queued" });
     await suite.db.execute(sql`drop trigger test_refuse_invoice_claim`);
     expect(await ctx.pull()).toHaveLength(1);
-    expect(await ctx.jobRow()).toMatchObject({ status: "printing", claimedBy: ctx.agentId });
-    expect(await ctx.row()).toMatchObject({
-      status: "sending",
+    expect(await ctx.jobRow()).toMatchObject({
+      status: "printing",
+      claimedBy: ctx.agentId,
       claimTokenHash: expect.any(String),
     });
+    expect(await ctx.row()).toMatchObject({ status: "sending" });
   });
   it("a repeated invoice result does not rewrite the completion time", async () => {
     const ctx = await setup();
@@ -885,12 +910,16 @@ describe("management invoice receipt resends", () => {
       ctx.advance(1000);
       const pulled = await ctx.pull();
       expect(pulled).toHaveLength(1);
-      const retryClaim = (pulled[0] as unknown as { invoiceClaim: ClaimWire }).invoiceClaim;
-      expect(retryClaim).toMatchObject({ deliveryId: retry!.id, generation: 2 });
+      expect(pulled[0]!.id).toBe(jobId);
+      const retryClaim = pulled[0]!.invoiceClaim!;
+      expect(retryClaim).toEqual({ token: expect.any(String) });
       expect(retryClaim.token).not.toBe(originalClaim.token);
       const before = (
         await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, retry!.id))
       )[0];
+      expect(
+        (await ctx.result({ status: "done", invoiceClaim: originalClaim }, jobId)).status,
+      ).toBe(204);
       await ctx.result({ status: "done", invoiceClaim: originalClaim });
       expect(
         (
@@ -1013,7 +1042,7 @@ async function bluetoothPull(
     body: JSON.stringify({ pairedBluetooth: [{ localKey: MAC }], ...extra }),
   });
   expect(response.status).toBe(200);
-  return (await response.json()) as { jobs: { id: string; invoiceClaim?: ClaimWire }[] };
+  return (await response.json()) as { jobs: { id: string; invoiceClaim?: InvoicePrintClaim }[] };
 }
 async function forget(
   ctx: Awaited<ReturnType<typeof setup>>,
@@ -1124,7 +1153,7 @@ describe("invoice receipt terminal Bluetooth endings", () => {
       visible: [{ transport: "bluetooth", localKey: MAC }],
     });
     expect(pulled.jobs).toHaveLength(1);
-    const acceptedClaim = (await ctx.row()).claimTokenHash;
+    const acceptedClaim = (await ctx.jobRow()).claimTokenHash;
     expect(acceptedClaim).not.toBeNull();
     expect(
       (
@@ -1147,12 +1176,12 @@ describe("invoice receipt terminal Bluetooth endings", () => {
       status: "failed",
       lastError: "transport_failed",
       attempts: MAX_DELIVERY_ATTEMPTS,
+      claimTokenHash: acceptedClaim,
     });
     expect(await ctx.row()).toMatchObject({
       status: "failed",
       failureCode: "transport_failed",
       completedAt: null,
-      claimTokenHash: acceptedClaim,
     });
     const retry = await emailRetry(ctx);
     expect(retry).toMatchObject({ status: "queued", designation: "original", generation: 2 });
@@ -1208,14 +1237,14 @@ describe("invoice receipt terminal Bluetooth endings", () => {
     expect(pulled.jobs).toHaveLength(1);
     const claim = pulled.jobs[0]!.invoiceClaim!;
     expect(claim).toBeDefined();
-    const tokenHash = (await ctx.row()).claimTokenHash;
+    const tokenHash = (await ctx.jobRow()).claimTokenHash;
     await forget(ctx, command);
     expect(await ctx.row()).toMatchObject({
       status: "unknown",
       failureCode: "transport_failed",
       expiredAt: ctx.now().toISOString(),
-      claimTokenHash: tokenHash,
     });
+    expect(await ctx.jobRow()).toMatchObject({ claimTokenHash: tokenHash });
     const retry = await emailRetry(ctx);
     expect(retry).toMatchObject({ designation: "original" });
     expect((await ctx.result({ status: "done", invoiceClaim: claim })).status).toBe(204);
@@ -1230,6 +1259,67 @@ describe("invoice receipt terminal Bluetooth endings", () => {
       )[0],
     ).toMatchObject({ status: "queued", designation: "original" });
     expect(await ctx.jobRow()).toMatchObject({ status: "failed", lastError: "printer.unpaired" });
+  });
+
+  it("keeps the original agent's late report as history when another agent confirmed unpairing", async () => {
+    const ctx = await setup(true);
+    const [job] = (
+      await bluetoothPull(ctx, {
+        visible: [{ transport: "bluetooth", localKey: MAC }],
+      })
+    ).jobs;
+    await suite.db
+      .update(printJobs)
+      .set({ claimedAt: new Date(ctx.now().getTime() - 61_000).toISOString() })
+      .where(eq(printJobs.id, ctx.job.jobId));
+    await withTransaction(suite.db, async (tx) => {
+      const ended = await endUnpairedPrinterJobs(tx, ctx.otherId, [MAC]);
+      expect(ended).toEqual([ctx.job.jobId]);
+      await endInvoicePrintDeliveries(tx, ended, ctx.now());
+    });
+    const retry = await emailRetry(ctx);
+    expect((await ctx.result({ status: "done", invoiceClaim: job!.invoiceClaim })).status).toBe(
+      204,
+    );
+    expect(await ctx.row()).toMatchObject({ status: "unknown", reportedOutcome: "sent" });
+    expect(await ctx.jobRow()).toMatchObject({ status: "failed", lastError: "printer.unpaired" });
+    expect(
+      (
+        await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, retry.id))
+      )[0],
+    ).toMatchObject({ status: "queued", designation: "original", generation: 2 });
+  });
+
+  it("reconciles a receipt when its agent confirms printing after another agent unpaired it", async () => {
+    const ctx = await setup(true);
+    const [job] = (
+      await bluetoothPull(ctx, {
+        visible: [{ transport: "bluetooth", localKey: MAC }],
+      })
+    ).jobs;
+    const claimedAt = new Date(ctx.now().getTime() - 61_000).toISOString();
+    await suite.db.update(printJobs).set({ claimedAt }).where(eq(printJobs.id, ctx.job.jobId));
+    await withTransaction(suite.db, async (tx) => {
+      const ended = await endUnpairedPrinterJobs(tx, ctx.otherId, [MAC]);
+      expect(ended).toEqual([ctx.job.jobId]);
+      await endInvoicePrintDeliveries(tx, ended, ctx.now());
+    });
+    expect(await ctx.row()).toMatchObject({ status: "unknown", failureCode: "transport_failed" });
+    expect((await ctx.result({ status: "done", invoiceClaim: job!.invoiceClaim })).status).toBe(
+      204,
+    );
+    expect(await ctx.row()).toMatchObject({
+      status: "sent",
+      reportedOutcome: "sent",
+      failureCode: null,
+    });
+    expect(await ctx.jobRow()).toMatchObject({
+      status: "done",
+      lastError: null,
+      claimedBy: ctx.agentId,
+      claimedAt,
+    });
+    expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
   });
 });
 
@@ -1274,17 +1364,20 @@ describe("invoice receipt printer deletion", () => {
     async (status, newerFirst) => {
       const ctx = await setup();
       const claim = (await ctx.pull())[0]!.invoiceClaim!;
-      const tokenHash = (await ctx.row()).claimTokenHash;
+      const tokenHash = (await ctx.jobRow()).claimTokenHash;
       await deletePrinterNow(ctx);
       const endedJob = await ctx.jobRow();
-      expect(endedJob).toMatchObject({ ...DELETED_JOB, claimedBy: ctx.agentId });
+      expect(endedJob).toMatchObject({
+        ...DELETED_JOB,
+        claimedBy: ctx.agentId,
+        claimTokenHash: tokenHash,
+      });
       const ended = await ctx.row();
       expect(ended).toMatchObject({
         status: "unknown",
         failureCode: "transport_failed",
         expiredAt: ctx.now().toISOString(),
         completedAt: null,
-        claimTokenHash: tokenHash,
         reportedAt: null,
       });
       const retry = newerFirst ? await emailRetry(ctx) : undefined;
@@ -1296,11 +1389,7 @@ describe("invoice receipt printer deletion", () => {
 
       for (const [bad, jobId, bearer] of [
         [{ ...body, invoiceClaim: { ...claim, token: randomUUID() } }, undefined, undefined],
-        [
-          { ...body, invoiceClaim: { ...claim, generation: claim.generation + 1 } },
-          undefined,
-          undefined,
-        ],
+        [body, randomUUID(), undefined],
         [{ ...body, invoiceClaim: undefined }, undefined, undefined],
         [body, undefined, ctx.otherToken],
       ] as const) {
@@ -1398,8 +1487,12 @@ describe("invoice receipt printer deletion", () => {
     // A receipt sent long enough ago that the resend's expiry pass would end it.
     const stale = new Date(ctx.now().getTime() - 120_000).toISOString();
     await suite.db
+      .update(printJobs)
+      .set({ claimedAt: stale })
+      .where(eq(printJobs.id, ctx.job.jobId));
+    await suite.db
       .update(invoiceDeliveries)
-      .set({ status: "sending", claimedAt: stale, expiredAt: null, failureCode: null })
+      .set({ status: "sending", expiredAt: null, failureCode: null })
       .where(eq(invoiceDeliveries.id, ctx.delivery.id));
     const before = await suite.db.select().from(invoiceDeliveries);
     const jobs = await suite.db.select().from(printJobs);

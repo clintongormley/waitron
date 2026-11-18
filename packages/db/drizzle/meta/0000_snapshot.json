@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "38048fe7-fe3a-4207-a381-acf341195eb7",
+  "id": "7e4340fc-a329-4be9-a170-9b3e0e30b8ad",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5720,6 +5720,13 @@
         },
         "claimed_at": {
           "name": "claimed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "claim_token_hash": {
+          "name": "claim_token_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

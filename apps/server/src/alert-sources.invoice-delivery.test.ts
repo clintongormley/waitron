@@ -14,6 +14,7 @@ import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter, enqueuePrintJob, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
+import { claimInvoiceReceipt } from "./invoice-print.js";
 import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
@@ -116,18 +117,21 @@ async function attempt(
     .set({ nextAttemptAt: START.toISOString() })
     .where(eq(invoiceDeliveries.id, reserved.id));
   if (status !== "queued") {
-    if (medium === "receipt") {
-      await suite.db
+    const held = await withTransaction(suite.db, async (tx) => {
+      const holder = medium === "email" ? "server-one" : v.agentId;
+      if (medium !== "receipt") {
+        const claim = (await claimInvoiceDelivery(tx, reserved.id, holder, START))!;
+        if (hold !== undefined) await renewInvoicePagePrint(tx, claim, hold, START);
+        return claim;
+      }
+      const printJobId = reserved.printJobId!;
+      await tx
         .update(printJobs)
-        .set({ status: "printing", claimedBy: v.agentId })
-        .where(eq(printJobs.id, reserved.printJobId!));
-    }
-    const held = (await withTransaction(suite.db, (tx) =>
-      claimInvoiceDelivery(tx, reserved.id, medium === "email" ? "server-one" : v.agentId, START),
-    ))!;
-    if (hold !== undefined) {
-      await withTransaction(suite.db, (tx) => renewInvoicePagePrint(tx, held, hold, START));
-    }
+        .set({ status: "printing", claimedBy: holder })
+        .where(eq(printJobs.id, printJobId));
+      const claim = await claimInvoiceReceipt(tx, printJobId, holder, START);
+      return { ...claim!, holder, printJobId };
+    });
     if (status === "sent" || status === "failed") {
       await withTransaction(suite.db, (tx) =>
         reportInvoiceDelivery(

@@ -17,6 +17,7 @@ import {
   type InvoiceDelivery,
 } from "./invoice-delivery.js";
 import {
+  invoiceDeliveryAttemptColumns,
   readInvoiceDeliveryState,
   readReceiptEmailDeliveries,
   rowAttempt,
@@ -40,8 +41,9 @@ async function replayed(
   sameRequest: (row: InvoiceDelivery) => boolean | Promise<boolean>,
 ) {
   const [row] = await tx
-    .select()
+    .select(invoiceDeliveryAttemptColumns)
     .from(invoiceDeliveries)
+    .leftJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
     .where(and(eq(invoiceDeliveries.saleId, saleId), eq(invoiceDeliveries.requestKey, requestKey)));
   if (row !== undefined && !(await sameRequest(row))) {
     throw new AppError("submission.id_reused", { submissionId: requestKey });

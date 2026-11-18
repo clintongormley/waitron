@@ -87,7 +87,7 @@ export interface JoinReply {
   verificationNumber: string;
 }
 
-export type InvoicePrintClaim = { deliveryId: string; generation: number; token: string };
+export type InvoicePrintClaim = { token: string };
 
 export interface WireJob {
   id: string;
@@ -338,20 +338,12 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
         return undefined;
       const claim = e.invoiceClaim as Record<string, unknown>;
       if (
-        typeof claim.deliveryId !== "string" ||
-        !UUID.test(claim.deliveryId) ||
         typeof claim.token !== "string" ||
         !UUID.test(claim.token) ||
-        typeof claim.generation !== "number" ||
-        !Number.isSafeInteger(claim.generation) ||
-        claim.generation < 1
+        Object.keys(claim).length !== 1
       )
         return undefined;
-      invoiceClaim = {
-        deliveryId: claim.deliveryId,
-        generation: claim.generation,
-        token: claim.token,
-      };
+      invoiceClaim = { token: claim.token };
     }
     jobs.push({
       id: e.id,

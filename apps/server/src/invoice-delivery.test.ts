@@ -37,6 +37,7 @@ import { jobOrigin, nodeId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import {
   claimInvoicePrintJobs,
+  claimInvoiceReceipt,
   endInvoicePrintDeliveries,
   reportInvoicePrintJob,
 } from "./invoice-print.js";
@@ -836,7 +837,7 @@ describe("receipt delivery reservation", () => {
     const [claimed] = await withTransaction(suite.db, (tx) =>
       claimInvoicePrintJobs(tx, agent!.id, { visibleKeys: [] }, now),
     );
-    expect(claimed!.invoiceClaim).toMatchObject({ deliveryId: delivery.id, generation: 1 });
+    expect(claimed!.invoiceClaim).toEqual({ token: expect.any(String) });
     await withTransaction(suite.db, (tx) =>
       reportInvoicePrintJob(
         tx,
@@ -887,7 +888,7 @@ describe("receipt delivery reservation", () => {
       });
     expect(await pick(new Date(start.getTime() + 600_000))).toEqual([]);
     const [claimed] = await pick(new Date(start.getTime() + 400 * 86_400_000));
-    expect(claimed!.invoiceClaim).toMatchObject({ deliveryId: delivery.id, generation: 1 });
+    expect(claimed!.invoiceClaim).toEqual({ token: expect.any(String) });
   });
 
   it("correlates the existing queued original without another job or handover snapshot", async () => {
@@ -1070,6 +1071,13 @@ describe("receipt delivery reservation", () => {
     );
   }
 
+  function claimReceipt(ctx: Awaited<ReturnType<typeof receiptClaimSetup>>, holder = ctx.agentId) {
+    return withTransaction(suite.db, async (tx) => {
+      const claim = await claimInvoiceReceipt(tx, ctx.job.jobId, holder, start);
+      return claim === undefined ? undefined : { ...claim, holder, printJobId: ctx.job.jobId };
+    });
+  }
+
   it("leaves an absent invoice delivery unclaimed", async () => {
     expect(await claim(randomUUID())).toBeUndefined();
     expect(await rows()).toHaveLength(0);
@@ -1083,12 +1091,12 @@ describe("receipt delivery reservation", () => {
         .update(printJobs)
         .set({ status, claimedBy: ctx.agentId })
         .where(eq(printJobs.id, ctx.job.jobId));
-      expect(await claim(ctx.delivery.id, ctx.agentId)).toBeUndefined();
+      expect(await claimReceipt(ctx)).toBeUndefined();
       await suite.db
         .update(printJobs)
         .set({ status: "printing" })
         .where(eq(printJobs.id, ctx.job.jobId));
-      expect(await claim(ctx.delivery.id, ctx.agentId)).toBeDefined();
+      expect(await claimReceipt(ctx)).toBeDefined();
     },
   );
 
@@ -1103,14 +1111,14 @@ describe("receipt delivery reservation", () => {
         printerId: job!.printerId,
       }),
     );
-    expect(await claim(ctx.delivery.id, ctx.agentId)).toBeUndefined();
+    expect(await claimReceipt(ctx)).toBeUndefined();
     await pulled(ctx);
-    expect(await claim(ctx.delivery.id, ctx.agentId)).toBeDefined();
+    expect(await claimReceipt(ctx)).toBeDefined();
   });
 
   it("requires the same agent's current print claim before assigning an invoice token", async () => {
     const ctx = await receiptClaimSetup();
-    expect(await claim(ctx.delivery.id, ctx.agentId)).toBeUndefined();
+    expect(await claimReceipt(ctx)).toBeUndefined();
     expect(await pulled(ctx)).toHaveLength(1);
     const [otherAgent] = await suite.db
       .insert(printAgents)
@@ -1119,10 +1127,11 @@ describe("receipt delivery reservation", () => {
         tokenHash: "scrypt$other-fixture",
       })
       .returning();
-    expect(await claim(ctx.delivery.id, otherAgent!.id)).toBeUndefined();
-    const held = await claim(ctx.delivery.id, ctx.agentId);
-    expect(held).toMatchObject({ deliveryId: ctx.delivery.id, generation: 1, holder: ctx.agentId });
-    expect((await rows())[0]).toMatchObject({ claimed_agent_id: ctx.agentId, status: "sending" });
+    expect(await claimReceipt(ctx, otherAgent!.id)).toBeUndefined();
+    const held = await claimReceipt(ctx);
+    expect(held).toMatchObject({ printJobId: ctx.job.jobId, holder: ctx.agentId });
+    expect((await rows())[0]).toMatchObject({ status: "sending", generation: 1 });
+    expect((await suite.db.select().from(printJobs))[0]).toMatchObject({ claimedBy: ctx.agentId });
   });
 
   it.each(["sent", "failed"] as const)(
@@ -1130,7 +1139,7 @@ describe("receipt delivery reservation", () => {
     async (status) => {
       const ctx = await receiptClaimSetup();
       await pulled(ctx);
-      const held = (await claim(ctx.delivery.id, ctx.agentId))!;
+      const held = (await claimReceipt(ctx))!;
       await withTransaction(suite.db, (tx) =>
         reportInvoiceDelivery(
           tx,
@@ -1160,7 +1169,7 @@ describe("receipt delivery reservation", () => {
     async (restart) => {
       const ctx = await receiptClaimSetup();
       await pulled(ctx);
-      const held = (await claim(ctx.delivery.id, ctx.agentId))!;
+      const held = (await claimReceipt(ctx))!;
       if (!restart) {
         expect(
           await withTransaction(suite.db, (tx) =>
@@ -1202,7 +1211,7 @@ describe("receipt delivery reservation", () => {
     async (status) => {
       const ctx = await receiptClaimSetup();
       await pulled(ctx);
-      const held = (await claim(ctx.delivery.id, ctx.agentId))!;
+      const held = (await claimReceipt(ctx))!;
       await expire();
       await withTransaction(suite.db, (tx) =>
         reportInvoiceDelivery(
@@ -1225,14 +1234,14 @@ describe("receipt delivery reservation", () => {
     },
   );
 
-  it("keeps the receipt job unchanged for an unauthenticated token or generation", async () => {
+  it("keeps the receipt job unchanged for an unauthenticated token or job", async () => {
     const ctx = await receiptClaimSetup();
     await pulled(ctx);
-    const held = (await claim(ctx.delivery.id, ctx.agentId))!;
+    const held = (await claimReceipt(ctx))!;
     const before = (await suite.db.select().from(printJobs))[0];
     for (const bad of [
       { ...held, token: "wrong" },
-      { ...held, generation: 2 },
+      { ...held, printJobId: randomUUID() },
     ]) {
       expect(
         await withTransaction(suite.db, (tx) =>
@@ -1325,7 +1334,7 @@ describe("receipt delivery reservation", () => {
     const before = await rows();
     const job = await jobById(ctx.job.jobId);
 
-    expect(await claim(ctx.delivery.id, ctx.agentId)).toBeUndefined();
+    expect(await claimReceipt(ctx)).toBeUndefined();
 
     expect(await rows()).toEqual(before);
     expect(await jobById(ctx.job.jobId)).toEqual(job);
@@ -1338,7 +1347,7 @@ describe("receipt delivery reservation", () => {
       const [pulledJob] = await withTransaction(suite.db, (tx) =>
         claimInvoicePrintJobs(tx, ctx.agentId, { visibleKeys: [] }, start),
       );
-      const held = { ...pulledJob!.invoiceClaim!, holder: ctx.agentId };
+      const held = { ...pulledJob!.invoiceClaim!, holder: ctx.agentId, printJobId: ctx.job.jobId };
       await deleteReceiptPrinter(ctx.job.jobId);
       const ended = await jobById(ctx.job.jobId);
       expect(ended).toMatchObject({
@@ -1397,7 +1406,7 @@ describe("receipt delivery reservation", () => {
     const [pulledJob] = await withTransaction(suite.db, (tx) =>
       claimInvoicePrintJobs(tx, ctx.agentId, { visibleKeys: [] }, start),
     );
-    const held = { ...pulledJob!.invoiceClaim!, holder: ctx.agentId };
+    const held = { ...pulledJob!.invoiceClaim!, holder: ctx.agentId, printJobId: ctx.job.jobId };
     // A job finished while its receipt still says sending: not a state the routes leave, which is
     // why only the retained printer, not the job, can fence its late report.
     await suite.db
@@ -1436,7 +1445,7 @@ describe("receipt delivery reservation", () => {
     async (fence) => {
       const ctx = await receiptClaimSetup();
       await pulled(ctx);
-      await claim(ctx.delivery.id, ctx.agentId);
+      await claimReceipt(ctx);
       if (fence === "deleted printer") {
         await deleteReceiptPrinter(ctx.job.jobId);
         // Neither state is one the delete leaves; together they isolate expiry's printer check.
@@ -1639,11 +1648,14 @@ describe("invoice email automatic retries", () => {
       .set({ status: "printing", claimedBy: agent!.id })
       .where(eq(printJobs.id, delivery.printJobId!));
     await dueAtStart(delivery.id);
-    const held = (await claim(delivery.id, agent!.id, new Date("2026-12-01T00:00:00.000Z")))!;
+    const printJobId = delivery.printJobId!;
+    const claim = await withTransaction(suite.db, (tx) =>
+      claimInvoiceReceipt(tx, printJobId, agent!.id, new Date("2026-12-01T00:00:00.000Z")),
+    );
     await withTransaction(suite.db, (tx) =>
-      reportInvoiceEmailDelivery(
+      reportInvoiceDelivery(
         tx,
-        held,
+        { ...claim!, holder: agent!.id, printJobId },
         { status: "failed", failureCode: "transport_failed" },
         new Date("2026-12-01T00:00:01.000Z"),
       ),

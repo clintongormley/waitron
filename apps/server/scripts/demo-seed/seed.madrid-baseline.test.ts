@@ -2719,6 +2719,7 @@ for (const locale of ["en", "es"] as const) {
       for (const [anchor, names] of [
         ["receipt_copy", ["handed_over_by", "handed_over_at"]],
         ["last_error", ["next_attempt_at"]],
+        ["claimed_at", ["claim_token_hash"]],
       ] as const) {
         const index = printJobsTable.columns.findIndex((column) => column.name === anchor);
         expect(index, `${phase}/print_jobs/${anchor} anchor`).toBeGreaterThanOrEqual(0);
