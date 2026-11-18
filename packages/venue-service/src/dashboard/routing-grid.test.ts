@@ -309,11 +309,11 @@ function santet(): RoutingView {
       { id: "santet", name: "Santet Deli Co", parentId: null },
       { id: "agave", name: "AGAVE", parentId: "santet" },
       { id: "clandestina", name: "CLANDESTINA", parentId: "agave" },
-      { id: "cafes", name: "CAFÉS", parentId: "santet" },
+      { id: "teas", name: "TEAS", parentId: "santet" },
     ],
     products: [
       { id: "reposado", name: "Clandestina Reposado", categoryId: "clandestina" },
-      { id: "leche", name: "Café con leche", categoryId: "cafes" },
+      { id: "milk", name: "Tea with milk", categoryId: "teas" },
     ],
     cells: [
       { row: { kind: "category", categoryId: "santet" }, zoneId: "front", target: station("bar") },
@@ -1197,7 +1197,7 @@ describe("venue-routing-grid", () => {
       const weight = (row: string) =>
         getComputedStyle(texts(rowHeader(el, row))[0]!.parentElement!).fontWeight;
       expect(weight("c:agave")).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-medium)"));
-      expect(weight("p:leche")).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-normal)"));
+      expect(weight("p:milk")).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-normal)"));
     });
 
     it("lines a row's name up with the station beside it, in a row as tall as a tap target", async () => {
@@ -1206,7 +1206,7 @@ describe("venue-routing-grid", () => {
       await openAll(el);
       await el.updateComplete;
       const tap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
-      for (const row of ["c:agave", "p:leche", "all"]) {
+      for (const row of ["c:agave", "p:milk", "all"]) {
         const name = boxes(texts(rowHeader(el, row))[0]!);
         expect(name, row).toHaveLength(1);
         const height = rowHeader(el, row).closest("tr")!.getBoundingClientRect().height;
@@ -1224,7 +1224,7 @@ describe("venue-routing-grid", () => {
       const { el } = await mount(santet());
       await openAll(el);
       await el.updateComplete;
-      for (const row of ["c:santet", "c:agave", "c:cafes", "p:leche"]) {
+      for (const row of ["c:santet", "c:agave", "c:teas", "p:milk"]) {
         const [text] = texts(rowHeader(el, row));
         for (const word of text!.data.matchAll(/\S+/g)) {
           expect(boxes(text!, word.index, word.index + word[0].length), word[0]).toHaveLength(1);
@@ -2131,7 +2131,7 @@ describe("one period", () => {
   };
   /**
    * Restaurant runs Lunch and Dinner in the Terrace; Bar runs Breakfast at the Counter. PIZZAS go
-   * to the Kitchen, and to the Pizza oven at Lunch and Dinner; POSTRES on the Terrace go to the
+   * to the Kitchen, and to the Pizza oven at Lunch and Dinner; SWEETS on the Terrace go to the
    * Kitchen, and to the Grill at Lunch; Margherita on the Terrace is set to the Kitchen.
    */
   const twoDepartments = (overrides: Partial<RoutingView> = {}) =>
@@ -2144,11 +2144,11 @@ describe("one period", () => {
       ],
       categories: [
         { id: "pizzas", name: "PIZZAS", parentId: null },
-        { id: "postres", name: "POSTRES", parentId: null },
+        { id: "sweets", name: "SWEETS", parentId: null },
       ],
       products: [
         { id: "margherita", name: "Margherita", categoryId: "pizzas" },
-        { id: "flan", name: "Flan", categoryId: "postres" },
+        { id: "flan", name: "Flan", categoryId: "sweets" },
       ],
       cells: [
         {
@@ -2161,7 +2161,7 @@ describe("one period", () => {
           ],
         },
         {
-          row: { kind: "category", categoryId: "postres" },
+          row: { kind: "category", categoryId: "sweets" },
           zoneId: "terrace",
           target: station("kitchen"),
           periods: [{ periodId: "lunch", target: station("grill") }],
@@ -2249,7 +2249,7 @@ describe("one period", () => {
       style: "inherited",
       colour: "pink",
     });
-    expect(drawn(el, "c:postres", "terrace")).toEqual({
+    expect(drawn(el, "c:sweets", "terrace")).toEqual({
       text: "Grill",
       style: "set",
       colour: "purple",
@@ -2265,7 +2265,7 @@ describe("one period", () => {
       spoken("PIZZAS, Every zone: Pizza oven, set here."),
     );
     await choosePeriod(el, "dinner");
-    expect(drawn(el, "c:postres", "terrace")).toEqual({
+    expect(drawn(el, "c:sweets", "terrace")).toEqual({
       text: "Kitchen",
       style: "set",
       colour: "orange",
@@ -2414,8 +2414,8 @@ describe("one period", () => {
   });
 
   it("the period view still draws a refusal, and a disabled station unpainted with its warning", async () => {
-    const postresEvery: CellAddress = {
-      row: { kind: "category", categoryId: "postres" },
+    const sweetsEvery: CellAddress = {
+      row: { kind: "category", categoryId: "sweets" },
       zoneId: null,
     };
     const model = twoDepartments({
@@ -2428,7 +2428,7 @@ describe("one period", () => {
     });
     model.cells = [
       ...model.cells,
-      { ...postresEvery, target: station("old") },
+      { ...sweetsEvery, target: station("old") },
       {
         row: { kind: "product", productId: "flan" },
         zoneId: null,
@@ -2438,16 +2438,16 @@ describe("one period", () => {
     ];
     const { el } = await mountExpanded(model);
     await choosePeriod(el, "lunch");
-    el.refusal = { address: postresEvery, message: "The change could not be saved." };
+    el.refusal = { address: sweetsEvery, message: "The change could not be saved." };
     await el.updateComplete;
-    expect(errorOf(el, "c:postres", "every")).toBe("The change could not be saved.");
-    expect(drawn(el, "c:postres", "every")).toEqual({
+    expect(errorOf(el, "c:sweets", "every")).toBe("The change could not be saved.");
+    expect(drawn(el, "c:sweets", "every")).toEqual({
       text: "Old kitchen (Disabled)",
       style: "set",
       colour: undefined,
     });
     expect(
-      cell(el, "c:postres", "every").querySelector('[data-test="disabled-target"]')!.textContent,
+      cell(el, "c:sweets", "every").querySelector('[data-test="disabled-target"]')!.textContent,
     ).toContain("Old kitchen: Disabled.");
     expect(drawn(el, "p:flan", "every")).toEqual({
       text: "Old kitchen (Disabled)",
