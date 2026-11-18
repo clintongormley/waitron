@@ -29,11 +29,10 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import "@waitron/ui/src/components/wt-delete-dialog.js";
-import type { DeleteImpact } from "@waitron/shared";
 import { PairingHold, type PairingHoldStatus } from "../api/pairing-hold.js";
 import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
+import { HardwareDeleteDialog } from "../widgets/hardware-delete-dialog.js";
 import { deviceDeleteCopy } from "../widgets/device-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
 import "../widgets/row-actions.js";
@@ -556,23 +555,22 @@ export class DevicesScreen extends LitElement {
     else this.#clearDeviceAddress();
   }
 
-  /** The id of the device the delete dialog is open on. Each opening and close is a new generation,
-   * so a delete's answer for an earlier one is never applied; an impact read for an earlier one is
-   * dropped by its query slot, which the next `watch` or `release` replaces. */
-  @state() private deleteTarget: string | null = null;
-  @state() private deleteImpact: DeleteImpact | null = null;
-  @state() private deleteLoading = false;
-  @state() private deleteSubmitting = false;
-  @state() private deleteReadError = "";
-  @state() private deleteActionError = "";
-  #deleteGeneration = 0;
-  #deleteOpener: HTMLElement | null = null;
   #deleteCopy: { locale: string; copy: DeleteDialogCopy } | null = null;
-  readonly #impactQueries = new DashboardQueries(
-    this,
-    () => this.api,
-    (error) => this.#impactFailed(error),
-  );
+  readonly #deleteDialog = new HardwareDeleteDialog(this, () => this.api, {
+    notFound: ["device.not_found"],
+    send: (id) => this.api.deleteDevice(id),
+    onGone: (id, source) => {
+      this.#deviceGone(id, true);
+      if (source === "send") return this.#rewatchDevices();
+    },
+    onDeleted: (id) => {
+      const add = this.renderRoot.querySelector<HTMLElement>(
+        ".heading [data-test=open-add-device]",
+      );
+      this.#deviceGone(id, false, add);
+      return this.#rewatchDevices();
+    },
+  });
   @state() private editForm: EditForm = {
     name: "",
     profileId: "",
@@ -784,7 +782,7 @@ export class DevicesScreen extends LitElement {
   override disconnectedCallback(): void {
     clearTimeout(this.#staleTimer);
     this.#staleTimer = undefined;
-    this.#closeDelete();
+    this.#deleteDialog.close();
     this.#endAdding();
     this.#endEdit(false);
     super.disconnectedCallback();
@@ -1536,7 +1534,11 @@ export class DevicesScreen extends LitElement {
         data-test=${`delete-device-${device.id}`}
         @click=${(event: Event) => {
           const button = event.currentTarget as HTMLElement;
-          this.#openDelete(device, this.#rowMenuButton(button) ?? button);
+          this.#deleteDialog.open(
+            device.id,
+            this.#rowMenuButton(button) ?? button,
+            "getDeviceDeleteImpact",
+          );
         }}
         >${t("action.delete")}</wt-button
       >
@@ -1554,90 +1556,6 @@ export class DevicesScreen extends LitElement {
 
   // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
 
-  #openDelete(device: DeviceRow, opener: HTMLElement): void {
-    this.#deleteGeneration++;
-    this.#deleteOpener = opener;
-    this.deleteTarget = device.id;
-    this.deleteImpact = null;
-    this.deleteLoading = true;
-    this.deleteSubmitting = false;
-    this.deleteReadError = "";
-    this.deleteActionError = "";
-    this.#readImpact(device.id);
-  }
-
-  #readImpact(id: string): void {
-    this.#impactQueries
-      .watch("getDeviceDeleteImpact", [id], (impact) => {
-        this.deleteImpact = impact;
-        this.deleteLoading = false;
-        this.deleteReadError = "";
-      })
-      // A failure has already reached `#impactFailed`.
-      .catch(() => undefined);
-  }
-
-  #impactFailed(error: unknown): void {
-    const target = this.deleteTarget;
-    if (target === null) return;
-    const code = codeOf(error);
-    if (code === "device.not_found") {
-      // The delete in flight may be what removed it; its own answer decides what is shown.
-      if (!this.deleteSubmitting) this.#deviceGone(target, true);
-      return;
-    }
-    this.deleteLoading = false;
-    this.deleteReadError = codeMessage(code);
-  }
-
-  #retryImpact(): void {
-    const target = this.deleteTarget;
-    if (target === null || this.deleteSubmitting) return;
-    this.deleteLoading = true;
-    this.deleteReadError = "";
-    this.#readImpact(target);
-  }
-
-  #closeDelete(): void {
-    this.#deleteGeneration++;
-    this.#impactQueries.release("getDeviceDeleteImpact");
-    this.deleteTarget = null;
-    this.deleteImpact = null;
-    this.deleteLoading = false;
-    this.deleteSubmitting = false;
-    this.deleteReadError = "";
-    this.deleteActionError = "";
-  }
-
-  async #confirmDelete(id: string): Promise<void> {
-    const target = this.deleteTarget;
-    if (target === null || id !== target || this.deleteSubmitting) return;
-    const generation = this.#deleteGeneration;
-    this.deleteSubmitting = true;
-    this.deleteActionError = "";
-    try {
-      await this.api.deleteDevice(id);
-    } catch (error) {
-      if (generation !== this.#deleteGeneration) return;
-      this.deleteSubmitting = false;
-      const code = codeOf(error);
-      if (code !== "device.not_found") {
-        this.deleteActionError = codeMessage(code);
-        return;
-      }
-      this.#deviceGone(id, true);
-      await this.#rewatchDevices();
-      return;
-    }
-    if (generation !== this.#deleteGeneration) return;
-    // What opened the dialog goes with the row, and the dialog hands focus to its opener as it closes.
-    this.#deleteOpener =
-      this.renderRoot.querySelector<HTMLElement>(".heading [data-test=open-add-device]") ??
-      this.#deleteOpener;
-    this.#deviceGone(id, false);
-    await this.#rewatchDevices();
-  }
-
   /** Not `#load`, which would clear a message this screen has just shown. A failure is a read's. */
   async #rewatchDevices(): Promise<void> {
     if (!this.isConnected) return;
@@ -1650,12 +1568,12 @@ export class DevicesScreen extends LitElement {
    * without asking to keep Edit's drafts — and drops its row. `refuse` says so where something was
    * open on it.
    */
-  #deviceGone(id: string, refuse: boolean): void {
-    const ours = this.deleteSubmitting && this.deleteTarget === id;
+  #deviceGone(id: string, refuse: boolean, focusTo?: HTMLElement | null): void {
+    const ours = this.#deleteDialog.submitting && this.#deleteDialog.target === id;
     let open = false;
-    if (this.deleteTarget === id) {
+    if (this.#deleteDialog.target === id) {
       open = true;
-      this.#closeDelete();
+      this.#deleteDialog.close(focusTo);
     }
     if (this.editing?.id === id) {
       open = true;
@@ -1671,24 +1589,6 @@ export class DevicesScreen extends LitElement {
     if (this.#deleteCopy?.locale !== locale)
       this.#deleteCopy = { locale, copy: deviceDeleteCopy() };
     return this.#deleteCopy.copy;
-  }
-
-  #renderDeleteDialog(): TemplateResult {
-    return html`<wt-delete-dialog
-      data-test="delete-device-dialog"
-      .open=${this.deleteTarget !== null}
-      .impact=${this.deleteImpact}
-      .loading=${this.deleteLoading}
-      .submitting=${this.deleteSubmitting}
-      .readError=${this.deleteReadError}
-      .actionError=${this.deleteActionError}
-      .copy=${this.#deleteDialogCopy()}
-      .opener=${this.#deleteOpener}
-      @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) =>
-        void this.#confirmDelete(event.detail.id)}
-      @wt-delete-retry=${() => this.#retryImpact()}
-      @wt-close=${() => this.#closeDelete()}
-    ></wt-delete-dialog>`;
   }
 
   #renderDevicesTable(): TemplateResult {
@@ -2358,7 +2258,8 @@ export class DevicesScreen extends LitElement {
           : nothing
       }
       ${this.#renderAddDialog()} ${this.#renderJoinedDialog()} ${this.#renderPairDialog()}
-      ${this.#renderEditDialog()} ${this.#renderDeleteDialog()}
+      ${this.#renderEditDialog()}
+      ${this.#deleteDialog.render("delete-device-dialog", this.#deleteDialogCopy())}
     `;
   }
 }
