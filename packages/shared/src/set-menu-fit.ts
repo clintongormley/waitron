@@ -12,8 +12,6 @@ export const MAX_SET_MENU_AMOUNT_CENTS = 1_000_000;
 export interface SetMenuOfferDish {
   readonly productId: string;
   readonly variantId: string | null;
-  /** What this dish counts as when it is placed in this set menu: the set menu's own course for
-   * it, else its product's course, as copied when the full menu was published. */
   readonly countsAsCourseId: string;
   readonly surchargeCents: number;
 }
