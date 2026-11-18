@@ -1043,11 +1043,6 @@ it.each([
     "One of these bills is to eat here and the other to take away, so dishes cannot move between them. Switch one bill to match the other first, if it has not gone to the kitchen",
     "Una de estas cuentas es para tomar aquí y la otra para llevar, así que los platos no pueden pasar de una a otra. Cambia primero una de ellas para que coincidan, si aún no ha ido a cocina",
   ],
-  [
-    "order.set_lunch_takeaway",
-    "Set lunches are only served to eat here for now, so a takeaway order cannot include one. Remove the set lunch to sell this order to take away",
-    "Por ahora el menú del día solo se sirve para tomar aquí, así que un pedido para llevar no puede incluirlo. Quita el menú del día para vender este pedido para llevar",
-  ],
 ])("words %s in English and Spanish (A1522)", (code, en, es) => {
   expect(codeMessage(code, "en")).toBe(en);
   expect(codeMessage(code, "es")).toBe(es);

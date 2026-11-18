@@ -99,8 +99,6 @@ import {
   productsOfferedIn,
   readLateSendMarks,
   recordLateSendMarks,
-  readLunchLineIds,
-  orderHasSetLunch,
 } from "./operations.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 
@@ -2139,73 +2137,6 @@ async function addLine(tx: Transaction, venue: SellingVenue, orderId: string, li
   });
   return id;
 }
-
-it("says whether an order holds a set lunch, by its lines' recorded versions", async () => {
-  const venue = await seedSellingVenue();
-  await scoped(async (tx) => {
-    const id = await openOrder(tx, venue, 1);
-    await recordOrderServiceContext(tx, id, venue.diningZone);
-    expect(await orderHasSetLunch(tx, id)).toBe(false);
-    const ordinary = await addLine(tx, venue, id, 1);
-    await stampFixtureLineContexts(
-      tx,
-      id,
-      [{ workingOrderLineId: ordinary, menuItemId: venue.menuItemId }],
-      await listZoneOffers(tx, venue.diningZone),
-    );
-    expect(await orderHasSetLunch(tx, id)).toBe(false);
-    await updateProduct(tx, venue.productId, { setLunch: true });
-    await publish(tx, venue.menuId);
-    const lunch = await addLine(tx, venue, id, 2);
-    await stampFixtureLineContexts(
-      tx,
-      id,
-      [{ workingOrderLineId: lunch, menuItemId: venue.menuItemId }],
-      await listZoneOffers(tx, venue.diningZone),
-    );
-    expect(await orderHasSetLunch(tx, id)).toBe(true);
-    const other = await openOrder(tx, venue, 2);
-    expect(await orderHasSetLunch(tx, other)).toBe(false);
-  });
-});
-
-it("reads lunch identity from each line's recorded version after republishing", async () => {
-  const venue = await seedSellingVenue();
-  await scoped(async (tx) => {
-    const id = await openOrder(tx, venue, 1);
-    await recordOrderServiceContext(tx, id, venue.diningZone);
-    const ordinary = await addLine(tx, venue, id, 1);
-    await stampFixtureLineContexts(
-      tx,
-      id,
-      [{ workingOrderLineId: ordinary, menuItemId: venue.menuItemId }],
-      await listZoneOffers(tx, venue.diningZone),
-    );
-    await updateProduct(tx, venue.productId, { setLunch: true });
-    await publish(tx, venue.menuId);
-    const lunch = await addLine(tx, venue, id, 2);
-    const withoutVersion = await addLine(tx, venue, id, 3);
-    await stampFixtureLineContexts(
-      tx,
-      id,
-      [lunch, withoutVersion].map((workingOrderLineId) => ({
-        workingOrderLineId,
-        menuItemId: venue.menuItemId,
-      })),
-      await listZoneOffers(tx, venue.diningZone),
-    );
-    await tx
-      .update(workingOrderLines)
-      .set({ menuVersionId: null })
-      .where(eq(workingOrderLines.id, withoutVersion));
-    await updateProduct(tx, venue.productId, { setLunch: false });
-    await publish(tx, venue.menuId);
-    expect(await readLunchLineIds(tx, [ordinary, lunch, withoutVersion, randomUUID()])).toEqual(
-      new Set([lunch]),
-    );
-    expect(await readLunchLineIds(tx, [])).toEqual(new Set());
-  });
-});
 
 describe("order service context", () => {
   afterEach(() => {

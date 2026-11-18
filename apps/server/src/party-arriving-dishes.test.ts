@@ -1243,9 +1243,7 @@ describe("A773 requested lifecycle: arrival", () => {
     expect(burgerItem.firedAt).not.toBeNull();
     await nextMillisecond();
     await everyStationWaiting(async () => {
-      await inTx(v, (tx) =>
-        fireOrderLines(tx, v.cfg, originalParty.tabId, [custardLine!.id], { ask: undefined }),
-      );
+      await inTx(v, (tx) => fireOrderLines(tx, v.cfg, originalParty.tabId, [custardLine!.id]));
       const custardItem = await itemOf(custardLine!.id);
       expect(custardItem).toMatchObject({ firedAt: null, passControlled: true });
       expect(custardItem.requestedAt! > burgerItem.firedAt!).toBe(true);

@@ -6,12 +6,13 @@ import { trackDialog } from "./track-dialog.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   formatDecimalInput,
   saveActionState,
 } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import type {
   ComboboxOption,
   DraftScope,
@@ -128,18 +129,6 @@ export class TillModifierPicker extends LitElement {
       }
       .min-quantity-action {
         margin-block: calc(-1 * var(--wt-space-2)) var(--wt-space-3);
-      }
-      .picker-actions {
-        width: 100%;
-      }
-      .picker-action-row {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--wt-space-2);
-      }
-      .request-refusal {
-        margin: 0 0 var(--wt-space-2);
-        color: var(--wt-color-danger);
       }
       .group {
         margin: 0 0 var(--wt-space-4);
@@ -304,9 +293,6 @@ export class TillModifierPicker extends LitElement {
    * it is empty, which is how "the operator deliberately picked nothing" is told from a fresh open:
    * a fresh open seeds the offer's defaults, a reopen never does. */
   @property({ attribute: false }) initialSelections?: LineSelection;
-  @property({ attribute: false }) lockedExtras: readonly { listId: string; productId: string }[] =
-    [];
-
   @property({ attribute: false }) filters: MenuFilters = EMPTY_MENU_FILTERS;
   @state() private removedDefaults: string[] = [];
 
@@ -316,7 +302,6 @@ export class TillModifierPicker extends LitElement {
   @property() coursePlaceholder = "";
   @property({ attribute: false }) courseChoices: readonly ComboboxOption[] = [];
   @property({ type: Boolean }) disabled = false;
-  @property({ attribute: false }) refusal: unknown = nothing;
   @property({ type: Boolean }) lineDetails = false;
   /** With {@link lineDetails}, the line's quantity is neither drawn nor sent. */
   @property({ type: Boolean }) quantityReadOnly = false;
@@ -340,7 +325,7 @@ export class TillModifierPicker extends LitElement {
   #reported?: ModifierChangeDetail;
   @state() private courseId = "";
   @state() private editedQuantity = "1";
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
 
   /** How many of each offered product is taken, keyed by {@link pickKey}. */
   @state() private picks: Record<string, number> = {};
@@ -614,7 +599,7 @@ export class TillModifierPicker extends LitElement {
         return entry.labels.some((label) => label.id === this.answers[entry.id]);
       const total = totals.get(entry.id) ?? 0;
       return (
-        (this.product.setLunch === true || total >= entry.minPicks) &&
+        total >= entry.minPicks &&
         (entry.maxPicks === null || total <= entry.maxPicks) &&
         entry.items.every(
           (item) =>
@@ -682,12 +667,7 @@ export class TillModifierPicker extends LitElement {
     return formatMoney(lineGross(previewLine), currentLocale());
   }
 
-  #locked(listId: string, productId: string): boolean {
-    return this.lockedExtras.some((pick) => pick.listId === listId && pick.productId === productId);
-  }
-
   #setCount(listId: string, productId: string, quantity: number): void {
-    if (this.#locked(listId, productId)) return;
     if (!this.isConnected || !this.active) return;
     const next = { ...this.picks };
     if (quantity >= 1) {
@@ -727,9 +707,9 @@ export class TillModifierPicker extends LitElement {
     e?.stopPropagation();
     if (!this.isConnected || !this.active || this.disabled || this.readOnly) return;
     if (this.#saveAction().unchanged) return;
-    this.attempted = true;
+    this.feedback.press();
     if (this.lineDetails && this.#quantityInvalid()) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     if (!this.#satisfied(this.#stalePicks(), this.#listTotals())) return;
@@ -785,7 +765,7 @@ export class TillModifierPicker extends LitElement {
   override updated(): void {
     if (!this.inline || !this.product || !this.#scope) return;
     const { saveAction, satisfied } = this.#checks;
-    const quantityRefused = this.attempted && this.lineDetails && this.#quantityInvalid();
+    const quantityRefused = this.feedback.attempted && this.lineDetails && this.#quantityInvalid();
     const extras = this.#selectedExtras();
     const report: ModifierChangeDetail = {
       changed: !saveAction.unchanged,
@@ -879,7 +859,7 @@ export class TillModifierPicker extends LitElement {
                         required
                         decimal-locale=${currentLocale()}
                         .value=${this.editedQuantity}
-                        .error=${!this.attempted || !this.#quantityInvalid() ? "" : this.#quantityBelowMinimum() ? this.minQuantityMessage : t("line.quantity_invalid")}
+                        .error=${!this.feedback.attempted || !this.#quantityInvalid() ? "" : this.#quantityBelowMinimum() ? this.minQuantityMessage : t("line.quantity_invalid")}
                         @wt-change=${(event: CustomEvent<{ value: string }>) => {
                           event.stopPropagation();
                           if (!this.isConnected || !this.active || this.disabled || this.readOnly)
@@ -889,7 +869,7 @@ export class TillModifierPicker extends LitElement {
                         }}
                       ></wt-input
                       >${
-                        this.attempted && this.#quantityBelowMinimum()
+                        this.feedback.attempted && this.#quantityBelowMinimum()
                           ? html`<div class="min-quantity-action">
                               <slot name="min-quantity-action"></slot>
                             </div>`
@@ -1066,31 +1046,31 @@ export class TillModifierPicker extends LitElement {
       @wt-close=${(event: Event) => this.#closed(event)}
     >
       ${fields}
-      <div slot="footer" class="picker-actions">
-        ${this.refusal === nothing ? nothing : html`<p role="alert" class="request-refusal">${this.refusal}</p>`}
-        ${!this.readOnly && this.attempted && this.lineDetails && this.#quantityInvalid() ? html`<p role="alert">${t("form.fix_fields")}</p>` : nothing}
-        <div class="picker-action-row">
-          <wt-button
-            class="cancel"
-            variant="secondary"
-            @click=${(event: Event) => this.#cancel(event)}
-          >
-            ${t(this.lineDetails ? "table.submitted_close" : "action.cancel")}
-          </wt-button>
-          ${
-            this.readOnly
-              ? nothing
-              : html`<wt-button
-                  class="confirm"
-                  variant=${this.initialSelections === undefined && !satisfied ? "secondary" : saveAction.variant}
-                  ?disabled=${this.disabled || saveAction.unchanged || !satisfied || (this.attempted && this.lineDetails && this.#quantityInvalid())}
-                  @click=${(e: Event) => this.#confirm(e)}
-                >
-                  ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
-                </wt-button>`
-          }
-        </div>
-      </div>
+      <wt-form-actions
+        slot="footer"
+        .error=${!this.readOnly && this.feedback.attempted && this.lineDetails && this.#quantityInvalid() ? t("form.fix_fields") : ""}
+      >
+        <wt-button
+          slot="cancel"
+          class="cancel"
+          variant="secondary"
+          @click=${(event: Event) => this.#cancel(event)}
+        >
+          ${t(this.lineDetails ? "table.submitted_close" : "action.cancel")}
+        </wt-button>
+        ${
+          this.readOnly
+            ? nothing
+            : html`<wt-button
+                class="confirm"
+                variant=${this.initialSelections === undefined && !satisfied ? "secondary" : saveAction.variant}
+                ?disabled=${this.disabled || saveAction.unchanged || !satisfied || (this.feedback.attempted && this.lineDetails && this.#quantityInvalid())}
+                @click=${(e: Event) => this.#confirm(e)}
+              >
+                ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
+              </wt-button>`
+        }
+      </wt-form-actions>
     </wt-modal>`;
     return keyed(this.#connection, modal);
   }
@@ -1129,18 +1109,15 @@ export class TillModifierPicker extends LitElement {
 
   #renderExtras(list: OfferedExtrasList, total: number) {
     const atListMax = list.maxPicks !== null && total >= list.maxPicks;
-    const unmetMinimum = !this.product.setLunch && list.minPicks >= 1 && total < list.minPicks;
+    const unmetMinimum = list.minPicks >= 1 && total < list.minPicks;
     const hintId = `minimum-${list.id}`;
     return html`
       <fieldset class="group" aria-describedby=${unmetMinimum ? hintId : nothing}>
-        <legend class="group-name">
-          ${list.name}${list.minPicks >= 1 && !this.product.setLunch ? " *" : ""}
-        </legend>
+        <legend class="group-name">${list.name}${list.minPicks >= 1 ? " *" : ""}</legend>
         <p class="selected-total">
           ${t("modifier.selected_total")}:
           ${total}${list.maxPicks === null ? "" : ` / ${list.maxPicks}`}
         </p>
-        ${this.product.setLunch && total < list.minPicks ? html`<p class="selected-total" data-lunch-open>${t("lunch.choose_later")}</p>` : nothing}
         ${unmetMinimum ? html`<p class="minimum-picks" id=${hintId}>${t("modifier.minimum_picks").replace("{count}", String(list.minPicks))}</p>` : nothing}
         <div class="extras-choices">
           ${list.items.map((item) =>
@@ -1188,7 +1165,7 @@ export class TillModifierPicker extends LitElement {
           type="checkbox"
           name=${`extras-${list.id}`}
           .checked=${checked}
-          ?disabled=${this.#locked(list.id, item.productId) || (!checked && atListMax)}
+          ?disabled=${!checked && atListMax}
           @change=${(e: Event) => {
             e.stopPropagation();
             this.#setCount(list.id, item.productId, (e.target as HTMLInputElement).checked ? 1 : 0);
@@ -1213,7 +1190,7 @@ export class TillModifierPicker extends LitElement {
             size=${this.lineDetails ? "md" : "sm"}
             data-test="${test}-dec"
             aria-label=${`${t("modifier.decrease")} ${item.name}`}
-            ?disabled=${this.#locked(list.id, item.productId) || count <= 0}
+            ?disabled=${count <= 0}
             @click=${() => this.#step(list, item, -1)}
           >
             −
@@ -1224,7 +1201,7 @@ export class TillModifierPicker extends LitElement {
             size=${this.lineDetails ? "md" : "sm"}
             data-test="${test}-inc"
             aria-label=${`${t("modifier.increase")} ${item.name}`}
-            ?disabled=${this.#locked(list.id, item.productId) || (item.maxQuantity !== null && count >= item.maxQuantity) || atListMax}
+            ?disabled=${(item.maxQuantity !== null && count >= item.maxQuantity) || atListMax}
             @click=${() => this.#step(list, item, 1)}
           >
             +

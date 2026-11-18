@@ -141,7 +141,6 @@ export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
 }
 
 /**
- * A set lunch stays with its diner. Ordinary identical dishes may share a simplified receipt row.
  * A group joins an earlier one
  * when its dish and each extra print the same at the same unit price and VAT rate, counted not
  * measured, with no list price and no comp or discount; counts and amounts add.
@@ -186,7 +185,6 @@ function samePrice(a: TillSaleLine, b: TillSaleLine): boolean {
 
 function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
   const lines = (group: LineGroup) => [group.dish, ...group.options];
-  if (a.dish.setLunch || b.dish.setLunch) return false;
   if (a.options.length !== b.options.length) return false;
   if (![...lines(a), ...lines(b)].every(groupable)) return false;
   if (answersKey(a.dish) !== answersKey(b.dish)) return false;

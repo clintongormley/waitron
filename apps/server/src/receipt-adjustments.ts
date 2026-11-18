@@ -2,7 +2,6 @@ import { readBillAdjustments } from "@waitron/adjustments";
 import type { Transaction } from "@waitron/db";
 import { sales, saleLines } from "@waitron/db";
 import { eq } from "drizzle-orm";
-import { readRecordedDocuments } from "@waitron/menu";
 import {
   addDecimal,
   basisPointsToDecimal,
@@ -83,10 +82,6 @@ export async function receiptLines(
             gross: saleLines.lineGross,
             listGross: saleLines.listGross,
             listUnitPriceGross: saleLines.listUnitPriceGross,
-            parentLineId: saleLines.parentLineId,
-            productId: saleLines.productId,
-            parentProductId: saleLines.parentProductId,
-            versionId: saleLines.menuVersionId,
             counterpartyTaxId: sales.counterpartyTaxId,
           })
           .from(saleLines)
@@ -99,39 +94,11 @@ export async function receiptLines(
     identities,
   ).map((line, i) => (each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line));
   if (filed !== undefined) {
-    const documents = await readRecordedDocuments(
-      tx,
-      filed.flatMap((row) =>
-        row.parentLineId === null && row.versionId !== null ? [row.versionId] : [],
-      ),
-    );
-    const lunches = new Map(
-      [...documents].map(([id, document]) => [
-        id,
-        new Set(
-          Object.values(document.offers)
-            .filter((offer) => offer.setLunch)
-            .map((offer) => offer.productId),
-        ),
-      ]),
-    );
-    const lunchLines = new Set(
-      filed
-        .filter(
-          (row) =>
-            row.parentLineId === null &&
-            row.versionId !== null &&
-            lunches.get(row.versionId)?.has(row.parentProductId ?? row.productId!),
-        )
-        .map((row) => row.lineNo),
-    );
     const byLineNo = new Map(filed.map((line) => [line.lineNo, line]));
     lines = lines.map((line, i) => {
       const lineNo = priced.lines[i]!.lineNo;
       const vatRate = basisPointsToDecimal(byLineNo.get(lineNo)!.rate);
-      return lunchLines.has(lineNo)
-        ? { ...line, vatRate, setLunch: true as const }
-        : { ...line, vatRate };
+      return { ...line, vatRate };
     });
     if (fullInvoice) {
       lines = lines.map((line, i) => {

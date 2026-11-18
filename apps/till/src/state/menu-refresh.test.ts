@@ -553,21 +553,6 @@ describe("lineBlock", () => {
       ).toBeUndefined();
     });
 
-    it("asks no least of a set lunch's list, but still its most", () => {
-      const setLunch = (limits: Parameters<typeof limited>[0], max = 2) => ({
-        ...limited(limits, max),
-        setLunch: true as const,
-      });
-      const none = lineOf(burger, "v1", { options: [cooked] });
-      expect(lineBlock(none, setLunch({ minPicks: 2 }))).toBeUndefined();
-      expect(
-        lineBlock({ ...none, extras: [pick("bacon", "1.50")] }, setLunch({ minPicks: 2 })),
-      ).toBeUndefined();
-      const two = { ...none, extras: [{ ...pick("cheese", "1.00"), quantity: 2 }] };
-      expect(lineBlock(two, setLunch({ maxPicks: 1 }))).toEqual(broken);
-      expect(lineBlock(two, setLunch({}, 1))).toEqual(broken);
-    });
-
     it("names a removed pick before the list's limits", () => {
       const line = lineOf(burger, "v1", {
         extras: [pick("cheese", "1.00"), { ...pick("ham", "1.00"), quantity: 2 }],

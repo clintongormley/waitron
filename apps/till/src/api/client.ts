@@ -306,7 +306,6 @@ import type { DietOverride, DietProfile } from "@waitron/shared";
  * retrieved order.
  */
 export interface TillProduct {
-  setLunch?: boolean;
   id: string;
   /** The shared product identity used by stock and preparation routing. */
   productId?: string;
@@ -499,7 +498,6 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     menuItemId: offer.id,
     ...(menuVersionId === undefined ? {} : { menuVersionId }),
     available: offer.available,
-    ...(offer.setLunch ? { setLunch: true } : {}),
     ...(offer.ordering === undefined ? {} : { ordering: offer.ordering }),
     ...(offer.color === undefined ? {} : { color: offer.color }),
     image: offer.image,
@@ -859,12 +857,6 @@ export interface LateSend {
   override?: { personId: string; pin: string };
 }
 
-/** A table send or fire: `lateSend` confirms a stored set-lunch course whose period has ended, which
- * is otherwise refused with `menu_period.ended` naming its lines in `workingOrderLineIds`. */
-export interface ReleaseCommand extends AllergyCommand {
-  lateSend?: LateSend;
-}
-
 /** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
@@ -1003,8 +995,6 @@ export type Tender = CashTender | CardTender;
  * never the client basket, so the printed line list cannot diverge from the invoice.
  */
 export interface TillSaleLine {
-  /** Presentation only, derived from the line's recorded menu version. */
-  setLunch?: true;
   /** F1 figures read from the filed sale line; unitPrice is per priceQuantity, base is the line total. */
   net?: { unitPrice: string; priceQuantity: string; base: string; rate: string; tax?: string };
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
@@ -2422,7 +2412,6 @@ export interface SplitSources {
  * `unitPriceGross` is the gross unit price LOCKED at add-time.
  */
 export interface TabLine {
-  lunchOffer?: TillMenuOffer;
   nutrition?: LineNutrition;
   /** The row's id, which a group move names. A dish in an order group is listed by it in
    * {@link OrderGroup.lineIds}; a child extras row never is. */
@@ -3436,7 +3425,7 @@ export class TillApi {
   }
 
   /** Switch a saved order between eaten here and takeaway → `PUT /api/working-orders/:id/dining`.
-   * Rejects, among others, `order.dining_fixed`, `order.dining_locked`, `order.set_lunch_takeaway`
+   * Rejects, among others, `order.dining_fixed`, `order.dining_locked`
    * and `working_order.out_of_date`. */
   switchDining(
     orderId: string,
@@ -4453,7 +4442,7 @@ export class TillApi {
   fireGroup(
     partyId: string,
     groupId: string,
-    command: ReleaseCommand,
+    command: AllergyCommand,
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4573,7 +4562,7 @@ export class TillApi {
   fireHeldLine(
     partyId: string,
     lineId: string,
-    command: ReleaseCommand,
+    command: AllergyCommand,
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4650,7 +4639,7 @@ export class TillApi {
     orderId: string,
     lineNos: number[],
     expectedEdit: BillEditExpected | null,
-    command?: ReleaseCommand,
+    command?: AllergyCommand,
     options: ReadOptions = {},
   ): Promise<void> {
     await this.#request<void>(

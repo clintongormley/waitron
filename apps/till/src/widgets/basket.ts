@@ -17,13 +17,7 @@ import { type Decimal, decimal, formatMoney, grossOf, multiplyDecimal } from "@w
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { nutritionIcons, nutritionIconStyles, nutritionDietLabels } from "./nutrition-icons.js";
 import { optionAnswers } from "./option-snapshot.js";
-import {
-  dishGross,
-  extraGross,
-  needsModifierPicker,
-  offeredListsOf,
-  quantityLabel,
-} from "../state/order-line.js";
+import { dishGross, extraGross, needsModifierPicker, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
@@ -1030,24 +1024,6 @@ export class TillBasket extends LitElement {
                     </div>
                   `,
                 )}
-                ${
-                  line.product.setLunch
-                    ? offeredListsOf(line.product)
-                        .filter(
-                          (list) =>
-                            list.kind === "extras" &&
-                            (line.extras ?? [])
-                              .filter((pick) => pick.listId === list.id)
-                              .reduce((sum, pick) => sum + pick.quantity, 0) < list.minPicks,
-                        )
-                        .map(
-                          (list) =>
-                            html`<div class="option" data-lunch-open>
-                              <span class="name">${list.name}: ${t("lunch.choose_later")}</span>
-                            </div>`,
-                        )
-                    : nothing
-                }
                 ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
                 <div class="line-after"><slot name=${`after-${index}`}></slot></div>
               </div>

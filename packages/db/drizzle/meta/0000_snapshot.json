@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "de0debe4-e91a-4ae8-a169-5ce6faad1e65",
+  "id": "658a844d-190f-4752-9dab-bcc50bc65946",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -7093,14 +7093,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
-        },
-        "set_lunch": {
-          "name": "set_lunch",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
         },
         "category_id": {
           "name": "category_id",

@@ -4,15 +4,7 @@ import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  addProductToMenu,
-  buildMenuDocument,
-  createMenu,
-  createProduct,
-  menuDocumentHash,
-  publishMenu,
-  units,
-} from "@waitron/menu";
+import { addProductToMenu, createMenu, createProduct, units } from "@waitron/menu";
 import type { Dining, DiningPolicy } from "@waitron/shared";
 import {
   departments,
@@ -1403,59 +1395,6 @@ describe("departmental tab transfers", () => {
       return line!.id;
     }
 
-    /** A line recorded from a published menu whose product is a set lunch. */
-    async function addSetLunch(v: Pending): Promise<void> {
-      await withTransaction(suite.db, async (tx) => {
-        await seedPerson(tx, { id: "person-1" });
-        const [unit] = await tx
-          .insert(units)
-          .values({
-            staffName: `Unit ${randomUUID()}`,
-            staffAbbreviation: "su",
-            name: { en: "each" },
-            abbreviation: { en: "ea" },
-            precision: 0,
-            seedKey: `each-${randomUUID()}`,
-          })
-          .returning();
-        const menu = await createMenu(tx, { name: `Lunch ${randomUUID()}` });
-        const product = await createProduct(tx, {
-          categoryId: null,
-          name: "Set lunch",
-          pricingUnit: "each",
-          unitPrice: "14.00",
-          vatClass: "reduced",
-          setLunch: true,
-        });
-        const offer = await addProductToMenu(tx, { menuId: menu.id, productId: product.id });
-        const { document } = await buildMenuDocument(tx, menu.id);
-        const { versionId } = await publishMenu(
-          tx,
-          menu.id,
-          menuDocumentHash(document),
-          "person-1",
-        );
-        const lineId = await addLine(tx, v);
-        await tx
-          .update(workingOrderLines)
-          .set({
-            menuItemId: offer.id,
-            menuId: menu.id,
-            menuVersionId: versionId,
-            menuName: "Lunch",
-            offerDepartmentId: v.a,
-            departmentName: "Deli",
-            offerCategoryName: "Lunch",
-            unitId: unit!.id,
-            offerUnitName: { en: "ea" },
-            offerUnitPrecision: 0,
-            soldInEach: true,
-            offerVatClass: "reduced",
-          })
-          .where(eq(workingOrderLines.id, lineId));
-      });
-    }
-
     async function diningOf(tab: string): Promise<Dining> {
       const [row] = await suite.db
         .select({ dining: workingOrders.dining })
@@ -1484,26 +1423,6 @@ describe("departmental tab transfers", () => {
         expect(await diningOf(v.tab)).toBe(dining);
       },
     );
-
-    it("refuses taking a set lunch away and leaves the order where it was", async () => {
-      const v = await deliOrder("eat_in", { dining: "takeaway", orderStart: "counter" });
-      await addSetLunch(v);
-      await expect(accept(v)).rejects.toMatchObject({
-        code: "order.set_lunch_takeaway",
-        params: { canSwitch: false },
-      });
-      expect(await diningOf(v.tab)).toBe("eat_in");
-      expect(await withTransaction(suite.db, (tx) => getOrderServiceContext(tx, v.tab))).toEqual({
-        zoneId: v.az,
-        departmentId: v.a,
-        serviceMode: "prepay",
-      });
-      const [request] = await suite.db
-        .select({ status: departmentTransferRequests.status })
-        .from(departmentTransferRequests)
-        .where(eq(departmentTransferRequests.id, v.request.id));
-      expect(request).toEqual({ status: "pending" });
-    });
 
     it.each(["till_choice", "eat_in"] as const)(
       "keeps an unsent takeaway counter order takeaway at a table of a %s department",

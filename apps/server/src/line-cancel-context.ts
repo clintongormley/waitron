@@ -1,4 +1,3 @@
-import { serviceDishPredicate } from "./service-dishes.js";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { ticketItems, workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
@@ -66,11 +65,7 @@ async function readRowContext(
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(eq(workingOrderLines.id, lineId));
-  if (
-    subject === undefined ||
-    (subject.parentLineId !== null && !(await serviceDishPredicate(tx, [subject]))(subject))
-  )
-    throw invalid("lineId");
+  if (subject === undefined || subject.parentLineId !== null) throw invalid("lineId");
   if (typeof target !== "string") {
     if (subject.bill.id !== target.billId || subject.bill.partyId !== null) throw invalid("lineId");
     if (subject.bill.status !== "open")

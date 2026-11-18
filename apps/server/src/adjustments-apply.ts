@@ -1,4 +1,3 @@
-import { serviceDishPredicate } from "./service-dishes.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -1029,25 +1028,7 @@ export async function planAdjustment(
     .where(eq(persons.id, ask.operatorId));
   if (actor === undefined) throw new AppError("person.not_found", { personId: ask.operatorId });
   const actorPermissions = (await readPersonAuthority(tx, ask.operatorId)).permissions;
-  const isDish = await serviceDishPredicate(tx, view);
-  const stageLines =
-    line === null
-      ? []
-      : isDish(line)
-        ? [line]
-        : line.parentLineId === null
-          ? view.filter((child) => child.parentLineId === line.id)
-          : [dishOf(line, view)];
-  const stage =
-    line === null
-      ? null
-      : stageLines.reduce(
-          (latest, member) => {
-            const candidate = stageOf(member);
-            return STAGE_RANK[candidate] > STAGE_RANK[latest] ? candidate : latest;
-          },
-          stageOf(line.parentLineId === null || isDish(line) ? line : dishOf(line, view)),
-        );
+  const stage = line === null ? null : stageOf(dishOf(line, view));
   const maxBillComp =
     ask.action === "cancel" ? null : (await readAdjustmentSettings(tx)).maxBillComp;
   const verdict =

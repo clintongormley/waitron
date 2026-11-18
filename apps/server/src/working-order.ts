@@ -1,6 +1,5 @@
 import { takesExtras, type ExtrasUnit } from "@waitron/menu/src/unit-extras.js";
 export { takesExtras } from "@waitron/menu/src/unit-extras.js";
-import { serviceDishPredicate, serviceDishCondition } from "./service-dishes.js";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
 import { prepareIssueClock } from "@waitron/fiscal";
@@ -257,7 +256,6 @@ import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   readOrderDinings,
-  refuseTakeawaySetLunch,
   requireOrderDining,
   storedOrderDining,
   type DiningChoice,
@@ -498,9 +496,8 @@ function offerModifiers(offer: ZoneMenuOffer, config: ContentLanguages): OfferMo
 function extrasListsFor(
   lists: ResolvedExtraList[],
   unit: ExtrasUnit | undefined,
-  setLunch = false,
 ): ResolvedExtraList[] {
-  return !setLunch && (unit === undefined || takesExtras(unit))
+  return unit === undefined || takesExtras(unit)
     ? lists
     : lists.map((list) => ({ ...list, minPicks: 0 }));
 }
@@ -584,12 +581,10 @@ async function readBasketOffers(
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
 /**
  * Marks an {@link ADDED_EXTRAS_ONLY} line whose stored dish, or one of its extras, has been sent:
- * stamped sent or holding a ticket item, held or fired. A set lunch's own row is never either, so
- * its courses answer for it. Only such extras take the period-ended check. A symbol, so no JSON
- * body can set it.
+ * stamped sent or holding a ticket item, held or fired. Only such extras take the period-ended
+ * check. A symbol, so no JSON body can set it.
  */
 const ON_SENT_DISH = Symbol("onSentDish");
-const RECORDED_OFFER = Symbol("recordedOffer");
 
 /**
  * Marks a requested line that prices a raised quantity of a stored line: after its period it is
@@ -624,7 +619,6 @@ export async function priceOrderLines(
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
     [ON_SENT_DISH]?: true;
-    [RECORDED_OFFER]?: { offer: ZoneMenuOffer; versionId: string };
     [STORED_RISE]?: true;
   } & LineExtras &
     RetainedCourseLine)[],
@@ -644,7 +638,6 @@ export async function priceOrderLines(
     workingOrderLineId: string;
     menuItemId: string;
     variantId?: string;
-    recorded?: { offer: ZoneMenuOffer; versionId: string };
     unit?: ExtraChild["unitContext"];
     late?: { periodName: string; confirmedBy: string };
   }[];
@@ -702,7 +695,7 @@ export async function priceOrderLines(
     const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
     const items: { productId: string; variantId: string | null }[] = [];
     for (const line of requestedLines) {
-      const offer = line[RECORDED_OFFER]?.offer ?? offerById.get(line.menuItemId);
+      const offer = offerById.get(line.menuItemId);
       const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
       if (
         periodName === undefined ||
@@ -736,7 +729,7 @@ export async function priceOrderLines(
     ) {
       throw new AppError("management.request_invalid", { field: "lines" });
     }
-    const offer = line[RECORDED_OFFER]?.offer ?? offerById.get(line.menuItemId);
+    const offer = offerById.get(line.menuItemId);
     if (offer === undefined) {
       throw new AppError("service_zone.offer_not_allowed", {
         zoneId: zoneId!,
@@ -771,17 +764,8 @@ export async function priceOrderLines(
     if (offer.ordering === "not_sold_separately" && line[ADDED_EXTRAS_ONLY] !== true) {
       throw new AppError("product.not_sold_separately", { productId: offer.productId });
     }
-    return {
-      ...line,
-      offer,
-      setLunch:
-        offer.setLunch === true &&
-        (line[ADDED_EXTRAS_ONLY] !== true || line[RECORDED_OFFER] !== undefined),
-    };
+    return { ...line, offer };
   });
-  if (dining === "takeaway" && lines.some((line) => line.setLunch)) {
-    await refuseTakeawaySetLunch(tx, workingOrderId, zoneId);
-  }
   // The mark each confirmed late dish's rows carry, by the dish's index in `lines`.
   const marks = new Map<number, { periodName: string; confirmedBy: string }>();
   if (late.length > 0) {
@@ -831,7 +815,6 @@ export async function priceOrderLines(
   type LineMeta =
     | {
         kind: "parent";
-        recorded?: { offer: ZoneMenuOffer; versionId: string };
         productId: string;
         variantId?: string;
         menuItemId: string;
@@ -846,8 +829,6 @@ export async function priceOrderLines(
       }
     | {
         kind: "child";
-        courseId: string | null;
-        recorded?: { offer: ZoneMenuOffer; versionId: string };
         productId: string;
         menuItemId: string;
         extraListId: string;
@@ -856,21 +837,6 @@ export async function priceOrderLines(
         vatClass: VatClass;
         takeawayVatClass: VatClass;
       };
-  const lunchProducts = [
-    ...new Set(
-      lines.flatMap((line) => (line.setLunch ? picksOf(line).map((pick) => pick.productId) : [])),
-    ),
-  ];
-  const lunchCourses = new Map(
-    lunchProducts.length === 0
-      ? []
-      : (
-          await tx
-            .select({ id: products.id, courseId: products.courseId })
-            .from(products)
-            .where(inArray(products.id, lunchProducts))
-        ).map((row) => [row.id, row.courseId]),
-  );
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   for (const [index, line] of lines.entries()) {
@@ -914,9 +880,7 @@ export async function priceOrderLines(
     const built = buildLineExtras(
       {
         extras:
-          line[FROZEN_EXTRAS] === undefined
-            ? extrasListsFor(modifiers.extras, selection.unit, line.setLunch)
-            : [],
+          line[FROZEN_EXTRAS] === undefined ? extrasListsFor(modifiers.extras, selection.unit) : [],
         options: line[FROZEN_OPTIONS] === undefined ? modifiers.options : [],
       },
       modifiers.extraProducts,
@@ -954,7 +918,7 @@ export async function priceOrderLines(
         kitchenName: child.kitchenName,
         // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        vatClass: line.setLunch ? product.vatClass : appliedVatClass(dining, child),
+        vatClass: appliedVatClass(dining, child),
         quantity: child.quantity,
         physicalQuantity: child.physicalQuantity,
         priceQuantity: child.priceQuantity,
@@ -964,7 +928,6 @@ export async function priceOrderLines(
     });
     lineMeta.push({
       kind: "parent",
-      recorded: line[RECORDED_OFFER],
       productId: selection.productId,
       ...(line.variantId == null ? {} : { variantId: line.variantId }),
       menuItemId: line.menuItemId,
@@ -991,15 +954,12 @@ export async function priceOrderLines(
     for (const child of extraChildren) {
       lineMeta.push({
         kind: "child",
-        courseId: line.setLunch ? (lunchCourses.get(child.productId) ?? null) : null,
-        recorded: line[RECORDED_OFFER],
         productId: child.productId,
         menuItemId: line.menuItemId,
         extraListId: child.listId,
         unit: child.unitContext,
-        // A set lunch is sold only eaten here, and its choices at the dish's class.
-        vatClass: line.setLunch ? classes.vatClass : child.vatClass,
-        takeawayVatClass: line.setLunch ? classes.vatClass : child.takeawayVatClass,
+        vatClass: child.vatClass,
+        takeawayVatClass: child.takeawayVatClass,
         ...(mark === undefined ? {} : { late: mark }),
       });
     }
@@ -1071,7 +1031,7 @@ export async function priceOrderLines(
       // customer see is gross, so the held-orders list's `sum(line_total)` must be too.
       lineTotal: decimalToCents(line.lineGross),
       category: line.category ?? null,
-      courseId: meta.courseId,
+      courseId: meta.kind === "parent" ? meta.courseId : null,
       note: meta.kind === "parent" ? meta.note : null,
       makeAtStationId: meta.kind === "parent" ? meta.makeAt : null,
       extraListId: meta.kind === "child" ? meta.extraListId : null,
@@ -1095,7 +1055,6 @@ export async function priceOrderLines(
     ...(meta.kind === "parent" && meta.variantId !== undefined
       ? { variantId: meta.variantId }
       : {}),
-    ...(meta.recorded === undefined ? {} : { recorded: meta.recorded }),
     ...(meta.unit !== undefined ? { unit: meta.unit } : {}),
     ...(meta.late !== undefined ? { late: meta.late } : {}),
   }));
@@ -1979,8 +1938,7 @@ export type LateUnsentMode = { ask: LateSendConfirmation | undefined } | "mark";
  * Judge stored dishes about to fire as entry judges a new one, and mark the late ones before they
  * fire, so their tickets print the mark. A dish already marked was judged when it was entered or by
  * an earlier send. Its menu is the one it was stored from; it is judged by the department of the
- * order's zone now, then by the one it was stored in ({@link unplacedLateDishes}); a lunch course is
- * judged by its lunch's product.
+ * order's zone now, then by the one it was stored in ({@link unplacedLateDishes}).
  */
 export async function lateUnsentDishes(
   tx: Transaction,
@@ -2027,7 +1985,7 @@ interface LateUnsentDish {
   lineId: string;
   /** The stored line a refusal names: an extra's dish when the extra is judged without it. */
   namedId: string;
-  /** The line whose product the also-sold rule reads: a lunch course's lunch, an extra's dish. */
+  /** The dish whose product the also-sold rule reads. */
   dishId: string;
   menuId: string;
   menuItemId: string;
@@ -2221,8 +2179,9 @@ export async function unsentDishLines(tx: Transaction, orderId: string): Promise
     tx,
     lines.map((line) => line.id),
   );
-  const isDish = await serviceDishPredicate(tx, lines);
-  return lines.filter((line) => isDish(line) && line.quantity > (cancellations.get(line.id) ?? 0));
+  return lines.filter(
+    (line) => line.parentLineId === null && line.quantity > (cancellations.get(line.id) ?? 0),
+  );
 }
 
 /**
@@ -2254,55 +2213,14 @@ export async function fireLines(
   const routing = options.routing ?? routingOnce(tx, new Date());
   const now = routing.at;
   const firedAt = now.toISOString();
-  const lunches = await VENUE_SERVICE.readLunchLineIds(tx, [
-    ...new Set(lines.map((line) => line.parentLineId ?? line.id)),
-  ]);
-  const lunchIds = new Set(
-    lines
-      .filter((line) => line.parentLineId === null && lunches.has(line.id))
-      .map((line) => line.id),
-  );
-  if (lunchIds.size > 0) {
-    const children = await tx
-      .select(fireableLineColumns)
-      .from(workingOrderLines)
-      .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-      .where(
-        and(
-          inArray(workingOrderLines.parentLineId, [...lunchIds]),
-          isNull(ticketItems.id),
-          isNull(workingOrderLines.sentAt),
-        ),
-      );
-    const byId = new Map(lines.map((line) => [line.id, line]));
-    for (const child of children)
-      if (!byId.has(child.id)) {
-        const parent = byId.get(child.parentLineId!)!;
-        byId.set(child.id, { ...child, hold: parent.hold, release: parent.release });
-      }
-    lines = [...byId.values()];
-  }
-  const isDish = (line: FireableLine) =>
-    line.parentLineId === null ? !lunches.has(line.id) : lunches.has(line.parentLineId);
   const cancellations = await readLineCancellations(
     tx,
     lines.map((line) => line.id),
   );
-  const lunchNotes =
-    lunches.size === 0
-      ? []
-      : await tx
-          .select({ id: workingOrderLines.id, note: workingOrderLines.note })
-          .from(workingOrderLines)
-          .where(inArray(workingOrderLines.id, [...lunches]));
-  const noteByLunch = new Map(lunchNotes.map((line) => [line.id, line.note]));
   const parentLines = lines
-    .filter(isDish)
+    .filter((line) => line.parentLineId === null)
     .map((line) => ({
       ...line,
-      note:
-        line.note ??
-        (line.parentLineId === null ? null : (noteByLunch.get(line.parentLineId) ?? null)),
       quantity: serviceQuantities(line.quantity, 0, cancellations.get(line.id) ?? 0).active,
     }))
     .filter((line) => line.quantity > 0);
@@ -2683,7 +2601,7 @@ async function heldNoRouteLines(
     .where(
       and(
         eq(workingOrderLines.workingOrderId, orderId),
-        await serviceDishCondition(tx, eq(workingOrderLines.workingOrderId, orderId)),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         isNotNull(workingOrderLines.productId),
         isNull(workingOrderLines.sentAt),
         isNull(ticketItems.id),
@@ -2742,125 +2660,15 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
   return order?.status === "open";
 }
 
-/** The stored dishes of `lineIds` a fire sends: unsent dish lines with a parent, a set lunch's courses. */
-async function storedCoursesOf(
-  tx: Transaction,
-  orderId: string,
-  lineIds: readonly string[],
-): Promise<FireableLine[]> {
-  const named = new Set(lineIds);
-  return (await unsentDishLines(tx, orderId)).filter(
-    (line) => line.parentLineId !== null && named.has(line.id),
-  );
-}
-
-/**
- * The stored courses of a fire to judge as late. Released from a hold, a course that reaches no
- * station is skipped: nothing stored tells one sent on hold with no preparation from one stored
- * later, and nothing prints for either. One that reaches a station, by its own make-at choice or
- * by routing, is judged, as {@link fireLines} decides where it goes.
- */
-async function coursesToJudge(
-  tx: Transaction,
-  orderId: string,
-  courses: readonly FireableLine[],
-  fromHold: boolean,
-  routing: RoutingOnce,
-): Promise<FireableLine[]> {
-  if (!fromHold || courses.length === 0) return [...courses];
-  const chosen = await tx
-    .select({ id: workingOrderLines.id })
-    .from(workingOrderLines)
-    .innerJoin(kitchenStations, eq(kitchenStations.id, workingOrderLines.makeAtStationId))
-    .where(
-      and(
-        inArray(
-          workingOrderLines.id,
-          courses.map((line) => line.id),
-        ),
-        eq(kitchenStations.active, true),
-      ),
-    );
-  const atChosenStation = new Set(chosen.map((row) => row.id));
-  const zoneId = (await VENUE_SERVICE.findOrderContext(tx, orderId))?.zoneId ?? null;
-  const routes = await (
-    await routing()
-  ).makers(zoneId, [...new Set(courses.map((line) => line.productId!))]);
-  return courses.filter((line) => {
-    if (atChosenStation.has(line.id)) return true;
-    const outcome = routes.get(line.productId!);
-    return !(outcome?.kind === "made" && outcome.route.kind === "no_preparation");
-  });
-}
-
-/**
- * Judge, before a held group is released across its bills, the stored courses each bill's
- * {@link fireOrderLines} would send, so one refusal names them all. Answers each bill's stored
- * courses, for its fire to take as already judged.
- */
-export async function judgeHeldRelease(
-  tx: Transaction,
-  bills: readonly { orderId: string; lineIds: readonly string[] }[],
-  late: LateUnsentMode,
-  routing: RoutingOnce,
-): Promise<Map<string, { judged: FireableLine[] }>> {
-  const stored = new Map<string, { judged: FireableLine[] }>();
-  const judged = [];
-  for (const { orderId, lineIds } of bills) {
-    const courses = await storedCoursesOf(tx, orderId, lineIds);
-    stored.set(orderId, { judged: courses });
-    judged.push({ orderId, lines: await coursesToJudge(tx, orderId, courses, true, routing) });
-  }
-  await lateUnsentDishesOf(tx, judged, late);
-  return stored;
-}
-
-/**
- * Send `lineIds`' stored courses and release their held kitchen work. `fire` names a release from a
- * held group; `late` says how a stored course whose period has ended is treated, or gives the
- * stored courses {@link judgeHeldRelease} already judged.
- */
 export async function fireOrderLines(
   tx: Transaction,
   cfg: OriginConfig,
   orderId: string,
   lineIds: readonly string[],
-  late: LateUnsentMode | { judged: readonly FireableLine[] },
   fire?: { heldPaper: ReadonlySet<string> },
   routing?: RoutingOnce,
 ): Promise<void> {
-  const fresh =
-    typeof late === "object" && "judged" in late
-      ? [...late.judged]
-      : await storedCoursesOf(tx, orderId, lineIds);
-  if (fresh.length > 0) {
-    if (await isOpenOrder(tx, orderId))
-      await assertSendable(
-        tx,
-        fresh.map((line) => line.id),
-      );
-    if (!(typeof late === "object" && "judged" in late))
-      await lateUnsentDishes(
-        tx,
-        orderId,
-        await coursesToJudge(
-          tx,
-          orderId,
-          fresh,
-          fire !== undefined,
-          routing ?? routingOnce(tx, new Date()),
-        ),
-        late,
-      );
-    await fireLines(
-      tx,
-      cfg,
-      orderId,
-      fresh.map((line) => ({ ...line, release: true })),
-      { routing },
-    );
-  }
-  const released = await releaseHeld(
+  await releaseHeld(
     tx,
     cfg,
     orderId,
@@ -2869,7 +2677,6 @@ export async function fireOrderLines(
     fire,
     routing,
   );
-  if (fresh.length > 0 && !released) await bumpRevisionKeepingPayment(tx, [orderId]);
 }
 
 async function releaseHeld(
@@ -3008,7 +2815,6 @@ export async function sendLines(
   authority: OrderEditAuthority,
   attendance?: OrderAttendance & { personId: string },
   command?: AllergyCommand,
-  lateSend?: LateSendConfirmation,
 ): Promise<void> {
   if (command !== undefined) {
     const partyId = await partyOfOrder(tx, tabId);
@@ -3038,7 +2844,7 @@ export async function sendLines(
             allergy,
             authority.operatorId ?? null,
           );
-          await sendLines(tx, cfg, tabId, lineNos, authority, attendance, undefined, lateSend);
+          await sendLines(tx, cfg, tabId, lineNos, authority, attendance);
           return null;
         },
         cfg.madeHereSink,
@@ -3061,8 +2867,7 @@ export async function sendLines(
               inArray(workingOrderLines.lineNo, lineNos),
             ),
           );
-  const isNamedDish = await serviceDishPredicate(tx, namedLines);
-  if (namedLines.some((line) => !isNamedDish(line))) {
+  if (namedLines.some((line) => line.parentLineId !== null)) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
   const heldGroupLines = await tx
@@ -3080,14 +2885,6 @@ export async function sendLines(
   const heldGroupLineIdSet = new Set(heldGroupLineIds);
   // An empty list sends every held line of the tab outside a held group.
   const namedLineIds = namedLines.map((line) => line.id);
-  const freshIds = new Set(namedLines.map((line) => line.id));
-  const fresh = (await unsentDishLines(tx, tabId)).filter(
-    (line) =>
-      line.parentLineId !== null &&
-      !heldGroupLineIdSet.has(line.id) &&
-      (lineNos.length === 0 || freshIds.has(line.id)),
-  );
-  await lateUnsentDishes(tx, tabId, fresh, { ask: lateSend });
   const firedNow = routing.at.toISOString();
   const ticketScope =
     lineNos.length === 0
@@ -3100,13 +2897,6 @@ export async function sendLines(
     { kind: "lines", orderId: tabId, lineNos },
     undefined,
     null,
-  );
-  await fireLines(
-    tx,
-    cfg,
-    tabId,
-    fresh.map((line) => ({ ...line, release: true })),
-    { routing },
   );
   const rerouted = await rerouteHeldAtRelease(tx, cfg, tabId, ticketScope, routing);
   const { released: firedItems, requested } = await requestHeldItems(
@@ -3146,14 +2936,7 @@ export async function sendLines(
     routing,
     rerouted,
   );
-  if (
-    fresh.length > 0 &&
-    firedItems.length === 0 &&
-    requested.length === 0 &&
-    noRoute.lines.length === 0
-  )
-    await bumpRevisionKeepingPayment(tx, [tabId]);
-  if (fresh.length > 0 || firedItems.length > 0 || requested.length > 0 || noRoute.lines.length > 0)
+  if (firedItems.length > 0 || requested.length > 0 || noRoute.lines.length > 0)
     await captureOrderService(tx, attendance, tabId, "send");
 }
 
@@ -3260,8 +3043,8 @@ export async function addTabRound(
     .forEach((row, k) => requestByParentId.set(row.id, lines[k]));
   const withHold = appendedLines.map((row) => ({
     ...row,
-    hold: requestByParentId.get(row.parentLineId ?? row.id)?.hold === true,
-    release: requestByParentId.get(row.parentLineId ?? row.id)?.release === true,
+    hold: requestByParentId.get(row.id)?.hold === true,
+    release: requestByParentId.get(row.id)?.release === true,
   }));
   await fireLines(tx, cfg, tabId, withHold);
   await bumpRevision(tx, [tabId]);
@@ -3888,7 +3671,7 @@ export async function setLineCourse(
   if (line === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
-  if (!(await serviceDishPredicate(tx, [line]))(line)) {
+  if (line.parentLineId !== null) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
   const [item] = await tx
@@ -3973,7 +3756,7 @@ async function servableLines(
     .where(
       and(
         where,
-        await serviceDishCondition(tx, inArray(workingOrders.partyId, family)),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         inArray(workingOrders.partyId, family),
         onShownBill(),
       ),
@@ -4108,7 +3891,7 @@ export async function ordersWithUnfiredDish(
     .where(
       and(
         inArray(workingOrderLines.workingOrderId, [...orderIds]),
-        await serviceDishCondition(tx, inArray(workingOrderLines.workingOrderId, [...orderIds])),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
       ),
     );
   const cancellations = await readLineCancellations(
@@ -4543,7 +4326,6 @@ export async function assertTabOpen(tx: Transaction, tabId: string): Promise<num
 /** One line of a bill. `unitPriceGross` is the gross unit price LOCKED at add time, NOT a
  *  re-price. */
 export interface TabLine {
-  lunchOffer?: ZoneMenuOffer;
   nutrition?: LineNutrition;
   /** The row's id, which a group move names. A dish in an order group is listed by it in the group's
    *  `lineIds`; a child extras row never is (`readGroups`, `apps/server/src/order-groups.ts`). */
@@ -4631,7 +4413,6 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
       id: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
       quantity: workingOrderLines.quantity,
-      ownCancelledQuantity: lineServiceCancellations.quantity,
       priceQuantity: workingOrderLines.priceQuantity,
       unitPrecision: workingOrderLines.unitPrecision,
       unitPriceGross: workingOrderLines.unitPriceGross,
@@ -4669,12 +4450,6 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
   const contexts = await VENUE_SERVICE.listLineContexts(tx, tabId);
-  const lunches = await VENUE_SERVICE.readLunchOffers(
-    tx,
-    tabId,
-    rows.filter((row) => row.parentLineId === null).map((row) => row.id),
-    contexts,
-  );
   const nutrition = await readDisplayLineNutrition(tx, rows);
   const menuItemByLine = new Map(
     contexts.map((context) => [context.workingOrderLineId, context.menuItemId]),
@@ -4685,13 +4460,6 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     tx,
     rows.map((row) => row.id),
   );
-  for (const row of rows)
-    if (
-      row.parentLineId !== null &&
-      lunches.has(row.parentLineId) &&
-      row.ownCancelledQuantity !== null
-    )
-      cancellations.set(row.id, row.ownCancelledQuantity);
   const heldExtras = dishesWithHeldExtra(
     rows.map((row) => ({
       parentLineId: row.parentLineId,
@@ -4720,7 +4488,6 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     return {
       id: row.id,
       ...(nutrition.has(row.id) ? { nutrition: nutrition.get(row.id)! } : {}),
-      ...(lunches.has(row.id) ? { lunchOffer: lunches.get(row.id)!.offer } : {}),
       lineNo: row.lineNo,
       name: staffPresentationName({ name: row.name, variantName: row.variantName }),
       optionSnapshots: row.optionSnapshots,
@@ -6333,15 +6100,6 @@ async function applyLineEdits(
       ])
     : undefined;
   const offerById = new Map(snapshot?.offers.map((offer) => [offer.id, offer]));
-  const lunches = needsModifiers
-    ? await VENUE_SERVICE.readLunchOffers(
-        tx,
-        orderId,
-        plan.edits
-          .filter(({ intent }) => intent.options !== null || intent.extras !== null)
-          .map(({ parent }) => parent.id),
-      )
-    : new Map<string, { offer: ZoneMenuOffer; versionId: string }>();
   // A stored line whose dish the live version no longer offers has no published lists left: its
   // options answer, which carries no price, is checked against the dish's own lists instead.
   const withdrawnDishes = needsModifiers
@@ -6352,7 +6110,7 @@ async function applyLineEdits(
   const ownOptions = await productOptionLists(tx, withdrawnDishes);
   const modifiersByOffer = new Map<ZoneMenuOffer, OfferModifiers>();
   const modifiersOf = (line: EditableParent): OfferModifiers => {
-    const offer = lunches.get(line.id)?.offer ?? offerById.get(menuItemOf(line));
+    const offer = offerById.get(menuItemOf(line));
     if (offer === undefined) {
       const dishId = (line.parentProductId ?? line.productId!).toLowerCase();
       return { ...NO_MODIFIERS, options: ownOptions.get(dishId) ?? [] };
@@ -6366,7 +6124,7 @@ async function applyLineEdits(
   };
   /** The unit the live offer sells the line's dish or variant in; none where it no longer sells it. */
   const liveUnitOf = (line: EditableParent) => {
-    const offer = lunches.get(line.id)?.offer ?? offerById.get(menuItemOf(line));
+    const offer = offerById.get(menuItemOf(line));
     if (line.parentProductId === null) return offer?.unit;
     return offer?.variants.find((variant) => variant.id === line.productId)?.unit;
   };
@@ -6465,15 +6223,11 @@ async function applyLineEdits(
             removed: [],
           }
         : editLineExtras(
-            extrasListsFor(modifiers.extras, liveUnitOf(parent), lunches.has(parent.id)),
+            extrasListsFor(modifiers.extras, liveUnitOf(parent)),
             modifiers.extraProducts,
             intent.extras.set,
             {
-              children: parent.children.filter(
-                (child) =>
-                  !lunches.has(parent.id) ||
-                  child.cancelledQuantity < decimalToThousandths(child.quantity),
-              ),
+              children: parent.children,
               dishQuantity: parent.quantity,
             },
             defaultLanguage,
@@ -6495,23 +6249,8 @@ async function applyLineEdits(
     // Changed in place or replaced, a paid line would no longer be what was paid for.
     await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
     const refusedDrop = rise < 0 && plan.refuseSentDrop === true;
-    const laterChoice =
-      lunches.has(parent.id) &&
-      rise === 0 &&
-      extrasChanged &&
-      extras.removed.every(
-        (child) =>
-          child.sentAt === null &&
-          child.servedQuantity === 0 &&
-          (child.ticket === null || initiatedAt(child.ticket) === null),
-      ) &&
-      intent.note === parent.note &&
-      optionSnapshots === parent.optionSnapshots &&
-      (intent.makeAt === undefined || intent.makeAt === parent.makeAtStationId);
-    if ((changed || refusedDrop) && !laterChoice) refuseServed(parent);
-    const fired = laterChoice
-      ? false
-      : kitchenHas(parent, changed || rise > 0, !changed && rise > 0);
+    if (changed || refusedDrop) refuseServed(parent);
+    const fired = kitchenHas(parent, changed || rise > 0, !changed && rise > 0);
     if (refusedDrop) refuseSent(parent, fired);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
     // Widening an adjusted line would sell the added units at its adjusted price (ruling R12).
@@ -6593,7 +6332,6 @@ async function applyLineEdits(
         )
           ? { [ON_SENT_DISH]: true }
           : {}),
-        ...(lunches.has(parent.id) ? { [RECORDED_OFFER]: lunches.get(parent.id)! } : {}),
       });
       pricedAs.push({ kind: "extras" });
     }
@@ -6776,7 +6514,6 @@ async function applyLineEdits(
   const inserted: WorkingOrderLineInsert[] = [];
   const insertedContexts: typeof priced.lineContexts = [];
   const fireNow: Parameters<typeof fireLines>[3] = [];
-  const addedFrom = new Map<string, string>();
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   const keepStations = new Map<string, string>();
   const keepReleased = new Set<string>();
@@ -6860,14 +6597,8 @@ async function applyLineEdits(
         keepStations.set(parent.id, parent.ticket.stationId);
       }
       for (const { child } of kept)
-        if (child.ticket !== null) {
-          keepStations.set(child.id, child.ticket.stationId);
-          keepMadeHere.set(child.id, {
-            madeHere: child.ticket.madeHere,
-            stationId: child.ticket.stationId,
-          });
+        if (child.ticket !== null)
           await tx.delete(ticketItems).where(eq(ticketItems.id, child.ticket.id));
-        }
       fireNow.push({
         id: parent.id,
         productId: parent.productId,
@@ -6991,16 +6722,6 @@ async function applyLineEdits(
       });
     }
     for (const [rowIndex, row] of group.rows.entries()) {
-      if (as.origin !== undefined) {
-        const source =
-          row.parentLineId === null
-            ? as.origin
-            : as.origin.children.find(
-                (child) =>
-                  child.productId === row.productId && child.extraListId === row.extraListId,
-              );
-        if (source !== undefined) addedFrom.set(row.id!, source.id);
-      }
       inserted.push({
         ...row,
         lineNo: ++nextLineNo,
@@ -7060,7 +6781,6 @@ async function applyLineEdits(
   const addedToExisting = changes.filter(
     (change) =>
       change.action === "free" &&
-      !lunches.has(change.parent.id) &&
       change.addedAt !== null &&
       (change.parent.ticket !== null ||
         change.parent.sentAt !== null ||
@@ -7124,49 +6844,8 @@ async function applyLineEdits(
     kind: "HOLD CHANGED",
     direction: "added",
   });
-  const lunchParents = await VENUE_SERVICE.readLunchLineIds(
-    tx,
-    fireNow.map((line) => line.id),
-  );
-  const serviceNow = fireNow.filter((line) => !lunchParents.has(line.id));
-  if (lunchParents.size > 0) {
-    const children = await tx
-      .select(fireableLineColumns)
-      .from(workingOrderLines)
-      .where(inArray(workingOrderLines.parentLineId, [...lunchParents]));
-    const sourceOf = new Map([
-      ...copiedContexts.map(({ from, to }) => [to, from] as const),
-      ...addedFrom,
-    ]);
-    for (const child of children) {
-      const before = order.parents.find(
-        (parent) => parent.id === (sourceOf.get(child.parentLineId!) ?? child.parentLineId),
-      );
-      const prior = before?.children.find(
-        (line) => line.id === (sourceOf.get(child.id) ?? child.id),
-      );
-      if (before !== undefined && prior?.ticket == null) continue;
-      if (before === undefined || sourceOf.has(child.id))
-        await tx
-          .update(workingOrderLines)
-          .set({ sentAt: null })
-          .where(eq(workingOrderLines.id, child.id));
-      const hold =
-        prior?.ticket !== undefined && prior.ticket !== null
-          ? initiatedAt(prior.ticket) === null
-          : fireNow.find((line) => line.id === child.parentLineId)?.hold === true;
-      serviceNow.push({
-        ...child,
-        hold,
-        release:
-          prior?.ticket != null
-            ? !hold
-            : child.courseId !== null && order.firedCourseIds.has(child.courseId),
-      });
-    }
-  }
   // Fired while the removed lines' items still stand, so a course they held counts as fired.
-  await fireLines(tx, cfg, orderId, serviceNow, {
+  await fireLines(tx, cfg, orderId, fireNow, {
     keepStations,
     keepMadeHere,
     keepAllergies,
@@ -8185,10 +7864,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
             .where(
               and(
                 inArray(workingOrderLines.workingOrderId, settledIds),
-                await serviceDishCondition(
-                  tx,
-                  inArray(workingOrderLines.workingOrderId, settledIds),
-                ),
+                isNull(sql`+${workingOrderLines.parentLineId}`),
               ),
             )
             .orderBy(workingOrderLines.lineNo);

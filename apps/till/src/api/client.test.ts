@@ -5562,7 +5562,6 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct({ ...offer, available: true })).toMatchObject({
       available: true,
     });
-    expect(menuOfferToTillProduct({ ...offer, setLunch: true })).toHaveProperty("setLunch", true);
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("menuVersionId");
   });
 
@@ -6103,29 +6102,6 @@ describe("a late-send confirmation on a request", () => {
       (api, lateSend) => api.parkOrder({ dining: "eat_in", id: "wo-1", lines, lateSend }),
     ],
     ["placeOrder", (api, lateSend) => api.placeOrder("wo-1", null, lateSend)],
-    [
-      "sendLines",
-      (api, lateSend) =>
-        api.sendLines("wo-1", [1], null, {
-          submissionId: "sub-1",
-          expectedPartyRevision: 4,
-          lateSend,
-        }),
-    ],
-    [
-      "fireGroup",
-      (api, lateSend) =>
-        api.fireGroup("v1", "g1", { submissionId: "sub-1", expectedPartyRevision: 4, lateSend }),
-    ],
-    [
-      "fireHeldLine",
-      (api, lateSend) =>
-        api.fireHeldLine("v1", "line-1", {
-          submissionId: "sub-1",
-          expectedPartyRevision: 4,
-          lateSend,
-        }),
-    ],
     [
       "updateWorkingOrder",
       (api, lateSend) =>

@@ -361,15 +361,13 @@ la estación. **La estación acepta — enviar** los envía y **Quitarlos** los 
 el botón dice **La estación acepta — guardar**. La misma ventana se abre cuando el servidor encuentra un
 plato así antes de que el terminal lo haya marcado.
 
-Un plato guardado antes de que acabara su periodo, en un pedido aparcado del mostrador o como plato
-posterior de una comida a precio fijo, pregunta lo mismo cuando haces el pedido, lo envías o lo
-marchas tras el periodo; **No enviarlos** lo deja sin enviar. Un extra añadido a un plato aparcado
+Un plato guardado antes de que acabara su periodo en un pedido aparcado del mostrador pregunta
+lo mismo cuando haces el pedido tras el periodo; **No enviarlos** lo deja sin enviar. Un extra añadido a un plato aparcado
 después de su periodo pregunta lo mismo cuando haces el pedido, aunque la estación ya aceptara el
 plato.
 
 Añadir un extra a un plato ya enviado después de que acabe su periodo abre la misma ventana:
-**La estación acepta — enviar** añade el extra (desde **Elegir platos** dice
-**La estación acepta — guardar**), y **No añadirlos** deja el plato como estaba.
+**La estación acepta — enviar** añade el extra y **No añadirlos** deja el plato como estaba.
 
 Si el terminal dice que ha terminado el periodo de un plato sin mostrar una lista, revisa el
 pedido y quita los platos de periodos terminados antes de volver a enviarlo.

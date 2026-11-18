@@ -6,21 +6,6 @@ blocked so you can practise recovery. In the dashboard's **Payments**, a manager
 **Check with the card provider** for a whole-order payment, or **Check with provider** for a bill
 contribution, and confirms. This ends the practice attempt without recording a charge.
 
-## Take a set-lunch order {#set-lunch}
-
-Add one lunch for each diner and choose the dishes they want now. **Choose later** marks a
-course they have not picked yet. Each lunch stays separate so you can return to it later.
-
-To hold chosen courses, send the order as held. In that lunch’s panel, use **Send to prep** for the
-course you want to send now. Open **Lunch choices** when the diner chooses another course, save
-it, then send that course. You can change a choice until it is sent; dishes already sent stay put.
-
-If the diner skips coffee, use **Pay** as usual. Leaving that choice open keeps the lunch price
-and sends nothing for it. Set lunches here are for service at the table.
-
-The receipt keeps each diner’s lunch separate, with its base price and any premium supplement
-priced beneath it. The chosen dishes are listed without separate prices.
-
 ## Give a comp or discount {#comps-and-discounts}
 
 Choose a reason when you make an item free or give a discount. With **Apply comps**, you can
@@ -668,7 +653,7 @@ till**, staff choose for each order, and **Starts as** sets how a counter order 
 order starts eaten here. Orders already open keep their way when you change this.
 
 On the till, tap **Eat here** or **Take away** above the order before you send it to the kitchen
-or take a payment; after that the order keeps its way. A set lunch can only be sold to eat here.
+or take a payment; after that the order keeps its way.
 
 ## Name a bill {#bill-names}
 

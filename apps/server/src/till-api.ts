@@ -504,7 +504,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_open": 409,
   "working_order.out_of_date": 409,
   "order.dining_fixed": 409,
-  "order.set_lunch_takeaway": 409,
   "order.dining_locked": 409,
   "order.dining_differs": 409,
   "kitchen_note.out_of_date": 409,
@@ -3395,24 +3394,21 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const body = asObject(await readRawJsonBody<unknown>(c));
       const command = { ...groupCommand(personId, body), ...allergyCommand(body) };
-      const lateSend = parseLateSend(body.lateSend);
-      const fired = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
-        withTransaction(deps.db, async (tx) => {
-          const current = await recheckFireSession(tx, session);
-          await checkZones(tx, current, [{ partyId }]);
-          return fireGroup(
-            tx,
-            requestCfg(deps.cfg, current),
-            partyId,
-            groupId,
-            { ...command, lateSend: late },
-            undefined,
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-          );
-        }),
-      );
+      const fired = await withTransaction(deps.db, async (tx) => {
+        const current = await recheckFireSession(tx, session);
+        await checkZones(tx, current, [{ partyId }]);
+        return fireGroup(
+          tx,
+          requestCfg(deps.cfg, current),
+          partyId,
+          groupId,
+          command,
+          undefined,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
+      });
       return c.json(fired);
     }),
   );
@@ -3576,32 +3572,29 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const command = { ...groupCommand(session.personId, body), ...allergyCommand(body) };
       if (typeof body.lineId !== "string" || !isUuid(body.lineId)) throw invalid("lineId");
       const lineId = body.lineId.toLowerCase();
-      const lateSend = parseLateSend(body.lateSend);
-      const answer = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
-        withTransaction(deps.db, async (tx) => {
-          await assertStillSignedIn(tx, session);
-          const device = await assertDeviceStillProven(tx, {
-            device: session.device,
-            tokenHash: null,
-          });
-          assertProfileAction(device, "take-orders");
-          if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
-            throw new AppError("device_profile.not_admitted", {});
-          const current = { ...session, device };
-          const cfg = requestCfg(deps.cfg, current);
-          await checkZones(tx, current, [{ partyId }]);
-          return fireHeldLine(
-            tx,
-            cfg,
-            partyId,
-            lineId,
-            { ...command, lateSend: late },
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-          );
-        }),
-      );
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await assertStillSignedIn(tx, session);
+        const device = await assertDeviceStillProven(tx, {
+          device: session.device,
+          tokenHash: null,
+        });
+        assertProfileAction(device, "take-orders");
+        if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
+          throw new AppError("device_profile.not_admitted", {});
+        const current = { ...session, device };
+        const cfg = requestCfg(deps.cfg, current);
+        await checkZones(tx, current, [{ partyId }]);
+        return fireHeldLine(
+          tx,
+          cfg,
+          partyId,
+          lineId,
+          command,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
+      });
       return c.json(answer);
     }),
   );
@@ -4223,27 +4216,22 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         submissionId?: string;
         expectedPartyRevision?: number;
         allergy?: AllergyCommand["allergy"];
-        lateSend?: unknown;
       }>(c);
-      const lateSend = parseLateSend(body.lateSend);
-      await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
-        withTransaction(deps.db, async (tx) => {
-          const current = await recheckFireSession(tx, session);
-          await checkZones(tx, current, [{ orderId: id }]);
-          await sendLines(
-            tx,
-            requestCfg(deps.cfg, current),
-            id,
-            body.lineNos ?? [],
-            { operatorId: session.personId, expectedEdit: body.expectedEdit },
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
-            allergyCommand(body),
-            late,
-          );
-        }),
-      );
+      await withTransaction(deps.db, async (tx) => {
+        const current = await recheckFireSession(tx, session);
+        await checkZones(tx, current, [{ orderId: id }]);
+        await sendLines(
+          tx,
+          requestCfg(deps.cfg, current),
+          id,
+          body.lineNos ?? [],
+          { operatorId: session.personId, expectedEdit: body.expectedEdit },
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+          allergyCommand(body),
+        );
+      });
       return c.body(null, 200);
     }),
   );

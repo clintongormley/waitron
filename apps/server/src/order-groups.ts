@@ -1,5 +1,4 @@
 import { readCourseFireNowZones } from "./kitchen.js";
-import { serviceDishPredicate, serviceDishCondition } from "./service-dishes.js";
 import { readDisplayLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import {
   readLineCancellations,
@@ -8,7 +7,7 @@ import {
 } from "./line-service-state.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
-import type { LateUnsentMode, OrderAttendance } from "./working-order.js";
+import type { OrderAttendance } from "./working-order.js";
 import {
   and,
   asc,
@@ -94,7 +93,6 @@ import {
   fireableLineColumns,
   fireOrderLines,
   insertTabRound,
-  judgeHeldRelease,
   isReleased,
   priceTabRound,
   routingOnce,
@@ -159,8 +157,6 @@ export interface PartyCommandArgs {
 
 export interface PartyFireArgs extends PartyCommandArgs {
   allergy?: AllergyPatch;
-  /** The request's confirmation that stored courses whose period has ended may go. */
-  lateSend?: LateSendConfirmation;
 }
 
 /** Who fires a group: a person, or a kitchen display nobody is signed in on. */
@@ -528,7 +524,6 @@ export async function fireGroup(
         cfg,
         partyId,
         groupId,
-        { ask: args.lateSend },
         firer,
         {},
         routing,
@@ -582,7 +577,8 @@ export async function fireHeldLine(
         .where(
           and(
             eq(workingOrderLines.id, lineId),
-            await serviceDishCondition(tx, eq(workingOrderLines.id, lineId)),
+            // The NULL-parent index range includes historical top-level dishes.
+            isNull(sql`+${workingOrderLines.parentLineId}`),
             inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
             eq(orderGroups.partyId, partyId),
             ne(orderGroups.state, "removed"),
@@ -633,15 +629,7 @@ export async function fireHeldLine(
         .update(workingOrderLines)
         .set({ groupId })
         .where(or(eq(workingOrderLines.id, lineId), eq(workingOrderLines.parentLineId, lineId)));
-      await fireOrderLines(
-        tx,
-        cfg,
-        line.workingOrderId,
-        [lineId],
-        { ask: args.lateSend },
-        { heldPaper },
-        routing,
-      );
+      await fireOrderLines(tx, cfg, line.workingOrderId, [lineId], { heldPaper }, routing);
       const snapshot =
         attendance === undefined
           ? undefined
@@ -875,13 +863,7 @@ async function copyGroups(
           workingOrderLines.id,
           sql`(select value from json_each(${JSON.stringify([...new Set(lineIds)])}))`,
         ),
-        await serviceDishCondition(
-          tx,
-          inArray(
-            workingOrderLines.id,
-            sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
-          ),
-        ),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         eq(orderGroups.partyId, fromPartyId),
         eq(orderGroups.state, state),
       ),
@@ -1038,7 +1020,7 @@ async function activeGroupLines(tx: Transaction, groupId: string) {
     .where(
       and(
         eq(workingOrderLines.groupId, groupId),
-        await serviceDishCondition(tx, eq(workingOrderLines.groupId, groupId)),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         onShownBill(),
       ),
     )
@@ -1063,10 +1045,7 @@ export async function releaseHeldWorkOf(
   attendance?: OrderAttendance,
 ): Promise<void> {
   if (billIds.length === 0) return;
-  const serviceDish = await serviceDishCondition(
-    tx,
-    inArray(workingOrderLines.workingOrderId, [...billIds]),
-  );
+  const serviceDish = isNull(sql`+${workingOrderLines.parentLineId}`);
   const held = await tx
     .selectDistinct({
       id: orderGroups.id,
@@ -1098,7 +1077,6 @@ export async function releaseHeldWorkOf(
         cfg,
         partyId,
         group.id,
-        "mark",
         { personId: operatorId },
         {},
         routing,
@@ -1135,7 +1113,6 @@ async function releaseGroup(
   cfg: OriginConfig,
   partyId: string,
   groupId: string,
-  late: LateUnsentMode,
   firer: Firer,
   detail: Record<string, unknown>,
   routing = routingOnce(tx, new Date()),
@@ -1154,14 +1131,8 @@ async function releaseGroup(
   const fire = { heldPaper: (await heldPaperStations(tx, [groupId])).get(groupId) ?? new Set() };
   // Every bill in this group must use the same station snapshot at the release instant.
   await routing();
-  const judged = await judgeHeldRelease(
-    tx,
-    [...byOrder].map(([orderId, lineIds]) => ({ orderId, lineIds })),
-    late,
-    routing,
-  );
   for (const [orderId, lineIds] of byOrder) {
-    await fireOrderLines(tx, cfg, orderId, lineIds, judged.get(orderId)!, fire, routing);
+    await fireOrderLines(tx, cfg, orderId, lineIds, fire, routing);
   }
   const firstFood = (await nextFireKind(tx, partyId)) === "new_order";
   await tx
@@ -1365,13 +1336,7 @@ export async function moveLinesToGroup(
               workingOrderLines.id,
               moves.map((m) => m.lineId),
             ),
-            await serviceDishCondition(
-              tx,
-              inArray(
-                workingOrderLines.id,
-                moves.map((move) => move.lineId),
-              ),
-            ),
+            isNull(sql`+${workingOrderLines.parentLineId}`),
             eq(orderGroups.partyId, partyId),
             ne(orderGroups.state, "removed"),
           ),
@@ -1680,10 +1645,7 @@ export async function removeEmptiedHeldGroups(
                 .where(
                   and(
                     eq(workingOrderLines.groupId, orderGroups.id),
-                    await serviceDishCondition(
-                      tx,
-                      inArray(workingOrderLines.groupId, [...groupIds]),
-                    ),
+                    isNull(sql`+${workingOrderLines.parentLineId}`),
                   ),
                 ),
             ),
@@ -1760,7 +1722,7 @@ async function readGroups(
     .where(
       and(
         eq(orderGroups.partyId, partyId),
-        await serviceDishCondition(tx, eq(orderGroups.partyId, partyId)),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         ...scope,
       ),
     )
@@ -1953,13 +1915,7 @@ export async function readReleaseReminders(
           workingOrderLines.groupId,
           groups.map((group) => group.id),
         ),
-        await serviceDishCondition(
-          tx,
-          inArray(
-            workingOrderLines.groupId,
-            groups.map((group) => group.id),
-          ),
-        ),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         onShownBill(),
       ),
     );
@@ -2022,7 +1978,7 @@ export async function readHeldCounts(
         inArray(orderGroups.partyId, [...partyIds]),
         eq(orderGroups.state, "held"),
         eq(parties.state, "open"),
-        await serviceDishCondition(tx, inArray(orderGroups.partyId, [...partyIds])),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         onShownBill(),
       ),
     );
@@ -2243,12 +2199,9 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     tx,
     lines.map((line) => line.id),
   );
-  const isDish = await serviceDishPredicate(tx, lines);
-  const heldExtras = dishesWithHeldExtra(
-    lines.filter((line) => line.parentLineId === null || !isDish(line)),
-  );
+  const heldExtras = dishesWithHeldExtra(lines);
   for (const line of lines) {
-    if (line.parentLineId === null || isDish(line)) continue;
+    if (line.parentLineId === null) continue;
     extras.set(line.parentLineId, [
       ...(extras.get(line.parentLineId) ?? []),
       {
@@ -2266,7 +2219,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
   }
   const families = new Map<string, (typeof lines)[number][]>();
   for (const line of lines) {
-    const parentId = isDish(line) ? line.id : (line.parentLineId ?? line.id);
+    const parentId = line.parentLineId ?? line.id;
     const familyLines = families.get(parentId) ?? [];
     familyLines.push(line);
     families.set(parentId, familyLines);
@@ -2293,7 +2246,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
   const defaults = await readCourseFireNowZones(tx);
   const retainedCourses = new Map<string, CurrentOrders["retainedCourses"][number]>();
   for (const line of lines) {
-    if (!isDish(line)) continue;
+    if (line.parentLineId !== null) continue;
     if (line.course !== null)
       retainedCourses.set(line.course.id, {
         ...line.course,
@@ -2874,7 +2827,7 @@ export async function groupArrivingDishes(
     .where(
       and(
         eq(workingOrderLines.workingOrderId, billId),
-        await serviceDishCondition(tx, eq(workingOrderLines.workingOrderId, billId)),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
         isNull(workingOrderLines.groupId),
       ),
     )
@@ -2925,7 +2878,6 @@ export async function groupArrivingDishes(
       cfg,
       billId,
       immediate.map((line) => line.id),
-      "mark",
       undefined,
       routing,
     );

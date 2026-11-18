@@ -514,19 +514,6 @@ describe("till-modifier-picker", () => {
     },
   );
 
-  it("lets a lunch be added with a required choice left for later", async () => {
-    const store = new WorkingOrderStore();
-    const lunch = { ...sandwich, setLunch: true };
-    const { picker } = await openPicker(lunch, "Bocadillo", store);
-    expect(addButton(picker).disabled).toBe(false);
-    expect(picker.shadowRoot!.querySelector(".minimum-picks")).toBeNull();
-    expect(picker.shadowRoot!.textContent).toContain(t("lunch.choose_later"));
-    addButton(picker).click();
-    await vi.waitFor(() => expect(store.lines).toHaveLength(1));
-    expect(store.lines[0]!.extras).toBeUndefined();
-    expect(store.total).toBe("5.00");
-  });
-
   it("caps a list at maxPicks on the summed count", async () => {
     const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
     incButton(picker, "list-extras", "p-cheese")!.click();
@@ -1468,23 +1455,32 @@ describe("till-modifier-picker", () => {
     });
   });
 
-  it("moves focus to a refused quantity when Save is pressed in its window", async () => {
-    const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
-      product: burger,
-      quantity: "2",
-      lineDetails: true,
-      initialSelections: { options: [{ listId: "list-cooked", labelId: "label-medium" }] },
-    });
-    const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-      'wt-input[name="quantity"]',
-    )!;
-    field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0" } }));
-    await el.updateComplete;
-    expect(el.shadowRoot!.activeElement).not.toBe(field);
-    await userEvent.click(addButton(el));
-    await expect.poll(() => field.error).toBe(t("line.quantity_invalid"));
-    await expect.poll(() => el.shadowRoot!.activeElement).toBe(field);
-  });
+  it.each([390, 1280])(
+    "puts a quantity refusal above the actions and focuses it at %i",
+    async (width) => {
+      await page.viewport(width, 844);
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: burger,
+        quantity: "2",
+        lineDetails: true,
+        initialSelections: { options: [{ listId: "list-cooked", labelId: "label-medium" }] },
+      });
+      const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        'wt-input[name="quantity"]',
+      )!;
+      field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0" } }));
+      await el.updateComplete;
+      expect(el.shadowRoot!.activeElement).not.toBe(field);
+      await userEvent.click(addButton(el));
+      await expect.poll(() => field.error).toBe(t("line.quantity_invalid"));
+      await expect.poll(() => el.shadowRoot!.activeElement).toBe(field);
+      const message = page.getByText(t("form.fix_fields"), { exact: true }).element();
+      const cancel = el.shadowRoot!.querySelector<HTMLElement>(".cancel")!;
+      await expect
+        .poll(() => message.getBoundingClientRect().bottom)
+        .toBeLessThanOrEqual(cancel.getBoundingClientRect().top);
+    },
+  );
 
   it("offers no extras list on a dish weighed on a scale or sold in a unit with decimals", async () => {
     // The server refuses extras on such a dish (`extras.unsupported_product`); its options list stays.

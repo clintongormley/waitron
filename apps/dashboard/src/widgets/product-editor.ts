@@ -122,7 +122,7 @@ const SECTION_FIELDS = {
   nutrition: ["allergens"],
   descriptors: ["customer-name-", "description-"],
   price: ["tax", "unit", "unit-price"],
-  selling: ["ordering", "available", "set-lunch"],
+  selling: ["ordering", "available"],
   modifiers: ["modifier"],
 } as const;
 type SectionName = keyof typeof SECTION_FIELDS;
@@ -135,7 +135,6 @@ type SectionName = keyof typeof SECTION_FIELDS;
  * the default content language's input is used.
  */
 const SERVER_FIELDS: Record<string, string> = {
-  setLunch: "set-lunch",
   name: "name",
   customerName: "customer-name-",
   description: "description-",
@@ -1403,12 +1402,11 @@ export class ProductEditor extends LitElement {
       <span slot="summary" class="selling-summary"
         ><strong class=${this.draft.available ? "" : "unavailable"}
           >${t(this.draft.available ? "editor.available" : "product.unavailable_badge")}</strong
-        >${this.draft.setLunch ? html` · ${t("editor.set_lunch")}` : nothing}${this.inherited ? nothing : html` · <strong>${t("editor.ordered_on_own")}:</strong> ${t(`product.ordering_${this.draft.ordering}`)}`}</span
+        >${this.inherited ? nothing : html` · <strong>${t("editor.ordered_on_own")}:</strong> ${t(`product.ordering_${this.draft.ordering}`)}`}</span
       >
       <div class="group">
         ${switchField(this.fields(), "available", t("editor.available"), this.draft.available, (value) => this.change("available", value))}
         ${this.inherited ? nothing : this.renderOrdering()}
-        ${this.inherited ? nothing : switchField(this.fields(), "set-lunch", t("editor.set_lunch"), this.draft.setLunch ?? false, (value) => this.change("setLunch", value))}
       </div>
     </wt-disclosure>`;
   }

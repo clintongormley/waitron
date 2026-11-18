@@ -15,8 +15,6 @@ export const en = {
   "problem_report.download": "Download report",
   "problem_report.download_failed": "Could not create the download. Try again.",
 
-  "lunch.choose_later": "Choose later",
-  "lunch.choices": "Lunch choices",
   "recovery.open": "Open recovery",
   "recovery.issuance_stopped":
     "New invoices are stopped. Open recovery with the current server key.",
@@ -1528,10 +1526,7 @@ export const en = {
   "dining.eat_in": "Eat here",
   "dining.takeaway": "Take away",
   "dining.label": "Eat here or take away",
-  "dining.switch_to_eat_in": "Switch to eat here",
   "dining.switch_failed": "Could not switch the order between eat here and take away, try again",
-  "dining.switch_to_eat_in_explained":
-    "Switch to eat here changes the whole order to eat here and keeps its dishes; then pay or send again",
   "table.draft_title": "New order",
   "table.view_menu": "Menu",
   "table.view_order": "Order",
@@ -2137,8 +2132,6 @@ export const es: Record<StringKey, string> = {
   "problem_report.download": "Descargar informe",
   "problem_report.download_failed": "No se ha podido crear la descarga. Inténtalo de nuevo.",
 
-  "lunch.choose_later": "Elegir más tarde",
-  "lunch.choices": "Elegir platos",
   "recovery.open": "Abrir recuperación",
   "recovery.issuance_stopped":
     "La emisión de facturas está detenida. Abre la recuperación con la clave del servidor actual.",
@@ -3632,11 +3625,8 @@ export const es: Record<StringKey, string> = {
   "dining.eat_in": "Para tomar aquí",
   "dining.takeaway": "Para llevar",
   "dining.label": "Para tomar aquí o para llevar",
-  "dining.switch_to_eat_in": "Cambiar a tomar aquí",
   "dining.switch_failed":
     "No se pudo cambiar el pedido entre para tomar aquí y para llevar, inténtalo de nuevo",
-  "dining.switch_to_eat_in_explained":
-    "Cambiar a tomar aquí cambia todo el pedido a tomar aquí y conserva sus platos; después, cobra o envía de nuevo",
   "table.draft_title": "Nuevo pedido",
   "table.view_menu": "Carta",
   "table.view_order": "Pedido",

@@ -249,7 +249,6 @@ describe("A773 requested lifecycle: serving", () => {
         venue.cfg,
         venue.party.tabId,
         [burger.id],
-        { ask: undefined },
         undefined,
         routingOnce(tx, laterAt),
       );

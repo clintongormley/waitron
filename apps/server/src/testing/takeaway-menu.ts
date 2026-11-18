@@ -6,7 +6,7 @@ import type { VatClass } from "@waitron/menu";
  * Products whose served-here and takeaway classes differ, for the A1522 suites: a cola served here
  * at `reduced` and taken away at `general`; a cheese with no takeaway class of its own; a cheese
  * board served here at `reduced` and taken away at `super_reduced`; a burger
- * whose extras list offers a lemon soda with two classes unlike the burger's; and a set lunch.
+ * whose extras list offers a lemon soda with two classes unlike the burger's.
  * Call before `offerProducts`, which publishes them.
  */
 export async function seedTakeawayProducts(tx: Transaction): Promise<{
@@ -15,7 +15,6 @@ export async function seedTakeawayProducts(tx: Transaction): Promise<{
   cheeseBoard: string;
   burger: string;
   lemonSoda: string;
-  setLunch: string;
   burgerExtras: string;
 }> {
   const product = async (
@@ -23,7 +22,6 @@ export async function seedTakeawayProducts(tx: Transaction): Promise<{
     unitPrice: string,
     vatClass: VatClass,
     takeawayVatClass: VatClass | null,
-    setLunch = false,
   ) =>
     (
       await createProduct(tx, {
@@ -33,7 +31,6 @@ export async function seedTakeawayProducts(tx: Transaction): Promise<{
         unitPrice,
         vatClass,
         takeawayVatClass,
-        setLunch,
       })
     ).id;
   const cola = await product("Cola", "1.80", "reduced", "general");
@@ -41,7 +38,6 @@ export async function seedTakeawayProducts(tx: Transaction): Promise<{
   const cheeseBoard = await product("Cheese board", "4.00", "reduced", "super_reduced");
   const burger = await product("Burger", "10.00", "general", "general");
   const lemonSoda = await product("Lemon soda", "2.00", "reduced", "zero");
-  const setLunch = await product("Set lunch", "15.00", "reduced", null, true);
   const extras = await createExtraList(
     tx,
     {
@@ -56,5 +52,5 @@ export async function seedTakeawayProducts(tx: Transaction): Promise<{
     "es-ES",
   );
   await writeProductModifiers(tx, burger, [{ kind: "extras", id: extras.id }]);
-  return { cola, cheese, cheeseBoard, burger, lemonSoda, setLunch, burgerExtras: extras.id };
+  return { cola, cheese, cheeseBoard, burger, lemonSoda, burgerExtras: extras.id };
 }

@@ -68,8 +68,7 @@ function assignAnswers(candidates: readonly ReadonlyMap<number, string>[]): (num
 /**
  * Re-derive a retrieved order's options answers, which come back as frozen NAMES with no ids, by
  * matching the STAFF name of the list and of an available label; on a line not yet sent the server
- * compares the other four. A set-lunch offer reaches here with its withdrawn labels still listed, and
- * those match nothing.
+ * compares the other four.
  *
  * Two lists can share a staff name (`option_lists.name` has no unique index), so taking each answer as
  * first matched could strand a list; {@link assignAnswers} searches instead.

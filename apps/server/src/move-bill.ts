@@ -1,6 +1,5 @@
-import { serviceDishCondition } from "./service-dishes.js";
 import { needsMoving, tableInService } from "@waitron/db";
-import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import {
   diningTables,
   orderGroups,
@@ -224,7 +223,7 @@ async function moveBillOnce(
       .where(
         and(
           eq(workingOrderLines.workingOrderId, billId),
-          await serviceDishCondition(tx, eq(workingOrderLines.workingOrderId, billId)),
+          isNull(sql`+${workingOrderLines.parentLineId}`),
         ),
       );
     const changes = await applyPartyAllergyPatch(
@@ -558,7 +557,7 @@ export async function leaveParty(
     .where(
       and(
         eq(workingOrderLines.workingOrderId, billId),
-        await serviceDishCondition(tx, eq(workingOrderLines.workingOrderId, billId)),
+        isNull(sql`+${workingOrderLines.parentLineId}`),
       ),
     );
   const staysHeld = (line: (typeof lines)[number]) => held === "keep" && line.groupState === "held";

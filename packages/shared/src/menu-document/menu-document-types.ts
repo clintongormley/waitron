@@ -176,7 +176,6 @@ export type MenuField =
         | "diet"
         | "vat"
         | "ordering"
-        | "set_lunch"
         | "direct";
     }
   | { kind: "variants" | "extras" | "options" }
@@ -299,7 +298,6 @@ export type ProductChangeField =
   | "unit"
   | "vat"
   | "ordering"
-  | "set_lunch"
   | "variants"
   | "extras"
   | "options";

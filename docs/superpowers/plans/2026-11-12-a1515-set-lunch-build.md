@@ -1,5 +1,7 @@
 # A1515: table-service set lunch build plan
 
+**Superseded 2026-11-17:** the old set-lunch build is removed; the [set-menu design](../specs/2026-11-17-set-menus-design.md) replaces it. The historical text below is unchanged.
+
 **Cleared by the watcher, 12 November 2026 at 22:04, with the three required corrections applied.** Separate Sol-high author; Claude approach/fixes reads complete; driver applied corrections. The [spec](../specs/2026-11-12-a1515-set-lunch-proposal.md) records the owner’s decisions; no owner plan approval is claimed.
 
 **Finish:** configure €18 lunch from extras, one item per diner, later choices and sends by course. Hake adds €3 once; included coffee adds nothing. Two lunches plus ordinary €7.80 Croquettes total €43.80 before hake, €46.80 after. Bill/receipt/invoice keep base/supplement prices and unpriced dishes. Existing `menuPeriods.menuId`/`listZoneOffers` control availability.

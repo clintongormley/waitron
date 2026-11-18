@@ -173,7 +173,6 @@ const PRODUCT_KEYS = {
   unit: ["unit", "pricingUnit"],
   vat: ["vatClass", "takeawayVatClass"],
   ordering: ["ordering"],
-  set_lunch: ["setLunch"],
 } as const;
 
 function productFields(

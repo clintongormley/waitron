@@ -105,7 +105,7 @@ async function run(p: Fixture, path: string, ask?: AllergyCommand) {
     if (path === "group" || path === "cross-bill-group")
       return fireGroup(tx, v.cfg, p.partyId, p.groupId, groupAsk);
     if (path === "held-line") return fireHeldLine(tx, v.cfg, p.partyId, p.lineId, groupAsk);
-    if (path === "lower") return fireOrderLines(tx, v.cfg, p.tabId, [p.lineId], { ask: undefined });
+    if (path === "lower") return fireOrderLines(tx, v.cfg, p.tabId, [p.lineId]);
     return sendLines(
       tx,
       v.cfg,
@@ -437,7 +437,6 @@ describe("A669 release matrix", () => {
         v.cfg,
         id,
         rows.map((row) => row.id),
-        { ask: undefined },
       ),
     );
     await expect(
