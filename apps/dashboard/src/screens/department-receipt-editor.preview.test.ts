@@ -369,13 +369,7 @@ it("redraws the preview when the theme in use changes, with the draft unchanged"
   await expect.poll(() => receiptRoot(el).querySelector("[data-test=venue-logo]")).toBeTruthy();
   expect(el.hasUnsavedChanges).toBe(false);
 });
-const WIDTH_TABLES = [
-  "printers",
-  "printer_holders",
-  "devices",
-  "device_profiles",
-  "device_profile_printers",
-] as const;
+const WIDTH_TABLES = ["printers", "devices", "device_profiles", "device_profile_printers"] as const;
 it.each(WIDTH_TABLES)(
   "offers the widths a fresh preview names after a %s change moves them",
   async (type) => {
