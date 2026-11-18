@@ -362,3 +362,199 @@ function exhaustiveFit(input: SetMenuFitInput): number {
   }
   return tryOffers([]);
 }
+
+function previousFrom(fit: Extract<SetMenuFit, { kind: "fitted" }>) {
+  return {
+    offerBySetMenu: new Map(fit.setMenus.map(({ id, offerId }) => [id, offerId])),
+    placeByDish: new Map(fit.dishes.map(({ id, place }) => [id, place])),
+  };
+}
+
+describe("refitting set menus", () => {
+  const tied = smallBill({ offers: [daily, { ...special, priceCents: daily.priceCents }] });
+  const frozen = smallBill({
+    setMenus: menus(1, "daily"),
+    dishes: [{ ...dish("pinned", "soup"), pinnedTo: { setMenuId: "s1", lineIndex: 0 } }],
+  });
+
+  it("keeps equal-price types in preference to starting over", () => {
+    const previous = {
+      offerBySetMenu: new Map([
+        ["s1", "special"],
+        ["s2", "daily"],
+      ]),
+      placeByDish: new Map(),
+    };
+    expect(fitSetMenus({ ...tied, previous })).toMatchObject({
+      setMenus: [
+        { id: "s1", offerId: "special" },
+        { id: "s2", offerId: "daily" },
+      ],
+    });
+  });
+
+  it("ignores an old menu that has gone and a place no longer on the menu", () => {
+    const previous = {
+      offerBySetMenu: new Map([
+        ["s1", "daily"],
+        ["gone", "special"],
+      ]),
+      placeByDish: new Map([["soup", { setMenuId: "s1", lineIndex: 8 }]]),
+    };
+    expect(
+      fitSetMenus({ ...tied, setMenus: menus(1), dishes: [dish("soup", "soup")], previous }),
+    ).toMatchObject({
+      setMenus: [{ offerId: "daily" }],
+      dishes: [{ place: { setMenuId: "s1", lineIndex: 0 } }],
+    });
+  });
+
+  it("keeps an existing dish where it was when adding another of the same dish", () => {
+    const previous = {
+      offerBySetMenu: new Map([
+        ["s1", "daily"],
+        ["s2", "daily"],
+      ]),
+      placeByDish: new Map([["a", { setMenuId: "s2", lineIndex: 0 }]]),
+    };
+    expect(
+      fitSetMenus({ ...tied, dishes: [dish("a", "soup"), dish("b", "soup")], previous }),
+    ).toMatchObject({
+      dishes: [
+        { id: "a", place: { setMenuId: "s2" } },
+        { id: "b", place: { setMenuId: "s1" } },
+      ],
+    });
+  });
+
+  it("changes the menu that lost its hake rather than a menu with both dishes", () => {
+    const offerBySetMenu = new Map(
+      menus(4).map(({ id }, i) => [id, i === 3 ? "special" : "daily"]),
+    );
+    const placeByDish = new Map(
+      worked.dishes.slice(0, 4).map(({ id }, i) => [id, { setMenuId: `s${i + 1}`, lineIndex: 0 }]),
+    );
+    for (const [id, setMenuId] of [
+      ["hake", "s1"],
+      ["sirloin-a", "s2"],
+      ["sirloin-b", "s3"],
+      ["bass", "s4"],
+    ]) {
+      placeByDish.set(id!, { setMenuId: setMenuId!, lineIndex: 1 });
+    }
+    const dishes = worked.dishes
+      .filter(({ id }) => id !== "hake")
+      .concat(dish("bass-new", "sea bass", "main"));
+    const fit = fitSetMenus({ ...worked, dishes, previous: { offerBySetMenu, placeByDish } });
+    expect(fit).toMatchObject({ kind: "fitted", totalCents: 7800 });
+    if (fit.kind !== "fitted") return;
+    expect(fit.setMenus.map(({ offerId }) => offerId)).toEqual([
+      "special",
+      "daily",
+      "daily",
+      "special",
+    ]);
+    for (const { id, place } of fit.dishes) {
+      expect(place).toEqual(
+        id === "bass-new" ? { setMenuId: "s1", lineIndex: 1 } : placeByDish.get(id),
+      );
+    }
+  });
+
+  it("charges pinned surcharges and places new dishes around the pins", () => {
+    const pinned = {
+      ...dish("pinned", "sirloin", "main"),
+      pinnedTo: { setMenuId: "s1", lineIndex: 1 },
+    };
+    expect(fitSetMenus({ ...frozen, dishes: [pinned, dish("new", "soup")] })).toMatchObject({
+      totalCents: 1900,
+      dishes: [
+        { id: "new", place: { setMenuId: "s1", lineIndex: 0 } },
+        { id: "pinned", place: pinned.pinnedTo, surchargeCents: 500 },
+      ],
+    });
+    expect(fitSetMenus({ ...frozen, dishes: [...frozen.dishes, dish("new", "soup")] }).kind).toBe(
+      "uncovered",
+    );
+  });
+
+  it("keeps a pinned dish on its own menu even when it sorts after a newcomer", () => {
+    const fit = fitSetMenus({
+      ...frozen,
+      setMenus: menus(2, "daily"),
+      dishes: [...frozen.dishes, dish("new", "soup")],
+    });
+    expect(fit).toMatchObject({
+      dishes: [
+        { id: "new", place: { setMenuId: "s2" } },
+        { id: "pinned", place: { setMenuId: "s1" } },
+      ],
+    });
+  });
+
+  it.each([
+    ["gone", 0, "soup", "unknown_set_menu"],
+    ["s2", 0, "soup", "pinned_to_unfixed"],
+    ["s1", 2, "soup", "pinned_place_invalid"],
+    ["s1", 0, "sea bass", "pinned_place_invalid"],
+    ["s1", 1, "soup", "pinned_place_invalid"],
+    ["s1", 0, "soup", "pinned_place_invalid"],
+  ])("rejects a bad pin to %s line %i for %s", (setMenuId, lineIndex, productId, reason) => {
+    expect(() =>
+      fitSetMenus({
+        ...frozen,
+        setMenus: [...frozen.setMenus, { id: "s2", fixedOfferId: null }],
+        dishes: [
+          ...frozen.dishes,
+          { ...dish("second", productId), pinnedTo: { setMenuId, lineIndex } },
+        ],
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: "set_menu.fit_invalid_input",
+        params: { id: "second", reason },
+      }),
+    );
+  });
+
+  it.each([false, true])(
+    "stops before weighted arithmetic becomes inexact (wide lines: %s)",
+    (wide) => {
+      const capped = offer(
+        "capped",
+        MAX_SET_MENU_AMOUNT_CENTS,
+        [["soup", MAX_SET_MENU_AMOUNT_CENTS]],
+        [{ count: wide ? 1_000_000 : 1, courseIds: ["starter"] }],
+      );
+      const setMenus = menus(wide ? 40 : 1000, "capped");
+      expect(
+        fitSetMenus(
+          smallBill({
+            offers: [capped],
+            setMenus,
+            dishes: setMenus.map(({ id }) => dish(id, "soup")),
+          }),
+        ).kind,
+      ).toBe("too_large");
+    },
+  );
+
+  it("returns the same fit in reverse input order and when refitting its own answer", () => {
+    for (const input of smallTables(200)) {
+      const fit = fitSetMenus(input);
+      const reversed = {
+        ...input,
+        setMenus: [...input.setMenus].reverse(),
+        dishes: [...input.dishes].reverse(),
+        offers: [...input.offers].reverse().map((entry) => ({
+          ...entry,
+          dishes: [...entry.dishes].reverse(),
+          lines: entry.lines.map((line) => ({ ...line, courseIds: [...line.courseIds].reverse() })),
+        })),
+      };
+      expect(fitSetMenus(reversed)).toEqual(fit);
+      if (fit.kind === "fitted")
+        expect(fitSetMenus({ ...reversed, previous: previousFrom(fit) })).toEqual(fit);
+    }
+  });
+});
