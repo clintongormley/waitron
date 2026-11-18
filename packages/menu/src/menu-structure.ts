@@ -3,7 +3,14 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listMenus, type Menu } from "./operations.js";
-import { menuItems, menuItemVariantOverrides, sections } from "@waitron/db";
+import {
+  menuItems,
+  menuItemVariantOverrides,
+  sections,
+  setMenuDishCourses,
+  setMenuVariantExclusions,
+} from "@waitron/db";
+import { touchSetMenu } from "./set-menus.js";
 import { loadSectionGraph, reachableProducts, type SectionGraph } from "./section-graph.js";
 import { directIncludedMenus, includableMenus } from "./menu-inclusion.js";
 import type { IncludeFolder, MemberRef, SectionInput, SectionDetails } from "@waitron/shared";
@@ -230,16 +237,19 @@ export async function syncMenuOffers(
   tx: Transaction,
   menuIds: readonly string[],
   before?: SectionGraph,
-): Promise<void> {
-  if (menuIds.length === 0) return;
+): Promise<Map<string, string[]>> {
+  const setMenuAdditions = new Map<string, string[]>();
+  if (menuIds.length === 0) return setMenuAdditions;
   const roots = await menuRoots(tx, menuIds);
-  if (roots.size === 0) return;
+  if (roots.size === 0) return setMenuAdditions;
   const graph = await loadSectionGraph(tx);
   for (const [menuId, rootSectionId] of roots) {
     const reached = reachableProducts(graph, rootSectionId);
+    const previouslyReached =
+      before === undefined ? undefined : reachableProducts(before, rootSectionId);
     const held = new Set(reached);
-    const heldBefore =
-      before === undefined ? undefined : new Set(reachableProducts(before, rootSectionId));
+    const heldBefore = previouslyReached === undefined ? undefined : new Set(previouslyReached);
+    const setMenu = graph.menu(menuId)?.kind === "set_menu";
     const adding =
       heldBefore === undefined
         ? reached
@@ -258,6 +268,12 @@ export async function syncMenuOffers(
             [...heldBefore].filter((productId) => !held.has(productId)),
           );
     for (const batch of batches(stale)) {
+      if (setMenu) {
+        await tx
+          .delete(setMenuVariantExclusions)
+          .where(inArray(setMenuVariantExclusions.menuItemId, batch));
+        await tx.delete(setMenuDishCourses).where(inArray(setMenuDishCourses.menuItemId, batch));
+      }
       await tx
         .delete(menuItemVariantOverrides)
         .where(inArray(menuItemVariantOverrides.menuItemId, batch));
@@ -266,7 +282,17 @@ export async function syncMenuOffers(
         .set({ grossPrice: null })
         .where(and(inArray(menuItems.id, batch), isNotNull(menuItems.grossPrice)));
     }
+    if (setMenu) {
+      if (adding.length > 0) setMenuAdditions.set(menuId, adding);
+      if (
+        stale.length > 0 ||
+        reached.length !== previouslyReached?.length ||
+        reached.some((id, index) => id !== previouslyReached[index])
+      )
+        await touchSetMenu(tx, menuId);
+    }
   }
+  return setMenuAdditions;
 }
 
 async function rowsNotHeld(

@@ -1,15 +1,16 @@
 import type { Transaction } from "@waitron/db";
+import type { SetMenuLine } from "@waitron/shared";
 import { syncMenuOffers } from "./menu-structure.js";
 import type { SectionGraph } from "./section-graph.js";
+import { addLinesForCourses } from "./set-menus.js";
 
-/**
- * Each member write in `sections.ts` calls this once, in the caller's transaction, with the menus
- * whose structure it may have changed and the graph it read before writing; so does `takeOffMenus`
- * (`menu-removal.ts`) when any list or shortcut held the products. A Device Home Page's shortcut
- * writes (`menu-home.ts`) do not: no menu root reaches it.
- */
-export const onStructureChanged: (
+export async function onStructureChanged(
   tx: Transaction,
   menuIds: readonly string[],
   before: SectionGraph,
-) => Promise<void> = (tx, menuIds, before) => syncMenuOffers(tx, menuIds, before);
+): Promise<Map<string, SetMenuLine[]>> {
+  const addedLines = new Map<string, SetMenuLine[]>();
+  for (const [menuId, productIds] of await syncMenuOffers(tx, menuIds, before))
+    addedLines.set(menuId, await addLinesForCourses(tx, menuId, productIds));
+  return addedLines;
+}

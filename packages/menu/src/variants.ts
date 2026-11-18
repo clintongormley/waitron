@@ -25,6 +25,7 @@ import {
   validateOptionalTranslations,
 } from "./optional-translations.js";
 import { reachableMenuItem } from "./menu-structure.js";
+import { refuseSetMenu } from "./set-menus.js";
 import { batches } from "./batches.js";
 import { dropMenuPrices } from "./menu-removal.js";
 import { assertOffPublishedMenus, removeFromExtraLists } from "./archive.js";
@@ -322,6 +323,7 @@ async function offerProduct(
 ): Promise<string> {
   const offer = await reachableMenuItem(tx, menuItemId, menuId);
   if (!offer) throw new AppError("menu_item.not_found", { menuItemId });
+  await refuseSetMenu(tx, offer.menuId);
   return offer.productId;
 }
 

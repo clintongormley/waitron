@@ -63,7 +63,13 @@ import { assertMenuNameFree } from "./menu-names.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember, sectionPatchValues } from "./sections.js";
 import { archiveProducts } from "./archive.js";
-import { refuseSetMenu, requireSetMenu, setMenuPriceCents, setMenuVatClass } from "./set-menus.js";
+import {
+  refuseSetMenu,
+  requireSetMenu,
+  setMenuPriceCents,
+  setMenuVatClass,
+  touchSetMenu,
+} from "./set-menus.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
 import { assertFamilyNamesFree, assertUpdatedNamesFree, readUpdatedName } from "./product-names.js";
@@ -414,7 +420,7 @@ export async function addProductToMenu(
     .where(and(eq(menuItems.menuId, input.menuId), eq(menuItems.productId, input.productId)));
   // Just placed on the root, so reached: `updateMenuItem`'s reachability check would only repeat it.
   if (input.grossPrice !== undefined)
-    await writeMenuItemSettings(tx, row!.id, { grossPrice: input.grossPrice });
+    await writeMenuItemSettings(tx, input.menuId, row!.id, { grossPrice: input.grossPrice });
   const [written] = await tx
     .select(MENU_ITEM_COLUMNS)
     .from(menuItems)
@@ -431,20 +437,22 @@ export async function updateMenuItem(
 ): Promise<void> {
   if ((await reachableMenuItem(tx, menuItemId, menuId)) === undefined)
     throw new AppError("menu_item.not_found", { menuId, menuItemId });
-  await writeMenuItemSettings(tx, menuItemId, patch);
+  await writeMenuItemSettings(tx, menuId, menuItemId, patch);
 }
 
 async function writeMenuItemSettings(
   tx: Transaction,
+  menuId: string,
   menuItemId: string,
   patch: { grossPrice?: string | null },
 ): Promise<void> {
   const { grossPrice } = patch;
-  if (grossPrice !== undefined)
-    await tx
-      .update(menuItems)
-      .set({ grossPrice: grossPrice === null ? null : stringToCents(grossPrice) })
-      .where(eq(menuItems.id, menuItemId));
+  if (grossPrice === undefined) return;
+  await tx
+    .update(menuItems)
+    .set({ grossPrice: grossPrice === null ? null : stringToCents(grossPrice) })
+    .where(eq(menuItems.id, menuItemId));
+  await touchSetMenu(tx, menuId);
 }
 
 /**
@@ -900,8 +908,10 @@ export async function updateMenuDetails(
       })
       .where(eq(menus.id, menuId));
   }
-  if (Object.keys(presentation).length > 0)
+  if (Object.keys(presentation).length > 0) {
     await tx.update(sections).set(presentation).where(eq(sections.id, rootSectionId));
+    if (internalName === undefined && !changesTerms) await touchSetMenu(tx, menuId);
+  }
 }
 
 export async function deactivateMenu(
