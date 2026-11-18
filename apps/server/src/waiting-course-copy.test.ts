@@ -29,6 +29,10 @@ import { readContentLanguages, writeContentLanguages } from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import { cancelItem } from "./line-cancel.js";
+import { readCancellationContext } from "./line-cancel-context.js";
+import { createAdjustmentReason } from "@waitron/adjustments";
+import { applyAdjustment } from "./adjustments-apply.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { createCourse, createStation } from "./kitchen.js";
@@ -60,7 +64,13 @@ import { numberBill } from "./testing/bill-identities.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
+import {
+  cancelItemForTest,
+  cancelLine,
+  cancelReasonId,
+  GIVE_AWAY_REASON,
+  observedCancelItem,
+} from "./testing/cancel-line.js";
 import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { moveSettledBillToCounter } from "./move-bill.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
@@ -1810,12 +1820,27 @@ function movedSlip(station: string, orderLine: string, from: string, to: string,
 async function paperTable(
   holdPaper: boolean,
   grillHoldPaper = holdPaper,
-  tartaExtras?: { listId: string; picks: { productId: string; quantity: number }[] }[],
+  tarta?: {
+    extras: { listId: string; picks: { productId: string; quantity: number }[] }[];
+    splitAtPastry?: true;
+  },
 ) {
   const n = ++paperNumber;
   const grill = await stationWithPrinter(`Paper grill ${n}`, ["Burger", "Tarta"]);
   const pastry = await stationWithPrinter(`Paper pastry ${n}`, ["Flan"]);
   paperStations.push(grill, pastry);
+  if (tarta?.splitAtPastry) {
+    await inTx(v, async (tx) => {
+      for (const { productId } of tarta.extras.flatMap(({ picks }) => picks)) {
+        await setRoutingCell(
+          tx,
+          { row: { kind: "product", productId }, zoneId: null },
+          { kind: "station", stationId: pastry },
+        );
+      }
+    });
+  }
+
   await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: holdPaper }, [pastry]));
   await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: grillHoldPaper }, [grill]));
   const label = `Mesa 5 (${n})`;
@@ -1837,7 +1862,7 @@ async function paperTable(
             menuItemId: v.item(name),
             quantity: "1",
             courseId: desserts,
-            ...(name === "Tarta" && tartaExtras !== undefined ? { extras: tartaExtras } : {}),
+            ...(name === "Tarta" && tarta !== undefined ? { extras: tarta.extras } : {}),
           })),
         },
       ],
@@ -2422,9 +2447,10 @@ describe("A803 waiting copy: kitchen paper", () => {
 
     async function waitingAtCounter(
       withUnprintedBurger = false,
-      extras?: Parameters<typeof paperTable>[2],
+      tarta?: Parameters<typeof paperTable>[2],
+      grillHoldPaper = true,
     ) {
-      const t = await waitingTable(true, extras);
+      const t = await waitingTable(grillHoldPaper, tarta);
       if (withUnprintedBurger) {
         await inTx(v, (tx) =>
           placeGroups(tx, v.cfg, t.partyId, {
@@ -2445,7 +2471,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect(await kitchenItemOf(cake.id)).toMatchObject({
         firedAt: null,
         requestedAt: expect.any(String),
-        holdPaperQueued: true,
+        holdPaperQueued: grillHoldPaper,
       });
       return { ...t, cake };
     }
@@ -2574,6 +2600,71 @@ describe("A803 waiting copy: kitchen paper", () => {
         expect(await kitchenItemOf(id)).toMatchObject({ firedAt: null, holdPaperQueued: true });
     });
 
+    it("counter paper: cancelling a raised row prints one removal for both waiting portions", async () => {
+      const t = await waitingAtCounter();
+      await editCounterDish(t, { quantity: "2" });
+      const lineIds = (await linesOf(t.bill2))
+        .filter(({ name }) => name === "Tarta")
+        .map(({ id }) => id);
+      const mark = (await printed(t.grill.printer)).length;
+
+      await inTx(v, async (tx) => {
+        const { target, lineId, body } = await observedCancelItem(tx, t.bill2, t.cake.lineNo, "2");
+        await cancelItem(
+          tx,
+          v.cfg,
+          target,
+          lineId,
+          {
+            ...body,
+            lineIds,
+            expectedContext: await readCancellationContext(tx, target, lineId, lineIds),
+            admission: testTradingAdmission(),
+          },
+          OPERATOR,
+        );
+      });
+
+      expect((await printed(t.grill.printer)).slice(mark)).toEqual([
+        expect.arrayContaining([`*** ${words.holdCancelled} ***`, "2 x TARTA"]),
+      ]);
+    });
+
+    it("counter paper: adding a portion beside a comped dish leaves it waiting on HOLD paper", async () => {
+      const t = await waitingAtCounter();
+      await inTx(v, async (tx) => {
+        const reason = await createAdjustmentReason(tx, GIVE_AWAY_REASON);
+        await applyAdjustment(
+          tx,
+          v.cfg,
+          {
+            admission: testTradingAdmission(),
+            orderId: t.bill2,
+            expectedEdit: await readBillEditState(tx, t.bill2),
+            expectedRevision: await readOrderRevision(tx, t.bill2),
+            submissionId: randomUUID(),
+            operatorId: OPERATOR,
+            action: "comp",
+            reasonId: reason.id,
+            lineId: t.cake.id,
+            note: null,
+          },
+          v.cfg.locale,
+        );
+      });
+      const mark = (await printed(t.grill.printer)).length;
+
+      await editCounterDish(t, { quantity: "2" });
+
+      expect((await printed(t.grill.printer)).slice(mark)).toEqual([
+        expect.arrayContaining([`*** ${words.holdChanged} ***`, "+1 x TARTA"]),
+      ]);
+      const added = (await linesOf(t.bill2)).find(
+        ({ id, name }) => id !== t.cake.id && name === "Tarta",
+      )!;
+      expect(await kitchenItemOf(added.id)).toMatchObject({ firedAt: null, holdPaperQueued: true });
+    });
+
     it("counter paper: a whole-bill save cannot drop a waiting dish already sent to the kitchen", async () => {
       const t = await waitingAtCounter();
       const burger = await lineOf(t.bill2, "Burger");
@@ -2591,6 +2682,64 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect((await printed(t.grill.printer)).slice(mark)).toEqual([]);
     });
 
+    it.each([true, false])(
+      "counter paper: keep-charge with a started extra corrects its waiting dish only if it had HOLD paper (%s)",
+      async (hadPaper) => {
+        const {
+          listId,
+          productIds: [productId],
+        } = await inTx(v, async (tx) => {
+          const extra = await addExtras(
+            tx,
+            v.cfg,
+            v.productId("Tarta"),
+            [{ name: hadPaper ? "Cream side" : "Custard side" }],
+            { staffNameOnly: true },
+          );
+          await publishWorkingMenu(tx, v.tables.menuId);
+          return extra;
+        });
+        const t = await waitingAtCounter(
+          false,
+          {
+            extras: [{ listId, picks: [{ productId: productId!, quantity: 1 }] }],
+            splitAtPastry: true,
+          },
+          hadPaper,
+        );
+        const extra = (await linesOf(t.bill2)).find(
+          ({ parentLineId }) => parentLineId === t.cake.id,
+        )!;
+        expect(await kitchenItemOf(extra.id)).toMatchObject({
+          stationId: t.pastry.id,
+          firedAt: expect.any(String),
+        });
+        const mark = (await printed(t.grill.printer)).length;
+
+        await inTx(v, async (tx) => {
+          const { target, lineId, body } = await observedCancelItem(tx, t.bill2, t.cake.lineNo);
+          await cancelItem(
+            tx,
+            v.cfg,
+            target,
+            lineId,
+            {
+              ...body,
+              outcome: "keep_charge",
+              preparationStarted: true,
+              admission: testTradingAdmission(),
+              reasonId: await cancelReasonId(tx),
+            },
+            OPERATOR,
+          );
+        });
+
+        expect((await printed(t.grill.printer)).slice(mark)).toEqual(
+          hadPaper ? [expect.arrayContaining([`*** ${words.holdCancelled} ***`, "1 x TARTA"])] : [],
+        );
+      },
+    );
+
     it("counter paper: cancelling a single extra updates the dish on HOLD paper", async () => {
       const {
         listId,
@@ -2603,7 +2752,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         return extras;
       });
       const extras = [{ listId, picks: [{ productId: cream!, quantity: 1 }] }];
-      const t = await waitingAtCounter(false, extras);
+      const t = await waitingAtCounter(false, { extras });
       const extra = (await linesOf(t.bill2)).find(
         ({ parentLineId }) => parentLineId === t.cake.id,
       )!;
