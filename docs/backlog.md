@@ -395,6 +395,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **Qualify year-sized Cloud backups and revisit incremental copies with venue measurements.**
   Pair the box and Cloud release candidates on a year-sized backup and near-cap publication.
+  Measure the deployed verifier's resource use on the representative capture.
   Revisit continuous Cloud copies, content-named pieces and a read-only archive database after
   time-ordered IDs and real venue measurements.
   [Detail](backlog/setup.md#qualify-year-sized-cloud-backups-and-revisit-incremental-copies-with-venue-measurements).

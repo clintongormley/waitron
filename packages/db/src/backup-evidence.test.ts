@@ -66,6 +66,47 @@ describe("complete backup table comparison", () => {
     expect(await compare()).toBe(false);
   });
 
+  it("uses the primary-key index while still comparing the complete payload", async () => {
+    for (const db of [before.db, after.db]) {
+      db.run(sql`drop table evidence`);
+      db.run(
+        sql`create table evidence (id text primary key not null, attempts integer, payload blob)`,
+      );
+    }
+    before.db.run(sql`insert into evidence values ('a', 0, x'01'), ('b', 0, x'02')`);
+    after.db.run(sql`insert into evidence values ('b', 0, x'02'), ('a', 0, x'01')`);
+
+    const plans: string[][] = [];
+    const explain = (db: typeof before.db, query: BackupQuery): BackupQuery => ({
+      rows(statement, values) {
+        if (statement.includes("order by")) {
+          plans.push(
+            db
+              .all<{ detail: string }>(sql.raw(`explain query plan ${statement}`))
+              .map(({ detail }) => detail),
+          );
+        }
+        return query.rows(statement, values);
+      },
+    });
+    await queries(before.db, after.db, async (a, b) => {
+      expect(
+        await compareBackupTables({
+          before: explain(before.db, a),
+          after: explain(after.db, b),
+          policies: [{ table: "evidence", immutable: true, addedColumns: {} }],
+        }),
+      ).toBe(true);
+      expect(plans).toHaveLength(2);
+      for (const plan of plans) {
+        expect(plan).not.toContain("USE TEMP B-TREE FOR ORDER BY");
+        expect(plan).toContainEqual(expect.stringContaining("USING INDEX"));
+      }
+    });
+    after.db.run(sql`update evidence set payload = x'03' where id = 'b'`);
+    expect(await compare()).toBe(false);
+  });
+
   it.each([
     ["null", "''"],
     ["1", "'1'"],

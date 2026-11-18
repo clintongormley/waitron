@@ -62,8 +62,12 @@ export async function compareBackupTables(input: {
       added.some((name) => !Object.hasOwn(policy.addedColumns, name))
     )
       return false;
-    // BINARY overrides a table's collation; hex breaks SQLite's INTEGER/REAL numeric ties.
-    const order = columns
+    // A leading primary key lets SQLite read wide rows in index order.
+    const orderColumns = columns.includes("id")
+      ? ["id", ...columns.filter((name) => name !== "id")]
+      : columns;
+    // BINARY overrides a table's collation. Hex breaks SQLite's INTEGER/REAL numeric ties.
+    const order = orderColumns
       .flatMap((name) => [`${ident(name)} collate binary`, `hex(${ident(name)}) collate binary`])
       .join(", ");
     const a = input.before.rows(`select * from ${table} order by ${order}`)[Symbol.asyncIterator]();
