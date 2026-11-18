@@ -1,3 +1,4 @@
+import { ensureOperator } from "./cancel-line.js";
 import { parties, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -77,6 +78,7 @@ export async function submitGroups(
     expectedEdit = await observation(tx, cfg, partyId, input.billId, true);
     cache.set(key, expectedEdit);
   }
+  await ensureOperator(tx, input.operatorId);
   return submit(tx, cfg, partyId, { ...input, expectedEdit }, attendance);
 }
 
@@ -87,6 +89,7 @@ export async function placeGroups(
   input: Omit<PlaceGroupsInput, "expectedEdit"> & { expectedEdit?: BillEditExpected },
   attendance?: { recorder: AttendanceRecorder; at: string },
 ) {
+  await ensureOperator(tx, input.operatorId);
   return place(
     tx,
     cfg,
@@ -115,6 +118,7 @@ export async function placeGroupedRound(
   operatorId: string,
   allergy?: AllergyPatch,
 ) {
+  await ensureOperator(tx, operatorId);
   const round = await priceTabRound(tx, cfg, seat.tabId, group.lines, "checked");
   const rows = await insertTabRound(
     tx,

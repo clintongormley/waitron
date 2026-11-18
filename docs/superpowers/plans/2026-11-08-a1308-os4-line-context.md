@@ -10,6 +10,31 @@
 > index choice), check that plan with `EXPLAIN QUERY PLAN` on the box image's SQLite (CLAUDE.md §4).
 > See [when the bench runs](../../developers/testing-guide.md#when-the-bench-runs).
 
+> **2026-11-18, watcher clearance at 03:07 (Lane H questions):** Keep the fold in this slice.
+> The sold-as part stays fixed on placed and settled bills. Keep the existing first-send capture
+> of `sent_nutrition` (#2936) and the later late-send marks for held work (#3414). Carry both,
+> and the recorded menu ids, when a line is copied. Permit only the send-time writes the existing
+> behaviour cases show are needed. Port the current readers and writers, including
+> `readLunchLineIds` if it is still on main. The Recall route and test went away in #2879. Keep
+> the split, move, held-release and first-send assertions instead. The menu package path is
+> `packages/menu/src/menu-structure.ts`.
+>
+> **Task 1 at `eb8b6f08fa`:** The seven-day demo VAT case passed and produced no writer
+> observations. `seed-sales.ts` inserts lines directly. The probe in the actual writer then
+> compared all 1,004 lines it received in `working-order.test.ts`, `order-dining.start.test.ts`
+> and `till-api.sell-published.test.ts` (343 tests passed). It found 315 Each lines with a null
+> printed unit name and 188 null categories paired with `Uncategorised`, as well as 688 differing
+> non-null unit names, 315 differing precisions and 27 differing VAT classes. Keep all four
+> `offer_` columns. M2 stays periodic under the 10 November note.
+>
+> The first send of a held line can follow presentation or payment. The line trigger permits the
+> first late mark on an unstamped line and the first declaration on a stamped line. The send
+> writes those facts and its stamp in one transaction. The table route's "Fire line at 14:05"
+> case exercises open, placed and settled bills. The priced facts remain fixed after placement.
+> The menu version key checks version existence. The writer resolves it for the recorded menu.
+> The watcher cleared the test ports at 03:23, 03:28 and 03:32, and cleared up to 1,500
+> counted lines at 03:37 with shared person seeding.
+
 **Goal:** Fold `working_line_contexts` (the menu, department, unit, allergens and late-send facts
 frozen when a line is added) into `working_order_lines`, so a line is written once, with its context,
 in the insert that creates it.
@@ -29,8 +54,10 @@ and M3. README §5 U11 (person keys). Rules: [slice rules](2026-11-08-a1308-slic
 **Who lands:** the lane. No sale, invoice number or hash input changes: the sale copies lines by value
 (`sale_lines`, tables-ordersales.md §1.14), and none of these columns is copied into it.
 
-**First line of the PR description:** "Every venue is reset: core; backups and exports from before
-this cannot be restored or imported."
+**First line of the PR description:** "Every venue is reset: core. Backups from before this cannot
+be restored. Configuration exports stay at format 45." The watcher cleared that wording at 03:54
+on 18 November. The configuration-transfer case exported on `eb8b6f08fa` and imported the same
+encrypted artifact after the fold, preserving the languages, holiday area and default menu.
 
 ---
 
@@ -108,7 +135,7 @@ pnpm exec vitest run scripts/schema-constraints.test.ts scripts/behavioural-trig
 | --- | --- | --- |
 | `working_line_contexts` | `missing table working_line_contexts`; `missing index working_line_contexts.primary key(working_order_line_id)` | all |
 | `working_line_contexts` | `missing trigger waitron_change_working_line_contexts_insert`, `_update`, `_delete` | change-feed |
-| `working_order_lines` | `extra table working_order_lines.columns[<c>]` for each of the 14 columns in item 2 (18 if M3 keeps the `offer_` four) | all |
+| `working_order_lines` | `extra table working_order_lines.columns[<c>]` for each of the 14 columns in item 2, the four retained `offer_` fields and `sent_nutrition` | all |
 | `working_order_lines` | `extra table working_order_lines.checks[working_order_lines_hardware_unit_ck]`, `[working_order_lines_context_ck]` (and the two `offer_` CHECKs if kept) | all |
 | `working_order_lines` | `extra table working_order_lines.foreignKeys[menu_item_id->menu_items(id)]`, `[menu_version_id->menu_versions(id)]`, `[late_confirmed_by->persons(id)]`, `[credited_to->persons(id)]` | all |
 | `working_order_lines` | `changed table working_order_lines.columnOrder` | all |

@@ -1,6 +1,6 @@
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
-import { seedPerson } from "@waitron/db/testing/seed.js";
+import { ensureOperator } from "./testing/cancel-line.js";
 import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import {
   seedDeviceProfiles,
@@ -247,6 +247,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
 
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
+    await ensureOperator(tx, OPERATOR);
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinksCategory = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
@@ -693,7 +694,6 @@ it("a cash bill payment that pays the bill in full reads the device's printers o
     });
     return tabId;
   });
-  await seedPerson(suite.db, { id: OPERATOR, displayName: "Operator" });
   const operator = {
     personId: OPERATOR,
     sessionId: await openTillSession(suite.db, {

@@ -35,6 +35,8 @@ export type {
   JsonReference,
   ModuleConfigurationTransfer,
   LateSendMark,
+  LineContextInput,
+  LineContextColumns,
   OrderServiceContext,
   ServiceZoneSummary,
   ZoneDeviceHome,

@@ -1,24 +1,10 @@
-import type { AllergenMap, DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
+import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { mediaImages } from "../media/images.js";
-import { menuItems } from "../menu/menu.js";
-import { menuVersions } from "../menu/publication.js";
-import {
-  count,
-  enumCheck,
-  flag,
-  id,
-  json,
-  label,
-  newId,
-  nowIso,
-  table,
-  tsString,
-} from "../columns.js";
+import { enumCheck, flag, id, json, label, newId, nowIso, table, tsString } from "../columns.js";
 import { deviceProfiles } from "../device-profiles.js";
 import { floorZones } from "../floor-zones.js";
-import { workingOrderLines } from "../orders.js";
 import { sales } from "../sales.js";
 import {
   collectionNumber,
@@ -154,68 +140,5 @@ export const deviceProfileZones = table(
       foreignColumns: [floorZones.id],
       name: "device_profile_zones_zone_fk",
     }),
-  ],
-);
-
-export const workingLineContexts = table(
-  "working_line_contexts",
-  {
-    workingOrderLineId: id("working_order_line_id").notNull(),
-    menuItemId: id("menu_item_id").notNull(),
-    menuId: id("menu_id").notNull(),
-    // Nullable because its migration adds it to a table that may already hold rows: SQLite refuses
-    // `ADD COLUMN ... NOT NULL` with no default on a table holding one (measured on `node:sqlite`,
-    // Node v26.7.0; the same statement on an empty table was accepted).
-    menuVersionId: id("menu_version_id"),
-    menuName: label("menu_name").notNull(),
-    departmentId: id("department_id").notNull(),
-    departmentName: label("department_name").notNull(),
-    categoryName: label("category_name").notNull(),
-    unitId: id("unit_id").notNull(),
-    unitName: json<Record<string, string>>("unit_name").notNull(),
-    unitPrecision: count("unit_precision").notNull(),
-    soldInEach: flag("sold_in_each").notNull().default(false),
-    hardwareUnit: label("hardware_unit"),
-    vatClass: label("vat_class").notNull(),
-    allergens: json<AllergenMap>("allergens"),
-    sentNutrition: json<{ allergens: AllergenMap | null; dietaryDeclarations: string[] }>(
-      "sent_nutrition",
-    ),
-    diet: json<unknown>("diet"),
-    dietOverride: json<unknown>("diet_override"),
-    latePeriodName: label("late_period_name"),
-    // No key yet; the writer takes the id from the same request's session or its manager
-    // authorisation.
-    lateConfirmedBy: id("late_confirmed_by"),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workingOrderLineId], name: "working_line_contexts_pk" }),
-    foreignKey({
-      columns: [t.workingOrderLineId],
-      foreignColumns: [workingOrderLines.id],
-      name: "working_line_contexts_line_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.menuItemId],
-      foreignColumns: [menuItems.id],
-      name: "working_line_contexts_menu_item_fk",
-    }),
-    // Refuses a version that does not exist, but not a row naming another menu's version: the
-    // two-column key `menu_releases_version_fk` uses would take a table rebuild (CLAUDE.md §3).
-    // `recordWorkingLineContexts` takes both from one served offer's menu; the copy copies both.
-    foreignKey({
-      columns: [t.menuVersionId],
-      foreignColumns: [menuVersions.id],
-      name: "working_line_contexts_menu_version_fk",
-    }),
-    check("working_line_contexts_unit_precision_ck", sql`${t.unitPrecision} between 0 and 3`),
-    check(
-      "working_line_contexts_hardware_unit_ck",
-      sql`${t.hardwareUnit} is null or ${t.hardwareUnit} in ('kg','g','mg')`,
-    ),
-    check(
-      "working_line_contexts_vat_class_ck",
-      sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,
-    ),
   ],
 );

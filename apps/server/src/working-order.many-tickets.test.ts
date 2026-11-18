@@ -8,7 +8,6 @@ import {
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
-import { workingLineContexts } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -162,13 +161,11 @@ it("a 1,188-water round keeps every line and context and an extra across the ins
     expect(stored).toHaveLength(1190);
     expect(stored[boundary]!.parentLineId).toBe(stored[boundary - 1]!.id);
     const contexts = await tx
-      .select({ id: workingLineContexts.workingOrderLineId })
-      .from(workingLineContexts)
-      .innerJoin(
-        workingOrderLines,
-        eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
-      )
-      .where(eq(workingOrderLines.workingOrderId, tabId));
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        sql`${workingOrderLines.workingOrderId} = ${tabId} and ${workingOrderLines.menuItemId} is not null`,
+      );
     expect(new Set(contexts.map((row) => row.id))).toEqual(new Set(stored.map((row) => row.id)));
     await fireAll(tx, venue.cfg, tabId);
     const kitchen = await tx

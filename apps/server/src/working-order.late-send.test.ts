@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
@@ -23,7 +24,6 @@ import {
   replaceMenuWeek,
   saveMenuPeriod,
   updateDepartment,
-  workingLineContexts,
 } from "@waitron/venue-service";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -215,18 +215,17 @@ const confirming = (menuIds: string[], personId = randomUUID()) => ({
   personId,
   lateSend: {
     menuIds: new Set(menuIds),
-    confirm: vi.fn(async () => personId),
+    confirm: vi.fn<LateSendConfirmation["confirm"]>((tx) => ensureOperator(tx, personId)),
   },
 });
 
 const marksOf = (id: string) =>
   suite.db
     .select({
-      latePeriodName: workingLineContexts.latePeriodName,
-      lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+      latePeriodName: workingOrderLines.latePeriodName,
+      lateConfirmedBy: workingOrderLines.lateConfirmedBy,
     })
-    .from(workingLineContexts)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, workingLineContexts.workingOrderLineId))
+    .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id));
 
 const linesOf = (id: string) =>
@@ -280,14 +279,10 @@ describe("a dish whose period ended earlier today", () => {
       expect(
         await suite.db
           .select({
-            latePeriodName: workingLineContexts.latePeriodName,
-            lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+            latePeriodName: workingOrderLines.latePeriodName,
+            lateConfirmedBy: workingOrderLines.lateConfirmedBy,
           })
-          .from(workingLineContexts)
-          .innerJoin(
-            workingOrderLines,
-            eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
-          )
+          .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, id)),
       ).toEqual([{ latePeriodName: null, lateConfirmedBy: null }]);
     },
@@ -488,14 +483,10 @@ describe("a dish whose period ended earlier today", () => {
     const marks = await suite.db
       .select({
         unitPriceGross: workingOrderLines.unitPriceGross,
-        latePeriodName: workingLineContexts.latePeriodName,
-        lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+        latePeriodName: workingOrderLines.latePeriodName,
+        lateConfirmedBy: workingOrderLines.lateConfirmedBy,
       })
-      .from(workingLineContexts)
-      .innerJoin(
-        workingOrderLines,
-        eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
-      )
+      .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(marks).toHaveLength(2);
     expect(marks).toEqual(
@@ -651,14 +642,10 @@ describe("extras added later to a stored dish", () => {
       await suite.db
         .select({
           parentLineId: workingOrderLines.parentLineId,
-          latePeriodName: workingLineContexts.latePeriodName,
-          lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+          latePeriodName: workingOrderLines.latePeriodName,
+          lateConfirmedBy: workingOrderLines.lateConfirmedBy,
         })
-        .from(workingLineContexts)
-        .innerJoin(
-          workingOrderLines,
-          eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
-        )
+        .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id))
     )
       .sort((a, b) => Number(a.parentLineId !== null) - Number(b.parentLineId !== null))
@@ -790,14 +777,10 @@ describe("extras added later to a stored dish", () => {
     const marks = await suite.db
       .select({
         productId: workingOrderLines.productId,
-        latePeriodName: workingLineContexts.latePeriodName,
-        lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+        latePeriodName: workingOrderLines.latePeriodName,
+        lateConfirmedBy: workingOrderLines.lateConfirmedBy,
       })
-      .from(workingLineContexts)
-      .innerJoin(
-        workingOrderLines,
-        eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
-      )
+      .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(marks).toHaveLength(3);
     expect(marks).toEqual(
@@ -870,14 +853,10 @@ describe("extras added later to a stored dish", () => {
     await addEgg(lateSend);
     const [egg] = await suite.db
       .select({
-        latePeriodName: workingLineContexts.latePeriodName,
-        lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+        latePeriodName: workingOrderLines.latePeriodName,
+        lateConfirmedBy: workingOrderLines.lateConfirmedBy,
       })
-      .from(workingLineContexts)
-      .innerJoin(
-        workingOrderLines,
-        eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
-      )
+      .from(workingOrderLines)
       .where(
         and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.productId, v.eggId)),
       );

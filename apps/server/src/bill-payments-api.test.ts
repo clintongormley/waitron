@@ -1784,8 +1784,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
   it("uses the bill's department for a receipt while retaining each line's original department", async () => {
     const billId = await tabWith("Salad");
     const [original] = suite.db.all<{ department_id: string }>(sql`
-      select department_id from working_line_contexts c
-      join working_order_lines l on l.id = c.working_order_line_id
+      select offer_department_id as department_id from working_order_lines l
       where l.working_order_id = ${billId}`);
     const destination = await inTx(async (tx) => {
       const department = await createDepartment(tx, {
@@ -1835,8 +1834,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const paid = await contribute(billId, "15.00");
     expect(paid.status).toBe(200);
     const lineDepartments = suite.db.all<{ department_id: string }>(sql`
-      select c.department_id from working_line_contexts c
-      join working_order_lines l on l.id = c.working_order_line_id
+      select l.offer_department_id as department_id from working_order_lines l
       where l.working_order_id = ${billId} order by l.line_no`);
     expect(lineDepartments).toEqual([
       { department_id: original!.department_id },

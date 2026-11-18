@@ -1,5 +1,6 @@
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { ensureOperator } from "./testing/cancel-line.js";
 import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
   sendLines,
@@ -219,6 +220,7 @@ async function setupVenue(): Promise<SeededVenue> {
     operationDescription: "Venta en establecimiento",
   });
   const available = await withTransaction(suite.db, async (tx) => {
+    await ensureOperator(tx, OPERATOR);
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {

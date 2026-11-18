@@ -17,7 +17,6 @@ import {
   kitchenStations,
   dayCutoverChanges,
   withTransaction,
-  workingLineContexts,
   workingOrderLines,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -607,20 +606,22 @@ describe("recordKitchenNotices", () => {
           lineTotal: 200,
         })
         .returning({ id: workingOrderLines.id });
-      await db.insert(workingLineContexts).values({
-        workingOrderLineId: line!.id,
-        menuItemId: offer.id,
-        menuId: offer.menuId,
-        menuName: "Snacks",
-        departmentId: "00000000-0000-4000-8000-0000000000d1",
-        departmentName: "Restaurant",
-        categoryName: "Uncategorised",
-        unitId: sold.unit.id,
-        unitName: sold.unit.abbreviation,
-        unitPrecision: sold.unit.precision,
-        soldInEach: sold.soldInEach,
-        vatClass: "reduced",
-      });
+      await db
+        .update(workingOrderLines)
+        .set({
+          menuItemId: offer.id,
+          menuId: offer.menuId,
+          menuName: "Snacks",
+          offerDepartmentId: "00000000-0000-4000-8000-0000000000d1",
+          departmentName: "Restaurant",
+          offerCategoryName: "Uncategorised",
+          unitId: sold.unit.id,
+          offerUnitName: sold.unit.abbreviation,
+          offerUnitPrecision: sold.unit.precision,
+          soldInEach: sold.soldInEach,
+          offerVatClass: "reduced",
+        })
+        .where(eq(workingOrderLines.id, line!.id));
       lineIds.push(line!.id);
     }
 

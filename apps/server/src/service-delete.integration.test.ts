@@ -858,7 +858,6 @@ const HISTORY_ROWS = [
   "cadenas",
   "order_amendments",
   "working_order_lines",
-  "working_line_contexts",
   "department_transfer_requests",
   "time_entries",
   "daily_closes",
@@ -1140,12 +1139,7 @@ it.each(["zone", "department"] as const)(
       );
       const lines = rows("working_order_lines").filter((row) => row.working_order_id === orderId);
       expect(lines).not.toEqual([]);
-      for (const line of lines)
-        expect(
-          rows("working_line_contexts").find((row) => row.working_order_line_id === line.id),
-        ).toMatchObject({
-          department_id: f.departmentId,
-        });
+      for (const line of lines) expect(line).toMatchObject({ offer_department_id: f.departmentId });
     }
     const unaffectedContext = rows("orderContexts").find(
       (row) => row.working_order_id === unaffected,
@@ -1162,11 +1156,8 @@ it.each(["zone", "department"] as const)(
       (row) => row.working_order_id === unaffected,
     );
     expect(unaffectedLines).not.toEqual([]);
-    const unaffectedLineContexts = unaffectedLines.map((line) =>
-      rows("working_line_contexts").find((row) => row.working_order_line_id === line.id)!,
-    );
-    for (const context of unaffectedLineContexts)
-      expect(context).toMatchObject({ department_id: unaffectedContext.department_id });
+    for (const line of unaffectedLines)
+      expect(line).toMatchObject({ offer_department_id: unaffectedContext.department_id });
     for (const name of [
       "bill_payments",
       "tenders",
@@ -1178,7 +1169,6 @@ it.each(["zone", "department"] as const)(
       "order_amendments",
       "working_order_lines",
       "orderContexts",
-      "working_line_contexts",
       "sale_receipt_headers",
       "department_transfer_requests",
       "time_entries",
@@ -1191,8 +1181,7 @@ it.each(["zone", "department"] as const)(
     const retained = await run(retainedHistory);
     expect(retained.orderContexts).toContainEqual(unaffectedContext);
     expect(retained.sale_receipt_headers).toContainEqual(unaffectedHeader);
-    for (const context of unaffectedLineContexts)
-      expect(retained.working_line_contexts).toContainEqual(context);
+    for (const line of unaffectedLines) expect(retained.working_order_lines).toContainEqual(line);
     expect(retained).toEqual(history);
     const after = await run(completeSnapshot);
     for (const name of FLOOR_ROWS) expect(after[name], name).toEqual([]);

@@ -19,7 +19,8 @@ import { deviceProfiles } from "./device-profiles.js";
 import { devices } from "./devices.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedPerson, seedDevice, seedNode, seedVenue, seedZone } from "../testing/seed.js";
-import { products } from "./menus.js";
+import { menus, products } from "./menus.js";
+import { menuItems } from "./menu/menu.js";
 import { parties } from "./parties.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 
@@ -48,8 +49,8 @@ afterEach(async () => {
     await tx.execute(sql`drop trigger working_order_lines_require_open_parent_delete`);
     await tx.execute(sql`delete from working_order_lines`);
     await tx.execute(sql`delete from working_orders`);
-    await tx.execute(sql`delete from products`);
     await tx.execute(sql`delete from menus`);
+    await tx.execute(sql`delete from products`);
     await tx.execute(sql`delete from nodes`);
     await tx.execute(sql`delete from ${devices}`);
     await tx.execute(sql`delete from ${deviceProfiles}`);
@@ -705,6 +706,103 @@ describe("working_order_lines", () => {
     await seed(db);
   });
 
+  describe("a line's sold-as context", () => {
+    async function addLine() {
+      const bill = await openOrder(db);
+      const [menu] = await db.insert(menus).values({ name: "Lunch" }).returning();
+      const [item] = await db
+        .insert(menuItems)
+        .values({ menuId: menu.id, productId: productA })
+        .returning();
+      const [line] = await db
+        .insert(workingOrderLines)
+        .values({ ...LINE, workingOrderId: bill })
+        .returning({ id: workingOrderLines.id });
+      return { bill, line: line.id, menu: menu.id, item: item.id };
+    }
+
+    function setContext(line: string, menu: string, item: string) {
+      return db.execute(sql`update working_order_lines set menu_item_id = ${item}, menu_id = ${menu},
+        menu_name = 'Lunch', offer_department_id = 'back-room', department_name = 'Back Room',
+        unit_id = 'each', sold_in_each = 1,
+        offer_unit_name = '{"es":"unidad"}', offer_unit_precision = 0,
+        offer_vat_class = 'reduced', offer_category_name = 'Drinks'
+        where id = ${line}`);
+    }
+
+    it("requires the whole recorded offer context or none of it", async () => {
+      const { line, menu, item } = await addLine();
+      await setContext(line, menu, item);
+      for (const column of [
+        "menu_item_id",
+        "menu_id",
+        "menu_name",
+        "offer_department_id",
+        "department_name",
+        "unit_id",
+        "sold_in_each",
+        "offer_unit_name",
+        "offer_unit_precision",
+        "offer_vat_class",
+        "offer_category_name",
+      ]) {
+        const error = await captureError(() =>
+          db.execute(sql`update working_order_lines set ${sql.identifier(column)} = null
+            where id = ${line}`),
+        );
+        expect(engineErrorMessage(error)).toContain("working_order_lines_context_ck");
+      }
+      for (const [column, value, constraint] of [
+        ["offer_unit_precision", 4, "working_order_lines_offer_unit_precision_ck"],
+        ["offer_vat_class", "other", "working_order_lines_offer_vat_class_ck"],
+      ] as const) {
+        const error = await captureError(() =>
+          db.execute(sql`update working_order_lines set ${sql.identifier(column)} = ${value}
+            where id = ${line}`),
+        );
+        expect(engineErrorMessage(error)).toContain(constraint);
+      }
+    });
+
+    it("refuses a hardware unit outside kg, g, mg", async () => {
+      const { line } = await addLine();
+      const error = await captureError(() =>
+        db.execute(sql`update working_order_lines set hardware_unit = 'litre' where id = ${line}`),
+      );
+      expect(engineErrorMessage(error)).toContain("working_order_lines_hardware_unit_ck");
+      await db.execute(sql`update working_order_lines set hardware_unit = 'g' where id = ${line}`);
+    });
+
+    it("requires recorded offer, menu version and person keys to exist", async () => {
+      const { line, menu } = await addLine();
+      const invalidOffer = await captureError(() => setContext(line, menu, "missing"));
+      expect(isRefusal(invalidOffer, FOREIGN_KEY_VIOLATION)).toBe(true);
+      for (const column of ["menu_version_id", "late_confirmed_by", "credited_to"]) {
+        const error = await captureError(() =>
+          db.execute(sql`update working_order_lines set ${sql.identifier(column)} = 'missing'
+            where id = ${line}`),
+        );
+        expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+      }
+      const person = await seedPerson(db);
+      await db.execute(sql`update working_order_lines
+        set late_confirmed_by = ${person}, credited_to = ${person} where id = ${line}`);
+    });
+
+    it("keeps a placed bill's sold-as context", async () => {
+      const { bill, line, menu, item } = await addLine();
+      await setContext(line, menu, item);
+      await db.execute(sql`update working_order_lines set menu_name = 'Brunch' where id = ${line}`);
+      await db.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, bill));
+      const error = await captureError(() =>
+        db.execute(sql`update working_order_lines set menu_name = 'Dinner' where id = ${line}`),
+      );
+      expect(engineErrorMessage(error)).toContain(
+        "lines may only be written while the order is open",
+      );
+    });
+  });
+
   it("adds a line to an open order", async () => {
     const id = await openOrder(db);
     await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
@@ -801,7 +899,7 @@ describe("working_order_lines", () => {
     expect(line.descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
   });
 
-  it("carries only product_id and extra_list_id as menu-shaped identifiers", async () => {
+  it("carries the product, extras list, menu and menu item identifiers", async () => {
     // Reads column NAMES only, so a menu reference under an unrelated name passes.
     const cols = await rows<{ name: string }>(
       db,
@@ -811,7 +909,7 @@ describe("working_order_lines", () => {
       .map((c) => c.name)
       .filter((n) => /(product|item|menu|catalog|menu|sku|variant|category|list)_id$/i.test(n))
       .sort();
-    expect(references).toEqual(["extra_list_id", "product_id"]);
+    expect(references).toEqual(["extra_list_id", "menu_id", "menu_item_id", "product_id"]);
   });
 
   it("records when a line was sent and the extras list a pick came from, both unset at first", async () => {

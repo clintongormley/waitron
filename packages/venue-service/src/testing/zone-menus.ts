@@ -1,6 +1,14 @@
+import { lineContextColumns } from "../operations.js";
 import { readBusinessDayScheduleRevision } from "../business-day-schedule.js";
 import { and, eq } from "drizzle-orm";
-import { menus, menuPeriods, readVenueClock, floorZones, type Transaction } from "@waitron/db";
+import {
+  menus,
+  menuPeriods,
+  readVenueClock,
+  floorZones,
+  workingOrderLines,
+  type Transaction,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod, updateMenuPeriod } from "../menu-timetable.js";
 import "../errors.js";
@@ -62,4 +70,10 @@ export async function offerMenuThroughZone(
     new Date(),
     await readBusinessDayScheduleRevision(tx),
   );
+}
+
+export async function stampFixtureLineContexts(...args: Parameters<typeof lineContextColumns>) {
+  const [tx] = args;
+  for (const [lineId, context] of await lineContextColumns(...args))
+    await tx.update(workingOrderLines).set(context).where(eq(workingOrderLines.id, lineId));
 }

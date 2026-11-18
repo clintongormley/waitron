@@ -48,7 +48,6 @@ import {
   updateDepartment,
   updateMenuPeriod,
   VENUE_SERVICE_PERMISSIONS,
-  workingLineContexts,
   type MenuSlot,
 } from "@waitron/venue-service";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
@@ -236,15 +235,11 @@ const linesOf = (tx: Transaction, workingOrderId: string) =>
     .select({
       id: workingOrderLines.id,
       unitPriceGross: workingOrderLines.unitPriceGross,
-      menuName: workingLineContexts.menuName,
-      menuVersionId: workingLineContexts.menuVersionId,
-      departmentId: workingLineContexts.departmentId,
+      menuName: workingOrderLines.menuName,
+      menuVersionId: workingOrderLines.menuVersionId,
+      departmentId: workingOrderLines.offerDepartmentId,
     })
     .from(workingOrderLines)
-    .innerJoin(
-      workingLineContexts,
-      eq(workingLineContexts.workingOrderLineId, workingOrderLines.id),
-    )
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
 
@@ -490,14 +485,10 @@ const marksOf = (workingOrderId: string) =>
   suite.db
     .select({
       unitPriceGross: workingOrderLines.unitPriceGross,
-      latePeriodName: workingLineContexts.latePeriodName,
-      lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+      latePeriodName: workingOrderLines.latePeriodName,
+      lateConfirmedBy: workingOrderLines.lateConfirmedBy,
     })
     .from(workingOrderLines)
-    .innerJoin(
-      workingLineContexts,
-      eq(workingLineContexts.workingOrderLineId, workingOrderLines.id),
-    )
     .where(eq(workingOrderLines.workingOrderId, workingOrderId));
 
 /** A Spreads list offering Butter at 0.50 on the Midday Toast, published as `versionId`. */
@@ -1878,14 +1869,10 @@ describe("a dish whose period ended earlier today", () => {
         .select({
           id: workingOrderLines.id,
           quantity: workingOrderLines.quantity,
-          latePeriodName: workingLineContexts.latePeriodName,
-          lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+          latePeriodName: workingOrderLines.latePeriodName,
+          lateConfirmedBy: workingOrderLines.lateConfirmedBy,
         })
         .from(workingOrderLines)
-        .innerJoin(
-          workingLineContexts,
-          eq(workingLineContexts.workingOrderLineId, workingOrderLines.id),
-        )
         .where(eq(workingOrderLines.workingOrderId, workingOrderId));
 
     it("at 14:05 with a fresh Lunch dish and a confirmation marks only the new line", async () => {
@@ -2489,14 +2476,10 @@ describe("a dish whose period ended earlier today", () => {
           groupId: workingOrderLines.groupId,
           sentAt: workingOrderLines.sentAt,
           firedAt: ticketItems.firedAt,
-          latePeriodName: workingLineContexts.latePeriodName,
-          lateConfirmedBy: workingLineContexts.lateConfirmedBy,
+          latePeriodName: workingOrderLines.latePeriodName,
+          lateConfirmedBy: workingOrderLines.lateConfirmedBy,
         })
         .from(workingOrderLines)
-        .innerJoin(
-          workingLineContexts,
-          eq(workingLineContexts.workingOrderLineId, workingOrderLines.id),
-        )
         .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
         .where(
           and(
@@ -2608,18 +2591,26 @@ describe("a dish whose period ended earlier today", () => {
       });
     });
 
-    it("Fire line at 14:05 on a held Main changed at 13:55 is refused unconfirmed, naming it, and then sent confirmed and marked", async () => {
-      const { t, pie } = await pieStoredAtLunch("hold");
-      at(mondayAt("14:05"));
-      expect(await fireLine(t, pie.id)).toEqual(refusal(t, [pie.id]));
-      expect(await courseLine(t, "pie")).toEqual(pie);
-      expect((await fireLine(t, pie.id, lateSend(t.v))).status).toBe(200);
-      expect(await courseLine(t, "pie")).toMatchObject({
-        firedAt: expect.any(String),
-        latePeriodName: "Lunch",
-        lateConfirmedBy: t.v.personId,
-      });
-    });
+    it.each(["open", "placed", "settled"] as const)(
+      "Fire line at 14:05 on a held Main of a %s bill is refused unconfirmed and then sent confirmed and marked",
+      async (status) => {
+        const { t, pie } = await pieStoredAtLunch("hold");
+        if (status !== "open")
+          await suite.db
+            .update(workingOrders)
+            .set({ status, settledAt: status === "settled" ? new Date().toISOString() : null })
+            .where(eq(workingOrders.id, t.tabId));
+        at(mondayAt("14:05"));
+        expect(await fireLine(t, pie.id)).toEqual(refusal(t, [pie.id]));
+        expect(await courseLine(t, "pie")).toEqual(pie);
+        expect((await fireLine(t, pie.id, lateSend(t.v))).status).toBe(200);
+        expect(await courseLine(t, "pie")).toMatchObject({
+          firedAt: expect.any(String),
+          latePeriodName: "Lunch",
+          lateConfirmedBy: t.v.personId,
+        });
+      },
+    );
 
     it("Fire course at 14:05 across two bills is refused once, naming each bill's stored Main, and one confirmation marks both", async () => {
       const { t, groupId, pie } = await pieStoredAtLunch("hold");

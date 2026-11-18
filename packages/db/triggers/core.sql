@@ -409,12 +409,38 @@ BEGIN
       AND new.group_id IS old.group_id
       AND new.credited_to IS old.credited_to
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.menu_item_id IS old.menu_item_id
+      AND new.menu_id IS old.menu_id
+      AND new.menu_name IS old.menu_name
+      AND new.menu_version_id IS old.menu_version_id
+      AND new.offer_department_id IS old.offer_department_id
+      AND new.department_name IS old.department_name
+      AND new.unit_id IS old.unit_id
+      AND new.sold_in_each IS old.sold_in_each
+      AND new.hardware_unit IS old.hardware_unit
+      AND new.allergens IS old.allergens
+      AND new.diet IS old.diet
+      AND new.diet_override IS old.diet_override
+      AND new.late_period_name IS old.late_period_name
+      AND new.late_confirmed_by IS old.late_confirmed_by
+      AND new.sent_nutrition IS old.sent_nutrition
+      AND new.offer_unit_name IS old.offer_unit_name
+      AND new.offer_unit_precision IS old.offer_unit_precision
+      AND new.offer_vat_class IS old.offer_vat_class
+      AND new.offer_category_name IS old.offer_category_name
     )
     OR (
       exists (
         SELECT 1 FROM working_orders
         WHERE id = old.working_order_id
-          AND (status = 'placed' OR (status = 'settled' AND new.group_id IS NOT old.group_id))
+          AND (
+            status = 'placed'
+            OR (status = 'settled' AND (
+              new.group_id IS NOT old.group_id
+              OR new.sent_nutrition IS NOT old.sent_nutrition
+              OR new.late_period_name IS NOT old.late_period_name
+            ))
+          )
       )
       AND new.id IS old.id
       AND new.working_order_id IS old.working_order_id
@@ -447,6 +473,45 @@ BEGIN
       AND new.credited_to IS old.credited_to
       AND new.served_quantity IS old.served_quantity
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.menu_item_id IS old.menu_item_id
+      AND new.menu_id IS old.menu_id
+      AND new.menu_name IS old.menu_name
+      AND new.menu_version_id IS old.menu_version_id
+      AND new.offer_department_id IS old.offer_department_id
+      AND new.department_name IS old.department_name
+      AND new.unit_id IS old.unit_id
+      AND new.sold_in_each IS old.sold_in_each
+      AND new.hardware_unit IS old.hardware_unit
+      AND new.allergens IS old.allergens
+      AND new.diet IS old.diet
+      AND new.diet_override IS old.diet_override
+      -- A late release records its decision before taking the sent stamp.
+      AND (
+        (new.late_period_name IS old.late_period_name AND new.late_confirmed_by IS old.late_confirmed_by)
+        OR (
+          new.group_id IS old.group_id
+          AND old.menu_item_id IS NOT NULL
+          AND old.sent_at IS NULL
+          AND old.late_period_name IS NULL
+          AND old.late_confirmed_by IS NULL
+          AND new.late_period_name IS NOT NULL
+        )
+      )
+      -- A stamped line can acquire one declaration, which the send records after the stamp.
+      AND (
+        new.sent_nutrition IS old.sent_nutrition
+        OR (
+          new.group_id IS old.group_id
+          AND old.menu_item_id IS NOT NULL
+          AND old.sent_at IS NOT NULL
+          AND old.sent_nutrition IS NULL
+          AND new.sent_nutrition IS NOT NULL
+        )
+      )
+      AND new.offer_unit_name IS old.offer_unit_name
+      AND new.offer_unit_precision IS old.offer_unit_precision
+      AND new.offer_vat_class IS old.offer_vat_class
+      AND new.offer_category_name IS old.offer_category_name
     )
     OR (
       exists (
@@ -486,6 +551,25 @@ BEGIN
       AND new.group_id IS old.group_id
       AND new.credited_to IS old.credited_to
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.menu_item_id IS old.menu_item_id
+      AND new.menu_id IS old.menu_id
+      AND new.menu_name IS old.menu_name
+      AND new.menu_version_id IS old.menu_version_id
+      AND new.offer_department_id IS old.offer_department_id
+      AND new.department_name IS old.department_name
+      AND new.unit_id IS old.unit_id
+      AND new.sold_in_each IS old.sold_in_each
+      AND new.hardware_unit IS old.hardware_unit
+      AND new.allergens IS old.allergens
+      AND new.diet IS old.diet
+      AND new.diet_override IS old.diet_override
+      AND new.late_period_name IS old.late_period_name
+      AND new.late_confirmed_by IS old.late_confirmed_by
+      AND new.sent_nutrition IS old.sent_nutrition
+      AND new.offer_unit_name IS old.offer_unit_name
+      AND new.offer_unit_precision IS old.offer_unit_precision
+      AND new.offer_vat_class IS old.offer_vat_class
+      AND new.offer_category_name IS old.offer_category_name
     )
   );
 END;

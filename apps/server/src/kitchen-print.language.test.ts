@@ -329,9 +329,7 @@ it("A964 language boundaries keep weighted units and all recorded presentation n
         ],
       })
       .where(eq(workingOrderLines.id, lineId));
-    await tx.execute(
-      sql`update working_line_contexts set sold_in_each = 0 where working_order_line_id = ${lineId}`,
-    );
+    await tx.execute(sql`update working_order_lines set sold_in_each = 0 where id = ${lineId}`);
     const lines = await tx
       .select(fireableLineColumns)
       .from(workingOrderLines)
@@ -580,9 +578,7 @@ it.each([
             country === "GB" ? { es: "ES-unit", en: "EN-unit" } : { en: "EN-unit", es: "ES-unit" },
         })
         .where(eq(workingOrderLines.id, lineId));
-      await tx.execute(
-        sql`update working_line_contexts set sold_in_each = 0 where working_order_line_id = ${lineId}`,
-      );
+      await tx.execute(sql`update working_order_lines set sold_in_each = 0 where id = ${lineId}`);
       const lines = await tx
         .select(fireableLineColumns)
         .from(workingOrderLines)

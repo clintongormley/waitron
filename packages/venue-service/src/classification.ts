@@ -19,7 +19,6 @@ export const VENUE_SERVICE_TABLES = [
   "device_profile_kitchen_screen_zones",
   "routing_cells",
   "routing_cell_periods",
-  "working_line_contexts",
   "kitchen_notices",
   "order_kitchen_notes",
   "party_allergy_guests",

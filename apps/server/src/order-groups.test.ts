@@ -1,3 +1,4 @@
+import * as lineServiceState from "./line-service-state.js";
 import type { TradingContext } from "./trading-context.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
@@ -5906,15 +5907,17 @@ describe("splitting a held line into units", () => {
       release = resolve;
     });
     let blocked = false;
-    const copy = VENUE_SERVICE.copyLineContext;
-    const gate = vi.spyOn(VENUE_SERVICE, "copyLineContext").mockImplementation(async (...args) => {
-      await copy(...args);
-      if (!blocked) {
-        blocked = true;
-        copied();
-        await readerDone;
-      }
-    });
+    const copy = lineServiceState.splitLineServiceState;
+    const gate = vi
+      .spyOn(lineServiceState, "splitLineServiceState")
+      .mockImplementation(async (...args) => {
+        await copy(...args);
+        if (!blocked) {
+          blocked = true;
+          copied();
+          await readerDone;
+        }
+      });
     const splitting = inTx((tx) =>
       splitHeldLineIntoUnits(tx, v.cfg, s.partyId, source!.id, command),
     );
@@ -5941,7 +5944,7 @@ describe("splitting a held line into units", () => {
       .set({ paymentAttemptAt: new Date().toISOString() })
       .where(eq(workingOrders.id, s.tabId));
     const command = await args(s.partyId);
-    const copy = vi.spyOn(VENUE_SERVICE, "copyLineContext");
+    const copy = vi.spyOn(lineServiceState, "splitLineServiceState");
     try {
       await expectRefusedWithNothingWritten(
         v,
@@ -6075,6 +6078,9 @@ describe("Fire now on one held dish", () => {
           ...row,
           groupId: firedRow(row) ? fired.id : held.id,
           sentAt: firedRow(row) ? expect.any(String) : row.sentAt,
+          sentNutrition: firedRow(row)
+            ? { allergens: null, dietaryDeclarations: [] }
+            : row.sentNutrition,
         })),
       );
       expect(after.find((r) => r.id === fish.id)).toEqual(fish);

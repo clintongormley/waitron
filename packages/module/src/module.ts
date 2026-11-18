@@ -25,7 +25,14 @@ import type { ModulePersonalData } from "./personal-data.js";
 import semver from "semver";
 import type { Hono } from "hono";
 import { AppError, type ErrorParams } from "@waitron/shared";
-import type { AllergenMap, Database, SQL, Transaction, SettingsDocument } from "@waitron/db";
+import type {
+  AllergenMap,
+  Database,
+  SQL,
+  Transaction,
+  SettingsDocument,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
 import type { RecoveryPackPage } from "@waitron/recovery-pack";
 import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
@@ -719,6 +726,49 @@ export interface PrintedDepartmentReceipt {
   readonly unreadable?: true;
 }
 
+export interface LineContextInput {
+  workingOrderLineId: string;
+  menuItemId: string;
+  /**
+   * The variant the line sells, as listed in its offer's `variants`: its VAT class, allergens
+   * and diet are recorded in place of the dish's. A variant the offer does not list records the
+   * dish's.
+   */
+  variantId?: string;
+  recorded?: { offer: ZoneMenuOffer; versionId: string };
+  unit?: {
+    id: string;
+    name: Record<string, string>;
+    precision: number;
+    hardwareUnit: "kg" | "g" | "mg" | null;
+  };
+  /** A dish sent after its period ended: that period's name and who confirmed the send. */
+  late?: { periodName: string; confirmedBy: string };
+}
+
+export type LineContextColumns = Pick<
+  typeof workingOrderLines.$inferInsert,
+  | "menuItemId"
+  | "menuId"
+  | "menuName"
+  | "menuVersionId"
+  | "offerDepartmentId"
+  | "departmentName"
+  | "unitId"
+  | "soldInEach"
+  | "hardwareUnit"
+  | "allergens"
+  | "diet"
+  | "dietOverride"
+  | "latePeriodName"
+  | "lateConfirmedBy"
+  | "sentNutrition"
+  | "offerUnitName"
+  | "offerUnitPrecision"
+  | "offerVatClass"
+  | "offerCategoryName"
+>;
+
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
   readServiceDay(tx: Transaction, at: Date): Promise<PreparedServiceDay>;
@@ -1155,30 +1205,12 @@ export interface VenueServiceContribution {
   >;
   /** Each line's offer is looked up in `offers`, the zone's offers the lines were priced from; one
    *  it does not hold is refused `service_zone.offer_not_allowed`. */
-  recordLineContexts(
+  lineContextColumns(
     tx: Transaction,
     workingOrderId: string,
-    lines: readonly {
-      workingOrderLineId: string;
-      menuItemId: string;
-      /**
-       * The variant the line sells, as listed in its offer's `variants`: its VAT class, allergens
-       * and diet are recorded in place of the dish's. A variant the offer does not list records the
-       * dish's.
-       */
-      variantId?: string;
-      recorded?: { offer: ZoneMenuOffer; versionId: string };
-      unit?: {
-        id: string;
-        name: Record<string, string>;
-        precision: number;
-        hardwareUnit: "kg" | "g" | "mg" | null;
-      };
-      /** A dish sent after its period ended: that period's name and who confirmed the send. */
-      late?: { periodName: string; confirmedBy: string };
-    }[],
+    lines: readonly LineContextInput[],
     offers: ZoneOffers,
-  ): Promise<void>;
+  ): Promise<ReadonlyMap<string, LineContextColumns>>;
   readSentLineNutrition(
     tx: Transaction,
     lineIds: readonly string[],
@@ -1195,13 +1227,6 @@ export interface VenueServiceContribution {
     fromWorkingOrderId: string,
     toWorkingOrderId: string,
   ): Promise<void>;
-  copyLineContext(
-    tx: Transaction,
-    fromWorkingOrderLineId: string,
-    toWorkingOrderLineId: string,
-  ): Promise<void>;
-  /** `copyLineContext` for each pair, in one read. */
-  copyLineContexts(tx: Transaction, pairs: readonly { from: string; to: string }[]): Promise<void>;
   /** Which of the lines were sold in Each: by the unit id their context froze, and for a stored
    *  unit by that unit's current seed key; a line with no context is not. */
   readLinesSoldInEach(tx: Transaction, lineIds: readonly string[]): Promise<ReadonlySet<string>>;

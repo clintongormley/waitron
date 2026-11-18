@@ -525,9 +525,8 @@ describe("A1208 a counter order of more portions than one statement can bind", (
     expect(lines).toHaveLength(17 * 99);
     expect(new Set(lines.map((line) => line.portionId)).size).toBe(17 * 99);
     const [contexts] = venue.db.all<{ count: number }>(
-      sql`select count(*) as count from working_line_contexts c
-          join working_order_lines l on l.id = c.working_order_line_id
-          where l.working_order_id = ${id}`,
+      sql`select count(*) as count from working_order_lines
+          where working_order_id = ${id} and menu_item_id is not null`,
     );
     expect(contexts!.count).toBe(17 * 99);
   });

@@ -109,13 +109,12 @@ describe("arriving dishes whose course no longer holds them", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, source.tabId));
       for (const line of before) {
+        const held = kind === "unheld" && line.id === later.id;
         expect(after.find((row) => row.id === line.id)).toEqual({
           ...line,
-          groupId: groups[kind === "unheld" && line.id === later.id ? 1 : 0]!.id,
-          sentAt:
-            kind === "unheld" && line.id === later.id
-              ? line.sentAt
-              : (line.sentAt ?? expect.any(String)),
+          groupId: groups[held ? 1 : 0]!.id,
+          sentAt: held ? line.sentAt : (line.sentAt ?? expect.any(String)),
+          sentNutrition: held ? line.sentNutrition : { allergens: null, dietaryDeclarations: [] },
         });
       }
       const ticket = (

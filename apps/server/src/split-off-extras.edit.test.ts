@@ -936,8 +936,8 @@ it.each([false, true])(
         expect(
           queries.mock.calls.filter(
             ([query]) =>
-              query.sql.includes('from "working_line_contexts"') &&
-              query.sql.includes('"menu_item_id"'),
+              query.sql.includes('from "working_order_lines"') &&
+              query.sql.includes('"menu_item_id" is not null'),
           ),
         ).toHaveLength(1);
         expect(
@@ -1089,7 +1089,7 @@ it.each([false, true])(
       await addTabRound(tx, venue.cfg, venue.party.tabId, [line(venue, "burger")]);
       if (nullVersion)
         await tx.run(
-          sql`update working_line_contexts set menu_version_id = null where working_order_line_id in (select id from working_order_lines where working_order_id = ${venue.party.tabId})`,
+          sql`update working_order_lines set menu_version_id = null where working_order_id = ${venue.party.tabId}`,
         );
       await updateProduct(tx, venue.products.burger, { setLunch: true });
       await offerProducts(tx, venue.cfg, {

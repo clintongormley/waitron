@@ -43,7 +43,6 @@ const TABLES = [
   "device_profile_zones",
   "routing_cells",
   "routing_cell_periods",
-  "working_line_contexts",
   "kitchen_notices",
   "device_profile_kitchen_screens",
   "device_profile_kitchen_screen_stations",
@@ -164,12 +163,12 @@ describe("the late-send storage", () => {
       notnull: 1,
       dflt_value: "false",
     });
-    expect(await column("working_line_contexts", "late_period_name")).toEqual({
+    expect(await column("working_order_lines", "late_period_name")).toEqual({
       name: "late_period_name",
       notnull: 0,
       dflt_value: null,
     });
-    expect(await column("working_line_contexts", "late_confirmed_by")).toEqual({
+    expect(await column("working_order_lines", "late_confirmed_by")).toEqual({
       name: "late_confirmed_by",
       notnull: 0,
       dflt_value: null,
@@ -232,6 +231,10 @@ describe("the venue-service tables carry no taxpayer column", () => {
     expect(await columnsOf("order_service_contexts")).toEqual([]);
   });
 
+  it("keeps offer context on the working line without a separate table", async () => {
+    expect(await columnsOf("working_line_contexts")).toEqual([]);
+  });
+
   it("keys and links every table on its own columns and each parent's primary key", async () => {
     const shape: Record<string, { primaryKey: string[]; foreignKeys: string[] }> = {};
     for (const table of TABLES) {
@@ -285,14 +288,6 @@ describe("the venue-service tables carry no taxpayer column", () => {
           "(cell_id) -> routing_cells(id) on delete cascade",
           "(period_id) -> menu_periods(id) on delete cascade",
           "(station_id) -> kitchen_stations(id)",
-        ],
-      },
-      working_line_contexts: {
-        primaryKey: ["working_order_line_id"],
-        foreignKeys: [
-          "(menu_item_id) -> menu_items(id)",
-          "(menu_version_id) -> menu_versions(id)",
-          "(working_order_line_id) -> working_order_lines(id) on delete cascade",
         ],
       },
       kitchen_notices: {

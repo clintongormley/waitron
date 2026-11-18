@@ -40,7 +40,6 @@ import {
   setDepartmentSalePolicyField,
   departmentTransferRequests,
   departments,
-  workingLineContexts,
   writePartyAllergy,
 } from "@waitron/venue-service";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
@@ -610,10 +609,7 @@ describe("department transfer till writes", () => {
           .select()
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, f.tab));
-        const contexts = await tx
-          .select()
-          .from(workingLineContexts)
-          .where(eq(workingLineContexts.workingOrderLineId, lineRows[0]!.id));
+        const contexts = lineRows.filter((line) => line.menuItemId !== null);
         const kitchen = await ticketItemsWithBill(tx).where(
           eq(workingOrderLines.workingOrderId, f.tab),
         );

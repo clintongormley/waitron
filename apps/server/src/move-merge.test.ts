@@ -49,13 +49,7 @@ import {
   storedOrderTotal,
 } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
-import {
-  kitchenNotices,
-  setRoutingCell,
-  listZoneOffers,
-  recordWorkingLineContexts,
-  workingLineContexts,
-} from "@waitron/venue-service";
+import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import { createStation, updateStation } from "./kitchen.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
@@ -2532,29 +2526,18 @@ describe("A1378 MOVED follows station grouping and preserves portion boundaries"
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, p.tabId));
-    await inTx(v, async (tx) => {
-      await tx
-        .delete(workingLineContexts)
-        .where(eq(workingLineContexts.workingOrderLineId, lines[1]!.id));
-      await recordWorkingLineContexts(
-        tx,
-        p.tabId,
-        [
-          {
-            workingOrderLineId: lines[1]!.id,
-            menuItemId: v.item("Burger"),
-            late: { periodName: "Lunch", confirmedBy: OPERATOR },
-          },
-        ],
-        await listZoneOffers(tx, v.tables.zoneId),
-      );
-    });
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ latePeriodName: "Lunch", lateConfirmedBy: OPERATOR, sentNutrition: null })
+        .where(eq(workingOrderLines.id, lines[1]!.id)),
+    );
     const contexts = await v.db
-      .select()
-      .from(workingLineContexts)
+      .select({ latePeriodName: workingOrderLines.latePeriodName })
+      .from(workingOrderLines)
       .where(
         inArray(
-          workingLineContexts.workingOrderLineId,
+          workingOrderLines.id,
           lines.map((line) => line.id),
         ),
       );
@@ -3118,15 +3101,6 @@ it("moves 32,772 lines, preserves sent numbers and portions, then moves the comp
         lineNo: index + 2,
         groupId: index === 0 ? printed!.id : index === 1 ? unprinted!.id : template!.groupId,
       })),
-    );
-    const [context] = await tx
-      .select()
-      .from(workingLineContexts)
-      .where(eq(workingLineContexts.workingOrderLineId, template!.id));
-    await insertInChunks(
-      tx,
-      workingLineContexts,
-      ids.slice(1).map((id) => ({ ...context!, workingOrderLineId: id })),
     );
     await insertInChunks(
       tx,

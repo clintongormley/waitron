@@ -565,9 +565,8 @@ describe("Find Bills SQL paging", () => {
       expect((await readFindBill(tx, unzoned, scope)).workingOrderId).toBe(unzoned);
     });
   });
-  it("retains missing-person credit, table names and exact row facts", async () => {
+  it("retains both staff credits, table names and exact row facts", async () => {
     const party = await seatedWith(venue, "Tarta", "Caña");
-    const missing = randomUUID();
     await inTx(venue, async (tx) => {
       await tx
         .update(workingOrders)
@@ -579,7 +578,7 @@ describe("Find Bills SQL paging", () => {
         .where(eq(workingOrderLines.workingOrderId, party.tabId));
       await tx
         .update(workingOrderLines)
-        .set({ creditedTo: missing })
+        .set({ creditedTo: venue.adminId })
         .where(eq(workingOrderLines.id, line!.id));
     });
     const row = await inTx(venue, (tx) => readFindBill(tx, party.tabId));
@@ -598,9 +597,9 @@ describe("Find Bills SQL paging", () => {
     });
     expect(row.zoneName).toBeTruthy();
     expect(row.tables).toHaveLength(1);
-    expect(row.staff).toContainEqual({ id: missing, name: null });
+    expect(row.staff).toContainEqual({ id: venue.adminId, name: "Administrator" });
     expect(row.staff).toContainEqual({ id: venue.operatorId, name: "Anna" });
-    expect((await list({ staffId: missing })).total).toBe(1);
+    expect((await list({ staffId: venue.adminId })).total).toBe(1);
     expect((await list({ q: row.tables[0]! })).rows.map((r) => r.workingOrderId)).toContain(
       party.tabId,
     );

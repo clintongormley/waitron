@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import type { TradingContext } from "./trading-context.js";
 import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -50,7 +51,7 @@ import {
   rateLines,
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
-import { departments, saleReceiptHeaders, workingLineContexts } from "@waitron/venue-service";
+import { departments, saleReceiptHeaders } from "@waitron/venue-service";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -667,8 +668,7 @@ describe("recordTillSale", () => {
     }>(sql`
       select o.zone_id, l.menu_item_id, l.menu_name, l.department_name
       from working_orders o
-      join working_order_lines w on w.working_order_id = o.id
-      join working_line_contexts l on l.working_order_line_id = w.id
+      join working_order_lines l on l.working_order_id = o.id
       `);
     const attribution = {
       zone_id: zoneId,
@@ -1035,7 +1035,9 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
   it("credits a walk-up's lines to the operator who rang it, in no group", async () => {
     const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES"], { es: "Café" });
     const workingOrderId = randomUUID();
-    const operatorId = "cccccccc-0000-4000-8000-00000000000a";
+    const operatorId = await withTransaction(suite.db, (tx) =>
+      ensureOperator(tx, "cccccccc-0000-4000-8000-00000000000a"),
+    );
 
     await payWorkingOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -2963,12 +2965,8 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const versionOf = async (workingOrderId: string) =>
       suite.db
-        .select({ menuVersionId: workingLineContexts.menuVersionId })
-        .from(workingLineContexts)
-        .innerJoin(
-          workingOrderLines,
-          eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
-        )
+        .select({ menuVersionId: workingOrderLines.menuVersionId })
+        .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, workingOrderId));
     const liveVersion = async () => {
       const [row] = await suite.db

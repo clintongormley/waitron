@@ -1003,7 +1003,7 @@ Changes refresh the menu immediately; restoration stays manual.
 `nutritionIcons` draws allergen and positive diet icons beside counter and table-order line names,
 and, at the large size, a dish's and an extra's allergens on the station and pass cards.
 A null allergen declaration draws no icons. Sent counter and table rows use `sentNutrition` from
-`working_line_contexts`, captured at the first `sent_at` through the effective current product
+`working_order_lines.sent_nutrition`, captured at the first `sent_at` through the effective current product
 read, including variant inheritance. `readDisplayLineNutrition` keeps unstamped rows live and
 never substitutes current declarations for a missing sent snapshot. Each extra stays separate.
 Stations reads retain their current-product declarations. Orders history detail reads the same saved
