@@ -23,6 +23,11 @@ usarla, elige **Añadir impresora** y después **Añadir** junto a ella. Si se r
 nombre y calibración, así que no necesitas repetirlos. Vuelve a asignar sus dispositivos y
 estaciones de preparación.
 
+Para imprimir comandas de estación, elige la impresora en cada estación en **Estaciones de
+preparación**. Una impresora elegida en todas las estaciones imprime todo lo que se envía, para el
+pase. Cuando tienes dos o más estaciones, **Añadir una estación** empieza con las impresoras que
+ya usan todas las estaciones.
+
 ## Calibrar una impresora de recibos {#calibrate}
 
 La calibración tiene tres pasos. Se abre al añadir una impresora de recibos nueva, y **Calibrar

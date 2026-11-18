@@ -161,6 +161,10 @@ export class PrepStationsScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      .note {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+      }
       .form {
         padding-block: var(--wt-space-3);
       }
@@ -288,6 +292,7 @@ export class PrepStationsScreen extends LitElement {
   #stationEditRun = 0;
   #stationScope?: DraftScope<NewStation>;
   #stationBaseline?: NewStation;
+  #startedWithPrinters = false;
   #stationIdentity?: object;
   #stationActionIdentity?: object;
   readonly #impactQueries = new QueryController(
@@ -595,6 +600,14 @@ export class PrepStationsScreen extends LitElement {
   /** A printer deleted elsewhere leaves the open printer choices, and each says so in its message. */
   #dropUnlistedPrinters(printers: PrepStationsView["printers"]): void {
     if (this.editor) {
+      const baseline = this.#stationBaseline;
+      if (baseline) {
+        const base = listedPrinterIds(baseline.printerIds, printers);
+        if (base.length < baseline.printerIds.length) {
+          this.#stationBaseline = { ...baseline, printerIds: base };
+          this.#stationScope?.commit(this.#stationBaseline);
+        }
+      }
       const printerIds = listedPrinterIds(this.draft.printerIds, printers);
       if (printerIds.length < this.draft.printerIds.length) {
         this.#change("printerIds", printerIds);
@@ -915,6 +928,16 @@ export class PrepStationsScreen extends LitElement {
       .filter((station) => station.active)
       .map(({ id, name, colour }) => ({ id, name, colour }));
   }
+  #printersOnEveryStation(): string[] {
+    const view = this.view!;
+    const active = view.stations.filter((station) => station.active);
+    if (active.length < 2) return [];
+    const lists = active.map((station) => this.#printersOf(station.id));
+    return view.printers
+      .filter((printer) => printer.active !== false)
+      .map((printer) => printer.id)
+      .filter((id) => lists.every((list) => list.includes(id)));
+  }
   #openStation() {
     this.#stationBaseline = undefined;
     this.stationAttempted = false;
@@ -925,8 +948,9 @@ export class PrepStationsScreen extends LitElement {
       colour: firstUnusedStationColour(used),
       ...DEFAULT_STATION_THRESHOLDS,
       readyWarningAfterMinutes: DEFAULT_READY_WARNING_AFTER_MINUTES,
-      printerIds: [],
+      printerIds: this.#printersOnEveryStation(),
     };
+    this.#startedWithPrinters = this.draft.printerIds.length > 0;
     this.#stationRefusal = undefined;
     this.#stationUnplaced = "";
     this.fieldError = {};
@@ -1239,7 +1263,7 @@ export class PrepStationsScreen extends LitElement {
             this.editor = undefined;
         }}
         ><div class="form">
-          ${this.#field("name", t("prep.name"), "text")}${this.#newStationColour()}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#field("readyWarningAfterMinutes", t("prep.ready_warning"))}${this.#newStationPrinters()}
+          ${this.#field("name", t("prep.name"), "text")}${this.#newStationColour()}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#field("readyWarningAfterMinutes", t("prep.ready_warning"))}${this.#newStationPrinters()}${this.#startedWithPrinters ? html`<p class="note">${t("prep.printers_every_station")}</p>` : nothing}
         </div>
         <wt-form-actions slot="footer" .error=${this.error}>
           <wt-button
