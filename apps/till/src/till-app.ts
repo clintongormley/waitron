@@ -20093,8 +20093,21 @@ export class TillApp extends LitElement {
       event as CustomEvent<{ workingOrderId: string; printAnyway?: boolean; showFirst?: boolean }>
     ).detail;
     if (showFirst === true && !this.mealEndSending && this.activeTabId !== workingOrderId) {
+      const { api, orderParty: pressed } = this;
+      const session = this.#operatorSession;
+      const visit = this.#orderVisit;
       if (!(await this.#switchToBill(workingOrderId))) return;
       await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
+      // Issuing a ticket cannot be undone: a table that moved on is not the one the press saw, and
+      // the revision read now would pass the server's stale check.
+      if (
+        api !== this.api ||
+        session !== this.#operatorSession ||
+        visit !== this.#orderVisit ||
+        pressed?.id !== this.orderParty?.id ||
+        pressed?.revision !== this.orderParty?.revision
+      )
+        return;
     }
     const party = this.orderParty;
     const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);

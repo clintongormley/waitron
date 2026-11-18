@@ -3,9 +3,10 @@ import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { clockUnusableText, overLimitText, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
-import type { EndedMeal, PartyBill, TillApi } from "./api/client.js";
+import type { EndedMeal, PartyBill, TabLine, TillApi } from "./api/client.js";
 import type { CapabilityFlag } from "./layout.js";
 import {
+  bill120,
   billOf,
   emit,
   floor,
@@ -94,6 +95,42 @@ const sentBodies = (endMeal: ReturnType<typeof vi.fn>) =>
 async function printBill(el: TillApp): Promise<void> {
   emit(tableOrder(el), "end-meal", { workingOrderId: "wo-4" });
   await flush(el, 6);
+}
+
+/** A promise the test settles by hand, for an answer held back. */
+function heldAnswer<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const twoBills = () =>
+  vi.fn(async () => [billOf(), billOf({ workingOrderId: "wo-9", billNumber: 2 })]);
+
+/** Finish table is refused for the bill still owing, and its Print the bill is pressed. */
+async function pressPrintFromFinishRefusal(el: TillApp): Promise<void> {
+  emit(tableOrder(el), "finish-table", {});
+  await flush(el);
+  shadow(el).querySelector<HTMLElement>("[data-finish-refusal] [data-print-bill]")!.click();
+  await flush(el, 6);
+}
+
+/** The first read of bill `wo-9`'s lines is held back; every other read answers at once. */
+function holdingFirstBillTwoRead() {
+  const read = heldAnswer<{ lines: TabLine[]; revision: number }>();
+  let holding = true;
+  const getTabLines = vi.fn((billId: string) => {
+    if (billId === "wo-9" && holding) {
+      holding = false;
+      return read.promise;
+    }
+    return Promise.resolve({ lines: bill120, revision: 0 });
+  });
+  return { getTabLines, release: () => read.resolve({ lines: bill120, revision: 0 }) };
 }
 
 beforeEach(() => {
@@ -754,6 +791,148 @@ describe("till-app: Print the bill with dishes not served", () => {
 });
 
 describe("till-app: Print the bill from Finish table's refusal", () => {
+  it("sends nothing when the table was left, reopened and moved on while the pressed bill was read", async () => {
+    let revision = 3;
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    const { el, endMeal } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines,
+      getTablesState: vi.fn(async () => [heldTable({ revision })]),
+    });
+    await pressPrintFromFinishRefusal(el);
+    expect(tableOrder(el).orderId).toBe("wo-9");
+
+    revision = 4;
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el, 6);
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el, 6);
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    expect(tableOrder(el).orderId).toBe("wo-9");
+    expect(tableOrder(el).party!.revision).toBe(4);
+
+    release();
+    await flush(el, 6);
+
+    expect(endMeal).not.toHaveBeenCalled();
+    expect(tableOrder(el).orderId).toBe("wo-9");
+  });
+
+  it("sends nothing when the table was left and reopened at the same revision while the pressed bill was read", async () => {
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    const { el, endMeal } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines,
+    });
+    await pressPrintFromFinishRefusal(el);
+
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el, 6);
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el, 6);
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    expect(tableOrder(el).party!.revision).toBe(3);
+
+    release();
+    await flush(el, 6);
+
+    expect(endMeal).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when another party takes the table while the pressed bill is read", async () => {
+    let party = "v1";
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    const { el, endMeal } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines,
+      getTablesState: vi.fn(async () => [heldTable({ id: party })]),
+      markServed: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
+    });
+    await pressPrintFromFinishRefusal(el);
+    party = "v2";
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+    expect(tableOrder(el).party!.id).toBe("v2");
+    expect(tableOrder(el).party!.revision).toBe(3);
+
+    release();
+    await flush(el, 6);
+
+    expect(endMeal).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing to a server the till was pointed at while the pressed bill was read", async () => {
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    const { el, endMeal } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines,
+    });
+    await pressPrintFromFinishRefusal(el);
+    const elsewhere = vi.fn(async () => ended);
+    el.api = { ...api, endMeal: elsewhere } as unknown as TillApi;
+    await flush(el);
+
+    release();
+    await flush(el, 6);
+
+    expect(endMeal).not.toHaveBeenCalled();
+    expect(elsewhere).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing after the person signed out and back in while the pressed bill was read", async () => {
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    const { el, endMeal } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines,
+    });
+    await pressPrintFromFinishRefusal(el);
+
+    emit(shell(el), "logout");
+    await flush(el, 6);
+    await openTable(el, ["payment.take"]);
+    await flush(el, 6);
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+
+    release();
+    await flush(el, 6);
+
+    expect(endMeal).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when the table's revision moves while the pressed bill is read, and the next press prints", async () => {
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    const { el, endMeal } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines,
+    });
+    await pressPrintFromFinishRefusal(el);
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+    expect(tableOrder(el).party!.revision).toBe(4);
+
+    release();
+    await flush(el, 6);
+
+    expect(endMeal).not.toHaveBeenCalled();
+    expect(tableOrder(el).orderId).toBe("wo-9");
+
+    emit(tableOrder(el), "end-meal", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    expect(endMeal).toHaveBeenCalledOnce();
+    expect(sentBodies(endMeal)[0]).toEqual(
+      expect.objectContaining({ billId: "wo-9", expectedPartyRevision: 4 }),
+    );
+  });
+
   it("shows the bill the refusal names before printing it, and says it is printed under that bill", async () => {
     let printed = false;
     const { el, endMeal } = await openBill({
