@@ -956,6 +956,14 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   now hold empty blobs. The printers-down check (`stationPrintersDownQuery` in
   `apps/server/src/station-outputs-down.ts`) groups over every stuck job of a printer. It matters
   only with many stuck jobs. Put the payload after the columns reads filter on.
+- **A dish's recorded options answers do not say which list they came from (left open by #3746).**
+  Park a dish not yet sent with Cooking and Sauce answers, delete the Cooking list and add a required
+  Milk list: the till does not ask for Milk and the server accepts the save, because the leftover
+  answer could be the Milk list under a new name. `option_snapshots` on `working_order_lines` and
+  `sale_lines` holds names only, so `answersOfGoneLists` (`apps/server/src/modifier-selection.ts`)
+  has to count. Both Codex reviews of #3746 gave the fix: "preserve each recorded answer by its
+  original list identity and validate new lists separately". It changes what both tables store, so
+  it belongs with A1308's line work (watcher, 2026-11-18). No slice's plan names it yet.
 
 ## What A1308 retires
 
