@@ -104,6 +104,7 @@ export async function resendInvoicePrintJob(
   return retry;
 }
 
+/** The pull checks when the receipt is due in the same transaction, before attaching its token. */
 export async function claimInvoiceReceipt(
   tx: Transaction,
   printJobId: string,
