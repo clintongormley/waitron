@@ -295,7 +295,7 @@ it("copies the set menu's stored change stamp rather than the time of the build"
   expect(updated.workingHash).not.toBe(first.workingHash);
 });
 
-it("publishes a surcharge on a dish at a different VAT class from the set menu", async () => {
+it("keeps a mixed-rate dish and its surcharge in the published copy", async () => {
   await place();
   await suite.db.update(products).set({ vatClass: "general" }).where(eq(products.id, f.sirloin));
   await publish();

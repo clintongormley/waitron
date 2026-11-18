@@ -876,7 +876,8 @@ export function saveSetMenuDishCourse(
 - Test: `packages/menu/src/set-menu-document.test.ts`, `apps/server/src/menu-api.test.ts`.
 
 **Interfaces:**
-- Consumes: `readSetMenu`, `setMenuProblems` (Tasks 4, 4b); the `set_menu` `DocumentMember` (Task 3b).
+- Consumes: the draft reads and rules from Tasks 4 and 4b through `readSetMenuDrafts`,
+  and the `set_menu` `DocumentMember` (Task 3b).
 - Produces, in `menu-document-types.ts`:
 
 ```ts
@@ -910,15 +911,14 @@ export interface PublishedSetMenu {
 
   `MenuDocument` gains optional `setMenus?: Record<string, PublishedSetMenu>`, keyed by set menu
   id.
-- Produces `freezeSetMenu(offers: FrozenOffer[], root: DocumentList, details: SetMenuDetails): PublishedSetMenu`
+- Produces `freezeSetMenu(offers: FrozenOffer[], root: DocumentList, draft: SetMenuDraft): PublishedSetMenu`
   in `set-menu-document.ts`. In the copy:
   - each offer's `unitPrice` is the dish's surcharge, `"0.00"` when included; each variant left out
     is removed from `variants`; each kept variant's `unitPrice` and `menuPrice` are its surcharge
     (its own, else the dish's, else `"0.00"`). An offer whose variants are all left out is dropped,
     with its product member.
-  - `countsAsCourseId` is the course `readSetMenu` reports for the dish and for each kept variant,
-    which is the set menu's own course for the dish when it gives one; `courseOverrideId` is
-    `readSetMenu`'s `courseOverrideId`.
+  - `countsAsCourseId` comes from the draft's course for the dish and for each kept variant.
+    `courseOverrideId` carries the course the set menu gives the dish, when it has one.
   - `terms` is `{ price, vatClass, takeawayVatClass, names, lines }`, with names from the root
     section and a missing takeaway override resolved to the eat-in class.
 - Produces `documentSetMenuOffers(document: MenuDocument): SetMenuFrozenOffer[]` in
@@ -934,9 +934,9 @@ export interface PublishedSetMenu {
 - **How the copy is built.** `order()` (`menu-document.ts:241-249`) puts a held set menu before the
   full menu, as it does an included menu; the set menu's own pass builds its root and frozen offers,
   and the full menu reuses them through `freezeSetMenu`. `buildMenuDocuments` reads the set-menu
-  details (`readSetMenu`'s lines, exclusions, variant surcharges, courses, classes and units) for
-  every set menu it builds in ONE batched read, never one call per set menu: `menuStatus` builds
-  every menu on each live change (`menu-publication.ts:216-227`).
+  terms, lines and dish settings through one call to `readSetMenuDrafts` for all the set menus
+  it builds. The draft reader batches the queries so the menu list can build documents for all
+  its menus in one pass.
 - `BuiltMenu` gains `setMenuProblems: { menuId: string; name: string; problems: SetMenuProblem[] }[]`:
   on a full menu, one entry per held set menu that has problems; on a set menu, `[]` (the editor
   reads its problems from `readSetMenu`). Task 5b shows it in the Preview.
@@ -972,13 +972,15 @@ export interface PublishedSetMenu {
     move Soup to Mains (accepted by a line) → the live copy still says Starters; publish → Mains.
   - `"a dish moved to a course no line accepts stops Lunch's next publish"`: give Soup a course no
     line includes → `buildMenuDocument(Lunch).setMenuProblems` names Daily menu with
-    `dish_not_included`, and `publishMenu(Lunch)` refuses `set_menu.not_publishable`
-    `{ menuId: dailyMenu, count: 1 }`.
+    `dish_not_included` and `line_unfillable`, and `publishMenu(Lunch)` refuses
+    `set_menu.not_publishable` with `{ menuId: dailyMenu, count: 2 }`.
   - `"copies the set menu's stored change stamp rather than the time of the build"`:
     `changedAt` equals Daily menu's `updated_at`; building Lunch twice gives the same working hash;
     a surcharge change moves `changedAt` and the working hash.
-  - Publish a surcharge on a dish at a different rate. A null takeaway override resolves to
-    the set menu's eat-in rate. A takeaway-only edit changes the working hash and the stamp.
+  - `"keeps a mixed-rate dish and its surcharge in the published copy"`: the copy carries the
+    dish and its surcharge while the terms resolve a null takeaway override to the eat-in rate.
+  - `"freezes a takeaway-only VAT edit on the next full-menu publish"`: the edit changes the
+    working hash and advances the stamp. The live copy takes the new rate on republish.
   - `"a set menu has no Publish of its own"`: `publishMenu(dailyMenu)` and
     `patchLiveMenu(dailyMenu)` refuse `set_menu.wrong_place`.
   - `"building every menu reads set-menu details once"`: count statements (or spy) while
