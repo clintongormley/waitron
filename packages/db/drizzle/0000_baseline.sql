@@ -2301,17 +2301,6 @@ CREATE TABLE `device_profile_zones` (
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE `order_service_contexts` (
-	`working_order_id` text PRIMARY KEY NOT NULL,
-	`zone_id` text NOT NULL,
-	`department_id` text NOT NULL,
-	`service_mode` text NOT NULL,
-	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "order_service_contexts_mode_ck" CHECK("order_service_contexts"."service_mode" in ('table_tab','prepay','ticket_then_pay'))
-);
---> statement-breakpoint
 CREATE TABLE `sale_receipt_headers` (
 	`sale_id` text PRIMARY KEY NOT NULL,
 	`department_id` text,

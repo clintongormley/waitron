@@ -43,7 +43,6 @@ const TABLES = [
   "device_profile_zones",
   "routing_cells",
   "routing_cell_periods",
-  "order_service_contexts",
   "working_line_contexts",
   "kitchen_notices",
   "device_profile_kitchen_screens",
@@ -229,6 +228,10 @@ describe("the venue-service tables carry no taxpayer column", () => {
     expect(left.rows).toEqual([]);
   });
 
+  it("keeps service context on the bill without a separate table", async () => {
+    expect(await columnsOf("order_service_contexts")).toEqual([]);
+  });
+
   it("keys and links every table on its own columns and each parent's primary key", async () => {
     const shape: Record<string, { primaryKey: string[]; foreignKeys: string[] }> = {};
     for (const table of TABLES) {
@@ -282,14 +285,6 @@ describe("the venue-service tables carry no taxpayer column", () => {
           "(cell_id) -> routing_cells(id) on delete cascade",
           "(period_id) -> menu_periods(id) on delete cascade",
           "(station_id) -> kitchen_stations(id)",
-        ],
-      },
-      order_service_contexts: {
-        primaryKey: ["working_order_id"],
-        foreignKeys: [
-          "(department_id) -> departments(id)",
-          "(working_order_id) -> working_orders(id) on delete cascade",
-          "(zone_id) -> floor_zones(id)",
         ],
       },
       working_line_contexts: {
@@ -747,12 +742,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       sql`insert into menu_periods (id, department_id, name, menu_id)
         values (${randomUUID()}, ${v.departmentId}, 'Lunch', ${missing})`,
       "menu_periods_menu_fk",
-    );
-    await refusal(
-      sql`insert into order_service_contexts
-          (working_order_id, zone_id, department_id, service_mode)
-        values (${missing}, ${v.zoneId}, ${v.departmentId}, 'prepay')`,
-      "order_service_contexts_order_fk",
     );
   });
 

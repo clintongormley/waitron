@@ -430,7 +430,6 @@ export {
   kitchenNotices,
   menuPeriods,
   orderKitchenNotes,
-  orderServiceContexts,
   partyAllergyGuests,
   routingCellPeriods,
   routingCells,

@@ -18,7 +18,7 @@ import {
 } from "../columns.js";
 import { deviceProfiles } from "../device-profiles.js";
 import { floorZones } from "../floor-zones.js";
-import { workingOrderLines, workingOrders } from "../orders.js";
+import { workingOrderLines } from "../orders.js";
 import { sales } from "../sales.js";
 import {
   collectionNumber,
@@ -154,38 +154,6 @@ export const deviceProfileZones = table(
       foreignColumns: [floorZones.id],
       name: "device_profile_zones_zone_fk",
     }),
-  ],
-);
-
-export const orderServiceContexts = table(
-  "order_service_contexts",
-  {
-    workingOrderId: id("working_order_id").notNull(),
-    zoneId: id("zone_id").notNull(),
-    departmentId: id("department_id").notNull(),
-    serviceMode: label("service_mode").notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.workingOrderId], name: "order_service_contexts_pk" }),
-    foreignKey({
-      columns: [t.workingOrderId],
-      foreignColumns: [workingOrders.id],
-      name: "order_service_contexts_order_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.zoneId],
-      foreignColumns: [floorZones.id],
-      name: "order_service_contexts_zone_fk",
-    }),
-    foreignKey({
-      columns: [t.departmentId],
-      foreignColumns: [departments.id],
-      name: "order_service_contexts_department_fk",
-    }),
-    check(
-      "order_service_contexts_mode_ck",
-      sql`${t.serviceMode} in ('table_tab','prepay','ticket_then_pay')`,
-    ),
   ],
 );
 

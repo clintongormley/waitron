@@ -277,7 +277,6 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   zone_sale_policies: ["receipt_print_mode"],
   departments: ["location_id"],
   sales: ["operation_date"],
-  order_service_contexts: ["location_id"],
   zone_service_policies: ["location_id"],
   routing_cells: ["location_id"],
   seasons: ["location_id"],
@@ -325,6 +324,7 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "order_service_contexts",
   "bill_edit_states",
   "working_order_counters",
   "shift_assignments",
@@ -1102,17 +1102,22 @@ for (const locale of ["en", "es"] as const) {
         { name: "editor_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
         { name: "editor_version", type: "INTEGER", notnull: 1, dflt_value: "0", pk: 0 },
       );
+      for (const name of ["zone_id", "department_id", "service_mode"])
+        orders.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
       for (const row of Object.values(orders.rows))
         Object.assign(row, {
           bill_number: null,
           bill_name: null,
           editor_id: null,
           editor_version: 0,
+          zone_id: null,
+          department_id: null,
+          service_mode: null,
         });
       orders.foreignKeys = [
-        ...orders.foreignKeys.map((key) => ({ ...key, id: key.id >= 2 ? key.id + 1 : key.id })),
+        ...orders.foreignKeys.map((key) => ({ ...key, id: key.id + (key.id >= 2 ? 3 : 2) })),
         {
-          id: 2,
+          id: 4,
           seq: 0,
           table: "persons",
           from: "editor_id",
@@ -1121,6 +1126,21 @@ for (const locale of ["en", "es"] as const) {
           on_delete: "NO ACTION",
           match: "NONE",
         },
+        ...(
+          [
+            ["departments", "department_id"],
+            ["floor_zones", "zone_id"],
+          ] as const
+        ).map(([table, from], id) => ({
+          id,
+          seq: 0,
+          table,
+          from,
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        })),
       ].sort((a, b) => a.id - b.id);
       const orderLines = expected[phase].tables.working_order_lines!;
       orderLines.columns.splice(
