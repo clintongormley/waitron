@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import {
   statementChunks,
   kitchenCourses,
+  menuItems,
   newId,
   nowIso,
   orderEvents,
@@ -318,6 +319,22 @@ export async function saveDraft(
     partyId,
     lines.map((line) => line.menuItemId),
   );
+  const outsideZone = lines
+    .map((line) => line.menuItemId)
+    .filter((menuItemId) => !offers.has(menuItemId));
+  if (outsideZone.length > 0) {
+    const rows = await tx
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(
+        inArray(menuItems.id, sql`(select value from json_each(${JSON.stringify(outsideZone)}))`),
+      );
+    const existing = new Set(rows.map((row) => row.id));
+    const missing = lines.findIndex(
+      ({ menuItemId }) => !offers.has(menuItemId) && !existing.has(menuItemId),
+    );
+    if (missing !== -1) throw invalid(`lines.${missing}.menuItemId`);
+  }
   for (const line of lines) {
     const offer = offers.get(line.menuItemId);
     if (offer?.ordering === "not_sold_separately") {
