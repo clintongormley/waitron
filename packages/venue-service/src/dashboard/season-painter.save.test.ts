@@ -452,7 +452,7 @@ it("several edited departments made inactive are told together", async () => {
   const bar = model.departments[2]!;
   const { painter } = await mount({
     ...model,
-    departments: [...model.departments, { ...bar, id: "d4", name: "Café" }],
+    departments: [...model.departments, { ...bar, id: "d4", name: "Coffee shop" }],
   });
   for (const id of ["d3", "d4"]) {
     await pick(painter, id);
@@ -465,12 +465,12 @@ it("several edited departments made inactive are told together", async () => {
       ...next.departments.map((department) =>
         department.id === "d3" ? { ...department, active: false } : department,
       ),
-      { ...bar, id: "d4", name: "Café", active: false },
+      { ...bar, id: "d4", name: "Coffee shop", active: false },
     ],
   };
   await settle(painter);
   expect(frame(painter).refusal).toBe(
-    "Bar and Café are no longer active; their changes were dropped.",
+    "Bar and Coffee shop are no longer active; their changes were dropped.",
   );
 });
 

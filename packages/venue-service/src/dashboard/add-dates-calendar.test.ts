@@ -380,7 +380,7 @@ describe("Add-dates calendar", () => {
   });
 
   it("shows no legend in a month with no held date", async () => {
-    const el = await mount({ taken: new Map([["2027-01-06", "Reyes"]]) });
+    const el = await mount({ taken: new Map([["2027-01-06", "Epiphany"]]) });
     expect(root(el).querySelector('[data-test="legend"]')).toBeNull();
   });
 

@@ -56,7 +56,7 @@ function model(empty: boolean): OpeningHoursModel {
     dayCutover: "06:00",
     menus: [
       { id: "breakfast", name: "Breakfast menu", active: true, includes: [] },
-      { id: "lunch", name: "Menú del día", active: true, includes: [] },
+      { id: "lunch", name: "Set lunch menu", active: true, includes: [] },
       { id: "christmas", name: "Christmas menu", active: true, includes: [] },
       { id: "bar", name: "Bar menu", active: true, includes: [] },
       { id: "staff", name: "Staff meal", active: true, includes: [] },

@@ -568,10 +568,10 @@ it.each(
         { id: "deli", name: "Deli takeaway", active: true, includes: [] },
       ];
       data.seasons = [
-        { id: "spring", name: "Primavera", startsOn: "03-01", colour: "green" },
-        { id: "summer", name: "Verano", startsOn: "06-01", colour: "amber" },
-        { id: "autumn", name: "Otoño", startsOn: "09-01", colour: "orange" },
-        { id: "winter", name: "Invierno", startsOn: "12-01", colour: "blue" },
+        { id: "spring", name: "Spring", startsOn: "03-01", colour: "green" },
+        { id: "summer", name: "Summer", startsOn: "06-01", colour: "amber" },
+        { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" },
+        { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
       ];
       data.departments = [
         {
@@ -587,7 +587,7 @@ it.each(
         {
           periodId: "p1",
           seasons: data.seasons.map(({ id, name }) => ({ id, name })),
-          specialDays: [{ id: "sd1", name: "Nochevieja" }],
+          specialDays: [{ id: "sd1", name: "New Year's Eve" }],
         },
         { periodId: "p2", seasons: [], specialDays: [] },
       ];

@@ -310,19 +310,19 @@ it("choosing another replacement clears a refusal that named Replace with", asyn
   expect(bottom(el)).toBe("");
 });
 
-it("Spanish: Eliminar Lunch y Sin categoría · Terraza", async () => {
+it("Spanish: Eliminar Lunch y Sin categoría · Terrace", async () => {
   setLocale("es");
   const el = await mount(
     impactOf({
       seasons: 2,
-      routingUses: [{ rowKind: "no_category", rowLabel: null, zoneName: "Terraza" }],
+      routingUses: [{ rowKind: "no_category", rowLabel: null, zoneName: "Terrace" }],
     }),
   );
   expect(heading(el)).toBe("¿Eliminar Lunch?");
   expect(confirm(el).textContent!.trim()).toBe("Eliminar Lunch");
   const text = body(el);
   expect(text).toContain("Pintado en 2 temporadas.");
-  expect(text).toContain("Nombrado en 1 celda de asignación: Sin categoría · Terraza.");
+  expect(text).toContain("Nombrado en 1 celda de asignación: Sin categoría · Terrace.");
   expect(text).toContain("Se eliminan sus líneas de asignación.");
   expect(picker(el)!.label).toBe("Sustituir por");
   expect(picker(el)!.options[0]).toEqual({ value: "", label: "Ninguno" });

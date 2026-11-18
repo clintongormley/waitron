@@ -36,7 +36,8 @@ async function mount(theme: "light" | "dark", state: string) {
     ];
     box.innerHTML = `<wt-button slot="season-action" variant="secondary">Edit Autumn's standard week</wt-button><wt-button variant="secondary">Edit special day</wt-button>`;
   } else if (state === "a plain day with a long name") {
-    box.name = "Fiesta de la Exaltación de la Santa Cruz y Romería de San Cristóbal del Monte";
+    box.name =
+      "Festival of the Exaltation of the Holy Cross and Pilgrimage to Saint Christopher of the Mount";
     box.nameKind = "holiday";
     box.line = "Autumn standard hours";
     box.rows = [{ name: "Santet Deli Co", text: "Closed" }];

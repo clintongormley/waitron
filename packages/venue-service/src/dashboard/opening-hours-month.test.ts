@@ -852,7 +852,7 @@ describe("Opening hours month", () => {
   });
 
   it('reads "<name> · Closed" and an empty bar per row on a date closed all day', async () => {
-    const long = "Lunes siguiente al Día de la Constitución Española";
+    const long = "Monday following the Day of the Spanish Constitution";
     const model = monthModel();
     const days = model.days.map((day) =>
       day.date === "2026-12-07" ? { ...day, holidays: [holiday(day.date, long)] } : day,
