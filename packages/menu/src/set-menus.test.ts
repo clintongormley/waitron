@@ -93,7 +93,9 @@ it("duplicates the distinct takeaway rate with the eat-in rate", async () => {
 
 it("saves a takeaway-only patch, stamps it and allows clearing the override", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
-  onTestFinished(() => vi.useRealTimers());
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   vi.setSystemTime(new Date("2030-02-01T12:00:00Z"));
   const set = await app((tx) => createMenu(tx, lunch));
   const read = () => app((tx) => readSetMenu(tx, set.id));

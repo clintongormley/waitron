@@ -156,7 +156,7 @@ second amendment are marked **my call (plan writer)**:
     and price a bill's recorded copy after a republish.
 11. **A set menu has its own eat-in and takeaway VAT classes.** An empty takeaway override
     follows the eat-in class. Dishes and variants may have any VAT class on the product.
-    Supplements take the applicable class of the set menu. The owner's decisions are recorded
+    Supplements and paid extras use the applicable class of the set menu. The owner's decisions are recorded
     on the [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md).
 12. **A product sold by measure cannot be in a set menu** (owner, 18 November 2026: "no" when
     asked whether a set menu can include dishes sold by weight). A set-menu dish is stored one unit per line
@@ -1287,7 +1287,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
 - `POST /management-api/menus` accepts `kind`, `setPrice`, `setVatClass` and `setTakeawayVatClass`.
   `PATCH .../menus/:id` accepts the three terms fields. A null `setTakeawayVatClass` clears the
   override. An invalid takeaway class answers `set_menu.invalid` naming `setTakeawayVatClass`.
-- `GET /management-api/menus/:id/set-menu` → `SetMenuDetails`.
+- `GET /management-api/menus/:id/set-menu` → `SetMenuDetails`. The editor reads the takeaway
+  override from these details. The menu list keeps its existing summary fields.
 - `PUT /management-api/menus/:id/set-menu/lines` body `{ lines: { count, courseIds }[] }` →
   `{ lines: SetMenuLine[] }`.
 - `PUT /management-api/menus/:id/set-menu/items/:itemId/course` body `{ courseId: string | null }`

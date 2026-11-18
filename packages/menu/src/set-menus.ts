@@ -329,7 +329,12 @@ export async function readSetMenu(
   return { ...details, problems: setMenuProblems(details) };
 }
 
-function includedDishChoices(dish: SetMenuDishSetting) {
+function includedDishChoices(dish: SetMenuDishSetting): {
+  id: string;
+  name: string;
+  courseId: string | null;
+  parentName: string | null;
+}[] {
   if (dish.variants.length === 0) {
     const { productId, name, courseId } = dish;
     return [{ id: productId, name, courseId, parentName: null }];
