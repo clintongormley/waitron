@@ -61,6 +61,18 @@ async function syncFolder(parent: string, io: DurableJsonIo): Promise<void> {
   }
 }
 
+/** For a caller that keeps a file already in place: its rename may never have been synced. */
+export async function syncDurableHostJsonFolder(
+  path: string,
+  io: DurableJsonIo = fs,
+): Promise<void> {
+  try {
+    await syncFolder(dirname(path), io);
+  } catch {
+    throw invalid();
+  }
+}
+
 export async function writeDurableHostJson(
   path: string,
   value: unknown,
