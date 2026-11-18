@@ -419,7 +419,7 @@ verify_numbered_release() {
   [ "${BASH_SOURCE[0]}" -ef "$WAITRON_HOST_DIR/waitron.sh" ] \
     || die "run numbered installs from $WAITRON_HOST_DIR/waitron.sh"
   [ -x "$HOST_NODE" ] && [ -r "$RELEASE_TRUST/verify-release.mjs" ] \
-    || die 'release verification is unavailable — run a checked upgrade to main first'
+    || die 'numbered installs need the verifier and both release keys — use a main image published with them, then follow the checked upgrade instructions'
   command -v curl >/dev/null 2>&1 || die 'install curl to download the signed release file'
   curl -q -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 15 \
     --max-time 60 --max-filesize 16384 \
@@ -980,7 +980,7 @@ cmd_manual_install() (
       source="resolved Git fallback"
       fetch_upgrade_driver "$sha" "$stage" || die 'could not download one complete upgrade driver'
     fi
-    if fetch_release_trust "$sha" "$stage/release-trust"; then trust_ready=1; fi
+    if fetch_release_trust "$sha" "$stage/release-trust" 2>/dev/null; then trust_ready=1; fi
   else
     fetch_upgrade_driver "$sha" "$stage" || die 'could not download one complete upgrade driver'
   fi
@@ -991,7 +991,12 @@ cmd_manual_install() (
   refuse_pending_upgrade
   if [ -n "$signed_sha" ]; then require_current_or_newer_release "$ref"; fi
   install_upgrade_driver "$stage"
-  if [ "$trust_ready" -eq 1 ]; then cp -R "$stage/release-trust" "$WAITRON_HOST_DIR/"; fi
+  if [ "$trust_ready" -eq 1 ]; then
+    cp -R "$stage/release-trust" "$WAITRON_HOST_DIR/"
+    echo 'waitron.sh: loaded the release verifier and both public keys' >&2
+  elif [ "$ref" = main ]; then
+    echo 'waitron.sh: could not load release trust files — check the network and use a published main image with both release keys' >&2
+  fi
   load_print_agent_apparmor "$sha"
   disable_bluetooth_autopair
   enable_time_sync

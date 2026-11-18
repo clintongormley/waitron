@@ -474,11 +474,14 @@ commit and identifies both images by digest, a fingerprint of the exact image. I
 venue data, the checked manual upgrade uses those images for the trial and for restart. You
 can reinstall the same version or move forward. An install that keeps the data refuses an
 older release. A confirmed reset can install an older signed release because it wipes the data.
+Fresh and reset installs use the retained installer's steps. A checked upgrade to a numbered
+release loads the upgrade driver from the signed commit.
 
 The USB recipe seeds release trust when built with both keys. On an existing development box,
 wait for a published main image that includes the verifier and keys. Download a new copy of
 the main installer and use that copy for the first checked upgrade to main. The old retained
-installer cannot seed the keys.
+installer cannot seed the keys. The checked upgrade reports whether it loaded the verifier and
+keys.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/waitron.sh -o waitron.sh
