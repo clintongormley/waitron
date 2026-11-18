@@ -4,7 +4,7 @@ import { generateKeyPairSync, verify } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { main } from "./sign-release-list.mjs";
 
 const keyPair = () =>
@@ -17,6 +17,8 @@ const spare = keyPair();
 const app = "sha256:" + "a".repeat(64);
 const agent = "sha256:" + "b".repeat(64);
 const source = "c".repeat(40);
+const SPAWN_TIMEOUT_MS = 5_000;
+vi.setConfig({ testTimeout: SPAWN_TIMEOUT_MS + 5_000 });
 
 function run({
   secret,
@@ -48,7 +50,7 @@ function run({
       const result = spawnSync(
         process.execPath,
         [join(import.meta.dirname, "sign-release-list.mjs"), dir, output],
-        { encoding: "utf8", timeout: 5000, env },
+        { encoding: "utf8", timeout: SPAWN_TIMEOUT_MS, env },
       );
       return { ...result, bytes: readOutput() };
     }
