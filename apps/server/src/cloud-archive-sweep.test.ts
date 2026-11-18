@@ -1,7 +1,10 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm, readdir } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, readdir, stat } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
+import { gunzipSync } from "node:zlib";
+import { withTransaction } from "@waitron/db";
+import { sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { BACKUP_STAGING_DIR } from "@waitron/store";
@@ -44,7 +47,7 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
     new AbortController().signal,
   );
   const entries = new Map(
-    unpackArchive(decryptArtifact(result.bytes, "recovery key")).map((e) => [
+    unpackArchive(gunzipSync(decryptArtifact(result.bytes, "recovery key"))).map((e) => [
       e.name,
       Buffer.from(e.bytes),
     ]),
@@ -75,7 +78,7 @@ it("refuses an oversized SQLite copy and removes its plaintext staging", async (
   const archive = vi.spyOn(db.db, "archiveTo").mockImplementationOnce(async (path) => {
     const file = await open(path, "w");
     try {
-      await file.truncate(513 * 1024 * 1024);
+      await file.truncate(4 * 1024 ** 3 + 1);
     } finally {
       await file.close();
     }
@@ -143,3 +146,49 @@ it("lets a node copy still writing into staging finish before it clears staging 
     copy.mockRestore();
   }
 });
+
+it.runIf(process.env.WAITRON_LARGE_CLOUD_BACKUP_TEST === "1")(
+  "publishes a Cloud capture from a real SQLite copy over 512 MiB",
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "snapshot-large-sqlite-"));
+    dirs.push(root);
+    for (const path of RECOVERY_FILES) {
+      await mkdir(dirname(join(root, path)), { recursive: true });
+      await writeFile(join(root, path), "state");
+    }
+    await withTransaction(db.db, async (tx) => {
+      await tx.run(sql`create table large_capture_fixture (payload blob)`);
+      for (let row = 0; row < 65; row++)
+        await tx.run(sql`insert into large_capture_fixture values (zeroblob(${8 * 1024 * 1024}))`);
+    });
+    const copy = db.db.archiveTo.bind(db.db);
+    let copyBytes = 0;
+    const archive = vi.spyOn(db.db, "archiveTo").mockImplementationOnce(async (path) => {
+      await copy(path);
+      copyBytes = (await stat(path)).size;
+      expect(copyBytes).toBeGreaterThan(512 * 1024 * 1024);
+    });
+    const stagingDir = join(root, BACKUP_STAGING_DIR);
+    try {
+      const captured = await captureCloudArchive(
+        {
+          db: db.db,
+          node: db.node,
+          modules: ALL_MODULES,
+          environment: "preproduction",
+          stateDir: root,
+          stagingDir,
+        },
+        "recovery key",
+        new Date(),
+        new AbortController().signal,
+      );
+      expect(captured.bytes.length).toBeGreaterThan(0);
+    } finally {
+      console.log("Cloud capture SQLite copy bytes", copyBytes);
+      archive.mockRestore();
+      expect(await readdir(stagingDir)).toEqual([]);
+    }
+  },
+  60_000,
+);

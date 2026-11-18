@@ -1,3 +1,4 @@
+import { gunzipSync } from "node:zlib";
 import { afterEach, expect, it } from "vitest";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -177,7 +178,7 @@ it("keeps exact encrypted bytes across a failed upload and restart, without pers
   const [old, fresh] = [...f.points.keys()];
   expect(f.reservations).toEqual([old, old, fresh]);
   expect(f.uploads).toEqual([old, fresh]);
-  expect(await decryptArtifactAsync(f.uploaded.get(fresh!)!, "secret-key")).toEqual(
+  expect(gunzipSync(await decryptArtifactAsync(f.uploaded.get(fresh!)!, "secret-key"))).toEqual(
     Buffer.from("staged archive 2026-09-24T12:01:00.000Z"),
   );
   expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual(["state.json"]);
@@ -229,12 +230,12 @@ it("refuses a connection that is not a test connection, as an outcome", async ()
   expect(f.reservations).toEqual([]);
 });
 
-it("refuses an archive whose plaintext plus overhead is over 512 MiB before reserving", async () => {
+it("refuses an archive whose expanded size is over 4 GiB before reserving", async () => {
   const f = await fixture();
   await expect(
     createCloudArchiveTarget(f.deps).store({
       ...f.input(),
-      plaintextBytes: 536_870_864,
+      plaintextBytes: 4_294_967_297,
     }),
   ).resolves.toEqual({ stored: false, errorCode: "cloud.unavailable" });
   expect(f.captures()).toBe(0);

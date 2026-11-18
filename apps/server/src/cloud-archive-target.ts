@@ -7,13 +7,15 @@ import { chmod, lstat, open, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { ARTIFACT_HEADER_BYTES } from "./artifact-cipher.js";
 import { encryptArtifactFile } from "./artifact-cipher-file.js";
+import { compressArchive } from "./backup-compression.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import type { CloudCaptureGrant, CloudCaptureMetadata } from "./cloud-backup.js";
 import type { CloudConnection, CloudConnectionStatus } from "./cloud-client.js";
 import { digestFile } from "./handover-capture.js";
 import "./errors.js";
 
-const MAX_BYTES = 512 * 1024 * 1024;
+const MAX_BYTES = 2 * 1024 ** 3;
+const MAX_EXPANDED_BYTES = 4 * 1024 ** 3;
 interface Pending {
   id: string;
   createdAt: number;
@@ -64,6 +66,15 @@ interface CloudArchiveDeps {
 
 function unavailable(): never {
   throw new AppError("cloud.unavailable", {});
+}
+
+async function* boundedCompressedArchive(input: CloudArchiveInput) {
+  let bytes = ARTIFACT_HEADER_BYTES;
+  for await (const chunk of compressArchive(input.entries(), input.signal)) {
+    bytes += chunk.byteLength;
+    if (bytes > MAX_BYTES) unavailable();
+    yield chunk;
+  }
 }
 
 const uuid = (v: unknown) =>
@@ -166,8 +177,8 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
       return { storedAt: saved.storedAt ?? null, pending: saved.pending !== undefined };
     },
     async roomNeeded(plaintextBytes) {
-      const ciphertextBytes = plaintextBytes + ARTIFACT_HEADER_BYTES;
-      if (ciphertextBytes > MAX_BYTES) return 0;
+      if (plaintextBytes > MAX_EXPANDED_BYTES) return 0;
+      const ciphertextBytes = Math.min(MAX_BYTES, plaintextBytes + ARTIFACT_HEADER_BYTES);
       const status = await deps.connection?.status().catch(() => undefined);
       if (!cloudArchiveAvailable(status)) return 0;
       let waiting = 0;
@@ -245,7 +256,12 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
             // Only the saved metadata makes this ciphertext eligible for retry. A crash before
             // that save can leave a partial file, which the next attempt replaces.
             await rm(file, { force: true });
-            await encryptArtifactFile(input.entries(), file, grant.recoveryKey, signal);
+            await encryptArtifactFile(
+              boundedCompressedArchive(input),
+              file,
+              grant.recoveryKey,
+              signal,
+            );
             allowed();
             const { sha256, bytes } = await digestFile(file, signal);
             if (bytes <= ARTIFACT_HEADER_BYTES || bytes > MAX_BYTES) unavailable();
@@ -297,7 +313,7 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
         } else if (previous && pendingExpired(previous, now().getTime())) {
           await clearPending();
         }
-        if (input.plaintextBytes + ARTIFACT_HEADER_BYTES > MAX_BYTES) unavailable();
+        if (input.plaintextBytes < 1 || input.plaintextBytes > MAX_EXPANDED_BYTES) unavailable();
         let pending = state.pending;
         if (!pending) {
           pending = { id: randomUUID(), createdAt: now().getTime() };
