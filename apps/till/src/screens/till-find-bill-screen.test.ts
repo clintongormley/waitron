@@ -17,6 +17,7 @@ const modules = import.meta.glob("./till-find-bill-screen.ts");
 type Screen = HTMLElement & {
   api: TillApi;
   active: boolean;
+  busy: boolean;
   updateComplete: Promise<unknown>;
   requestUpdate(): void;
 };
@@ -281,6 +282,20 @@ it("deactivation aborts reads and late responses cannot restore rows; a new visi
   el.active = true;
   await el.updateComplete;
   await vi.waitFor(() => expect(requests(fetcher)).toHaveLength(2));
+});
+it("a row opens on a click only while the screen is active and not busy", async () => {
+  const { el } = await mount();
+  const row = (await ready(el)).rows[0];
+  expect(table(el).rowActivation!(row)).toBe("click");
+  el.busy = true;
+  await el.updateComplete;
+  expect(table(el).rowActivation!(row)).toBe("none");
+  el.busy = false;
+  await el.updateComplete;
+  expect(table(el).rowActivation!(row)).toBe("click");
+  el.active = false;
+  await el.updateComplete;
+  expect(table(el).rowActivation!(row)).toBe("none");
 });
 it("retains Transactions query and page when switching tabs, then fetches that page on return", async () => {
   const source = findBillApi(async (url) =>

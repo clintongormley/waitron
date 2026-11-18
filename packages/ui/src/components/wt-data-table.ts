@@ -906,19 +906,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * them, ignoring `rowGroup` and the sort column, in either direction; their own children still
    * sort. */
   @property({ attribute: false }) rowKeepsChildOrder: (row: Row) => boolean = () => false;
-  /** When set, each row becomes activatable, except on a flat table a row `rowClickable` refuses: a
+  /** When set, each row becomes activatable, unless `rowActivation` says otherwise: a
    * stretched, focusable button covers the row and calls this on click; it is drawn
    * in the first shown column that does not set `activatesRow: false`, and none when every column
    * sets it; drawn in the pinned column, it covers that cell only. Per-row controls (the selection
-   * checkbox, the Edit/Delete menu) sit above the activator, so they are never swallowed. In a
-   * tree, `rowActivation` can give a row a toggle instead. */
+   * checkbox, the Edit/Delete menu) sit above the activator, so they are never swallowed. */
   @property({ attribute: false }) rowClick?: (row: Row) => void;
   @property({ attribute: false }) rowClickLabel: (row: Row) => string = () => "Open row";
-  /** On a flat table, a row this returns false for draws no activator and does not open from a
-   * click on its pinned cell. Unset, every row clicks. A tree uses `rowActivation` instead. */
-  @property({ attribute: false }) rowClickable?: (row: Row) => boolean;
-  /** In tree mode, what a click or Enter anywhere on a row does: "toggle" opens and closes a branch,
-   * "click" calls `rowClick`, "none" leaves the row to its own controls. Unset, every row clicks. */
+  /** What a row's activator does: "click" calls `rowClick`, "none" draws no activator and leaves the
+   * row to its own controls, and "toggle" opens and closes a tree row that can collapse and acts as
+   * "none" on any other row, every row of a flat table included. Unset, every row clicks. */
   @property({ attribute: false }) rowActivation?: (row: Row) => "toggle" | "click" | "none";
   @property({ type: Boolean }) loading = false;
   @property() loadingMessage = "Loading";
@@ -3246,7 +3243,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
             <tbody>
               ${repeat(sorted, repeatKeys(rowKeys), (row, index) => {
                 const key = rowKeys[index]!;
-                const clicks = this.rowClick !== undefined && (this.rowClickable?.(row) ?? true);
+                const clicks =
+                  this.rowClick !== undefined && (this.rowActivation?.(row) ?? "click") === "click";
                 const cellParts = this.rowCellParts?.(row);
                 return html`
                   <tr data-row-key=${key} class=${classMap({ clickable: clicks })}>

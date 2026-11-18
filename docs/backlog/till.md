@@ -480,10 +480,8 @@ adds the separate durable post-invoice payment-refund path.
 
 ## What W105b left open (#1248, a disabled device coming back as itself)
 
-Left OPEN by W105b (#1248, a disabled device coming back as itself): (1) Someone holding a copy
-of a disabled device's current cookie can ask first and so replace that cookie; outside dev mode
-they still cannot get in without a manager tapping the number. (2) If an ask's response is lost
-after the server saved it, the browser's next ask joins as a new device and the old row stays
+Left OPEN by W105b (#1248, a disabled device coming back as itself): (2) If an ask's response is
+lost after the server saved it, the browser's next ask joins as a new device and the old row stays
 disabled. (4) An ask that replaces
 a waiting one always gets a later `createdAt`, but an ask made when no ask is waiting under its
 id, whatever ended the previous one (accepting it included, once the device is later disabled),
@@ -500,14 +498,6 @@ queue's Created and Delivered columns; the menu status and preview's "published 
 use `wt-relative-time` is the owner's call. (2) `wt-relative-time`'s words are an inline button
 below `--wt-tap-min`, under criterion 2.5.8's exception for a target in a sentence
 ([design-system.md](../developers/design-system.md)); whether that may stay is the owner's call.
-
-## What W105 left open (#1235)
-
-Review suggestions #1235 did not take, listed in its description: the edit
-route checks permission before the device id where revoke checks the id first; its body is the
-whole device rather than only the fields named (since W105e, made-here may be left out); and
-`rowClickable` and `rowActivation` could be one option. A save reading the device list twice is a decision, not
-open: [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ## What W104 left open (#1225)
 
@@ -1536,12 +1526,10 @@ except that it no longer waits on the retired split and transfer routes (A1196).
 1 entry, size S.
 
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
-  - W105b (#1248, a disabled device coming back as itself): (1) someone holding a copy of a
-    disabled device's current cookie can ask first and so replace that cookie.
+  - W105b (#1248, a disabled device coming back as itself): an ask whose response is lost comes
+    back as a new device, and two asks under one id are not forced to differ in time when no ask is
+    waiting.
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
-  - W105 (#1235): review suggestions #1235 did not take that are still open: the edit route's
-    checks and request body, and two table options that could be one.
-    [Detail](till.md#what-w105-left-open-1235)
   - W104 (#1225), not acted on: the dialogs were never looked at on a box.
     [Detail](till.md#what-w104-left-open-1225)
   - W106 (#1240): whether the plain `YYYY-MM-DD HH:MM` times on Devices, Printers, the menu
@@ -1593,6 +1581,38 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   the notice stood in for after the screen's own read: one read from the save, a second from the
   notice ("… with no live notice, read once, and once more on the notice" in
   `apps/dashboard/src/screens/devices-screen.test.ts`).
+
+- **Editing a device still has to send its name, its profile and, unless the profile is a kitchen
+  display, its receipt and payment-slip printer choices (lane B, 2026-11-18, not the owner; the
+  owner may overrule).** The edit request (`PATCH /management-api/devices/:id`) does not treat every
+  field as optional, as #1235's review suggested: its one caller, the Devices screen's Edit
+  (`updateDevice` in `apps/dashboard/src/api/client.ts`), always sends them, so that would add a
+  path nothing uses.
+
+- **A copy of a deleted device's cookie can still ask to come back first, and so make the real
+  device's cookie stop working (watcher, 2026-11-18, lane B, not the owner; the owner may overrule;
+  decided before review showed that on a box serving plain HTTP the cookie crosses the network
+  unencrypted).** Each ask to come back gives the asking browser a new cookie and makes the old one
+  worthless (`createJoinRequest` in `apps/server/src/join-requests.ts`), so the real tablet's next
+  ask joins as a new device, and a manager gives it its name and profile again. It stays because a
+  copy taken while the device was enabled already let its holder act as the device, and keeping the
+  old cookie valid as a second lasting proof would add a credential to guard. A page's scripts
+  cannot read the cookie (`httpOnly`, `setDeviceCookie` in `apps/server/src/device-session.ts`). It
+  is marked `Secure` only when the box serves the tills over HTTPS (`secureCookies` in
+  `apps/server/src/boot.ts`); on a box serving plain HTTP it crosses the venue's network
+  unencrypted. Outside development mode a copy can ask only while the venue's join window is open,
+  "held open by the dashboard dialogs that are open" (`apps/server/src/pairing-mode.ts`); with it
+  shut the ask is refused `device.pairing_closed` and replaces nothing ("with no Add a device dialog
+  open, a disabled device's knock is refused and changes nothing" in
+  `apps/server/src/join-e2e.test.ts`). An ask that is taken only waits: a route that requires the
+  device refuses it (`requireDeviceProof`, through `readDeviceProof`, reads only `active` devices,
+  `apps/server/src/device-session.ts:197`) until a manager with hardware administration checks the
+  number on the device's screen and accepts
+  (`POST /management-api/device-join-requests/:id/accept`, `apps/server/src/join-api.ts:334`).
+  Pinned by "knocks as itself, is listed as returning, and Pair enables the same row with its
+  settings" in `apps/server/src/join-e2e.test.ts`, for the device's own read
+  (`GET /api/device/me`). In development mode (`devMode`) an ask is accepted at once (the `auto`
+  branch of `POST /api/device/join` in `apps/server/src/device-api.ts`).
 
 - **A sold-out extra stays on a reopened held order, flagged, and only a raise of its line is refused
   (owner, 2026-09-23, lane B Q1, option A: "keep sold-out lines in held work, flag them on the till,

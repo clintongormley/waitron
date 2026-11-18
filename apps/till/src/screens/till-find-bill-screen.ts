@@ -638,7 +638,7 @@ export class TillFindBillScreen extends LitElement {
       .sortKey=${tab === "bills" ? "openedAt" : "when"}
       sortDirection="descending"
       .rowClickLabel=${() => label(tab === "bills" ? "open_bill" : "open_receipt")}
-      .rowClickable=${() => !view.loading && this.active && !this.busy}
+      .rowActivation=${() => (!view.loading && this.active && !this.busy ? "click" : "none")}
       .rowClick=${(row: Row) => this.#emit(tab === "bills" ? "find-bill-open" : "find-transaction-open", { row })}
       .loading=${view.loading}
       loadingMessage=${label("loading")}

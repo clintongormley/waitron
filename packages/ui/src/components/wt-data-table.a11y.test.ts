@@ -219,7 +219,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  test("clickable rows beside a row rowClickable refuses", async () => {
+  test("clickable rows beside a row whose rowActivation is 'none'", async () => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',
       theme,
@@ -235,7 +235,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     el.rowKey = (row) => row.id;
     el.rowClick = (row) => void row.id;
     el.rowClickLabel = (row) => `Open ${row.name}`;
-    el.rowClickable = (row) => row.status === "Active";
+    el.rowActivation = (row) => (row.status === "Active" ? "click" : "none");
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll(".row-activate")).toHaveLength(1);
     await expectNoA11yViolations(host);
