@@ -120,7 +120,7 @@ describe("setup-connect-screen", () => {
         primaryUrl: "For example https://waitron.local",
         email: "An admin's sign-in email on the primary server",
         password: "That admin's dashboard password",
-        totp: "Current code, if this admin uses an authenticator",
+        totp: "The code the authenticator shows now",
       },
     ],
     [
@@ -136,7 +136,7 @@ describe("setup-connect-screen", () => {
     "explains each field with a hint in the empty field and no ? (%s)",
     async (locale, hints) => {
       setLocale(locale);
-      const { el } = await mount();
+      const { el } = await mount({ askForCode: true });
       const hintOf = (field: string) => q(el, `[data-test=${field}]`)!.getAttribute("hint");
       expect(hintOf("primaryUrl")).toBe(hints.primaryUrl);
       await toLogin(el);
@@ -188,7 +188,7 @@ describe("setup-connect-screen", () => {
   });
 
   it("turns off autocorrect, the capital first letter and spellcheck on the sign-in code", async () => {
-    const { el } = await mount();
+    const { el } = await mount({ askForCode: true });
     await toLogin(el);
     const field = q(el, "[data-test=totp]") as SetupConnectScreen;
     await field.updateComplete;
@@ -199,7 +199,7 @@ describe("setup-connect-screen", () => {
   });
 
   it("carries a filled TOTP into the credential object", async () => {
-    const { el, host } = await mount();
+    const { el, host } = await mount({ askForCode: true });
     const events = collect(host);
     await fillValid(el, { totp: "123456" });
     q(el, "[data-test=connect]")!.click();
@@ -212,7 +212,7 @@ describe("setup-connect-screen", () => {
   });
 
   it("trims whitespace on primaryUrl/email/totp but leaves the password verbatim", async () => {
-    const { el, host } = await mount();
+    const { el, host } = await mount({ askForCode: true });
     const events = collect(host);
     await fillValid(el, {
       primaryUrl: "  https://waitron.local  ",
@@ -323,6 +323,7 @@ describe("setup-connect-screen", () => {
         const { el } = await mount({
           errorMessage: "Couldn't reach the primary server.",
           request: REQUEST,
+          askForCode: true,
         });
         const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
         await actions.updateComplete;
@@ -368,12 +369,12 @@ describe("setup-connect-screen", () => {
     const events = collect(host);
     const value = (field: string) =>
       (q(el, `[data-test=${field}]`) as HTMLElement & { value: string }).value;
-    expect([value("primaryUrl"), value("email"), value("password"), value("totp")]).toEqual([
+    expect([value("primaryUrl"), value("email"), value("password")]).toEqual([
       "https://primary.example",
       "op7@example.com",
       " secret ",
-      "",
     ]);
+    expect(q(el, "[data-test=totp]")).toBeNull();
     q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
     expect(events).toEqual([
@@ -396,6 +397,7 @@ describe("setup-connect-screen", () => {
         ...REQUEST,
         credential: { email: "op7@example.com", password: " secret ", totp: "123456" },
       },
+      askForCode: true,
     });
     const value = (field: string) =>
       (q(el, `[data-test=${field}]`) as HTMLElement & { value: string }).value;
@@ -408,14 +410,13 @@ describe("setup-connect-screen", () => {
   });
 
   it("drops a field refusal on the next press and sends the form", async () => {
-    const { el, host } = await mount({ invalidField: "totp", request: REQUEST });
+    const { el, host } = await mount({ invalidField: "email", request: REQUEST });
     const events = collect(host);
-    await fillValid(el);
-    expect(q(el, "[data-test=totp]")!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(true);
     q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
     expect(events).toHaveLength(1);
-    expect(q(el, "[data-test=totp]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(false);
     expect(await bottomOf(el)).toBe("");
   });
 
@@ -464,7 +465,7 @@ describe("setup-connect-screen", () => {
     expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toBe("");
     expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("Check the admin email.");
     expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Check the admin password.");
-    expect(q(el, "[data-test=totp]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=totp]")).toBeNull();
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     const email = q(el, "[data-test=email]")!;
     expect(email.shadowRoot!.activeElement).toBe(email.shadowRoot!.querySelector("input"));
@@ -922,5 +923,71 @@ describe("setup-connect-screen in Spanish", () => {
     expect((q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string }).value).toBe(
       "https://waitron.local",
     );
+  });
+
+  describe("the authenticator code, drawn only once the main server asks for it", () => {
+    it("draws no code field on the login step until asked", async () => {
+      const { el } = await mount();
+      await toLogin(el);
+      expect(q(el, "[data-test=email]")).not.toBeNull();
+      expect(q(el, "[data-test=totp]")).toBeNull();
+      expect(q(el, "[data-test=totp-notice]")).toBeNull();
+    });
+
+    it.each([
+      [
+        "en-GB",
+        "Authenticator code",
+        "This account uses an authenticator app. Enter its current code and choose Connect.",
+      ],
+      [
+        "es-ES",
+        "Código del autenticador",
+        "Esta cuenta usa una aplicación de autenticación. Escribe el código que muestra ahora y elige Conectar.",
+      ],
+    ] as const)(
+      "once asked, shows a required, focused code field with a sentence saying why, and marks nothing (%s)",
+      async (locale, label, notice) => {
+        setLocale(locale);
+        const { el } = await mount({ request: REQUEST, askForCode: true });
+        await new Promise((resolve) => setTimeout(resolve));
+        const totp = q(el, "[data-test=totp]")!;
+        expect(totp.getAttribute("label")).toBe(label);
+        expect(totp.hasAttribute("required")).toBe(true);
+        expect(totp.shadowRoot!.activeElement).toBe(totp.shadowRoot!.querySelector("input"));
+        expect(q(el, "[data-test=totp-notice]")!.textContent!.trim()).toBe(notice);
+        for (const field of ["primaryUrl", "email", "password", "totp"]) {
+          expect(q(el, `[data-test=${field}]`)!.hasAttribute("invalid")).toBe(false);
+          expect(q(el, `[data-test=${field}]`)!.getAttribute("error")).toBe("");
+        }
+        expect(await bottomOf(el)).toBe("");
+        expect(await alerts(el)).toHaveLength(0);
+        const value = (field: string) =>
+          (q(el, `[data-test=${field}]`) as HTMLElement & { value: string }).value;
+        expect([value("email"), value("password")]).toEqual(["op7@example.com", " secret "]);
+      },
+    );
+
+    it("once asked, refuses a blank code without sending, and sends a typed one", async () => {
+      const { el, host } = await mount({ request: REQUEST, askForCode: true });
+      const events = collect(host);
+      await pressed(el, "connect");
+      expect(events).toEqual([]);
+      expect(q(el, "[data-test=totp]")!.getAttribute("error")).toBe(
+        "Check the authenticator code.",
+      );
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+
+      await type(el, "totp", " 654321 ");
+      await pressed(el, "connect");
+      expect(events).toEqual([
+        {
+          kind: "adopt",
+          detail: {
+            body: { ...REQUEST, credential: { ...REQUEST.credential, totp: "654321" } },
+          },
+        },
+      ]);
+    });
   });
 });

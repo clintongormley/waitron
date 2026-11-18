@@ -898,6 +898,11 @@ export class SetupApp extends LitElement {
   @state() private connectInvalidField?: ConnectField;
   /** Held only in this tab's memory, to hand back to the connect form with a refusal. */
   @state() private connectRequest?: AdoptBody;
+  /**
+   * Set once the main server asked for the authenticator code, and kept across later refusals of
+   * this join: the connect screen is drawn anew after each one.
+   */
+  @state() private connectAskForCode = false;
   @state() private restoreError?: Message;
   @state() private restoreInvalidField?: RestoreField;
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the archive path. */
@@ -1216,6 +1221,7 @@ export class SetupApp extends LitElement {
     this.connectErrorAboutLogin = false;
     this.connectInvalidField = undefined;
     this.connectRequest = undefined;
+    this.connectAskForCode = false;
     this.restoreError = undefined;
     this.restoreInvalidField = undefined;
     // An answer belongs to the copy it was given for; leaving the screen may mean another kit or file.
@@ -2278,7 +2284,12 @@ export class SetupApp extends LitElement {
       this.provisionMessage = say("shell.operation_conflict");
       this.provisionCanRetry = false;
       this.provisionReloadLabel = say("shell.reload");
+    } else if (code === "totp.required") {
+      this.connectAskForCode = true;
+      this.connectRequest = body;
+      this.screen = "connect";
     } else {
+      if (body.credential.totp !== undefined) this.connectAskForCode = true;
       this.connectInvalidField = refusedField(
         code,
         error.params,
@@ -2774,6 +2785,7 @@ export class SetupApp extends LitElement {
           .errorAboutLogin=${this.connectErrorAboutLogin}
           .invalidField=${this.connectInvalidField}
           .request=${this.connectRequest}
+          .askForCode=${this.connectAskForCode}
         ></setup-connect-screen>`;
       case "admin":
         return html`<setup-admin-screen

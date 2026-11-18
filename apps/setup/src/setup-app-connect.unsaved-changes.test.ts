@@ -26,7 +26,10 @@ const body: AdoptBody = {
   confirmedCaPem: PEM,
 };
 
-/** `step: "login"` opens the login fields on a clean form, as a confirmed comparison would. */
+/**
+ * `step: "login"` opens the login fields on a clean form, as a confirmed comparison would. The main
+ * server is taken to have asked for the authenticator code already, so the code field is drawn.
+ */
 async function mount(request?: AdoptBody, step: "address" | "login" = "address") {
   const api = {
     firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
@@ -40,7 +43,7 @@ async function mount(request?: AdoptBody, step: "address" | "login" = "address")
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });
   await vi.waitFor(() => expect(screen(el)).toBe("mode"));
-  Object.assign(el, { screen: "connect", connectRequest: request });
+  Object.assign(el, { screen: "connect", connectRequest: request, connectAskForCode: true });
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector<SetupConnectScreen>("setup-connect-screen")!;
   await form.updateComplete;

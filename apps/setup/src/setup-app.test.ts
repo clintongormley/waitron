@@ -9,6 +9,7 @@ import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import {
   SetupApi,
+  type AdoptBody,
   type ConfigurationPreview,
   type ProvisionBody,
   type SetupStatus,
@@ -2374,14 +2375,20 @@ describe("setup-app", () => {
       "setup.request_invalid",
       { field: "credential.totp" },
       "totp",
-      "Check the authenticator code (if required).",
+      "Check the authenticator code.",
     ],
   ])(
     "sends the adopt refusal %s %o back to connect under its field, leaving its button working",
     async (code, params, field, message) => {
       const adopt = vi.fn().mockRejectedValue({ code, params, status: 400 });
       const el = await mountSetupApp(stubApi({ adopt }));
-      adoptRequest(el);
+      // A code is sent only once the main server asked for one.
+      adoptRequest(
+        el,
+        field === "totp"
+          ? { ...adoptBody, credential: { ...adoptBody.credential, totp: "123456" } }
+          : adoptBody,
+      );
       await flush(el);
       const connect = await screenHost(el, "connect");
       const input = connect.shadowRoot!.querySelector(`[data-test=${field}]`)!;
@@ -2566,25 +2573,125 @@ describe("setup-app", () => {
         .shadowRoot!.querySelector(`[data-test=${field}]`)!
         .shadowRoot!.querySelector("input")!;
 
-    /** Types the address, confirms the fingerprint, types the login and presses Connect. */
-    async function typeAndConnect(el: SetupApp): Promise<void> {
+    const TOTP_REQUIRED = { code: "totp.required", params: {}, status: 401 };
+
+    /** Types the address, confirms the fingerprint, types the email and password and presses Connect. */
+    async function typeLoginAndConnect(el: SetupApp): Promise<void> {
       goto(el, "connect");
       await el.updateComplete;
       const connect = await screenHost(el, "connect");
-      const { primaryUrl, ...login } = TYPED;
-      await userEvent.fill(input(connect, "primaryUrl"), primaryUrl);
+      await userEvent.fill(input(connect, "primaryUrl"), TYPED.primaryUrl);
       connect.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
       await vi.waitFor(() =>
         expect(connect.shadowRoot!.querySelector("[data-test=matches]")).not.toBeNull(),
       );
       connect.shadowRoot!.querySelector<HTMLElement>("[data-test=matches]")!.click();
       await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      for (const [field, value] of Object.entries(login)) {
-        await userEvent.fill(input(connect, field), value);
-      }
+      await userEvent.fill(input(connect, "email"), TYPED.email);
+      await userEvent.fill(input(connect, "password"), TYPED.password);
       connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
       await flush(el);
     }
+
+    /**
+     * The whole join of an account with an authenticator: the main server answers the first Connect
+     * with `totp.required`, the code is typed, and Connect is pressed again. Only that second press
+     * reaches the test's own `adopt`.
+     */
+    async function typeAndConnect(el: SetupApp): Promise<void> {
+      const api = (el as unknown as { api: SetupApi }).api;
+      const later = api.adopt;
+      api.adopt = vi
+        .fn()
+        .mockRejectedValueOnce(TOTP_REQUIRED)
+        .mockImplementation((body: AdoptBody) => later.call(api, body));
+      await typeLoginAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      await vi.waitFor(() =>
+        expect(connect.shadowRoot!.querySelector("[data-test=totp]")).not.toBeNull(),
+      );
+      await userEvent.fill(input(connect, "totp"), TYPED.totp);
+      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
+      await flush(el);
+    }
+
+    it("asks for the authenticator code only when the main server answers totp.required, keeping what was typed", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValueOnce(TOTP_REQUIRED)
+        .mockResolvedValue({ adopted: true, restarting: true });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      goto(el, "connect");
+      await el.updateComplete;
+      const first = await screenHost(el, "connect");
+      await userEvent.fill(input(first, "primaryUrl"), TYPED.primaryUrl);
+      first.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+      await vi.waitFor(() =>
+        expect(first.shadowRoot!.querySelector("[data-test=matches]")).not.toBeNull(),
+      );
+      first.shadowRoot!.querySelector<HTMLElement>("[data-test=matches]")!.click();
+      await (first as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(first.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
+      await userEvent.fill(input(first, "email"), TYPED.email);
+      await userEvent.fill(input(first, "password"), TYPED.password);
+      first.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
+      await flush(el);
+      expect(adopt).toHaveBeenCalledExactlyOnceWith({
+        ...sentBody,
+        credential: { email: TYPED.email, password: TYPED.password },
+      });
+
+      const connect = await screenHost(el, "connect");
+      const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
+      await vi.waitFor(() => expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp")));
+      expect(totp.hasAttribute("required")).toBe(true);
+      expect(
+        connect.shadowRoot!.querySelector("[data-test=totp-notice]")!.textContent!.trim(),
+      ).toBe("This account uses an authenticator app. Enter its current code and choose Connect.");
+      for (const field of ["primaryUrl", "email", "password"] as const) {
+        expect(input(connect, field).value).toBe(TYPED[field]);
+      }
+      for (const field of ["primaryUrl", "email", "password", "totp"]) {
+        expect(
+          connect.shadowRoot!.querySelector(`[data-test=${field}]`)!.getAttribute("error"),
+        ).toBe("");
+      }
+      expect(await bottomOf(connect)).toBe("");
+
+      await userEvent.fill(input(connect, "totp"), TYPED.totp);
+      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
+      await flush(el);
+      expect(adopt).toHaveBeenCalledTimes(2);
+      expect(adopt).toHaveBeenLastCalledWith(sentBody);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+    });
+
+    it("does not draw the code field after an ordinary refusal of the login", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeLoginAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(await bottomOf(connect)).toContain("The login failed.");
+      expect(connect.shadowRoot!.querySelector("[data-test=totp]")).toBeNull();
+      expect(connect.shadowRoot!.querySelector("[data-test=totp-notice]")).toBeNull();
+    });
+
+    it("draws the code field, empty, when the refused request carried a code", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValue({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      adoptRequest(el, { ...adoptBody, credential: { ...adoptBody.credential, totp: "123456" } });
+      await flush(el);
+      const connect = await screenHost(el, "connect");
+      expect(input(connect, "email").value).toBe(adoptBody.credential.email);
+      expect(input(connect, "totp").value).toBe("");
+      expect(connect.shadowRoot!.querySelector("[data-test=totp]")!.hasAttribute("required")).toBe(
+        true,
+      );
+    });
 
     const sentBody = {
       primaryUrl: "https://primary.example",
@@ -2831,7 +2938,7 @@ describe("setup-app", () => {
       await new Promise((resolve) => setTimeout(resolve));
       const connect = await screenHost(el, "connect");
       const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
-      expect(totp.getAttribute("error")).toBe("Check the authenticator code (if required).");
+      expect(totp.getAttribute("error")).toBe("Check the authenticator code.");
       expect(input(connect, "totp").value).toBe("");
       expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp"));
       expect(input(connect, "password").value).toBe(TYPED.password);
@@ -2845,9 +2952,9 @@ describe("setup-app", () => {
       const el = await mountSetupApp(stubApi({ adopt }));
       await typeAndConnect(el);
       expect(readState(el, ["connectRequest"])).toEqual({ connectRequest: sentBody });
-      (await screenHost(el, "connect"))
-        .shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!
-        .click();
+      const connect = await screenHost(el, "connect");
+      await userEvent.fill(input(connect, "totp"), "654321");
+      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
       expect(readState(el, ["connectRequest"])).toEqual({ connectRequest: undefined });

@@ -114,6 +114,12 @@ export class SetupConnectScreen extends LitElement {
   /** Whether `errorMessage` is about the login, which the address step does not show. */
   @property({ type: Boolean }) errorAboutLogin = false;
 
+  /**
+   * Set once the main server answered `totp.required`, which it does only after the right password.
+   * The code field is drawn, required, only then, and takes focus unless a refusal came with it.
+   */
+  @property({ type: Boolean }) askForCode = false;
+
   /** A field the shell found an adopt refusal to be about. It never disables Connect. */
   @property() invalidField?: ConnectField;
 
@@ -216,6 +222,14 @@ export class SetupConnectScreen extends LitElement {
     this.#registerScope();
     if (changed.has("invalidField") && this.#refusedField() !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
+    } else if (
+      changed.has("askForCode") &&
+      this.askForCode &&
+      this.errorMessage === undefined &&
+      this.invalidField === undefined
+    ) {
+      const code = this.shadowRoot!.querySelector<LitElement>("[data-test=totp]");
+      void code?.updateComplete.then(() => code.focus());
     }
   }
 
@@ -226,7 +240,11 @@ export class SetupConnectScreen extends LitElement {
 
   #errors(): Set<ConnectField> {
     if (!this.attempted || (this.step !== "address" && this.step !== "login")) return new Set();
-    return new Set(REQUIRED_FIELDS[this.step].filter((key) => this.values[key].trim() === ""));
+    const required: readonly ConnectField[] =
+      this.step === "login" && this.askForCode
+        ? [...REQUIRED_FIELDS.login, "totp"]
+        : REQUIRED_FIELDS[this.step];
+    return new Set(required.filter((key) => this.values[key].trim() === ""));
   }
 
   #show(step: Step): void {
@@ -353,7 +371,7 @@ export class SetupConnectScreen extends LitElement {
       autocorrect="off"
       spellcheck="false"
       autocomplete=${key === "password" ? "current-password" : key === "email" ? "username" : key === "totp" ? "one-time-code" : "off"}
-      ?required=${key !== "totp" && !readonly}
+      ?required=${!readonly}
       hint=${t(text.hint)}
       error=${error === undefined ? "" : t(error)}
       data-test=${key}
@@ -423,7 +441,13 @@ export class SetupConnectScreen extends LitElement {
           <p class="fingerprint" data-test="fingerprint">${fingerprint}</p>`;
       }
       case "login":
-        return html`${field("email", "email")} ${field("password", "password")} ${field("totp")}`;
+        return html`${field("email", "email")} ${field("password", "password")}
+        ${
+          this.askForCode
+            ? html`<p data-test="totp-notice" role="status">${t("connect.totp.notice")}</p>
+                ${field("totp")}`
+            : nothing
+        }`;
     }
   }
 
