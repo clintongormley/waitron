@@ -30,6 +30,7 @@ import { setupVenue } from "./testing/venue-fixtures.js";
 import { corsForVenue } from "./cors.js";
 import { createHealthState } from "./health.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
+import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { startWaiting, type WaitingStartDeps } from "./waiting-start.js";
@@ -989,6 +990,17 @@ describe("the waiting start", () => {
       expect(await events()).toHaveLength(1);
     });
 
+    it("draws the second statement in the page's language", async () => {
+      const statement = WAITING_PAGE_WORDS["es-ES"].carryOn.noOtherRecovery;
+      const spanish = await (
+        await h
+          .app()
+          .request("https://box.test/", { headers: { "accept-language": "es-ES" } }, tls())
+      ).text();
+      expect(spanish).toContain(statement);
+      expect(await page()).not.toContain(statement);
+    });
+
     it("either statement unticked keeps the action disabled", async () => {
       const blank = await page();
       expect(blank).toContain('<button type="submit" disabled>Carry on as the main box</button>');
@@ -996,7 +1008,9 @@ describe("the waiting start", () => {
         '<input type="checkbox" id="carry-on-switched-off" name="switchedOff" value="yes" required>',
       );
       expect(blank).toContain("<strong>Spare</strong> is switched off");
-      expect(blank).toContain("No other recovery of this venue is in progress");
+      expect(blank).toContain(
+        "Nobody is restoring this venue from a backup or switching it to another box right now",
+      );
       // The password is never drawn back into the page, so a redrawn form starts with an empty
       // required field and its action disabled, even with both statements ticked.
       const ticked = await (await post({ ...ADMIN, password: "wrong", ...BOTH })).text();

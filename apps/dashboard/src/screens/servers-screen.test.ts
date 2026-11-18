@@ -709,7 +709,13 @@ describe("servers screen retiring a joined spare", () => {
 
   it.each([
     [listing, []],
-    [joined, ["This spare is switched off *", "No other recovery is in progress *"]],
+    [
+      joined,
+      [
+        "This spare is switched off *",
+        "Nobody is restoring this venue from a backup or switching it to another server right now *",
+      ],
+    ],
   ])("asks for the declarations only on a row the server flags", async (rows, labels) => {
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(rows) }));
     await openRemove(el);
@@ -718,7 +724,7 @@ describe("servers screen retiring a joined spare", () => {
     );
     expect(dialog(el).querySelector("[data-test=declare-explanation]")?.textContent?.trim()).toBe(
       labels.length > 0
-        ? "Confirm that this spare is switched off and no other recovery is in progress."
+        ? "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another server right now."
         : undefined,
     );
   });
@@ -781,8 +787,8 @@ describe("servers screen retiring a joined spare", () => {
       ].map((key) => es[key as keyof typeof es]),
     ).toEqual([
       "Este servidor en espera está apagado",
-      "No hay otra recuperación en curso",
-      "Confirma que este servidor en espera está apagado y no hay otra recuperación en curso.",
+      "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento",
+      "Confirma que este servidor en espera está apagado y que nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento.",
     ]);
     expect(codeMessage("membership.standby_joined", "es")).toBe(es["servers.declare_explanation"]);
     expect(codeMessage("membership.standby_joined", "en")).toBe(en["servers.declare_explanation"]);

@@ -2265,11 +2265,11 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
-        "The primary server already has a standby server set up to receive the restaurant's data, and this version of Waitron keeps one standby per restaurant. Nothing was changed on either server. To use this server instead, open Servers on the primary server, choose Remove on the old standby's row and confirm it is switched off and no other recovery is in progress, then enter a new authenticator code if you use one, and press Connect again. Or choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant.",
+        "The primary server already has a standby server set up to receive the restaurant's data, and this version of Waitron keeps one standby per restaurant. Nothing was changed on either server. To use this server instead, open Servers on the primary server, choose Remove on the old standby's row and confirm it is switched off and that nobody is restoring the restaurant from a backup or switching it to another server, then enter a new authenticator code if you use one, and press Connect again. Or choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant.",
       ],
       [
         "es-ES",
-        "El servidor principal ya tiene un servidor en espera preparado para recibir los datos del restaurante, y esta versión de Waitron admite un solo servidor en espera por restaurante. No se ha cambiado nada en ninguno de los dos servidores. Para usar este servidor en su lugar, abre Servidores en el servidor principal, elige Retirar en la fila del servidor en espera anterior y confirma que está apagado y que no hay otra recuperación en curso; después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar. O elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo.",
+        "El servidor principal ya tiene un servidor en espera preparado para recibir los datos del restaurante, y esta versión de Waitron admite un solo servidor en espera por restaurante. No se ha cambiado nada en ninguno de los dos servidores. Para usar este servidor en su lugar, abre Servidores en el servidor principal, elige Retirar en la fila del servidor en espera anterior y confirma que está apagado y que nadie está recuperando el restaurante desde una copia de seguridad ni pasándolo a otro servidor; después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar. O elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo.",
       ],
     ] as const)("shows the second-standby refusal and Back (%s)", async (locale, sentence) => {
       try {
@@ -2351,12 +2351,17 @@ describe("setup-app", () => {
   });
 
   it.each([
-    ["mirror.primary_url_invalid", {}, "primaryUrl", "Check the primary server address."],
+    [
+      "mirror.primary_url_invalid",
+      {},
+      "primaryUrl",
+      "This address can't be used. Enter the primary server's name, starting with https://, for example https://waitron.local. An IP address on the restaurant's network, such as https://192.168.1.10, is not accepted.",
+    ],
     [
       "setup.request_invalid",
       { field: "primaryUrl" },
       "primaryUrl",
-      "Check the primary server address.",
+      "This address can't be used. Enter the primary server's name, starting with https://, for example https://waitron.local. An IP address on the restaurant's network, such as https://192.168.1.10, is not accepted.",
     ],
     ["setup.request_invalid", { field: "credential.email" }, "email", "Check the admin email."],
     [
@@ -2698,7 +2703,7 @@ describe("setup-app", () => {
       await typeAndConnect(el);
       const connect = await screenHost(el, "connect");
       expect(await bottomOf(connect)).toContain("couldn't supply a mirror setup");
-      expect(button(connect, "check-address")!.textContent!.trim()).toBe("Check the address");
+      expect(button(connect, "check-address")!.textContent!.trim()).toBe("Change the address");
 
       button(connect, "check-address")!.click();
       await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
@@ -2760,7 +2765,9 @@ describe("setup-app", () => {
       const connect = await screenHost(el, "connect");
       expect(
         connect.shadowRoot!.querySelector("[data-test=primaryUrl]")!.getAttribute("error"),
-      ).toBe("Check the primary server address.");
+      ).toBe(
+        "This address can't be used. Enter the primary server's name, starting with https://, for example https://waitron.local. An IP address on the restaurant's network, such as https://192.168.1.10, is not accepted.",
+      );
       expect(input(connect, "primaryUrl").readOnly).toBe(false);
       expect(button(connect, "connect")).toBeNull();
 

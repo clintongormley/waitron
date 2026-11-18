@@ -78,7 +78,8 @@ export const WAITING_PAGE_WORDS: Readonly<
       totp: "Authenticator code",
       recoveryCode: "Or one of your recovery codes",
       switchedOff: ["", " is switched off"],
-      noOtherRecovery: "No other recovery of this venue is in progress",
+      noOtherRecovery:
+        "Nobody is restoring this venue from a backup or switching it to another box right now",
       action: "Carry on as the main box",
       emailMissing: "Enter your email.",
       passwordMissing: "Enter your password.",
@@ -137,7 +138,8 @@ export const WAITING_PAGE_WORDS: Readonly<
       totp: "Código del autenticador",
       recoveryCode: "O uno de tus códigos de recuperación",
       switchedOff: ["", " está apagado"],
-      noOtherRecovery: "No hay ninguna otra recuperación de este local en curso",
+      noOtherRecovery:
+        "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro equipo en este momento",
       action: "Seguir como equipo principal",
       emailMissing: "Introduce tu correo electrónico.",
       passwordMissing: "Introduce tu contraseña.",

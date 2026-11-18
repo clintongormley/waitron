@@ -1138,11 +1138,11 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "Print a switch label for each server: open the primary's dashboard, then System, then Servers, and choose Print switch label in each server's row menu.",
+      "Once this server has joined, print a switch label for each server and stick it on that server. If the primary fails, scanning the standby's label with a till or phone on the restaurant's network opens the page that switches the restaurant over to it. To print the labels, open the primary's dashboard, then System, then Servers, and choose Print switch label in each server's row menu.",
     ],
     [
       "es-ES",
-      "Imprime una etiqueta de cambio para cada servidor: abre el panel del servidor principal, luego Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor.",
+      "Cuando este servidor se haya unido, imprime una etiqueta de cambio para cada servidor y pégala en ese servidor. Si el principal falla, al escanear la etiqueta del servidor en espera con una caja o un móvil conectado a la red del restaurante se abre la página que pasa el restaurante a ese servidor. Para imprimirlas, abre el panel del servidor principal, luego Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor.",
     ],
   ] as const)(
     "tells the joining server's person to print switch labels (%s)",
@@ -1152,6 +1152,33 @@ describe("setup-done-screen", () => {
       expect(q(el, "[data-test=joining-switch-label]")!.textContent!.trim()).toBe(words);
     },
   );
+
+  it.each([
+    [
+      "en-GB",
+      "This page will not change. To see when this server has joined, open the primary's dashboard, then System, then Servers, and look for Last copy received in this server's row.",
+    ],
+    [
+      "es-ES",
+      "Esta página no cambiará. Para ver cuándo se ha unido este servidor, abre el panel del servidor principal, luego Sistema y luego Servidores, y busca Última copia recibida en la fila de este servidor.",
+    ],
+  ] as const)(
+    "says the joining page will not change and where to see the join, before the switch labels (%s)",
+    async (locale, words) => {
+      setLocale(locale);
+      const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
+      const next = q(el, "[data-test=joining-next]")!;
+      expect(next.textContent!.trim()).toBe(words);
+      expect(next.previousElementSibling).toBe(q(el, "[data-test=joining-body]"));
+      expect(next.nextElementSibling).toBe(q(el, "[data-test=joining-switch-label]"));
+    },
+  );
+
+  it("does not say the page will not change on the ordinary done page", async () => {
+    const el = await mountDone(() => new Promise(() => {}));
+    expect(q(el, "h1")).not.toBeNull();
+    expect(q(el, "[data-test=joining-next]")).toBeNull();
+  });
 
   it.each(["en-GB", "es-ES"] as const)(
     "sends the person to nobody on the mirror path (%s)",
@@ -1182,10 +1209,14 @@ describe("setup-done-screen", () => {
   });
 
   it.each([
-    ["en-GB", "Older backups need the key from that time", "Server key 15 Oct 2026 · K7QF"],
+    [
+      "en-GB",
+      "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
+      "Server key 15 Oct 2026 · K7QF",
+    ],
     [
       "es-ES",
-      "Las copias antiguas necesitan la clave de entonces",
+      "Para restaurar una copia de seguridad hace falta la clave del servidor que estaba en vigor cuando se hizo. Si tienes una clave del servidor anterior, consérvala mientras conserves copias de su época.",
       "Clave del servidor 15 oct 2026 · K7QF",
     ],
   ] as const)(
@@ -1198,7 +1229,7 @@ describe("setup-done-screen", () => {
         breakGlassKeyName: "2026-10-15 · K7QF",
       } as Partial<SetupDoneScreen>);
       expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(name);
-      expect(q(el, "[data-test=break-glass-backup-warning]")?.textContent).toContain(warning);
+      expect(q(el, "[data-test=break-glass-backup-warning]")?.textContent?.trim()).toBe(warning);
       expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
     },
   );

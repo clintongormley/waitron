@@ -1557,8 +1557,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este servidor ya ha funcionado como principal, así que no se puede retirar.",
   },
   "membership.standby_joined": {
-    en: "Confirm that this spare is switched off and no other recovery is in progress.",
-    es: "Confirma que este servidor en espera está apagado y no hay otra recuperación en curso.",
+    en: "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another server right now.",
+    es: "Confirma que este servidor en espera está apagado y que nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento.",
   },
   "membership.node_not_removed": {
     en: "This server has not been removed, so it cannot be cleared from the list.",

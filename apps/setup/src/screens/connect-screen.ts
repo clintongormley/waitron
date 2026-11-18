@@ -333,7 +333,8 @@ export class SetupConnectScreen extends LitElement {
     dispatchSetupGoto(this, "role");
   }
 
-  #field(key: ConnectField, invalid: boolean, type = "text"): TemplateResult {
+  #field(key: ConnectField, error: StringKey | undefined, type = "text"): TemplateResult {
+    const invalid = error !== undefined;
     const text = FIELD_TEXT[key];
     const readonly = key === "primaryUrl" && this.step !== "address";
     return html`<wt-input
@@ -354,7 +355,7 @@ export class SetupConnectScreen extends LitElement {
       autocomplete=${key === "password" ? "current-password" : key === "email" ? "username" : key === "totp" ? "one-time-code" : "off"}
       ?required=${key !== "totp" && !readonly}
       hint=${t(text.hint)}
-      error=${invalid ? t(text.error) : ""}
+      error=${error === undefined ? "" : t(error)}
       data-test=${key}
       type=${type}
       ?invalid=${invalid}
@@ -429,8 +430,12 @@ export class SetupConnectScreen extends LitElement {
   override render(): TemplateResult {
     const errors = this.#errors();
     const refused = this.#refusedField();
-    const field = (key: ConnectField, type?: string) =>
-      this.#field(key, errors.has(key) || refused === key, type);
+    const errorOf = (key: ConnectField): StringKey | undefined => {
+      if (errors.has(key)) return FIELD_TEXT[key].error;
+      if (refused !== key) return undefined;
+      return key === "primaryUrl" ? "connect.primary_url.refused" : FIELD_TEXT[key].error;
+    };
+    const field = (key: ConnectField, type?: string) => this.#field(key, errorOf(key), type);
     const bottom = [
       ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
       ...(this.readFailed ? [t("connect.certificate_failed")] : []),
