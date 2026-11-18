@@ -93,8 +93,9 @@ export async function checkManagerPassword(
 }
 
 // Every refusal is `password.invalid` with no params, whatever the cause, except that the email
-// path asks for the authenticator code with `totp.required` once the password is right. The cause
-// travels only as the error's log-only `reason`.
+// path, and the id path when given `askForCode`, asks for the authenticator code with
+// `totp.required` once the password is right. The cause travels only as the error's log-only
+// `reason`.
 async function completeManagerLogin(
   tx: Transaction,
   input: {
@@ -177,10 +178,16 @@ export async function loginManagerById(
     totpKeyRing: KeyRing;
     /** From {@link checkManagerPassword}, taken before the transaction opened. */
     checked?: SecretCheck;
+    askForCode?: true;
   },
 ): Promise<ManagementSession> {
   const person = await findPersonLogin(tx, { personId: input.personId });
-  return completeManagerLogin(tx, input, person, "password.invalid");
+  return completeManagerLogin(
+    tx,
+    input,
+    person,
+    input.askForCode ? "totp.required" : "password.invalid",
+  );
 }
 
 export async function authorizeManager(

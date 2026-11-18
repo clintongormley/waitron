@@ -53,6 +53,22 @@ describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations once the main server asked for the authenticator code", async () => {
+    const { el, host } = await mount(
+      {
+        request: {
+          primaryUrl: "https://waitron.local",
+          credential: { email: "op1@example.com", password: "correct horse" },
+          confirmedCaPem: CERTIFICATE.pem,
+        },
+        askForCode: true,
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=totp-notice]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with the message above Connect and invalid fields shown", async () => {
     const { el, host } = await mount({}, theme);
     await atLogin(el);

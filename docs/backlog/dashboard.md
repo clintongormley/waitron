@@ -32,7 +32,7 @@ reading unless marked run:
 
 - **Every login failure is one answer (C95, #930, owner decision 2026-09-30)** — the rule is in
   CLAUDE.md §3 and `docs/developers/conventions-ui.md`. Kept on purpose, each reachable only after a
-  credential was proved: `totp.required` (the dashboard's code step, after a right password),
+  credential was proved: `totp.required` (asking for the authenticator code, after a right password),
   `google.second_factor_required` (after a valid Google sign-in), `authorization.not_permitted`
   (right credentials, a role without the permission) and the adjustment approver's
   `adjustment.approval_required` for a right PIN whose role is too low; a signed-in person's

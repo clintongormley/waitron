@@ -1031,8 +1031,8 @@ invalid credential-header JSON and a setup Reset proof mismatch; the standby's r
 Passkey and Google refusals still carry no reason. Validation that does not depend
 on the account (an empty required field, a malformed code) may still sit under its field; a
 signed-in person re-checking their OWN password, PIN or code may be told which one was wrong. These
-answers are reachable only after a credential was proved and stay: `totp.required` (the
-dashboard's code step, after a right password), `google.second_factor_required` (after a valid
+answers are reachable only after a credential was proved and stay: `totp.required` (asking
+for the authenticator code, after a right password), `google.second_factor_required` (after a valid
 Google sign-in) and `authorization.not_permitted` (403 from standby connect, promote, the waiting
 box's carry-on (`apps/server/src/carry-on.ts`) and `GET /management-api/membership` when the password and code are right but the person lacks the
 permission, and from the drawer, refund, unpaid-departure, cancel and late-send overrides (`authorize`,

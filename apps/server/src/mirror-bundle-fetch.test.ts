@@ -246,6 +246,21 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(isAppError(error) && error.reason).toBe("primary_refused");
   });
 
+  it("relays the primary's totp.required as totp.required, carrying none of its params", async () => {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) =>
+      c.json(
+        { error: { code: "totp.required", params: { detail: "https://primary.internal" } } },
+        401,
+      ),
+    );
+    const base = await startServer(app);
+
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "totp.required")).toBe(true);
+    expect(isAppError(error) && error.params).toEqual({});
+  });
+
   it.each([
     ["totp.invalid", { detail: "https://primary.internal" }],
     ["person.not_found", { personId: "99999999-9999-9999-9999-999999999999" }],

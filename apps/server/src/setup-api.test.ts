@@ -3104,6 +3104,36 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         rmSync(dir, { recursive: true, force: true });
       }
     });
+
+    it("answers the main box's request for an authenticator code with 401, and adopts the resend that carries it", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-totp-required-"));
+      try {
+        const operations = createSetupOperationStore(dir);
+        const adopt = vi.fn(async (req: AdoptRequest, hooks: AdoptHooks) => {
+          if (req.credential.totp === undefined) throw new AppError("totp.required", {});
+          await hooks.beforeFirstWrite();
+          return { breakGlassSecret: BREAK_GLASS_SECRET };
+        });
+        const app = new Hono();
+        const { deps } = makeAdoptDeps({ adopt, operations });
+        mountSetup(app, deps, noopLog);
+
+        const asked = await postAdopt(app, adoptBody());
+        expect({ status: asked.status, body: await asked.json() }).toEqual({
+          status: 401,
+          body: { error: { code: "totp.required", params: {} } },
+        });
+
+        const resent = await postAdopt(app, {
+          ...adoptBody(),
+          credential: { ...ADOPT_CREDENTIAL, totp: "123456" },
+        });
+        expect(resent.status, JSON.stringify(await resent.clone().json())).toBe(200);
+        expect(adopt).toHaveBeenCalledTimes(2);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 
   it("answers adopt's refusal on a database stamped for another environment with 409", async () => {

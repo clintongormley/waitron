@@ -90,11 +90,14 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
 }
 
 type RelayedBare =
-  "password.invalid" | Exclude<(typeof JOIN_REFUSALS)[number], "mirror.clocks_apart">;
+  | "password.invalid"
+  | "totp.required"
+  | Exclude<(typeof JOIN_REFUSALS)[number], "mirror.clocks_apart">;
 
 function isRelayedBare(code: unknown): code is RelayedBare {
   return (
     code === "password.invalid" ||
+    code === "totp.required" ||
     ((JOIN_REFUSALS as readonly unknown[]).includes(code) && code !== "mirror.clocks_apart")
   );
 }
@@ -107,12 +110,12 @@ function isIsoTime(value: unknown): value is string {
 }
 
 /**
- * A refusal from the main box is passed on only when it is `password.invalid`, `password.throttled`
- * or one of `JOIN_REFUSALS`, and each is rebuilt here so nothing the main box wrote travels on: with
- * no parameters, except `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both are
- * ISO times, and `password.throttled` with `{ retryAfterSeconds }` only when it is a whole number of
- * seconds above zero. Every other code, and any of these whose parameters fail their check, is
- * `mirror.bundle_fetch_failed`.
+ * A refusal from the main box is passed on only when it is `password.invalid`, `totp.required`,
+ * `password.throttled` or one of `JOIN_REFUSALS`, and each is rebuilt here so nothing the main box
+ * wrote travels on: with no parameters, except `mirror.clocks_apart` with `{ primaryAt, standbyAt }`
+ * only when both are ISO times, and `password.throttled` with `{ retryAfterSeconds }` only when it
+ * is a whole number of seconds above zero. Every other code, and any of these whose parameters fail
+ * their check, is `mirror.bundle_fetch_failed`.
  */
 async function refusalFrom(response: Response): Promise<AppError> {
   let error: Record<string, unknown> = {};
