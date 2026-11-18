@@ -339,8 +339,18 @@ export class TillInvoiceRecipientDialog extends LitElement {
       legalName: this.legalName.trim() === "" ? t("invoice.name_required") : "",
       streetAddress: address.streetAddress ? t("invoice.street_address_required") : "",
       postalCode: address.postalCode ? t("invoice.postal_code_invalid") : "",
-      locality: address.locality ? t("invoice.locality_required") : "",
-      province: address.province ? t("invoice.province_required") : "",
+      locality:
+        address.locality === "invalid"
+          ? t("invoice.locality_comma")
+          : address.locality
+            ? t("invoice.locality_required")
+            : "",
+      province:
+        address.province === "invalid"
+          ? t("invoice.province_comma")
+          : address.province
+            ? t("invoice.province_required")
+            : "",
       email: this.medium !== "email" || isValidEmail(this.email) ? "" : t("invoice.email_invalid"),
     };
   }

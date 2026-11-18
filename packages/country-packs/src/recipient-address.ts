@@ -23,6 +23,10 @@ export function recipientAddressErrors(
     else if (!getCountryPack("ES")!.postalCode!.validate(draft.postalCode).valid)
       errors.postalCode = "invalid";
     if (draft.province.trim() === "") errors.province = "required";
+    if (!getCountryPack("ES")!.postalAddress!.isComplete(composeRecipientAddress(draft))) {
+      if (draft.locality.includes(",")) errors.locality = "invalid";
+      if (draft.province.includes(",")) errors.province = "invalid";
+    }
   }
   return errors;
 }

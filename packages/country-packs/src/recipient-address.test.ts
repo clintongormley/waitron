@@ -65,6 +65,41 @@ describe("recipient postal address independent of identity", () => {
       expect(addresses.recipientAddressErrors({ ...foreign, postalCode })).toEqual({});
     },
   );
+  it.each([
+    ["locality", "Centro, Madrid"],
+    ["province", "Balears, Illes"],
+  ] as const)("refuses a Spanish %s comma the server's check refuses", (field, value) => {
+    expect(addresses).toHaveProperty("recipientAddressErrors", expect.any(Function));
+    const isComplete = addresses.getCountryPack("ES")!.postalAddress!.isComplete;
+    expect(isComplete(addresses.composeRecipientAddress(spanish))).toBe(true);
+    const draft = { ...spanish, [field]: value };
+    expect(addresses.recipientAddressErrors(draft)).toEqual({ [field]: "invalid" });
+    expect(isComplete(addresses.composeRecipientAddress(draft))).toBe(false);
+    expect(addresses.recipientAddressErrors({ ...draft, countryCode: "FR" })).toEqual({});
+  });
+  it.each([
+    ["locality", "Centro, 28013 Madrid"],
+    ["province", "Madrid, 28013 Madrid, Madrid"],
+  ] as const)("accepts a Spanish %s comma the server's check accepts", (field, value) => {
+    expect(addresses).toHaveProperty("recipientAddressErrors", expect.any(Function));
+    const isComplete = addresses.getCountryPack("ES")!.postalAddress!.isComplete;
+    const draft = { ...spanish, [field]: value };
+    expect(addresses.recipientAddressErrors(draft)).toEqual({});
+    expect(isComplete(addresses.composeRecipientAddress(draft))).toBe(true);
+  });
+  it("refuses both a Spanish locality and province holding commas", () => {
+    expect(addresses).toHaveProperty("recipientAddressErrors", expect.any(Function));
+    const draft = { ...spanish, locality: "Centro, Madrid", province: "Balears, Illes" };
+    expect(addresses.recipientAddressErrors(draft)).toEqual({
+      locality: "invalid",
+      province: "invalid",
+    });
+    expect(
+      addresses
+        .getCountryPack("ES")!
+        .postalAddress!.isComplete(addresses.composeRecipientAddress(draft)),
+    ).toBe(false);
+  });
   it("trims fields without erasing street commas or inserting an empty province or country suffix", () => {
     expect(addresses).toHaveProperty("composeRecipientAddress", expect.any(Function));
     const draft = {
