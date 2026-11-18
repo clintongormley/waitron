@@ -519,6 +519,15 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
       // The mirror's singleton_role is 'secondary', so the pass that ran is the trivial empty one.
       await poll(() => server.health.lastPassAt ?? undefined);
       expect(server.health.lastPassAt).not.toBeNull();
+      const health = await fetch(`${base}/health`);
+      expect(health.status).toBe(200);
+      expect(await health.json()).toMatchObject({
+        ok: true,
+        duties: {
+          "fiscal.drain": { lastOkAt: null, stale: false },
+          "payments.reconcile": { lastOkAt: null, stale: false },
+        },
+      });
     } finally {
       await server.close();
     }
@@ -1024,8 +1033,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     // refuses server.node_config_invalid (WAITRON_NODE_ID), before serving its status surface.
     const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-state-"));
 
-    // Inert: this database holds no row for this box, so `runFinishAdoption` logs
-    // `adoption.establish_failed` and keeps the latch rather than failing the boot.
+    // With no pair link and no venue row, adoption keeps the pending record.
     writeFileSync(
       join(stateDir, "pending-adoption.json"),
       JSON.stringify({

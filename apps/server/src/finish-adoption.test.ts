@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readPairLink } from "@waitron/node-db";
+import { readPairLink, type PairLinkState } from "@waitron/node-db";
 import { MIRROR_VIEWER_PERSON_ID } from "./mirror-session.js";
 import {
   PENDING_ADOPTION_FILE,
@@ -96,12 +96,12 @@ describe("runFinishAdoption — on a migrated venue", () => {
   const own = generateNodeKeyPair();
   const main = generateNodeKeyPair();
 
-  async function spareNode(): Promise<void> {
+  async function spareNode(state: PairLinkState = "awaiting_copy"): Promise<void> {
     await withNodeTransaction(suite.node, async (tx) => {
       await sealNodeSigningKeyTx(tx, RING, STANDBY_NODE_ID, own.privateKey);
       await writePairLinkTx(tx, RING, STANDBY_NODE_ID, {
         role: "serves",
-        state: "awaiting_copy",
+        state,
         peerNodeId: PENDING.originNodeId,
         peerPublicKey: main.publicKey,
         storeUrl: "https://main:7443",
@@ -133,26 +133,26 @@ describe("runFinishAdoption — on a migrated venue", () => {
     });
   }
 
-  it("keeps the latch and logs the refusal when venue.db holds no row for this box", async () => {
-    await seedTaxpayer(suite.db);
-    await spareNode();
-    const dir = await tempDir();
-    await writePendingAdoption(dir, PENDING);
-    const logged: unknown[] = [];
-    let restarts = 0;
-    await finish(dir, logged, () => (restarts += 1));
-    expect(logged).toEqual([
-      {
-        level: "error",
-        event: "adoption.establish_failed",
-        fields: { code: "mirror.venue_not_copied" },
-      },
-    ]);
-    expect(await readPendingAdoption(dir)).toEqual(PENDING);
-    expect((await suite.db.execute(sql`select 1 from nodes`)).rows).toEqual([]);
-    expect((await suite.db.execute(sql`select 1 from persons`)).rows).toEqual([]);
-    expect(restarts).toBe(0);
-  });
+  it.each([
+    ["awaiting_copy", "info", "adoption.waiting_for_copy"],
+    ["copied", "error", "adoption.establish_failed"],
+  ] as const)(
+    "keeps the latch and logs at the right level when the link says %s and the venue row is missing",
+    async (state, level, event) => {
+      await seedTaxpayer(suite.db);
+      await spareNode(state);
+      const dir = await tempDir();
+      await writePendingAdoption(dir, PENDING);
+      const logged: unknown[] = [];
+      let restarts = 0;
+      await finish(dir, logged, () => (restarts += 1));
+      expect(logged).toEqual([{ level, event, fields: { code: "mirror.venue_not_copied" } }]);
+      expect(await readPendingAdoption(dir)).toEqual(PENDING);
+      expect((await suite.db.execute(sql`select 1 from nodes`)).rows).toEqual([]);
+      expect((await suite.db.execute(sql`select 1 from persons`)).rows).toEqual([]);
+      expect(restarts).toBe(0);
+    },
+  );
 
   it("finishes joining when venue.db holds this box's row with its own key", async () => {
     await spareNode();

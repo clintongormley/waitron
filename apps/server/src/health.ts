@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { isVenueHolderFresh, readVenueHolderAsync } from "@waitron/db";
+import { isVenueHolderFresh, readVenueHolderAsync, type SingletonRole } from "@waitron/db";
 import type { StreamView } from "@waitron/stream";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
 import { ALL_DUTIES, DRAIN_DUTY, RECONCILE_DUTY, type Duty, type PassReport } from "./pass.js";
@@ -45,6 +45,7 @@ export interface HealthState {
   readStream: () => StreamView;
   readJobs?: () => Readonly<Record<string, JobView>>;
   readTradingAdmission?: () => TradingAdmissionView;
+  readSingletonRole?: () => SingletonRole;
   /** Set on a box started restricted after a handover: it runs no duty and takes no sales. */
   takesNoSales?: boolean;
 }
@@ -151,8 +152,9 @@ export function healthSnapshot(
     return { ok: true, body: { ok: true, tradingAvailable: false } };
   const duties: Record<string, unknown> = {};
   let ok = state.lastPassAt !== null;
+  const judgeDuties = (state.readSingletonRole?.() ?? "primary") === "primary";
   for (const [name, duty] of Object.entries(state.duties)) {
-    const stale = isStale(duty, budgetFor(name), now);
+    const stale = judgeDuties && isStale(duty, budgetFor(name), now);
     if (stale) ok = false;
     duties[name] = {
       lastOkAt: duty.lastOkAt?.toISOString() ?? null,

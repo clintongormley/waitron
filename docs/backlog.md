@@ -1451,7 +1451,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **Adding a mirror while the internet is down** (owner, 2026-10-02). Since 3b-6a a spare takes its
   first copy over the venue's network, and since 3b-F so does a Veri*Factu venue's; left: the
-  owner's measurement with the internet unplugged (3b plan Task 6.11).
+  owner's measurement with the internet unplugged (3b plan Task 6.11). Read the completed copy's
+  size and time in the spare's `spare.first_copy_ready` log line after it restarts.
   [Detail](backlog/replication-cloud.md#adding-a-mirror-while-the-internet-is-down)
 
 **Cloud integration and SQLite work.**

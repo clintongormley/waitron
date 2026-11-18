@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { nodeSigningPublicKey, setPairLinkStateTx, type KeyRing } from "@waitron/credentials";
 import { nodes, withNodeTransaction, type Database, type NodeDatabase } from "@waitron/db";
+import { readPairLink } from "@waitron/node-db";
 import "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
@@ -68,7 +69,14 @@ export async function runFinishAdoption(deps: {
       .select({ publicKey: nodes.publicKey })
       .from(nodes)
       .where(eq(nodes.id, deps.nodeId));
-    if (row === undefined) throw new AppError("mirror.venue_not_copied", {});
+    if (row === undefined) {
+      const link = await readPairLink(deps.node, deps.nodeId);
+      if (link?.role === "serves" && link.state === "awaiting_copy") {
+        deps.log("info", "adoption.waiting_for_copy", { code: "mirror.venue_not_copied" });
+        return;
+      }
+      throw new AppError("mirror.venue_not_copied", {});
+    }
     const own = nodeSigningPublicKey(await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId));
     // Only a fault in Waitron produces this: the main box wrote the key this box sent it.
     if (row.publicKey !== own) throw new AppError("node.identity_mismatch", {});

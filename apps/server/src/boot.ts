@@ -2395,6 +2395,8 @@ async function bootServer(
     axes = await readNodeMode(store.node, config.node.nodeId);
   }
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
+  const readSingletonRole = () => holders.singletonRole.current;
+  health.readSingletonRole = readSingletonRole;
   // Shared by reference between the fiscal pass that WRITES it and the box-status read that surfaces
   // it: a node without a `fiscal.aeat` cert sells and chains locally, and its drain skips filing.
   const awaitingFiscalCert = { current: false };
@@ -4548,42 +4550,37 @@ async function bootServer(
   undoOnFailure.push(async () => fiscalReconciliation?.stop());
 
   const loop = runLoop({
-    // Drain and reconcile run ONLY on the node holding `singleton_role = 'primary'`, read per pass so
-    // a promotion starts them on the next tick; any other node gets an empty pass that still advances
-    // `/health`. So on a non-singleton node `/health` reflects only process liveness: a mirror answers
-    // healthy whatever its data.
-    pass: singletonPass(
-      () => holders.singletonRole.current,
-      (at) =>
-        runPass(
-          {
-            drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
-            reconcile: reconcilePassFor({
-              paymentsInstalled: migrationModules.some((module) => module.name === "payments"),
-              duties: auditDuties,
-              credentialProvisioned: (purpose) => credentialProvisioned(db, purpose),
-              runDue: (at2, duties) =>
-                runDue(
-                  {
-                    db,
-                    duties,
-                    horizonDays: timings.scheduler.horizonDays,
-                    maxPeriodsPerTick: timings.scheduler.maxPeriodsPerTick,
-                    maxAttempts: timings.scheduler.maxAttempts,
-                    backoffBaseMs: timings.scheduler.backoffBaseMs,
-                    staleAfterMs: timings.scheduler.staleAfterMs,
-                    skipRetryMs: timings.skipRetryMs,
-                  },
-                  at2,
-                ),
-            }),
-            awaitingCert: awaitingFiscalCert,
-            monotonicMs: () => performance.now(),
-            log,
-            signal: controller.signal,
-          },
-          at,
-        ),
+    // Read the same live role as /health so a promotion starts and judges these duties.
+    pass: singletonPass(readSingletonRole, (at) =>
+      runPass(
+        {
+          drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
+          reconcile: reconcilePassFor({
+            paymentsInstalled: migrationModules.some((module) => module.name === "payments"),
+            duties: auditDuties,
+            credentialProvisioned: (purpose) => credentialProvisioned(db, purpose),
+            runDue: (at2, duties) =>
+              runDue(
+                {
+                  db,
+                  duties,
+                  horizonDays: timings.scheduler.horizonDays,
+                  maxPeriodsPerTick: timings.scheduler.maxPeriodsPerTick,
+                  maxAttempts: timings.scheduler.maxAttempts,
+                  backoffBaseMs: timings.scheduler.backoffBaseMs,
+                  staleAfterMs: timings.scheduler.staleAfterMs,
+                  skipRetryMs: timings.skipRetryMs,
+                },
+                at2,
+              ),
+          }),
+          awaitingCert: awaitingFiscalCert,
+          monotonicMs: () => performance.now(),
+          log,
+          signal: controller.signal,
+        },
+        at,
+      ),
     ),
     now,
     sleep: drainWaker.sleep,

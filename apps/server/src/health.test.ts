@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { lockVenueDatabase } from "@waitron/db";
+import { lockVenueDatabase, type SingletonRole } from "@waitron/db";
 import type { StreamStatus, StreamView } from "@waitron/stream";
 import type { DrainResult } from "@waitron/fiscal";
 import type { TickResult } from "@waitron/payments";
@@ -136,6 +136,31 @@ describe("health state", () => {
     const state = createHealthState(BOOT);
     recordPass(state, report(true), AT);
     expect(healthSnapshot(state, AT).ok).toBe(true);
+  });
+
+  it("judges the pass loop on a secondary and restores duty checks on promotion", async () => {
+    let role: SingletonRole = "secondary";
+    const state = { ...createHealthState(BOOT), readSingletonRole: () => role };
+    const app = healthApp(state, () => NOW);
+
+    expect((await app.request("/health")).status).toBe(503);
+    recordPass(state, report([]), AT);
+    const spare = await app.request("/health");
+    expect(spare.status).toBe(200);
+    expect(await spare.json()).toMatchObject({
+      ok: true,
+      duties: {
+        [DRAIN_DUTY]: { lastOkAt: null, stale: false },
+        [RECONCILE_DUTY]: { lastOkAt: null, stale: false },
+      },
+    });
+
+    role = "primary";
+    expect((await app.request("/health")).status).toBe(503);
+    recordPass(state, report(true, false), AT);
+    expect((await app.request("/health")).status).toBe(503);
+    recordPass(state, report(true), AT);
+    expect((await app.request("/health")).status).toBe(200);
   });
 
   it("counts consecutive failures and resets them on success", () => {
