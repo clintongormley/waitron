@@ -431,6 +431,7 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
   const origin = `https://127.0.0.1:${held.port}`;
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(deps.now());
+  const log = vi.fn();
   let running: Awaited<ReturnType<typeof startLockedCopy>> | undefined;
   try {
     running = await startLockedCopy({
@@ -441,7 +442,7 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
       origin,
       hostname: held.host,
       port: held.port,
-      log: () => {},
+      log,
       totpPurposeKeys: [{ version: 7, key: purposeKey(sourceRing.current, "totp") }],
     } as Parameters<typeof startLockedCopy>[0]);
     await adoption.bound;
@@ -475,6 +476,13 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
     expect((await request("GET")).body).toMatchObject({
       error: { code: "management_session.required" },
     });
+    const statusUrl = origin + "/locked-api/status";
+    const signedOut = await fetch(statusUrl);
+    expect(signedOut.status).toBe(401);
+    expect(await signedOut.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    expect(f.requests.map((proof) => proof[2])).toEqual(["renew"]);
     const input = {
       email: " COPY@example.test ",
       password: "correct horse",
@@ -502,6 +510,35 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
       copyExpiresAt: deps.binding.expiresAt,
     });
     expect((await request("GET", undefined, cookie)).body).toEqual(signed.body);
+    const foreign = await fetch(statusUrl, {
+      headers: { cookie, origin: "https://foreign.example" },
+    });
+    expect(foreign.status).toBe(403);
+    await foreign.json();
+    expect(f.requests.map((proof) => proof[2])).toEqual(["renew"]);
+    const status = await fetch(statusUrl, { headers: { cookie } });
+    expect(status.status).toBe(200);
+    expect(status.headers.get("cache-control")).toBe("no-store");
+    expect(await status.json()).toEqual({ sourceLastHeardAt: null, reason: null });
+    const [, proof] = f.requests;
+    expect(proof).toEqual([
+      "waitron-cloud-machine-v1",
+      f.state.origin,
+      "emergency-copy-status",
+      deps.binding.installationId,
+      expect.any(String),
+      deps.now().getTime(),
+      JSON.stringify(f.state.lifecycle!.lease),
+      JSON.stringify({ version: 1, copyOperationId: deps.binding.copyOperationId }),
+    ]);
+    expect(proof![4]).not.toBe(deps.binding.copyOperationId);
+    expect(f.proofs).toEqual([true, true]);
+    f.refuse(400);
+    const rejected = await fetch(statusUrl, { headers: { cookie } });
+    expect(await rejected.json()).toMatchObject({ error: { code: "cloud.request_invalid" } });
+    expect(log).toHaveBeenCalledWith("warn", "cloud.request_invalid", expect.any(Object));
+    expect(rejected.status).toBe(503);
+    f.refuse(200);
     vi.setSystemTime(new Date("2026-11-17T10:15:00.000Z"));
     expect((await request("GET", undefined, cookie)).body.remainingMs).toBe(300000);
     vi.setSystemTime(new Date("2026-11-17T10:20:00.000Z"));
@@ -515,7 +552,25 @@ it("authenticates through TLS using source-only purpose keys and keeps sessions 
       error: { code: "password.invalid" },
     });
     const recoveredCookie = recovered.cookie!.split(";")[0]!;
-    expect((await request("DELETE", undefined, recoveredCookie)).status).toBe(200);
+    let releaseStatus: (() => void) | undefined;
+    f.delay(
+      () =>
+        new Promise((resolve) => {
+          releaseStatus = resolve;
+        }),
+    );
+    const pendingStatus = fetch(statusUrl, { headers: { cookie: recoveredCookie } });
+    try {
+      await vi.waitFor(() => expect(releaseStatus).toBeDefined());
+      expect((await request("DELETE", undefined, recoveredCookie)).status).toBe(200);
+    } finally {
+      releaseStatus?.();
+    }
+    const signedOutWhileWaiting = await pendingStatus;
+    expect(signedOutWhileWaiting.status).toBe(401);
+    expect(await signedOutWhileWaiting.json()).toMatchObject({
+      error: { code: "management_session.expired" },
+    });
     expect((await request("GET", undefined, recoveredCookie)).body).toMatchObject({
       error: { code: "management_session.expired" },
     });

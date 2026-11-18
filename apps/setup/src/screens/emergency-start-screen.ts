@@ -14,6 +14,17 @@ type Session = {
   copyExpiresAt: string;
   remainingMs: number;
 };
+type CopyStatus = {
+  sourceLastHeardAt: string | null;
+  reason:
+    | "setting_off"
+    | "level_inactive"
+    | "no_payment_method"
+    | "not_provisioned"
+    | "state_not_ready"
+    | "source_recent"
+    | null;
+};
 type Field = "email" | "password" | "code";
 
 @customElement("setup-emergency-start-screen")
@@ -43,6 +54,8 @@ export class EmergencyStartScreen extends LitElement {
   @property({ attribute: false }) transport: typeof fetch = (...args) => fetch(...args);
   @state() private context?: { accountUrl: string; copyExpiresAt: string };
   @state() private session?: Session;
+  @state() private copyStatus?: CopyStatus | null;
+  @state() private statusPending = false;
   @state() private values = { email: "", password: "", code: "" };
   @state() private recovery = false;
   @state() private revealed = false;
@@ -109,6 +122,48 @@ export class EmergencyStartScreen extends LitElement {
       this.session = undefined;
       this.error = t("emergency.expired");
     }, session.remainingMs);
+    this.copyStatus = undefined;
+    this.statusPending = false;
+    void this.checkStatus();
+  }
+  private async checkStatus() {
+    const session = this.session;
+    const signal = this.abort.signal;
+    if (!session || this.statusPending) return;
+    this.statusPending = true;
+    try {
+      const status: CopyStatus = await this.request("/locked-api/status");
+      if (this.session === session && !signal.aborted) this.copyStatus = status;
+    } catch (error) {
+      if (this.session !== session || signal.aborted) return;
+      const code = (error as { code?: string } | null)?.code;
+      if (code === "management_session.expired" || code === "management_session.required")
+        this.refuse(error);
+      else this.copyStatus = null;
+    } finally {
+      if (this.session === session && !signal.aborted) this.statusPending = false;
+    }
+  }
+  private renderCopyStatus() {
+    const status = this.copyStatus;
+    const at = status?.sourceLastHeardAt;
+    return html`<div role="status" aria-busy=${String(this.statusPending)}>
+      ${
+        status === undefined
+          ? nothing
+          : status === null
+            ? html`<p>${t("emergency.status_unavailable")}</p>`
+            : html`<p>
+                  ${
+                    at
+                      ? html`${t("emergency.source_contact")}
+                          <time data-source-contact datetime=${at}>${localTime(at)}</time>.`
+                      : t("emergency.source_contact_unknown")
+                  }
+                </p>
+                ${status.reason ? html`<p>${t(`emergency.status_${status.reason}`)}</p>` : nothing}`
+      }
+    </div>`;
   }
   private async load() {
     this.pending = true;
@@ -232,8 +287,21 @@ export class EmergencyStartScreen extends LitElement {
                 ${format("emergency.actor", { name: this.session.displayName })}
               </p>
               <p>${t("emergency.not_started")}</p>
-              <wt-form-actions .error=${this.error}
-                ><wt-button
+              ${this.renderCopyStatus()}
+              <wt-form-actions .error=${this.error}>
+                ${
+                  this.copyStatus === null || this.copyStatus?.reason === "state_not_ready"
+                    ? html`<wt-button
+                        slot="secondary"
+                        variant="secondary"
+                        data-action="check-status"
+                        ?disabled=${this.statusPending}
+                        @click=${() => void this.checkStatus()}
+                        >${t("emergency.check_status")}</wt-button
+                      >`
+                    : nothing
+                }
+                <wt-button
                   data-action="sign-out"
                   variant="secondary"
                   ?disabled=${this.pending}

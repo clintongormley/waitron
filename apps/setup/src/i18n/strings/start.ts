@@ -30,6 +30,21 @@ export const startEn = {
   "emergency.required": "Enter this value.",
   "emergency.loading": "Reading this copy…",
   "emergency.retry": "Try again",
+  "emergency.source_contact": "Cloud last heard from the old box at",
+  "emergency.source_contact_unknown": "Cloud does not know when it last heard from the old box.",
+  "emergency.status_unavailable": "Cloud status is unavailable.",
+  "emergency.status_source_recent":
+    "Cloud reported recent contact with the old box. Reload this page to check again.",
+  "emergency.status_setting_off":
+    "Emergency start is switched off. Open the owner’s Cloud account to turn it on.",
+  "emergency.status_level_inactive":
+    "Emergency start needs an active Connected plan. Check the plan in the Cloud account.",
+  "emergency.status_no_payment_method":
+    "Emergency start needs a payment method. Open the owner’s Cloud account to add one.",
+  "emergency.status_not_provisioned":
+    "Cloud cannot start this venue yet. Check availability in the Cloud account.",
+  "emergency.status_state_not_ready": "Cloud could not check whether emergency start is available.",
+  "emergency.check_status": "Check again",
 
   "connection.heading": "Is this page secure?",
   "connection.check_address_bar": "Look at your browser's address bar. If it says",
@@ -186,6 +201,22 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "emergency.required": "Introduce este valor.",
   "emergency.loading": "Leyendo esta copia…",
   "emergency.retry": "Volver a intentar",
+  "emergency.source_contact": "Último contacto de Cloud con el servidor anterior:",
+  "emergency.source_contact_unknown": "Se desconoce el último contacto con el servidor anterior.",
+  "emergency.status_unavailable": "No se pudo consultar el estado en Cloud.",
+  "emergency.status_source_recent":
+    "Cloud detectó contacto reciente con el servidor anterior. Recarga la página para volver a comprobarlo.",
+  "emergency.status_setting_off":
+    "El inicio de emergencia está desactivado. Entra en la cuenta del propietario en Cloud para activarlo.",
+  "emergency.status_level_inactive":
+    "El inicio de emergencia necesita un plan Conectado activo. Consulta el plan en la cuenta de Cloud.",
+  "emergency.status_no_payment_method":
+    "El inicio de emergencia necesita un método de pago. Añádelo en la cuenta del propietario en Cloud.",
+  "emergency.status_not_provisioned":
+    "Cloud aún no puede iniciar este local. Consulta la disponibilidad en la cuenta de Cloud.",
+  "emergency.status_state_not_ready":
+    "Cloud no pudo comprobar si el inicio de emergencia está disponible.",
+  "emergency.check_status": "Volver a comprobar",
 
   "connection.heading": "¿Es segura esta página?",
   "connection.check_address_bar": "Mira la barra de direcciones de tu navegador. Si pone",

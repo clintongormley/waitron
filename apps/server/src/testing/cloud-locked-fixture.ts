@@ -9,6 +9,24 @@ import { retainHttpListener } from "./retained-http-listener.js";
 
 const material = mintMtlsMaterial();
 
+export function lockedCopyStatusReply(binding: EmergencyCopyBinding, asOf: string) {
+  return {
+    version: 1,
+    installationId: binding.installationId,
+    venueId: binding.venueId,
+    environment: binding.environment,
+    sourceInstallationId: binding.sourceInstallationId,
+    sourceNodeId: binding.sourceNodeId,
+    copyNodeId: binding.copyNodeId,
+    copyOperationId: binding.copyOperationId,
+    startedAt: binding.startedAt,
+    expiresAt: binding.expiresAt,
+    asOf,
+    eligibility: { status: "ready", open: true, closedReason: null },
+    sourceLastHeardAt: null,
+  };
+}
+
 export async function lockedCloudFixture(binding: EmergencyCopyBinding) {
   const issuer = generateKeyPairSync("ed25519");
   const machine = generateKeyPairSync("ed25519");
@@ -39,6 +57,11 @@ export async function lockedCloudFixture(binding: EmergencyCopyBinding) {
       if (status !== 200) {
         res.writeHead(status);
         res.end(JSON.stringify({ error: status === 403 ? "revoked" : "unavailable" }));
+        return;
+      }
+      if (req.url === "/api/installations/emergency-copy-status") {
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify(lockedCopyStatusReply(binding, new Date().toISOString())));
         return;
       }
       const leaseBytes = Buffer.from(

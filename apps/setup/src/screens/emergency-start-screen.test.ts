@@ -23,13 +23,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function mount(code = "management_session.required", signed = false) {
+async function mount(
+  code = "management_session.required",
+  signed = false,
+  status = () => Response.json({ sourceLastHeardAt: null, reason: null }),
+) {
   await import("./emergency-start-screen.js");
   const requests: { path: string; init?: RequestInit }[] = [];
   const transport: typeof fetch = async (input, init) => {
     const path = String(input);
     requests.push({ path, init });
     if (path === "/locked-api/context") return Response.json(context);
+    if (path === "/locked-api/status") return status();
     if (init?.method === "DELETE") return Response.json({ ok: true });
     if (init?.method === "POST" || (signed && !init?.method)) return Response.json(session);
     return Response.json({ error: { code, params: {} } }, { status: 401 });
@@ -238,4 +243,48 @@ it("retries a failed initial read and loads only the emergency entry", async () 
   } finally {
     app.remove();
   }
+});
+
+it("shows the source contact and reason after retrying an unavailable status read", async () => {
+  const contact = "2026-11-17T22:00:00.000Z";
+  const status = vi
+    .fn()
+    .mockReturnValueOnce(Response.json({ error: { code: "cloud.unavailable" } }, { status: 503 }))
+    .mockReturnValueOnce(Response.json({ sourceLastHeardAt: contact, reason: "source_recent" }));
+  const { el } = await mount("management_session.required", true, status);
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Check again"));
+  await click(el, "check-status");
+  await vi.waitFor(() => {
+    const time = el.shadowRoot!.querySelector("[data-source-contact]");
+    expect(time?.getAttribute("datetime")).toBe(contact);
+    expect(time?.textContent?.trim()).toBeTruthy();
+    expect(el.shadowRoot!.textContent).toContain(
+      "Cloud reported recent contact with the old box. Reload this page to check again.",
+    );
+  });
+  expect(el.shadowRoot!.textContent).toContain("Nora");
+});
+
+it("shows an unknown source contact and a known closure in Spanish", async () => {
+  setLocale("es-ES");
+  const { el } = await mount("management_session.required", true, () =>
+    Response.json({ sourceLastHeardAt: null, reason: "no_payment_method" }),
+  );
+  await vi.waitFor(() => {
+    expect(el.shadowRoot!.textContent).toContain(startEs["emergency.source_contact_unknown"]);
+    expect(el.shadowRoot!.textContent).toContain(startEs["emergency.status_no_payment_method"]);
+  });
+});
+
+it("returns to sign-in if the session ends before the Cloud status arrives", async () => {
+  const { el } = await mount("management_session.required", true, () =>
+    Response.json({ error: { code: "management_session.expired" } }, { status: 401 }),
+  );
+  await vi.waitFor(() => {
+    expect(el.shadowRoot!.querySelector("[name=email]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-form-actions")?.shadowRoot?.textContent).toContain(
+      startEn["emergency.expired"],
+    );
+  });
+  expect(el.shadowRoot!.textContent).not.toContain("Nora");
 });
