@@ -101,7 +101,7 @@ import type { ReceiptDocumentInput } from "./receipt-document.js";
 import {
   isStuckJob,
   isWaiting,
-  linkedPrintoutSql,
+  linkedKitchenPrintoutSql,
   reprintJobOn,
   reprintRule,
   type PrinterSeen,
@@ -1728,7 +1728,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             // `jobWidthDots` reads a printout's width from its first ten bytes alone.
             head: sql<Uint8Array | null>`substr(${printJobs.payload}, 1, 10)`,
             // Correlated to the outer `print_jobs`; the join below keeps both sides qualified.
-            linked: sql<number>`case when ${printJobs.saleId} is null then ${linkedPrintoutSql(sql`coalesce(${printJobs.resendOf}, ${printJobs.id})`)} else 0 end`,
+            linked: sql<number>`case when ${printJobs.saleId} is null then
+              (${printJobs.tenderRefundId} is not null or
+                ${linkedKitchenPrintoutSql(sql`coalesce(${printJobs.resendOf}, ${printJobs.id})`)})
+              else 0 end`,
           })
           .from(printJobs)
           .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))

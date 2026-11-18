@@ -1,5 +1,12 @@
 # A1308 orders and sales, PR 9: receipt copies and PDF downloads go to the activity log — implementation plan
 
+**18 November 2026.** The owner is waiting for the adviser before choosing how long Orders
+keeps copy and PDF-download history. Tasks 1, 2 and 4 wait for that decision. Task 3 and
+the printer link are in the separate os9 print-links change, as cleared by the watcher at 19:34.
+A refund receipt's print job carries its refund id through retries. The print queue and its
+move action read that id to decide where the job can print. The history writers and readers
+remain part of the later history work.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move `receipt_reprints` and `invoice_pdf_downloads` into the shared `activity_log` as the
@@ -171,7 +178,7 @@ one copy twice, and nothing decides from it").
 - [ ] **Step 4: Run** the dashboard command and `scripts/live-subscriptions.test.ts`; PASS.
 - [ ] **Step 5: Commit** `feat(dashboard): the order dialog watches the activity log`.
 
-### Task 3: `invoice_deliveries.person_id` gets its key
+### Task 3: `invoice_deliveries.person_id` gets its key (print-links change)
 
 - [ ] **Step 1: Write the failing test** in a new `packages/db/src/schema/invoice-deliveries.test.ts`:
   `"refuses a delivery for a person who does not exist"`, with a control for a seeded person and one for

@@ -18,6 +18,7 @@ import {
 import { printAgents } from "./print-agents.js";
 import { printers } from "./printers.js";
 import { sales } from "./sales.js";
+import { tenderRefunds } from "./tender-refunds.js";
 
 export const printJobStatus = enumType(["queued", "printing", "done", "failed"]);
 
@@ -67,6 +68,7 @@ export const printJobs = table(
     /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
     /* v8 ignore stop */
+    tenderRefundId: id("tender_refund_id").references(() => tenderRefunds.id),
   },
   (t) => [
     index("print_jobs_pull_idx").on(t.printerId, t.status),

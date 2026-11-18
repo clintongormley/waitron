@@ -6,7 +6,6 @@ import {
   printJobs,
   isReceiptPrinter,
   printers,
-  receiptReprints,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -73,9 +72,9 @@ export function reprintRule(
   return { rule: "wide_enough", fits: (printerDots) => printerDots >= widthDots };
 }
 
-/** Whether the chain starting at job `head` is a kitchen ticket or a refund receipt. */
-export function linkedPrintoutSql(head: SQLWrapper | string): SQL<number> {
-  return sql<number>`(exists (select 1 from ${kitchenPrintJobs} where ${kitchenPrintJobs.printJobId} = ${head}) or exists (select 1 from ${receiptReprints} where ${receiptReprints.printJobId} = ${head}))`;
+/** Kitchen tickets link to the first job in the chain. */
+export function linkedKitchenPrintoutSql(head: SQLWrapper | string): SQL<number> {
+  return sql<number>`exists (select 1 from ${kitchenPrintJobs} where ${kitchenPrintJobs.printJobId} = ${head})`;
 }
 
 /**
@@ -130,12 +129,14 @@ export async function reprintJobOn(
   if (job.saleId !== null) {
     payload = await layOut(tx, job.saleId, job.receiptCopy === true, target);
   } else {
-    const {
-      rows: [linked],
-    } = await tx.execute<{ linked: number }>(
-      sql`select ${linkedPrintoutSql(job.resendOf ?? job.id)} as linked`,
-    );
-    const area = linked?.linked ? readPrintArea(job.payload) : null;
+    const linked =
+      job.tenderRefundId !== null ||
+      (
+        await tx.execute<{ linked: number }>(
+          sql`select ${linkedKitchenPrintoutSql(job.resendOf ?? job.id)} as linked`,
+        )
+      ).rows[0]?.linked === 1;
+    const area = linked ? readPrintArea(job.payload) : null;
     const { rule, fits } = reprintRule(null, area?.widthDots ?? null);
     if (rule === "own" || area === null)
       throw new AppError("print_job.own_printer_only", { id: jobId });

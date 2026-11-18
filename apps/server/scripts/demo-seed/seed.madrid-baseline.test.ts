@@ -2697,6 +2697,35 @@ for (const locale of ["en", "es"] as const) {
       ];
       paymentTable.foreignKeys.sort((a, b) => a.id - b.id);
 
+      const deliveriesTable = expected[phase].tables.invoice_deliveries!;
+      deliveriesTable.foreignKeys.splice(2, 0, {
+        ...personKey("person_id", 2),
+        on_delete: "NO ACTION",
+      });
+      deliveriesTable.foreignKeys = deliveriesTable.foreignKeys.map((key, id) => ({ ...key, id }));
+      const printJobsTable = expected[phase].tables.print_jobs!;
+      printJobsTable.columns.push({
+        name: "tender_refund_id",
+        type: "TEXT",
+        notnull: 0,
+        dflt_value: null,
+        pk: 0,
+      });
+      for (const row of Object.values(printJobsTable.rows)) row.tender_refund_id = null;
+      printJobsTable.foreignKeys = [
+        {
+          id: 0,
+          seq: 0,
+          table: "tender_refunds",
+          from: "tender_refund_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        },
+        ...printJobsTable.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
+      ];
+
       if (phase !== "seeded") expected[phase] = madridWithPhotos(expected[phase]);
       phases[phase]!.media_blobs = Object.keys(expected[phase].tables.media_blobs!.rows).length;
       delete phases[phase]!.media_image_data;

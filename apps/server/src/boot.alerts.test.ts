@@ -10,6 +10,7 @@ import { invoiceDeliveries, printAgents, taxpayer, withTransaction } from "@wait
 import { hashDeviceToken } from "@waitron/identity";
 import { cardReaders } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedWaitingRecords, stopRecord } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
@@ -53,6 +54,7 @@ type Venue = Awaited<ReturnType<typeof setupVenue>>;
 /** A synthetic full invoice in series `FB`, so its number is `FB/1`. */
 async function fullInvoice(venue: Venue): Promise<string> {
   beforeServerStarts();
+  await seedPerson(suite.db, { id: "staff-one" });
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved issuer address" });
   return (
     await recordSyntheticInvoice(suite.db, venue.cfg.nodeId, {

@@ -16,6 +16,9 @@ import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
 import { printers } from "../schema/printers.js";
+import { sales, tenders } from "../schema/sales.js";
+import { invoiceSeries } from "../schema/series.js";
+import { tenderRefunds } from "../schema/tender-refunds.js";
 import { workingOrders } from "../schema/orders.js";
 import { newId, nowIso } from "../schema/columns.js";
 import { settings } from "../schema/settings.js";
@@ -363,6 +366,64 @@ export async function seedPerson(
     .values(withFoldedPersonKeys({ id, displayName: input.displayName ?? "Test person" }))
     .onConflictDoNothing({ target: persons.id });
   return id;
+}
+
+export async function seedCashSale(db: Database | Transaction) {
+  const nodeId = await seedNode(db);
+  const [series] = await db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "R", purpose: "standard" })
+    .returning();
+  const at = "2026-10-16T09:00:00.000Z";
+  const [sale] = await db
+    .insert(sales)
+    .values({
+      source: "operator_script",
+      nodeId,
+      seriesId: series!.id,
+      invoiceNumber: 1,
+      issuedAt: at,
+      issuedOffsetMinutes: 0,
+      total: 1000,
+      vatBreakdown: [],
+      locale: "en",
+      invoiceLocales: ["en"],
+      fiscalBackend: "none",
+      fiscalState: "not_applicable",
+    })
+    .returning({ id: sales.id });
+  const saleId = sale!.id;
+  const [tender] = await db
+    .insert(tenders)
+    .values({ saleId, method: "cash", amount: 1000, settledAt: at })
+    .returning({ id: tenders.id });
+  return { saleId, tenderId: tender!.id, nodeId };
+}
+
+export async function seedCompletedCashRefund(
+  db: Database | Transaction,
+  input: { saleId: string; tenderId: string; nodeId: string; personId: string },
+): Promise<string> {
+  const { saleId, tenderId, nodeId, personId } = input;
+  const [refund] = await db
+    .insert(tenderRefunds)
+    .values({
+      saleId,
+      tenderId,
+      nodeId,
+      submissionId: newId(),
+      fingerprint: "cash refund",
+      appliedAmount: 200,
+      reason: "Goodwill",
+      authorizedBy: personId,
+      requestedBy: personId,
+      source: "operator_script",
+      method: "cash",
+      state: "completed",
+      completedAt: "2026-10-16T10:00:00.000Z",
+    })
+    .returning({ id: tenderRefunds.id });
+  return refund!.id;
 }
 
 export async function seedActivityActor(db: Database | Transaction) {

@@ -16,12 +16,18 @@ export async function enqueuePrintJob(
   {
     saleId = null,
     receiptCopy = null,
-  }: { saleId?: string | null; receiptCopy?: boolean | null } = {},
+    tenderRefundId = null,
+  }: {
+    saleId?: string | null;
+    receiptCopy?: boolean | null;
+    tenderRefundId?: string | null;
+  } = {},
 ): Promise<{ jobId: string }> {
   return insertPrintJob(tx, printerId, payload, kind, {
     resendOf: null,
     saleId,
     receiptCopy,
+    tenderRefundId,
   });
 }
 
@@ -34,10 +40,12 @@ async function insertPrintJob(
     resendOf,
     saleId,
     receiptCopy,
+    tenderRefundId,
   }: {
     resendOf: string | null;
     saleId: string | null;
     receiptCopy: boolean | null;
+    tenderRefundId: string | null;
   },
 ): Promise<{ jobId: string }> {
   // A deactivated or deleted printer is reported as `printer.not_found`, not a code of its own.
@@ -63,6 +71,7 @@ async function insertPrintJob(
       resendOf,
       saleId,
       receiptCopy,
+      tenderRefundId,
     })
     .returning({ id: printJobs.id });
   return { jobId: job!.id };
@@ -105,7 +114,7 @@ export async function endMovedPrintJob(tx: Transaction, jobId: string): Promise<
  * Resend the opaque document to its original printer, or `to` another with the bytes given,
  * preserving delivery history. The
  * copy names the first job of its chain, which `printJobInTrouble` (apps/server/src/print-job-trouble.ts)
- * reads to clear a failed job once a later copy has printed, and carries the receipt's sale.
+ * reads to clear a failed job once a later copy has printed.
  */
 export async function resendPrintJob(
   tx: Transaction,
@@ -149,6 +158,7 @@ export async function resendPrintJob(
       resendOf: job.resendOf ?? job.id,
       saleId: job.saleId,
       receiptCopy: job.receiptCopy,
+      tenderRefundId: job.tenderRefundId,
     },
   );
 }

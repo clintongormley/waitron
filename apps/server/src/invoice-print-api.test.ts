@@ -18,7 +18,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createPrinter,
   enqueuePrintJob,
@@ -68,6 +68,7 @@ const clock: TrustedClock = {
   currentAnchor: () => null,
 };
 async function issue(full = true) {
+  await seedPerson(suite.db, { id: "staff" });
   await seedTaxpayer(suite.db);
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   const existing = await readSettings(suite.db, VENUE_SETTINGS);
@@ -855,7 +856,10 @@ describe("management invoice receipt resends", () => {
         .select()
         .from(invoiceDeliveries)
         .where(eq(invoiceDeliveries.printJobId, jobId));
-      const [staff] = await suite.db.select().from(persons);
+      const [staff] = await suite.db
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.displayName, "Printer manager"));
       expect(retry).toMatchObject({
         saleId: ctx.sale.saleId,
         medium: "receipt",
@@ -1476,13 +1480,7 @@ describe("completed receipt original management actions", () => {
         }
         return job;
       });
-      const session = await withTransaction(suite.db, async (tx) => {
-        const [person] = await tx.select().from(persons);
-        return startManagementSession(tx, { method: "password", personId: person!.id });
-      });
-      const listing = await ctx.app.request("/management-api/print-jobs", {
-        headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
-      });
+      const listing = await command("/management-api/print-jobs", undefined, "GET");
       expect(listing.status).toBe(200);
       const jobs = (await listing.json()) as { id: string; canResend: boolean }[];
       expect(jobs.find((job) => job.id === original.jobId)).toMatchObject({ canResend: false });
