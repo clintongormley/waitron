@@ -1,4 +1,5 @@
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
+import { payments, recordVoid } from "@waitron/payments";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
   seedDeviceProfiles,
@@ -2407,7 +2408,7 @@ describe("payment slip persisted capture facts", () => {
       const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
       expect(text).toContain("JUSTIFICANTE DE PAGO");
       expect(text).toContain("Cobrado");
-      if (withCard) expect(text).toContain("VISA **** 5838");
+      if (withCard) expect(text).toContain("Visa ****5838");
       else expect(text).not.toContain("Tarjeta");
       expect(text).not.toContain("VERI*FACTU");
       expect(commandNames(new Uint8Array(jobs[0]!.payload))).not.toContain("GS ( k");
@@ -2415,6 +2416,31 @@ describe("payment slip persisted capture facts", () => {
       expect(await saleCount()).toBe(1);
     },
   );
+  it("names a card with no recorded entry mode as the receipt does, with no entry row", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt({ printerId: await makePrinter() });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const id = await ringSale(app, cookie, each.menuItemId, "card");
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(
+        sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = null, card_auth_code = '354739' where working_order_id = ${id}`,
+      ),
+    );
+    const res = await app.request(`/api/sales/${id}/payment-slip`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(200);
+    const jobs = await printJobsFor(cfg);
+    expect(jobs).toHaveLength(1);
+    const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
+    const labels = receiptLabelsFor("es-ES");
+    expect(text).toContain("Visa ****4034");
+    expect(text).toContain("354739");
+    expect(text).not.toContain(labels.paymentEntry);
+  });
   it.each([true, false])(
     "reader automatic slip=%s excludes only its own Waitron payment slip",
     async (automatic) => {
@@ -3527,10 +3553,56 @@ describe("card details on the receipt", () => {
     const { workingOrderId, tickets } = await cardSale();
     await liftPaymentGuard(suite.db, () =>
       suite.db.execute(
-        sql`update payments set provider = 'sumup', state = 'voided', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = 'chip', card_auth_code = null where working_order_id = ${workingOrderId}`,
+        sql`update payments set provider = 'sumup', state = 'failed', settled_at = null, card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = 'chip', card_auth_code = null where working_order_id = ${workingOrderId}`,
       ),
     );
     for (const ticket of await tickets()) expect(ticket.tender).not.toHaveProperty("card");
+  });
+
+  it("a card payment voided after capture still names the card it charged", async () => {
+    const { workingOrderId, tickets } = await cardSale();
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(
+        sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = 'chip', card_auth_code = null where working_order_id = ${workingOrderId}`,
+      ),
+    );
+    const [payment] = await suite.db
+      .select({ paymentRef: payments.paymentRef })
+      .from(payments)
+      .where(eq(payments.workingOrderId, workingOrderId));
+    await withTransaction(suite.db, (tx) =>
+      recordVoid(tx, { provider: "sumup", paymentRef: payment!.paymentRef }),
+    );
+    for (const ticket of await tickets())
+      expect(ticket.tender).toMatchObject({
+        card: { scheme: "VISA", last4: "4034", entryMode: "chip", authCode: null },
+      });
+  });
+
+  it("a card with no recorded entry mode is still named on the printed reprint, with no bracket", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt({ printerId: await makePrinter() });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cookie, each.menuItemId, "card");
+    await liftPaymentGuard(suite.db, () =>
+      suite.db.execute(
+        sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = null, card_auth_code = '354739' where working_order_id = ${orderId}`,
+      ),
+    );
+    const reprint = await app.request(`/api/sales/${orderId}/reprint`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(reprint.status).toBe(200);
+    const lines = decodeTicket(new Uint8Array((await printJobsFor(cfg)).at(-1)!.payload)).split(
+      "\n",
+    );
+    const cardLine = lines.find((line) => line.includes("Visa ****4034"));
+    expect(cardLine).toBeDefined();
+    expect(cardLine).not.toContain("(");
+    expect(lines.some((line) => line.includes("Autorización 354739"))).toBe(true);
   });
 
   it("a hand-keyed card with no card row prints no card", async () => {

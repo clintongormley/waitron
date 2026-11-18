@@ -13,7 +13,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { cardReaders, payments, type CardDetails, type PaymentResult } from "@waitron/payments";
+import { cardReaders, payments, type PaymentResult } from "@waitron/payments";
 import {
   AppError,
   centsToDecimal,
@@ -25,6 +25,7 @@ import {
 import { enqueuePrintJob } from "@waitron/printing";
 import { profileAllows } from "@waitron/layouts";
 import { readReceiptLanguage } from "@waitron/menu";
+import { cardDetailsOf } from "./card-details.js";
 import { formatPaymentSlip } from "./payment-slip.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { resolvePaymentSlipPrinter } from "./receipt-print.js";
@@ -263,15 +264,6 @@ async function enqueueSlips(
   /* v8 ignore stop */
   const order = await readReceiptOrder(tx, workingOrderId);
   for (const payment of cards) {
-    const card: CardDetails | null =
-      payment.scheme === null || payment.last4 === null || payment.entryMode === null
-        ? null
-        : {
-            scheme: payment.scheme,
-            last4: payment.last4,
-            entryMode: payment.entryMode as CardDetails["entryMode"],
-            authCode: payment.authCode,
-          };
     const charged = centsToDecimal(payment.charged);
     const tip = centsToDecimal(payment.tip);
     const payload = formatPaymentSlip({
@@ -281,7 +273,7 @@ async function enqueueSlips(
       amount: subtractDecimal(charged, tip),
       charged,
       tip,
-      card,
+      card: cardDetailsOf(payment),
       invoiceLocale: locale,
       copy,
       remaining: payment.remaining === null ? null : centsToDecimal(payment.remaining),

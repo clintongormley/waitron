@@ -93,7 +93,7 @@ describe("payment slip (pure renderer, no database)", () => {
       "Casa Gormley",
       "B12345678",
       "Table 6 · Pedido 41",
-      "VISA **** 5838",
+      "Visa ****5838",
       "Sin contacto",
       "328600",
       "Importe",

@@ -42,6 +42,7 @@ import {
   receiptDay,
   receiptDayNumeric,
 } from "./receipt-dates.js";
+import { cardName } from "./card-details.js";
 import { printsAsFullInvoice } from "./invoice-typing.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
@@ -551,16 +552,13 @@ export function buildReceiptDocument({
       row(label.card, formatMoney(amount, locale));
       return;
     }
-    const scheme = card.scheme
-      .toLowerCase()
-      .replace(/(^|\s)\p{L}/gu, (initial) => initial.toUpperCase());
     const presented = {
       contactless: ` (${label.paymentContactless})`,
       chip: ` (${label.paymentChip})`,
       swipe: ` (${label.paymentSwipe})`,
       unknown: "",
     }[card.entryMode];
-    row(`${scheme} ****${card.last4}${presented}`, formatMoney(amount, locale));
+    row(`${cardName(card)}${presented}`, formatMoney(amount, locale));
     if (card.authCode !== null) text(`${label.paymentAuthorization} ${card.authCode}`);
   };
   if (result.payments !== undefined && result.payments.length > 0) {

@@ -19,6 +19,7 @@ import { clearBillRequestIfPaid } from "./bill-request.js";
 // its codes.
 import "./errors.js";
 import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
+import { cardDetailsOf, type StoredCard } from "./card-details.js";
 import { replayPrepayMadeHere, storePrepayMadeHere } from "./made-here.js";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -482,7 +483,8 @@ export async function readTenderBlock(
         tender.billPaymentId === null
           ? isNull(payments.billPaymentId)
           : eq(payments.billPaymentId, tender.billPaymentId),
-        inArray(payments.state, MONEY_TAKEN),
+        // The card was charged: every capture writes `settled_at`, and a refund or a void keeps it.
+        isNotNull(payments.settledAt),
       ),
     )
     .orderBy(payments.settledAt, sql`${payments}.rowid`)
@@ -497,9 +499,6 @@ export async function readTenderBlock(
   };
 }
 
-/** A payment that charged the card, whatever was given back afterwards. */
-const MONEY_TAKEN = ["captured", "partially_refunded", "refunded"] as const;
-
 const CARD_COLUMNS = {
   scheme: payments.cardScheme,
   last4: payments.cardLast4,
@@ -507,27 +506,9 @@ const CARD_COLUMNS = {
   authCode: payments.cardAuthCode,
 };
 
-function cardOf(
-  row:
-    | {
-        scheme: string | null;
-        last4: string | null;
-        entryMode: string | null;
-        authCode: string | null;
-      }
-    | undefined,
-): { card?: CardDetails } {
-  if (row === undefined || row.scheme === null || row.last4 === null || row.entryMode === null)
-    return {};
-  return {
-    card: {
-      scheme: row.scheme,
-      last4: row.last4,
-      // `payments_card_entry_mode_ck` admits only CardDetails' entry modes.
-      entryMode: row.entryMode as CardDetails["entryMode"],
-      authCode: row.authCode,
-    },
-  };
+function cardOf(row: StoredCard | undefined): { card?: CardDetails } {
+  const card = row === undefined ? null : cardDetailsOf(row);
+  return card === null ? {} : { card };
 }
 
 const capturedCards = alias(payments, "captured_card");
@@ -562,10 +543,7 @@ export async function readBillTenderLines(
     )
     .leftJoin(
       capturedCards,
-      and(
-        eq(capturedCards.billPaymentId, billPayments.id),
-        inArray(capturedCards.state, MONEY_TAKEN),
-      ),
+      and(eq(capturedCards.billPaymentId, billPayments.id), isNotNull(capturedCards.settledAt)),
     )
     .where(eq(tenders.saleId, saleId))
     // Two payments can share a millisecond; a tie falls back to `rowid`, the order the rows were
