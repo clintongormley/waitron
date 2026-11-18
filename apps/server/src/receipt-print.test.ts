@@ -1438,11 +1438,23 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("files a cash sale without printing when the receipt choice points to an office printer", async () => {
+  it("files a cash sale without printing when the profile's default receipt printer is an office printer", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await withTransaction(suite.db, insertA4Printer);
+    await withTransaction(suite.db, async (tx) => {
+      const printerId = await insertA4Printer(tx);
+      const [device] = await tx
+        .select({ profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(eq(devices.id, cfg.origin.deviceId));
+      await tx.insert(deviceProfilePrinters).values({
+        deviceProfileId: device!.profileId,
+        printerId,
+        role: "receipt",
+        position: 0,
+        isDefault: true,
+      });
+    });
     const orderId = randomUUID();
-    await configureReceipt(cfg, { printerId });
     await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
