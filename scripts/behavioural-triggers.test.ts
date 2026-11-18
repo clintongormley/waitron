@@ -1322,7 +1322,7 @@ describe("working_order_lines_require_open_parent_update's sent-stamp exception"
     expect(declaration("null")).toBe(OPEN_PARENT_REFUSAL);
 
     const mark = (change: string) => update("line-late-settled", change);
-    expect(mark("late_period_name = 'Lunch', late_confirmed_by = 'person'")).toBeUndefined();
+    expect(mark("late_period_name = 'Lunch'")).toBeUndefined();
     expect(mark("late_period_name = 'Dinner'")).toBe(OPEN_PARENT_REFUSAL);
     expect(mark("late_confirmed_by = 'another-person'")).toBe(OPEN_PARENT_REFUSAL);
   });

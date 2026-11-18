@@ -1431,6 +1431,7 @@ describe("A803 portions: raising a dish", () => {
       );
     const [dish, extra] = await declarations();
     expect(extra).toEqual({ milk: {} });
+    expect(dish).not.toBeUndefined();
     expect(dish).not.toEqual(extra);
     await inTx(venue, (tx) =>
       splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1" }], {
