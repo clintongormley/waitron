@@ -2415,7 +2415,10 @@ export class TillTableOrderScreen extends LitElement {
       this.revealOtherDrafts !== changed.get("revealOtherDrafts")
     )
       void this.#revealTakeOver();
-    if (changed.has("finishRefused") && this.finishRefused) void this.#revealFinishRefusal();
+    if (changed.has("finishRefused") && this.finishRefused)
+      void this.#revealFootNotice("[data-finish-refusal]");
+    if (changed.has("mealEnd") && this.mealEnd !== null && "unserved" in this.mealEnd)
+      void this.#revealFootNotice("[data-meal-end-unserved]");
     if (changed.has("nameRefusal") && this.nameRefusal !== null) {
       this.naming = { value: this.nameRefusal.name, refusal: this.nameRefusal.message };
     }
@@ -2563,13 +2566,14 @@ export class TillTableOrderScreen extends LitElement {
     if (panel.isConnected) panel.scrollIntoView({ block: "nearest" });
   }
 
-  /** Finish table is tapped in the ⋮ at the top, and its refusal is drawn above the foot, which can
-   * be below the window, and on a narrow screen is on Order, hidden on Menu. */
-  async #revealFinishRefusal(): Promise<void> {
+  /** Finish table's refusal and Print the bill's not-served list are asked for from the ⋮ at the
+   * top or another notice, and are drawn above the foot, which can be below the window, and on a
+   * narrow screen is on Order, hidden on Menu. */
+  async #revealFootNotice(selector: string): Promise<void> {
     if (!this.wide && this.view !== "order" && this.#draftStore !== null) await this.#showOrder();
     await this.updateComplete;
-    const refusal = this.renderRoot.querySelector<HTMLElement>("[data-finish-refusal]");
-    if (refusal !== null) await this.#scrollIntoViewOnceDrawn(refusal);
+    const notice = this.renderRoot.querySelector<HTMLElement>(selector);
+    if (notice !== null) await this.#scrollIntoViewOnceDrawn(notice);
   }
 
   #drawnStep: ActionStep = "closed";

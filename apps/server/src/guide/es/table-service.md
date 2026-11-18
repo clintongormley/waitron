@@ -87,7 +87,7 @@ imprime por sí solo cuando vuelva a funcionar; si al día siguiente no se ha im
 venta. Si el dispositivo no tiene impresora de tickets, no se imprime nada: elige una o envía el
 correo antes de cerrar. Cierras la mesa por separado.
 Después del último pago de una cuenta impresa con **Imprimir la cuenta**, los clientes ya tienen su
-ticket: imprime una copia solo si la piden.
+ticket o su factura: imprime una copia solo si la piden.
 Si necesitas un documento más tarde, abre la venta y elige **Imprimir/Reimprimir**.
 
 ## Comprobar un pago con tarjeta antes de cancelar {#cancel-pending-card}
@@ -541,13 +541,14 @@ Escape cierra la lista.
 Todo lo demás que haces en la mesa está en el menú **⋮**, junto al selector, en dos partes. La
 primera, con el nombre de la cuenta en pantalla como título, por ejemplo **Cuenta 2 · Clint**, actúa
 solo sobre esa cuenta: **Poner nombre a esta cuenta**, **Mover platos…**, **Juntar cuentas**,
-**Mover esta cuenta**, **Descuento en la cuenta**, **Factura completa**, **Imprimir la cuenta**,
-**Copia del ticket** y **Cancelar y abonar**, cada una cuando corresponde a la cuenta.
-La segunda, **Toda la mesa**, actúa sobre todos los de la mesa: **Alergias**, **Poner nombre a los
-clientes**, **Comensales**, **Marcar cuenta pedida para …** con el nombre del grupo (una vez pedida,
-**Anular la petición de cuenta de …**), **Separar una mesa** (cuando el grupo ocupa más de una
-mesa), **Unir una mesa**, **Mover clientes** y **Cerrar mesa**. Una acción que necesita una
-elección, como con qué cuenta juntar, se abre junto al pedido, y **Atrás** la cierra.
+**Mover esta cuenta**, **Descuento en la cuenta**, **Registrar salida sin pagar**, **Factura
+completa**, **Imprimir la cuenta**, **Copia del ticket** y **Cancelar y abonar**, cada una cuando
+corresponde a la cuenta. La segunda, **Toda la mesa**, actúa sobre todos los de la mesa:
+**Alergias**, **Poner nombre a los clientes**, **Comensales**, **Marcar cuenta pedida para …** con
+el nombre del grupo (una vez pedida, **Anular la petición de cuenta de …**), **Separar una mesa**
+(cuando el grupo ocupa más de una mesa), **Unir una mesa**, **Mover clientes** y **Cerrar mesa**.
+Una acción que necesita una elección, como con qué cuenta juntar, se abre junto al pedido, y
+**Atrás** la cierra.
 
 Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que llegan toman los
 siguientes números del grupo que las recibe. Para juntar dos cuentas, abre la cuenta que debe
@@ -584,7 +585,7 @@ completó; esa ventana no acepta un cobro nuevo mientras haya platos sin enviar.
 Si eliges **Cerrar mesa** con una cuenta aún sin pagar, la caja indica **Hay una cuenta de esta mesa
 sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuenta** pone en pantalla
 una cuenta sin pagar para que la cobres. **Imprimir la cuenta**, que aparece cuando esa cuenta aún
-no está impresa, la pone en pantalla y la imprime.
+no está impresa, la pone en pantalla y la imprime, o muestra los platos aún sin servir.
 
 Si un cliente se va sin pagar, selecciona su cuenta, abre **⋮** y elige **Registrar salida sin
 pagar** bajo esa cuenta. Comprueba el importe e indica el motivo. Si hace falta autorización,
@@ -623,10 +624,10 @@ Elige **Factura completa** antes de imprimir: una vez impresa la cuenta, su tipo
 cambiar.
 
 Si hay platos de la cuenta sin marcar como servidos, todavía no se imprime nada: la caja los muestra
-bajo **Aún sin servir:**. Elige **Marcar como servidos** para los que ya han tomado y vuelve a
-elegir **Imprimir la cuenta**, o elige **Imprimir igualmente** para que salgan en la cuenta. Un
-plato que al final no llegue se devuelve después del cobro con
-[Rectificar una factura](table-service.md#correct-invoice).
+bajo **Aún sin servir:**. Si los clientes ya los han tomado, elige **Marcar como servidos** y vuelve
+a elegir **Imprimir la cuenta**. Los platos sin enviar o en espera se envían o se quitan como
+siempre. Si no, elige **Imprimir igualmente**: un plato que al final no llegue se devuelve después
+del cobro con [Rectificar una factura](table-service.md#correct-invoice).
 
 Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo en **+ Cuenta
 nueva**.

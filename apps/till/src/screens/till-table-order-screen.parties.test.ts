@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -550,6 +550,23 @@ describe("till-table-order-screen: Print the bill's outcome", () => {
   };
   const warning = (el: TillTableOrderScreen) =>
     shadow(el).querySelector<HTMLElement>("[data-meal-end-unserved]");
+
+  it("brings the warning into view when it appears, as it is drawn below Finish table's refusal", async () => {
+    const el = await mountScreen({ finishRefused: true });
+    const scrolled: Element[] = [];
+    const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      scrolled.push(this);
+    });
+    try {
+      el.mealEnd = unserved;
+      await el.updateComplete;
+      await vi.waitFor(() => expect(scrolled).toContain(warning(el)));
+    } finally {
+      scroll.mockRestore();
+    }
+  });
 
   it("says the bill was printed", async () => {
     const el = await mountScreen({ mealEnd: { workingOrderId: "wo-check", printed: true } });

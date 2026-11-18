@@ -80,7 +80,7 @@ close. If the printer is switched off or not working, it prints by itself when i
 not printed by the next day, print it from the sale. If the device has no receipt printer, nothing
 prints: choose one or send the email before closing. You close the table separately.
 After the last payment of a bill printed with **Print the bill**, the guests already have their
-receipt: print a copy only if they ask.
+receipt or invoice: print a copy only if they ask.
 For a document later, open the sale and choose **Print/Reprint**.
 
 ## Check a card before cancelling {#cancel-pending-card}
@@ -503,13 +503,13 @@ Enter to show it. Home and End reach the first and last choices. Escape closes t
 
 Everything else you do at the table is in the **⋮** menu beside the switcher, in two parts. The
 first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
-this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Full
-invoice**, **Print the bill**, **Receipt copy** and **Cancel and credit**, each when it applies to
-the bill. The second, **Whole table**, acts on everyone at the table: **Allergies**, **Name the
-party**, **Guests**, **Mark bill requested for …** with the party's name (once requested, **Cancel
-the bill request for …**), **Split a table** (when the party sits at more than one table), **Join a
-table**, **Move guests** and **Finish table**. An action that needs a choice, such as which bill to
-merge with, opens beside the order, and **Back** closes it.
+this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Record
+unpaid departure**, **Full invoice**, **Print the bill**, **Receipt copy** and **Cancel and
+credit**, each when it applies to the bill. The second, **Whole table**, acts on everyone at the
+table: **Allergies**, **Name the party**, **Guests**, **Mark bill requested for …** with the party's
+name (once requested, **Cancel the bill request for …**), **Split a table** (when the party sits at
+more than one table), **Join a table**, **Move guests** and **Finish table**. An action that needs a
+choice, such as which bill to merge with, opens beside the order, and **Back** closes it.
 
 Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
 receiving party's next numbers. To put two bills together, open the bill that should receive the
@@ -546,7 +546,7 @@ are unsent.
 If you choose **Finish table** while a bill is still unpaid, the till says **A bill for this table
 is still unpaid. Take payment before finishing the table** above the foot. **Take payment** puts an
 unpaid bill on screen so you can take its payment. **Print the bill**, offered when that bill is not
-printed yet, puts it on screen and prints it.
+printed yet, puts it on screen and prints it, or lists dishes not yet served.
 
 If a guest leaves without paying, select their bill, open **⋮**, then choose **Record unpaid
 departure** under that bill. Check its amount and give a reason. If approval is needed, choose a
@@ -583,9 +583,10 @@ on its own, so another bill's guests can carry on eating.
 Choose **Full invoice** before printing: once the bill is printed, its invoice type cannot change.
 
 If dishes on the bill are not marked served, nothing prints yet: the till lists them under **Not
-served yet:**. Choose **Mark served** for those the guests have had, then **Print the bill** again,
-or choose **Print anyway** to print them on the bill. A dish that then never comes is refunded after
-payment with [Correct an invoice](table-service.md#correct-invoice).
+served yet:**. If the guests have had them, choose **Mark served**, then **Print the bill** again.
+Send or take off dishes not yet sent or on hold as usual. Otherwise choose **Print anyway**: a dish
+that then never comes is refunded after payment with
+[Correct an invoice](table-service.md#correct-invoice).
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 
