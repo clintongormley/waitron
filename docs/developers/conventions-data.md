@@ -5364,7 +5364,7 @@ absent key is refused (`requireGuestCountOrNull`, `apps/server/src/till-api.ts`)
 null` and `refuses guests %j as a bad %s, changing nothing` do. The payment routes' `guestCount`
 (`POST /api/sales`, `/api/pay`, `/api/working-orders/:id/collect`, and
 `/api/working-orders/:id/payments` for the payment that completes the bill) keeps an explicit null
-as no guests line, while an absent key takes the party's default (`recordReceiptGuests`,
+as no guests line, while an absent key takes the party's default (`saleReceiptFacts`,
 `apps/server/src/receipt-guests.ts`). In `apps/server/src/receipt-guests.routes.test.ts` a pair of
 cases on a party's bill pins the two halves on each of the four routes.
 
