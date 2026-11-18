@@ -481,6 +481,53 @@ describe("updateBooking", () => {
     ).rejects.toMatchObject({ code: "table.not_found" });
   });
 
+  describe("a booking whose table was then taken off today's floor", () => {
+    async function bookingAtOffFloorWindow(): Promise<{ id: string; window: string }> {
+      const { createdBy } = await setupVenue();
+      const window = await insertDiningTable("Window");
+      const { id } = await scoped((tx) =>
+        createBooking(tx, {
+          bookingDate: "2026-08-20",
+          bookingTime: "20:00",
+          partySize: 4,
+          contactName: "Taylor",
+          tableId: window,
+          createdBy,
+        }),
+      );
+      await db.update(diningTables).set({ onFloor: false }).where(eq(diningTables.id, window));
+      return { id, window };
+    }
+
+    it("takes an edit that resends its own table", async () => {
+      const { id, window } = await bookingAtOffFloorWindow();
+      await scoped((tx) => updateBooking(tx, id, { partySize: 6, tableId: window }));
+      expect(await scoped((tx) => getBooking(tx, id))).toMatchObject({
+        partySize: 6,
+        tableId: window,
+      });
+    });
+
+    it("refuses a move to a different table that is off the floor with table.not_found", async () => {
+      const { id } = await bookingAtOffFloorWindow();
+      const patio = await insertDiningTable("Patio", false);
+      const before = await scoped((tx) => getBooking(tx, id));
+      await expect(scoped((tx) => updateBooking(tx, id, { tableId: patio }))).rejects.toMatchObject(
+        { code: "table.not_found", params: { tableId: patio } },
+      );
+      expect(await scoped((tx) => getBooking(tx, id))).toEqual(before);
+    });
+
+    it("refuses a date change that resends its own table with table.not_found", async () => {
+      const { id, window } = await bookingAtOffFloorWindow();
+      const before = await scoped((tx) => getBooking(tx, id));
+      await expect(
+        scoped((tx) => updateBooking(tx, id, { bookingDate: "2026-08-21", tableId: window })),
+      ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: window } });
+      expect(await scoped((tx) => getBooking(tx, id))).toEqual(before);
+    });
+  });
+
   describe("a removed table's kept name", () => {
     async function bookingAtRemovedWindow(): Promise<string> {
       const { createdBy } = await setupVenue();

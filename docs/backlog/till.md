@@ -942,10 +942,6 @@ table the last reset's copy leaves off while placing a part; on any other date, 
 naming no set, every part and no joined table (`requireActiveTable`,
 `packages/bookings/src/bookings.ts`).
 Nothing compares the table with the layout due at the booking's time. Spec §11: the editor could warn, or the booking screen refuse. Left open by A504.
-A booking whose table is later taken off today's floor refuses every edit with `table.not_found`:
-the dashboard form resends the booking's own table and `updateBooking` checks any table it is sent
-(run against `updateBooking`, not the form; found reviewing the Bookings list's table names,
-2026-11-18).
 
 
 ## A1101. Short names on the floor map where a full name does not fit, and on printed kitchen tickets.

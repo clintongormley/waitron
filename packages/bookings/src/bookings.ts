@@ -115,7 +115,6 @@ export async function updateBooking(
   patch: UpdateBookingPatch,
 ): Promise<void> {
   requireValidBooking(patch);
-  const tableChanges = patch.tableId !== undefined && patch.tableId !== null;
   let tableLabel: null | undefined;
   if (patch.tableId !== undefined || patch.bookingDate !== undefined) {
     const [stored] = await tx
@@ -123,12 +122,13 @@ export async function updateBooking(
       .from(bookings)
       .where(eq(bookings.id, id));
     const tableId = patch.tableId === undefined ? (stored?.tableId ?? null) : patch.tableId;
+    const tableChanges = patch.tableId !== undefined && patch.tableId !== (stored?.tableId ?? null);
     const dateChanges =
       patch.bookingDate !== undefined && patch.bookingDate !== stored?.bookingDate;
     if (tableId !== null && (tableChanges || dateChanges)) {
       await requireActiveTable(tx, tableId);
     }
-    if (patch.tableId !== undefined && patch.tableId !== (stored?.tableId ?? null)) {
+    if (tableChanges) {
       tableLabel = null;
     }
   }
