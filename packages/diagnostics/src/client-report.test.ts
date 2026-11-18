@@ -75,6 +75,7 @@ describe("local browser report", () => {
       event({ screen: "private" }, "nav"),
       event({ name: "TypeError", message: "private", stack: "private" }, "window.error"),
       event({ code: "storage.disk_full" }, "disk_stop.load_failed"),
+      event({ code: "storage.disk_full", message: "private" }, "tax_office_download.load_failed"),
       event({ token: "secret" }, "arbitrary"),
     ]);
     expect(base.trail.map((row) => [row.event, row.fields])).toEqual([
@@ -92,6 +93,7 @@ describe("local browser report", () => {
       ["nav", {}],
       ["window.error", { name: "TypeError" }],
       ["disk_stop.load_failed", { code: "storage.disk_full" }],
+      ["tax_office_download.load_failed", { code: "storage.disk_full" }],
     ]);
     expect(JSON.stringify(base)).not.toMatch(/john\.smith|secret|private/);
   });

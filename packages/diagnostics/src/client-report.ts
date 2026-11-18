@@ -29,6 +29,7 @@ const KEYS: Record<string, readonly string[]> = {
   "alerts.load_failed": ["code"],
   "disk_stop.load_failed": ["code"],
   "theme.load_failed": ["code"],
+  "tax_office_download.load_failed": ["code"],
   "ui.popover_load_failed": ["errorType"],
   "server-switch": [],
 };
