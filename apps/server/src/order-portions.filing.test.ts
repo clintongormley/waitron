@@ -4,7 +4,13 @@ import { randomUUID } from "node:crypto";
 import { StatementSync } from "node:sqlite";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createAdjustmentReason } from "@waitron/adjustments";
-import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
+import {
+  createExtraList,
+  createProduct,
+  createUnit,
+  updateProduct,
+  writeProductModifiers,
+} from "@waitron/menu";
 import {
   orderPortions,
   products,
@@ -56,6 +62,7 @@ import {
   readOrderRevision,
   readStoredOrder,
   storedOrderTotal,
+  splitLinesWithinOrder,
   updateHeldOrder,
   updateOrderLine,
   type TabRoundLine,
@@ -99,6 +106,18 @@ useVenueDb({
       const croquette = await product("Croqueta", "3.33");
       const burger = await product("Burger", "3.33");
       const cheese = await product("Cheese", "0.35");
+      const slice = await createUnit(
+        tx,
+        {
+          staffName: "Slice",
+          staffAbbreviation: "slice",
+          name: {},
+          abbreviation: {},
+          precision: 0,
+        },
+        venue.cfg.locale,
+      );
+      await updateProduct(tx, cheese, { unitId: slice.id, allergens: { milk: {} } });
       const bacon = await product("Bacon", "0.50");
       const toppings = (
         await createExtraList(
@@ -111,7 +130,7 @@ useVenueDb({
             maxPicks: null,
             active: true,
             items: [
-              { productId: cheese, maxQuantity: 2, preselected: false, price: null },
+              { productId: cheese, maxQuantity: 2, preselected: false, price: null, portion: "1" },
               { productId: bacon, maxQuantity: 1, preselected: false, price: null },
             ],
           },
@@ -1397,8 +1416,28 @@ describe("A803 portions: raising a dish", () => {
           where working_order_id = ${bound.billId} order by line_no`,
     );
     expect(contexts).toHaveLength(4);
+    expect(contexts[1]?.unit_id).not.toEqual(contexts[0]?.unit_id);
     expect(contexts[2]).toEqual(contexts[0]);
     expect(contexts[3]).toEqual(contexts[1]);
+  });
+
+  it("keeps each sent extra's own declaration when splitting a dish and its extras", async () => {
+    const { billId } = await billOf(burgersWithCheese("2"), { bound: false, fire: true });
+    const declarations = () =>
+      inTx(venue, async (tx) =>
+        (await readOrderDetail(tx, billId, "all", false)).lines.map(
+          (line) => line.sentNutrition?.allergens,
+        ),
+      );
+    const [dish, extra] = await declarations();
+    expect(extra).toEqual({ milk: {} });
+    expect(dish).not.toEqual(extra);
+    await inTx(venue, (tx) =>
+      splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1" }], {
+        splitExtras: true,
+      }),
+    );
+    expect(await declarations()).toEqual([dish, extra, dish, extra]);
   });
 
   it("A803 portions: raising a bound burger to 3 copies every copied line's sale context in one call", async () => {

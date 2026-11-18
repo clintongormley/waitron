@@ -1,3 +1,6 @@
+> 2026-11-18, A1308 os4: the recorded facts from `working_line_contexts` move onto
+> `working_order_lines`. The inventory below records the A760 layout before the fold.
+
 > 2026-11-17, A1308 os1: `working_order_counters` is deleted; order numbers come from
 > the bills. The inventory below records the A760 layout before that removal.
 

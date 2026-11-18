@@ -497,7 +497,7 @@ BEGIN
           AND new.late_period_name IS NOT NULL
         )
       )
-      -- Sending records the first declaration just after taking the line's sent stamp.
+      -- A stamped line can acquire one declaration, which the send records after the stamp.
       AND (
         new.sent_nutrition IS old.sent_nutrition
         OR (

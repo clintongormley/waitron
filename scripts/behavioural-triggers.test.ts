@@ -406,6 +406,8 @@ function seed(connection) {
     line("line-sent-settled", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
     line("line-sent-frozen", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
     line("line-sent-stamped", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
+    line("line-late-settled", "wo-sent-settled", '{"es":"Plato","ca":"Plat"}'),
+    `update working_order_lines set menu_item_id = 'offer' where id = 'line-late-settled'`,
     line("line-sent-abandoned", "wo-sent-abandoned", '{"es":"Plato","ca":"Plat"}'),
     `update working_order_lines set sent_at = '${STAMP}', menu_item_id = 'offer' where id = 'line-sent-stamped'`,
     `update working_orders set status = 'placed' where id = 'wo-sent-placed'`,
@@ -1309,15 +1311,20 @@ describe("working_order_lines_require_open_parent_update's sent-stamp exception"
     }
   });
 
-  it("allows the first declaration on a stamped paid line, then keeps it fixed", () => {
-    const update = (value: string) =>
-      refusalFor(
-        connection,
-        `update working_order_lines set sent_nutrition = ${value}
-        where id = 'line-sent-stamped'`,
-      );
-    expect(update(`'{"allergens":null,"dietaryDeclarations":[]}'`)).toBeUndefined();
-    expect(update("null")).toBe(OPEN_PARENT_REFUSAL);
+  it("allows the first declaration and late mark on paid lines, then keeps them fixed", () => {
+    const update = (id: string, change: string) =>
+      refusalFor(connection, `update working_order_lines set ${change} where id = '${id}'`);
+    const declaration = (value: string) => update("line-sent-stamped", `sent_nutrition = ${value}`);
+    expect(declaration(`'{"allergens":null,"dietaryDeclarations":[]}'`)).toBeUndefined();
+    expect(declaration(`'{"allergens":{"milk":{}},"dietaryDeclarations":[]}'`)).toBe(
+      OPEN_PARENT_REFUSAL,
+    );
+    expect(declaration("null")).toBe(OPEN_PARENT_REFUSAL);
+
+    const mark = (change: string) => update("line-late-settled", change);
+    expect(mark("late_period_name = 'Lunch', late_confirmed_by = 'person'")).toBeUndefined();
+    expect(mark("late_period_name = 'Dinner'")).toBe(OPEN_PARENT_REFUSAL);
+    expect(mark("late_confirmed_by = 'another-person'")).toBe(OPEN_PARENT_REFUSAL);
   });
 
   // On a presented bill a line may change its group alone, so `group_id` matters most there.

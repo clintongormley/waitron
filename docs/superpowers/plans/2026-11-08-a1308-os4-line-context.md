@@ -28,10 +28,12 @@
 > `offer_` columns. M2 stays periodic under the 10 November note.
 >
 > The first send of a held line can follow presentation or payment. The line trigger permits the
-> first late mark before the sent stamp and the first declaration after it in that send's
-> transaction. The table route's "Fire line at 14:05" case exercises open, placed and settled
-> bills. The priced facts remain fixed after placement. The watcher cleared the test ports at
-> 03:23, 03:28 and 03:32, and cleared up to 1,500 counted lines at 03:37 with shared person seeding.
+> first late mark on an unstamped line and the first declaration on a stamped line. The send
+> writes those facts and its stamp in one transaction. The table route's "Fire line at 14:05"
+> case exercises open, placed and settled bills. The priced facts remain fixed after placement.
+> The menu version key checks version existence. The writer resolves it for the recorded menu.
+> The watcher cleared the test ports at 03:23, 03:28 and 03:32, and cleared up to 1,500
+> counted lines at 03:37 with shared person seeding.
 
 **Goal:** Fold `working_line_contexts` (the menu, department, unit, allergens and late-send facts
 frozen when a line is added) into `working_order_lines`, so a line is written once, with its context,
