@@ -156,8 +156,9 @@ second amendment are marked **my call (plan writer)**:
     and price a bill's recorded copy after a republish.
 11. **A set menu has its own eat-in and takeaway VAT classes.** An empty takeaway override
     follows the eat-in class. Dishes and variants may have any VAT class on the product.
-    Supplements and paid extras use the applicable class of the set menu. The owner's decisions are recorded
-    on the [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md).
+    The owner's two-rate decision is recorded on the
+    [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md). The watcher clarified
+    on 18 November at 20:28 that supplements and paid extras use the set menu's applicable class.
 12. **A product sold by measure cannot be in a set menu** (owner, 18 November 2026: "no" when
     asked whether a set menu can include dishes sold by weight). A set-menu dish is stored one unit per line
     (spec section 3, "What is stored"), and a dish sold by weight has a fraction for its quantity.

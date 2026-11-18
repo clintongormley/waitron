@@ -157,6 +157,20 @@ it("can keep a variant whose rate differs from the set menu's", async () => {
     code: "set_menu.dish_sold_by_measure",
     params: { productId: f.wine },
   });
+  expect((await reading()).dishes[0]!.variants).toEqual(dish!.variants);
+  await app((tx) =>
+    saveSetMenuVariantChoices(
+      tx,
+      f.menuId,
+      dish!.menuItemId,
+      choices(false).map((choice) => ({ ...choice, included: false })),
+    ),
+  );
+  expect((await reading()).dishes[0]!.variants.map(({ included }) => included)).toEqual([
+    false,
+    false,
+  ]);
+
   await app((tx) => updateProduct(tx, f.wine, { unitId: null }));
   await includeBottle();
   expect(
@@ -243,7 +257,7 @@ it("caps a kept variant surcharge at 10,000.00", async () => {
   expect((await reading()).dishes[0]!.variants[0]!.surcharge).toBe("10000.00");
 });
 
-it("keeps an existing member when its dish starts being sold by measure", async () => {
+it("keeps a measured dish when replacing its member with the same product", async () => {
   const ref = { kind: "product", productId: f.soup } as const;
   const member = await app((tx) => addMember(tx, f.root, ref));
   await app(async (tx) => {

@@ -66,8 +66,8 @@ are charged as usual.
 - Set menus on eat-in counter orders. Eat-in set menus go on the bill of a seated table,
   including a bar whose stools are set up as tables in a table-service zone
   (**owner**, 17 November: "these set menus are only for tables/bars with seating").
-  The [ordering plan](../plans/2026-11-18-a1515-set-menu-ordering.md) covers which takeaway
-  and delivery orders can hold set menus.
+  Whether a standing guest can have an ordinary dish is the waiter's call (owner, 17 November).
+  The [ordering plan](../plans/2026-11-18-a1515-set-menu-ordering.md) covers takeaway and delivery.
 - A selling schedule of the set menu's own. A set menu sells when the full menu it sits in sells,
   under that menu's existing periods (**owner**, 12 November: "with set menus, having a selling
   times section doesn't make sense - that can already be handled with periods and menus").
@@ -357,9 +357,10 @@ An eat-in counter order offers no set menu. The server refuses a set menu or set
 on one (**owner**, see Non-goals). A till at a counter can still order set menus for a seated
 table's bill, since what a bill may hold follows the table's zone, not the till's.
 
-Set menus can be taken away. They use their takeaway class for the menu, supplements and paid
-extras. The [ordering plan](../plans/2026-11-18-a1515-set-menu-ordering.md) defines which bills
-can hold a set menu.
+Takeaway orders can hold a set menu even when they start at the counter (watcher, 18 November
+at 20:40, applying the owner's takeaway decision). Takeaway and delivery use the takeaway class
+for the set menu, supplements and paid extras. The
+[ordering plan](../plans/2026-11-18-a1515-set-menu-ordering.md) defines which bills can hold a set menu.
 
 ### 6. Courses for drinks, bread and coffee
 
