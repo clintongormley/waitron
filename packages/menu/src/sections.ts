@@ -17,6 +17,7 @@ import {
   type SectionGraph,
 } from "./section-graph.js";
 import {
+  appendProductMembers,
   checkRef,
   deleteMember,
   heldMember,
@@ -24,14 +25,19 @@ import {
   membersOf,
   moveMemberTo,
   nameOf,
-  nextPosition,
   refColumns,
   refKey,
   renumber,
   requirePosition,
 } from "./section-members.js";
 import { onStructureChanged } from "./section-structure.js";
-import type { SectionDetails, MemberRef, SectionInput, SectionMember } from "@waitron/shared";
+import type {
+  SectionDetails,
+  MemberRef,
+  SectionInput,
+  SectionMember,
+  SetMenuLine,
+} from "@waitron/shared";
 import "./errors.js";
 
 /*
@@ -279,24 +285,17 @@ export async function addProducts(
   tx: Transaction,
   sectionId: string,
   productIds: string[],
-): Promise<{ added: number }> {
+): Promise<{ added: number; addedLines?: SetMenuLine[] }> {
   const graph = await loadSectionGraph(tx);
   requireWritableList(graph, sectionId);
   if (!Array.isArray(productIds) || !(await allTopLevelProducts(tx, productIds, { active: true })))
     throw new AppError("menu_section.membership_invalid", {});
-  const held = new Set(
-    graph
-      .children(sectionId)
-      .flatMap((member) => (member.ref.kind === "product" ? [member.ref.productId] : [])),
-  );
-  const adding = productIds.filter((productId) => !held.has(productId));
-  let position = nextPosition(graph.children(sectionId));
-  for (const batch of batches(adding))
-    await tx
-      .insert(sectionMembers)
-      .values(batch.map((productId) => ({ sectionId, position: position++, productId })));
-  await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
-  return { added: adding.length };
+  const added = await appendProductMembers(tx, sectionId, graph.children(sectionId), productIds);
+  const lines = await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
+  const owner = graph.ownerMenu(sectionId)!;
+  return graph.menu(owner)?.kind === "set_menu"
+    ? { added: added.length, addedLines: lines.get(owner) ?? [] }
+    : { added: added.length };
 }
 
 export async function removeMember(

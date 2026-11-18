@@ -3,8 +3,8 @@ import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
 import { menus, products } from "../menus.js";
 import { id, money, newId, table } from "../columns.js";
 /**
- * A menu's setting for one product: its price. A blank `gross_price` means the product's own price
- * (`resolveOfferPrice`, `packages/menu/src/offer-price.ts`).
+ * On a set menu, `gross_price` is a surcharge and blank means included. On an ordinary menu,
+ * blank means the product's own price.
  */
 export const menuItems = table(
   "menu_items",

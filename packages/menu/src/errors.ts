@@ -78,7 +78,10 @@ declare module "@waitron/shared" {
      * bytes. */
     "media.unsupported_type": { detected?: string };
     "menu.not_found": { menuId: string };
-    "set_menu.invalid": { field: "setPrice" | "setVatClass" };
+    "set_menu.invalid": {
+      field:
+        "setPrice" | "setVatClass" | "lines" | "count" | "courseIds" | "variants" | "surcharge";
+    };
     "set_menu.not_found": { menuId: string };
     "set_menu.dishes_only": { menuId: string };
     "set_menu.wrong_place": { menuId: string };

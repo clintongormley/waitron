@@ -141,6 +141,24 @@ export function nextPosition(members: readonly SectionMember<MemberRef | TileRef
   return Math.max(-1, ...members.map((member) => member.position)) + 1;
 }
 
+export async function appendProductMembers(
+  tx: Transaction,
+  sectionId: string,
+  members: readonly SectionMember[],
+  productIds: readonly string[],
+): Promise<string[]> {
+  const held = new Set(
+    members.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : [])),
+  );
+  const adding = productIds.filter((productId) => !held.has(productId));
+  let position = nextPosition(members);
+  for (const batch of batches(adding))
+    await tx
+      .insert(sectionMembers)
+      .values(batch.map((productId) => ({ sectionId, position: position++, productId })));
+  return adding;
+}
+
 export async function insertMember(
   tx: Transaction,
   sectionId: string,
