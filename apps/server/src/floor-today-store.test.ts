@@ -2215,7 +2215,7 @@ it("late saved-group formation restores a contained manual group's reset slots",
   await editMaster(master.c!, { label: heldLabel });
   await reset(zoneId);
   await inTx(v, (tx) =>
-    writeMerge(tx, v.cfg, {
+    writeMerge(tx, {
       movingId: table.b!,
       targetId: table.a!,
       side: "left",

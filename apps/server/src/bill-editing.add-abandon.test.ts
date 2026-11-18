@@ -246,10 +246,10 @@ it("adding to the current editor's bill preserves both independently owned outbo
   await save(p);
   await save(other, venue.adminId);
   const states = [await edit(p.id), await edit(other.id)];
-  const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId!));
+  const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId!));
   await run(p, "add", states[0]!);
   expect([await edit(p.id), await edit(other.id)]).toEqual(states);
-  expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId!))).toEqual(drafts);
+  expect(await inTx(venue, (tx) => readDrafts(tx, p.partyId!))).toEqual(drafts);
   const lines = await venue.db
     .select()
     .from(workingOrderLines)

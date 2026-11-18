@@ -72,13 +72,13 @@ function active(row: CurrentOrderRow): boolean {
   return compareDecimal(decimal(row.quantity), decimal(row.cancelledQuantity ?? "0")) > 0;
 }
 
-async function readAllergyState(tx: Transaction, cfg: TradingContext, requestedPartyId: string) {
+async function readAllergyState(tx: Transaction, requestedPartyId: string) {
   const partyId = await survivingParty(tx, requestedPartyId);
   const family = await partyFamily(tx, partyId);
   const current = await readCurrentOrders(tx, partyId);
   const rows = [...current.groups.flatMap((group) => group.rows), ...current.ungrouped];
   const drafts = [];
-  for (const id of family) drafts.push(...(await readDrafts(tx, cfg, id)));
+  for (const id of family) drafts.push(...(await readDrafts(tx, id)));
   const stored = await tx
     .select({ line: workingOrderLines })
     .from(workingOrderLines)
@@ -176,10 +176,10 @@ async function readAllergyState(tx: Transaction, cfg: TradingContext, requestedP
 
 export async function readPartyAllergyView(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   partyId: string,
 ): Promise<PartyAllergyRead> {
-  return (await readAllergyState(tx, cfg, partyId)).view;
+  return (await readAllergyState(tx, partyId)).view;
 }
 
 export async function readArrivingAllergyDishes(
@@ -224,15 +224,11 @@ export async function readArrivingAllergyDishes(
 
 export async function readAllergySendView(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   partyId: string,
   target: AllergySendTarget,
 ): Promise<PartyAllergyRead> {
-  const { view, current, rows, drafts, storedById, family } = await readAllergyState(
-    tx,
-    cfg,
-    partyId,
-  );
+  const { view, current, rows, drafts, storedById, family } = await readAllergyState(tx, partyId);
   let chosen: Set<string>;
   if (target.kind === "draft") {
     const draft = drafts.find((d) => d.id === target.draftId);

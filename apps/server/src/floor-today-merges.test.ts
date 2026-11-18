@@ -29,7 +29,7 @@ const merge = (
   side: JoinSide,
   seats: number | null,
   free = true,
-) => inTx(v, (tx) => writeMerge(tx, v.cfg, { movingId, targetId, side, seats, free }));
+) => inTx(v, (tx) => writeMerge(tx, { movingId, targetId, side, seats, free }));
 
 async function setToday(
   tableId: string,

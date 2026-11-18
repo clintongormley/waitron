@@ -143,11 +143,11 @@ for (const operation of ["place", "submit"] as const) {
       const p = await fixture();
       await save(p);
       await save(p, p.otherId, venue.adminId);
-      const before = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+      const before = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
       const states = [await edit(p.tabId), await edit(p.otherId)];
       const result = await run(p, await command(p));
       expect(result.tabId).toBe(p.tabId);
-      expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(before);
+      expect(await inTx(venue, (tx) => readDrafts(tx, p.partyId))).toEqual(before);
       expect([await edit(p.tabId), await edit(p.otherId)]).toEqual(states);
       const lines = await venue.db
         .select()
@@ -194,7 +194,7 @@ describe("submitted groups retain original ownership observations", () => {
     const p = await fixture(),
       own = await save(p),
       other = await save(p, p.otherId, venue.adminId);
-    const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+    const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
     const firstAsk = await command(p);
     const first = await inTx(venue, (tx) => submitGroups(tx, venue.cfg, p.partyId, firstAsk));
     const secondAsk = await command(p, p.otherId);
@@ -209,7 +209,7 @@ describe("submitted groups retain original ownership observations", () => {
     expect(joined.groups[0]!.id).toBe(first.groups[0]!.id);
     expect(joined.groups[0]!.lineIds).toHaveLength(2);
     expect([await edit(p.tabId), await edit(p.otherId)]).toEqual([own.edit, other.edit]);
-    expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(drafts);
+    expect(await inTx(venue, (tx) => readDrafts(tx, p.partyId))).toEqual(drafts);
   });
   it("replays completed facts after takeover and rejects a changed observation under the same ID", async () => {
     const p = await fixture(),

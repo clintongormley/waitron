@@ -84,7 +84,7 @@ const rename = (tableId: string, name: string | null) =>
 
 const pushBarOntoLong = (table: Record<string, string>) =>
   inTx(v, (tx) =>
-    writeMerge(tx, v.cfg, {
+    writeMerge(tx, {
       movingId: table.bar!,
       targetId: table.c3!,
       side: "left",
@@ -466,7 +466,7 @@ describe("what moves, ends or keeps today's name", () => {
       tx.update(diningTables).set(todaySet({ name })).where(eq(diningTables.id, tableId)),
     );
   const push = (movingId: string, targetId: string, seats: number) =>
-    inTx(v, (tx) => writeMerge(tx, v.cfg, { movingId, targetId, side: "left", seats, free: true }));
+    inTx(v, (tx) => writeMerge(tx, { movingId, targetId, side: "left", seats, free: true }));
   const moveGuestsTo = (partyId: string, toTableId: string) =>
     inTx(v, async (tx) => {
       await moveGuests(tx, v.cfg, partyId, toTableId, {
@@ -706,7 +706,7 @@ describe("a reset clears today's name", () => {
     const { table, zoneId } = await LONG_TABLE([{ key: "window", place: { x: 80, y: 0 } }]);
     await rename(table.bar!, suffixed("Window"));
     await inTx(v, (tx) =>
-      writeMerge(tx, v.cfg, {
+      writeMerge(tx, {
         movingId: table.window!,
         targetId: table.bar!,
         side: "left",

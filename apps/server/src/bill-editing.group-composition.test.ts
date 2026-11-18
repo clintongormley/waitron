@@ -180,11 +180,11 @@ for (const operation of operations)
       const p = await fixture(),
         own = await save(p),
         other = await save(p, p.otherId, venue.adminId);
-      const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+      const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
       await run(p, operation, own.edit);
       expect(await edit(p.tabId)).toEqual(own.edit);
       expect(await edit(p.otherId)).toEqual(other.edit);
-      expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(drafts);
+      expect(await inTx(venue, (tx) => readDrafts(tx, p.partyId))).toEqual(drafts);
       const lines = await venue.db
         .select()
         .from(workingOrderLines)
@@ -265,12 +265,12 @@ for (const operation of operations)
 it("already-sent group Fire stays shared while the bill belongs to a colleague", async () => {
   const p = await fixture(),
     saved = await save(p, p.tabId, venue.adminId);
-  const before = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+  const before = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
   await inTx(venue, async (tx) =>
     fireGroup(tx, venue.cfg, p.partyId, p.line.groupId!, await command(p)),
   );
   expect(await edit(p.tabId)).toEqual(saved.edit);
-  expect(await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId))).toEqual(before);
+  expect(await inTx(venue, (tx) => readDrafts(tx, p.partyId))).toEqual(before);
   expect(
     (await venue.db.select().from(workingOrderLines).where(eq(workingOrderLines.id, p.line.id)))[0]!
       .groupId,

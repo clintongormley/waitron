@@ -123,7 +123,7 @@ describe("withMovedSlips", () => {
       const guests = await seat(v, table.c6!);
       await order(v, guests.tabId, "Burger");
       await inTx(v, (tx) =>
-        writeMerge(tx, v.cfg, {
+        writeMerge(tx, {
           movingId: table.t9!,
           targetId: table.c6!,
           side: "right",

@@ -43,7 +43,7 @@ export async function recordSyntheticInvoice(
     .insert(invoiceSeries)
     .values({
       nodeId,
-      code: options.seriesCode ?? `F${randomUUID().slice(0, 4)}`,
+      code: options.seriesCode ?? `F${randomUUID().slice(0, 8)}`,
       purpose: full ? "full" : "standard",
     })
     .returning();

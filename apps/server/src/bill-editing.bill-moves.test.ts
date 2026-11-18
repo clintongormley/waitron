@@ -178,7 +178,7 @@ describe("moving one bill compares only that bill and the complete destination",
       state: "open",
     });
     expect(
-      (await inTx(venue, (tx) => readDrafts(tx, venue.cfg, into.partyId))).find(
+      (await inTx(venue, (tx) => readDrafts(tx, into.partyId))).find(
         (d) => d.id === saved.draft!.id,
       )?.lines,
     ).toEqual(saved.draft!.lines);
@@ -596,7 +596,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
       editorVersion: 2,
       draftRevision: 1,
     });
-    const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+    const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
     expect(drafts).toHaveLength(1);
     expect(drafts[0]!.id).toBe(left.draft!.id);
     expect(drafts[0]!.lines.map((l) => ({ id: l.id, quantity: l.quantity }))).toEqual([
@@ -621,7 +621,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
       editorVersion: 1,
       draftRevision: 1,
     });
-    const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+    const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
     expect(drafts[0]).toMatchObject({
       id: saved.draft!.id,
       billId: p.tabId,
@@ -654,7 +654,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
         draftId: left?.draft!.id ?? right.draft!.id,
         draftRevision: 1,
       });
-      const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+      const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
       expect(drafts).toHaveLength(1);
       expect(drafts[0]!.id).toBe(left?.draft!.id ?? right.draft!.id);
       const ids = [...(left?.draft!.lines ?? []), ...right.draft!.lines].map((line) => line.id);
@@ -798,7 +798,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
     const allergy = await inTx(venue, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
     const charges = await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id);
     await merge(p.partyId, from, p.tabId, await billEdits(from, p.tabId));
-    const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
+    const drafts = await inTx(venue, (tx) => readDrafts(tx, p.partyId));
     expect(drafts).toHaveLength(1);
     expect(drafts[0]!.id).toBe(source.draft!.id);
     expect(

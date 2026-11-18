@@ -212,16 +212,16 @@ for (const op of operations)
       await save(other, venue.adminId);
       const states = [await edit(p.id), await edit(other.id)];
       const drafts = await inTx(venue, async (tx) => [
-        await readDrafts(tx, venue.cfg, p.partyId!),
-        await readDrafts(tx, venue.cfg, other.partyId!),
+        await readDrafts(tx, p.partyId!),
+        await readDrafts(tx, other.partyId!),
       ]);
       await run(p, op, states[0]!);
       await accepted(p, op);
       expect([await edit(p.id), await edit(other.id)]).toEqual(states);
       expect(
         await inTx(venue, async (tx) => [
-          await readDrafts(tx, venue.cfg, p.partyId!),
-          await readDrafts(tx, venue.cfg, other.partyId!),
+          await readDrafts(tx, p.partyId!),
+          await readDrafts(tx, other.partyId!),
         ]),
       ).toEqual(drafts);
     });

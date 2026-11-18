@@ -862,7 +862,7 @@ describe("a table that frees up after a reset needs moving", () => {
     );
     await reset(z.zoneId);
     await inTx(v, (tx) =>
-      writeMerge(tx, v.cfg, { movingId: bar, targetId: long, side: "left", seats: 12, free: true }),
+      writeMerge(tx, { movingId: bar, targetId: long, side: "left", seats: 12, free: true }),
     );
     await finish(partyId);
     expect(await readyOf(t3)).toEqual({ pending: true, readyToMove: false });

@@ -127,7 +127,7 @@ async function deliveryRows() {
 async function fullInvoice(nodeId: string): Promise<string> {
   const [series] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId, code: `F${randomUUID().slice(0, 4)}`, purpose: "full" })
+    .values({ nodeId, code: `F${randomUUID().slice(0, 8)}`, purpose: "full" })
     .returning();
   const modules = enabledModules(
     ALL_MODULES,

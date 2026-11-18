@@ -311,7 +311,7 @@ describe("the till's table-state answer carries today's names", () => {
     const named = await LONG_TABLE();
     const grouped = await LONG_TABLE();
     await inTx(v, (tx) =>
-      writeMerge(tx, v.cfg, {
+      writeMerge(tx, {
         movingId: grouped.table.bar!,
         targetId: grouped.table.c3!,
         side: "left",

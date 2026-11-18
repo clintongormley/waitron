@@ -226,11 +226,11 @@ export async function splitDraft(
         billId: newBillId,
         revision,
         source: {
-          draft: empty ? null : await readOpenDraft(tx, cfg, partyId, id),
+          draft: empty ? null : await readOpenDraft(tx, partyId, id),
           edit: await readBillEditState(tx, billId),
         },
         destination: {
-          draft: await readOpenDraft(tx, cfg, partyId, newDraftId),
+          draft: await readOpenDraft(tx, partyId, newDraftId),
           edit: await readBillEditState(tx, newBillId),
         },
       };
@@ -267,17 +267,13 @@ export interface UnsentDraft {
   lineCount: number;
 }
 
-export async function readDrafts(
-  tx: Transaction,
-  _cfg: TradingContext,
-  partyId: string,
-): Promise<Draft[]> {
+export async function readDrafts(tx: Transaction, partyId: string): Promise<Draft[]> {
   return readOpenDrafts(tx, partyId);
 }
 
 export async function saveDraft(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   partyId: string,
   operatorId: string,
   input: SaveDraftInput,
@@ -415,14 +411,14 @@ export async function saveDraft(
     await captureDraft(tx, attendance, operatorId, draftId, draft!.revision + 1, "discard", at);
     return { draft: null, edit: released };
   }
-  const saved = await readOpenDraft(tx, cfg, partyId, draftId, offers);
+  const saved = await readOpenDraft(tx, partyId, draftId, offers);
   await captureDraft(tx, attendance, operatorId, saved.id, saved.revision, "save", at);
   return { draft: saved, edit: await readBillEditState(tx, billId) };
 }
 
 export async function takeOverDraft(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   partyId: string,
   draftId: string,
   operatorId: string,
@@ -471,7 +467,7 @@ export async function takeOverDraft(
           at,
         );
       }
-      return { draft: await readOpenDraft(tx, cfg, partyId, draft.id), edit };
+      return { draft: await readOpenDraft(tx, partyId, draft.id), edit };
     },
   );
 }
@@ -867,7 +863,7 @@ export async function submitDraft(
       await captureDraft(tx, attendance, operatorId, id, draft.revision + 1, "submit", at);
       const result = {
         ...placed,
-        draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id, offers),
+        draft: emptied ? null : await readOpenDraft(tx, partyId, id, offers),
         edit: await readBillEditState(tx, billId),
       };
       const invoice = await complete?.(result.tabId);
@@ -1345,7 +1341,6 @@ async function replaceLines(
 /** One open draft of the party, which the caller knows is there. */
 async function readOpenDraft(
   tx: Transaction,
-  _cfg: TradingContext,
   partyId: string,
   draftId: string,
   offers?: Map<string, ZoneMenuOffer>,

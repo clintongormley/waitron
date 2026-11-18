@@ -170,7 +170,7 @@ describe("changing a sent dish while a New order waits on the bill", () => {
   it("recalls and re-sends the dish, leaves the New order as it was, and still sends it after", async () => {
     const bill = await billWithSentDish();
     const saved = await saveNewOrder(bill, venue.operatorId);
-    const draftsBefore = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, bill.partyId));
+    const draftsBefore = await inTx(venue, (tx) => readDrafts(tx, bill.partyId));
 
     const answer = await changeNote(bill);
 
@@ -187,7 +187,7 @@ describe("changing a sent dish while a New order waits on the bill", () => {
     expect(fresh!.id).not.toBe(bill.dish.id);
     expect(fresh!.firedAt).not.toBeNull();
 
-    const draftsAfter = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, bill.partyId));
+    const draftsAfter = await inTx(venue, (tx) => readDrafts(tx, bill.partyId));
     expect(draftsAfter).toEqual(draftsBefore);
     expect(draftsAfter).toEqual([
       expect.objectContaining({ id: saved.edit.draftId, revision: saved.edit.draftRevision }),

@@ -193,7 +193,7 @@ describe("the bill a table opens on", () => {
       bills: await billsOfParty(v, partyId),
       party: await partyRow(v, partyId),
       lines: await linesOf(v, tabId),
-      drafts: await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId)),
+      drafts: await inTx(v, (tx) => readDrafts(tx, partyId)),
     };
     await expect(
       inTx(v, async (tx) =>
@@ -211,7 +211,7 @@ describe("the bill a table opens on", () => {
       bills: await billsOfParty(v, partyId),
       party: await partyRow(v, partyId),
       lines: await linesOf(v, tabId),
-      drafts: await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId)),
+      drafts: await inTx(v, (tx) => readDrafts(tx, partyId)),
     }).toEqual(before);
     expect(before.bills).toEqual([tabId]);
   });
@@ -538,8 +538,8 @@ describe("A803 no main bill:", () => {
       lines: await linesOf(v, second),
       ours: await billsOfParty(v, partyId),
       theirs: await billsOfParty(v, otherPartyId),
-      ourDrafts: await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId)),
-      theirDrafts: await inTx(v, (tx) => readDrafts(tx, v.cfg, otherPartyId)),
+      ourDrafts: await inTx(v, (tx) => readDrafts(tx, partyId)),
+      theirDrafts: await inTx(v, (tx) => readDrafts(tx, otherPartyId)),
       revisions: [await revisionOf(v, partyId), await revisionOf(v, otherPartyId)],
     });
     const before = await rows();

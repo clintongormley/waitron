@@ -250,7 +250,7 @@ describe("roomPrints", () => {
   it("differs after a group's seats change", async () => {
     const { zoneId, table } = await LONG_TABLE();
     await inTx(v, (tx) =>
-      writeMerge(tx, v.cfg, {
+      writeMerge(tx, {
         movingId: table.bar!,
         targetId: table.c3!,
         side: "left",
@@ -289,7 +289,7 @@ describe("roomPrints", () => {
   it("a group's name changes the print of the room holding it", async () => {
     const { zoneId, table } = await LONG_TABLE();
     await inTx(v, (tx) =>
-      writeMerge(tx, v.cfg, {
+      writeMerge(tx, {
         movingId: table.bar!,
         targetId: table.c3!,
         side: "left",

@@ -120,7 +120,7 @@ async function LONG_WINDOW_STOOL() {
 }
 
 const push = (movingId: string, targetId: string, side: JoinSide, seats = 12) =>
-  inTx(v, (tx) => writeMerge(tx, v.cfg, { movingId, targetId, side, seats, free: true }));
+  inTx(v, (tx) => writeMerge(tx, { movingId, targetId, side, seats, free: true }));
 
 async function refusalOf(work: Promise<unknown>): Promise<AppError | null> {
   return (await work.then(

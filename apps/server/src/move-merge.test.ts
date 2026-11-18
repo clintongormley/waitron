@@ -2227,7 +2227,7 @@ describe("A803 split: what the kitchen is told", () => {
       const moved = await splitPicked(v, partyId, leave, { wholeBillIds: [], loose: [picked] });
 
       await expectOnlyTheDishesLeft(table, moved);
-      const drafts = await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId));
+      const drafts = await inTx(v, (tx) => readDrafts(tx, partyId));
       expect(
         drafts.map((row) => [row.id, row.billId, row.lines.map((line) => line.menuItemId)]),
       ).toEqual([[draft.id, tabId, [v.item("Paella")]]]);
@@ -2239,7 +2239,7 @@ describe("A803 split: what the kitchen is told", () => {
       expect(refused).toMatchObject({ code: "bill.unsent_dishes", params: { billId: tabId } });
       expect((await partyRow(v, partyId)).state).toBe("open");
 
-      const [current] = await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId));
+      const [current] = await inTx(v, (tx) => readDrafts(tx, partyId));
       const discarding = {
         admission: testTradingAdmission(),
         submissionId: randomUUID(),

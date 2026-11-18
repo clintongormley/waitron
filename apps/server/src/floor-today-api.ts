@@ -212,7 +212,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
           tx,
           deps.cfg,
           { tables: [movingId, targetId], targetGroupOf: targetId },
-          () => writeMerge(tx, deps.cfg, { movingId, targetId, side, seats, free: true }),
+          () => writeMerge(tx, { movingId, targetId, side, seats, free: true }),
         ),
       others: [targetId],
     };
