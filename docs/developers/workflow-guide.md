@@ -302,6 +302,7 @@ slot _k_ serves the till, dashboard, setup, server and print agent on 5190, 5191
 9110 plus 100 × _k_, so the second slot is 5290, 5291, 5292, 8180 and 9210.
 
 Open the dashboard at `/` on its port and the setup wizard at `/setup/` on its port.
+On their own ports, `/till` and `/setup` without the closing slash go to the address with it.
 An existing cross-app link redirects you to that app's own port, where its API and live-reload
 requests use that app's development server. For example, `curl -I http://localhost:5290/devices` returns `302` with
 `Location: http://localhost:5291/devices`. The `WAITRON_*_VITE_PORT` values select

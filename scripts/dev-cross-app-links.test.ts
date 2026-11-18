@@ -78,6 +78,7 @@ it.each([false, true])(
       ["till", "/devices?view=all", `http://localhost:${dashboard}/devices?view=all`],
       ["till", "/", `http://localhost:${dashboard}/`],
       ["dashboard", "/till/?dev", `http://localhost:${till}/till/?dev`],
+      ["dashboard", "/till", `http://localhost:${till}/till`],
       ["setup", "/till/", `http://localhost:${till}/till/`],
       ["setup", "/email", `http://localhost:${dashboard}/email`],
     ]) {
@@ -88,6 +89,18 @@ it.each([false, true])(
     }
   },
 );
+
+it.each([
+  ["till", "/till", "/till/"],
+  ["till", "/till?dev", "/till/?dev"],
+  ["setup", "/setup", "/setup/"],
+  ["setup", "/setup?step=2", "/setup/?step=2"],
+])("the %s server sends its own address %s to %s", async (app, url, expected) => {
+  const response = await fetch(origin(app) + url, { redirect: "manual" });
+  await response.arrayBuffer();
+  expect(response.status).toBe(302);
+  expect(response.headers.get("location")).toBe(expected);
+});
 
 it("keeps app paths local and preserves setup's handover entry", async () => {
   const till = await fetch(origin("till") + "/till/", { redirect: "manual" });

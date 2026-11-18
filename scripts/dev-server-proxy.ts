@@ -34,6 +34,9 @@ export function devCrossAppLinks(app: "till" | "dashboard" | "setup"): Plugin {
         if (destination !== undefined) {
           response.writeHead(302, { location: `http://localhost:${destination}${url}` });
           response.end();
+        } else if (app !== "dashboard" && pathname === `/${app}`) {
+          response.writeHead(302, { location: `${pathname}/${url.slice(pathname.length)}` });
+          response.end();
         } else if (app === "setup" && pathname.startsWith("/handover/")) {
           void readFile(join(server.config.root, "index.html"), "utf8")
             .then((html) => server.transformIndexHtml("/setup/index.html", html, url))
