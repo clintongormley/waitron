@@ -533,7 +533,7 @@ describe("fiscal restore, end to end", () => {
     });
   }, 120_000);
 
-  it("NEGATIVE CONTROL — skipSecrets:true (the rejoin shape) leaves SIF, series and stateDir untouched", async () => {
+  it("NEGATIVE CONTROL — skipSecrets:true leaves SIF, series and stateDir untouched", async () => {
     const dirs = await arrangeDirs();
     await restoreFromArtifact({ ...(await restoreDepsFor(dirs)), skipSecrets: true });
     const store = await openVenueDatabase(dirs.venueDir);

@@ -628,7 +628,7 @@ describe("the first-start marker (rebuild-first-start.ts)", () => {
     });
   });
 
-  it("leaves no marker when it keeps the box's own identity (a rejoin)", async () => {
+  it("leaves no marker when skipSecrets keeps the box's own identity", async () => {
     await restoreFromArtifact(makeRestoreDeps({ skipSecrets: true }));
     await noMarker();
   });
@@ -707,7 +707,7 @@ describe("the first-start marker (rebuild-first-start.ts)", () => {
   });
 });
 
-describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", () => {
+describe("validateArtifact / writeValidated (validate before wipe)", () => {
   useTempDirs("waitron-validate-");
 
   function deps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
@@ -813,7 +813,7 @@ describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", ()
   });
 });
 
-describe("restore steps (R3 composition)", () => {
+describe("restore steps", () => {
   useTempDirs("waitron-step-");
 
   it("restoreDatabase writes the archive's bytes to venue.db and returns that path", async () => {
@@ -1505,7 +1505,7 @@ describe("restore hooks (identity phase)", () => {
     expect(await stagedOrPrevious()).toEqual([]);
   });
 
-  it("a pre-existing identity is UNTOUCHED under skipSecrets (the rejoin shape keeps its own)", async () => {
+  it("a pre-existing identity is UNTOUCHED under skipSecrets", async () => {
     const own = formatEnvFile({ WAITRON_NODE_ID: "own" });
     await writeFile(join(stateDir, "trading.env"), own);
     await restoreFromArtifact(makeRestoreDeps({ skipSecrets: true }));
@@ -1797,7 +1797,7 @@ describe("backup settings and the database module list round-trip", () => {
     await expect(stat(join(stateDir, "backup.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("skipSecrets (rejoin) keeps this box's backup settings", async () => {
+  it("skipSecrets keeps this box's backup settings", async () => {
     await restoreFromArtifact(
       makeRestoreDeps({
         skipSecrets: true,
