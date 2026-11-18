@@ -73,6 +73,7 @@ async function seed() {
       lineTotal: 100,
     })),
   );
+  const holdRequestedAt = "2026-10-02T10:00:00.000Z";
   const records = { burger: randomUUID(), chips: randomUUID(), secondExtra: randomUUID() };
   await db.insert(ticketItems).values([
     {
@@ -87,6 +88,8 @@ async function seed() {
       workingOrderLineId: ids.chips,
       stationId: station("Fryer"),
       quantity: null,
+      requestedAt: holdRequestedAt,
+      holdPaperQueued: true,
     },
     {
       id: records.secondExtra,
@@ -95,7 +98,7 @@ async function seed() {
       quantity: 400,
     },
   ]);
-  return { ids, records, orderId, station };
+  return { ids, records, orderId, station, holdRequestedAt };
 }
 
 function replayEmitted(emitted: { sql: string; params: unknown[] }, prefix = "") {
@@ -111,7 +114,7 @@ function replayEmitted(emitted: { sql: string; params: unknown[] }, prefix = "")
 
 describe("dish kitchen records", () => {
   it("returns own work before extras and a dish served only by an extra", async () => {
-    const { ids, records, orderId, station } = await seed();
+    const { ids, records, orderId, station, holdRequestedAt } = await seed();
     const result = await withTransaction(db, (tx) =>
       dishKitchenItems(tx, [ids.burger, ids.second, ids.empty]),
     );
@@ -127,6 +130,7 @@ describe("dish kitchen records", () => {
         courseId: null,
         firedAt: null,
         requestedAt: null,
+        holdPaperQueued: false,
         state: "preparing",
         firedQuantity: 1500,
         lineQuantity: 2000,
@@ -140,7 +144,8 @@ describe("dish kitchen records", () => {
         stationId: station("Fryer"),
         courseId: null,
         firedAt: null,
-        requestedAt: null,
+        requestedAt: holdRequestedAt,
+        holdPaperQueued: true,
         state: "queued",
         firedQuantity: 1000,
         lineQuantity: 1000,
@@ -157,6 +162,7 @@ describe("dish kitchen records", () => {
         courseId: null,
         firedAt: null,
         requestedAt: null,
+        holdPaperQueued: false,
         state: "queued",
         firedQuantity: 400,
         lineQuantity: 500,

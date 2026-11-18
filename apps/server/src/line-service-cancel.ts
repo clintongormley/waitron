@@ -75,6 +75,7 @@ export async function enqueueServiceCancellation(
               dish,
               requested: item!.requestedAt !== null && item!.firedAt === null,
               requestedAt: item!.requestedAt,
+              holdPaperQueued: item!.holdPaperQueued,
               item: {
                 workingOrderLineId: row.id,
                 stationId: item!.stationId,

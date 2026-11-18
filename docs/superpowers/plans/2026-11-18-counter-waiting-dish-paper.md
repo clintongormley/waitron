@@ -3,18 +3,23 @@
 The watcher assigned COUNTER-WAITING-DISH-PAPER to Lane H on 18 November 2026.
 It follows os10 (#3794, `7a4eb59399`). Lane H lands this item.
 
-Staff can reprint a counter dish already on HOLD paper, cancel it on an open or paid bill and
+Staff can reprint a counter dish already on HOLD paper, cancel it on an open bill and
 give its old station a removal slip when they move it. A destination that waits and prints
 advance HOLD gets a HOLD ticket. A destination that starts it immediately gets the regular
 ticket. Use the existing paper flag on each ticket item at its current station for requested,
 unfired, ungrouped work. Keep the group/station lookup for grouped dishes. Reuse the current
-routing, notices and ticket formats. This covers the three queued commands.
+routing, notices and ticket formats. The watcher cleared the plan at 23:05 on 18 November and added quantity and extra edits,
+single-extra cancellation, and a whole-bill save guard check. The 23:38 watcher note kept
+paid counter cancellation for the refunds work after the existing command refused it.
+
+Scope is paper for existing commands. Paid counter cancellation access is tracked in the
+[till backlog](../../backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g).
 
 1. **Failing checks.** In `apps/server/src/waiting-course-copy.test.ts`, adapt the base
    reproductions with the existing waiting-table and queued-paper fixtures. Reprint the fired
    Burger and waiting Tarta once, with Tarta in HOLD, and leave out a waiting Burger that never
-   had paper. Cancel Tarta on an open bill with `cancelItemForTest` and on a paid bill with the
-   keep-charge command. Expect one HOLD CANCELLED slip naming Tarta without a group. Use a
+   had paper. Cancel Tarta on an open bill with `cancelItemForTest` and exercise keep-charge where
+   the existing command allows it. Expect one HOLD CANCELLED slip naming Tarta without a group. Use a
    flagged Tarta and an unprinted waiting Burger to check that only Tarta produces corrections.
    Move the waiting Tarta to a station that waits and prints advance HOLD, one that waits with
    advance HOLD off, and one that starts immediately. Check the old removal, the destination's
@@ -42,7 +47,10 @@ routing, notices and ticket formats. This covers the three queued commands.
    destination with advance HOLD on, enqueue HOLD only for dishes whose own flag was set
    at the old station. Queueing HOLD records paper at the new station. Keep the regular
    immediate-start path and omit `holdGroupId` from ungrouped removal slips.
-5. **Verify.** Run the changed suite and grouped controls in `station-move.test.ts`,
+5. **Edits.** Check that a whole-bill save refuses to drop the sent dish. Carry the station's
+   paper record to corrections when a quantity or extra changes. An added portion of the same
+   dish prints at the station that has its paper if the new portion is also waiting there.
+6. **Verify.** Run the changed suite and grouped controls in `station-move.test.ts`,
    `line-cancel.test.ts`, `kitchen-print.test.ts`, `kitchen-print.language.test.ts` and
    `kitchen-request.hold-paper.test.ts`. Run the queue's unedited fiscal and menu gates.
    Check the diff and sign off commits before finish-branch.
