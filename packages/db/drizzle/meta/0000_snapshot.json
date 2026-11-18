@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6f96bee7-71f6-4501-bd18-61c892b4f1fa",
+  "id": "6508a5d4-ba84-4bbd-9747-270def8d6436",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -3779,6 +3779,19 @@
           "tableTo": "order_drafts",
           "columnsFrom": [
             "draft_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "order_draft_lines_menu_item_fk": {
+          "name": "order_draft_lines_menu_item_fk",
+          "tableFrom": "order_draft_lines",
+          "tableTo": "menu_items",
+          "columnsFrom": [
+            "menu_item_id"
           ],
           "columnsTo": [
             "id"

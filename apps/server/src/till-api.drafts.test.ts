@@ -1291,6 +1291,25 @@ describe("a draft named on another party", () => {
   });
 });
 
+it("marks the field of an unknown menu item and leaves the draft unchanged", async () => {
+  const party = await seated();
+  const draft = await newDraft(anna, party.partyId, [dish("Caña")]);
+  const before = await snapshot();
+
+  const answer = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
+    billId: await openBillOf(party.partyId),
+    draftId: draft.id,
+    revision: draft.revision,
+    lines: [dish("Octopus"), { ...dish("Caña"), menuItemId: randomUUID() }],
+  });
+
+  expect(answer.status).toBe(400);
+  expect(answer.json).toEqual(
+    refusal("management.request_invalid", { field: "lines.1.menuItemId" }),
+  );
+  expect(await snapshot()).toEqual(before);
+});
+
 const ID = "cccccccc-0000-4000-8000-000000000001";
 
 describe("a malformed body", () => {

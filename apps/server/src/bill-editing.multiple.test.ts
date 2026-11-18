@@ -12,7 +12,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedMenuItem, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 
 import { AppError } from "@waitron/shared";
 import {
@@ -54,6 +54,7 @@ async function fixture(owners: ("Anna" | "Lewis" | null)[]) {
       { displayName: "Sam" },
     ]);
     const [party] = await tx.insert(parties).values({ openedBy: anna!.id }).returning();
+    const menuItemId = await seedMenuItem(tx);
     const states: BillEditState[] = [];
     for (const [index, owner] of owners.entries()) {
       const billId = ids[index]!;
@@ -87,7 +88,7 @@ async function fixture(owners: ("Anna" | "Lewis" | null)[]) {
         await tx.insert(orderDraftLines).values({
           draftId: draft!.id,
           position: 1,
-          menuItemId: randomUUID(),
+          menuItemId,
           options: [],
           extras: [],
           quantity: 1000,

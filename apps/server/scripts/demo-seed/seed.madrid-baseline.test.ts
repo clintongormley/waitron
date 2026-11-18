@@ -1435,6 +1435,22 @@ for (const locale of ["en", "es"] as const) {
           table.foreignKeys.filter((key) => key.id === capturedId).map((key) => ({ ...key, id })),
         );
       }
+      const draftLineKeys = expected[phase].tables.order_draft_lines!.foreignKeys;
+      draftLineKeys.splice(
+        4,
+        1,
+        {
+          id: 4,
+          seq: 0,
+          table: "menu_items",
+          from: "menu_item_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        },
+        { ...draftLineKeys[4]!, id: 5 },
+      );
       for (const [name, previous, current] of [
         ["devices", "invoice_page_printer_id", "invoice_printer_id"],
         ["device_profile_printers", "page_printer_id", "printer_id"],

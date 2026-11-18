@@ -35,6 +35,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
+  addProductToMenu,
   assignMenuToVenue,
   assignProductUnit,
   createMenu,
@@ -277,6 +278,15 @@ function item(v: Venue, dish: Dish, overrides: Partial<LineInput> = {}): LineInp
     afterGroupId: null,
     ...overrides,
   };
+}
+
+async function beerFromAnotherMenu(v: Venue): Promise<LineInput> {
+  return inTx(async (tx) => {
+    const menu = await createMenu(tx, { name: "Other menu" });
+    const offer = await addProductToMenu(tx, { menuId: menu.id, productId: v.productId.beer });
+    await publishWorkingMenu(tx, menu.id);
+    return item(v, "beer", { menuItemId: offer.id });
+  });
 }
 
 async function save(
@@ -2472,11 +2482,7 @@ describe("unavailable lines (spec §10)", () => {
       },
       "options.label_required",
     ],
-    [
-      "a menu item the zone does not offer",
-      async (v) => item(v, "beer", { menuItemId: randomUUID() }),
-      "service_zone.offer_not_allowed",
-    ],
+    ["a menu item the zone does not offer", beerFromAnotherMenu, "service_zone.offer_not_allowed"],
   ];
 
   it("sends the same kinds of line when nothing is withdrawn (the control for the cases below)", async () => {
@@ -2584,7 +2590,7 @@ describe("unavailable lines (spec §10)", () => {
   it("marks a line naming a menu item the zone does not offer", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
-    await save(v, partyId, ALEX, null, 0, [item(v, "beer", { menuItemId: randomUUID() })]);
+    await save(v, partyId, ALEX, null, 0, [await beerFromAnotherMenu(v)]);
     expect((await draftsOf(v, partyId))[0]!.lines[0]!.unavailable).toBe(true);
   });
 
@@ -3349,9 +3355,7 @@ describe("unavailable lines at submission (spec §10)", () => {
   it("refuses at submission a menu item the zone does not offer (service_zone.offer_not_allowed)", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
-    const draft = await save(v, partyId, ALEX, null, 0, [
-      item(v, "beer", { menuItemId: randomUUID() }),
-    ]);
+    const draft = await save(v, partyId, ALEX, null, 0, [await beerFromAnotherMenu(v)]);
 
     await refusedWritingNothing(
       () => submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]),
@@ -5233,12 +5237,8 @@ describe("A803: weighed and measured adds never merge", () => {
   it("A803: two lines of a menu item the zone does not offer merge as before", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
-    const gone = randomUUID();
-
-    const saved = await save(v, partyId, ALEX, null, 0, [
-      item(v, "beer", { menuItemId: gone }),
-      item(v, "beer", { menuItemId: gone }),
-    ]);
+    const line = await beerFromAnotherMenu(v);
+    const saved = await save(v, partyId, ALEX, null, 0, [line, line]);
 
     expect(saved.lines.map((line) => [line.quantity, line.unavailable])).toEqual([["2.000", true]]);
   });
