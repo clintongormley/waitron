@@ -45,7 +45,13 @@ export function freezeSetMenu(
   return {
     name: draft.name,
     changedAt: draft.changedAt,
-    terms: { price: draft.price, vatClass: draft.vatClass, names: draft.names, lines: draft.lines },
+    terms: {
+      price: draft.price,
+      vatClass: draft.vatClass,
+      takeawayVatClass: draft.takeawayVatClass ?? draft.vatClass,
+      names: draft.names,
+      lines: draft.lines,
+    },
     root: {
       members: root.members.filter(
         (member) => member.kind === "product" && member.menuItemId in copied,

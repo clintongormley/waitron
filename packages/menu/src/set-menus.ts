@@ -341,7 +341,7 @@ async function dishSettings(
 
 export type SetMenuDraft = Pick<
   SetMenuDetails,
-  "name" | "names" | "price" | "vatClass" | "dishes" | "lines" | "problems"
+  "name" | "names" | "price" | "vatClass" | "takeawayVatClass" | "dishes" | "lines" | "problems"
 > & { changedAt: string };
 
 export async function readSetMenuDrafts(
@@ -353,6 +353,7 @@ export async function readSetMenuDrafts(
     names: Record<string, string>;
     setPrice: number | null;
     setVatClass: string | null;
+    setTakeawayVatClass: string | null;
     updatedAt: Date;
   }[],
 ): Promise<Map<string, SetMenuDraft>> {
@@ -374,6 +375,7 @@ export async function readSetMenuDrafts(
         names: row.names,
         price: centsToDecimal(row.setPrice!),
         vatClass: row.setVatClass as VatClass,
+        takeawayVatClass: row.setTakeawayVatClass as VatClass | null,
         changedAt: row.updatedAt.toISOString(),
         dishes: dishes.get(row.rootSectionId) ?? [],
         lines: linesForDraft(lines.get(row.menuId)?.values() ?? []),

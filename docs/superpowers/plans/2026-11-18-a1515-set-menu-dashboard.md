@@ -959,7 +959,7 @@ export interface PublishedSetMenu {
     `"5.00"`, Wine's variants only Glass at `"1.50"`; Sirloin's `offeredModifiers` equal those of
     Lunch's own Sirloin offer; Lunch's own Sirloin offer stays `"18.00"`.
   - `"the copy carries the terms and what each dish counts as in this set menu"`: `terms` equals
-    `{ price: "14.00", vatClass: "reduced", takeawayVatClass: "general", names: { en: "Daily menu" }, lines: [...] }`; Soup's
+    `{ price: "14.00", vatClass: "reduced", takeawayVatClass: "reduced", names: { en: "Daily menu" }, lines: [...] }`; Soup's
     `countsAsCourseId` is Starters; Glass's is its own course.
   - `"two set menus' copies give one product different courses"`: Bravas listed in Daily menu
     with no course of its own and in Special menu given Starters, both placed in Lunch → Daily's
@@ -1081,7 +1081,7 @@ export interface PublishedSetMenu {
 - [ ] **Step 1: Write the failing tests:**
   - `"a live price correction of Lunch's Sirloin leaves the copy's surcharge alone, and a live
     wording correction reaches the copy and keeps its changedAt"`.
-  - "a live VAT correction changes a copied dish and keeps the set menu's rates":
+  - `"a live VAT correction changes a copied dish and keeps the set menu's rates"`:
     change both rates on Soup's offer. The correction reaches the copy and its own terms
     still carry the two set-menu rates from publication.
   - In the routing-store test: a dish only the set menu lists offers its extras in the zone; in

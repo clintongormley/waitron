@@ -24,7 +24,7 @@ import {
 import { patchLiveMenu, publishMenu, readLiveMenu } from "./menu-publication.js";
 import { queueMenuPublication } from "./menu-schedule.js";
 import { requireMenuRoot } from "./menu-structure.js";
-import { createMenu, updateMenuItem } from "./operations.js";
+import { createMenu, updateMenuDetails, updateMenuItem } from "./operations.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { addMember, createSectionIn } from "./sections.js";
 import { addSetMenuDishes, saveSetMenuDishCourse, saveSetMenuVariantChoices } from "./set-menus.js";
@@ -182,6 +182,7 @@ it("freezes the terms and each kept variant's own course", async () => {
   expect(copy?.terms).toEqual({
     price: "14.00",
     vatClass: "reduced",
+    takeawayVatClass: "reduced",
     names: { en: "Daily menu" },
     lines: [
       { id: f.lines[0]!.id, count: 1, courseIds: [f.starters] },
@@ -294,16 +295,34 @@ it("copies the set menu's stored change stamp rather than the time of the build"
   expect(updated.workingHash).not.toBe(first.workingHash);
 });
 
-it("refuses the full menu after a dish's eat-in VAT class changes", async () => {
+it("publishes a surcharge on a dish at a different VAT class from the set menu", async () => {
   await place();
+  await suite.db.update(products).set({ vatClass: "general" }).where(eq(products.id, f.sirloin));
   await publish();
-  const before = await live();
-  await suite.db.update(products).set({ vatClass: "general" }).where(eq(products.id, f.soup));
-  await expect(publish()).rejects.toMatchObject({
-    code: "set_menu.not_publishable",
-    params: { menuId: f.daily, count: 1 },
+  const copy = await fromLive();
+  expect(copy?.terms).toMatchObject({ vatClass: "reduced", takeawayVatClass: "reduced" });
+  expect(copy?.offers[f.sirloinItem]).toMatchObject({ vatClass: "general", unitPrice: "5.00" });
+});
+
+it("freezes a takeaway-only VAT edit on the next full-menu publish", async () => {
+  const older = new Date("2026-11-17T11:00:00.000Z");
+  await suite.db.update(menus).set({ updatedAt: older }).where(eq(menus.id, f.daily));
+  await place();
+  const first = await build();
+  await publish();
+
+  await app((tx) => updateMenuDetails(tx, f.daily, { setTakeawayVatClass: "general" }));
+  const second = await build();
+  const copy = second.document.setMenus?.[f.daily];
+  expect(second.workingHash).not.toBe(first.workingHash);
+  expect(Date.parse(copy!.changedAt)).toBeGreaterThan(older.getTime());
+  expect(copy?.terms).toMatchObject({ vatClass: "reduced", takeawayVatClass: "general" });
+  expect((await fromLive())?.terms).toMatchObject({
+    vatClass: "reduced",
+    takeawayVatClass: "reduced",
   });
-  expect(await live()).toEqual(before);
+  await publish();
+  expect(await fromLive()).toEqual(copy);
 });
 
 it("refuses to publish or live-edit a set menu on its own", async () => {
@@ -428,10 +447,10 @@ it("refuses a scheduled publish of a set menu or of a full menu with an invalid 
     params: { menuId: f.daily },
   });
   await place();
-  await suite.db.update(products).set({ vatClass: "general" }).where(eq(products.id, f.soup));
+  await suite.db.update(products).set({ courseId: f.sharing }).where(eq(products.id, f.soup));
   await expect(queue(f.lunch)).rejects.toMatchObject({
     code: "set_menu.not_publishable",
-    params: { menuId: f.daily, count: 1 },
+    params: { menuId: f.daily, count: 2 },
   });
 });
 

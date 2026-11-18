@@ -174,6 +174,7 @@ export async function buildMenuDocuments(
         names: root.names,
         setPrice: menus.setPrice,
         setVatClass: menus.setVatClass,
+        setTakeawayVatClass: menus.setTakeawayVatClass,
         updatedAt: menus.updatedAt,
       })
       .from(menus)
