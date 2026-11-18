@@ -1079,7 +1079,7 @@ The floor screen hands the map each table's `fixed` and, for a party
 at two or more groups, its `linkId`, so a fixed stool being dragged leaves a copy, with a line to
 the table marked as its drop target, and a party's tables are joined by a line. `canDrag` and the details sheet's
 actions follow `canChangeToday` (the profile's take-orders): without it nothing on the map moves,
-the sheet offers no changes for today and the zone menu holds no change. With it, on a zone with
+a free table cannot be seated, the sheet offers no changes for today and the zone menu holds no change. With it, on a zone with
 today's plan or whose department has a floor plan set (the zone list's `hasPlan`), a
 `wt-row-actions` ⋮ named "Today's plan" beside the List/Map toggle opens the zone menu: Add a spare
 table, Taken off today and "Reset to {set} plan", naming the set today's plan was last made from

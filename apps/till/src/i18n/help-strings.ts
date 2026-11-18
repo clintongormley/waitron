@@ -25,9 +25,9 @@ export const helpEn = {
   "help.floor.tables_map":
     "Tap a free table to seat guests, or a table in use to go back to its order. Hold a table and let go to see its details; hold and drag to move it for today. Its details list a service step with Done.",
   "help.floor.tables_map_view":
-    "Tap a free table to seat guests, or a table in use to go back to its order. Hold a table and let go to see its details. Its details show a service step.",
+    "Tap a table in use to go back to its order. Hold a table and let go to see its details. Its details show a service step.",
   "help.floor.tables_list":
-    "Tap a card to seat guests at a free table, or to go back to a table in use. A card marked Needs clearing has a button for that; one marked Needs moving has buttons too, if you may take orders. Tap Done on a service step when the guests want nothing.",
+    "Tap a card to go back to a table in use, or, if you may take orders, to seat guests at a free table. A card marked Needs clearing has a button for that; one marked Needs moving has buttons too, if you may take orders. Tap Done on a service step when the guests want nothing.",
   "help.floor.layout_due":
     "Update layout moves this zone's free tables to the new plan now. Tables with guests or still to clear keep their place until they are free, then show Needs moving. Tables taken off today stay off.",
   "help.floor.needs_moving":
@@ -92,9 +92,9 @@ export const helpEs: Record<HelpKey, string> = {
   "help.floor.tables_map":
     "Toca una mesa libre para sentar a los clientes, o una ocupada para volver a su pedido. Mantén pulsada una mesa y suéltala para ver sus detalles; mantenla y arrástrala para moverla hoy. Sus detalles muestran el paso de servicio con Hecho.",
   "help.floor.tables_map_view":
-    "Toca una mesa libre para sentar a los clientes, o una ocupada para volver a su pedido. Mantén pulsada una mesa y suéltala para ver sus detalles. Sus detalles muestran el paso de servicio.",
+    "Toca una mesa ocupada para volver a su pedido. Mantén pulsada una mesa y suéltala para ver sus detalles. Sus detalles muestran el paso de servicio.",
   "help.floor.tables_list":
-    "Toca una tarjeta para sentar a los clientes en una mesa libre o volver a una ocupada. Una tarjeta Por recoger tiene un botón para ello; una Por mover también tiene botones, si puedes tomar pedidos. Toca Hecho en un paso de servicio cuando los clientes no quieran nada.",
+    "Toca una tarjeta para volver a una mesa ocupada o, si puedes tomar pedidos, para sentar a los clientes en una mesa libre. Una tarjeta Por recoger tiene un botón para ello; una Por mover también tiene botones, si puedes tomar pedidos. Toca Hecho en un paso de servicio cuando los clientes no quieran nada.",
   "help.floor.layout_due":
     "Actualizar plano coloca ya las mesas libres de esta zona según el plano nuevo. Las mesas con clientes o por recoger se quedan donde están hasta quedar libres, y entonces aparecen Por mover. Las mesas quitadas hoy siguen quitadas.",
   "help.floor.needs_moving":

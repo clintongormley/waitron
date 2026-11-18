@@ -256,16 +256,93 @@ describe("till-floor-screen", () => {
     expect(seen.detail).toEqual({ tableId: "t1", seated: false, guestCount: null });
   });
 
-  it("does not offer to seat a free table on a device whose profile cannot take orders", async () => {
+  it.each([
+    [
+      "en-GB",
+      "This device's profile doesn't allow that. It can be changed in the dashboard, under Device profiles.",
+    ],
+    [
+      "es-ES",
+      "El perfil de este dispositivo no lo permite. Se puede cambiar en el panel, en Perfiles de dispositivo.",
+    ],
+  ])(
+    "refuses to seat a free table on a device whose profile cannot take orders, in %s",
+    async (locale, words) => {
+      const previous = currentLocale();
+      try {
+        setLocale(locale);
+        const { el } = await mount({
+          zones: [zone()],
+          tables: [table({ id: "t1", state: "free", hasOpenTab: false })],
+          canChangeToday: false,
+        });
+        const seen = captureOpenTable(el);
+        el.shadowRoot!.querySelector<HTMLElement>('[data-table="t1"]')!.click();
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+        expect(seen.detail).toBeUndefined();
+        const refusal = el.shadowRoot!.querySelector("[data-floor-refusal]");
+        expect(refusal?.textContent?.trim()).toBe(words);
+        expect(refusal?.getAttribute("role")).toBe("status");
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
+  it("forgets an earlier zone notice when it refuses to seat a free table for the device's profile", async () => {
+    const { el } = await mount({ zones: [zone({ closed: true })], canChangeToday: false });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
+    el.zones = [zone({ closed: false })];
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-floor-refusal]")).not.toBeNull();
+    el.zones = [zone({ closed: true })];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).toBeNull();
+  });
+
+  it("closes an open Seat window when the device's profile stops taking orders", async () => {
     const { el } = await mount({
       zones: [zone()],
       tables: [table({ id: "t1", state: "free", hasOpenTab: false })],
-      canChangeToday: false,
+      canChangeToday: true,
     });
     const seen = captureOpenTable(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-table="t1"]')!.click();
     await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
+    el.canChangeToday = false;
+    await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-floor-refusal]")?.textContent?.trim()).toBe(
+      "This device's profile doesn't allow that. It can be changed in the dashboard, under Device profiles.",
+    );
+    expect(seen.detail).toBeUndefined();
+  });
+
+  it("does not seat from a Seat window confirmed after the device's profile stops taking orders", async () => {
+    const { el } = await mount({
+      zones: [zone()],
+      tables: [table({ id: "t1", state: "free", hasOpenTab: false })],
+      canChangeToday: true,
+    });
+    const seen = captureOpenTable(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-table="t1"]')!.click();
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector("till-seat-dialog")!;
+    // Before the screen's next update can close the window.
+    el.canChangeToday = false;
+    dialog.dispatchEvent(
+      new CustomEvent("seat-confirm", {
+        detail: { guestCount: 2 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     expect(seen.detail).toBeUndefined();
   });
 
@@ -493,7 +570,7 @@ describe("till-floor-screen — map/list toggle and tray", () => {
     expect(el.shadowRoot!.querySelector('[data-tray-table="t1"]')).toBeNull();
   });
 
-  it("opens a free tray table (asking for its guest count) when it is tapped in VIEW mode", async () => {
+  it("opens a free tray table (asking for its guest count) when it is tapped", async () => {
     const el = await mountFloor({ tables: [placed("t1"), table({ id: "t9", label: "9" })] });
     el.canChangeToday = true;
     await el.updateComplete;
@@ -556,6 +633,15 @@ describe("closed floor zones", () => {
     } finally {
       setLocale(previous);
     }
+  });
+
+  it("shows the closed notice, not the profile's refusal, on a device that cannot take orders", async () => {
+    const { el } = await mount({ zones: [zone({ closed: true })], canChangeToday: false });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-floor-refusal]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
   });
 
   it("still resumes an occupied table in a closed zone", async () => {
@@ -636,6 +722,21 @@ describe("floor zones that seat no one", () => {
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).not.toBeNull();
   });
+
+  it.each([
+    ["a prepay zone", "prepay"],
+    ["a zone with no service mode", null],
+  ] as const)(
+    "shows the notice for %s, not the profile's refusal, on a device that cannot take orders",
+    async (_, serviceMode) => {
+      const { el } = await mount({ zones: [zone({ serviceMode })], canChangeToday: false });
+      el.shadowRoot!.querySelector<HTMLElement>("[data-table]")!.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-zone-no-seating]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-floor-refusal]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
+    },
+  );
 
   it("still resumes a seated table there", async () => {
     const { el } = await mount({

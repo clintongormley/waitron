@@ -903,8 +903,7 @@ export class TillFloorScreen extends LitElement {
     new Map();
   @property({ attribute: false }) api?: TillApi;
   @property({ attribute: false }) operatorSession = 0;
-  /** The device's profile allows `take-orders`, which every change to today's plan needs: seating a
-   * free table, the map's drag and the details sheet's actions. */
+  /** The device's profile allows `take-orders`. */
   @property({ attribute: false }) canChangeToday = false;
   /** The device's profile allows `take-orders`, so a card offers Done on its step. Its own
    * property, not `canChangeToday`: Done must not follow if today's floor gets its own action. */
@@ -1051,6 +1050,10 @@ export class TillFloorScreen extends LitElement {
     }
     if (changed.has("tables") && this.askingSeats === null && this.#joinWork === null)
       this.#pending = null;
+    if (this.seating !== null && !this.canChangeToday) {
+      this.seating = null;
+      this.refusal = codeMessage("device.forbidden_action");
+    }
     if (
       this.seating !== null &&
       [this.seating.table.id, ...(this.seating.withTableIds ?? [])].some(
@@ -1144,8 +1147,8 @@ export class TillFloorScreen extends LitElement {
 
   /**
    * A seated table resumes; a table needing clearing offers Mark cleared, and one needing moving
-   * Leave it here and Mark moved; a free one asks for guests, headed and seated beside the other
-   * tables `seat` names when a drop gives them.
+   * Leave it here and Mark moved; a free one, on a device that takes orders, asks for guests, headed
+   * and seated beside the other tables `seat` names when a drop gives them.
    */
   #openTable(
     table: TableState,
@@ -1161,7 +1164,6 @@ export class TillFloorScreen extends LitElement {
       return;
     }
     if (table.party === null && !table.hasOpenTab) {
-      if (!this.canChangeToday) return;
       const zone = this.zones.find((candidate) => candidate.id === table.zoneId);
       if (zone !== undefined && (zone.closed || !seatsGuests(zone))) {
         this.refusal = null;
@@ -1169,6 +1171,10 @@ export class TillFloorScreen extends LitElement {
         return;
       }
       this.refusedZoneId = null;
+      if (!this.canChangeToday) {
+        this.refusal = codeMessage("device.forbidden_action");
+        return;
+      }
       this.seating = seat === null ? { table, ...this.#seatHeading(table) } : { table, ...seat };
       return;
     }
@@ -1179,6 +1185,7 @@ export class TillFloorScreen extends LitElement {
     event.stopPropagation();
     if (
       this.seating !== seating ||
+      !this.canChangeToday ||
       [seating.table.id, ...(seating.withTableIds ?? [])].some(
         (id) => !this.tables.some((table) => table.id === id),
       )
