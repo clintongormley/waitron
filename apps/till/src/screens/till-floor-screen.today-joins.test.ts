@@ -269,7 +269,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
 
   it("a join refused for another reason says why only after the seats are typed", async () => {
     const api = stubApi();
-    api.joinTables.mockRejectedValueOnce({ code: "table.merged", status: 409 });
+    api.joinTables.mockRejectedValueOnce({ code: "table.needs_clearing", status: 409 });
     const el = await mount([planned("t1", 2, {}, "1", P), planned("t2", 20)], api);
     const refreshes = countRefreshes(el);
 
@@ -294,7 +294,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     });
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
     expect(drawnAt(el, "t1")).toBe(2);
-    expect(refusal(el)).toBe("That table is joined to another. Split it first");
+    expect(refusal(el)).toBe("That table needs clearing first. Mark it cleared, then try again");
     expect(refreshes.count).toBe(1);
   });
 
