@@ -107,6 +107,7 @@ export const JOIN_REFUSAL_STATUS = Object.fromEntries(
 // `membership.write_contended` is transient, so the caller retries.
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
+  "totp.required": 401,
   "password.throttled": 429,
   "authorization.not_permitted": 403,
   "mirror.standby_invalid": 400,
@@ -276,6 +277,7 @@ export function mountMirrorBundleApi(
             totp,
             totpKeyRing: deps.credentialKeyRing,
             checked,
+            askForCode: true,
           });
           await withInspectorAdmitted(() =>
             authorizeManager(tx, { managementSessionId: session.token, permission: "node.manage" }),

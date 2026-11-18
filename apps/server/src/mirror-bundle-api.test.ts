@@ -950,6 +950,45 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(await allocationSnapshot()).toEqual(counterBefore);
   });
 
+  it("asks on the plain path for the authenticator code only once the password is right, and reserves nothing", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
+    await withTransaction(db, (tx) =>
+      seedPersons(tx, {
+        displayName: "Suspended administrator",
+        email: SUSPENDED_EMAIL,
+        pinHash: fixturePinHash("1234"),
+        passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
+        role: "admin",
+        status: "suspended",
+      }),
+    );
+    const app = mountApp(designated);
+    const counterBefore = await allocationSnapshot();
+
+    const causes: Record<string, Record<string, unknown>> = {
+      unknown: { email: "nobody@example.test", password: ADMIN_PASSWORD },
+      suspended: { email: SUSPENDED_EMAIL, password: ADMIN_PASSWORD },
+      wrongPassword: { email: ADMIN_EMAIL, password: "wrong", totp: generateSync({ secret }) },
+      wrongCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, totp: wrongTotpCode(secret) },
+      missingCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+    };
+    const answers: Record<string, unknown> = {};
+    for (const [cause, credential] of Object.entries(causes)) {
+      const res = await rawPost(app, { ...credential, ...validStandby() });
+      answers[cause] = { status: res.status, body: await res.json() };
+    }
+    const refused = { status: 401, body: { error: { code: "password.invalid", params: {} } } };
+    expect(answers).toEqual({
+      unknown: refused,
+      suspended: refused,
+      wrongPassword: refused,
+      wrongCode: refused,
+      missingCode: { status: 401, body: { error: { code: "totp.required", params: {} } } },
+    });
+    expect(await allocationSnapshot()).toEqual(counterBefore);
+  });
+
   describe("repeated wrong passwords", () => {
     const wrongAttempt = (email: string) => ({ email, password: "wrong", ...validStandby() });
     const rightAttempt = (email = ADMIN_EMAIL) => ({
@@ -1030,6 +1069,21 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         clock.mockRestore();
         vi.useRealTimers();
       }
+    });
+
+    it("does not count a request for the authenticator code as a failed try", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
+      const app = mountApp(designated);
+
+      for (let attempt = 0; attempt < 5; attempt += 1)
+        expect(await answer(await rawPost(app, rightAttempt()))).toEqual({
+          status: 401,
+          body: { error: { code: "totp.required", params: {} } },
+        });
+
+      const signedIn = await rawPost(app, { ...rightAttempt(), totp: generateSync({ secret }) });
+      expect(signedIn.status, JSON.stringify(await signedIn.clone().json())).toBe(200);
     });
 
     it("lets a correct sign-in through before the limit, and starts the count again after it", async () => {
