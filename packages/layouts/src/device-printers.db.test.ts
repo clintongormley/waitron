@@ -167,7 +167,6 @@ describe("a profile's printer lists and each device's current printers", () => {
       paymentSlipPrinterId: null,
       cashDrawerPrinterId: null,
       invoicePrinterId: null,
-      invoicePagePrinterId: null,
     });
     expect(await readPrinterHoldsForTest(suite.db)).toEqual([]);
   });
@@ -768,20 +767,14 @@ describe("a profile's invoice printer list", () => {
     await inTx((tx) => setProfilePrinterLists(tx, profileId, saved));
     expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(saved);
     const rows = await suite.db
-      .select({
-        printerId: deviceProfilePrinters.printerId,
-        pagePrinterId: deviceProfilePrinters.pagePrinterId,
-      })
+      .select({ printerId: deviceProfilePrinters.printerId })
       .from(deviceProfilePrinters)
       .where(eq(deviceProfilePrinters.deviceProfileId, profileId))
       .orderBy(deviceProfilePrinters.position);
-    expect(rows).toEqual([
-      { printerId: null, pagePrinterId: office },
-      { printerId: receipt, pagePrinterId: null },
-    ]);
+    expect(rows).toEqual([{ printerId: office }, { printerId: receipt }]);
   });
 
-  it("refuses an id in neither printer table with printer.not_found, storing nothing", async () => {
+  it("refuses an unknown printer with printer.not_found, storing nothing", async () => {
     const { profileId } = await seedDevice(suite.db);
     const stored = lists({ receiptPrinterIds: [receipt] });
     await inTx((tx) => setProfilePrinterLists(tx, profileId, stored));

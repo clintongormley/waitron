@@ -48,6 +48,9 @@ export const LOCALES_REFUSAL = "descriptions must carry exactly the venue locale
 /** `working_order_lines_check_variant_locales_*`: the same, for the optional variant map. */
 export const VARIANT_LOCALES_REFUSAL = "variant_descriptions must carry exactly the venue locales";
 
+export const DEVICE_PRINTER_KIND_REFUSAL =
+  "a receipt, slip or drawer printer must be a receipt printer";
+
 /** `device_profile_form_factor_locked`: an active device still depends on the profile's form factor. */
 export const FORM_FACTOR_REFUSAL =
   "cannot change form factor of a profile in use by an active device";

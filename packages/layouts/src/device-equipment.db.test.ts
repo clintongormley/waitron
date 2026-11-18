@@ -90,12 +90,12 @@ async function seedPagePrinter(name: string, host = "10.0.0.9"): Promise<string>
   return printerId;
 }
 
-async function invoiceColumns(deviceId: string) {
+async function invoiceChoice(deviceId: string) {
   const [row] = await suite.db
-    .select({ printer: devices.invoicePrinterId, page: devices.invoicePagePrinterId })
+    .select({ printer: devices.invoicePrinterId })
     .from(devices)
     .where(eq(devices.id, deviceId));
-  return row!;
+  return row!.printer;
 }
 
 async function columns(deviceId: string) {
@@ -1194,32 +1194,25 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
       ok: false,
       refusal: "not_permitted",
     });
-    expect(await invoiceColumns(a)).toEqual({ printer: null, page: null });
+    expect(await invoiceChoice(a)).toBe(null);
   });
 
-  it("choosing one kind clears the other kind's column, and Use default clears both", async () => {
+  it("choosing either kind replaces the invoice choice, and Use default clears it", async () => {
     await listInvoices([receiptPrinter, page]);
     await choose(a, "invoice", { id: receiptPrinter });
-    expect(await invoiceColumns(a)).toEqual({ printer: receiptPrinter, page: null });
+    expect(await invoiceChoice(a)).toBe(receiptPrinter);
+    expect(await resolve(a, "invoice")).toBe(receiptPrinter);
 
     await choose(a, "invoice", { id: page });
-    expect(await invoiceColumns(a)).toEqual({ printer: null, page });
+    expect(await invoiceChoice(a)).toBe(page);
 
     await choose(a, "invoice", { id: receiptPrinter });
-    expect(await invoiceColumns(a)).toEqual({ printer: receiptPrinter, page: null });
-
-    await suite.db.update(devices).set({ invoicePagePrinterId: page }).where(eq(devices.id, a));
-    await choose(a, "invoice", "default");
-    expect(await invoiceColumns(a)).toEqual({ printer: null, page: null });
-  });
-
-  it("prefers the receipt printer column when both are set", async () => {
-    await listInvoices([receiptPrinter, page]);
-    await suite.db
-      .update(devices)
-      .set({ invoicePrinterId: receiptPrinter, invoicePagePrinterId: page })
-      .where(eq(devices.id, a));
+    expect(await invoiceChoice(a)).toBe(receiptPrinter);
     expect(await resolve(a, "invoice")).toBe(receiptPrinter);
+
+    await suite.db.update(devices).set({ invoicePrinterId: page }).where(eq(devices.id, a));
+    await choose(a, "invoice", "default");
+    expect(await invoiceChoice(a)).toBe(null);
   });
 
   it.each(["page", "receipt"] as const)(
@@ -1231,25 +1224,26 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
 
       await listInvoices([kept], kept);
 
-      expect(await invoiceColumns(a)).toEqual({ printer: null, page: null });
+      expect(await invoiceChoice(a)).toBe(null);
       expect(await resolve(a, "invoice")).toBe(kept);
     },
   );
 
-  it("clearing a device's unlisted choices clears an invoice choice in either column", async () => {
-    await listInvoices([receiptPrinter, page]);
-    await suite.db
-      .update(devices)
-      .set({ invoicePrinterId: awayPrinter, invoicePagePrinterId: awayPage })
-      .where(eq(devices.id, a));
-    await suite.db.update(devices).set({ invoicePagePrinterId: page }).where(eq(devices.id, b));
+  it.each(["page", "receipt"] as const)(
+    "clearing a device's unlisted choices clears an unlisted %s invoice choice",
+    async (kind) => {
+      await listInvoices([receiptPrinter, page]);
+      const unlisted = kind === "page" ? awayPage : awayPrinter;
+      await suite.db.update(devices).set({ invoicePrinterId: unlisted }).where(eq(devices.id, a));
+      await suite.db.update(devices).set({ invoicePrinterId: page }).where(eq(devices.id, b));
 
-    await inTx((tx) => clearUnlistedPrinterChoices(tx, a));
-    await inTx((tx) => clearUnlistedPrinterChoices(tx, b));
+      await inTx((tx) => clearUnlistedPrinterChoices(tx, a));
+      await inTx((tx) => clearUnlistedPrinterChoices(tx, b));
 
-    expect(await invoiceColumns(a)).toEqual({ printer: null, page: null });
-    expect(await invoiceColumns(b)).toEqual({ printer: null, page });
-  });
+      expect(await invoiceChoice(a)).toBeNull();
+      expect(await invoiceChoice(b)).toBe(page);
+    },
+  );
 
   it("a portable printer another device holds still resolves for invoices, and choosing it takes no hold", async () => {
     await inTx((tx) =>
@@ -1417,27 +1411,23 @@ describe("clearDeletedPagePrinter", () => {
         lists({ invoicePrinterIds: [gone, kept, receipt], invoicePrinterDefaultId: gone }),
       ),
     );
-    await suite.db.update(devices).set({ invoicePagePrinterId: gone }).where(eq(devices.id, a));
-    await suite.db.update(devices).set({ invoicePagePrinterId: kept }).where(eq(devices.id, b));
+    await suite.db.update(devices).set({ invoicePrinterId: gone }).where(eq(devices.id, a));
+    await suite.db.update(devices).set({ invoicePrinterId: kept }).where(eq(devices.id, b));
     await suite.db.update(devices).set({ invoicePrinterId: receipt }).where(eq(devices.id, c));
 
     await inTx((tx) => clearDeletedPagePrinter(tx, gone));
 
-    expect(await invoiceColumns(a)).toEqual({ printer: null, page: null });
-    expect(await invoiceColumns(b)).toEqual({ printer: null, page: kept });
-    expect(await invoiceColumns(c)).toEqual({ printer: receipt, page: null });
+    expect(await invoiceChoice(a)).toBe(null);
+    expect(await invoiceChoice(b)).toBe(kept);
+    expect(await invoiceChoice(c)).toBe(receipt);
     const listed = await suite.db
       .select({
         printerId: deviceProfilePrinters.printerId,
-        pagePrinterId: deviceProfilePrinters.pagePrinterId,
       })
       .from(deviceProfilePrinters)
       .where(eq(deviceProfilePrinters.deviceProfileId, first.profileId))
       .orderBy(asc(deviceProfilePrinters.position));
-    expect(listed).toEqual([
-      { printerId: null, pagePrinterId: kept },
-      { printerId: receipt, pagePrinterId: null },
-    ]);
+    expect(listed).toEqual([{ printerId: kept }, { printerId: receipt }]);
   });
 });
 
@@ -1488,12 +1478,12 @@ describe("checkDevicePrinterChoice", () => {
     );
     expect(invoice).toEqual({
       ok: true,
-      columns: { invoicePrinterId: null, invoicePagePrinterId: page },
+      columns: { invoicePrinterId: page },
       heldPrinterId: null,
       previousHolderDeviceId: null,
     });
     expect(await columns(deviceId)).toEqual({ receipt: null, slip: null, drawer: null });
-    expect(await invoiceColumns(deviceId)).toEqual({ printer: null, page: null });
+    expect(await invoiceChoice(deviceId)).toBe(null);
   });
 
   it("refuses a printer the device's own profile lists but the given profile does not", async () => {
@@ -1526,8 +1516,7 @@ describe("choicesClearedOnProfile", () => {
       receiptPrinterId: bar,
       paymentSlipPrinterId: counter,
       cashDrawerPrinterId: drawer,
-      invoicePrinterId: null,
-      invoicePagePrinterId: page,
+      invoicePrinterId: page,
     };
     await suite.db.update(devices).set(stored).where(eq(devices.id, deviceId));
     const other = (await seedDevice(suite.db, { label: "Till B" })).profileId;
@@ -1546,6 +1535,6 @@ describe("choicesClearedOnProfile", () => {
     const cleared = await inTx((tx) => choicesClearedOnProfile(tx, stored, other));
     expect(cleared).toEqual({ paymentSlipPrinterId: null, cashDrawerPrinterId: null });
     expect(await columns(deviceId)).toEqual({ receipt: bar, slip: counter, drawer });
-    expect(await invoiceColumns(deviceId)).toEqual({ printer: null, page });
+    expect(await invoiceChoice(deviceId)).toBe(page);
   });
 });

@@ -2199,7 +2199,7 @@ describe("the device's invoice printer", () => {
       await listInvoicePrinter(tx, { profileId, pagePrinterId: old, isDefault: false });
       await tx
         .update(devices)
-        .set({ invoicePagePrinterId: old })
+        .set({ invoicePrinterId: old })
         .where(eq(devices.id, cfg.origin.deviceId));
     });
 

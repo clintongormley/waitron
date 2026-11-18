@@ -478,7 +478,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 47,
+  version: 48,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -871,7 +871,7 @@ describe("configuration transfer database path", () => {
       new Date("2026-10-15T12:00:00Z"),
       versions,
     );
-    expect(transferred.tables.device_profile_printers!.map((row) => row.page_printer_id)).toContain(
+    expect(transferred.tables.device_profile_printers!.map((row) => row.printer_id)).toContain(
       sourcePagePrinterId,
     );
     await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
@@ -891,7 +891,6 @@ describe("configuration transfer database path", () => {
     const rows = await targetSuite.db
       .select({
         printerId: deviceProfilePrinters.printerId,
-        pagePrinterId: deviceProfilePrinters.pagePrinterId,
         isDefault: deviceProfilePrinters.isDefault,
       })
       .from(deviceProfilePrinters)
@@ -901,7 +900,7 @@ describe("configuration transfer database path", () => {
           eq(deviceProfilePrinters.role, "invoice"),
         ),
       );
-    expect(rows).toEqual([{ printerId: null, pagePrinterId: imported!.id, isDefault: true }]);
+    expect(rows).toEqual([{ printerId: imported!.id, isDefault: true }]);
   });
 
   it("copies declared configuration into a fresh venue while scrubbing staff authenticators", async () => {
@@ -5616,7 +5615,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(47);
+  expect(exported.version).toBe(48);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

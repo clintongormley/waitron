@@ -2291,7 +2291,6 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     });
     expect(await invoiceChoice(t.deviceId)).toEqual({
       invoicePrinterId: t.counter,
-      invoicePagePrinterId: null,
     });
     const [drawer] = await suite.db
       .select({ cashDrawerPrinterId: devices.cashDrawerPrinterId })
@@ -2364,7 +2363,6 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
         paymentSlipPrinterId: devices.paymentSlipPrinterId,
         cashDrawerPrinterId: devices.cashDrawerPrinterId,
         invoicePrinterId: devices.invoicePrinterId,
-        invoicePagePrinterId: devices.invoicePagePrinterId,
       })
       .from(devices)
       .where(eq(devices.id, t.deviceId));
@@ -2374,7 +2372,6 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       paymentSlipPrinterId: null,
       cashDrawerPrinterId: null,
       invoicePrinterId: null,
-      invoicePagePrinterId: null,
     });
   });
 
@@ -2566,7 +2563,6 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     const [row] = await suite.db
       .select({
         invoicePrinterId: devices.invoicePrinterId,
-        invoicePagePrinterId: devices.invoicePagePrinterId,
       })
       .from(devices)
       .where(eq(devices.id, deviceId));
@@ -2590,8 +2586,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     });
     expect(toOffice.status).toBe(204);
     expect(await invoiceChoice(t.deviceId)).toEqual({
-      invoicePrinterId: null,
-      invoicePagePrinterId: office,
+      invoicePrinterId: office,
     });
 
     const toReceipt = await edit(app, venue.managerCookie, t.deviceId, {
@@ -2600,14 +2595,12 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     expect(toReceipt.status).toBe(204);
     expect(await invoiceChoice(t.deviceId)).toEqual({
       invoicePrinterId: t.counter,
-      invoicePagePrinterId: null,
     });
 
     const absent = await edit(app, venue.managerCookie, t.deviceId, { name: "Bar till 2" });
     expect(absent.status).toBe(204);
     expect(await invoiceChoice(t.deviceId)).toEqual({
       invoicePrinterId: t.counter,
-      invoicePagePrinterId: null,
     });
 
     const toDefault = await edit(app, venue.managerCookie, t.deviceId, {
@@ -2616,7 +2609,6 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     expect(toDefault.status).toBe(204);
     expect(await invoiceChoice(t.deviceId)).toEqual({
       invoicePrinterId: null,
-      invoicePagePrinterId: null,
     });
   });
 
@@ -2642,7 +2634,6 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     expect(await labelOf(t.deviceId)).toBe("Till");
     expect(await invoiceChoice(t.deviceId)).toEqual({
       invoicePrinterId: null,
-      invoicePagePrinterId: null,
     });
   });
 

@@ -761,7 +761,6 @@ CREATE TABLE `devices` (
 	`cash_drawer_printer_id` text,
 	`invoice_printer_id` text,
 	`card_reader_id` text,
-	`invoice_page_printer_id` text,
 	`label` text NOT NULL,
 	`token_hash` text NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
@@ -778,7 +777,6 @@ CREATE TABLE `devices` (
 	FOREIGN KEY (`payment_slip_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`cash_drawer_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`invoice_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`invoice_page_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "devices_battery_level_ck" CHECK("devices"."battery_level" is null or "devices"."battery_level" between 0 and 100),
 	CONSTRAINT "devices_deleted_ck" CHECK("devices"."deleted_at" is null or "devices"."active" = 0),
 	CONSTRAINT "devices_made_here_station_ids_ck" CHECK(json_valid("devices"."made_here_station_ids") and json_type("devices"."made_here_station_ids") = 'array' and json_array_length("devices"."made_here_station_ids") <= 1),
@@ -1181,20 +1179,16 @@ CREATE UNIQUE INDEX `device_profiles_live_name_key` ON `device_profiles` (`name`
 CREATE TABLE `device_profile_printers` (
 	`id` text PRIMARY KEY NOT NULL,
 	`device_profile_id` text NOT NULL,
-	`printer_id` text,
-	`page_printer_id` text,
+	`printer_id` text NOT NULL,
 	`role` text NOT NULL,
 	`position` integer NOT NULL,
 	`is_default` integer DEFAULT false NOT NULL,
 	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`page_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "device_profile_printers_role_ck" CHECK("device_profile_printers"."role" in ('receipt', 'payment_slip', 'cash_drawer', 'invoice')),
-	CONSTRAINT "device_profile_printers_target_ck" CHECK(("device_profile_printers"."printer_id" is null) <> ("device_profile_printers"."page_printer_id" is null) and ("device_profile_printers"."page_printer_id" is null or "device_profile_printers"."role" = 'invoice'))
+	CONSTRAINT "device_profile_printers_role_ck" CHECK("device_profile_printers"."role" in ('receipt', 'payment_slip', 'cash_drawer', 'invoice'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `device_profile_printers_profile_role_default_key` ON `device_profile_printers` (`device_profile_id`,`role`) WHERE "device_profile_printers"."is_default" = 1;--> statement-breakpoint
-CREATE UNIQUE INDEX `device_profile_printers_profile_role_page_printer_key` ON `device_profile_printers` (`device_profile_id`,`role`,`page_printer_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `device_profile_printers_profile_role_printer_key` ON `device_profile_printers` (`device_profile_id`,`role`,`printer_id`);--> statement-breakpoint
 CREATE TABLE `custom_themes` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -3103,6 +3097,30 @@ BEGIN
     AND exists (
       SELECT 1 FROM devices d WHERE d.device_profile_id = new.id AND d.active <> 0
     );
+END;
+--> statement-breakpoint
+CREATE TRIGGER devices_receipt_printer_kind_insert
+BEFORE INSERT ON devices
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a receipt, slip or drawer printer must be a receipt printer')
+  WHERE EXISTS (
+    SELECT 1 FROM printers
+    WHERE id IN (new.receipt_printer_id, new.payment_slip_printer_id, new.cash_drawer_printer_id)
+      AND kind <> 'receipt'
+  );
+END;
+--> statement-breakpoint
+CREATE TRIGGER devices_receipt_printer_kind_update
+BEFORE UPDATE OF receipt_printer_id, payment_slip_printer_id, cash_drawer_printer_id ON devices
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'a receipt, slip or drawer printer must be a receipt printer')
+  WHERE EXISTS (
+    SELECT 1 FROM printers
+    WHERE id IN (new.receipt_printer_id, new.payment_slip_printer_id, new.cash_drawer_printer_id)
+      AND kind <> 'receipt'
+  );
 END;
 --> statement-breakpoint
 CREATE TRIGGER tender_refunds_guard_update

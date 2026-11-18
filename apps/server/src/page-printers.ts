@@ -154,7 +154,7 @@ export async function readPagePrinterDeleteImpact(
   const choosing = await tx
     .select({ id: devices.id, name: devices.label })
     .from(devices)
-    .where(eq(devices.invoicePagePrinterId, id));
+    .where(eq(devices.invoicePrinterId, id));
   const profiles = await tx
     .select({
       id: deviceProfiles.id,
@@ -163,7 +163,7 @@ export async function readPagePrinterDeleteImpact(
     })
     .from(deviceProfilePrinters)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
-    .where(eq(deviceProfilePrinters.pagePrinterId, id));
+    .where(and(eq(deviceProfilePrinters.printerId, id), eq(deviceProfilePrinters.role, "invoice")));
   const removes = [
     named("device_invoice", choosing),
     named("profile_invoice", profiles),

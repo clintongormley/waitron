@@ -641,13 +641,6 @@ Hardware and inbox checks to complete in the owner session.
   languages match by exact code, so a `ca-ES-valencia` content language does not offer `ca-ES`
   (`offeredReceiptLanguages`, `apps/server/src/venue-locale.ts`).
 
-- **No database check that a device sets at most one of its two invoice printer columns
-  (2026-10-15, A661).** `devices.invoice_printer_id` names a receipt printer and
-  `devices.invoice_page_printer_id` an A4 printer. A CHECK would make drizzle-kit rebuild `devices`,
-  and that rebuild deletes the rows of every table cascading from it. Every write that stores an
-  invoice choice takes its columns from `choiceColumns` (`packages/layouts/src/device-equipment.ts`),
-  which sets one and clears the other.
-
 ## Shared office-printer queues
 
 Receipt and office printers share the `printers` table ([A1308 dv4](../superpowers/plans/2026-11-08-a1308-dv4-a4-printers.md)).

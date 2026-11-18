@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "658a844d-190f-4752-9dab-bcc50bc65946",
+  "id": "d226e335-7cac-4d71-96d3-5991c5ea1d8a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4932,13 +4932,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "invoice_page_printer_id": {
-          "name": "invoice_page_printer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "label": {
           "name": "label",
           "type": "text",
@@ -5089,19 +5082,6 @@
           "tableTo": "printers",
           "columnsFrom": [
             "invoice_printer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "devices_invoice_page_printer_id_printers_id_fk": {
-          "name": "devices_invoice_page_printer_id_printers_id_fk",
-          "tableFrom": "devices",
-          "tableTo": "printers",
-          "columnsFrom": [
-            "invoice_page_printer_id"
           ],
           "columnsTo": [
             "id"
@@ -7681,14 +7661,7 @@
           "name": "printer_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "page_printer_id": {
-          "name": "page_printer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "role": {
@@ -7723,15 +7696,6 @@
           ],
           "isUnique": true,
           "where": "\"device_profile_printers\".\"is_default\" = 1"
-        },
-        "device_profile_printers_profile_role_page_printer_key": {
-          "name": "device_profile_printers_profile_role_page_printer_key",
-          "columns": [
-            "device_profile_id",
-            "role",
-            "page_printer_id"
-          ],
-          "isUnique": true
         },
         "device_profile_printers_profile_role_printer_key": {
           "name": "device_profile_printers_profile_role_printer_key",
@@ -7769,19 +7733,6 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
-        },
-        "device_profile_printers_page_printer_id_printers_id_fk": {
-          "name": "device_profile_printers_page_printer_id_printers_id_fk",
-          "tableFrom": "device_profile_printers",
-          "tableTo": "printers",
-          "columnsFrom": [
-            "page_printer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -7790,10 +7741,6 @@
         "device_profile_printers_role_ck": {
           "name": "device_profile_printers_role_ck",
           "value": "\"device_profile_printers\".\"role\" in ('receipt', 'payment_slip', 'cash_drawer', 'invoice')"
-        },
-        "device_profile_printers_target_ck": {
-          "name": "device_profile_printers_target_ck",
-          "value": "(\"device_profile_printers\".\"printer_id\" is null) <> (\"device_profile_printers\".\"page_printer_id\" is null) and (\"device_profile_printers\".\"page_printer_id\" is null or \"device_profile_printers\".\"role\" = 'invoice')"
         }
       }
     },

@@ -386,7 +386,7 @@ async function upstairsOffice(v: Venue): Promise<string> {
     }
     await tx
       .update(devices)
-      .set({ invoicePrinterId: null, invoicePagePrinterId: upstairsId })
+      .set({ invoicePrinterId: upstairsId })
       .where(sql`true`);
     return upstairsId;
   });
@@ -571,7 +571,8 @@ type Prepared = { sql: string; params: unknown[] };
 
 function invoicePrinterRead(id: string) {
   return ({ sql, params }: Prepared) =>
-    sql.includes('"office_printers"') || (PRINTER_INFO_READ.test(sql) && params.includes(id));
+    sql.includes('from "device_profile_printers" inner join "printers"') ||
+    (PRINTER_INFO_READ.test(sql) && params.includes(id));
 }
 const RECEIPT_ORIGINAL_READ =
   /^select "print_jobs"\."sale_id", .* from "print_jobs" inner join "printers"/;
@@ -948,7 +949,7 @@ async function invoiceReceiptPrinter(): Promise<string> {
     }
     await tx
       .update(devices)
-      .set({ invoicePrinterId: printer.id, invoicePagePrinterId: null })
+      .set({ invoicePrinterId: printer.id })
       .where(sql`true`);
     return printer.id;
   });

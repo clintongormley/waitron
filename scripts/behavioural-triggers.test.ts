@@ -23,6 +23,7 @@ import {
   COVERAGE_REFUSAL,
   DAY_START_HISTORY_REFUSAL,
   DINING_FIXED_REFUSAL,
+  DEVICE_PRINTER_KIND_REFUSAL,
   FORM_FACTOR_REFUSAL,
   LOCALES_REFUSAL,
   OPEN_PARENT_REFUSAL,
@@ -114,6 +115,8 @@ const EXPECTED_TRIGGERS = [
   "bill_payments_guard_update",
   "bill_payments_no_delete",
   "device_profile_form_factor_locked",
+  "devices_receipt_printer_kind_insert",
+  "devices_receipt_printer_kind_update",
   "products_id_fixed_update",
   "products_variant_one_level_insert",
   "products_variant_parent_fixed_update",
@@ -1617,6 +1620,30 @@ describe("the main bill is gone", () => {
       .all()
       .map((row) => row.name);
     expect(naming).toEqual([]);
+  });
+});
+
+describe("devices_receipt_printer_kind", () => {
+  it("refuses an A4 printer as a receipt choice", () => {
+    connection.exec(`insert into printers
+      (id, name, kind, transport, host, port, paper_width, resolution, resource_path,
+       document_format, supported_formats, media, resolution_dpi, picks_up_receipts, picks_up_payment_slips)
+      values ('printer-a4', 'Office', 'a4', 'ipp', '10.0.0.9', 631, null, null, '/ipp/print',
+        'application/pdf', '["application/pdf"]', 'iso_a4_210x297mm', 300, 0, 0)`);
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices
+        (id, device_profile_id, label, token_hash, receipt_printer_id, enrolled_at)
+        values ('dev-a4', 'dp-used', 'Office till', 'hash', 'printer-a4', '2026-11-18')`,
+      ),
+    ).toBe(DEVICE_PRINTER_KIND_REFUSAL);
+    expect(
+      refusalFor(
+        connection,
+        `update devices set receipt_printer_id = 'printer-a4' where id = 'dev-active'`,
+      ),
+    ).toBe(DEVICE_PRINTER_KIND_REFUSAL);
   });
 });
 

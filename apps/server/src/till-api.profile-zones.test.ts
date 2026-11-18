@@ -1875,12 +1875,12 @@ describe("a Restaurant profile in its own zones", () => {
     await withTransaction(suite.db, async (tx) => {
       await listInvoicePrinter(tx, {
         profileId: restaurantProfile,
-        pagePrinterId: ids.restaurant,
+        printerId: ids.restaurant,
         isDefault: true,
       });
       await listInvoicePrinter(tx, {
         profileId: deliProfile,
-        pagePrinterId: ids.deli,
+        printerId: ids.deli,
         isDefault: true,
       });
     });
@@ -1897,7 +1897,7 @@ describe("a Restaurant profile in its own zones", () => {
     } finally {
       await suite.db
         .delete(deviceProfilePrinters)
-        .where(inArray(deviceProfilePrinters.pagePrinterId, [ids.restaurant, ids.deli]));
+        .where(inArray(deviceProfilePrinters.printerId, [ids.restaurant, ids.deli]));
       await suite.db.delete(printers).where(inArray(printers.id, [ids.restaurant, ids.deli]));
     }
   });

@@ -849,7 +849,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
             paymentSlipPrinterId: devices.paymentSlipPrinterId,
             cashDrawerPrinterId: devices.cashDrawerPrinterId,
             invoicePrinterId: devices.invoicePrinterId,
-            invoicePagePrinterId: devices.invoicePagePrinterId,
             cardReaderId: devices.cardReaderId,
           })
           .from(devices)
