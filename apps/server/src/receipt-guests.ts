@@ -49,7 +49,7 @@ export async function recordReceiptGuests(
 /** The default as the row can hold it: a party's count above 999, which the parties table allows, stores no line. */
 async function storableDefault(tx: Transaction, workingOrderId: string): Promise<number | null> {
   const party = await readBillParty(tx, workingOrderId);
-  return party === undefined ? null : defaultGuestCount(party.guestCount, party.billCount);
+  return party === undefined ? null : defaultGuestCount(party);
 }
 
 /** What a paper receipt of the sale prints: a simplified sale's stored row when it has one, else {@link readReceiptGuests}. */
@@ -111,13 +111,12 @@ async function readBillParty(
   return countedParty(tx, row);
 }
 
-/** A party's count and how many bills its family holds that are not abandoned, counted up to 2. */
+/** A party's count and how many bills its family holds that are not abandoned. `billCount` stops at 2: enough to tell one bill from several, never a total. */
 interface CountedParty {
   guestCount: number;
   billCount: number;
 }
 
-/** `undefined` when there is no party, it has no count, or it was merged into another. */
 async function countedParty(
   tx: Transaction,
   row: { partyId: string; guestCount: number | null; mergedInto: string | null } | undefined,

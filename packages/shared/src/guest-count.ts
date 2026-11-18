@@ -6,7 +6,12 @@ export function isValidGuestCount(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= MAX_GUEST_COUNT;
 }
 
-/** The count a receipt prints when nobody chose one: the party's own, only while it has exactly one bill. */
-export function defaultGuestCount(guestCount: number | null, billCount: number): number | null {
-  return billCount === 1 && isValidGuestCount(guestCount) ? guestCount : null;
+export interface PartyGuestCount {
+  guestCount: number | null;
+  billCount: number;
+}
+
+/** A party's default guest count: its own count, only while it has exactly one bill and the count is valid. */
+export function defaultGuestCount(party: PartyGuestCount): number | null {
+  return party.billCount === 1 && isValidGuestCount(party.guestCount) ? party.guestCount : null;
 }

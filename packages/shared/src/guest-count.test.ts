@@ -30,22 +30,22 @@ describe("isValidGuestCount", () => {
 
 describe("defaultGuestCount", () => {
   it("is the party's count when the party has exactly one bill", () => {
-    expect(defaultGuestCount(4, 1)).toBe(4);
-    expect(defaultGuestCount(MAX_GUEST_COUNT, 1)).toBe(MAX_GUEST_COUNT);
+    expect(defaultGuestCount({ guestCount: 4, billCount: 1 })).toBe(4);
+    expect(defaultGuestCount({ guestCount: MAX_GUEST_COUNT, billCount: 1 })).toBe(MAX_GUEST_COUNT);
   });
 
   it("is null when the party has no bill or more than one", () => {
-    expect(defaultGuestCount(4, 0)).toBeNull();
-    expect(defaultGuestCount(4, 2)).toBeNull();
+    expect(defaultGuestCount({ guestCount: 4, billCount: 0 })).toBeNull();
+    expect(defaultGuestCount({ guestCount: 4, billCount: 2 })).toBeNull();
   });
 
   it("is null when the party has no count", () => {
-    expect(defaultGuestCount(null, 1)).toBeNull();
+    expect(defaultGuestCount({ guestCount: null, billCount: 1 })).toBeNull();
   });
 
-  it("is null when the count is not one a receipt can print", () => {
-    expect(defaultGuestCount(MAX_GUEST_COUNT + 1, 1)).toBeNull();
-    expect(defaultGuestCount(2.5, 1)).toBeNull();
-    expect(defaultGuestCount(0, 1)).toBeNull();
+  it("is null when the count is not a valid guest count", () => {
+    expect(defaultGuestCount({ guestCount: MAX_GUEST_COUNT + 1, billCount: 1 })).toBeNull();
+    expect(defaultGuestCount({ guestCount: 2.5, billCount: 1 })).toBeNull();
+    expect(defaultGuestCount({ guestCount: 0, billCount: 1 })).toBeNull();
   });
 });

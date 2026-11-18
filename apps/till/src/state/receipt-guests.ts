@@ -1,7 +1,7 @@
 import { defaultGuestCount } from "@waitron/shared";
 import type { TableParty } from "../api/client.js";
 
-/** What the receipt prints when no count is chosen. */
+/** The guests the payment screen fills in when nobody has chosen a count. */
 export function defaultReceiptGuestCount(party: TableParty | null | undefined): number | null {
-  return party == null ? null : defaultGuestCount(party.guestCount, party.billCount);
+  return party == null ? null : defaultGuestCount(party);
 }
