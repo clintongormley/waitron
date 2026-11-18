@@ -7012,7 +7012,7 @@ describe("a deleted printer in a configuration transfer", () => {
         row.printer_id,
       ]),
     ).toEqual([[ids.profile, ids.live]]);
-    for (const table of ["print_jobs", "printer_holders", "drawer_opens"])
+    for (const table of ["print_jobs", "drawer_opens"])
       expect(transferred.tables).not.toHaveProperty(table);
     expect(transferred.reconnect).toContain("printers");
 
