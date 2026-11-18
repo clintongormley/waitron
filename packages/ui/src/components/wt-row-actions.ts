@@ -110,15 +110,24 @@ export class WtRowActions extends LitElement {
   readonly #resize = new ResizeObserver(() => this.positionPopup());
 
   override disconnectedCallback(): void {
-    this.expanded = false;
+    this.#setExpanded(false);
     this.removeAttribute("data-fallback-popover-open");
     this.#resize.disconnect();
     window.removeEventListener("resize", this.onWindowResize);
     super.disconnectedCallback();
   }
 
-  private onToggle(): void {
-    this.expanded = this.popup.matches(":popover-open");
+  #setExpanded(open: boolean): void {
+    if (this.expanded === open) return;
+    this.expanded = open;
+    this.dispatchEvent(
+      new CustomEvent("wt-row-actions-toggle", { bubbles: true, composed: true, detail: { open } }),
+    );
+  }
+
+  private onToggle(event: Event): void {
+    event.stopPropagation();
+    this.#setExpanded(this.popup.matches(":popover-open"));
     this.toggleAttribute(
       "data-fallback-popover-open",
       this.popup.classList.contains(":popover-open"),
@@ -148,6 +157,8 @@ export class WtRowActions extends LitElement {
     if (this.directDelete || popup === null || !this.isConnected || popup.matches(":popover-open"))
       return;
     popup.showPopover();
+    // A sibling can render before the browser's queued toggle event reaches this menu.
+    this.#setExpanded(popup.matches(":popover-open"));
     this.positionPopup();
     this.#resize.observe(popup);
     window.addEventListener("resize", this.onWindowResize);

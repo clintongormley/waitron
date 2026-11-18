@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -707,6 +707,13 @@ describe("where the shell draws the notice", () => {
         expect(hit).not.toBeNull();
         expect(hit!.closest(".toast-stack")).toBeNull();
       }
+
+      const menu = el.shadowRoot!.querySelector("[data-test=account-menu]")!;
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      await expect.poll(() => alertToast(el).shadowRoot!.querySelector(".toast")).toBeNull();
+      expect(alertToast(el)).toMatchObject({ open: true, held: true });
+      const stack = toast(el).parentElement!.getBoundingClientRect();
+      expect(boxOf(toast(el)).top).toBeCloseTo(stack.top);
     },
   );
 });

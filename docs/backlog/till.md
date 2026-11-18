@@ -362,14 +362,6 @@ Open:
   `apps/till/src/screens/till-table-order-screen.ts`) for a floating language button the till
   no longer has — the language button now sits in the tab shell's top bar (A187). Removing the
   space changes the screen's layout, so it is its own change.
-- On the dashboard, the account menu (which since A582's slice 2b also holds the signed-in
-  language choices) is a native popover in the top layer (`wt-row-actions`), so it paints over the alert pop-up (in `.toast-stack` in
-  `apps/dashboard/src/dashboard-app.ts`, whose `z-index: 40` the top layer ignores): where the two overlap, an alert arriving while the menu is open is hidden under it,
-  and its countdown keeps running, since `wt-toast` (`packages/ui/src/components/wt-toast.ts`)
-  holds it, restarting it in full afterwards, only while the pointer or keyboard focus is on the pop-up, or while a window it is not
-  inside is open (the account menu is a popover, not such a window). Measured in A582 slice
-  2b's review: with the account menu open, the menu covered the pop-up at 400 and 1280 px wide.
-  Decide whether an arriving alert should close the menu.
 
 ## Task 17 (#991, a bill left unpaid)
 

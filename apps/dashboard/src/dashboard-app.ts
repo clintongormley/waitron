@@ -816,7 +816,7 @@ export class DashboardApp extends LitElement {
       .toast-stack > * {
         pointer-events: auto;
       }
-      .toast-stack > wt-toast[open] ~ wt-toast[open] {
+      .toast-stack > wt-toast[open]:not([held]) ~ wt-toast[open] {
         margin-block-start: var(--wt-space-2);
       }
 
@@ -1068,6 +1068,7 @@ export class DashboardApp extends LitElement {
   @state() private alertBusyKey: string | null = null;
   @state() private saveRefusal: { key: StringKey; name: string } | null = null;
   @state() private alertToast: { alerts: AlertView[]; tone: "info" | "error" } | null = null;
+  @state() private accountMenuOpen = false;
   readonly #alertArrivals = new AlertArrivals();
   /** Bumped whenever the alerts state is cleared, which also happens without a new session (a
    * re-check that finds the person is now staff), so a Mark handled started before it is ignored. */
@@ -2340,6 +2341,7 @@ export class DashboardApp extends LitElement {
         <wt-toast
           data-test="alert-toast"
           .open=${this.alertToast !== null}
+          .held=${this.accountMenuOpen}
           .message=${
             this.alertToast === null
               ? ""
@@ -2596,6 +2598,10 @@ export class DashboardApp extends LitElement {
                   .iconSize=${"lg"}
                   label=${t("nav.account_menu")}
                   data-test="account-menu"
+                  @wt-row-actions-toggle=${(event: CustomEvent<{ open: boolean }>) => {
+                    if (event.target === event.currentTarget)
+                      this.accountMenuOpen = event.detail.open;
+                  }}
                 >
                   <wt-menu-row
                     data-test="profile-row"
