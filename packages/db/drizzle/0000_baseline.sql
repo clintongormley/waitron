@@ -1161,12 +1161,21 @@ CREATE TABLE `device_profiles` (
 	`capabilities` text DEFAULT '[]' NOT NULL,
 	`inactivity_timeout_seconds` integer,
 	`starting_screen` text,
+	`order_department_id` text,
+	`order_starting_zone_id` text,
+	`order_zone_ids` text,
 	`card_readers` text DEFAULT '{}' NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	`retired_at` text,
+	FOREIGN KEY (`order_department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`order_starting_zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "device_profiles_form_factor_ck" CHECK("device_profiles"."form_factor" in ('till', 'phone-portrait', 'tablet-landscape', 'kds')),
-	CONSTRAINT "device_profiles_card_readers_ck" CHECK(json_valid("device_profiles"."card_readers") and json_type("device_profiles"."card_readers") = 'object')
+	CONSTRAINT "device_profiles_card_readers_ck" CHECK(json_valid("device_profiles"."card_readers") and json_type("device_profiles"."card_readers") = 'object'),
+	CONSTRAINT "device_profiles_kds_timeout_ck" CHECK("device_profiles"."form_factor" <> 'kds' or "device_profiles"."inactivity_timeout_seconds" is null),
+	CONSTRAINT "device_profiles_order_scope_ck" CHECK(("device_profiles"."order_department_id" is null) = ("device_profiles"."order_starting_zone_id" is null)
+          and ("device_profiles"."order_department_id" is not null or "device_profiles"."order_zone_ids" is null)),
+	CONSTRAINT "device_profiles_order_zone_ids_ck" CHECK(json_valid("device_profiles"."order_zone_ids") and json_type("device_profiles"."order_zone_ids") = 'array')
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `device_profiles_live_name_key` ON `device_profiles` (`name`) WHERE "device_profiles"."retired_at" is null;--> statement-breakpoint
@@ -2300,24 +2309,6 @@ CREATE TABLE `departments` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `departments_name_key` ON `departments` (`name`) WHERE "departments"."active" = 1;--> statement-breakpoint
 CREATE UNIQUE INDEX `departments_one_default_key` ON `departments` (`is_default`) WHERE "departments"."is_default";--> statement-breakpoint
-CREATE TABLE `device_profile_service_access` (
-	`device_profile_id` text PRIMARY KEY NOT NULL,
-	`department_id` text NOT NULL,
-	`every_zone` integer DEFAULT false NOT NULL,
-	`starting_zone_id` text NOT NULL,
-	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`starting_zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE TABLE `device_profile_zones` (
-	`device_profile_id` text NOT NULL,
-	`zone_id` text NOT NULL,
-	PRIMARY KEY(`device_profile_id`, `zone_id`),
-	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profile_service_access`(`device_profile_id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `sale_receipt_headers` (
 	`sale_id` text PRIMARY KEY NOT NULL,
 	`department_id` text,

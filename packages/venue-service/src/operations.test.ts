@@ -55,11 +55,13 @@ import type { Database, Transaction } from "@waitron/db";
 import type { ZoneMenu, ZoneMenuState } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  seedDeviceProfiles,
   seedPerson,
   seedNode,
   seedVenue,
   seedZone as seedZoneRow,
 } from "@waitron/db/testing/seed.js";
+import { setProfileServiceScope } from "./profile-access.js";
 import { AppError } from "@waitron/shared";
 
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
@@ -142,6 +144,31 @@ it("lists a zone's staff menus in the period's order, active ones only", async (
 });
 
 describe("order flow from sale policies", () => {
+  it("keeps a zone in its department while it is a profile's only allowed zone", async () => {
+    await seedFixtureVenue("Profile zone move");
+    const { source, target, zone, profileId } = await scoped(async (tx) => {
+      const source = await createDepartment(tx, { name: "Source" });
+      const target = await createDepartment(tx, { name: "Target" });
+      const zone = await createServiceZone(tx, { name: "Terrace", departmentId: source.id });
+      const [profile] = await seedDeviceProfiles(tx, { name: "Terrace till", formFactor: "till" });
+      await setProfileServiceScope(tx, profile!.id, {
+        departmentId: source.id,
+        startingZoneId: zone.id,
+        allowedZoneIds: [zone.id],
+      });
+      return { source, target, zone, profileId: profile!.id };
+    });
+    await expect(
+      scoped((tx) => configureZone(tx, { zoneId: zone.id, departmentId: target.id })),
+    ).rejects.toMatchObject({
+      code: "zone.profile_in_use",
+      params: { zoneId: zone.id, profileId },
+    });
+    expect(await scoped((tx) => resolveZoneContext(tx, zone.id))).toMatchObject({
+      departmentId: source.id,
+    });
+  });
+
   it("moves a zone's department without resetting overrides, and clears only an explicit order start", async () => {
     await seedFixtureVenue("Move zone row rules");
     await scoped(async (tx) => {

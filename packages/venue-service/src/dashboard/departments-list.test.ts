@@ -8,11 +8,15 @@ import {
   expectRowMenusOnScreen,
 } from "@waitron/ui/src/test-helpers.js";
 import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
-import type { VenueServiceView } from "./client.js";
+import { VenueServiceApi, type VenueServiceView } from "./client.js";
 
 import "./departments-list.js";
 
-type List = HTMLElement & { model: VenueServiceView; updateComplete: Promise<unknown> };
+type List = HTMLElement & {
+  api: VenueServiceApi;
+  model: VenueServiceView;
+  updateComplete: Promise<unknown>;
+};
 const model: VenueServiceView = {
   departments: [
     {
@@ -143,6 +147,23 @@ async function action(el: List, key: string) {
 }
 
 describe("department list", () => {
+  it("explains how to move a zone that a device profile still needs", async () => {
+    const el = await setup();
+    const request = vi.fn().mockRejectedValue({ code: "zone.profile_in_use" });
+    el.api = new VenueServiceApi(request);
+    find(el, "[data-test=zone-grip-z1]")!.focus();
+    await userEvent.keyboard("{Enter}{ArrowDown}{Enter}");
+
+    await expect
+      .poll(() => find(el, "[role=alert]")?.textContent)
+      .toBe(
+        "Add another allowed zone or change the device profile’s department, then move this zone.",
+      );
+    expect(request).toHaveBeenCalledWith("/management-api/venue-service/zones/z1", "PUT", {
+      departmentId: "d2",
+    });
+  });
+
   it("shows service columns and only active department and zone rows", async () => {
     const el = await setup();
     const list = table(el);

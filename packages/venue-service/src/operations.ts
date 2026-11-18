@@ -62,7 +62,7 @@ import type {
 import { AppError } from "@waitron/shared";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
-import { readProfileZones } from "./profile-access.js";
+import { profilesBlockedByZoneChange, readProfileZones } from "./profile-access.js";
 import "./errors.js";
 import { readDefaultMenuId } from "@waitron/menu";
 
@@ -367,7 +367,7 @@ export async function configureZone(
   },
 ): Promise<void> {
   const [zone] = await tx
-    .select({ id: floorZones.id, active: floorZones.active })
+    .select({ id: floorZones.id, departmentId: floorZones.departmentId })
     .from(floorZones)
     .where(and(eq(floorZones.id, input.zoneId), eq(floorZones.active, true)));
   if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId: input.zoneId });
@@ -377,6 +377,13 @@ export async function configureZone(
     .where(and(eq(departments.id, input.departmentId), eq(departments.active, true)));
   if (department === undefined) {
     throw new AppError("department.not_found", { departmentId: input.departmentId });
+  }
+  if (zone.departmentId !== input.departmentId) {
+    const [blocked] = await profilesBlockedByZoneChange(tx, [zone.id], {
+      movingToDepartmentId: input.departmentId,
+    });
+    if (blocked !== undefined)
+      throw new AppError("zone.profile_in_use", { zoneId: zone.id, profileId: blocked.id });
   }
   await tx
     .update(floorZones)

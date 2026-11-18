@@ -28,7 +28,6 @@ import {
   createDepartment,
   createServiceZone,
   configureZone,
-  deviceProfileServiceAccess,
   replaceMenuWeek,
   saveMenuPeriod,
   setProfileServiceAccess,
@@ -194,7 +193,9 @@ describe("the till's keep-open read", () => {
 
 describe("the till keeps a zone open today", () => {
   it("lists a floor zone of an inactive department with a null closing time", async () => {
-    await suite.db.delete(deviceProfileServiceAccess);
+    await suite.db
+      .update(deviceProfiles)
+      .set({ orderDepartmentId: null, orderStartingZoneId: null, orderZoneIds: null });
     const [unavailable] = await suite.db
       .insert(departments)
       .values({ name: "Unavailable", tradingName: "Unavailable", active: false })

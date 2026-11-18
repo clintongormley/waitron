@@ -68,7 +68,7 @@ export {
 } from "./schema/columns.js";
 export * from "./schema/taxpayer.js";
 export { readTaxpayer } from "./read-taxpayer.js";
-export { withoutId, removeIdFromJson } from "./json-id-lists.js";
+export { withoutId, removeIdFromJson, removeIdsFromJson } from "./json-id-lists.js";
 export type { Taxpayer } from "./read-taxpayer.js";
 export {
   readVenue,
@@ -409,8 +409,6 @@ export {
   deviceProfileKitchenScreens,
   deviceProfileKitchenScreenStations,
   deviceProfileKitchenScreenZones,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
   deviceZoneSelections,
   deviceZoneSelectionZones,
   kitchenNoticeKind,

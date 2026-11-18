@@ -26,12 +26,26 @@ export async function removeIdFromJson(
   column: AnySQLiteColumn,
   id: string,
 ): Promise<number> {
+  return removeIdsFromJson(tx, column, [id]);
+}
+
+export async function removeIdsFromJson(
+  tx: Transaction,
+  column: AnySQLiteColumn,
+  ids: readonly string[],
+): Promise<number> {
+  if (ids.length === 0) return 0;
   const rows = await tx.execute<{ source_rowid: number; source_json: string }>(sql`
     select rowid as source_rowid, ${column} as source_json from ${column.table}
-    where exists (select 1 from json_tree(${column}) where type = 'text' and atom = ${id})
+    where exists (
+      select 1 from json_tree(${column})
+      where type = 'text' and atom in (select value from json_each(${JSON.stringify(ids)}))
+    )
   `);
   for (const row of rows.rows) {
-    const value = JSON.stringify(withoutId(JSON.parse(row.source_json), id));
+    const value = JSON.stringify(
+      ids.reduce((doc, id) => withoutId(doc, id), JSON.parse(row.source_json) as unknown),
+    );
     await tx.execute(
       sql`update ${column.table} set ${sql.identifier(column.name)} = ${value} where rowid = ${row.source_rowid}`,
     );

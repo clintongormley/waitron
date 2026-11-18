@@ -4,8 +4,6 @@ import {
   CORE_MIGRATIONS,
   departments,
   deviceProfiles,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
   floorZones,
   withTransaction,
 } from "@waitron/db";
@@ -325,10 +323,10 @@ describe("a profile's service access", () => {
     });
     expect(
       await db
-        .select()
-        .from(deviceProfileZones)
-        .where(eq(deviceProfileZones.deviceProfileId, venue.profile)),
-    ).toEqual([]);
+        .select({ orderZoneIds: deviceProfiles.orderZoneIds })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, venue.profile)),
+    ).toEqual([{ orderZoneIds: null }]);
   });
 
   it("expands every zone to the department's active zones when read", async () => {
@@ -417,8 +415,9 @@ describe("a profile's service access", () => {
     const venue = await seedVenueWithZones();
     await save(venue, restaurantScope(venue, { allowedZoneIds: [venue.dining] }));
     await db
-      .delete(deviceProfileZones)
-      .where(eq(deviceProfileZones.deviceProfileId, venue.profile));
+      .update(deviceProfiles)
+      .set({ orderZoneIds: [] })
+      .where(eq(deviceProfiles.id, venue.profile));
     await expect(read(venue)).resolves.toMatchObject({ allowedZoneIds: [], startingZoneId: null });
   });
 
@@ -480,19 +479,6 @@ describe("a profile's service access", () => {
       startingZoneId: null,
     });
   });
-
-  it("is deleted with its profile", async () => {
-    const venue = await seedVenueWithZones();
-    await save(venue, restaurantScope(venue, { allowedZoneIds: [venue.dining] }));
-    await db.delete(deviceProfiles).where(eq(deviceProfiles.id, venue.profile));
-    expect(await db.select().from(deviceProfileServiceAccess)).toEqual([]);
-    expect(
-      await db
-        .select()
-        .from(deviceProfileZones)
-        .where(eq(deviceProfileZones.deviceProfileId, venue.profile)),
-    ).toEqual([]);
-  });
 });
 
 describe("profile departments", () => {
@@ -500,20 +486,22 @@ describe("profile departments", () => {
     const venue = await seedVenueWithZones();
     await save(venue, restaurantScope(venue));
     const deliProfile = await seedProfile();
-    await db.insert(deviceProfileServiceAccess).values({
-      deviceProfileId: deliProfile,
-      departmentId: venue.deli,
-      everyZone: true,
-      startingZoneId: venue.counter,
-    });
+    await scoped((tx) =>
+      setProfileServiceScope(tx, deliProfile, {
+        departmentId: venue.deli,
+        allowedZoneIds: null,
+        startingZoneId: venue.counter,
+      }),
+    );
     await db.update(departments).set({ active: false }).where(eq(departments.id, venue.deli));
     const unasked = await seedProfile();
-    await db.insert(deviceProfileServiceAccess).values({
-      deviceProfileId: unasked,
-      departmentId: venue.restaurant,
-      everyZone: true,
-      startingZoneId: venue.dining,
-    });
+    await scoped((tx) =>
+      setProfileServiceScope(tx, unasked, {
+        departmentId: venue.restaurant,
+        allowedZoneIds: null,
+        startingZoneId: venue.dining,
+      }),
+    );
     const noDepartment = await seedProfile();
     const rows = await scoped((tx) =>
       readProfileDepartments(tx, [venue.profile, deliProfile, noDepartment, randomUUID()]),
@@ -842,6 +830,9 @@ describe("A773 station policy: readProfilesZones", () => {
     await access(everyZone, restaurantScope(venue));
     const listed = await seedProfile();
     await access(listed, restaurantScope(venue, { allowedZoneIds: [venue.dining] }));
+    const empty = await seedProfile();
+    await access(empty, restaurantScope(venue));
+    await db.update(deviceProfiles).set({ orderZoneIds: [] }).where(eq(deviceProfiles.id, empty));
     const deli = await seedProfile();
     await access(deli, {
       departmentId: venue.deli,
@@ -853,7 +844,7 @@ describe("A773 station policy: readProfilesZones", () => {
       await tx.execute(sql`update departments set active = false where id = ${venue.deli}`);
     });
 
-    const profiles = [display, noDepartment, everyZone, listed, deli];
+    const profiles = [display, noDepartment, everyZone, listed, deli, empty];
     const unknown = randomUUID();
     const answers = await scoped((tx) => readProfilesZones(tx, [...profiles, unknown]));
     expect([...answers.keys()].sort()).toEqual([...profiles].sort());
@@ -865,6 +856,7 @@ describe("A773 station policy: readProfilesZones", () => {
       null,
       null,
       [venue.terrace],
+      [],
       [],
       [],
     ]);

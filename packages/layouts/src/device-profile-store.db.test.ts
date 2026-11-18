@@ -1145,7 +1145,7 @@ describe("a profile's starting screen and shared-display actions", () => {
 
 describe("what can refuse a write to device_profiles", () => {
   // Migrates core's set only: a key from another set (payments' card-reader keys) is not seen.
-  it("has no key out of device_profiles and ONE key into it that can refuse", async () => {
+  it("has two ordering keys out of device_profiles and one key into it that can refuse", async () => {
     const { rows } = await suite.db.execute<{
       child: string;
       column: string;
@@ -1188,10 +1188,16 @@ describe("what can refuse a write to device_profiles", () => {
         on_delete: "CASCADE",
       },
       {
-        child: "device_profile_service_access",
-        column: "device_profile_id",
-        parent: "device_profiles",
-        on_delete: "CASCADE",
+        child: "device_profiles",
+        column: "order_department_id",
+        parent: "departments",
+        on_delete: "NO ACTION",
+      },
+      {
+        child: "device_profiles",
+        column: "order_starting_zone_id",
+        parent: "floor_zones",
+        on_delete: "NO ACTION",
       },
       {
         child: "device_zone_selections",

@@ -15,8 +15,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "menu_periods",
       "routing_cell_periods",
       "routing_cells",
-      "device_profile_zones",
-      "device_profile_service_access",
       "device_profile_kitchen_screen_stations",
       "device_profile_kitchen_screen_zones",
       "device_profile_kitchen_screens",

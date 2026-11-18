@@ -284,6 +284,7 @@ export class DepartmentDialogs extends LitElement {
   }
   private refusal(error: unknown): string {
     const code = (error as { code?: string } | undefined)?.code;
+    if (this.moving && code === "zone.profile_in_use") return t("venue.move_zone_profile_in_use");
     if (code === "department.last_active") return t("venue.department_last_active");
     const conflict = clockChangeConflictText(refusalOf(error));
     if (conflict) return conflict;

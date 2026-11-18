@@ -1807,6 +1807,17 @@ describe("human transfer identities", () => {
       await post(f.desk.cookie, resolutionPath(id, "accept"), { revision: 0, zoneId: f.bz }),
     ).toMatchObject({ status: 200 });
     await withTransaction(suite.db, async (tx) => {
+      const fallback = await createServiceZone(tx, {
+        name: "Receiving fallback",
+        departmentId: f.b,
+      });
+      for (const profileId of [f.deskProfile, f.otherProfile]) {
+        await setProfileServiceScope(tx, profileId, {
+          departmentId: f.b,
+          allowedZoneIds: [fallback.id],
+          startingZoneId: fallback.id,
+        });
+      }
       await configureZone(tx, { zoneId: f.bz, departmentId: f.a });
       await setProfileServiceScope(tx, f.sourceProfile, {
         departmentId: f.a,

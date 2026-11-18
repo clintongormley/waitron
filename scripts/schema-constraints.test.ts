@@ -85,11 +85,8 @@ const EXPECTED_FOREIGN_KEYS = [
   ["device_profile_admission_roles", ["staff_role_id"], "staff_roles"],
   ["device_profile_printers", ["device_profile_id"], "device_profiles"],
   ["device_profile_printers", ["printer_id"], "printers"],
-  ["device_profile_service_access", ["department_id"], "departments"],
-  ["device_profile_service_access", ["device_profile_id"], "device_profiles"],
-  ["device_profile_service_access", ["starting_zone_id"], "floor_zones"],
-  ["device_profile_zones", ["device_profile_id"], "device_profile_service_access"],
-  ["device_profile_zones", ["zone_id"], "floor_zones"],
+  ["device_profiles", ["order_department_id"], "departments"],
+  ["device_profiles", ["order_starting_zone_id"], "floor_zones"],
   ["device_profile_kitchen_screens", ["device_profile_id"], "device_profiles"],
   [
     "device_profile_kitchen_screen_stations",

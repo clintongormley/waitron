@@ -500,7 +500,7 @@ it.each(["Zone", "Department"] as const)(
       );
       fail = false;
       model = before;
-      live.invalidate([{ type: "device_profile_zones" }]);
+      live.invalidate([{ type: "device_profiles" }]);
       await vi.waitFor(() => expect(recovered).toHaveBeenCalledOnce());
       expect(apply).toHaveBeenLastCalledWith(before);
       expect(active).not.toHaveBeenCalled();

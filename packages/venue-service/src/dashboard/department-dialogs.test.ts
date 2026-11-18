@@ -143,6 +143,21 @@ it("creates a department with name only and emits the saved id", async () => {
   expect(saved.mock.calls[0]![0].detail).toEqual({ departmentId: "new" });
 });
 
+it("tells the manager how to move a zone still needed by a device profile", async () => {
+  const { el } = await mount(
+    { kind: "add-to-department", row: view.floorZones[0]! },
+    vi.fn().mockRejectedValue({ code: "zone.profile_in_use" }),
+  );
+  await chooseOption(field(el, "departmentId"), "d2");
+  save(el).click();
+  await expect
+    .poll(() => bottom(el))
+    .toBe(
+      "Add another allowed zone or change the device profile’s department, then move this zone.",
+    );
+  expect(save(el).disabled).toBe(false);
+});
+
 it("a move cannot save a destination removed by a live read", async () => {
   const { el, request } = await mount({ kind: "add-to-department", row: view.floorZones[0]! });
   const destination =

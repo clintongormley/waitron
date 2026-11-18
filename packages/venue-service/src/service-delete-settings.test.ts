@@ -11,8 +11,7 @@ import {
   deviceProfileKitchenScreens,
   deviceProfileKitchenScreenStations,
   deviceProfileKitchenScreenZones,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
+  deviceProfiles,
   devices,
   deviceZoneSelections,
   deviceZoneSelectionZones,
@@ -97,20 +96,20 @@ async function fixture(tx: Transaction, suffix = "") {
     string,
     string,
   ];
-  await tx.insert(deviceProfileServiceAccess).values(
-    ps.map((row) => ({
-      deviceProfileId: row.id,
-      departmentId: department,
-      everyZone: row.id === every,
-      startingZoneId: gone,
-    })),
-  );
-  await tx.insert(deviceProfileZones).values([
-    { deviceProfileId: explicit, zoneId: gone },
-    { deviceProfileId: explicit, zoneId: allowed },
-    { deviceProfileId: retired, zoneId: gone },
-    { deviceProfileId: kitchen, zoneId: gone },
-  ]);
+  for (const [id, orderZoneIds] of [
+    [explicit, [gone, allowed]],
+    [every, null],
+    [retired, [gone]],
+    [kitchen, [gone]],
+  ] as const)
+    await tx
+      .update(deviceProfiles)
+      .set({
+        orderDepartmentId: department,
+        orderStartingZoneId: gone,
+        orderZoneIds: orderZoneIds === null ? null : [...orderZoneIds],
+      })
+      .where(eq(deviceProfiles.id, id));
   return {
     cfg,
     department,
@@ -173,10 +172,17 @@ it("delete starting zone advances only within allowed surviving zones and Every 
     expect((await readProfileServiceScopes(tx, [f.explicit]))[0]).toEqual(stored);
     expect(
       await tx
-        .select()
-        .from(deviceProfileServiceAccess)
-        .where(inArray(deviceProfileServiceAccess.deviceProfileId, [f.retired, f.kitchen])),
-    ).toEqual([]);
+        .select({
+          departmentId: deviceProfiles.orderDepartmentId,
+          start: deviceProfiles.orderStartingZoneId,
+          zones: deviceProfiles.orderZoneIds,
+        })
+        .from(deviceProfiles)
+        .where(inArray(deviceProfiles.id, [f.retired, f.kitchen])),
+    ).toEqual([
+      { departmentId: null, start: null, zones: null },
+      { departmentId: null, start: null, zones: null },
+    ]);
     expect((await resolveNewOrderZone(tx, { profileId: f.explicit })).zoneId).toBe(f.allowed);
     expect((await resolveNewOrderZone(tx, {})).zoneId).toBe(f.forbidden);
   });
@@ -226,8 +232,9 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
     const f = await fixture(tx);
     // The live service profiles would refuse department deletion; this helper runs after that check.
     await tx
-      .delete(deviceProfileServiceAccess)
-      .where(inArray(deviceProfileServiceAccess.deviceProfileId, [f.explicit, f.every]));
+      .update(deviceProfiles)
+      .set({ orderDepartmentId: null, orderStartingZoneId: null, orderZoneIds: null })
+      .where(inArray(deviceProfiles.id, [f.explicit, f.every]));
     const [menu] = await tx.insert(menus).values({ name: "Published menu" }).returning();
     const periods = await tx
       .insert(menuPeriods)
@@ -376,8 +383,9 @@ it("delete takes the department's season days and their ranges before its period
   await run(async (tx) => {
     const f = await fixture(tx);
     await tx
-      .delete(deviceProfileServiceAccess)
-      .where(inArray(deviceProfileServiceAccess.deviceProfileId, [f.explicit, f.every]));
+      .update(deviceProfiles)
+      .set({ orderDepartmentId: null, orderStartingZoneId: null, orderZoneIds: null })
+      .where(inArray(deviceProfiles.id, [f.explicit, f.every]));
     const [menu] = await tx.insert(menus).values({ name: "Published menu" }).returning();
     const [lunch, other] = await tx
       .insert(menuPeriods)
@@ -578,7 +586,10 @@ it("delete counter default chooses by display order then name then id within its
 it("delete without a surviving configured zone leaves default_missing and never widens an empty profile", async () => {
   const f = await run(async (tx) => {
     const f = await fixture(tx);
-    await tx.delete(deviceProfileZones).where(eq(deviceProfileZones.deviceProfileId, f.explicit));
+    await tx
+      .update(deviceProfiles)
+      .set({ orderZoneIds: [] })
+      .where(eq(deviceProfiles.id, f.explicit));
     expect(
       (
         await readServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed, f.elsewhere], null)
@@ -613,7 +624,10 @@ it("delete keeps missing-parent and KDS service access unrestricted while a reta
   await run(async (tx) => {
     const f = await fixture(tx);
     const [unbound] = await seedDeviceProfiles(tx, { name: "Unbound", formFactor: "till" });
-    await tx.delete(deviceProfileZones).where(eq(deviceProfileZones.deviceProfileId, f.explicit));
+    await tx
+      .update(deviceProfiles)
+      .set({ orderZoneIds: [] })
+      .where(eq(deviceProfiles.id, f.explicit));
     await clearServiceDeleteSettings(tx, [f.gone], null);
     await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.gone));
     expect(await readProfileZones(tx, f.explicit)).toEqual({
@@ -623,14 +637,19 @@ it("delete keeps missing-parent and KDS service access unrestricted while a reta
     });
     expect(
       await tx
-        .select()
-        .from(deviceProfileServiceAccess)
-        .where(eq(deviceProfileServiceAccess.deviceProfileId, f.explicit)),
+        .select({
+          deviceProfileId: deviceProfiles.id,
+          departmentId: deviceProfiles.orderDepartmentId,
+          orderZoneIds: deviceProfiles.orderZoneIds,
+          startingZoneId: deviceProfiles.orderStartingZoneId,
+        })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, f.explicit)),
     ).toEqual([
       {
         deviceProfileId: f.explicit,
         departmentId: f.department,
-        everyZone: false,
+        orderZoneIds: [],
         startingZoneId: f.gone,
       },
     ]);

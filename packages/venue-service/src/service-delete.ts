@@ -3,9 +3,6 @@ import {
   floorPlanSets,
   departments,
   departmentTransferRequests,
-  deviceProfiles,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
   floorZones,
   menuPeriods,
   workingOrders,
@@ -24,6 +21,7 @@ import {
   clearServiceDeleteSettings,
   readServiceDeleteSettings,
 } from "./service-delete-settings.js";
+import { profilesBlockedByZoneChange } from "./profile-access.js";
 import "./errors.js";
 
 type Kind = "zone" | "department";
@@ -188,54 +186,24 @@ async function selection(
       });
   }
 
-  const scopes = await tx
-    .select({
-      id: deviceProfiles.id,
-      name: deviceProfiles.name,
-      retiredAt: deviceProfiles.retiredAt,
-      formFactor: deviceProfiles.formFactor,
-      departmentId: deviceProfileServiceAccess.departmentId,
-      everyZone: deviceProfileServiceAccess.everyZone,
-      startingZoneId: deviceProfileServiceAccess.startingZoneId,
-    })
-    .from(deviceProfileServiceAccess)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfileServiceAccess.deviceProfileId))
-    .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
-  const memberships = await tx.select().from(deviceProfileZones);
-  const candidates = await tx
-    .select({ id: floorZones.id, departmentId: floorZones.departmentId })
-    .from(floorZones)
-    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .where(and(eq(floorZones.active, true), eq(departments.active, true)));
-  for (const profile of ordered(scopes)) {
-    if (profile.retiredAt !== null || profile.formFactor === "kds") continue;
-    if (departmentId !== null) {
-      if (profile.departmentId === departmentId)
-        refusals.push({
-          code: "department.profile_in_use",
-          params: { departmentId, profileId: profile.id },
-          targets: [{ id: profile.id, name: profile.name }],
-        });
-      continue;
+  const blocked = await profilesBlockedByZoneChange(tx, zoneIds, {
+    deletingDepartmentId: departmentId,
+  });
+  for (const profile of ordered(blocked)) {
+    const targets = [{ id: profile.id, name: profile.name }];
+    if (profile.zoneId !== null) {
+      refusals.push({
+        code: "zone.profile_in_use",
+        params: { zoneId: profile.zoneId, profileId: profile.id },
+        targets,
+      });
+    } else if (departmentId !== null) {
+      refusals.push({
+        code: "department.profile_in_use",
+        params: { departmentId, profileId: profile.id },
+        targets,
+      });
     }
-    const affected =
-      zoneIds.includes(profile.startingZoneId) ||
-      memberships.some((row) => row.deviceProfileId === profile.id && zoneIds.includes(row.zoneId));
-    if (!affected) continue;
-    const allowed = candidates.filter(
-      (candidate) =>
-        candidate.departmentId === profile.departmentId &&
-        (profile.everyZone ||
-          memberships.some(
-            (row) => row.deviceProfileId === profile.id && row.zoneId === candidate.id,
-          )),
-    );
-    if (allowed.some((candidate) => !zoneIds.includes(candidate.id))) continue;
-    refusals.push({
-      code: "zone.profile_in_use",
-      params: { zoneId: id, profileId: profile.id },
-      targets: [{ id: profile.id, name: profile.name }],
-    });
   }
 
   const removes = [...floorImpact.removes, ...settings];

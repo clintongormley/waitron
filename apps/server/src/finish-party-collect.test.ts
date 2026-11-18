@@ -26,8 +26,7 @@ import {
 import { adjustments } from "@waitron/adjustments";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import {
-  deviceProfileServiceAccess,
-  deviceProfileZones,
+  readProfileServiceScopes,
   listDepartments,
   setProfileServiceAccess,
 } from "@waitron/venue-service";
@@ -669,25 +668,7 @@ async function withZones<T>(zones: string[] | null, fn: () => Promise<T>): Promi
   const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
   const profileId = device!.deviceProfileId;
   const [department] = await listDepartments(venue.db);
-  const [access] = await venue.db
-    .select()
-    .from(deviceProfileServiceAccess)
-    .where(eq(deviceProfileServiceAccess.deviceProfileId, profileId));
-  const prior =
-    access === undefined
-      ? { departmentId: null, allowedZoneIds: null, startingZoneId: null }
-      : {
-          departmentId: access.departmentId,
-          allowedZoneIds: access.everyZone
-            ? null
-            : (
-                await venue.db
-                  .select({ zoneId: deviceProfileZones.zoneId })
-                  .from(deviceProfileZones)
-                  .where(eq(deviceProfileZones.deviceProfileId, profileId))
-              ).map((row) => row.zoneId),
-          startingZoneId: access.startingZoneId,
-        };
+  const [prior] = await inTx(venue, (tx) => readProfileServiceScopes(tx, [profileId]));
   await inTx(venue, (tx) =>
     setProfileServiceAccess(
       tx,
@@ -700,7 +681,7 @@ async function withZones<T>(zones: string[] | null, fn: () => Promise<T>): Promi
   try {
     return await fn();
   } finally {
-    await inTx(venue, (tx) => setProfileServiceAccess(tx, profileId, prior));
+    await inTx(venue, (tx) => setProfileServiceAccess(tx, profileId, prior!));
   }
 }
 

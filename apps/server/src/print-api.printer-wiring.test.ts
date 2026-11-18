@@ -7,6 +7,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfilePrinters,
   devices,
+  deviceProfiles,
   kitchenStations,
   nowIso,
   printAgents,
@@ -23,7 +24,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { departments, deviceProfileServiceAccess } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import {
   readPrinterHoldsForTest,
   holdPrinterForTest,
@@ -716,12 +717,13 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
       { name: `Terrace till ${randomUUID()}`, formFactor: "till" },
       { name: `Pass display ${randomUUID()}`, formFactor: "kds" },
     ]);
-    await suite.db.insert(deviceProfileServiceAccess).values({
-      deviceProfileId: till!.id,
-      departmentId: terrace!.id,
-      everyZone: true,
-      startingZoneId: zone!.id,
-    });
+    await suite.db
+      .update(deviceProfiles)
+      .set({
+        orderDepartmentId: terrace!.id,
+        orderStartingZoneId: zone!.id,
+      })
+      .where(eq(deviceProfiles.id, till!.id));
     await suite.db.insert(deviceProfilePrinters).values([
       // Stored before the receipt row, and before it alphabetically, so neither order gives the list's.
       { deviceProfileId: till!.id, printerId: printer, role: "cash_drawer", position: 0 },

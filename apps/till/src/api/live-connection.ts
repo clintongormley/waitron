@@ -6,13 +6,7 @@ interface Options {
   ): Promise<void>;
 }
 
-const DEVICE_TYPES = [
-  "devices",
-  "device_profiles",
-  "device_profile_service_access",
-  "device_profile_zones",
-  "device_profile_admission_roles",
-];
+const DEVICE_TYPES = ["devices", "device_profiles", "device_profile_admission_roles"];
 const ORDER_TYPES = [
   "working_orders",
   "working_order_lines",

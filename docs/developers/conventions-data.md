@@ -2189,7 +2189,12 @@ behind. The synthetic round-trip and refusal cases are in
 `packages/provisioning/src/configuration-transfer.json-lists.test.ts`; each later list owner adds
 its own declaration, deletion call and round-trip case. Enrolled devices do not travel in
 configuration bundles. Their `devices.made_here_station_ids` list holds at most one station, and
-`deleteStation` clears that id in the same transaction.
+`deleteStation` clears that id in the same transaction. Configuration format 49 carries
+`device_profiles.order_zone_ids` and remaps the zone ids on import. A null list allows every zone
+of the profile's department and an empty list allows none. Removing a zone removes its id from
+those lists in the same transaction. A department deletion also checks profiles in other
+departments that still point to a zone being deleted. If the profile has another allowed zone,
+deletion can move its starting zone there. Otherwise the deletion names the profile and refuses.
 
 The export leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
 device profile, `retired_at`), or whose `leaveBehindWhenFalse` column holds false or 0

@@ -1,11 +1,5 @@
-import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
-import {
-  departments,
-  deviceProfiles,
-  deviceProfileServiceAccess,
-  deviceProfileZones,
-  floorZones,
-} from "@waitron/db";
+import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { departments, deviceProfiles, floorZones } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError, type ErrorParams } from "@waitron/shared";
 import "./errors.js";
@@ -36,6 +30,8 @@ type Refusal = ErrorParams["device_profile.access_invalid"];
 
 /** The form factor `@waitron/layouts` treats as a shared kitchen display. */
 const SHARED_DISPLAY = "kds";
+
+const listedZone = sql`${floorZones.id} in (select value from json_each(${deviceProfiles.orderZoneIds}))`;
 
 function refuse(field: Refusal["field"], reason: Refusal["reason"]): never {
   throw new AppError("device_profile.access_invalid", { field, reason });
@@ -72,15 +68,11 @@ export async function readProfileZones(
   const [profile] = await tx
     .select({
       formFactor: deviceProfiles.formFactor,
-      departmentId: deviceProfileServiceAccess.departmentId,
-      everyZone: deviceProfileServiceAccess.everyZone,
-      startingZoneId: deviceProfileServiceAccess.startingZoneId,
+      departmentId: deviceProfiles.orderDepartmentId,
+      zoneIds: deviceProfiles.orderZoneIds,
+      startingZoneId: deviceProfiles.orderStartingZoneId,
     })
     .from(deviceProfiles)
-    .leftJoin(
-      deviceProfileServiceAccess,
-      eq(deviceProfileServiceAccess.deviceProfileId, deviceProfiles.id),
-    )
     .where(eq(deviceProfiles.id, profileId));
   if (profile === undefined) refuse("profileId", "not_found");
 
@@ -102,15 +94,7 @@ export async function readProfileZones(
           eq(floorZones.departmentId, profile.departmentId),
           eq(floorZones.active, true),
           eq(departments.active, true),
-          profile.everyZone
-            ? undefined
-            : inArray(
-                floorZones.id,
-                tx
-                  .select({ id: deviceProfileZones.zoneId })
-                  .from(deviceProfileZones)
-                  .where(eq(deviceProfileZones.deviceProfileId, profileId)),
-              ),
+          profile.zoneIds === null ? undefined : inArray(floorZones.id, profile.zoneIds),
         ),
       )
       .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id))
@@ -137,14 +121,10 @@ export async function readProfilesZones(
     .select({
       id: deviceProfiles.id,
       formFactor: deviceProfiles.formFactor,
-      departmentId: deviceProfileServiceAccess.departmentId,
-      startingZoneId: deviceProfileServiceAccess.startingZoneId,
+      departmentId: deviceProfiles.orderDepartmentId,
+      startingZoneId: deviceProfiles.orderStartingZoneId,
     })
     .from(deviceProfiles)
-    .leftJoin(
-      deviceProfileServiceAccess,
-      eq(deviceProfileServiceAccess.deviceProfileId, deviceProfiles.id),
-    )
     .where(inArray(deviceProfiles.id, [...profileIds]));
   const scoped: string[] = [];
   for (const profile of profiles) {
@@ -158,23 +138,16 @@ export async function readProfilesZones(
   if (scoped.length === 0) return answers;
 
   const zones = await tx
-    .select({ profileId: deviceProfileServiceAccess.deviceProfileId, zoneId: floorZones.id })
-    .from(deviceProfileServiceAccess)
-    .innerJoin(floorZones, eq(floorZones.departmentId, deviceProfileServiceAccess.departmentId))
+    .select({ profileId: deviceProfiles.id, zoneId: floorZones.id })
+    .from(deviceProfiles)
+    .innerJoin(floorZones, eq(floorZones.departmentId, deviceProfiles.orderDepartmentId))
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .leftJoin(
-      deviceProfileZones,
-      and(
-        eq(deviceProfileZones.deviceProfileId, deviceProfileServiceAccess.deviceProfileId),
-        eq(deviceProfileZones.zoneId, floorZones.id),
-      ),
-    )
     .where(
       and(
-        inArray(deviceProfileServiceAccess.deviceProfileId, scoped),
+        inArray(deviceProfiles.id, scoped),
         eq(floorZones.active, true),
         eq(departments.active, true),
-        or(eq(deviceProfileServiceAccess.everyZone, true), isNotNull(deviceProfileZones.zoneId)),
+        or(isNull(deviceProfiles.orderZoneIds), listedZone),
       ),
     )
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
@@ -256,18 +229,18 @@ export async function readProfileServiceScopes(
   if (profileIds.length === 0) return [];
   const scopes = await tx
     .select({
-      profileId: deviceProfileServiceAccess.deviceProfileId,
-      departmentId: deviceProfileServiceAccess.departmentId,
-      everyZone: deviceProfileServiceAccess.everyZone,
-      startingZoneId: deviceProfileServiceAccess.startingZoneId,
+      profileId: deviceProfiles.id,
+      departmentId: deviceProfiles.orderDepartmentId,
+      zoneIds: deviceProfiles.orderZoneIds,
+      startingZoneId: deviceProfiles.orderStartingZoneId,
     })
-    .from(deviceProfileServiceAccess)
-    .where(inArray(deviceProfileServiceAccess.deviceProfileId, [...profileIds]));
+    .from(deviceProfiles)
+    .where(inArray(deviceProfiles.id, [...profileIds]));
   const zones = await tx
-    .select({ profileId: deviceProfileZones.deviceProfileId, zoneId: deviceProfileZones.zoneId })
-    .from(deviceProfileZones)
-    .innerJoin(floorZones, eq(floorZones.id, deviceProfileZones.zoneId))
-    .where(inArray(deviceProfileZones.deviceProfileId, [...profileIds]))
+    .select({ profileId: deviceProfiles.id, zoneId: floorZones.id })
+    .from(deviceProfiles)
+    .innerJoin(floorZones, listedZone)
+    .where(inArray(deviceProfiles.id, [...profileIds]))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
   return profileIds.map((profileId) => {
     const scope = scopes.find((row) => row.profileId === profileId);
@@ -276,9 +249,10 @@ export async function readProfileServiceScopes(
     return {
       profileId,
       departmentId: scope.departmentId,
-      allowedZoneIds: scope.everyZone
-        ? null
-        : zones.filter((row) => row.profileId === profileId).map((row) => row.zoneId),
+      allowedZoneIds:
+        scope.zoneIds === null
+          ? null
+          : zones.filter((row) => row.profileId === profileId).map((row) => row.zoneId),
       startingZoneId: scope.startingZoneId,
     };
   });
@@ -292,13 +266,59 @@ export async function readProfileDepartments(
   if (profileIds.length === 0) return [];
   return tx
     .select({
-      profileId: deviceProfileServiceAccess.deviceProfileId,
+      profileId: deviceProfiles.id,
       departmentId: departments.id,
       departmentName: departments.name,
     })
-    .from(deviceProfileServiceAccess)
-    .innerJoin(departments, eq(departments.id, deviceProfileServiceAccess.departmentId))
-    .where(inArray(deviceProfileServiceAccess.deviceProfileId, [...profileIds]));
+    .from(deviceProfiles)
+    .innerJoin(departments, eq(departments.id, deviceProfiles.orderDepartmentId))
+    .where(inArray(deviceProfiles.id, [...profileIds]));
+}
+
+type BlockedProfile = { id: string; name: string; zoneId: string | null };
+
+export async function profilesBlockedByZoneChange(
+  tx: Transaction,
+  zoneIds: readonly string[],
+  options: { deletingDepartmentId?: string | null; movingToDepartmentId?: string },
+): Promise<BlockedProfile[]> {
+  const scopes = await tx
+    .select({
+      id: deviceProfiles.id,
+      name: deviceProfiles.name,
+      retiredAt: deviceProfiles.retiredAt,
+      formFactor: deviceProfiles.formFactor,
+      departmentId: deviceProfiles.orderDepartmentId,
+      zoneIds: deviceProfiles.orderZoneIds,
+      startingZoneId: deviceProfiles.orderStartingZoneId,
+    })
+    .from(deviceProfiles)
+    .where(isNotNull(deviceProfiles.orderDepartmentId))
+    .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
+  const candidates = await tx
+    .select({ id: floorZones.id, departmentId: floorZones.departmentId })
+    .from(floorZones)
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+    .where(and(eq(floorZones.active, true), eq(departments.active, true)));
+  return scopes.flatMap<BlockedProfile>((profile) => {
+    if (profile.retiredAt !== null || profile.formFactor === "kds") return [];
+    if (profile.departmentId === options.movingToDepartmentId) return [];
+    const target = { id: profile.id, name: profile.name };
+    if (profile.departmentId === options.deletingDepartmentId) return [{ ...target, zoneId: null }];
+    // A moved zone can still be named by a profile that orders for its previous department.
+    const zoneId =
+      profile.startingZoneId !== null && zoneIds.includes(profile.startingZoneId)
+        ? profile.startingZoneId
+        : zoneIds.find((id) => profile.zoneIds?.includes(id));
+    if (zoneId === undefined) return [];
+    const hasSurvivingZone = candidates.some(
+      (candidate) =>
+        candidate.departmentId === profile.departmentId &&
+        !zoneIds.includes(candidate.id) &&
+        (profile.zoneIds === null || profile.zoneIds.includes(candidate.id)),
+    );
+    return hasSurvivingZone ? [] : [{ ...target, zoneId }];
+  });
 }
 
 async function liveFormFactor(tx: Transaction, profileId: string): Promise<string> {
@@ -315,22 +335,14 @@ async function writeScope(
   profileId: string,
   scope: { departmentId: string; zoneIds: string[] | null; startingZoneId: string } | null,
 ): Promise<void> {
-  // Deleting the scope row also deletes its `device_profile_zones` rows, through their key.
   await tx
-    .delete(deviceProfileServiceAccess)
-    .where(eq(deviceProfileServiceAccess.deviceProfileId, profileId));
-  if (scope === null) return;
-  await tx.insert(deviceProfileServiceAccess).values({
-    deviceProfileId: profileId,
-    departmentId: scope.departmentId,
-    everyZone: scope.zoneIds === null,
-    startingZoneId: scope.startingZoneId,
-  });
-  if (scope.zoneIds !== null) {
-    await tx
-      .insert(deviceProfileZones)
-      .values(scope.zoneIds.map((zoneId) => ({ deviceProfileId: profileId, zoneId })));
-  }
+    .update(deviceProfiles)
+    .set({
+      orderDepartmentId: scope?.departmentId ?? null,
+      orderStartingZoneId: scope?.startingZoneId ?? null,
+      orderZoneIds: scope?.zoneIds ?? null,
+    })
+    .where(eq(deviceProfiles.id, profileId));
 }
 
 async function checkedScope(

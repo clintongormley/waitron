@@ -39,8 +39,7 @@ beforeAll(() => {
 const TABLES = [
   "departments",
   "floor_zones",
-  "device_profile_service_access",
-  "device_profile_zones",
+  "device_profiles",
   "routing_cells",
   "routing_cell_periods",
   "kitchen_notices",
@@ -258,19 +257,11 @@ describe("the venue-service tables carry no taxpayer column", () => {
           "(today_set_id) -> floor_plan_sets(id)",
         ],
       },
-      device_profile_service_access: {
-        primaryKey: ["device_profile_id"],
+      device_profiles: {
+        primaryKey: ["id"],
         foreignKeys: [
-          "(department_id) -> departments(id)",
-          "(device_profile_id) -> device_profiles(id) on delete cascade",
-          "(starting_zone_id) -> floor_zones(id)",
-        ],
-      },
-      device_profile_zones: {
-        primaryKey: ["device_profile_id", "zone_id"],
-        foreignKeys: [
-          "(device_profile_id) -> device_profile_service_access(device_profile_id) on delete cascade",
-          "(zone_id) -> floor_zones(id)",
+          "(order_department_id) -> departments(id)",
+          "(order_starting_zone_id) -> floor_zones(id)",
         ],
       },
       routing_cells: {

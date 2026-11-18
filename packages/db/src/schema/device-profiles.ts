@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   count,
   enumCheck,
@@ -13,6 +13,8 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { floorZones } from "./floor-zones.js";
+import { departments } from "./venue-service/service.js";
 
 /**
  * The values MUST equal `FORM_FACTORS` in `packages/layouts/src/device-types.ts`; @waitron/layouts owns
@@ -43,12 +45,17 @@ export const deviceProfiles = table(
     name: label("name").notNull(),
     formFactor: deviceFormFactorEnum("form_factor").notNull(),
     capabilities: json("capabilities").notNull().default([]),
-    // Auto-logout idle timeout in seconds; NULL = never. `validateInactivityTimeout`
-    // (@waitron/layouts) forces NULL for a kds profile on write; the database does not.
+    // Auto-logout idle timeout in seconds; NULL = never.
     inactivityTimeoutSeconds: count("inactivity_timeout_seconds"),
-    // NULL = the fixed home screen. No CHECK: one would make drizzle-kit rebuild this table. The
-    // store (`validateStartingScreen`, @waitron/layouts) refuses a screen the profile does not show.
+    // The store refuses a screen the profile does not show. NULL opens the fixed home screen.
     startingScreen: label("starting_screen"),
+    orderDepartmentId: id("order_department_id").references((): AnySQLiteColumn => departments.id),
+    orderStartingZoneId: id("order_starting_zone_id").references(
+      (): AnySQLiteColumn => floorZones.id,
+    ),
+    // With a department, NULL allows every zone and an empty list allows none.
+    // The scope writer checks the zone ids. Deleting a zone removes it from the list.
+    orderZoneIds: json<string[]>("order_zone_ids"),
     cardReaders: json<DeviceProfileCardReaders>("card_readers").notNull().default({}),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
@@ -60,5 +67,15 @@ export const deviceProfiles = table(
       .where(sql`${t.retiredAt} is null`),
     check("device_profiles_form_factor_ck", enumCheck(t.formFactor)),
     check("device_profiles_card_readers_ck", jsonShapeCheck(t.cardReaders, "object")),
+    check(
+      "device_profiles_kds_timeout_ck",
+      sql`${t.formFactor} <> 'kds' or ${t.inactivityTimeoutSeconds} is null`,
+    ),
+    check(
+      "device_profiles_order_scope_ck",
+      sql`(${t.orderDepartmentId} is null) = (${t.orderStartingZoneId} is null)
+          and (${t.orderDepartmentId} is not null or ${t.orderZoneIds} is null)`,
+    ),
+    check("device_profiles_order_zone_ids_ck", jsonShapeCheck(t.orderZoneIds, "array")),
   ],
 );

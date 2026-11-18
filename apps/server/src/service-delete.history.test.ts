@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   printers,
   devices,
+  deviceProfiles,
   diningTables,
   printJobs,
   sales,
@@ -20,7 +21,6 @@ import {
   createServiceZone,
   deleteDepartment,
   departments,
-  deviceProfileServiceAccess,
   departmentTransferRequests,
   saleReceiptHeaders,
   readDepartmentTransfer,
@@ -147,15 +147,15 @@ it("deleted department reprints its original receipt configuration and frozen he
   const grouping = await run((tx) => readReceiptOrder(tx, billId));
   await run(async (tx) => {
     const profiles = await tx
-      .select()
-      .from(deviceProfileServiceAccess)
-      .where(eq(deviceProfileServiceAccess.departmentId, departmentId));
+      .select({ id: deviceProfiles.id })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.orderDepartmentId, departmentId));
     const survivorZone = await createServiceZone(tx, {
       name: "Survivor zone",
       departmentId: survivorId,
     });
     for (const profile of profiles)
-      await setProfileServiceScope(tx, profile.deviceProfileId, {
+      await setProfileServiceScope(tx, profile.id, {
         departmentId: survivorId,
         allowedZoneIds: null,
         startingZoneId: survivorZone.id,

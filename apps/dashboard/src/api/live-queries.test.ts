@@ -363,11 +363,7 @@ it.each([
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile, and the profile's department. Not `devices`,
   // which a device's heartbeat changes every minute.
-  [
-    "listPrinterProfiles",
-    [],
-    ["device_profile_printers", "device_profiles", "device_profile_service_access", "departments"],
-  ],
+  ["listPrinterProfiles", [], ["device_profile_printers", "device_profiles", "departments"]],
   // `/management-api/printer-stations` (apps/server/src/print-api.ts): the station rows, joined to
   // their station's name.
   ["listPrinterStationNames", [], ["kitchen_stations"]],
@@ -1118,8 +1114,6 @@ it.each(["Zone", "Department"] as const)(
       "departments",
       "device_profiles",
       "devices",
-      "device_profile_service_access",
-      "device_profile_zones",
       "device_profile_kitchen_screens",
       "device_profile_kitchen_screen_stations",
       "device_profile_kitchen_screen_zones",

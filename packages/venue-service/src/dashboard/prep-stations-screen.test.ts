@@ -6203,8 +6203,6 @@ describe("A773 station policy: the pass coverage warning", () => {
       "device_profile_kitchen_screen_stations",
       "device_profile_kitchen_screen_zones",
       // readProfilesZones
-      "device_profile_service_access",
-      "device_profile_zones",
       "departments",
     ]);
   });

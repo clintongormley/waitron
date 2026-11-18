@@ -134,18 +134,13 @@ describe("VENUE_SERVICE", () => {
     expect(names).not.toContain("kitchen_notices");
   });
 
-  it("transfers a profile's department, zones and kitchen screens, which travel with profiles", () => {
+  it("transfers a profile's kitchen screens", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    expect(names).toContain("device_profile_service_access");
-    expect(names).toContain("device_profile_zones");
     expect(names).toContain("device_profile_kitchen_screens");
     expect(names).toContain("device_profile_kitchen_screen_stations");
     expect(names).toContain("device_profile_kitchen_screen_zones");
     expect(names).not.toContain("device_profile_stations");
     expect(names).not.toContain("device_profile_watchers");
-    expect(names.indexOf("device_profile_service_access")).toBeLessThan(
-      names.indexOf("device_profile_zones"),
-    );
   });
 
   it("transfers service calendars without station hours, fallbacks or today's by-hand state", () => {

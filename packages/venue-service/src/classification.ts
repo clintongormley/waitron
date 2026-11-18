@@ -10,8 +10,6 @@ export const VENUE_SERVICE_TABLES = [
   "department_transfer_requests",
   "sale_receipt_headers",
   "menu_periods",
-  "device_profile_service_access",
-  "device_profile_zones",
   "device_zone_selections",
   "device_zone_selection_zones",
   "device_profile_kitchen_screens",

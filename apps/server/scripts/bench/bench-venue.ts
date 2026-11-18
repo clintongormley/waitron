@@ -530,7 +530,7 @@ async function readSeeded(db: Database, cookies: Record<string, string>) {
     return cookie;
   };
   const access = db.all<{ profileId: string; departmentId: string }>(
-    sql`select device_profile_id as profileId, department_id as departmentId from device_profile_service_access`,
+    sql`select id as profileId, order_department_id as departmentId from device_profiles where order_department_id is not null`,
   );
   const tills: BenchTill[] = deviceRows
     .filter((row) => row.name.startsWith(TILL_PREFIX))

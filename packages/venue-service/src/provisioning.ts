@@ -4,7 +4,6 @@ import {
   departments,
   departmentCourses,
   deviceProfiles,
-  deviceProfileServiceAccess,
   floorZones,
   kitchenCourses,
   readTaxpayer,
@@ -148,15 +147,11 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         await tx
           .select({ id: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
           .from(deviceProfiles)
-          .leftJoin(
-            deviceProfileServiceAccess,
-            eq(deviceProfileServiceAccess.deviceProfileId, deviceProfiles.id),
-          )
           .where(
             and(
               isNull(deviceProfiles.retiredAt),
               ne(deviceProfiles.formFactor, "kds"),
-              isNull(deviceProfileServiceAccess.deviceProfileId),
+              isNull(deviceProfiles.orderDepartmentId),
             ),
           )
       ).filter(({ capabilities }) => (capabilities as string[]).includes("take-orders"));

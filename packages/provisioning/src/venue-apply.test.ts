@@ -617,11 +617,11 @@ describe("applyVenue", () => {
       starting_zone: string | null;
       every_zone: number | null;
     }>(sql`
-      select p.name, d.name as department, z.name as starting_zone, a.every_zone
+      select p.name, d.name as department, z.name as starting_zone,
+             case when p.order_department_id is not null then p.order_zone_ids is null end as every_zone
       from device_profiles p
-      left join device_profile_service_access a on a.device_profile_id = p.id
-      left join departments d on d.id = a.department_id
-      left join floor_zones z on z.id = a.starting_zone_id
+      left join departments d on d.id = p.order_department_id
+      left join floor_zones z on z.id = p.order_starting_zone_id
       order by p.name`);
     expect(scopes.rows).toEqual([
       {

@@ -2072,14 +2072,19 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   });
 });
 
-it.each(["till", "phone-portrait", "tablet-landscape", "kds"] as const)(
-  "GET /api/till returns the enrolled %s form factor without canvas data",
-  async (formFactor) => {
+it.each([
+  { formFactor: "till", inactivityTimeoutSeconds: 42 },
+  { formFactor: "phone-portrait", inactivityTimeoutSeconds: 42 },
+  { formFactor: "tablet-landscape", inactivityTimeoutSeconds: 42 },
+  { formFactor: "kds", inactivityTimeoutSeconds: null },
+] as const)(
+  "GET /api/till returns the enrolled $formFactor form factor without canvas data",
+  async ({ formFactor, inactivityTimeoutSeconds }) => {
     const [profile] = await seedDeviceProfiles(suite.db, {
       name: `Fixed ${formFactor}`,
       formFactor,
       capabilities: [],
-      inactivityTimeoutSeconds: 42,
+      inactivityTimeoutSeconds,
     });
     try {
       const enrolled = await enrolDeviceForTest(suite.db, cfg, {
@@ -2098,7 +2103,7 @@ it.each(["till", "phone-portrait", "tablet-landscape", "kds"] as const)(
       expect(body).toHaveProperty("formFactor", formFactor);
       expect(body).not.toHaveProperty("canvas");
       expect(body).toHaveProperty("capabilities", []);
-      expect(body).toHaveProperty("inactivityTimeoutSeconds", 42);
+      expect(body).toHaveProperty("inactivityTimeoutSeconds", inactivityTimeoutSeconds);
       expect(body).not.toHaveProperty("startingScreen");
     } finally {
       await suite.db.execute(

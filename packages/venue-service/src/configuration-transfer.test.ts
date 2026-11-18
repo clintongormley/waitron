@@ -1676,8 +1676,9 @@ describe("special days in a configuration bundle", () => {
 
 it("leaves per-device zone choices outside the configuration transfer descriptor", () => {
   const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-  expect(names).toContain("device_profile_service_access");
-  expect(names).toContain("device_profile_zones");
+  expect(
+    CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "device_profiles"),
+  ).toHaveProperty("jsonReferences", [{ column: "order_zone_ids", paths: [["*"]] }]);
   expect(names).not.toContain("device_zone_selections");
   expect(names).not.toContain("device_zone_selection_zones");
 });
