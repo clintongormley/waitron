@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "70cc53f5-b02a-4e6c-81ac-04c769aa76af",
+  "id": "05841f19-799a-46fc-8800-eb8b1608277b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -680,6 +680,139 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "menu_item_id": {
+          "name": "menu_item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "menu_id": {
+          "name": "menu_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "menu_name": {
+          "name": "menu_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "menu_version_id": {
+          "name": "menu_version_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "offer_department_id": {
+          "name": "offer_department_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "department_name": {
+          "name": "department_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sold_in_each": {
+          "name": "sold_in_each",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hardware_unit": {
+          "name": "hardware_unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "allergens": {
+          "name": "allergens",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "diet": {
+          "name": "diet",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "diet_override": {
+          "name": "diet_override",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "late_period_name": {
+          "name": "late_period_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "late_confirmed_by": {
+          "name": "late_confirmed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sent_nutrition": {
+          "name": "sent_nutrition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "offer_unit_name": {
+          "name": "offer_unit_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "offer_unit_precision": {
+          "name": "offer_unit_precision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "offer_vat_class": {
+          "name": "offer_vat_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "offer_category_name": {
+          "name": "offer_category_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -798,6 +931,58 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "working_order_lines_menu_item_fk": {
+          "name": "working_order_lines_menu_item_fk",
+          "tableFrom": "working_order_lines",
+          "tableTo": "menu_items",
+          "columnsFrom": [
+            "menu_item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "working_order_lines_menu_version_fk": {
+          "name": "working_order_lines_menu_version_fk",
+          "tableFrom": "working_order_lines",
+          "tableTo": "menu_versions",
+          "columnsFrom": [
+            "menu_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "working_order_lines_late_confirmed_by_fk": {
+          "name": "working_order_lines_late_confirmed_by_fk",
+          "tableFrom": "working_order_lines",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "late_confirmed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "working_order_lines_credited_to_fk": {
+          "name": "working_order_lines_credited_to_fk",
+          "tableFrom": "working_order_lines",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "credited_to"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -826,6 +1011,22 @@
         "working_order_lines_line_no_ck": {
           "name": "working_order_lines_line_no_ck",
           "value": "\"working_order_lines\".\"line_no\" >= 1"
+        },
+        "working_order_lines_hardware_unit_ck": {
+          "name": "working_order_lines_hardware_unit_ck",
+          "value": "\"working_order_lines\".\"hardware_unit\" is null or \"working_order_lines\".\"hardware_unit\" in ('kg','g','mg')"
+        },
+        "working_order_lines_offer_unit_precision_ck": {
+          "name": "working_order_lines_offer_unit_precision_ck",
+          "value": "\"working_order_lines\".\"offer_unit_precision\" between 0 and 3"
+        },
+        "working_order_lines_offer_vat_class_ck": {
+          "name": "working_order_lines_offer_vat_class_ck",
+          "value": "\"working_order_lines\".\"offer_vat_class\" in ('general','reduced','super_reduced','zero')"
+        },
+        "working_order_lines_context_ck": {
+          "name": "working_order_lines_context_ck",
+          "value": "(\"working_order_lines\".\"menu_id\" is null) = (\"working_order_lines\".\"menu_item_id\" is null)\n        and (\"working_order_lines\".\"menu_name\" is null) = (\"working_order_lines\".\"menu_item_id\" is null)\n        and (\"working_order_lines\".\"offer_department_id\" is null) = (\"working_order_lines\".\"menu_item_id\" is null)\n        and (\"working_order_lines\".\"department_name\" is null) = (\"working_order_lines\".\"menu_item_id\" is null)\n        and (\"working_order_lines\".\"unit_id\" is null) = (\"working_order_lines\".\"menu_item_id\" is null)\n        and (\"working_order_lines\".\"sold_in_each\" is null) = (\"working_order_lines\".\"menu_item_id\" is null)\n        and (\"working_order_lines\".\"offer_unit_name\" is null) = (\"working_order_lines\".\"menu_item_id\" is null)\n        and (\"working_order_lines\".\"offer_unit_precision\" is null) = (\"working_order_lines\".\"menu_item_id\" is null)\n        and (\"working_order_lines\".\"offer_vat_class\" is null) = (\"working_order_lines\".\"menu_item_id\" is null)\n        and (\"working_order_lines\".\"offer_category_name\" is null) = (\"working_order_lines\".\"menu_item_id\" is null)"
         }
       }
     },
@@ -15255,210 +15456,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
-    },
-    "working_line_contexts": {
-      "name": "working_line_contexts",
-      "columns": {
-        "working_order_line_id": {
-          "name": "working_order_line_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "menu_item_id": {
-          "name": "menu_item_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "menu_id": {
-          "name": "menu_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "menu_version_id": {
-          "name": "menu_version_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "menu_name": {
-          "name": "menu_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "department_id": {
-          "name": "department_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "department_name": {
-          "name": "department_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "category_name": {
-          "name": "category_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "unit_id": {
-          "name": "unit_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "unit_name": {
-          "name": "unit_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "unit_precision": {
-          "name": "unit_precision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sold_in_each": {
-          "name": "sold_in_each",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "hardware_unit": {
-          "name": "hardware_unit",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "vat_class": {
-          "name": "vat_class",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "allergens": {
-          "name": "allergens",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sent_nutrition": {
-          "name": "sent_nutrition",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "diet": {
-          "name": "diet",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "diet_override": {
-          "name": "diet_override",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "late_period_name": {
-          "name": "late_period_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "late_confirmed_by": {
-          "name": "late_confirmed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "working_line_contexts_line_fk": {
-          "name": "working_line_contexts_line_fk",
-          "tableFrom": "working_line_contexts",
-          "tableTo": "working_order_lines",
-          "columnsFrom": [
-            "working_order_line_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "working_line_contexts_menu_item_fk": {
-          "name": "working_line_contexts_menu_item_fk",
-          "tableFrom": "working_line_contexts",
-          "tableTo": "menu_items",
-          "columnsFrom": [
-            "menu_item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "working_line_contexts_menu_version_fk": {
-          "name": "working_line_contexts_menu_version_fk",
-          "tableFrom": "working_line_contexts",
-          "tableTo": "menu_versions",
-          "columnsFrom": [
-            "menu_version_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "working_line_contexts_unit_precision_ck": {
-          "name": "working_line_contexts_unit_precision_ck",
-          "value": "\"working_line_contexts\".\"unit_precision\" between 0 and 3"
-        },
-        "working_line_contexts_hardware_unit_ck": {
-          "name": "working_line_contexts_hardware_unit_ck",
-          "value": "\"working_line_contexts\".\"hardware_unit\" is null or \"working_line_contexts\".\"hardware_unit\" in ('kg','g','mg')"
-        },
-        "working_line_contexts_vat_class_ck": {
-          "name": "working_line_contexts_vat_class_ck",
-          "value": "\"working_line_contexts\".\"vat_class\" in ('general','reduced','super_reduced','zero')"
-        }
-      }
     },
     "kitchen_notices": {
       "name": "kitchen_notices",
