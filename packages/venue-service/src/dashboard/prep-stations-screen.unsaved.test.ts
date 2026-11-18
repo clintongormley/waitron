@@ -94,7 +94,12 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
-async function mount(write?: Promise<void>, refreshFails = false, liveData?: LiveData) {
+async function mount(
+  write?: Promise<void>,
+  refreshFails = false,
+  liveData?: LiveData,
+  loaded = view,
+) {
   const writes: unknown[] = [];
   let reads = 0;
   app = document.createElement("station-leave-test-app") as StationLeaveApp;
@@ -103,7 +108,7 @@ async function mount(write?: Promise<void>, refreshFails = false, liveData?: Liv
     readPassCoverage: async () => [],
     load: async () => {
       if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
-      return structuredClone(view);
+      return structuredClone(loaded);
     },
     createStation: async (body: unknown) => {
       writes.push(body);
@@ -190,6 +195,28 @@ async function choose(decision: "keep" | "discard") {
   q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
   await expect.poll(() => q.open).toBe(false);
 }
+it("Add with the printers every station lists already chosen is clean and closes directly", async () => {
+  const { screen } = await mount(undefined, false, undefined, {
+    ...view,
+    stations: [...view.stations, { ...view.stations[0]!, id: "upstairs", isDefault: false }],
+    printers: [{ id: "pass", name: "Pass printer", active: true }],
+    stationPrinters: [
+      { stationId: "bar", printerId: "pass" },
+      { stationId: "upstairs", printerId: "pass" },
+    ],
+  });
+  const modal = await open(screen, false);
+  expect(modal.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.values).toEqual([
+    "pass",
+  ]);
+  expect(modal.querySelector("[data-test=save-station]")!.hasAttribute("disabled")).toBe(true);
+  expect(unload()).toBe(false);
+  const closed = closeOf(modal);
+  modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+  await closed;
+  await expect.poll(() => modalIn(screen)).toBeNull();
+  expect((await question()).open).toBe(false);
+});
 for (const rename of [false, true]) {
   const label = rename ? "Edit" : "Add";
   it(`${label} keeps name through native Escape and discards once without writing`, async () => {

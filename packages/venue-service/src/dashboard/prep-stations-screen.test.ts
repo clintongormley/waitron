@@ -5178,6 +5178,68 @@ describe("The station editor", () => {
       printerIds: ["next"],
     });
   });
+  it("Add station starts with the active printers every active station lists", async () => {
+    const a = api({
+      load: vi.fn().mockResolvedValue({
+        ...ticketView,
+        stations: [...ticketView.stations, { ...upstairs, id: "retired", active: false }],
+        stationPrinters: [
+          { stationId: "bar", printerId: "old" },
+          { stationId: "bar", printerId: "disabled" },
+          { stationId: "bar", printerId: "watcher" },
+          { stationId: "upstairs", printerId: "watcher" },
+          { stationId: "upstairs", printerId: "disabled" },
+          { stationId: "upstairs", printerId: "next" },
+        ],
+      }),
+      createStation: vi.fn().mockResolvedValue({ id: "grill" }),
+    });
+    const el = await mount(a);
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).values).toEqual(["watcher"]);
+    expect(q(el, "wt-modal p.note")?.textContent).toBe(
+      "Printers on every station are already chosen.",
+    );
+    await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
+    q(el, '[data-test="save-station"]')!.click();
+    await settle(el);
+    expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+      name: "Grill",
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+      readyWarningAfterMinutes: 3,
+      colour: "red",
+      printerIds: ["watcher"],
+    });
+  });
+  it("Add station starts with no printers when one station is active or none share a printer", async () => {
+    for (const loaded of [
+      {
+        ...ticketView,
+        stations: [ticketView.stations[0]!, { ...upstairs, active: false }],
+        stationPrinters: [
+          { stationId: "bar", printerId: "watcher" },
+          { stationId: "upstairs", printerId: "watcher" },
+        ],
+      },
+      {
+        ...ticketView,
+        stationPrinters: [
+          { stationId: "bar", printerId: "old" },
+          { stationId: "upstairs", printerId: "watcher" },
+        ],
+      },
+    ]) {
+      const el = await mount(api({ load: vi.fn().mockResolvedValue(loaded) }));
+      q(el, '[data-test="new-station"]')!.click();
+      await settle(el);
+      expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).values).toEqual([]);
+      expect(q(el, "wt-modal p.note")).toBeNull();
+      el.remove();
+    }
+  });
   it("ignores a departed editor's cancel and a departed Add station's printers", async () => {
     const { el, a } = await openEdit({ createStation: vi.fn() });
     const old = editorOf(el)!;

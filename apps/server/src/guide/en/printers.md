@@ -20,6 +20,10 @@ confirmation lists the assignments removed and work ended. To use it again, choo
 printer**, then **Add** beside it. A recognised printer keeps its name and calibration, so you
 do not need to name or calibrate it again. Assign its devices and prep stations again.
 
+To print station tickets, choose the printer on each station in **Prep stations**. A printer
+chosen on every station prints the whole send, for the pass. **Add station** starts with those
+printers chosen.
+
 ## Calibrate a receipt printer {#calibrate}
 
 Calibration has three steps. It opens after you add a new receipt printer, and **Calibrate printer**

@@ -624,10 +624,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   records, and screen refresh.**
   [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
 
-- **A pass printer must be added to each new station by hand.** A pass printer is now a printer
-  listed on every station; a watcher set to follow every station used to cover a new station at
-  once. Consider an "add to every station" control. Left open by A366 slice 5 Part B (decision P2).
-
 
 - **KDS corrections deferred from #191** — owner, 2026-09-01.
   [Detail](backlog/kitchen.md#kds-corrections-deferred-from-191)
