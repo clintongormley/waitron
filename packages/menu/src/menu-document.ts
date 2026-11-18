@@ -836,7 +836,7 @@ function serveSetMenuOffer(
 ): ServedSetMenuOffer | undefined {
   const { countsAsCourseId, courseOverrideId, variants, ...frozen } = offer;
   const live = serveOffer(
-    { ...frozen, variants: variants.map(({ countsAsCourseId: _course, ...variant }) => variant) },
+    { ...frozen, variants: variants.map((variant) => without(variant, ["countsAsCourseId"])) },
     rows,
   );
   if (live === undefined) return;
