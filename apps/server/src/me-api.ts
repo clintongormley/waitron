@@ -55,10 +55,6 @@ import type { Logger } from "./logger.js";
 import type { TradingAdmissionView } from "./trading-admission.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import type { EmailDelivery } from "./email-delivery.js";
-import { modulesNamed } from "./modules.js";
-import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
-import { actionsPersonalData } from "./personal-data-actions.js";
-import { timeRecordPersonalData } from "./personal-data-time-record.js";
 
 export interface MeApiDeps {
   db: Database;
@@ -76,7 +72,6 @@ export interface MeApiDeps {
   origin?: string;
   accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
   assertAccountMailPrimary?: () => Promise<void>;
-  now?: () => Date;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -120,8 +115,7 @@ const runPasskeyOptions = createErrorBoundary(
  * Staff self-service routes. Every route acts as the person its management session names, never
  * one the request body names. Never `authorizeManager`: a `staff` person
  * holds none of the permissions the management routes ask for, so that gate would refuse every
- * staff member. The personal-data mount this calls also carries the admin's download of another
- * person's data, which does call `authorizeManager`.
+ * staff member.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   const credentialKeyRing = deps.credentialKeyRing;
@@ -130,19 +124,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     withTransaction(deps.db, async (tx) => {
       return fn(tx);
     });
-
-  const modules = modulesNamed(deps.modules);
-  mountPersonalDataExportApi(
-    app,
-    {
-      db: deps.db,
-      modules,
-      serverParts: [...timeRecordPersonalData(modules), ...actionsPersonalData(deps.db)],
-      venueLocale: deps.venueLocale,
-      now: deps.now,
-    },
-    log,
-  );
 
   const proofThrottle = createPasswordThrottle();
   const proofSite = { rpId: deps.rpId ?? "localhost", origin: deps.origin ?? "http://localhost" };

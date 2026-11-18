@@ -1690,7 +1690,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   route fixtures use English staff display-name samples.
   Local portion-sale projection, station-queue and station-move staff samples use Anna and Lewis.
   Local adjustment-report staff use Lucy, Paul and Rose; `till-session.person` and box-alert-email samples use Anna.
-  The own personal-data download (`me-api`) and box-health samples use Martha and Rose; stream-route and cross-person profile administrators use Administrator.
+  The own personal-data download (`personal-data-export-api.own`) and box-health samples use Martha and Rose; stream-route and cross-person profile administrators use Administrator.
   Local personal-data export, staff-export and working-time record suites use Martha Lewis; the staff-export suite's administrator sample uses Anna Admin.
   The adjustment-download worked example uses Martha Lewis, Lewis Green, Paul Gray and Anna Smith;
   local reprint and restore-archive staff samples use Anna.

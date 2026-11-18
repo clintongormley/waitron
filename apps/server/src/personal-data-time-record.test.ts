@@ -1,10 +1,10 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { unzipSync } from "fflate";
-import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
+import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
@@ -211,7 +211,7 @@ describe("the server's working-time part", () => {
     expect(() =>
       validatePersonalDataParts([
         ...personalDataParts(ALL_MODULES),
-        ...timeRecordPersonalData(ALL_MODULES),
+        ...personalDataServerParts(ALL_MODULES, {} as Database),
       ]),
     ).not.toThrow();
   });

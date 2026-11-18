@@ -51,7 +51,7 @@ import {
   timeEntries,
 } from "@waitron/workforce";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
-import { mountMeApi } from "./me-api.js";
+import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { personalDataReadme } from "./personal-data-readme.js";
 
@@ -683,13 +683,13 @@ async function seedActions(colleague: string): Promise<void> {
 
 async function download(path = PATH, as = cookie): Promise<Record<string, Uint8Array>> {
   const app = new Hono();
-  mountMeApi(
+  mountPersonalDataExportApi(
     app,
     {
       db: suite.db,
+      modules: ALL_MODULES,
+      serverParts: personalDataServerParts(ALL_MODULES, suite.db),
       venueLocale: "en-GB",
-      modules: ALL_MODULES.map((m) => m.name),
-      credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 6) } },
       now: () => AT,
     },
     logger,

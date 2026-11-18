@@ -22,7 +22,9 @@ import { createErrorBoundary, requireManagementSession } from "@waitron/server-k
 import { archiveFileName, zipArchive } from "./download-archive.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
+import { actionsPersonalData } from "./personal-data-actions.js";
 import { personalDataReadme } from "./personal-data-readme.js";
+import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { knownZone } from "./venue-time-zone.js";
 
 export interface PersonalDataExportDeps {
@@ -33,6 +35,13 @@ export interface PersonalDataExportDeps {
   venueLocale: string;
   now?: () => Date;
 }
+export function personalDataServerParts(
+  modules: readonly WaitronModule[],
+  db: Database,
+): PersonalDataPart[] {
+  return [...timeRecordPersonalData(modules), ...actionsPersonalData(db)];
+}
+
 export type PersonalDataAuthorize = (
   tx: Transaction,
 ) => Promise<{ personId: string; label: string; language: "en" | "es" }>;

@@ -6,14 +6,13 @@ import {
   INVOICE_CUSTOMER_README_WORDS,
   PERSONAL_DATA_README_WORDS,
 } from "./i18n/personal-data-readme.js";
-import { actionsPersonalData } from "./personal-data-actions.js";
 import {
   invoiceCustomerReadme,
   personalDataReadme,
   type InvoiceCustomerReadmeInput,
   type PersonalDataReadmeInput,
 } from "./personal-data-readme.js";
-import { timeRecordPersonalData } from "./personal-data-time-record.js";
+import { personalDataServerParts } from "./personal-data-export-api.js";
 
 const base: PersonalDataReadmeInput = {
   language: "en",
@@ -292,9 +291,7 @@ Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
   });
   it("has words in both languages for every file the server adds itself", () => {
     const stubDb = {} as Database;
-    const names = [...timeRecordPersonalData(ALL_MODULES), ...actionsPersonalData(stubDb)].flatMap(
-      (p) => p.part.files,
-    );
+    const names = personalDataServerParts(ALL_MODULES, stubDb).flatMap((p) => p.part.files);
     expect(names.length).toBeGreaterThan(0);
     for (const name of names) {
       expect(PERSONAL_DATA_README_WORDS.en.files[name], `en ${name}`).toBeDefined();
