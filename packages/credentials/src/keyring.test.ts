@@ -119,7 +119,7 @@ describe("loadKeyRing", () => {
     });
   });
 
-  it("never echoes the offending value for an invalid current version — C1", () => {
+  it("never echoes the offending value for an invalid current version", () => {
     // An operator transposes WAITRON_CREDENTIALS_KEY_VERSION and WAITRON_CREDENTIALS_KEY (a
     // plausible .env/systemd typo), handing this function real key material where a small integer
     // was expected. The params may not carry `leaked`, because bin.ts prints an AppError's params
@@ -132,7 +132,7 @@ describe("loadKeyRing", () => {
     expect(JSON.stringify(error.params)).not.toContain(leaked);
   });
 
-  it("never echoes the offending value for an invalid previous version — C1", () => {
+  it("never echoes the offending value for an invalid previous version", () => {
     const leaked = Buffer.alloc(32, 8).toString("base64");
     const error = captured(() =>
       loadKeyRing({

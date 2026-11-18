@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withNodeTransaction } from "@waitron/db";
 import { NODE_MIGRATIONS, readPairLink } from "@waitron/node-db";
 import { hasCode } from "@waitron/shared";
@@ -48,10 +48,6 @@ const LINK: NewPairLink = {
 
 describe("the pair link in node.db", () => {
   const suite = useVenueDb({ migrations: [NODE_MIGRATIONS] });
-
-  beforeEach(() => {
-    suite.node.run(sql`delete from node_pair_link`);
-  });
 
   function write(nodeId: string, link: NewPairLink = LINK, ring = RING_V1) {
     return withNodeTransaction(suite.node, (tx) => writePairLinkTx(tx, ring, nodeId, link));
