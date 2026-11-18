@@ -266,14 +266,17 @@ whole-file reads are separate work:
   deletion markers, including `venue.db`, `node.db` and their WALs. `fingerprintAgainst` avoids the
   read when the size differs; equal-size files are still hashed through a whole buffer. Preserve
   the same-size replacement refusal when streaming these hashes.
-- Cloud recovery downloads collect an archive of up to 512 MiB in memory (`cloud-recovery.ts`).
-  The unused archive branch
-  of `/recovery/preparation` and emergency handover still buffer archives within 256 MiB.
+- The unused archive branch of `/recovery/preparation` and emergency handover still buffer archives
+  within 256 MiB.
   Configuration transfer retains its separate buffer.
   These are transfer limits and buffers, not ordinary-start database admission.
 
-**Cloud transfer work waits for Cloud's receiving and verification limits.** On 16 November
-2026, Cloud revision `45cfc4eb6e35291ab0c5e161ab0871c8f97a0b40` caps encrypted objects at
+**Cloud capture and verification remain open.** Box recovery downloads approved Cloud objects to a
+file and refuses a point over 2 GiB. Larger Cloud captures, Cloud's receiving and verifier work,
+and paired year-sized qualification follow the
+[Cloud transfer plan](../superpowers/plans/2026-11-17-cloud-snapshot-stream.md).
+
+The earlier limits were measured on 16 November 2026. At that point, Cloud revision `45cfc4eb6e35291ab0c5e161ab0871c8f97a0b40` caps encrypted objects at
 512 MiB (`packages/backups/src/object-transfer.ts`, `MAX_OBJECT_BYTES`, and the metadata check
 in `catalogue.ts`). Its bound verification container allows at most 256 MiB for the whole
 scratch folder (`bound-container-verifier.ts`), including extracted database files. The verifier

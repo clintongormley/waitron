@@ -1,7 +1,11 @@
 import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { mkdirDurable, readRestoreFlowPhase, writeFileDurable } from "@waitron/provisioning";
 import { CLOUD_DIR, CLOUD_RECOVERY_FILE } from "@waitron/store";
-import { createHash, generateKeyPairSync, randomInt, randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomInt, randomUUID } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
+import { AppError } from "@waitron/shared";
 import { Agent } from "node:https";
 import { join } from "node:path";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
@@ -19,9 +23,15 @@ import {
   type SavedCloudRecoveryState as SavedState,
   type SnapshotRecoveryVerification,
 } from "./cloud-recovery-v2.js";
-import type { ArchiveRestoreRequest } from "./restore-request.js";
+import { MAX_CLOUD_ARCHIVE_BYTES } from "./cloud-backup-limits.js";
+import { errnoOf } from "./errno.js";
+import { freeBytes } from "./free-bytes.js";
+import { recoveryArchiveFileSourceId } from "./recovery-source.js";
+import { ARCHIVE_DOWNLOAD_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
+import { START_FREE_SPACE_FLOOR } from "./start-space.js";
+import type { ArchiveFileRestoreRequest } from "./restore-request.js";
+import "./errors.js";
 
-const MAX_BYTES = 512 * 1024 * 1024;
 const uuid = (value: unknown): value is string =>
   typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
@@ -68,7 +78,7 @@ export interface CloudRecoveryOptions {
   storageCa?: string;
   snapshotProtocol?: 2;
   target?: () => BackupVerificationTarget;
-  download?: (grant: Grant) => Promise<Uint8Array>;
+  download?: (grant: Grant, artifactPath: string) => Promise<void>;
 }
 
 function point(value: unknown): CloudRecoveryPoint {
@@ -86,14 +96,14 @@ function point(value: unknown): CloudRecoveryPoint {
     !/^[0-9a-f]{64}$/.test(value.digest) ||
     !Number.isSafeInteger(value.size) ||
     Number(value.size) < 1 ||
-    Number(value.size) > MAX_BYTES ||
+    Number(value.size) > MAX_CLOUD_ARCHIVE_BYTES ||
     !record(value.modules) ||
     Object.values(value.modules).some((v) => !Number.isSafeInteger(v) || Number(v) < 0)
   )
     unavailable();
   return value as unknown as CloudRecoveryPoint;
 }
-async function downloadArchive(grant: Grant, ca?: string): Promise<Uint8Array> {
+async function downloadArchive(grant: Grant, artifactPath: string, ca?: string): Promise<void> {
   let client: S3Client | undefined;
   try {
     const url = new URL(grant.location.endpoint);
@@ -119,23 +129,30 @@ async function downloadArchive(grant: Grant, ca?: string): Promise<Uint8Array> {
       credentials: grant.credentials,
       forcePathStyle: true,
       maxAttempts: 1,
-      requestHandler: { httpsAgent: new Agent({ ca }) },
+      requestHandler: { httpsAgent: new Agent({ ca, rejectUnauthorized: true }) },
     });
+    const signal = AbortSignal.timeout(remaining);
     const response = await client.send(
       new GetObjectCommand({ Bucket: grant.location.bucket, Key: grant.point.objectKey }),
-      { abortSignal: AbortSignal.timeout(remaining) },
+      { abortSignal: signal },
     );
     if (response.ContentLength !== grant.point.size || !response.Body) unavailable();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
-      size += chunk.length;
-      if (size > grant.point.size || size > MAX_BYTES) unavailable();
-      chunks.push(chunk);
-    }
-    if (size !== grant.point.size) unavailable();
-    return Buffer.concat(chunks, size);
-  } catch {
+    await pipeline(
+      response.Body as AsyncIterable<Uint8Array>,
+      async function* (chunks) {
+        let size = 0;
+        for await (const chunk of chunks) {
+          size += chunk.length;
+          if (size > grant.point.size) unavailable();
+          yield chunk;
+        }
+      },
+      createWriteStream(artifactPath, { flags: "wx", mode: 0o600 }),
+      { signal },
+    );
+  } catch (error) {
+    if (["ENOSPC", "EDQUOT"].includes(errnoOf(error) ?? ""))
+      throw new AppError("restore.archive_resource_limit", {});
     return unavailable();
   } finally {
     client?.destroy();
@@ -395,7 +412,10 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     await save(state);
     return view(state, "approved", p, info.operationExpiresAt);
   }
-  async function readSelectedArchive(expectedPointId: string) {
+  async function withSelectedArchive<T>(
+    expectedPointId: string,
+    use: (request: ArchiveFileRestoreRequest, state: SavedState) => Promise<T>,
+  ): Promise<T> {
     const state = await readForSetup();
     if (!state || state.phase) unavailable();
     const current = await statusOf(state, "status");
@@ -429,32 +449,52 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     if (JSON.stringify(granted) !== JSON.stringify(p)) unavailable();
     checkedVerification(state, result, granted);
     const grant = result as unknown as Grant;
-    const archive = await (
-      options.download ?? ((g: Grant) => downloadArchive(g, options.storageCa))
-    )(grant);
-    if (
-      archive.length !== p.size ||
-      createHash("sha256").update(archive).digest("hex") !== p.digest
-    )
-      unavailable();
-    const after = await post(state, "info");
-    if (
-      !record(after) ||
-      JSON.stringify(point(after.point)) !== JSON.stringify(p) ||
-      !validDate(after.operationExpiresAt) ||
-      Date.parse(after.operationExpiresAt) <= Date.now()
-    )
-      unavailable();
-    checkedVerification(state, after, p);
-    assertCurrent(state);
-    const request: ArchiveRestoreRequest = {
-      artifact: archive,
-      recoveryKey: grant.recoveryKey,
-      environment: "preproduction",
-      managedCloud: { requestId: state.requestId, pointId: p.id },
-      ...(verification === undefined ? {} : { snapshotVerification: verification }),
-    };
-    return { state, request };
+    const stagingDir = join(options.stateDir, RESTORE_STAGING_DIR);
+    let scratch: string | undefined;
+    try {
+      try {
+        await mkdir(stagingDir, { recursive: true, mode: 0o700 });
+        const free = await freeBytes(stagingDir);
+        if (free === null || free - START_FREE_SPACE_FLOOR < p.size)
+          throw new AppError("restore.archive_resource_limit", {});
+        scratch = await mkdtemp(join(stagingDir, ARCHIVE_DOWNLOAD_PREFIX));
+      } catch (error) {
+        if (["ENOSPC", "EDQUOT"].includes(errnoOf(error) ?? ""))
+          throw new AppError("restore.archive_resource_limit", {});
+        throw error;
+      }
+      const artifactPath = join(scratch, "archive");
+      if (options.download) await options.download(grant, artifactPath);
+      else await downloadArchive(grant, artifactPath, options.storageCa);
+      if (
+        (await stat(artifactPath)).size !== p.size ||
+        (await recoveryArchiveFileSourceId(artifactPath)) !== p.digest
+      )
+        unavailable();
+      const after = await post(state, "info");
+      if (
+        !record(after) ||
+        JSON.stringify(point(after.point)) !== JSON.stringify(p) ||
+        !validDate(after.operationExpiresAt) ||
+        Date.parse(after.operationExpiresAt) <= Date.now()
+      )
+        unavailable();
+      checkedVerification(state, after, p);
+      assertCurrent(state);
+      return await use(
+        {
+          kind: "archive-file",
+          artifactPath,
+          recoveryKey: grant.recoveryKey,
+          environment: "preproduction",
+          managedCloud: { requestId: state.requestId, pointId: p.id },
+          ...(verification === undefined ? {} : { snapshotVerification: verification }),
+        },
+        state,
+      );
+    } finally {
+      if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+    }
   }
   return {
     async replacementApproval(): Promise<{
@@ -532,24 +572,22 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       });
     },
     async preview<T>(
-      review: (request: ArchiveRestoreRequest) => Promise<T>,
+      review: (request: ArchiveFileRestoreRequest) => Promise<T>,
       expectedPointId: string,
     ): Promise<T> {
-      return locked(async () => {
-        const { request } = await readSelectedArchive(expectedPointId);
-        return review(request);
-      });
+      return locked(() => withSelectedArchive(expectedPointId, (request) => review(request)));
     },
     async restore(
-      stage: (request: ArchiveRestoreRequest) => Promise<void>,
+      stage: (request: ArchiveFileRestoreRequest) => Promise<void>,
       expectedPointId: string,
     ): Promise<void> {
-      return locked(async () => {
-        const { state, request } = await readSelectedArchive(expectedPointId);
-        await stage(request);
-        state.phase = "staged";
-        await save(state);
-      });
+      return locked(() =>
+        withSelectedArchive(expectedPointId, async (request, state) => {
+          await stage(request);
+          state.phase = "staged";
+          await save(state);
+        }),
+      );
     },
     async markRestored(binding: { requestId: string; pointId: string }): Promise<void> {
       return locked(async () => {

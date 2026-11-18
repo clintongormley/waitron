@@ -266,8 +266,9 @@ describe("selected-hour admission before archive placement", () => {
       };
       const fetched = vi.spyOn(globalThis, "fetch");
       const f = await archiveHost(source === "stream" ? "stream" : "archive");
+      const { artifact, ...placement } = f.restore;
       const common = {
-        ...f.restore,
+        ...placement,
         modules: f.service.modules,
         withModuleOperations: f.service.runner(f.outcome.input),
       };
@@ -275,7 +276,7 @@ describe("selected-hour admission before archive placement", () => {
         await writeStreamRestore({ ...common, databasePath: f.database, entries: f.entries });
       } else if (source === "file") {
         const artifactPath = join(root, "historical.backup.enc");
-        await writeFile(artifactPath, f.restore.artifact);
+        await writeFile(artifactPath, artifact);
         await restoreFromArtifactFile({ ...common, artifactPath });
       } else if (source === "managed") {
         const pointId = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
@@ -292,8 +293,8 @@ describe("selected-hour admission before archive placement", () => {
               now: new Date(),
             })
           ).modules,
-          digest: createHash("sha256").update(f.restore.artifact).digest("hex"),
-          size: f.restore.artifact.length,
+          digest: createHash("sha256").update(artifact).digest("hex"),
+          size: artifact.length,
           objectKey: `snapshots/${pointId}`,
           verification: "verified",
           kind: "snapshot",
@@ -338,14 +339,14 @@ describe("selected-hour admission before archive placement", () => {
               });
             throw new Error(`unexpected Cloud recovery action ${action}`);
           },
-          download: async () => f.restore.artifact,
+          download: async (_grant: unknown, path: string) => writeFile(path, artifact),
         });
         await client.start();
         await client.restore(async (request) => {
-          await restoreFromArtifact({ ...common, ...request });
+          await restoreFromArtifactFile({ ...common, ...request });
         }, pointId);
       } else {
-        await restoreFromArtifact(common);
+        await restoreFromArtifact({ ...common, artifact });
       }
       expect({
         clients: aeatClients.mock.calls.length,

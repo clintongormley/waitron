@@ -24,7 +24,7 @@ import { createCloudRecoveryClient } from "../src/cloud-recovery.js";
 import { createCloudConnection } from "../src/cloud-client.js";
 import { createCloudReplacement } from "../src/cloud-replacement.js";
 import { stageRestoreRequest, runStagedRestore } from "../src/restore-request.js";
-import { validateArtifact } from "../src/restore.js";
+import { validateArtifactFile } from "../src/restore.js";
 import { RESTORE_STAGING_DIR } from "../src/restore-staging-dirs.js";
 import { ALL_MODULES } from "../src/modules.js";
 import { parseEnvFile } from "../src/env-file.js";
@@ -87,9 +87,9 @@ else if (request.command === "status") result = await client.status();
 else if (request.command === "stage") {
   assert(request.expectedPointId);
   await client.restore(async (candidate) => {
-    const checked = await validateArtifact({
+    const checked = await validateArtifactFile({
       ...validation,
-      artifact: candidate.artifact,
+      artifactPath: candidate.artifactPath,
       recoveryKey: candidate.recoveryKey,
     });
     try {

@@ -134,7 +134,7 @@ async function fixture() {
     snapshotProtocol: 2,
     target: f.localTarget,
     fetch: fetchImpl as typeof fetch,
-    download: vi.fn(async () => Buffer.from("archive")),
+    download: vi.fn(async (_grant, path: string) => writeFile(path, "archive")),
   };
   return {
     ...f,
@@ -219,11 +219,13 @@ describe("target-bound snapshot recovery v2", () => {
     await client.status();
     let staged: unknown;
     await client.restore(async (request) => {
+      expect(await readFile(request.artifactPath, "utf8")).toBe("archive");
       staged = request;
     }, point.id);
     const saved = await f.saved();
     expect(staged).toEqual({
-      artifact: Buffer.from("archive"),
+      kind: "archive-file",
+      artifactPath: expect.any(String),
       recoveryKey: "archive-key",
       environment: "preproduction",
       managedCloud: { requestId: saved.requestId, pointId: point.id },
@@ -394,9 +396,9 @@ describe("target-bound snapshot recovery v2", () => {
           return result;
         };
       if (where === "during-download")
-        f.options.download = vi.fn(async () => {
+        f.options.download = vi.fn(async (_grant, path) => {
           f.changeTarget();
-          return Buffer.from("archive");
+          await writeFile(path, "archive");
         });
       const stage = vi.fn(async () => {});
       await expect(client.restore(stage, point.id)).rejects.toThrow(unavailable);
@@ -610,6 +612,30 @@ describe("target-bound snapshot recovery v2", () => {
     expect(saved).toMatchObject({ version: 1 });
     expect(saved.target).toBeUndefined();
   });
+  it("accepts an approved point at the 2 GiB encrypted limit", async () => {
+    expect(
+      v2.readSnapshotRecoveryVerification({ ...verification(), archiveBytes: 2_147_483_648 }),
+    ).toMatchObject({ archiveBytes: 2_147_483_648 });
+    expect(() =>
+      v2.readSnapshotRecoveryVerification({ ...verification(), archiveBytes: 2_147_483_649 }),
+    ).toThrow(unavailable);
+    const f = await fixture();
+    const client = createCloudRecoveryClient(f.options);
+    await client.start();
+    f.rewrite = (action, result) =>
+      action === "info"
+        ? {
+            ...result,
+            point: { ...point, size: 2_147_483_648 },
+            verification: { ...verification(), archiveBytes: 2_147_483_648 },
+          }
+        : result;
+    await expect(client.status()).resolves.toMatchObject({
+      state: "approved",
+      point: { id: point.id },
+    });
+  });
+
   it.each(["empty", "fraction", "negative", "over-limit", "non-number", "bad-hash", "bad-point"])(
     "refuses verification archive %s",
     async (fault) => {
@@ -621,11 +647,15 @@ describe("target-bound snapshot recovery v2", () => {
         if (fault === "empty") v.archiveBytes = 0;
         if (fault === "fraction") v.archiveBytes = 7.5;
         if (fault === "negative") v.archiveBytes = -1;
-        if (fault === "over-limit") v.archiveBytes = 512 * 1024 * 1024 + 1;
+        if (fault === "over-limit") v.archiveBytes = 2_147_483_649;
         if (fault === "non-number") v.archiveBytes = "7";
         if (fault === "bad-hash") v.archiveSha256 = "bad";
         if (fault === "bad-point") v.pointId = "bad";
-        return { ...result, verification: v };
+        return {
+          ...result,
+          point: fault === "over-limit" ? { ...point, size: v.archiveBytes } : point,
+          verification: v,
+        };
       };
       await expect(createCloudRecoveryClient(f.options).status()).rejects.toThrow(unavailable);
     },

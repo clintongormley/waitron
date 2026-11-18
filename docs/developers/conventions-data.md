@@ -5492,8 +5492,10 @@ src/local-fs-backend.test.ts`.
 
 Sparse 2147487744-byte placement and codec tests check size, offsets and edge bytes. They do not
 measure integrity checks or cryptographic throughput over a valid SQLite database that large.
-Managed Cloud retains its separate 512 MiB limit. The browser's preview, recovery stage and restore
-routes stream ciphertext into a private 0700 folder and 0600 file under `scratch/restore`, with a
+Managed Cloud capture and the verifier's wire parser keep their 512 MiB limits. Box-side Cloud
+recovery accepts an approved object up to 2 GiB. It checks the start reserve before downloading the
+ciphertext to a private file under `scratch/restore`. The browser's preview, recovery stage and
+restore routes stream ciphertext into a private 0700 folder and 0600 file under `scratch/restore`, with a
 4 GiB input ceiling, a counted multipart overhead budget and the start's free-space reserve.
 They share the provisioning latch through receipt and validation; a restore keeps it until restart.
 The file validator authenticates ciphertext before decoding it. Publication moves and flushes the

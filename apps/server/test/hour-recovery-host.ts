@@ -804,7 +804,7 @@ export async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
       if (action === "restored") return Response.json({ status: "restored" });
       throw new Error(`unexpected recovery action ${action}`);
     },
-    download: async () => f.restore.artifact,
+    download: async (_grant: unknown, path: string) => writeFile(path, f.restore.artifact),
   };
   const client = () => createCloudRecoveryClient(options);
   await client().start();

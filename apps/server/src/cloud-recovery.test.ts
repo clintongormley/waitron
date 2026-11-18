@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { createServer } from "node:https";
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import * as filesystemSpace from "./free-bytes.js";
+import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import { publishRestoreFlow, endRestoreFlow } from "./restore-flow.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { S3Client } from "@aws-sdk/client-s3";
@@ -32,7 +36,7 @@ const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-async function fixture() {
+async function fixture(selected = point) {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-cloud-recovery-"));
   dirs.push(stateDir);
   const calls: { action: string; body: Record<string, unknown> }[] = [];
@@ -58,12 +62,12 @@ async function fixture() {
       });
     if (action === "info")
       return Response.json({
-        point,
+        point: selected,
         operationExpiresAt: new Date(Date.now() + 60 * 60_000).toISOString(),
       });
     if (action === "read")
       return Response.json({
-        point,
+        point: selected,
         location: { endpoint: "https://store.example.test", bucket: "backup", region: "local" },
         credentials: { accessKeyId: "access", secretAccessKey: "secret", sessionToken: "session" },
         recoveryKey: "archive-key",
@@ -78,7 +82,7 @@ async function fixture() {
     origin,
     environment: "preproduction" as const,
     fetch: fetchImpl as typeof fetch,
-    download: vi.fn(async () => Buffer.from("archive")),
+    download: vi.fn(async (_grant: unknown, path: string) => writeFile(path, "archive")),
   };
   return { stateDir, calls, options };
 }
@@ -112,13 +116,28 @@ describe("Cloud recovery target", () => {
     expect(JSON.stringify(view)).not.toContain("store.example.test");
   });
 
+  it("refuses a version-1 point over 2 GiB before requesting a download grant", async () => {
+    const f = await fixture({ ...point, size: 2_147_483_649 });
+    const client = createCloudRecoveryClient(f.options);
+    await expect(client.start()).rejects.toThrow();
+    await expect(client.restore(async () => {}, point.id)).rejects.toThrow(
+      "Cloud recovery is unavailable",
+    );
+    expect(f.calls.map((call) => call.action)).toEqual(["start", "status", "info"]);
+  });
+
   it("validates bytes and rechecks owner authority before staging", async () => {
     const f = await fixture();
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
-    const stage = vi.fn(async () => {});
+    const stage = vi.fn(
+      async (request: import("./restore-request.js").ArchiveFileRestoreRequest) => {
+        expect(await readFile(request.artifactPath, "utf8")).toBe("archive");
+      },
+    );
     await createCloudRecoveryClient(f.options).restore(stage, point.id);
     expect(stage).toHaveBeenCalledWith({
-      artifact: Buffer.from("archive"),
+      kind: "archive-file",
+      artifactPath: expect.any(String),
       recoveryKey: "archive-key",
       environment: "preproduction",
       managedCloud: { requestId: expect.any(String), pointId: point.id },
@@ -150,10 +169,25 @@ describe("Cloud recovery target", () => {
   it("refuses a wrong digest without staging", async () => {
     const f = await fixture();
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
-    f.options.download = vi.fn(async () => Buffer.from("wrong!!"));
+    f.options.download.mockImplementation(async (_grant, path) => writeFile(path, "wrong!!"));
     const stage = vi.fn(async () => {});
     await expect(createCloudRecoveryClient(f.options).restore(stage, point.id)).rejects.toThrow();
     expect(stage).not.toHaveBeenCalled();
+  });
+
+  it("leaves the start reserve untouched when the approved object will not fit", async () => {
+    const f = await fixture();
+    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+    const free = vi.spyOn(filesystemSpace, "freeBytes").mockResolvedValueOnce(1);
+    try {
+      await expect(
+        createCloudRecoveryClient(f.options).restore(async () => {}, point.id),
+      ).rejects.toMatchObject({ code: "restore.archive_resource_limit" });
+      expect(f.options.download).not.toHaveBeenCalled();
+      expect(await readdir(join(f.stateDir, RESTORE_STAGING_DIR))).toEqual([]);
+    } finally {
+      free.mockRestore();
+    }
   });
 
   it("refuses staging when Cloud withdraws authority after the archive download", async () => {
@@ -170,6 +204,7 @@ describe("Cloud recovery target", () => {
     await expect(createCloudRecoveryClient(f.options).restore(stage, point.id)).rejects.toThrow();
     expect(f.options.download).toHaveBeenCalledOnce();
     expect(stage).not.toHaveBeenCalled();
+    expect(await readdir(join(f.stateDir, RESTORE_STAGING_DIR))).toEqual([]);
   });
 
   it("rejects a read grant for any snapshot other than the displayed approval", async () => {
@@ -320,6 +355,68 @@ describe("Cloud recovery target", () => {
       code: "ENOENT",
     });
   });
+
+  it.runIf(process.env.WAITRON_LARGE_CLOUD_BACKUP_TEST === "1")(
+    "stages a 513 MiB HTTPS object from a private file",
+    async () => {
+      const chunk = Buffer.alloc(1024 * 1024, 0x5a);
+      const hash = createHash("sha256");
+      for (let i = 0; i < 513; i++) hash.update(chunk);
+      const selected = { ...point, size: 513 * chunk.length, digest: hash.digest("hex") };
+      const f = await fixture(selected);
+      await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+      const tls = mintSelfSignedServerCert({
+        hostnames: ["localhost"],
+        ipAddresses: ["127.0.0.1"],
+        now: new Date(),
+      });
+      const paths: string[] = [];
+      const server = createServer(
+        { key: tls.serverKeyPem, cert: tls.serverCertPem },
+        (req, res) => {
+          paths.push(String(req.url));
+          res.writeHead(200, { "content-length": selected.size });
+          const chunks = Array.from({ length: 513 }, () => chunk);
+          void pipeline(Readable.from(chunks), res).catch(() => res.destroy());
+        },
+      );
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const endpoint = `https://127.0.0.1:${(server.address() as { port: number }).port}`;
+      const options: CloudRecoveryOptions = {
+        ...f.options,
+        download: undefined,
+        storageCa: tls.caCertPem,
+        fetch: (async (url: string, init?: RequestInit) => {
+          const response = await f.options.fetch(url, init);
+          if (!url.endsWith("/read")) return response;
+          return Response.json({
+            ...(await response.json()),
+            location: { endpoint, bucket: "backup", region: "local" },
+          });
+        }) as typeof fetch,
+      };
+      try {
+        let staged = false;
+        await createCloudRecoveryClient(options).restore(async (request) => {
+          if (!("artifactPath" in request) || typeof request.artifactPath !== "string")
+            throw new Error("Expected a private archive file");
+          const info = await stat(request.artifactPath);
+          expect(info.size).toBe(selected.size);
+          expect(info.mode & 0o777).toBe(0o600);
+          staged = true;
+        }, point.id);
+        expect(staged).toBe(true);
+        expect(paths.map((path) => new URL(path, endpoint).pathname)).toEqual([
+          `/backup/${point.objectKey}`,
+        ]);
+        expect(await readdir(join(f.stateDir, RESTORE_STAGING_DIR))).toEqual([]);
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    },
+    60_000,
+  );
 
   it("bounds a stalled HTTPS object body and retries the same scoped GET", async () => {
     const f = await fixture();
@@ -556,10 +653,15 @@ describe("Cloud selected-copy preview", () => {
     const f = await fixture();
     const client = createCloudRecoveryClient(f.options);
     await expect(client.start()).rejects.toThrow();
-    const review = vi.fn(async (request: import("./restore-request.js").ArchiveRestoreRequest) => ({
-      sourceId: request.managedCloud!.pointId,
-      nodeRecoveryKeyName: "Amber Hill",
-    }));
+    const review = vi.fn(
+      async (request: import("./restore-request.js").ArchiveFileRestoreRequest) => {
+        expect(await readFile(request.artifactPath, "utf8")).toBe("archive");
+        return {
+          sourceId: request.managedCloud!.pointId,
+          nodeRecoveryKeyName: "Amber Hill",
+        };
+      },
+    );
     expect(typeof client.preview).toBe("function");
     expect(await client.preview(review, point.id)).toEqual({
       sourceId: point.id,
@@ -568,11 +670,13 @@ describe("Cloud selected-copy preview", () => {
     const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
     expect(saved.phase).toBeUndefined();
     expect(review).toHaveBeenCalledWith({
-      artifact: Buffer.from("archive"),
+      kind: "archive-file",
+      artifactPath: expect.any(String),
       recoveryKey: "archive-key",
       environment: "preproduction",
       managedCloud: { requestId: saved.requestId, pointId: point.id },
     });
+    expect(await readdir(join(f.stateDir, RESTORE_STAGING_DIR))).toEqual([]);
     const stage = vi.fn(async () => {});
     await client.restore(stage, point.id);
     expect(stage).toHaveBeenCalledOnce();
@@ -584,7 +688,7 @@ describe("Cloud selected-copy preview", () => {
     const f = await fixture();
     const client = createCloudRecoveryClient(f.options);
     await expect(client.start()).rejects.toThrow();
-    f.options.download.mockResolvedValue(Buffer.from("wrong!!"));
+    f.options.download.mockImplementation(async (_grant, path) => writeFile(path, "wrong!!"));
     const review = vi.fn(async () => ({ nodeRecoveryKeyName: "Amber Hill" }));
     expect(typeof client.preview).toBe("function");
     await expect(client.preview(review, point.id)).rejects.toThrow();
