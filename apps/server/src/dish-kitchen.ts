@@ -14,6 +14,7 @@ export interface DishKitchenItem {
   courseId: string | null;
   firedAt: string | null;
   requestedAt: string | null;
+  holdPaperQueued: boolean;
   state: TicketState;
   /** Thousandths: what the station was asked for. */
   firedQuantity: number;
@@ -32,6 +33,7 @@ export function dishKitchenItemsQuery(tx: Transaction, dishLineIds: readonly str
       courseId: ticketItems.courseId,
       firedAt: ticketItems.firedAt,
       requestedAt: ticketItems.requestedAt,
+      holdPaperQueued: ticketItems.holdPaperQueued,
       state: ticketItems.state,
       firedQuantity: ticketItems.quantity,
       lineQuantity: workingOrderLines.quantity,
@@ -75,6 +77,7 @@ export async function dishKitchenItems(
       courseId: row.courseId,
       firedAt: row.firedAt,
       requestedAt: row.requestedAt,
+      holdPaperQueued: row.holdPaperQueued,
       state: row.state,
       firedQuantity: row.firedQuantity ?? row.lineQuantity,
       lineQuantity: row.lineQuantity,

@@ -1001,6 +1001,8 @@ export interface CorrectionItem {
    *  CHANGED. */
   quantity: number;
   wasStarted: boolean;
+  /** An ungrouped correction to work waiting on HOLD paper. */
+  ungroupedHold?: true;
   /** The permanent number on the HOLD ticket being corrected. */
   group?: number;
   numberPartyLabel?: string;
@@ -1366,8 +1368,9 @@ export async function enqueueStationMoved(
   await VENUE_SERVICE.recordKitchenNotices(tx, orderId, notices.map(toNoticeItem), "rerouted", {
     reroutedTo: toStationName,
   });
-  const fired = items.filter((item) => item.group === undefined);
-  const held = items.filter((item) => item.group !== undefined);
+  const onHold = (item: CorrectionItem) => item.ungroupedHold === true || item.group !== undefined;
+  const fired = items.filter((item) => !onHold(item));
+  const held = items.filter(onHold);
   if (fired.length > 0)
     await printCorrectionSlips(
       tx,
@@ -1390,7 +1393,7 @@ export async function enqueueHoldCorrections(
   tx: Transaction,
   cfg: TradingContext,
   orderId: string,
-  items: (CorrectionItem & { group: number })[],
+  items: CorrectionItem[],
   change: HoldCorrection,
 ): Promise<void> {
   items = await withoutMadeHere(tx, items);
@@ -1419,6 +1422,7 @@ export interface CancelledExtra {
   item: {
     firedAt: string | null;
     requestedAt: string | null;
+    holdPaperQueued: boolean;
     stationId: string | null;
     state: TicketState;
     firedQuantity: number;
@@ -1446,6 +1450,7 @@ export async function readCancelledExtra(
       ticketItemId: ticketItems.id,
       firedAt: ticketItems.firedAt,
       requestedAt: ticketItems.requestedAt,
+      holdPaperQueued: ticketItems.holdPaperQueued,
       stationId: ticketItems.stationId,
       state: ticketItems.state,
       firedQuantity,
@@ -1472,6 +1477,7 @@ export async function readCancelledExtra(
         : {
             firedAt: found.firedAt,
             requestedAt: found.requestedAt,
+            holdPaperQueued: found.holdPaperQueued!,
             stationId: found.stationId,
             state: found.state!,
             firedQuantity: found.firedQuantity,
@@ -1499,7 +1505,7 @@ export async function enqueueExtraCancelled(
   });
   await printCorrectionSlips(tx, cfg, orderId, [item], {
     kind: "EXTRA CANCELLED",
-    held: item.group !== undefined,
+    held: item.ungroupedHold === true || item.group !== undefined,
     cancelledExtra,
   });
 }
@@ -1852,6 +1858,14 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
         isNotNull(orderGroups.holdPrintedAt),
       ),
     );
+}
+
+export function hasUngroupedHoldPaper(item: {
+  firedAt: string | null;
+  requestedAt: string | null;
+  holdPaperQueued: boolean | null;
+}): boolean {
+  return item.firedAt === null && item.requestedAt !== null && item.holdPaperQueued === true;
 }
 
 /**
@@ -2526,6 +2540,25 @@ async function readReprintParts(
       sentAt: holdPrintedAt,
     }),
   );
+  const counterHold = await tx
+    .select({
+      workingOrderId: workingOrderLines.workingOrderId,
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      quantity: ticketItems.quantity,
+      sentAt: ticketItems.queuedAt,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(
+      and(
+        inIds(workingOrderLines.workingOrderId, orderIds),
+        isNull(workingOrderLines.groupId),
+        isNull(ticketItems.firedAt),
+        isNotNull(ticketItems.requestedAt),
+        eq(ticketItems.holdPaperQueued, true),
+      ),
+    );
   const byOrder = (
     rows: readonly (Omit<FiredItem, "sentAt"> & {
       workingOrderId: string;
@@ -2539,7 +2572,7 @@ async function readReprintParts(
     return items;
   };
   const firedByOrder = byOrder(fired);
-  const heldByOrder = byOrder(held);
+  const heldByOrder = byOrder([...held, ...counterHold]);
   return new Map(
     orderIds.map((id) => {
       const firedItems = firedByOrder.get(id)!;

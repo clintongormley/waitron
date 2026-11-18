@@ -29,6 +29,10 @@ import { readContentLanguages, writeContentLanguages } from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import { cancelItem } from "./line-cancel.js";
+import { readCancellationContext } from "./line-cancel-context.js";
+import { applyAdjustment } from "./adjustments-apply.js";
+import { reprintOrderTickets } from "./kitchen-print.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { createCourse, createStation } from "./kitchen.js";
 import {
@@ -45,6 +49,13 @@ import { saveDraft } from "./order-drafts.js";
 import { holderOf, insertPartyBill } from "./parties.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readBillLines, readOrderRevision } from "./working-order.js";
+import {
+  moveDishesToStation,
+  updateHeldOrder,
+  updateOrderLine,
+} from "./testing/order-writer-fixture.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { addExtras } from "./testing/split-extras-venue.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mergeBills, moveDishes, splitBill } from "./testing/bill-action-fixture.js";
@@ -52,7 +63,14 @@ import { numberBill } from "./testing/bill-identities.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { cancelLine } from "./testing/cancel-line.js";
+import {
+  cancelItemForTest,
+  cancelLine,
+  cancelReasonId,
+  GIVE_AWAY_REASON,
+  observedCancelItem,
+  reasonIdOf,
+} from "./testing/cancel-line.js";
 import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { moveSettledBillToCounter } from "./move-bill.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
@@ -1799,11 +1817,30 @@ function movedSlip(station: string, orderLine: string, from: string, to: string,
  * Burger and the held Tarta. Flan and Tarta share held group G, the party's third, so a copy at a
  * new party (fired group 1, copy 2) never shares G's number.
  */
-async function paperTable(holdPaper: boolean, grillHoldPaper = holdPaper) {
+async function paperTable(
+  holdPaper: boolean,
+  grillHoldPaper = holdPaper,
+  tarta?: {
+    extras: { listId: string; picks: { productId: string; quantity: number }[] }[];
+    splitAtPastry?: true;
+  },
+) {
   const n = ++paperNumber;
   const grill = await stationWithPrinter(`Paper grill ${n}`, ["Burger", "Tarta"]);
   const pastry = await stationWithPrinter(`Paper pastry ${n}`, ["Flan"]);
   paperStations.push(grill, pastry);
+  if (tarta?.splitAtPastry) {
+    await inTx(v, async (tx) => {
+      for (const { productId } of tarta.extras.flatMap(({ picks }) => picks)) {
+        await setRoutingCell(
+          tx,
+          { row: { kind: "product", productId }, zoneId: null },
+          { kind: "station", stationId: pastry },
+        );
+      }
+    });
+  }
+
   await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: holdPaper }, [pastry]));
   await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: grillHoldPaper }, [grill]));
   const label = `Mesa 5 (${n})`;
@@ -1825,6 +1862,7 @@ async function paperTable(holdPaper: boolean, grillHoldPaper = holdPaper) {
             menuItemId: v.item(name),
             quantity: "1",
             courseId: desserts,
+            ...(name === "Tarta" && tarta !== undefined ? { extras: tarta.extras } : {}),
           })),
         },
       ],
@@ -2164,7 +2202,22 @@ describe("A803 waiting copy: kitchen paper", () => {
   });
 
   describe("A1327 a dish waiting for the pass on HOLD paper changes table", () => {
-    afterEach(() => inTx(v, (tx) => setStationsWaitForPass(tx, false, paperStations)));
+    let previousLanguage: Awaited<ReturnType<typeof readContentLanguages>> | undefined;
+
+    afterEach(async () => {
+      await inTx(v, (tx) => setStationsWaitForPass(tx, false, paperStations));
+      if (previousLanguage === undefined) return;
+      const restore = previousLanguage;
+      previousLanguage = undefined;
+      await inTx(v, (tx) => writeContentLanguages(tx, restore));
+    });
+
+    async function setPaperLanguage(language: string) {
+      await inTx(v, async (tx) => {
+        previousLanguage = await readContentLanguages(tx, v.cfg.locale);
+        await writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] });
+      });
+    }
 
     let passActor: PassActor | undefined;
 
@@ -2211,8 +2264,8 @@ describe("A803 waiting copy: kitchen paper", () => {
     }
 
     /** {@link paperTable} with Grill waiting for the pass and G fired: Tarta waits on HOLD paper. */
-    async function waitingTable(grillHoldPaper = true) {
-      const t = await paperTable(true, grillHoldPaper);
+    async function waitingTable(grillHoldPaper = true, extras?: Parameters<typeof paperTable>[2]) {
+      const t = await paperTable(true, grillHoldPaper, extras);
       await inTx(v, (tx) => setStationsWaitForPass(tx, true, [t.grill.id]));
       await fire(t.partyId, t.g);
       const cake = await kitchenItemOf((await lineOf(t.bill2, "Tarta")).id);
@@ -2390,6 +2443,370 @@ describe("A803 waiting copy: kitchen paper", () => {
       const burger = (await printed(t.grill.printer)).slice(beforeBurger);
       expect(burger).toEqual([expect.arrayContaining(["1 x BURG"])]);
       expect(burger[0]![0]).not.toMatch(/\*\*\*/);
+    });
+
+    async function waitingAtCounter(
+      withUnprintedBurger = false,
+      tarta?: Parameters<typeof paperTable>[2],
+      grillHoldPaper = true,
+    ) {
+      const t = await waitingTable(grillHoldPaper, tarta);
+      if (withUnprintedBurger) {
+        await inTx(v, (tx) =>
+          placeGroups(tx, v.cfg, t.partyId, {
+            groups: [
+              {
+                release: "fire",
+                lines: [{ menuItemId: v.item("Burger"), quantity: "1", courseId: null }],
+              },
+            ],
+            operatorId: OPERATOR,
+            billId: t.bill2,
+          }),
+        );
+      }
+      await moveWholeBill(t.bill2, t.partyId, { counter: { zoneId: null } });
+      const cake = await lineOf(t.bill2, "Tarta");
+      expect(cake.groupId).toBeNull();
+      expect(await kitchenItemOf(cake.id)).toMatchObject({
+        firedAt: null,
+        requestedAt: expect.any(String),
+        holdPaperQueued: grillHoldPaper,
+      });
+      return { ...t, cake };
+    }
+
+    it("counter paper: reprints the fired burger and only the waiting dish with HOLD paper", async () => {
+      const t = await waitingAtCounter(true);
+      const mark = (await printed(t.grill.printer)).length;
+
+      await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, t.bill2));
+
+      const slips = (await printed(t.grill.printer)).slice(mark);
+      const paper = slips[0]!;
+      expect(slips).toHaveLength(1);
+      const hold = paper.indexOf(`*** ${words.hold} ***`);
+      expect(hold).toBeGreaterThan(0);
+      expect(paper.slice(0, hold).filter((line) => line === "1 x BURG")).toHaveLength(1);
+      expect(paper.slice(hold)).toContain("1 x TARTA");
+      expect(paper.slice(hold)).not.toContain("1 x BURG");
+    });
+
+    it.each([
+      ["en", "HOLD CANCELLED"],
+      ["es", "EN ESPERA CANCELADO"],
+    ] as const)(
+      "counter paper: a %s HOLD cancellation prints for a waiting dish",
+      async (language, heading) => {
+        await setPaperLanguage(language);
+        const t = await waitingAtCounter(true);
+        const mark = (await printed(t.grill.printer)).length;
+        await inTx(v, async (tx) => {
+          const burgers = (await linesOf(t.bill2)).filter((line) => line.name === "Burger");
+          await cancelItemForTest(tx, v.cfg, t.bill2, burgers[1]!.lineNo);
+          await cancelItemForTest(tx, v.cfg, t.bill2, t.cake.lineNo);
+        });
+
+        const slips = (await printed(t.grill.printer)).slice(mark);
+        expect(slips).toEqual([expect.arrayContaining([`*** ${heading} ***`, "1 x TARTA"])]);
+        expect(slips.flat().join("\n")).not.toContain("undefined");
+      },
+    );
+
+    it.each([
+      ["en", true, true, "HOLD CANCELLED"],
+      ["es", true, false, "EN ESPERA CANCELADO"],
+      ["en", false, false, "HOLD CANCELLED"],
+    ] as const)(
+      "counter paper: a %s station removal when the destination waits: %s, prints HOLD: %s",
+      async (language, waits, printsHold, heading) => {
+        await setPaperLanguage(language);
+        const t = await waitingAtCounter(waits && printsHold);
+        const burgers = (await linesOf(t.bill2)).filter((line) => line.name === "Burger");
+        await inTx(v, async (tx) => {
+          await setStationsWaitForPass(tx, waits, [t.pastry.id]);
+          await setStationPrinting(tx, { printHeldWork: printsHold }, [t.pastry.id]);
+        });
+        const oldMark = (await printed(t.grill.printer)).length;
+        const newMark = (await printed(t.pastry.printer)).length;
+        const actor = await passDevice();
+        await inTx(v, (tx) =>
+          moveDishesToStation(
+            tx,
+            v.cfg,
+            t.bill2,
+            {
+              submissionId: randomUUID(),
+              lineIds: [t.cake.id, ...burgers.slice(1).map(({ id }) => id)],
+              stationId: t.pastry.id,
+            },
+            actor,
+          ),
+        );
+
+        const removals = (await printed(t.grill.printer)).slice(oldMark);
+        expect(removals).toEqual([expect.arrayContaining([`*** ${heading} ***`, "1 x TARTA"])]);
+        expect(removals.flat().join("\n")).not.toContain("undefined");
+        expect(removals.flat()).not.toContain("1 x BURG");
+        const arrivals = (await printed(t.pastry.printer)).slice(newMark);
+        expect(arrivals).toEqual(
+          waits && !printsHold ? [] : [expect.arrayContaining(["1 x TARTA"])],
+        );
+        expect(arrivals.flat()).not.toContain("1 x BURG");
+        if (waits && printsHold) expect(arrivals[0]).toContain("*** HOLD ***");
+        expect(await kitchenItemOf(t.cake.id)).toMatchObject({
+          stationId: t.pastry.id,
+          firedAt: waits ? null : expect.any(String),
+          holdPaperQueued: printsHold,
+        });
+        if (burgers.length === 2)
+          expect(await kitchenItemOf(burgers[1]!.id)).toMatchObject({
+            stationId: t.pastry.id,
+            firedAt: null,
+            holdPaperQueued: false,
+          });
+      },
+    );
+
+    function editCounterDish(
+      { bill2, cake }: Awaited<ReturnType<typeof waitingAtCounter>>,
+      patch: Parameters<typeof updateOrderLine>[4],
+    ) {
+      return inTx(v, async (tx) =>
+        updateOrderLine(
+          tx,
+          v.cfg,
+          bill2,
+          cake.lineNo,
+          patch,
+          await readOrderRevision(tx, bill2),
+          OPERATOR,
+        ),
+      );
+    }
+
+    it("counter paper: increasing a waiting dish prints the added quantity", async () => {
+      const t = await waitingAtCounter();
+      const mark = (await printed(t.grill.printer)).length;
+
+      await editCounterDish(t, { quantity: "2" });
+
+      expect((await printed(t.grill.printer)).slice(mark)).toEqual([
+        expect.arrayContaining([`*** ${words.holdChanged} ***`, "+1 x TARTA"]),
+      ]);
+      const tartas = (await linesOf(t.bill2)).filter(({ name }) => name === "Tarta");
+      expect(tartas).toHaveLength(2);
+      for (const { id } of tartas)
+        expect(await kitchenItemOf(id)).toMatchObject({ firedAt: null, holdPaperQueued: true });
+    });
+
+    it("counter paper: cancelling a raised row prints one removal for both waiting portions", async () => {
+      const t = await waitingAtCounter();
+      await editCounterDish(t, { quantity: "2" });
+      const lineIds = (await linesOf(t.bill2))
+        .filter(({ name }) => name === "Tarta")
+        .map(({ id }) => id);
+      const mark = (await printed(t.grill.printer)).length;
+
+      await inTx(v, async (tx) => {
+        const { target, lineId, body } = await observedCancelItem(tx, t.bill2, t.cake.lineNo, "2");
+        await cancelItem(
+          tx,
+          v.cfg,
+          target,
+          lineId,
+          {
+            ...body,
+            lineIds,
+            expectedContext: await readCancellationContext(tx, target, lineId, lineIds),
+            admission: testTradingAdmission(),
+          },
+          OPERATOR,
+        );
+      });
+
+      expect((await printed(t.grill.printer)).slice(mark)).toEqual([
+        expect.arrayContaining([`*** ${words.holdCancelled} ***`, "2 x TARTA"]),
+      ]);
+      expect((await linesOf(t.bill2)).map(({ name }) => name)).toEqual(["Burger"]);
+    });
+
+    it("counter paper: adding a portion beside a comped dish leaves it waiting on HOLD paper", async () => {
+      const t = await waitingAtCounter();
+      await inTx(v, async (tx) => {
+        const reasonId = await reasonIdOf(tx, GIVE_AWAY_REASON);
+        await applyAdjustment(
+          tx,
+          v.cfg,
+          {
+            admission: testTradingAdmission(),
+            orderId: t.bill2,
+            expectedEdit: await readBillEditState(tx, t.bill2),
+            expectedRevision: await readOrderRevision(tx, t.bill2),
+            submissionId: randomUUID(),
+            operatorId: OPERATOR,
+            action: "comp",
+            reasonId,
+            lineId: t.cake.id,
+            note: null,
+          },
+          v.cfg.locale,
+        );
+      });
+      const mark = (await printed(t.grill.printer)).length;
+
+      await editCounterDish(t, { quantity: "2" });
+
+      expect((await printed(t.grill.printer)).slice(mark)).toEqual([
+        expect.arrayContaining([`*** ${words.holdChanged} ***`, "+1 x TARTA"]),
+      ]);
+      const tartas = (await linesOf(t.bill2)).filter(({ name }) => name === "Tarta");
+      expect(tartas).toHaveLength(2);
+      expect(tartas.map(({ id }) => id)).toContain(t.cake.id);
+      const added = tartas.find(({ id }) => id !== t.cake.id)!;
+      expect(await kitchenItemOf(added.id)).toMatchObject({ firedAt: null, holdPaperQueued: true });
+    });
+
+    it("counter paper: a new portion at another waiting station gets no correction for the old station's HOLD paper", async () => {
+      const t = await waitingAtCounter();
+      await inTx(v, async (tx) => {
+        await setStationsWaitForPass(tx, true, [t.pastry.id]);
+        await setRoutingCell(
+          tx,
+          { row: { kind: "product", productId: v.productId("Tarta") }, zoneId: null },
+          { kind: "station", stationId: t.pastry.id },
+        );
+      });
+      const mark = (await printed(t.pastry.printer)).length;
+
+      await editCounterDish(t, { quantity: "2" });
+
+      const added = (await linesOf(t.bill2)).find(
+        ({ id, name }) => id !== t.cake.id && name === "Tarta",
+      )!;
+      expect(await kitchenItemOf(added.id)).toMatchObject({
+        stationId: t.pastry.id,
+        firedAt: null,
+      });
+      expect((await printed(t.pastry.printer)).slice(mark)).toEqual([]);
+    });
+
+    it("counter paper: a whole-bill save cannot drop a waiting dish already sent to the kitchen", async () => {
+      const t = await waitingAtCounter();
+      const burger = await lineOf(t.bill2, "Burger");
+      const mark = (await printed(t.grill.printer)).length;
+
+      await expect(
+        updateHeldOrder({ db: v.db, admission: testTradingAdmission() }, v.cfg, t.bill2, {
+          revision: await inTx(v, (tx) => readOrderRevision(tx, t.bill2)),
+          lines: [{ workingOrderLineId: burger.id, menuItemId: v.item("Burger"), quantity: "1" }],
+          operatorId: OPERATOR,
+        }),
+      ).rejects.toMatchObject({ code: "ticket.already_fired" });
+
+      expect((await linesOf(t.bill2)).map(({ id }) => id)).toContain(t.cake.id);
+      expect((await printed(t.grill.printer)).slice(mark)).toEqual([]);
+    });
+
+    it.each([true, false])(
+      "counter paper: keep-charge with a started extra corrects its waiting dish only if it had HOLD paper (%s)",
+      async (hadPaper) => {
+        const {
+          listId,
+          productIds: [productId],
+        } = await inTx(v, async (tx) => {
+          const extra = await addExtras(
+            tx,
+            v.cfg,
+            v.productId("Tarta"),
+            [{ name: hadPaper ? "Cream side" : "Custard side" }],
+            { staffNameOnly: true },
+          );
+          await publishWorkingMenu(tx, v.tables.menuId);
+          return extra;
+        });
+        const t = await waitingAtCounter(
+          false,
+          {
+            extras: [{ listId, picks: [{ productId: productId!, quantity: 1 }] }],
+            splitAtPastry: true,
+          },
+          hadPaper,
+        );
+        const extra = (await linesOf(t.bill2)).find(
+          ({ parentLineId }) => parentLineId === t.cake.id,
+        )!;
+        expect(await kitchenItemOf(extra.id)).toMatchObject({
+          stationId: t.pastry.id,
+          firedAt: expect.any(String),
+        });
+        const mark = (await printed(t.grill.printer)).length;
+
+        await inTx(v, async (tx) => {
+          const { target, lineId, body } = await observedCancelItem(tx, t.bill2, t.cake.lineNo);
+          await cancelItem(
+            tx,
+            v.cfg,
+            target,
+            lineId,
+            {
+              ...body,
+              outcome: "keep_charge",
+              preparationStarted: true,
+              admission: testTradingAdmission(),
+              reasonId: await cancelReasonId(tx),
+            },
+            OPERATOR,
+          );
+        });
+
+        expect((await printed(t.grill.printer)).slice(mark)).toEqual(
+          hadPaper ? [expect.arrayContaining([`*** ${words.holdCancelled} ***`, "1 x TARTA"])] : [],
+        );
+      },
+    );
+
+    it("counter paper: cancelling a single extra updates the dish on HOLD paper", async () => {
+      const {
+        listId,
+        productIds: [cream],
+      } = await inTx(v, async (tx) => {
+        const extras = await addExtras(tx, v.cfg, v.productId("Tarta"), [
+          { name: "Cream", customerName: "Whipped cream", kitchenName: "CREAM" },
+        ]);
+        await publishWorkingMenu(tx, v.tables.menuId);
+        return extras;
+      });
+      const extras = [{ listId, picks: [{ productId: cream!, quantity: 1 }] }];
+      const t = await waitingAtCounter(false, { extras });
+      const extra = (await linesOf(t.bill2)).find(
+        ({ parentLineId }) => parentLineId === t.cake.id,
+      )!;
+      const mark = (await printed(t.grill.printer)).length;
+
+      await inTx(v, (tx) => cancelLine(tx, v.cfg, t.bill2, extra.lineNo));
+      const cancellation = (await printed(t.grill.printer)).slice(mark);
+      const editMark = mark + cancellation.length;
+
+      await editCounterDish(t, { extras });
+
+      const edit = (await printed(t.grill.printer)).slice(editMark);
+      expect({ cancellation, edit }).toEqual({
+        cancellation: [
+          expect.arrayContaining([
+            `*** ${words.holdChanged} ***`,
+            expect.stringContaining("CREAM"),
+          ]),
+        ],
+        edit: [
+          expect.arrayContaining([`*** ${words.holdChanged} ***`, "-1 x TARTA"]),
+          expect.arrayContaining([
+            `*** ${words.holdChanged} ***`,
+            "+1 x TARTA",
+            expect.stringContaining("CREAM"),
+          ]),
+        ],
+      });
     });
 
     it("A1368: a whole dish moved to an unprinted group releases at the counter without FIRE", async () => {

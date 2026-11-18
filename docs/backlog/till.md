@@ -278,6 +278,14 @@ the remaining preparation actions and planned pass release rather than extend th
 
 Left open:
 
+- **Refunds follow-up. A waiting dish on a paid bill moved to the counter cannot be
+  cancelled.** The counter command refuses it with `working_order.not_open`
+  (`apps/server/src/line-cancel-context.ts:72`), after the move detaches the bill in
+  `apps/server/src/move-bill.ts:342`. On an open bill, remove-charge works for an unstarted
+  dish. Keep-charge refuses it with
+  `management.request_invalid` (`apps/server/src/line-cancel.ts:226`). The 18 November
+  Lane H reproductions on `16a6986d4b` are in `receipts/counter-waiting-dish-paper/red.log`
+  and `red-expanded.log`. Route the paid case through the unified refunds work.
 - **The adjustment history records who approved, but not whether the bill's comp limit or the refund rule,
   rather than the reason, is why.** Recording it would need a column. **Next action:** decide
   whether to record it.

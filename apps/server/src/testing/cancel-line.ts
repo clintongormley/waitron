@@ -61,7 +61,7 @@ export const COMP_BILL_REASON: AdjustmentReasonInput = {
 };
 
 /** `reason`'s id, created the first time a database is asked for it. */
-async function reasonIdOf(tx: Transaction, reason: AdjustmentReasonInput): Promise<string> {
+export async function reasonIdOf(tx: Transaction, reason: AdjustmentReasonInput): Promise<string> {
   const [found] = await tx
     .select({ id: adjustmentReasons.id })
     .from(adjustmentReasons)

@@ -1408,7 +1408,7 @@ export async function moveLinesToGroup(
         for (const [from, to] of split) splitIds.set(from, to.id);
       }
       const taken: HeldChange[] = [];
-      const given: HeldChange[] = [];
+      const given: (HeldChange & { groupId: string })[] = [];
       const movedTicketLines: string[] = [];
       for (const { lineId, quantity } of moves) {
         const line = lineById.get(lineId)!;
@@ -2527,8 +2527,8 @@ export interface HeldChange {
   stationId: string;
   quantity: number;
   /** The group whose HOLD ticket is corrected. */
-  groupId: string;
-  group: number;
+  groupId?: string;
+  group?: number;
   numberPartyLabel?: string;
 }
 
@@ -2569,7 +2569,7 @@ export async function correctHoldTickets(
  */
 export async function recordJoiningStations(
   tx: Transaction,
-  arriving: readonly HeldChange[],
+  arriving: readonly (HeldChange & { groupId: string })[],
 ): Promise<void> {
   const reach = await heldPaperReach(
     tx,

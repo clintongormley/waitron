@@ -478,7 +478,7 @@ export async function cancelItem(
             ask.preparationStarted === true,
           )
         ).map(({ dish, ...correction }) => ({ ...correction, group: groupOf(dish) }));
-        if (groups.length > 0) {
+        if (corrections.length > 0) {
           const holdPaper = await holdPaperFor(
             tx,
             corrections.flatMap(({ group, requested }) =>
@@ -489,24 +489,26 @@ export async function cancelItem(
             tx,
             cfg,
             bill!.id,
-            corrections.flatMap(({ group, requested, requestedAt, item }) =>
-              item.fired ||
-              group === undefined ||
-              (requested &&
+            corrections.flatMap(({ group, requested, requestedAt, holdPaperQueued, item }) => {
+              if (item.fired) return [];
+              if (group === undefined) return requested && holdPaperQueued ? [item] : [];
+              if (
+                requested &&
                 holdPaper(group.id, {
                   stationId: item.stationId,
                   requestedAt,
                   firedAt: null,
-                }) === undefined)
-                ? []
-                : [
-                    {
-                      ...item,
-                      group: group.displayNumber,
-                      ...(group.holdPrintedAt === null ? {} : { holdGroupId: group.id }),
-                    },
-                  ],
-            ),
+                }) === undefined
+              )
+                return [];
+              return [
+                {
+                  ...item,
+                  group: group.displayNumber,
+                  ...(group.holdPrintedAt === null ? {} : { holdGroupId: group.id }),
+                },
+              ];
+            }),
             { kind: "HOLD CANCELLED" },
           );
         }

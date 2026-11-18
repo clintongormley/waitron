@@ -16,7 +16,12 @@ import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js
 import { invalid } from "./bill-allocation.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { raiseReleasedAtClosedStation } from "./closed-station-alert.js";
-import { enqueueKitchenTickets, enqueueStationMoved, firedQuantity } from "./kitchen-print.js";
+import {
+  enqueueKitchenTickets,
+  enqueueStationMoved,
+  firedQuantity,
+  hasUngroupedHoldPaper,
+} from "./kitchen-print.js";
 import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js";
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -379,6 +384,7 @@ export async function moveDishesToStation(
                 state: ticketItems.state,
                 firedAt: ticketItems.firedAt,
                 requestedAt: ticketItems.requestedAt,
+                holdPaperQueued: ticketItems.holdPaperQueued,
                 madeHere: ticketItems.madeHere,
                 quantity: firedQuantity,
               })
@@ -417,7 +423,10 @@ export async function moveDishesToStation(
           moved: [],
         };
       const [destinationSettings] = await tx
-        .select({ waitsForPass: kitchenStations.waitsForPass })
+        .select({
+          waitsForPass: kitchenStations.waitsForPass,
+          printHeldWork: kitchenStations.printHeldWork,
+        })
         .from(kitchenStations)
         .where(eq(kitchenStations.id, request.stationId));
       const destinationWaits = destinationSettings!.waitsForPass;
@@ -431,6 +440,8 @@ export async function moveDishesToStation(
       );
       const paperOf = (row: (typeof moving)[number]) =>
         row.groupId === null ? undefined : holdPaper(row.groupId, row);
+      const counterOnPaper = (row: (typeof moving)[number]) =>
+        row.groupId === null && hasUngroupedHoldPaper(row);
       // A fired group's Requested dish moving to a station that waits is corrected at any station
       // recorded for its group, so it joins the destination's HOLD paper whether or not the station
       // it leaves had any; one moving to a station that does not wait starts there and prints an
@@ -445,14 +456,18 @@ export async function moveDishesToStation(
       for (const [oldStationId, lines] of byStation) {
         const corrections: CorrectionItem[] = lines.flatMap((row) => {
           const group = paperOf(row);
-          if (row.firedAt === null && group === undefined) return [];
+          if (row.firedAt === null && group === undefined && !counterOnPaper(row)) return [];
           return [
             {
               workingOrderLineId: row.id,
               stationId: oldStationId,
               quantity: row.quantity,
               wasStarted: false,
-              ...(row.firedAt === null ? { group, holdGroupId: row.groupId! } : {}),
+              ...(group === undefined
+                ? counterOnPaper(row)
+                  ? { ungroupedHold: true as const }
+                  : {}
+                : { group, holdGroupId: row.groupId! }),
             },
           ];
         });
@@ -536,6 +551,14 @@ export async function moveDishesToStation(
             quantity: row.quantity,
           }));
         if (fired.length > 0) await enqueueKitchenTickets(tx, cfg, orderId, fired, { from });
+        if (destinationWaits && destinationSettings!.printHeldWork) {
+          const held = lines.filter(counterOnPaper).map((row) => ({
+            workingOrderLineId: row.id,
+            stationId: request.stationId,
+            quantity: row.quantity,
+          }));
+          await enqueueKitchenTickets(tx, cfg, orderId, held, { mark: "HOLD", from });
+        }
         for (const [groupId, recorded] of paperAtDestination) {
           const held: FiredItem[] = lines
             .filter((row) => row.groupId === groupId && arrivesOnPaper(row))

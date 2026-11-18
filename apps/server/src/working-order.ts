@@ -72,6 +72,7 @@ import {
 } from "./kitchen-allergy.js";
 import { passWaitingStations, requestHeldItems, requestStamps } from "./kitchen-release.js";
 import {
+  requestedItem,
   heldItem,
   initiatedAt,
   initiatedItem,
@@ -274,6 +275,7 @@ import {
   recordJoiningStations,
   onShownBill,
   holdPaperFor,
+  type HoldPaper,
   printHoldTickets,
   readReleaseReminders,
   readGroupNumberLabels,
@@ -293,6 +295,8 @@ import {
   copyKitchenPrintLinks,
   enqueueCorrectionSlips,
   enqueueExtraCancelled,
+  hasUngroupedHoldPaper,
+  inIds,
   enqueueKitchenTickets,
   firedQuantity,
   isStarted,
@@ -303,7 +307,7 @@ import {
 } from "./kitchen-print.js";
 import type { CancelledExtra, CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
 import { readStationChanges, refuseChangesAfterSending } from "./changes-after-sending.js";
-import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
+import { dishKitchenItems, onDishesOrTheirExtras, type DishKitchenItem } from "./dish-kitchen.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
@@ -3110,17 +3114,27 @@ export interface VoidTarget {
   firedQuantity: number;
 }
 
-/** Each ticket item's `requested_at`, read in one select. */
-async function requestedAtOf(
-  tx: Transaction,
-  ticketItemIds: readonly string[],
-): Promise<Map<string, string | null>> {
-  if (ticketItemIds.length === 0) return new Map();
-  const rows = await tx
-    .select({ id: ticketItems.id, requestedAt: ticketItems.requestedAt })
-    .from(ticketItems)
-    .where(inArray(ticketItems.id, [...ticketItemIds]));
-  return new Map(rows.map((row) => [row.id, row.requestedAt]));
+function heldChangeOf(
+  orderId: string,
+  groupId: string | null,
+  item: Pick<
+    DishKitchenItem,
+    "workingOrderLineId" | "stationId" | "requestedAt" | "firedAt" | "holdPaperQueued"
+  >,
+  quantity: number,
+  holdPaper: HoldPaper,
+): HeldChange[] {
+  const group = groupId === null ? undefined : holdPaper(groupId, item);
+  if (group === undefined && (groupId !== null || !hasUngroupedHoldPaper(item))) return [];
+  return [
+    {
+      workingOrderId: orderId,
+      workingOrderLineId: item.workingOrderLineId,
+      stationId: item.stationId,
+      quantity,
+      ...(groupId === null ? {} : { groupId, group }),
+    },
+  ];
 }
 
 /**
@@ -3140,12 +3154,9 @@ export async function removeFromLine(
   const wasStarted = preparationStarted || isStarted(target.state);
   const extra =
     target.parentLineId === null ? null : await readCancelledExtra(tx, target.id, cfg.locale);
-  const childItems =
-    target.parentLineId === null
-      ? ((await dishKitchenItems(tx, [target.id])).get(target.id) ?? []).filter(
-          (item) => item.extra,
-        )
-      : [];
+  const dishId = target.parentLineId ?? target.id;
+  const work = (await dishKitchenItems(tx, [dishId])).get(dishId) ?? [];
+  const childItems = target.parentLineId === null ? work.filter((item) => item.extra) : [];
   const removedQuantity = (item: (typeof childItems)[number]) =>
     removed === null
       ? item.firedQuantity
@@ -3183,48 +3194,21 @@ export async function removeFromLine(
   );
   // Before the delete or the reduction: the notice and the slip re-read the line.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
-  if (target.groupId !== null) {
-    const groupId = target.groupId;
-    const holdPaper = await holdPaperFor(tx, [groupId]);
-    const requestedAt =
-      target.ticketItemId === null || target.firedAt !== null
-        ? null
-        : (await requestedAtOf(tx, [target.ticketItemId])).get(target.ticketItemId)!;
-    const own =
-      target.ticketItemId === null
-        ? undefined
-        : holdPaper(groupId, { stationId: target.stationId, requestedAt, firedAt: target.firedAt });
-    const held = [
+  const holdPaper = await holdPaperFor(tx, target.groupId === null ? [] : [target.groupId]);
+  const own = work.find((item) => item.workingOrderLineId === target.id);
+  await correctHoldTickets(
+    tx,
+    cfg,
+    [
       ...(own === undefined
         ? []
-        : [
-            {
-              workingOrderId: tabId,
-              workingOrderLineId: target.id,
-              stationId: target.stationId!,
-              quantity: removed ?? target.firedQuantity,
-              groupId,
-              group: own,
-            },
-          ]),
-      ...childItems.flatMap((item) => {
-        const group = holdPaper(groupId, item);
-        return group === undefined
-          ? []
-          : [
-              {
-                workingOrderId: tabId,
-                workingOrderLineId: item.workingOrderLineId,
-                stationId: item.stationId,
-                quantity: removedQuantity(item),
-                groupId,
-                group,
-              },
-            ];
-      }),
-    ];
-    if (held.length > 0) await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
-  }
+        : heldChangeOf(tabId, target.groupId, own, removed ?? target.firedQuantity, holdPaper)),
+      ...childItems.flatMap((item) =>
+        heldChangeOf(tabId, target.groupId, item, removedQuantity(item), holdPaper),
+      ),
+    ],
+    { kind: "HOLD CANCELLED" },
+  );
   await bumpRevision(tx, [tabId]);
   if (removed === null) {
     if (target.parentLineId === null)
@@ -3305,54 +3289,18 @@ export async function removePortions(
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
   const groupIds = [...new Set(targets.flatMap(({ groupId }) => groupId ?? []))];
   const holdPaper = await holdPaperFor(tx, groupIds);
-  const requested = await requestedAtOf(
-    tx,
-    targets.flatMap(({ ticketItemId, firedAt }) =>
-      ticketItemId === null || firedAt !== null ? [] : [ticketItemId],
+  const held = targets.flatMap((target) =>
+    (work.get(target.id) ?? []).flatMap((item) =>
+      heldChangeOf(
+        tabId,
+        target.groupId,
+        item,
+        item.extra ? item.firedQuantity : target.firedQuantity,
+        holdPaper,
+      ),
     ),
   );
-  const held = targets.flatMap((target) => {
-    const groupId = target.groupId;
-    if (groupId === null) return [];
-    const own =
-      target.ticketItemId === null
-        ? undefined
-        : holdPaper(groupId, {
-            stationId: target.stationId,
-            requestedAt: requested.get(target.ticketItemId) ?? null,
-            firedAt: target.firedAt,
-          });
-    return [
-      ...(own === undefined
-        ? []
-        : [
-            {
-              workingOrderId: tabId,
-              groupId,
-              group: own,
-              workingOrderLineId: target.id,
-              stationId: target.stationId!,
-              quantity: target.firedQuantity,
-            },
-          ]),
-      ...childrenOf(target).flatMap((item) => {
-        const group = holdPaper(groupId, item);
-        return group === undefined
-          ? []
-          : [
-              {
-                workingOrderId: tabId,
-                groupId,
-                group,
-                workingOrderLineId: item.workingOrderLineId,
-                stationId: item.stationId,
-                quantity: item.firedQuantity,
-              },
-            ];
-      }),
-    ];
-  });
-  if (held.length > 0) await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
+  await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
   await bumpRevision(tx, [tabId]);
   await cancelPortions(tx, tabId, ids, operatorId ?? null);
   await tx
@@ -3390,7 +3338,17 @@ async function tellKitchenOfCancelledExtra(
     await enqueueExtraCancelled(tx, cfg, tabId, correction, extra.label);
     return;
   }
-  if (extra.dishGroupId === null) return;
+  if (extra.dishGroupId === null) {
+    if (hasUngroupedHoldPaper(item))
+      await enqueueExtraCancelled(
+        tx,
+        cfg,
+        tabId,
+        { ...correction, ungroupedHold: true },
+        extra.label,
+      );
+    return;
+  }
   const group = (await holdPaperFor(tx, [extra.dishGroupId]))(extra.dishGroupId, item);
   if (group === undefined) return;
   await enqueueExtraCancelled(
@@ -5574,6 +5532,7 @@ interface EditableLine {
   ticket: {
     id: string;
     requestedAt: string | null;
+    holdPaperQueued: boolean;
     firedAt: string | null;
     state: TicketState;
     stationId: string;
@@ -5807,6 +5766,7 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
       creditedTo: workingOrderLines.creditedTo,
       ticketId: ticketItems.id,
       requestedAt: ticketItems.requestedAt,
+      holdPaperQueued: ticketItems.holdPaperQueued,
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
       stationId: ticketItems.stationId,
@@ -5851,6 +5811,7 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
         : {
             id: row.ticketId,
             requestedAt: row.requestedAt,
+            holdPaperQueued: row.holdPaperQueued!,
             firedAt: row.firedAt,
             state: row.state!,
             stationId: row.stationId!,
@@ -6476,6 +6437,7 @@ async function applyLineEdits(
   const keepSentNumber = new Map<number, string[]>();
   const copiedContexts: { from: string; to: string }[] = [];
   const copiedDishes: { from: string; to: string }[] = [];
+  const raisedApart: { from: string; to: string }[] = [];
   // Two raised portions of one cohort number their copies on from each other.
   const nextOrdinal = new Map<string, number>();
   const joinedHeld: { groupId: string; lineIds: string[] }[] = [];
@@ -6677,6 +6639,16 @@ async function applyLineEdits(
       });
     }
     for (const [rowIndex, row] of group.rows.entries()) {
+      if (as.joins?.groupId === null) {
+        const source =
+          row.parentLineId === null
+            ? as.joins
+            : as.joins.children.find(
+                (child) =>
+                  child.productId === row.productId && child.extraListId === row.extraListId,
+              );
+        if (source !== undefined) raisedApart.push({ from: source.id, to: row.id! });
+      }
       inserted.push({
         ...row,
         lineNo: ++nextLineNo,
@@ -6770,7 +6742,7 @@ async function applyLineEdits(
     tx,
     addedToExisting.flatMap(({ parent }) => (parent.groupId === null ? [] : [parent.groupId])),
   );
-  const givenExtras: HeldChange[] = insertedExtras.flatMap((item) => {
+  const givenExtras: (HeldChange & { groupId: string })[] = insertedExtras.flatMap((item) => {
     const parent = addedToExisting.find(
       ({ parent }) =>
         parent.children.some((child) => child.id === item.workingOrderLineId) ||
@@ -6817,6 +6789,45 @@ async function applyLineEdits(
       );
   const heldGroup = newGroups.get("hold");
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
+  const counterHoldStations = new Map(
+    order.lines.flatMap(({ id, groupId, ticket }) =>
+      groupId === null && ticket !== null && hasUngroupedHoldPaper(ticket)
+        ? [[id, ticket.stationId]]
+        : [],
+    ),
+  );
+  const carriedCounterPaper = new Map(
+    [...copiedContexts, ...raisedApart].flatMap(({ from, to }) => {
+      const stationId = counterHoldStations.get(from);
+      return stationId === undefined ? [] : [[to, stationId] as const];
+    }),
+  );
+  if (carriedCounterPaper.size > 0) {
+    const additions = await tx
+      .select({
+        workingOrderLineId: ticketItems.workingOrderLineId,
+        stationId: ticketItems.stationId,
+        quantity: firedQuantity,
+      })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(
+        and(
+          inIds(ticketItems.workingOrderLineId, [...carriedCounterPaper.keys()]),
+          requestedItem(),
+        ),
+      );
+    await correctHoldTickets(
+      tx,
+      cfg,
+      additions.flatMap((item) =>
+        carriedCounterPaper.get(item.workingOrderLineId) === item.stationId
+          ? [{ ...item, workingOrderId: orderId }]
+          : [],
+      ),
+      { kind: "HOLD CHANGED", direction: "added" },
+    );
+  }
   // As a raise of the line itself would: `+N` at the stations that have its group's HOLD paper.
   await correctJoin(tx, cfg, joinedHeld);
   await refreshKitchenAllergyClashes(
@@ -6885,31 +6896,27 @@ async function planHeldCorrections(
   removed: readonly EditableParent[],
 ): Promise<{ cancelled: HeldChange[]; taken: HeldChange[]; given: HeldChange[] }> {
   const held = (parent: EditableParent) =>
-    parent.groupId !== null &&
     [parent, ...parent.children].some(
-      (part) => part.ticket !== null && part.ticket.firedAt === null,
+      ({ ticket }) =>
+        ticket !== null &&
+        (parent.groupId === null ? hasUngroupedHoldPaper(ticket) : ticket.firedAt === null),
     );
   const heldChanges = changes.filter(({ parent }) => held(parent));
   const heldRemoved = removed.filter(held);
   const holdPaper = await holdPaperFor(tx, [
-    ...heldChanges.map(({ parent }) => parent.groupId!),
-    ...heldRemoved.map((parent) => parent.groupId!),
+    ...heldChanges.flatMap(({ parent }) => parent.groupId ?? []),
+    ...heldRemoved.flatMap((parent) => parent.groupId ?? []),
   ]);
-  const change = (parent: EditableParent, part: EditableLine, quantity: number): HeldChange[] => {
-    if (quantity <= 0 || part.ticket === null) return [];
-    const group = holdPaper(parent.groupId!, part.ticket);
-    if (group === undefined) return [];
-    return [
-      {
-        workingOrderId: orderId,
-        workingOrderLineId: part.id,
-        stationId: part.ticket.stationId,
-        quantity,
-        groupId: parent.groupId!,
-        group,
-      },
-    ];
-  };
+  const change = (parent: EditableParent, part: EditableLine, quantity: number): HeldChange[] =>
+    quantity <= 0 || part.ticket === null
+      ? []
+      : heldChangeOf(
+          orderId,
+          parent.groupId,
+          { ...part.ticket, workingOrderLineId: part.id },
+          quantity,
+          holdPaper,
+        );
   const before = (edit: { parent: EditableParent }) => decimalToThousandths(edit.parent.quantity);
   const after = (edit: { quantity: Decimal }) => decimalToThousandths(edit.quantity);
   return {
