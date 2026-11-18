@@ -1165,10 +1165,10 @@ describe("the route's own rules", () => {
         400,
         "adjustment.quantity_invalid",
       ],
-      [{ lineId: randomUUID(), action: "comp" }, 404, "tab.line_not_found"],
+      [{ lineId: randomUUID(), action: "comp" }, 400, "tab.line_not_found"],
       [
         { lineId: bottle, action: "comp", reasonId: randomUUID() },
-        404,
+        400,
         "adjustment_reason.not_found",
       ],
       [{ lineId: bottle, action: "comp", expectedRevision: 0 }, 409, "working_order.out_of_date"],
@@ -1176,6 +1176,14 @@ describe("the route's own rules", () => {
     for (const [body, status, code] of cases) {
       const answer = await post(billId, body);
       expect([answer.status, answer.json.code]).toEqual([status, code]);
+    }
+    const previews: [Record<string, unknown>, string][] = [
+      [{ lineId: randomUUID(), action: "comp" }, "tab.line_not_found"],
+      [{ lineId: bottle, action: "comp", reasonId: randomUUID() }, "adjustment_reason.not_found"],
+    ];
+    for (const [body, code] of previews) {
+      const answer = await post(billId, body, { path: "/preview" });
+      expect([answer.status, answer.json.code]).toEqual([400, code]);
     }
     expect(await recordedOn(billId)).toEqual([]);
   });
@@ -1215,7 +1223,7 @@ describe("the route's own rules", () => {
     ]);
   });
 
-  it("maps weighed_partial to 409, a deleted reason to 404, and a comp past the reason's cap to 403", async () => {
+  it("maps weighed_partial to 409, a deleted reason to 400, and a comp past the reason's cap to 403", async () => {
     const { billId } = await billWith(venue, [
       { name: "Bottle" },
       { name: "Bottle" },
@@ -1246,7 +1254,7 @@ describe("the route's own rules", () => {
     );
     expect([partial.status, partial.json.code]).toEqual([409, "adjustment.weighed_partial"]);
     const retired = await post(billId, await comp(2, { reasonId: deleted }));
-    expect([retired.status, retired.json.code]).toEqual([404, "adjustment_reason.not_found"]);
+    expect([retired.status, retired.json.code]).toEqual([400, "adjustment_reason.not_found"]);
   });
 
   it("maps a give-away that takes nothing off to 409", async () => {

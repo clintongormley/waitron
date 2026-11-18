@@ -360,13 +360,13 @@ describe("A803 move dishes route:", () => {
     expect(lineIdsOf(second)).toHaveLength(1);
   });
 
-  it("a dish the bill does not hold is 404 tab.line_not_found", async () => {
+  it("a dish the bill does not hold is 400 tab.line_not_found", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
     const missing = randomUUID();
 
     const answer = await post(tabId, await wellFormed(partyId, tabId, [missing], null));
 
-    expect(answer.status).toBe(404);
+    expect(answer.status).toBe(400);
     expect(answer.json).toMatchObject({ code: "tab.line_not_found" });
   });
 

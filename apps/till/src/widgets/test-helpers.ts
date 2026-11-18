@@ -543,7 +543,7 @@ export function draftServer(
         };
         server.drafts.push(draft);
       } else {
-        draft = server.open(partyId, save.draftId, save.revision);
+        draft = server.open(partyId, save.draftId, save.revision, 400);
       }
       draft.revision += 1;
       draft.lines = reidentify(save.lines);
@@ -568,7 +568,7 @@ export function draftServer(
     apply(partyId: string, draftId: string, submission: DraftSubmission): SubmittedDraft {
       const replay = replies.get(submission.submissionId);
       if (replay !== undefined) return replay;
-      const draft = server.open(partyId, draftId, submission.draftRevision);
+      const draft = server.open(partyId, draftId, submission.draftRevision, 404);
       const named = submission.groups.flatMap((group) => group.lineIds);
       if (!named.every((id) => draft.lines.some((line) => line.id === id)))
         throw { code: "management.request_invalid", status: 400, field: "groups" };
@@ -584,11 +584,12 @@ export function draftServer(
       replies.set(submission.submissionId, reply);
       return reply;
     },
-    open(partyId: string, draftId: string, revision: number): Draft {
+    /** `missingStatus`: 400 when only the body names the draft (a save), 404 when the address does. */
+    open(partyId: string, draftId: string, revision: number, missingStatus: 400 | 404): Draft {
       const draft = server.drafts.find(
         (candidate) => candidate.id === draftId && candidate.partyId === partyId,
       );
-      if (draft === undefined) throw { code: "draft.not_found", status: 404 };
+      if (draft === undefined) throw { code: "draft.not_found", status: missingStatus };
       if (draft.ownerId !== server.personId)
         throw {
           code: "draft.taken_over",

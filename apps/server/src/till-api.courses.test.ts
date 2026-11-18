@@ -454,7 +454,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
     expect((await queueItemsByName(tabId, station)).get(STEAK)!.course).toBeNull();
   });
 
-  it("a malformed courseId is 404 course.not_found, screened before any DB touch", async () => {
+  it("a malformed courseId is 400 course.not_found, screened before any DB touch", async () => {
     // A well-formed tab id + line no, but a non-uuid courseId. No tab is even opened: the screen runs
     // before assertPartyBillOpen.
     const res = await app.request(`/api/working-orders/${randomUUID()}/lines/1/course`, {
@@ -462,9 +462,35 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ courseId: "not-a-uuid" }),
     });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       error: { code: "course.not_found", params: { courseId: "not-a-uuid" } },
+    });
+  });
+  it("a well-formed courseId naming no course is 400 course.not_found", async () => {
+    const tabId = await tabWithSoupAndSteak();
+    const courseId = randomUUID();
+    const res = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: await billBody(tabId, { courseId }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId } },
+    });
+  });
+
+  it("a line number the address names and the bill lacks stays 404 tab.line_not_found", async () => {
+    const tabId = await tabWithSoupAndSteak();
+    const res = await app.request(`/api/working-orders/${tabId}/lines/99/course`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: await billBody(tabId, { courseId: null }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.line_not_found", params: { tabId, lineNo: 99 } },
     });
   });
 
@@ -678,5 +704,112 @@ describe("expo routes: the All stations board + whole-card ready", () => {
     });
     expect(away.status).toBe(404);
     expect(await away.text()).toBe("404 Not Found");
+  });
+});
+
+describe("a course that only the request body names is refused 400", () => {
+  const courseId = randomUUID();
+
+  async function lines() {
+    const ids = await offerIdsByName();
+    return [{ menuItemId: ids.get(BREAD)!, quantity: "1", courseId }];
+  }
+
+  async function parkedOrder(): Promise<string> {
+    const ids = await offerIdsByName();
+    const id = randomUUID();
+    const park = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        dining: "eat_in",
+        id,
+        zoneId: counterOffers.zoneId,
+        lines: [{ menuItemId: ids.get(BREAD)!, quantity: "1" }],
+      }),
+    });
+    expect(park.status).toBe(200);
+    return id;
+  }
+
+  const routes: [string, () => Promise<[string, string, unknown]>][] = [
+    [
+      "POST /api/working-orders",
+      async () => [
+        "POST",
+        "/api/working-orders",
+        {
+          dining: "eat_in",
+          id: randomUUID(),
+          zoneId: counterOffers.zoneId,
+          lines: await lines(),
+        },
+      ],
+    ],
+    [
+      "PUT /api/working-orders/:id",
+      async () => {
+        const id = await parkedOrder();
+        const [order] = await suite.db
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id));
+        return [
+          "PUT",
+          `/api/working-orders/${id}`,
+          {
+            dining: "eat_in",
+            lines: await lines(),
+            revision: order!.revision,
+            expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, id)),
+          },
+        ];
+      },
+    ],
+    [
+      "POST /api/dead-ends/sale",
+      async () => [
+        "POST",
+        "/api/dead-ends/sale",
+        { step: "place", zoneId: counterOffers.zoneId, lines: await lines() },
+      ],
+    ],
+    [
+      "POST /api/parties/:id/groups",
+      async () => {
+        const tabId = await tabWithSoupAndSteak();
+        const [bill] = await suite.db
+          .select({ partyId: workingOrders.partyId })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, tabId));
+        const [party] = await suite.db
+          .select({ revision: parties.revision })
+          .from(parties)
+          .where(eq(parties.id, bill!.partyId!));
+        return [
+          "POST",
+          `/api/parties/${bill!.partyId}/groups`,
+          {
+            expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
+            submissionId: randomUUID(),
+            expectedPartyRevision: party!.revision,
+            groups: [{ lines: await lines(), release: "fire" }],
+          },
+        ];
+      },
+    ],
+  ];
+
+  it.each(routes)("%s", async (_route, request) => {
+    const [method, path, body] = await request();
+    const res = await app.request(path, {
+      method,
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId } },
+    });
   });
 });

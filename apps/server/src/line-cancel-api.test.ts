@@ -604,6 +604,7 @@ describe("the public cancellation read and command", () => {
     { reasonId: "", code: "management.request_invalid", status: 400 },
     { reasonId: "wrong-action", code: "adjustment.action_not_allowed", status: 409 },
     { reasonId: "note-required", code: "adjustment.note_required", status: 400 },
+    { reasonId: "unknown", code: "adjustment_reason.not_found", status: 400 },
   ])(
     "refuses charged cancellation with invalid reason $reasonId before any write",
     async ({ reasonId, code, status }) => {
@@ -615,7 +616,9 @@ describe("the public cancellation read and command", () => {
             ? venue.reasonId.complaint
             : reasonId === "note-required"
               ? venue.reasonId.mistake
-              : reasonId,
+              : reasonId === "unknown"
+                ? randomUUID()
+                : reasonId,
       });
       const before = await frozen();
       const result = await post(p, body);

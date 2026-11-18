@@ -656,7 +656,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.refund_exceeds_capture": 422,
   "drawer.no_printer": 400,
   "drawer.not_attached": 400,
-  "adjustment_reason.not_found": 404,
+  // No till address holds a reason id: only a request body can name a missing one.
+  "adjustment_reason.not_found": 400,
   // 403, as `authorization.not_permitted` answers: the request is sound, the person may not alone.
   "adjustment.approval_required": 403,
   // The rest follow their nearest siblings: a refusal that depends on the bill or the reason as they
@@ -676,16 +677,21 @@ const runAvailability = createErrorBoundary(
   { ...STATUS, "product.not_found": 404, "options.not_found": 404 },
   "till.failed",
 );
-const runSplitLine = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
-const runSaveDraft = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
-const runDeadEndsOrder = createErrorBoundary(
-  { ...STATUS, "working_order.not_found": 400 },
-  "till.failed",
-);
-const runFinishParty = createErrorBoundary(
-  { ...STATUS, "adjustment_reason.not_found": 400 },
-  "till.failed",
-);
+/** `run`, for a route whose address holds none of these codes' ids: they answer 400
+ * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
+export const runBodyIds = (...codes: string[]): Run =>
+  createErrorBoundary(
+    { ...STATUS, ...Object.fromEntries(codes.map((code) => [code, 400] as const)) },
+    "till.failed",
+  );
+const runBodyGroup = runBodyIds("group.not_found");
+const runBodyCourse = runBodyIds("course.not_found");
+const runBodyLines = runBodyIds("tab.line_not_found");
+const runMoveStation = runBodyIds("tab.line_not_found", "station.not_found");
+const runSubmitGroups = runBodyIds("group.not_found", "course.not_found");
+const runSaveDraft = runBodyIds("group.not_found", "draft.not_found", "course.not_found");
+const runDeadEndsDraft = runBodyIds("draft.not_found");
+const runDeadEndsOrder = runBodyIds("working_order.not_found");
 
 export type Run = typeof run;
 
@@ -1698,7 +1704,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/dead-ends/sale", (c) =>
-    run(c, log, async () => {
+    runBodyCourse(c, log, async () => {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const body = await readJsonBody<{
@@ -1816,7 +1822,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/sales", (c) =>
-    run(c, log, async () => {
+    runBodyCourse(c, log, async () => {
       const session = await requireSession(deps, c, { permission: "payment.take" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
@@ -1883,7 +1889,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   // for the whole card payment, which runs inside the pay; only another override for the same
   // manager on this device, which is busy with the payment, waits for it.
   app.post("/api/pay", (c) =>
-    run(c, log, async () => {
+    runBodyCourse(c, log, async () => {
       const session = await requireSession(deps, c, { permission: "payment.take" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
@@ -1955,7 +1961,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   // Idempotent on the client-minted `body.id`: a re-sent park collides on the primary key and
   // replays the existing open order's `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
-    run(c, log, async () => {
+    runBodyCourse(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
@@ -2038,7 +2044,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.put("/api/working-orders/:id", (c) =>
-    run(c, log, async () => {
+    runBodyCourse(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
@@ -2987,7 +2993,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/parties/:id/finish", (c) =>
-    runFinishParty(c, log, async () => {
+    run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const partyId = requirePartyParam(c.req.param("id"));
@@ -3216,7 +3222,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   }
 
   app.post("/api/parties/:id/split-table", (c) =>
-    run(c, log, async () => {
+    runBodyLines(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
@@ -3342,7 +3348,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/parties/:id/groups", (c) =>
-    run(c, log, async () => {
+    runSubmitGroups(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
@@ -3442,7 +3448,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     ["unserved", unmarkServed],
   ] as const) {
     app.post(`/api/parties/:id/${path}`, (c) =>
-      run(c, log, async () => {
+      runBodyGroup(c, log, async () => {
         const session = await requireSession(deps, c, { action: "hand-over-orders" });
         const { personId } = session;
         const cfg = requestCfg(deps.cfg, session);
@@ -3532,7 +3538,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.put("/api/parties/:id/groups/order", (c) =>
-    run(c, log, async () => {
+    runBodyGroup(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const partyId = requirePartyParam(c.req.param("id"));
@@ -3559,7 +3565,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/parties/:id/groups/fire-line", (c) =>
-    run(c, log, async () => {
+    runBodyGroup(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
@@ -3597,7 +3603,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/parties/:id/groups/split-line", (c) =>
-    runSplitLine(c, log, async () => {
+    runBodyGroup(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
@@ -3623,7 +3629,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/parties/:id/groups/move", (c) =>
-    run(c, log, async () => {
+    runBodyGroup(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
@@ -3819,7 +3825,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/dead-ends/draft", (c) =>
-    run(c, log, async () => {
+    runDeadEndsDraft(c, log, async () => {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const body = await readJsonBody<{ partyId: string; draftId: string; lineIds: string[] }>(c);
@@ -3882,7 +3888,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/parties/:id/drafts/:did/submit", (c) =>
-    run(c, log, async () => {
+    runBodyGroup(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
@@ -4083,7 +4089,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/working-orders/:id/lines/move-station", (c) =>
-    run(c, log, async () => {
+    runMoveStation(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
@@ -4171,7 +4177,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.patch("/api/working-orders/:id/lines/:lineNo/course", (c) =>
-    run(c, log, async () => {
+    runBodyCourse(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
@@ -4240,7 +4246,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
 
   // The path is the bill the dishes leave.
   app.post("/api/bills/:id/move-dishes", (c) =>
-    run(c, log, async () => {
+    runBodyLines(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);

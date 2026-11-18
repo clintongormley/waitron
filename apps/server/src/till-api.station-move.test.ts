@@ -196,13 +196,24 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
     expect(
       (await call(path, { submissionId: randomUUID(), lineIds: [], stationId: grill })).json,
     ).toMatchObject({ code: "management.request_invalid", params: { field: "lineIds" } });
-    expect(
-      (await call(path, { submissionId: randomUUID(), lineIds: ["bad"], stationId: grill })).status,
-    ).toBe(404);
-    expect(
-      (await call(path, { submissionId: randomUUID(), lineIds: [randomUUID()], stationId: "bad" }))
-        .status,
-    ).toBe(404);
+    const badLine = await call(path, {
+      submissionId: randomUUID(),
+      lineIds: ["bad"],
+      stationId: grill,
+    });
+    expect({ status: badLine.status, code: badLine.json.code }).toEqual({
+      status: 400,
+      code: "tab.line_not_found",
+    });
+    const badStation = await call(path, {
+      submissionId: randomUUID(),
+      lineIds: [randomUUID()],
+      stationId: "bad",
+    });
+    expect({ status: badStation.status, code: badStation.json.code }).toEqual({
+      status: 400,
+      code: "station.not_found",
+    });
     expect(
       (
         await call(
@@ -212,6 +223,27 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
         )
       ).status,
     ).toBe(401);
+  });
+
+  it("answers 404 for an unknown order in the address, and 400 when only the body misses", async () => {
+    const { tabId } = await seatedWith(venue, "Paella");
+    const unknownOrder = randomUUID();
+    const body = { lineIds: [randomUUID()], stationId: grill };
+    const missedAddress = await call(`/api/working-orders/${unknownOrder}/lines/move-station`, {
+      submissionId: randomUUID(),
+      ...body,
+    });
+    expect(missedAddress.status).toBe(404);
+    expect(missedAddress.json).toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: unknownOrder },
+    });
+    const missedBody = await call(`/api/working-orders/${tabId}/lines/move-station`, {
+      submissionId: randomUUID(),
+      ...body,
+    });
+    expect(missedBody.status).toBe(400);
+    expect(missedBody.json).toMatchObject({ code: "tab.line_not_found" });
   });
 
   it.each([
@@ -282,10 +314,10 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
         stationId,
       });
     const wrongLine = await request(otherItem!.workingOrderLineId, grill);
-    expect(wrongLine.status).toBe(404);
+    expect(wrongLine.status).toBe(400);
     expect(wrongLine.json).toMatchObject({ code: "tab.line_not_found" });
     const unknownStation = await request(firstItem!.workingOrderLineId, randomUUID());
-    expect(unknownStation.status).toBe(404);
+    expect(unknownStation.status).toBe(400);
     expect(unknownStation.json).toMatchObject({ code: "station.not_found" });
     const inactive = await inTx(venue, async (tx) => {
       const station = await createStation(tx, { name: `Off ${randomUUID()}` });
@@ -296,7 +328,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
       return station.id;
     });
     const off = await request(firstItem!.workingOrderLineId, inactive);
-    expect(off.status).toBe(404);
+    expect(off.status).toBe(400);
     expect(off.json).toMatchObject({ code: "station.not_found", params: { stationId: inactive } });
     await inTx(venue, (tx) =>
       tx

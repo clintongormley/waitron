@@ -456,6 +456,17 @@ describe("POST /api/transactions/:saleId/corrections", () => {
     });
   });
 
+  it("answers 400 for an unknown reason only the body names, writing nothing", async () => {
+    const saleId = await sold(["10.00"]);
+    const missing = randomUUID();
+    const before = counts();
+    expect(await open(saleId, body({ reasonId: missing }))).toEqual({
+      status: 400,
+      json: { code: "adjustment_reason.not_found", params: { reasonId: missing } },
+    });
+    expect(counts()).toEqual(before);
+  });
+
   const refusals: [string, () => Promise<{ saleId: string; patch?: Record<string, unknown> }>][] = [
     ["invoice_correction.not_settled", async () => ({ saleId: await sold([]) })],
     [

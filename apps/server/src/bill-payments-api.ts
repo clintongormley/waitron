@@ -24,6 +24,7 @@ import {
   parseOverrideField,
   parseReason,
   resolveCardCollector,
+  runBodyIds,
 } from "./till-api.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { sendingCfg } from "./made-here.js";
@@ -197,6 +198,7 @@ export function mountBillPaymentsApi(
   run: Run,
   pinThrottle: PinThrottle,
 ): void {
+  const runBodyLines = runBodyIds("tab.line_not_found");
   const fiscal = {
     db: deps.db,
     cfg: deps.cfg,
@@ -217,7 +219,7 @@ export function mountBillPaymentsApi(
   );
 
   app.post("/api/working-orders/:id/payments/preview", (c) =>
-    run(c, log, async () => {
+    runBodyLines(c, log, async () => {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBillParam(c.req.param("id"));
@@ -228,7 +230,7 @@ export function mountBillPaymentsApi(
   );
 
   app.post("/api/working-orders/:id/payments", (c) =>
-    run(c, log, async () => {
+    runBodyLines(c, log, async () => {
       const session = await requireSession(deps, c, { permission: "payment.take" });
       await assertRequestDevice(deps, c, session);
       const { personId, sessionId } = session;

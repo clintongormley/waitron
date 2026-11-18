@@ -780,6 +780,20 @@ describe("PUT /api/parties/:id/drafts", () => {
 });
 
 describe("POST /api/dead-ends/draft", () => {
+  it.each([
+    ["no draft", () => randomUUID()],
+    ["a malformed draft id", () => "draft-1"],
+  ])("answers 400 draft.not_found for a body naming %s", async (_label, draftIdOf) => {
+    const party = await seated();
+    const draftId = draftIdOf();
+    const answer = await anna("POST", "/api/dead-ends/draft", {
+      partyId: party.partyId,
+      draftId,
+      lineIds: [],
+    });
+    expect(answer.status).toBe(400);
+    expect(answer.json).toEqual(refusal("draft.not_found", { draftId }));
+  });
   it("answers a selected draft line with the closed station and current station choices", async () => {
     const party = await seated();
     const draft = await newDraft(anna, party.partyId, [dish("Caña")]);
@@ -1204,7 +1218,21 @@ describe("POST /api/parties/:id/drafts/:did/submit uses its saved bill", () => {
 });
 
 describe("a draft named on another party", () => {
-  it("is refused 404 draft.not_found by the save, the take-over and the submit, as is an id that is not one", async () => {
+  it("refuses a save naming a course that does not exist with 400 course.not_found", async () => {
+    const party = await seated();
+    const courseId = randomUUID();
+    const before = await snapshot();
+    const answer = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
+      billId: await openBillOf(party.partyId),
+      draftId: null,
+      revision: 0,
+      lines: [{ ...dish("Caña"), courseId }],
+    });
+    expect(answer.status).toBe(400);
+    expect(answer.json).toEqual(refusal("course.not_found", { courseId }));
+    expect(await snapshot()).toEqual(before);
+  });
+  it("is refused draft.not_found: 400 by the save, whose body names it, and 404 by the take-over and the submit, as is an id that is not one", async () => {
     const firstParty = await seated();
     const secondParty = await seated();
     const annas = await newDraft(anna, firstParty.partyId, [dish("Caña")]);
@@ -1234,8 +1262,8 @@ describe("a draft named on another party", () => {
       },
     );
 
-    for (const answer of answers) {
-      expect(answer.status).toBe(404);
+    for (const [index, answer] of answers.entries()) {
+      expect(answer.status).toBe(index === 0 ? 400 : 404);
       expect(answer.json).toEqual(refusal("draft.not_found", { draftId: annas.id }));
     }
     expect(notAnId.status).toBe(404);
@@ -1516,7 +1544,7 @@ describe("per-group HTTP destinations draft", () => {
         { release: "hold", joinGroupId: randomUUID(), lineIds: [draft.lines[1]!.id] },
       ],
     });
-    expect(refused.status).toBe(404);
+    expect(refused.status).toBe(400);
     expect(refused.json).toMatchObject({ code: "group.not_found" });
     expect(await snapshot()).toEqual(before);
   });

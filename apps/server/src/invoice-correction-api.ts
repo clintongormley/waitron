@@ -47,7 +47,6 @@ export function mountInvoiceCorrectionApi(
       "sale.correction_scope_invalid": 400,
       "sale.correction_history_unusable": 409,
       "sale.correction_not_admitted": 409,
-      "adjustment_reason.not_found": 400,
       "invoice_correction.not_settled": 409,
       "invoice_correction.already_open": 409,
       "invoice_correction.money_short": 409,

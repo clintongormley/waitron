@@ -561,7 +561,7 @@ describe("A669 allergy preview validation", () => {
       { kind: "group", groupId: randomUUID() },
       { kind: "held-line", lineId: randomUUID() },
     ])
-      await expectError(await request("POST", route("POST"), body), 404, "group.not_found");
+      await expectError(await request("POST", route("POST"), body), 400, "group.not_found");
     const result = await request("POST", route("POST"), {
       kind: "course",
       orderId: billId,

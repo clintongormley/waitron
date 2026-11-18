@@ -1574,7 +1574,20 @@ describe("an item already paid for (design §8 test 5)", () => {
       tip: "0.00",
     });
 
-    expect(refused.status).toBe(404);
+    expect(refused.status).toBe(400);
+    expect(refused.json).toMatchObject({ code: "tab.line_not_found", params: { lineNo: 9 } });
+  });
+  it("refuses a preview naming a line the bill does not have", async () => {
+    const billId = await tabWith("Paella");
+
+    const refused = await request("POST", `/api/working-orders/${billId}/payments/preview`, {
+      kind: "items",
+      lines: [{ lineNo: 9 }],
+      method: "cash",
+      tendered: "35.00",
+    });
+
+    expect(refused.status).toBe(400);
     expect(refused.json).toMatchObject({ code: "tab.line_not_found", params: { lineNo: 9 } });
   });
 });
