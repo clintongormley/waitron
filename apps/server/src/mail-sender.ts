@@ -355,7 +355,8 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
           : { processed: false };
     });
   } catch (error) {
-    if (failed === undefined) throw error;
+    // A rolled-back invoice claim still holds the sale's active delivery slot.
+    if (failed === undefined || failed.kind === "invoice") throw error;
     const mail = failed;
     const owner = owners.get(mail.kind)!;
     // The owner’s writes rolled back; a fresh transaction retains only the failed attempt’s back-off.

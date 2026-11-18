@@ -1688,7 +1688,7 @@ const retry = (
 ) =>
   send(v, "POST", `/api/sales/${orderId}/deliveries/${deliveryId}/retry`, { requestKey }, cookie);
 
-/** One pass of the email worker, the mail transport answering `outcome` (or throwing). */
+/** One pass of the mail job, the mail transport answering `outcome` (or throwing). */
 async function emailWorkerPass(outcome: "sent" | "failed" | "throws") {
   return runMailPass({
     db: suite.db,
@@ -1722,7 +1722,7 @@ async function emailWorkerPass(outcome: "sent" | "failed" | "throws") {
   });
 }
 
-/** An email original to the customer, ended `status` by the email worker. */
+/** An email original to the customer, ended `status` by the mail job. */
 async function endedEmail(v: Venue, orderId: string, status: "failed" | "unknown" | "sent") {
   const queued = await emailIt(v, orderId);
   expect(queued.status).toBe(200);

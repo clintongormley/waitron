@@ -2050,6 +2050,33 @@ async function claimMailAt(id: string, at: string) {
 }
 
 describe("invoice mail pass", () => {
+  it("can send an invoice after its claim transaction failed once", async () => {
+    const { delivery } = await queued();
+    const pass = () =>
+      runInvoiceMailPass({
+        db: suite.db,
+        now: () => start,
+        readDocument: documentFor,
+        send: async () => ({ status: "sent" }),
+      });
+    await suite.db.execute(sql`create trigger refuse_invoice_mail_claim
+      before update of status on invoice_deliveries when new.status = 'sending'
+      begin select raise(abort, 'Claim write failed'); end`);
+    try {
+      await expect(pass()).rejects.toThrow("Claim write failed");
+    } finally {
+      await suite.db.execute(sql`drop trigger refuse_invoice_mail_claim`);
+    }
+    expect((await rows())[0]).toMatchObject({ status: "queued", attempts: 0 });
+    expect(await readMail(suite.db, `invoice:${delivery.id}`)).toMatchObject({
+      status: "pending",
+      attempts: 0,
+      finishedAt: null,
+    });
+    await pass();
+    expect((await rows())[0]).toMatchObject({ status: "sent", attempts: 1 });
+  });
+
   it.each(["queued", "released"] as const)(
     "frees the sale if a %s mail reaches its seven-day deadline",
     async (state) => {
