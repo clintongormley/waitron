@@ -24,6 +24,7 @@
       "order_amendments",
       "order_group_events",
       "order_draft_events",
+      "order_events",
       "handover_activations",
       "menu_versions",
       "menu_version_images",

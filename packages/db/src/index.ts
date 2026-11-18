@@ -134,6 +134,7 @@ export {
   type OrderGroupRequestKind,
 } from "./schema/order-groups.js";
 export { orderGroupHoldStations } from "./schema/order-group-hold-stations.js";
+export { ORDER_EVENT_KINDS, orderEvents } from "./schema/order-events.js";
 export {
   orderDraftEventKind,
   orderDraftEvents,

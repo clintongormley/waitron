@@ -230,6 +230,11 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "who owned an unsent order and what became of it; never corrected, copied to a standby, never drained back",
   ),
+  appendOnly(
+    "order_events",
+    "state",
+    "what happened to a bill's dishes, rounds and drafts, and who did it; never corrected, copied to a standby, never drained back",
+  ),
 
   // state — one row per database, the same whichever node reads it.
   classify(
