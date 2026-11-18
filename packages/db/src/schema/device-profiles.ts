@@ -25,7 +25,7 @@ export const deviceFormFactorEnum = enumType(["till", "phone-portrait", "tablet-
 export const printerListRoles = ["receipt", "payment_slip", "cash_drawer", "invoice"] as const;
 export type PrinterListRole = (typeof printerListRoles)[number];
 
-/** An absent role has no choices or default. Each stored default is on its role's list. */
+/** An absent or empty role offers no printer. A stored default is on its role's list. */
 export type StoredPrinterLists = Partial<
   Record<PrinterListRole, { readonly ids: readonly string[]; readonly defaultId: string | null }>
 >;

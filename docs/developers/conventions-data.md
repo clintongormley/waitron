@@ -2200,7 +2200,8 @@ Configuration format 51 stores each device profile's ordered printer choices and
 `device_profiles.printer_lists`. You can transfer both receipt and office invoice choices. The
 export drops deleted printer ids and the import assigns the destination's printer ids. Receipt
 and office Delete clear their choices and defaults in the same transaction that removes the printer
-from service. The printer round trip in `apps/server/src/configuration-transfer.test.ts` checks
+from service. A role can become empty after Delete. An empty role and an absent role both offer
+no printer. The printer round trip in `apps/server/src/configuration-transfer.test.ts` checks
 order, defaults and a deleted printer.
 
 The export leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
