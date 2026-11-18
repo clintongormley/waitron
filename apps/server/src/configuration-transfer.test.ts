@@ -3669,7 +3669,7 @@ it("remaps ordered profile printer lists and defaults, leaving a deleted printer
 });
 
 it.each([
-  ["a malformed role", (_profileId: unknown) => ({ receipt: true })],
+  ["a malformed role", () => ({ receipt: true })],
   [
     "an id that belongs to a profile",
     (profileId: unknown) => ({
