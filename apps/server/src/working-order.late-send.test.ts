@@ -215,9 +215,7 @@ const confirming = (menuIds: string[], personId = randomUUID()) => ({
   personId,
   lateSend: {
     menuIds: new Set(menuIds),
-    confirm: vi.fn((tx: Parameters<LateSendConfirmation["confirm"]>[0], _needsManager: boolean) =>
-      ensureOperator(tx, personId),
-    ),
+    confirm: vi.fn<LateSendConfirmation["confirm"]>((tx) => ensureOperator(tx, personId)),
   },
 });
 
