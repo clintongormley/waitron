@@ -57,6 +57,12 @@ describe("prepareDeclarationSource", () => {
     );
   });
 
+  it("lists full invoices as well as simplified ones among the real functions", () => {
+    expect(prepareDeclarationSource(input())).toContain(
+      "expedición de facturas simplificadas y completas",
+    );
+  });
+
   it("refuses a slot it does not know", () => {
     expect(() =>
       prepareDeclarationSource(input({ template: "**1.a) Nombre:** ‹nada›\n" })),
@@ -95,7 +101,7 @@ describe("releaseBlockers", () => {
   it("answers each blocker line's text in the real template", () => {
     const blockers = releaseBlockers(template);
     expect(blockers).toHaveLength(1);
-    expect(blockers[0]).toMatch(/^Item 1\.d\) is the draft sent to the asesor as Q53\./);
+    expect(blockers[0]).toMatch(/^Item 1\.d\) is the draft the asesor is asked about in question 9 /);
   });
 
   it("answers nothing for a text with none", () => {

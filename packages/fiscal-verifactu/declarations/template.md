@@ -1,4 +1,4 @@
-<!-- release-blocker: Item 1.d) is the draft sent to the asesor as Q53. Replace it with the answered wording, keeping the cloud-server phrase and the spare-server sentence only if this version can do them, then delete this line. -->
+<!-- release-blocker: Item 1.d) is the draft the asesor is asked about in question 9 of docs/compliance/2026-11-19-adviser-meeting.md (Q53 before it). Replace it with the answered wording, keeping the cloud-server phrase and the spare-server sentence only if this version can do them, then delete this line. -->
 **DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN**
 
 **1.a) Nombre del sistema informático a que se refiere esta declaración responsable:**
