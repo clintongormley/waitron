@@ -473,7 +473,8 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it.each([false, true])("audits a practice receipt, VAT column %s", async (withRate) => {
+  it.each([4, 5])("has no violations on a %i-column practice receipt", async (columns) => {
+    const withRate = columns === 5;
     const { el, host } = await mountWidget<TillTicketView>(
       "till-ticket-view",
       {
@@ -529,7 +530,7 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     const tables = article.querySelectorAll("table");
     expect(tables).toHaveLength(2);
     const headings = tables[0]!.querySelectorAll("th[scope=col]");
-    expect(headings).toHaveLength(withRate ? 5 : 4);
+    expect(headings).toHaveLength(columns);
     if (withRate) {
       expect(headings[4]!.textContent).toBe("IVA");
       expect(tables[0]!.querySelector("tbody td:last-child")!.textContent).toBe("10%");
