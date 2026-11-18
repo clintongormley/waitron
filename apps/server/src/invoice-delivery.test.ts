@@ -162,12 +162,7 @@ describe("invoice delivery reservation", () => {
     const sale = await issue();
     await suite.db.select().from(nodes);
     const printerId = await insertA4Printer(suite.db, {
-      name: "Office",
-      host: "192.0.2.20",
-      port: 8631,
-      resourcePath: "/ipp/printer",
       supportedFormats: ["application/pdf", "image/urf"],
-      resolutionDpi: 600,
     });
     const request = {
       requestKey: randomUUID(),
@@ -199,13 +194,8 @@ describe("invoice delivery reservation", () => {
     const sale = await issue();
     await suite.db.select().from(nodes);
     const printerId = await insertA4Printer(suite.db, {
-      name: "Office",
-      host: "192.0.2.20",
-      port: 8631,
-      resourcePath: "/ipp/printer",
       documentFormat: "image/urf",
       supportedFormats: ["image/urf"],
-      resolutionDpi: 600,
       active: kind !== "disabled",
     });
     const request = {
@@ -223,14 +213,7 @@ describe("invoice delivery reservation", () => {
   it("records issuance's A4 original for a disabled printer as failed, and the next one is still an original", async () => {
     const sale = await issue();
     await suite.db.select().from(nodes);
-    const printerId = await insertA4Printer(suite.db, {
-      name: "Office",
-      host: "192.0.2.20",
-      port: 8631,
-      resourcePath: "/ipp/printer",
-      resolutionDpi: 600,
-      active: false,
-    });
+    const printerId = await insertA4Printer(suite.db, { active: false });
     const request = {
       requestKey: `issuance:${sale.saleId}`,
       personId: "staff-one",
@@ -269,13 +252,7 @@ describe("invoice delivery reservation", () => {
   it("queues issuance's A4 original for an active printer when inactive printers are allowed", async () => {
     const sale = await issue();
     await suite.db.select().from(nodes);
-    const printerId = await insertA4Printer(suite.db, {
-      name: "Office",
-      host: "192.0.2.20",
-      port: 8631,
-      resourcePath: "/ipp/printer",
-      resolutionDpi: 600,
-    });
+    const printerId = await insertA4Printer(suite.db);
     expect(
       await withTransaction(suite.db, (tx) =>
         reserveInvoiceDelivery(

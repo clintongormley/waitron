@@ -313,18 +313,18 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(b[0]!.id).toBeDefined();
   });
 
-  it("printers: the old (agent_id) FK and the agent_id/usb_path columns are gone", () => {
+  it("printers: have the office agent key and no usb_path column", () => {
     // SQLite stores no name for a foreign key, so this asks whether any key on `printers` points
     // at `print_agents`.
     const keys = suite.db.all<{ table: string }>(
       sql.raw(`select "table" from pragma_foreign_key_list('printers')`),
     );
-    expect(keys.filter((key) => key.table === "print_agents")).toEqual([]);
+    expect(keys.filter((key) => key.table === "print_agents")).toEqual([{ table: "print_agents" }]);
     const cols = suite.db.all<{ name: string }>(
       sql`select name from pragma_table_info('printers')
            where name in ('agent_id', 'usb_path')`,
     );
-    expect(cols).toEqual([]);
+    expect(cols).toEqual([{ name: "agent_id" }]);
   });
 
   it("print_jobs: accepts claimed_by naming an agent, and NULL", async () => {

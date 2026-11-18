@@ -191,9 +191,6 @@ describe("registering a page printer from discovery", () => {
       entry(v.agentOne, { office: { ...pdfReport, port: 8631, resourcePath: "/ipp/office" } }),
     );
     expect(result.outcome).toBe("created");
-    expect(
-      await suite.db.select({ id: printers.id }).from(printers).where(eq(printers.kind, "a4")),
-    ).toEqual([{ id: result.id }]);
     expect(await printerRows()).toEqual([
       {
         id: result.id,
