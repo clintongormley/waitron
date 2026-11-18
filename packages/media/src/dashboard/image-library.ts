@@ -567,8 +567,6 @@ export class ImageLibrary extends LitElement {
   #suggestion: { language: string; name: string } | null = null;
   /** The last save's refusal, until Save is pressed again or, for a field's, that field changes. */
   @state() private refusal: { field: string; code: string } | null = null;
-  /** Why the last reload failed. Apart from `refusal`, whose conflict a failed read must not replace. */
-  @state() private reloadFailure: string | null = null;
   @state() private duplicateImage: LibraryImage | null = null;
   @state() private deletion: { image: LibraryImage; uses: ImageUsage[] } | null = null;
   @state() private deleteError = false;
@@ -742,7 +740,6 @@ export class ImageLibrary extends LitElement {
     };
     this.#feedback.reset();
     this.refusal = null;
-    this.reloadFailure = null;
     this.duplicateImage = null;
     this.#baseline = this.#draft();
     this.#registerScope();
@@ -839,17 +836,10 @@ export class ImageLibrary extends LitElement {
     const editor = this.editor;
     if (!editor?.image || this.busy || this.reloading) return;
     const generation = this.#editorGeneration;
-    const conflict = this.refusal;
     this.reloading = true;
-    this.reloadFailure = null;
     try {
       const { image } = await this.api.getImage(editor.image.id);
-      if (
-        generation !== this.#editorGeneration ||
-        this.editor !== editor ||
-        this.refusal !== conflict
-      )
-        return;
+      if (generation !== this.#editorGeneration || this.editor !== editor) return;
       if (this.#leave)
         await this.#leave.request({
           scopes: [this],
@@ -858,8 +848,8 @@ export class ImageLibrary extends LitElement {
         });
       else this.#edit(image);
     } catch (error) {
-      if (generation === this.#editorGeneration && this.refusal === conflict)
-        this.reloadFailure = codeOf(error);
+      if (generation === this.#editorGeneration)
+        this.refusal = { field: "_form", code: codeOf(error) };
     } finally {
       this.reloading = false;
     }
@@ -895,7 +885,6 @@ export class ImageLibrary extends LitElement {
       return;
     this.#feedback.press();
     this.refusal = null;
-    this.reloadFailure = null;
     if ([...this.#checked().values()].some(Boolean)) {
       void this.#feedback.focus(this.shadowRoot!.querySelector("wt-modal")!);
       return;
@@ -1108,12 +1097,8 @@ export class ImageLibrary extends LitElement {
       errors.set(refusal.field, codeMessage(refusal.code));
     const fileError = errors.get("file") ?? "";
     const marked = [...errors.values()].some(Boolean);
-    const photoDeleted = this.reloadFailure === "image.not_found";
     const bottom = bottomMessage(
-      refusal && !refusedField && !photoDeleted
-        ? `${t("image.save_error")} ${codeMessage(refusal.code)}`
-        : null,
-      this.reloadFailure ? `${t("image.reload_error")} ${codeMessage(this.reloadFailure)}` : null,
+      refusal && !refusedField ? `${t("image.save_error")} ${codeMessage(refusal.code)}` : null,
       marked ? t("image.fix_fields") : null,
     );
     const preview = editor.image ? liveMediaImage(editor.image.filename, "square") : null;
@@ -1212,7 +1197,7 @@ export class ImageLibrary extends LitElement {
         )}
       </div>
       ${
-        refusal?.code === "image.changed" && !photoDeleted
+        refusal?.code === "image.changed"
           ? html`<wt-button
               data-test="reload-photo"
               variant="secondary"

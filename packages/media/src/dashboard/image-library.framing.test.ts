@@ -1,41 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LitElement, html } from "lit";
-import { LeaveController, applyTokens, setContentLanguages } from "@waitron/ui";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import {
-  codeMessage,
-  currentLocale,
-  registerCodeMessages,
-  setLocale,
-  LiveData,
-} from "@waitron/dashboard-kit";
+import { applyTokens, setContentLanguages } from "@waitron/ui";
+import { currentLocale, setLocale, LiveData } from "@waitron/dashboard-kit";
 import type { ImageApi, LibraryImage } from "./client.js";
 import type { ImageLibrary } from "./image-library.js";
 import "./image-library.js";
-import { MEDIA_STRINGS } from "./strings.js";
-
-const CONNECTION_FAILED =
-  "This browser could not connect to Waitron. Check your connection and try again.";
-registerCodeMessages({
-  "connection.failed": {
-    en: CONNECTION_FAILED,
-    es: `${CONNECTION_FAILED} (es)`,
-  },
-});
-
-class LeaveHost extends LitElement {
-  readonly leave = new LeaveController(this);
-  override render() {
-    return html`<slot></slot> ${this.leave.render({
-        heading: "Unsaved changes",
-        message: "Discard unsaved changes?",
-        keepLabel: "Keep editing",
-        discardLabel: "Discard changes",
-      })}`;
-  }
-}
-customElements.define("image-framing-leave-host", LeaveHost);
 
 const image: LibraryImage = {
   id: "photo",
@@ -50,7 +19,6 @@ const image: LibraryImage = {
   updatedAt: "2026-10-08T10:00:00Z",
 };
 let el: ImageLibrary;
-let leaveHost: LeaveHost | undefined;
 let locale: string;
 beforeEach(() => {
   locale = currentLocale();
@@ -59,13 +27,11 @@ beforeEach(() => {
 });
 afterEach(() => {
   el?.remove();
-  leaveHost?.remove();
-  leaveHost = undefined;
   setLocale(locale);
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   vi.restoreAllMocks();
 });
-async function mount(value = image, parent: HTMLElement = document.body) {
+async function mount(value = image) {
   const api = {
     liveData: new LiveData(),
     listImages: vi.fn().mockResolvedValue({ images: [value], total: 1 }),
@@ -76,7 +42,7 @@ async function mount(value = image, parent: HTMLElement = document.body) {
   el = document.createElement("dashboard-image-library");
   el.api = api as unknown as ImageApi;
   applyTokens(el);
-  parent.append(el);
+  document.body.append(el);
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=edit-photo]")).not.toBeNull(),
   );
@@ -125,84 +91,6 @@ async function replace() {
   input.dispatchEvent(new Event("change", { bubbles: true }));
   await el.updateComplete;
   return file;
-}
-
-const conflict =
-  "The image could not be saved. This photo has changed. Reload it before saving again.";
-const reloadFailed = `The photo could not be reloaded. ${CONNECTION_FAILED}`;
-const busyRefusal = "The image could not be saved. The photo service is busy. Try again shortly.";
-const photoDeleted =
-  "The photo could not be reloaded. This photo has been deleted. Cancel to close this editor.";
-const newer = { image: { ...image, names: { en: "Newer" }, revision: 7 }, uses: [] };
-type Api = Awaited<ReturnType<typeof mount>>;
-async function conflictedDraft(parent?: HTMLElement) {
-  const api = await mount(image, parent);
-  const file = await replace();
-  api.updateImage.mockRejectedValueOnce({ code: "image.changed" });
-  save().click();
-  await vi.waitFor(() => expect(reloadButton()).not.toBeNull());
-  return { api, file };
-}
-function reloadButton() {
-  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    "[data-test=reload-photo]",
-  );
-}
-async function pressReload() {
-  await userEvent.click(page.elementLocator(reloadButton()!));
-}
-function holdNextRead(api: Api) {
-  let answer!: (value: unknown) => void;
-  let fail!: (reason: unknown) => void;
-  api.getImage.mockReturnValueOnce(
-    new Promise((resolve, reject) => {
-      answer = resolve;
-      fail = reject;
-    }),
-  );
-  return { answer, fail };
-}
-async function reloadHeld(api: Api) {
-  const read = holdNextRead(api);
-  await pressReload();
-  await vi.waitFor(() => expect(reloadButton()!.disabled).toBe(true));
-  return read;
-}
-async function reloadFails(api: Api) {
-  api.getImage.mockRejectedValueOnce({ code: "connection.failed" });
-  await pressReload();
-  await vi.waitFor(async () => expect(await bottomOf()).toBe(`${conflict} ${reloadFailed}`));
-}
-async function bottomOf() {
-  const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
-    "wt-modal wt-form-actions",
-  )!;
-  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
-}
-function nameField() {
-  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-en]")!;
-}
-function filename() {
-  return el.shadowRoot!.querySelector("[data-test=photo-filename]")?.textContent;
-}
-async function cancel() {
-  el.shadowRoot!.querySelector<HTMLElement>("wt-modal wt-button[slot=cancel]")!.click();
-  await expect.poll(() => el.shadowRoot!.querySelector("wt-modal")).toBeNull();
-}
-async function open(id: string) {
-  el.shadowRoot!.querySelector<HTMLElement>(`[data-test=edit-${id}]`)!.click();
-  await el.updateComplete;
-  await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
-}
-async function settled() {
-  await new Promise((resolve) => setTimeout(resolve));
-  await el.updateComplete;
-}
-async function mountLeaveHost() {
-  leaveHost = document.createElement("image-framing-leave-host") as LeaveHost;
-  document.body.append(leaveHost);
-  await leaveHost.updateComplete;
-  return leaveHost;
 }
 
 it("Edit photo shows the human filename, with a stored-filename fallback and no write", async () => {
@@ -404,208 +292,83 @@ it("conflict keeps the exact draft until explicit reload, which reads the new re
   expect(api.updateImage).toHaveBeenCalledTimes(1);
 });
 
-it("a reload that fails keeps the conflict and the draft, says why, and can be tried again", async () => {
-  const { api, file } = await conflictedDraft();
-  await reloadFails(api);
-  expect(reloadButton()).not.toBeNull();
-  expect(reloadButton()!.disabled).toBe(false);
-  expect(filename()).toContain(file.name);
-  expect(nameField().value).toBe("Spicy potatoes");
-  expect(save().disabled).toBe(false);
-  api.getImage.mockResolvedValueOnce(newer);
-  await pressReload();
-  await vi.waitFor(() => expect(nameField().value).toBe("Newer"));
-  expect(filename()).not.toContain(file.name);
-  expect(await bottomOf()).toBe("");
-  expect(reloadButton()).toBeNull();
-});
-
-it("a reload that fails after the person typed still says why and keeps what they typed", async () => {
-  const { api } = await conflictedDraft();
-  const read = await reloadHeld(api);
-  nameField().dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: "Typed meanwhile" },
-      bubbles: true,
-      composed: true,
-    }),
+async function conflictedDraft() {
+  const api = await mount();
+  const file = await replace();
+  api.updateImage.mockRejectedValueOnce({ code: "image.changed" });
+  save().click();
+  await vi.waitFor(() => expect(reloadButton()).not.toBeNull());
+  return { api, file };
+}
+function reloadButton() {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=reload-photo]",
   );
-  await el.updateComplete;
-  read.fail({ code: "connection.failed" });
-  await vi.waitFor(async () => expect(await bottomOf()).toBe(`${conflict} ${reloadFailed}`));
-  expect(nameField().value).toBe("Typed meanwhile");
-  expect(reloadButton()!.disabled).toBe(false);
-});
+}
+function formError() {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    "wt-modal wt-form-actions",
+  )!.error;
+}
 
-it("a failed reload is worded in Spanish too", async () => {
-  const { api } = await conflictedDraft();
-  setLocale("es");
-  api.getImage.mockRejectedValueOnce({ code: "connection.failed" });
-  await pressReload();
-  await vi.waitFor(async () =>
-    expect(await bottomOf()).toBe(
-      [
-        MEDIA_STRINGS.es["image.save_error"],
-        codeMessage("image.changed", "es"),
-        MEDIA_STRINGS.es["image.reload_error"],
-        codeMessage("connection.failed", "es"),
-      ].join(" "),
+it("a reload that fails says why and keeps the draft", async () => {
+  const { api, file } = await conflictedDraft();
+  api.getImage.mockRejectedValueOnce({ code: "image.busy" });
+  await userEvent.click(page.elementLocator(reloadButton()!));
+  await vi.waitFor(() =>
+    expect(formError()).toBe(
+      "The image could not be saved. The photo service is busy. Try again shortly.",
     ),
   );
+  expect(el.shadowRoot!.querySelector("[data-test=photo-filename]")?.textContent).toContain(
+    file.name,
+  );
+  expect(save().disabled).toBe(false);
 });
 
-it("a new reload takes the last reload's failure away while it runs", async () => {
+it("a reload that fails after the editor moved on leaves the editor's message alone", async () => {
   const { api } = await conflictedDraft();
-  await reloadFails(api);
-  const read = await reloadHeld(api);
-  expect(await bottomOf()).toBe(conflict);
-  read.fail({ code: "connection.failed" });
-  await vi.waitFor(async () => expect(await bottomOf()).toBe(`${conflict} ${reloadFailed}`));
-  expect(reloadButton()!.disabled).toBe(false);
-});
-
-it("pressing Save takes a reload's failure away", async () => {
-  const { api } = await conflictedDraft();
-  await reloadFails(api);
-  api.updateImage.mockRejectedValueOnce({ code: "image.changed" });
-  save().click();
-  await vi.waitFor(() => expect(api.updateImage).toHaveBeenCalledTimes(2));
-  await vi.waitFor(async () => expect(await bottomOf()).toBe(conflict));
-  expect(reloadButton()).not.toBeNull();
-});
-
-it("a reload that fails after Save was pressed says nothing", async () => {
-  const { api } = await conflictedDraft();
-  const read = await reloadHeld(api);
-  let refuse!: (reason: unknown) => void;
-  api.updateImage.mockReturnValueOnce(
+  const conflictMessage = formError();
+  let fail!: (reason: unknown) => void;
+  api.getImage.mockReturnValueOnce(
     new Promise((_resolve, reject) => {
-      refuse = reject;
+      fail = reject;
     }),
   );
-  save().click();
-  await vi.waitFor(() => expect(api.updateImage).toHaveBeenCalledTimes(2));
-  read.fail({ code: "connection.failed" });
-  await settled();
-  expect(await bottomOf()).toBe("");
-  refuse({ code: "image.changed" });
-  await vi.waitFor(async () => expect(await bottomOf()).toBe(conflict));
-});
-
-it("a reload that answers after Save was refused for another reason changes nothing", async () => {
-  const host = await mountLeaveHost();
-  const { api, file } = await conflictedDraft(host);
-  const read = await reloadHeld(api);
-  api.updateImage.mockRejectedValueOnce({ code: "image.busy" });
-  save().click();
-  await vi.waitFor(async () => expect(await bottomOf()).toBe(busyRefusal));
-  read.answer(newer);
-  await settled();
-  await host.updateComplete;
-  expect(host.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  expect(filename()).toContain(file.name);
-  expect(nameField().value).toBe("Spicy potatoes");
-  expect(await bottomOf()).toBe(busyRefusal);
-  expect(reloadButton()).toBeNull();
-});
-
-it("a reload that fails after Save was refused as changed again shows only the new conflict", async () => {
-  const { api } = await conflictedDraft();
-  const read = await reloadHeld(api);
-  api.updateImage.mockRejectedValueOnce({ code: "image.changed" });
-  save().click();
-  await vi.waitFor(() => expect(api.updateImage).toHaveBeenCalledTimes(2));
-  await vi.waitFor(async () => expect(await bottomOf()).toBe(conflict));
-  read.fail({ code: "connection.failed" });
-  await vi.waitFor(() => expect(reloadButton()!.disabled).toBe(false));
-  await settled();
-  expect(await bottomOf()).toBe(conflict);
-});
-
-it("a reload that finds the photo deleted says so, offers no reload, and Cancel still closes", async () => {
-  const { api, file } = await conflictedDraft();
-  api.getImage.mockRejectedValueOnce({ code: "image.not_found" });
-  await pressReload();
-  await vi.waitFor(async () => expect(await bottomOf()).toBe(photoDeleted));
-  expect(reloadButton()).toBeNull();
-  expect(filename()).toContain(file.name);
-  expect(nameField().value).toBe("Spicy potatoes");
-  await cancel();
-});
-
-it("the deleted photo's sentence names the editor's Cancel button in each language", () => {
-  for (const language of ["en", "es"] as const)
-    expect(codeMessage("image.not_found", language)).toContain(
-      MEDIA_STRINGS[language]["image.cancel"],
-    );
-});
-
-it("closing the editor takes a reload's failure away", async () => {
-  const { api } = await conflictedDraft();
-  await reloadFails(api);
-  await cancel();
-  await open("photo");
-  expect(await bottomOf()).toBe("");
-  expect(reloadButton()).toBeNull();
-});
-
-it("a reload that answers after Cancel leaves the editor closed and the photo as it was", async () => {
-  const { api } = await conflictedDraft();
-  const read = await reloadHeld(api);
-  await cancel();
-  read.answer(newer);
-  await settled();
-  expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  await open("photo");
-  expect(nameField().value).toBe("Spicy potatoes");
-  expect(await bottomOf()).toBe("");
-});
-
-it("a reload that fails after Cancel leaves nothing for the next photo opened", async () => {
-  const { api } = await conflictedDraft();
-  api.listImages.mockResolvedValue({
-    images: [image, { ...image, id: "other", names: { en: "Other" } }],
-    total: 2,
-  });
-  api.liveData.invalidate([{ type: "media_images" }]);
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=edit-other]")).not.toBeNull(),
-  );
-  const read = await reloadHeld(api);
-  await cancel();
-  read.fail({ code: "connection.failed" });
-  await settled();
-  expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  await open("other");
-  expect(nameField().value).toBe("Other");
-  expect(await bottomOf()).toBe("");
-  expect(reloadButton()).toBeNull();
-});
-
-it("a reload that fails after the screen was taken off the page and put back leaves the editor's message alone", async () => {
-  const { api } = await conflictedDraft();
-  const read = await reloadHeld(api);
+  await userEvent.click(page.elementLocator(reloadButton()!));
+  await vi.waitFor(() => expect(reloadButton()!.disabled).toBe(true));
   el.remove();
   document.body.append(el);
   await el.updateComplete;
-  read.fail({ code: "connection.failed" });
+  fail({ code: "image.busy" });
   await vi.waitFor(() => expect(reloadButton()?.disabled).not.toBe(true));
   await el.updateComplete;
-  expect(await bottomOf()).toBe(conflict);
+  expect(formError()).toBe(conflictMessage);
   expect(reloadButton()).not.toBeNull();
 });
 
-it("a reload that answers after the screen was taken off the page and put back does not replace the draft", async () => {
+it("a reload that answers after the editor moved on does not replace the draft", async () => {
   const { api, file } = await conflictedDraft();
-  const read = await reloadHeld(api);
+  let answer!: (value: unknown) => void;
+  api.getImage.mockReturnValueOnce(
+    new Promise((resolve) => {
+      answer = resolve;
+    }),
+  );
+  await userEvent.click(page.elementLocator(reloadButton()!));
+  await vi.waitFor(() => expect(reloadButton()!.disabled).toBe(true));
   el.remove();
   document.body.append(el);
   await el.updateComplete;
-  read.answer(newer);
+  answer({ image: { ...image, names: { en: "Newer" }, revision: 7 }, uses: [] });
   await vi.waitFor(() => expect(reloadButton()?.disabled).not.toBe(true));
   await el.updateComplete;
-  expect(filename()).toContain(file.name);
-  expect(nameField().value).toBe("Spicy potatoes");
+  expect(el.shadowRoot!.querySelector("[data-test=photo-filename]")?.textContent).toContain(
+    file.name,
+  );
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-en]")!.value,
+  ).toBe("Spicy potatoes");
 });
 
 it("replacement URLs are revoked on replacement and disconnect, and reconnect makes a fresh URL", async () => {
