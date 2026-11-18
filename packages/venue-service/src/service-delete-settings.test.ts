@@ -8,9 +8,6 @@ import {
   menus,
   departments,
   departmentTransferDestinations,
-  deviceProfileKitchenScreens,
-  deviceProfileKitchenScreenStations,
-  deviceProfileKitchenScreenZones,
   deviceProfiles,
   devices,
   deviceZoneSelections,
@@ -197,25 +194,29 @@ it("deleting the last profile screen zone leaves its explicit empty bound on dis
       .insert(kitchenStations)
       .values({ ...f.cfg, name: "Surviving station" })
       .returning();
-    await tx.insert(deviceProfileKitchenScreens).values([
-      { deviceProfileId: f.explicit, screen: "pass", everyStation: false, everyZone: false },
-      { deviceProfileId: f.kitchen, screen: "pass_monitor", everyStation: true, everyZone: false },
-    ]);
+    const pass = { stationIds: [station!.id], zoneIds: [f.gone], showNonPassStations: true };
+    const monitor = { stationIds: null, zoneIds: [], showNonPassStations: true };
     await tx
-      .insert(deviceProfileKitchenScreenZones)
-      .values({ deviceProfileId: f.explicit, screen: "pass", zoneId: f.gone });
+      .update(deviceProfiles)
+      .set({ kitchenViews: { pass } })
+      .where(eq(deviceProfiles.id, f.explicit));
     await tx
-      .insert(deviceProfileKitchenScreenStations)
-      .values({ deviceProfileId: f.explicit, screen: "pass", stationId: station!.id });
-    const parents = await tx.select().from(deviceProfileKitchenScreens);
-    const stationBounds = await tx.select().from(deviceProfileKitchenScreenStations);
+      .update(deviceProfiles)
+      .set({ kitchenViews: { pass_monitor: monitor } })
+      .where(eq(deviceProfiles.id, f.kitchen));
+    const bindings = () =>
+      tx.select({ id: deviceProfiles.id, views: deviceProfiles.kitchenViews }).from(deviceProfiles);
+    const before = await bindings();
     const impact = await readServiceDeleteSettings(tx, [f.gone], null);
     expect(impact.filter((row) => row.key.startsWith("screen_"))).toEqual([
       { key: "screen_zones", count: 1, targets: [{ id: f.explicit, name: "Explicit" }] },
     ]);
     await clearServiceDeleteSettings(tx, [f.gone], null);
-    expect(await tx.select().from(deviceProfileKitchenScreens)).toEqual(parents);
-    expect(await tx.select().from(deviceProfileKitchenScreenStations)).toEqual(stationBounds);
+    expect(await bindings()).toEqual(
+      before.map((row) =>
+        row.id === f.explicit ? { ...row, views: { pass: { ...pass, zoneIds: [] } } } : row,
+      ),
+    );
     expect(
       (await readProfileKitchenScreens(tx)).find((row) => row.profileId === f.explicit)?.screens,
     ).toEqual({

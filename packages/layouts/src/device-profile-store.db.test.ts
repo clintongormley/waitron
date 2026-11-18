@@ -1174,12 +1174,6 @@ describe("what can refuse a write to device_profiles", () => {
         on_delete: "CASCADE",
       },
       {
-        child: "device_profile_kitchen_screens",
-        column: "device_profile_id",
-        parent: "device_profiles",
-        on_delete: "CASCADE",
-      },
-      {
         child: "device_profiles",
         column: "order_department_id",
         parent: "departments",

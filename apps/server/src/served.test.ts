@@ -583,7 +583,7 @@ describe("served by quantity (§12 item 5)", () => {
       .where(eq(ticketItems.workingOrderLineId, s.croq.id));
     expect(ticket!.firedAt).not.toBeNull();
     expect(ticket!.stationId).not.toBeNull();
-    expect(suite.db.all(sql`select device_profile_id from device_profile_kitchen_screens`)).toEqual(
+    expect(suite.db.all(sql`select id from device_profiles where kitchen_views <> '{}'`)).toEqual(
       [],
     );
 

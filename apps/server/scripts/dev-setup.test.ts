@@ -370,16 +370,15 @@ describe("devSetup against a real venue directory", () => {
         every_station: number | null;
         every_zone: number | null;
       }>(
-        sql`select d.label, dp.form_factor, dks.screen, dks.every_station,
+        sql`select d.label, dp.form_factor, dks.key as screen, json_type(dks.value, '$.stationIds') = 'null' as every_station,
                    (select group_concat(name, ',') from (
-                      select ks.name from device_profile_kitchen_screen_stations s
-                      join kitchen_stations ks on ks.id = s.station_id
-                      where s.device_profile_id = d.device_profile_id and s.screen = dks.screen
+                      select ks.name from json_each(dks.value, '$.stationIds') s
+                      join kitchen_stations ks on ks.id = s.value
                       order by ks.name)) as station_names,
-                   dks.every_zone
+                   case when dks.key is null then null when dks.key = 'station' then 0 else json_type(dks.value, '$.zoneIds') = 'null' end as every_zone
             from devices d
             join device_profiles dp on dp.id = d.device_profile_id
-            left join device_profile_kitchen_screens dks on dks.device_profile_id = d.device_profile_id
+            left join json_each(dp.kitchen_views) dks on true
             order by d.label`,
       );
       return result.rows;

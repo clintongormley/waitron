@@ -412,9 +412,6 @@ export {
   departments,
   departmentTransferDestinations,
   departmentTransferRequests,
-  deviceProfileKitchenScreens,
-  deviceProfileKitchenScreenStations,
-  deviceProfileKitchenScreenZones,
   deviceZoneSelections,
   deviceZoneSelectionZones,
   kitchenNoticeKind,
@@ -433,7 +430,11 @@ export {
 } from "./schema/index.js";
 export { kitchenAllergyBlockCheck } from "./schema/venue-service/kitchen-allergy.js";
 export { KITCHEN_NOTICE_DIRECTIONS } from "./schema/venue-service/kitchen-notices.js";
-export { KITCHEN_SCREEN_KINDS } from "./schema/venue-service/kitchen-screens.js";
+export {
+  KITCHEN_SCREEN_KINDS,
+  type StoredKitchenView,
+  type StoredKitchenViews,
+} from "./schema/venue-service/kitchen-screens.js";
 export { ZONE_PAINT_KINDS } from "./schema/venue-service/seasons.js";
 export { SERVICE_STEP_STARTS } from "./schema/venue-service/service-steps.js";
 export type { ServiceStepStart } from "./schema/venue-service/service-steps.js";

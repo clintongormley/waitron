@@ -1,6 +1,7 @@
 import type { Transaction } from "./client.js";
 import { eq } from "drizzle-orm";
 import { kitchenStations } from "./schema/kitchen-stations.js";
+import { KITCHEN_SCREEN_KINDS } from "./schema/venue-service/kitchen-screens.js";
 import { deviceProfiles, printerListRoles } from "./schema/device-profiles.js";
 import {
   AppError,
@@ -54,6 +55,49 @@ function validatePrinterLists(
   }
 }
 
+function validateKitchenViews(
+  profiles: readonly Record<string, unknown>[],
+  stations: readonly Record<string, unknown>[],
+  zones: readonly Record<string, unknown>[],
+): void {
+  const stationIds = new Set(stations.map(({ id }) => id));
+  const zoneIds = new Set(zones.map(({ id }) => id));
+  const kinds = new Set<string>(KITCHEN_SCREEN_KINDS);
+  const invalid = () =>
+    new AppError("setup.request_invalid", { field: "device_profiles.kitchen_views" });
+  const isObject = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  const isBound = (value: unknown, ids: ReadonlySet<unknown>) =>
+    value === null ||
+    (Array.isArray(value) &&
+      value.every((id: unknown) => typeof id === "string" && ids.has(id)) &&
+      new Set(value).size === value.length);
+
+  for (const { kitchen_views: raw } of profiles) {
+    if (raw === undefined) continue;
+    if (typeof raw !== "string") throw invalid();
+    let views: unknown;
+    try {
+      views = JSON.parse(raw) as unknown;
+    } catch {
+      throw invalid();
+    }
+    if (!isObject(views)) throw invalid();
+    const entries = Object.entries(views);
+    if (entries.length > 1) throw invalid();
+    for (const [kind, view] of entries) {
+      if (!kinds.has(kind) || !isObject(view)) throw invalid();
+      if (
+        !isBound(view.stationIds, stationIds) ||
+        !isBound(view.zoneIds, zoneIds) ||
+        (kind === "station" && view.zoneIds !== null) ||
+        (view.showNonPassStations !== undefined && typeof view.showNonPassStations !== "boolean")
+      )
+        throw invalid();
+    }
+  }
+}
+
 export function validateCoreConfiguration(
   tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
 ): void {
@@ -88,6 +132,11 @@ export function validateCoreConfiguration(
     }
   }
   validatePrinterLists(tables.device_profiles ?? [], tables.printers ?? []);
+  validateKitchenViews(
+    tables.device_profiles ?? [],
+    tables.kitchen_stations ?? [],
+    tables.floor_zones ?? [],
+  );
   // An import makes a new venue, so the file's rows are all of its tables; the plan's tables have
   // no unique index to catch a clash later.
   for (const table of ["dining_tables", "floor_plan_tables"]) {
@@ -134,6 +183,13 @@ export const CORE_CONFIGURATION_TRANSFER = {
       leaveBehindWhenSet: "retired_at",
       jsonReferences: [
         { column: "order_zone_ids", paths: [["*"]] },
+        {
+          column: "kitchen_views",
+          paths: [
+            ["*", "stationIds", "*"],
+            ["*", "zoneIds", "*"],
+          ],
+        },
         {
           column: "printer_lists",
           paths: [

@@ -18,12 +18,7 @@ import {
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import {
-  createDepartment,
-  createServiceZone,
-  deviceProfileKitchenScreenZones,
-  deviceProfileKitchenScreens,
-} from "@waitron/venue-service";
+import { createDepartment, createServiceZone } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
@@ -1741,8 +1736,11 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       expect(created.status).toBe(201);
       const { id } = (await created.json()) as ProfileRow;
       await suite.db
-        .delete(deviceProfileKitchenScreenZones)
-        .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, id));
+        .update(deviceProfiles)
+        .set({
+          kitchenViews: { pass: { stationIds: [grill], zoneIds: [], showNonPassStations: true } },
+        })
+        .where(eq(deviceProfiles.id, id));
       await suite.db.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone!.id));
       const kitchenScreens = { pass: { stationIds: [grill], zoneIds: [] } };
       const saved = await app.request(`/management-api/device-profiles/${id}`, {
@@ -1774,16 +1772,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         pass: { ...kitchenScreens.pass, showNonPassStations: true },
       });
       const [parent] = await suite.db
-        .select()
-        .from(deviceProfileKitchenScreens)
-        .where(eq(deviceProfileKitchenScreens.deviceProfileId, copy.id));
-      expect(parent).toMatchObject({ screen: "pass", everyZone: false, everyStation: false });
-      expect(
-        await suite.db
-          .select()
-          .from(deviceProfileKitchenScreenZones)
-          .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, copy.id)),
-      ).toEqual([]);
+        .select({ views: deviceProfiles.kitchenViews })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, copy.id));
+      expect(parent!.views).toEqual({
+        pass: { stationIds: [grill], zoneIds: [], showNonPassStations: true },
+      });
     });
 
     it("profile copy refuses a printer only its body names with 400, and a missing source with 404", async () => {

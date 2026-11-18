@@ -848,7 +848,7 @@ also qualifies the historical operation-description references in this section.
   Devices hold their assigned station and invoice printer choice revision on the device row.
   Printers now store the device holding them and which documents they pick up on the printer row.
   Receipt and office printers share one table. Each profile stores its ordered printer choices and defaults.
-  Device profiles hold their ordering department, starting zone and allowed zones on the profile row.
+  Device profiles hold their ordering department, starting zone, allowed zones and kitchen view on the profile row.
   Kitchen tickets now read their bill through the order line, with no copied bill id to update on a move.
   Each order line now carries its recorded offer and first-send facts, which stay with the line when it is split or moved.
   Floor splits now check the parties the till read, separately from the room layout revision;

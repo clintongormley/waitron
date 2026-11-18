@@ -541,7 +541,11 @@ async function readSeeded(db: Database, cookies: Record<string, string>) {
       departmentId: access.find((scope) => scope.profileId === row.profileId)!.departmentId,
     }));
   const screens = db.all<{ deviceId: string; stationId: string }>(
-    sql`select d.id as deviceId, s.station_id as stationId from devices d join device_profile_kitchen_screen_stations s on s.device_profile_id = d.device_profile_id`,
+    sql`select d.id as deviceId, s.value as stationId
+      from devices d
+      join device_profiles p on p.id = d.device_profile_id
+      join json_each(p.kitchen_views, '$.station.stationIds') s
+      where s.type = 'text'`,
   );
   const kitchenScreens: BenchKitchenScreen[] = deviceRows
     .filter((row) => row.name.startsWith(KDS_PREFIX))

@@ -6,7 +6,7 @@ import {
   CORE_MIGRATIONS,
   menus,
   departments,
-  deviceProfileKitchenScreens,
+  deviceProfiles,
   devices,
   kitchenStations,
   menuPeriods,
@@ -310,17 +310,16 @@ it("retains an empty explicit profile parent and its unrelated zones for every d
     await setProfileKitchenScreens(tx, pid, { pass: { stationIds: [f.gone], zoneIds: [f.zone] } });
     const first = await device(tx, pid, "First");
     const second = await device(tx, pid, "Second");
-    const parents = await tx
-      .select()
-      .from(deviceProfileKitchenScreens)
-      .where(eq(deviceProfileKitchenScreens.deviceProfileId, pid));
+    const stored = () =>
+      tx
+        .select({ views: deviceProfiles.kitchenViews })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, pid));
+    const [before] = await stored();
     await module.clearStationDeleteSettings(tx, f.gone);
-    expect(
-      await tx
-        .select()
-        .from(deviceProfileKitchenScreens)
-        .where(eq(deviceProfileKitchenScreens.deviceProfileId, pid)),
-    ).toEqual(parents);
+    expect(await stored()).toEqual([
+      { views: { pass: { ...before!.views.pass!, stationIds: [] } } },
+    ]);
     expect(
       (await readProfileKitchenScreens(tx)).find((row) => row.profileId === pid)?.screens,
     ).toEqual({

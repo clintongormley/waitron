@@ -1,10 +1,7 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
-  deviceProfileKitchenScreens,
-  deviceProfileKitchenScreenStations,
-  deviceProfileKitchenScreenZones,
   deviceProfiles,
   devices,
   floorZones,
@@ -43,6 +40,10 @@ let db: Database;
 beforeAll(() => {
   db = suite.db;
 });
+
+async function updateStored(id: string, kitchenViews: ProfileKitchenScreens) {
+  await db.update(deviceProfiles).set({ kitchenViews }).where(eq(deviceProfiles.id, id));
+}
 
 function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, fn);
@@ -170,12 +171,11 @@ describe("a profile's kitchen screens", () => {
       await set(venue.kds, { [kind]: input });
       expect(await screensOf(venue.kds)).toEqual({ [kind]: expected });
     }
-    expect(
-      await db
-        .select()
-        .from(deviceProfileKitchenScreenStations)
-        .where(eq(deviceProfileKitchenScreenStations.deviceProfileId, venue.kds)),
-    ).toHaveLength(2);
+    const [profile] = await db
+      .select({ views: deviceProfiles.kitchenViews })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, venue.kds));
+    expect(profile!.views.pass_monitor!.stationIds).toEqual([venue.pastry, venue.cold]);
   });
 
   it("reads every live profile, one with nothing stored as no screens, and no retired one", async () => {
@@ -430,12 +430,11 @@ describe("a kitchen screen added to a profile", () => {
     await expect(screensOf(venue.kds)).resolves.toEqual({
       station: { stationIds: null, zoneIds: null },
     });
-    expect(
-      await db
-        .select()
-        .from(deviceProfileKitchenScreens)
-        .where(eq(deviceProfileKitchenScreens.deviceProfileId, venue.kds)),
-    ).toHaveLength(1);
+    const [profile] = await db
+      .select({ views: deviceProfiles.kitchenViews })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, venue.kds));
+    expect(Object.keys(profile!.views)).toHaveLength(1);
   });
 });
 
@@ -588,14 +587,12 @@ describe("deleted zone bounds", () => {
         zoneIds: previous === "station" ? null : [venue.dining],
       },
     });
-    if (previous === "station")
-      await db
-        .delete(deviceProfileKitchenScreenStations)
-        .where(eq(deviceProfileKitchenScreenStations.deviceProfileId, venue.kds));
-    else
-      await db
-        .delete(deviceProfileKitchenScreenZones)
-        .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, venue.kds));
+    await updateStored(venue.kds, {
+      [previous]: {
+        stationIds: previous === "station" ? [] : [venue.grill],
+        zoneIds: previous === "station" ? null : [],
+      },
+    });
     const replacement = next === null ? {} : { [next]: { stationIds: null, zoneIds: null } };
     await expect(set(venue.kds, replacement)).resolves.toBeUndefined();
     expect(await screensOf(venue.kds)).toEqual(
@@ -614,9 +611,7 @@ describe("deleted zone bounds", () => {
   it("retained empty zone bound survives unrelated profile save without widening", async () => {
     const venue = await seedVenueWithStations();
     await set(venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [venue.dining] } });
-    await db
-      .delete(deviceProfileKitchenScreenZones)
-      .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, venue.kds));
+    await updateStored(venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [] } });
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.dining));
     await expect(
       set(venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [] } }),
@@ -625,19 +620,21 @@ describe("deleted zone bounds", () => {
       pass: { stationIds: [venue.grill], zoneIds: [], showNonPassStations: true },
     });
     const [parent] = await db
-      .select()
-      .from(deviceProfileKitchenScreens)
-      .where(eq(deviceProfileKitchenScreens.deviceProfileId, venue.kds));
-    expect(parent).toMatchObject({ everyZone: false, everyStation: false });
+      .select({ views: deviceProfiles.kitchenViews })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, venue.kds));
+    expect(parent!.views.pass).toEqual({
+      stationIds: [venue.grill],
+      zoneIds: [],
+      showNonPassStations: true,
+    });
     await expect(set(venue.kds, {})).resolves.toBeUndefined();
     await expect(screensOf(venue.kds)).resolves.toEqual({});
   });
   it("an empty inherited zone bound stays empty and refuses every order zone", async () => {
     const venue = await seedVenueWithStations();
     await set(venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [venue.dining] } });
-    await db
-      .delete(deviceProfileKitchenScreenZones)
-      .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, venue.kds));
+    await updateStored(venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [] } });
     const deviceId = await seedDevice(venue.kds, "Restricted pass");
     expect((await shown(deviceId))[0]!.zones).toEqual([]);
     for (const zoneId of [venue.dining, null]) {
@@ -677,15 +674,13 @@ describe("A773 profile display policy", () => {
   it("stores the profile's value in its column, and reads a row inserted without it as true", async () => {
     const venue = await seedVenueWithStations();
     await set(venue.kds, { pass: { ...every, showNonPassStations: false } });
-    const exported = await db.all<Record<string, unknown>>(
-      sql`select * from device_profile_kitchen_screens where device_profile_id = ${venue.kds}`,
-    );
-    expect(exported).toEqual([expect.objectContaining({ show_non_pass_stations: 0 })]);
+    const [stored] = await db
+      .select({ views: deviceProfiles.kitchenViews })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, venue.kds));
+    expect(stored!.views.pass!.showNonPassStations).toBe(false);
 
-    await db.run(sql`
-      insert into device_profile_kitchen_screens (device_profile_id, screen, every_station, every_zone)
-      values (${venue.till}, 'pass', 1, 1)
-    `);
+    await updateStored(venue.till, { pass: every });
     expect((await screensOf(venue.till))!.pass).toEqual({
       ...every,
       showNonPassStations: true,
@@ -733,13 +728,9 @@ describe("profile-scoped screen reads", () => {
         try {
           await read(tx);
           const queries = prepared.mock.calls.map(([query]) => query as unknown as { sql: string });
-          const profiles = queries.filter((query) =>
-            query.sql.includes('from "device_profile_kitchen_screens"'),
-          );
+          const profiles = queries.filter((query) => query.sql.includes('from "device_profiles"'));
           expect(profiles).toHaveLength(1);
-          expect(profiles[0]!.sql).toContain(
-            '"device_profile_kitchen_screens"."device_profile_id" in',
-          );
+          expect(profiles[0]!.sql).toContain('"device_profiles"."id" in');
         } finally {
           prepared.mockRestore();
         }
