@@ -442,6 +442,46 @@ it("keeps a blocked proposal available to disagree while checking competing late
   expect((await inbox()).prompts).toEqual([]);
   expect((await queue()).items[0]).toMatchObject({ status: "disputed", readyToApply: false });
 });
+it("keeps a retime blocked when it ties the next shift's clock-in", async () => {
+  const { end } = await shift();
+  const input = { nodeId, personId, offsetMinutes: 0, origin };
+  await run((tx) => backend.clockIn(tx, { ...input, at: "2026-01-05T18:00:00Z" }));
+  await run((tx) => backend.clockOut(tx, { ...input, at: "2026-01-05T22:00:00Z" }));
+
+  const proposal = await send(
+    {
+      action: "propose",
+      personId,
+      changes: [{ target: { entryId: end }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 }],
+      reason: "Later end",
+    },
+    manager,
+    manager,
+  );
+
+  expect((await queue()).items).toMatchObject([{ id: proposal.entryIds[0], readyToApply: false }]);
+});
+
+it("keeps a retime ready when the same clock-out is already unmatched", async () => {
+  const input = { nodeId, personId, offsetMinutes: 0, origin };
+  await run((tx) => backend.clockIn(tx, { ...input, at: "2026-01-05T21:00:00Z" }));
+  await run((tx) => backend.clockOut(tx, { ...input, at: "2026-01-05T20:30:00Z" }));
+  const entries = await readRecordedEntries(suite.db, { personId });
+  const out = entries.find((e) => e.entryKind === "out")!;
+  const proposal = await send(
+    {
+      action: "propose",
+      personId,
+      changes: [{ target: { entryId: out.entryId }, at: "2026-01-05T20:00:00Z", offsetMinutes: 0 }],
+      reason: "Earlier end",
+    },
+    manager,
+    manager,
+  );
+
+  expect((await queue()).items).toMatchObject([{ id: proposal.entryIds[0], readyToApply: true }]);
+});
+
 it("both split shifts remain visible after a delayed missing-shift approval", async () => {
   await shift(personId, "2026-01-06");
   const pair = await send({

@@ -1353,6 +1353,13 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Decisions and deliberate limits
 
+<a id="a1268-part-2-pair-a-persons-entries-by-write-order-after-a-backward-clock-step"></a>
+
+### A1268 part 2 correction validation after a backward clock step
+
+The owner chose to fix correction validation and keep event-time pairing. See the
+[workforce decision](workforce.md#a1268-corrections-after-a-backward-clock-step).
+
 ### Local-copy growth uses the existing backup and disk warnings
 
 The watcher decided on 16 November 2026, after the two Claude run-it reviews, to keep the existing
@@ -1889,16 +1896,6 @@ the clock passes the period's end. A clock wrongly days ahead could close a peri
 ended, and the closure is append-only. No production code calls it yet; the caller that is added
 needs a clock check. Left open by
 A798-B slice 9b, Task 15 (its audit table, `docs/developers/conventions-data.md`).
-
-## A1268 part 2: pair a person's entries by write order after a backward clock step.
-
-After a backward step the hours read,
-the end-of-day pass (`intervalsFor` in `end-of-day.ts`) and the correction check
-(`validateSequence` in `corrections.ts`) still order a person's entries by `compareEvents`, so a
-session reads as written (negative or missing) and every other correction for that person is
-refused `correction.invalid` `unmatched_out` until a manager retimes the clock-in. Read, not run,
-except the retime. Left open by A798-B slice 9b, Task 15a. Design:
-[A1268 design §4](../superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md#4-part-2--readings-that-order-entries-by-time-after-a-backward-clock-step).
 
 ## timesyncd's clock file after a backward set has not been watched across a reboot.
 

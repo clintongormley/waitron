@@ -93,25 +93,47 @@ export async function recordEntryById(tx: Transaction, id: string): Promise<Time
 function correctionInvalid(reason: string): never {
   throw new AppError("correction.invalid", { reason });
 }
-function validateSequence(entries: readonly TimeEntryRecord[]): void {
+function scanSequence(entries: readonly TimeEntryRecord[]) {
+  const faults = new Map<string, string>();
+  const completedStarts = new Set<string>();
+  let latestStart: string | undefined;
   let state: "out" | "working" | "on_break" = "out";
   for (const e of [...entries].sort(compareEvents)) {
     if (e.entryKind === "in") {
-      if (state !== "out") correctionInvalid("duplicate_in");
-      state = "working";
+      // Hours use the latest clock-in even when the validator sees a duplicate.
+      latestStart = e.entryId;
+      if (state !== "out") faults.set(e.entryId, "duplicate_in");
+      else state = "working";
     }
     if (e.entryKind === "out") {
-      if (state === "out") correctionInvalid("unmatched_out");
-      state = "out";
+      if (state === "out") faults.set(e.entryId, "unmatched_out");
+      else state = "out";
+      if (latestStart !== undefined) completedStarts.add(latestStart);
+      latestStart = undefined;
     }
     if (e.entryKind === "break_start") {
-      if (state !== "working") correctionInvalid("unmatched_break_start");
-      state = "on_break";
+      if (state !== "working") faults.set(e.entryId, "unmatched_break_start");
+      else state = "on_break";
     }
     if (e.entryKind === "break_end") {
-      if (state !== "on_break") correctionInvalid("unmatched_break_end");
-      state = "working";
+      if (state !== "on_break") faults.set(e.entryId, "unmatched_break_end");
+      else state = "working";
     }
+  }
+  return { faults, completedStarts };
+}
+function validateSequenceChange(
+  before: readonly TimeEntryRecord[],
+  after: readonly TimeEntryRecord[],
+): void {
+  const candidate = scanSequence(after);
+  if (candidate.faults.size === 0) return;
+  const existing = scanSequence(before);
+  for (const [entryId, reason] of candidate.faults) {
+    if (existing.faults.get(entryId) !== reason) correctionInvalid(reason);
+  }
+  for (const start of existing.completedStarts) {
+    if (!candidate.completedStarts.has(start)) correctionInvalid("unmatched_out");
   }
 }
 function isMissingPair(requests: readonly TimeEntryRecord[]): boolean {
@@ -181,10 +203,13 @@ export function correctionGroupCanApply(
     const kind = target?.entryKind ?? request.extension?.missingEntryKind;
     if (!kind) return false;
     if (target) targets.add(target.entryId);
-    additions.push({ ...request, entryKind: kind });
+    additions.push({ ...request, entryId: target?.entryId ?? request.entryId, entryKind: kind });
   }
   try {
-    validateSequence([...effective.filter((e) => !targets.has(e.entryId)), ...additions]);
+    validateSequenceChange(effective, [
+      ...effective.filter((e) => !targets.has(e.entryId)),
+      ...additions,
+    ]);
     return true;
   } catch (error) {
     if (error instanceof AppError && error.code === "correction.invalid") return false;
@@ -201,7 +226,8 @@ function validateChange(
     const target = effective.find((e) => e.entryId === change.correctsEntryId);
     if (target === undefined)
       throw new AppError("correction.not_pending", { correctionId: change.entryId });
-    validateSequence(
+    validateSequenceChange(
+      effective,
       effective.map((e) =>
         e === target ? { ...e, eventAt: change.eventAt, offsetMinutes: change.offsetMinutes } : e,
       ),
@@ -210,7 +236,7 @@ function validateChange(
     if (!settling && effective.length === 0 && change.extension?.missingEntryKind !== "in") return;
     const candidate = { ...change, entryKind: change.extension!.missingEntryKind! };
     try {
-      validateSequence([...effective, candidate]);
+      validateSequenceChange(effective, [...effective, candidate]);
     } catch (error) {
       if (settling) throw error;
       const counterpart =
@@ -233,7 +259,11 @@ function validateChange(
         .sort(compareEvents)
         .at(-1);
       if (pending === undefined) throw error;
-      validateSequence([...effective, { ...pending, entryKind: counterpart! }, candidate]);
+      validateSequenceChange(effective, [
+        ...effective,
+        { ...pending, entryKind: counterpart! },
+        candidate,
+      ]);
     }
   }
 }
