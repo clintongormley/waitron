@@ -863,7 +863,7 @@ export function saveSetMenuDishCourse(
 - [ ] **Step 4: Run the file, `src/set-menus.dishes.test.ts` and `packages/menu`'s suite; all pass.**
 - [ ] **Step 5: Commit** — "Set menus: give a dish another course in one set menu".
 
-### Task 5a: The set menu's copy in a full menu's published document, and refusing to publish an unpublishable one
+### Task 5a: Copying and checking set menus when publishing a full menu
 
 **Files:**
 - Create: `packages/menu/src/set-menu-document.ts`
@@ -871,7 +871,9 @@ export function saveSetMenuDishCourse(
   `:104-112`), `packages/shared/src/menu-document/menu-document-types.ts` (`MenuDocument`)
 - Modify: `packages/menu/src/menu-publication.ts` (`publishMenu` `:660-689`, `patchLiveMenu`
   `:734`)
-- Test: `packages/menu/src/set-menu-document.test.ts`
+- Modify: `packages/menu/src/menu-schedule.ts` (the publication gate), `packages/menu/src/archive.ts`
+  (products held by live or queued copies), and the menu API and dashboard error wording.
+- Test: `packages/menu/src/set-menu-document.test.ts`, `apps/server/src/menu-api.test.ts`.
 
 **Interfaces:**
 - Consumes: `readSetMenu`, `setMenuProblems` (Tasks 4, 4b); the `set_menu` `DocumentMember` (Task 3b).
@@ -943,7 +945,9 @@ export interface PublishedSetMenu {
   empty → `set_menu.not_publishable`
   `{ menuId: <the first set menu with problems>, count: <its problems> }`. `patchLiveMenu` on a set
   menu → `set_menu.wrong_place` (a full menu's live correction of its copies is Task 5c's).
-  Queueing and the Preview are Task 5b's.
+  Immediate and scheduled publication use the same gate for both refusals. The archive check
+  includes the copy's products, variants and extras, and publication records their photos through
+  `documentImages`. The Preview is Task 5b's.
 - Keep `MENU_DOCUMENT_FORMAT` at 4 (decision 7); a stored format-4 document without `setMenus`
   reads as before.
 
@@ -985,18 +989,21 @@ export interface PublishedSetMenu {
   - `"a set menu placed in two lists publishes one copy and appears in both"`: publish Lunch
     with Daily menu in its root and in Deals. The published document has one copy keyed by
     Daily menu's id, and both lists hold a set-menu member naming that id.
+  - Scheduled publication refuses a set menu on its own and a full menu whose held set menu has
+    problems.
+  - A dish held only by a published set-menu copy cannot be archived. Publication registers photos
+    used only by the copy. The publish API returns a conflict with the set-menu problem code and details.
 - [ ] **Step 2: Run; they fail.** `pnpm --filter @waitron/menu exec vitest run src/set-menu-document.test.ts`
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run the file, then `menu-publication.test.ts` and `menu-document.test.ts` (grep
-  for the publication tests if named otherwise).**
+- [ ] **Step 4: Run the file, then `menu-publication.test.ts`, `menu-document.test.ts`,
+  `menu-schedule.test.ts` and the publish route case in `menu-api.test.ts`.**
 - [ ] **Step 5: Commit** — "Set menus: copy a set menu into each full menu when it is published, and refuse one that cannot be covered".
 
-### Task 5b: Queueing, and the set menu in a full menu's Preview
+### Task 5b: The set menu in a full menu's Preview
 
 **Files:**
-- Modify: `packages/menu/src/menu-schedule.ts` (`queueMenuPublication` `:37-60`, which builds and
-  stores the document when queued, so the copy is taken then), `packages/menu/src/menu-publication.ts`
-  (`previewMenu`), `packages/menu/src/menu-document.ts` (`diffEntries`),
+- Modify: `packages/menu/src/menu-publication.ts` (`previewMenu`),
+  `packages/menu/src/menu-document.ts` (`diffEntries`),
   `packages/shared/src/menu-document/menu-document-types.ts` (`MenuPreview`, `MenuChangeBody`,
   `MenuChangeSource`), `packages/menu/src/menu-navigation.ts`, `packages/menu/src/menu-undo.ts`,
   `apps/dashboard/src/widgets/menu-preview.ts` and `apps/dashboard/src/i18n/strings.ts`
@@ -1005,8 +1012,6 @@ export interface PublishedSetMenu {
 
 **Interfaces:**
 - Consumes the copy and `BuiltMenu.setMenuProblems` (Task 5a).
-- Queueing refuses as publishing does, at `menu-schedule.ts:48-49`: a set menu itself →
-  `set_menu.wrong_place`; a full menu with `setMenuProblems` → `set_menu.not_publishable`.
 - `MenuPreview` gains `setMenuProblems` with `BuiltMenu`'s shape; `previewMenu` on a set menu
   refuses `set_menu.wrong_place`. Compare both terms rates for the Preview's VAT change.
 - `MenuChangeBody` gains
@@ -1027,10 +1032,8 @@ export interface PublishedSetMenu {
 
 - [ ] **Step 1: Write the failing tests** in `set-menu-document.changes.test.ts`, on Task 5a's
   fixture with Lunch published:
-  - `"queueing refuses what publishing refuses"`: `queueMenuPublication(dailyMenu)` →
-    `set_menu.wrong_place`; with Soup given a course no line includes,
-    `queueMenuPublication(Lunch)` → `set_menu.not_publishable` `{ menuId: dailyMenu, count: 1 }`
-    and `previewMenu(Lunch).setMenuProblems` names Daily menu with `dish_not_included`.
+  - With Soup given a course no line includes, `previewMenu(Lunch).setMenuProblems` names
+    Daily menu with `dish_not_included`.
   - `"a queued version takes its copy when it is queued"`: queue Lunch, then change a surcharge →
     the queued document still has the old surcharge and the old `changedAt`.
   - `"a set menu has no preview"`: `previewMenu(dailyMenu)` refuses `set_menu.wrong_place`.
@@ -1049,7 +1052,7 @@ export interface PublishedSetMenu {
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run the file, `menu-schedule.test.ts`, `menu-document.test.ts`, the navigation and
   undo tests (grep `menu-navigation` and `menu-undo` for them), and `packages/menu`'s suite.**
-- [ ] **Step 5: Commit** — "Set menus: queueing refuses an unpublishable set menu, and the Preview lists what changed in set menus".
+- [ ] **Step 5: Commit** — "Set menus: list set-menu changes and problems in the Preview".
 
 ### Task 5c: Live corrections, and the other readers of a published document
 
@@ -1068,8 +1071,7 @@ export interface PublishedSetMenu {
 - A live correction can change a copied dish's `vatClass` or `takeawayVatClass` fields.
   The copied set menu's own `terms` determine its rates and stay as published.
 - **Other readers of a published document's offers** do not see the copies unless changed. Decide
-  each and record it in the commit message: `documentProductIds`/`assertOffPublishedMenus`
-  (`archive.ts:77`) and `documentImages` (`menu-document.ts:472`) read the copies;
+  each and record it in the commit message. Task 5a covers the archive and photo readers.
   `routing-store.ts:742-768` (which extras a dish offers per zone) and `extra-usage.ts:32-45`
   (where an extras list is in use) read them through Task 5a's `documentSetMenuOffers`, never
   through `documentOffers`; `productsOfferedIn` and `guest-menu.ts` skip them (a set menu is not
@@ -1079,13 +1081,9 @@ export interface PublishedSetMenu {
 - [ ] **Step 1: Write the failing tests:**
   - `"a live price correction of Lunch's Sirloin leaves the copy's surcharge alone, and a live
     wording correction reaches the copy and keeps its changedAt"`.
-  - `"a live VAT correction changes a copied dish and keeps the set menu's rates"`:
+  - "a live VAT correction changes a copied dish and keeps the set menu's rates":
     change both rates on Soup's offer. The correction reaches the copy and its own terms
     still carry the two set-menu rates from publication.
-  - `"a published copy protects its dishes from being archived"`: `assertOffPublishedMenus`
-    refuses archiving a dish only the set menu lists while Lunch is live.
-  - `"the copy's dish images are kept"`: `documentImages` of Lunch's document lists the image of a
-    dish only the set menu lists.
   - In the routing-store test: a dish only the set menu lists offers its extras in the zone; in
     the extra-usage test: an extras list used only by a set-menu dish is reported in use.
 - [ ] **Step 2: Run; they fail.** `pnpm --filter @waitron/menu exec vitest run src/set-menu-document.readers.test.ts`

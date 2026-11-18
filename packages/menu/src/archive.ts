@@ -12,6 +12,7 @@ import {
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import type { MenuDocument } from "@waitron/shared";
+import { documentSetMenuOffers } from "./menu-document.js";
 import { liveVersions } from "./menu-publication.js";
 import { takeOffMenus, dropMenuPrices } from "./menu-removal.js";
 import { readUpdatedName } from "./product-names.js";
@@ -24,7 +25,7 @@ export interface HoldingMenu {
 
 export function documentProductIds(document: MenuDocument): Set<string> {
   const ids = new Set<string>();
-  for (const offer of Object.values(document.offers)) {
+  for (const offer of [...Object.values(document.offers), ...documentSetMenuOffers(document)]) {
     ids.add(offer.productId);
     for (const variant of offer.variants) ids.add(variant.id);
     for (const entry of offer.offeredModifiers)

@@ -17,7 +17,7 @@ import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
 import { readMenuSettings } from "./settings.js";
-import { includedMenus } from "./menu-inclusion.js";
+import { directMenuChildren } from "./menu-inclusion.js";
 import { clashesOf } from "./menu-combine.js";
 import type {
   CombinedOffer,
@@ -39,6 +39,9 @@ import type {
   MenuUnavailable,
   ProductChangeField,
   SectionChangeField,
+  PublishedSetMenu,
+  SetMenuFrozenOffer,
+  SetMenuProblem,
 } from "@waitron/shared";
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
@@ -51,6 +54,8 @@ import {
 import { SECTION_NAME } from "./sections.js";
 import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
+import { readSetMenuDrafts } from "./set-menus.js";
+import { freezeSetMenu } from "./set-menu-document.js";
 import "./errors.js";
 
 export type {
@@ -103,6 +108,7 @@ export interface OmittedShortcut {
 
 interface BuiltMenu {
   workingHash: string;
+  setMenuProblems: { menuId: string; name: string; problems: SetMenuProblem[] }[];
   clashes: MenuClash[];
   combined: Map<string, CombinedOffer>;
   document: MenuDocument;
@@ -165,6 +171,10 @@ export async function buildMenuDocuments(
         tillTiles: menus.tillTiles,
         tillOrder: menus.tillOrder,
         menuName: menus.name,
+        names: root.names,
+        setPrice: menus.setPrice,
+        setVatClass: menus.setVatClass,
+        updatedAt: menus.updatedAt,
       })
       .from(menus)
       .innerJoin(
@@ -186,12 +196,23 @@ export async function buildMenuDocuments(
       .where(where)
       .orderBy(menus.createdAt, menus.id);
   const loaded = graph ?? (await loadSectionGraph(tx));
+  const childrenByMenu = new Map<string, ReturnType<typeof directMenuChildren>>();
+  const activeChildren = (menuId: string) => {
+    const existing = childrenByMenu.get(menuId);
+    if (existing !== undefined) return existing;
+    const { included, setMenus } = directMenuChildren(loaded, menuId);
+    const active = (id: string) => loaded.menu(id)?.active;
+    const children = { included: included.filter(active), setMenus: setMenus.filter(active) };
+    childrenByMenu.set(menuId, children);
+    return children;
+  };
   const requested = menuIds === undefined ? undefined : new Set(menuIds);
   const visit = (id: string): void => {
-    for (const included of includedMenus(loaded, id))
-      if (!requested!.has(included)) {
-        requested!.add(included);
-        visit(included);
+    const { included, setMenus } = activeChildren(id);
+    for (const child of [...included, ...setMenus])
+      if (!requested!.has(child)) {
+        requested!.add(child);
+        visit(child);
       }
   };
   if (requested !== undefined) for (const id of menuIds!) visit(id);
@@ -203,6 +224,15 @@ export async function buildMenuDocuments(
   const menuRows = new Map<string, BuiltMenu>();
   const sectionNames = new Map<string, string>();
   if (details.length === 0) return { graph: loaded, menus: menuRows, sectionNames };
+  const setMenuDrafts = await readSetMenuDrafts(
+    tx,
+    details
+      .filter(
+        (row) => loaded.menu(row.menuId)?.kind === "set_menu" && loaded.menu(row.menuId)?.active,
+      )
+      .map((row) => ({ ...row, names: row.names ?? {} })),
+  );
+  const setMenuCopies = new Map<string, PublishedSetMenu>();
   const offers = await listMenuOffers(
     tx,
     details.map((row) => row.menuId),
@@ -242,7 +272,8 @@ export async function buildMenuDocuments(
   const order = (id: string): void => {
     if (seen.has(id)) return;
     seen.add(id);
-    for (const child of includedMenus(loaded, id)) order(child);
+    const { included, setMenus } = activeChildren(id);
+    for (const child of [...included, ...setMenus]) order(child);
     const row = details.find((row) => row.menuId === id);
     if (row !== undefined) ordered.push(row);
   };
@@ -255,6 +286,7 @@ export async function buildMenuDocuments(
       ]),
     );
     const reachedSections = new Set<string>();
+    const heldSetMenus = new Set<string>();
     const listOf = (sectionId: string, path: readonly string[]): DocumentMember[] =>
       loaded.children(sectionId).flatMap(({ id: memberId, ref }): DocumentMember[] => {
         if (ref.kind === "product") {
@@ -265,7 +297,9 @@ export async function buildMenuDocuments(
         }
         if (ref.kind === "set_menu") {
           const menu = loaded.menu(ref.menuId);
-          return menu?.active ? [{ kind: "set_menu", menuId: ref.menuId, name: menu.name }] : [];
+          if (!menu?.active) return [];
+          heldSetMenus.add(ref.menuId);
+          return [{ kind: "set_menu", menuId: ref.menuId, name: menu.name }];
         }
         if (path.includes(ref.sectionId)) return [];
         const includedMenuId =
@@ -295,6 +329,21 @@ export async function buildMenuDocuments(
         ];
       });
     const root = { members: listOf(row.rootSectionId, [row.rootSectionId]) };
+    const draft = setMenuDrafts.get(row.menuId);
+    if (draft !== undefined)
+      setMenuCopies.set(row.menuId, freezeSetMenu([...onMenu.values()], root, draft));
+    const setMenus = Object.fromEntries(
+      [...heldSetMenus].flatMap((id) => {
+        const copy = setMenuCopies.get(id);
+        return copy === undefined ? [] : [[id, copy]];
+      }),
+    );
+    const setMenuProblems = [...heldSetMenus].flatMap((menuId) => {
+      const details = setMenuDrafts.get(menuId);
+      return details !== undefined && details.problems.length > 0
+        ? [{ menuId, name: details.name, problems: details.problems }]
+        : [];
+    });
     const omittedShortcuts: OmittedShortcut[] = [];
     const shortcuts: DocumentTile[] = [];
     for (const { ref } of loaded.tiles(row.homeSectionId)) {
@@ -309,6 +358,7 @@ export async function buildMenuDocuments(
       }
     }
     const built = {
+      setMenuProblems,
       unreviewed: (offersByMenu.get(row.menuId) ?? []).flatMap((offer) => [
         ...(offer.allergens === null
           ? [{ id: offer.productId, name: offer.name, parentName: null }]
@@ -326,14 +376,15 @@ export async function buildMenuDocuments(
       document: {
         format: MENU_DOCUMENT_FORMAT,
         includedMenuHashes: Object.fromEntries(
-          includedMenus(loaded, row.menuId)
-            .filter((id) => menuRows.has(id))
+          activeChildren(row.menuId)
+            .included.filter((id) => menuRows.has(id))
             .map((id) => [id, menuRows.get(id)!.workingHash]),
         ),
         menuId: row.menuId,
         menuName: row.menuName,
         root,
         offers: Object.fromEntries([...onMenu.values()].map((offer) => [offer.id, offer])),
+        ...(Object.keys(setMenus).length === 0 ? {} : { setMenus }),
         home: { shortcuts, ...homeDisplaysOf(row) },
       },
     } satisfies Omit<BuiltMenu, "workingHash">;
@@ -487,7 +538,7 @@ export function documentImages(document: MenuDocument): string[] {
       }
   };
   walk(document.root.members);
-  for (const offer of Object.values(document.offers)) {
+  for (const offer of [...Object.values(document.offers), ...documentSetMenuOffers(document)]) {
     add(offer.image);
     for (const variant of offer.variants) add(variant.image);
     for (const entry of offer.offeredModifiers)
@@ -510,6 +561,19 @@ export function documentOffers(document: MenuDocument): FrozenOffer[] {
   };
   walk(document.root.members);
   return ordered;
+}
+
+/** Each set menu's offers in its root's order, with copies ordered by set-menu id. */
+export function documentSetMenuOffers(document: MenuDocument): SetMenuFrozenOffer[] {
+  const copies = document.setMenus ?? {};
+  return Object.keys(copies)
+    .sort()
+    .flatMap((id) => {
+      const copy = copies[id]!;
+      return copy.root.members.flatMap((member) =>
+        member.kind === "product" ? [copy.offers[member.menuItemId]!] : [],
+      );
+    });
 }
 
 interface LiveProductRow {

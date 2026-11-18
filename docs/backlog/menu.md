@@ -987,8 +987,10 @@ Set-menu drafts can store dish and variant surcharges, leave variants out, copy 
 add a line for each new course. Drafts can store an eat-in and an optional takeaway VAT class.
 Dishes and variants can have different rates from the set menu. Draft writes still enforce
 portion-only units and the surcharge limit. A dish can have its own course in the draft.
-The dashboard editor and placement controls, publishing the full set-menu copy, till ordering,
-paying such a bill and its documents, and updating the demo and guides remain open.
+Publishing or scheduling a full menu freezes each set menu it holds and refuses drafts with
+problems. Published copies protect their dishes and photos.
+The dashboard editor and placement controls, Preview and live corrections, serving the copies,
+till ordering and payment, bill documents, and the demo and guides remain open.
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer
 (owner, 2026-11-18, question 4 of the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md);

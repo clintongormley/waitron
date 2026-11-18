@@ -1,3 +1,4 @@
+import type { SetMenuTerms } from "./set-menu-types.js";
 import type { Unit } from "./product-types.js";
 import type { MenuClash } from "./menu-combine-types.js";
 import type {
@@ -95,6 +96,24 @@ export interface DeviceHome {
   till: HomeDisplay;
 }
 
+export type SetMenuOfferVariant = FrozenOfferVariant & { countsAsCourseId: string };
+export type SetMenuFrozenOffer = Omit<FrozenOffer, "variants"> & {
+  /** The course the dish counts as, or null when only its variants have courses. */
+  countsAsCourseId: string | null;
+  /** The course this set menu gives the dish and its variants, if any. */
+  courseOverrideId: string | null;
+  variants: SetMenuOfferVariant[];
+};
+
+export interface PublishedSetMenu {
+  name: string;
+  terms: SetMenuTerms;
+  root: DocumentList;
+  offers: Record<string, SetMenuFrozenOffer>;
+  /** The draft's last change when the full menu took this copy. */
+  changedAt: string;
+}
+
 export interface MenuDocument {
   format: 4;
   /** Direct active inclusions' working hashes. */
@@ -105,6 +124,7 @@ export interface MenuDocument {
   root: DocumentList;
   /** Keyed by menu-item id: one per distinct product the menu offers. */
   offers: Record<string, FrozenOffer>;
+  setMenus?: Record<string, PublishedSetMenu>;
   /** The Device Home Page: its shortcuts in order, an empty slot for a target this document does
    * not hold, and how each device presents it. */
   home: DeviceHome;

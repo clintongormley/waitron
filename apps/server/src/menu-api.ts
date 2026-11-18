@@ -328,6 +328,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu.not_found": 404,
   "set_menu.dishes_only": 409,
   "set_menu.wrong_place": 409,
+  "set_menu.not_publishable": 409,
   "menu.name_taken": 409,
   "category.not_found": 404,
   "category.invalid": 400,
