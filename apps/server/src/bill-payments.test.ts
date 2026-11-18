@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
@@ -27,7 +28,7 @@ import {
   sales,
   invoiceSeries,
   invoiceDeliveries,
-  pagePrinters,
+  printers,
   tenders,
   taxpayer,
   triggerRaised,
@@ -2713,16 +2714,10 @@ describe("the invoice at full payment", () => {
       const pagePrinterId = randomUUID();
       if (kind !== "missing")
         await inTx(async (tx) => {
-          await tx.insert(pagePrinters).values({
+          await insertA4Printer(tx, {
             id: pagePrinterId,
             name: "Office",
             host: pagePrinterId,
-            port: 631,
-            resourcePath: "/ipp/print",
-            documentFormat: "application/pdf",
-            supportedFormats: ["application/pdf"],
-            media: "iso_a4_210x297mm",
-            resolutionDpi: 300,
             active: kind !== "disabled",
           });
           await tillInvoicePrinter(tx, pagePrinterId);
@@ -2767,17 +2762,7 @@ describe("the invoice at full payment", () => {
     const billId = await tabWith("Beer");
     const pagePrinterId = randomUUID();
     await inTx(async (tx) => {
-      await tx.insert(pagePrinters).values({
-        id: pagePrinterId,
-        name: "Office",
-        host: pagePrinterId,
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-      });
+      await insertA4Printer(tx, { id: pagePrinterId, name: "Office", host: pagePrinterId });
       await tillInvoicePrinter(tx, pagePrinterId);
     });
     await expect(
@@ -2826,17 +2811,7 @@ describe("the invoice at full payment", () => {
       const pagePrinterId = randomUUID();
       await withDepartmentContact({ email: "dining@example.test" }, async () => {
         await inTx(async (tx) => {
-          await tx.insert(pagePrinters).values({
-            id: pagePrinterId,
-            name: "Invoice",
-            host: pagePrinterId,
-            port: 631,
-            resourcePath: "/ipp/print",
-            documentFormat: "application/pdf",
-            supportedFormats: ["application/pdf"],
-            media: "iso_a4_210x297mm",
-            resolutionDpi: 300,
-          });
+          await insertA4Printer(tx, { id: pagePrinterId, name: "Invoice", host: pagePrinterId });
           await tillInvoicePrinter(tx, pagePrinterId);
         });
         await setOrderInvoiceChoice(
@@ -2862,10 +2837,7 @@ describe("the invoice at full payment", () => {
         );
         if (kind === "disabled-a4") {
           await inTx((tx) =>
-            tx
-              .update(pagePrinters)
-              .set({ active: false })
-              .where(eq(pagePrinters.id, pagePrinterId)),
+            tx.update(printers).set({ active: false }).where(eq(printers.id, pagePrinterId)),
           );
         }
         const paymentId = await insertPayment(billId, { applied: 300 });
@@ -2902,8 +2874,8 @@ describe("the invoice at full payment", () => {
                 designation: "original",
                 personId: OPERATOR,
                 ...(medium === "email"
-                  ? { recipient: "customer@example.test", pagePrinterId: null }
-                  : { recipient: null, pagePrinterId }),
+                  ? { recipient: "customer@example.test", printerId: null }
+                  : { recipient: null, printerId: pagePrinterId }),
               }),
             ]);
             expect(await tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))).toEqual(

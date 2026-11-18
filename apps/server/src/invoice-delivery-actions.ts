@@ -1,6 +1,7 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
 import {
+  receiptRollColumns,
   invoiceDeliveries,
   printJobs,
   isReceiptPrinter,
@@ -69,7 +70,7 @@ export async function requestPrintDelivery(
   const { printerId, ...reserved } = request;
   await expireInvoiceDeliveryClaims(tx);
   const replay = await replayed(tx, sale.id, request.requestKey, async (row) => {
-    if (row.medium === "a4") return row.pagePrinterId === printerId;
+    if (row.medium === "a4") return row.printerId === printerId;
     if (row.medium !== "receipt") return false;
     const [job] = await tx
       .select({ printerId: printJobs.printerId })
@@ -96,7 +97,7 @@ export async function requestPrintDelivery(
     return rowAttempt(row);
   }
   const [setting] = await tx
-    .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
+    .select({ ...receiptRollColumns })
     .from(printers)
     .where(and(isReceiptPrinter(), eq(printers.id, printer.id)));
   const ticket =

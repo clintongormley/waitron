@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -14,7 +15,6 @@ import {
   devices,
   invoiceDeliveries,
   invoiceSeries,
-  pagePrinters,
   printAgents,
   printJobs,
   printers,
@@ -196,20 +196,12 @@ async function venue(): Promise<Venue> {
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
     });
-    const [office] = await tx
-      .insert(pagePrinters)
-      .values({
-        name: "Back office",
-        host: "192.0.2.20",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-        agentId: agent!.id,
-      })
-      .returning({ id: pagePrinters.id });
+    const officeId = await insertA4Printer(tx, {
+      name: "Back office",
+      host: "192.0.2.20",
+      resolutionDpi: 600,
+      agentId: agent!.id,
+    });
     const receipt = { email: "facturas@example.test" };
     for (const { id } of await tx.select({ id: departments.id }).from(departments)) {
       await seedDepartmentReceipt(tx, id, receipt);
@@ -220,7 +212,7 @@ async function venue(): Promise<Venue> {
       staffId: staff!.id,
       agentId: agent!.id,
       receiptPrinterId: receiptPrinter.id,
-      officeId: office!.id,
+      officeId: officeId,
     };
   });
   const app = new Hono();
@@ -380,31 +372,23 @@ const printInvoice = (
 
 async function upstairsOffice(v: Venue): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const [upstairs] = await tx
-      .insert(pagePrinters)
-      .values({
-        name: "Upstairs office",
-        host: "192.0.2.21",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-        agentId: v.agentId,
-      })
-      .returning({ id: pagePrinters.id });
+    const upstairsId = await insertA4Printer(tx, {
+      name: "Upstairs office",
+      host: "192.0.2.21",
+      resolutionDpi: 600,
+      agentId: v.agentId,
+    });
     for (const { profileId } of await tx
       .selectDistinct({ profileId: devices.deviceProfileId })
       .from(devices)
       .where(sql`true`)) {
-      await listInvoicePrinter(tx, { profileId, pagePrinterId: upstairs!.id, isDefault: false });
+      await listInvoicePrinter(tx, { profileId, pagePrinterId: upstairsId, isDefault: false });
     }
     await tx
       .update(devices)
-      .set({ invoicePrinterId: null, invoicePagePrinterId: upstairs!.id })
+      .set({ invoicePrinterId: null, invoicePagePrinterId: upstairsId })
       .where(sql`true`);
-    return upstairs!.id;
+    return upstairsId;
   });
 }
 const toReceipt = (
@@ -580,30 +564,39 @@ async function receiptOriginal(
 }
 
 const SALE_LOCATION_READ = /from "sales" inner join "nodes"/;
-const INVOICE_PRINTER_READ = /"page_printers"/;
+const PRINTER_INFO_READ =
+  /^select "id", "name", "kind", "portable", "active", "held_by_device_id" from "printers"/;
+
+type Prepared = { sql: string; params: unknown[] };
+
+function invoicePrinterRead(id: string) {
+  return ({ sql, params }: Prepared) =>
+    sql.includes('"office_printers"') || (PRINTER_INFO_READ.test(sql) && params.includes(id));
+}
 const RECEIPT_ORIGINAL_READ =
   /^select "print_jobs"\."sale_id", .* from "print_jobs" inner join "printers"/;
 
 /** `act`'s answer, and how many statements matching `pattern` the venue database prepared for it. */
 async function readsDuring<T>(
-  pattern: RegExp,
+  pattern: RegExp | ((statement: Prepared) => boolean),
   act: () => Promise<T>,
 ): Promise<{ answer: T; reads: number }> {
   const { answer, statements } = await statementsDuring(act);
-  return { answer, reads: statements.filter((statement) => pattern.test(statement)).length };
+  const matches = pattern instanceof RegExp ? ({ sql }: Prepared) => pattern.test(sql) : pattern;
+  return { answer, reads: statements.filter(matches).length };
 }
 
-/** `act`'s answer, and the SQL of every statement the venue database prepared for it. */
+/** `act`'s answer, and the SQL and values of every statement the venue database prepared for it. */
 async function statementsDuring<T>(
   act: () => Promise<T>,
-): Promise<{ answer: T; statements: string[] }> {
+): Promise<{ answer: T; statements: Prepared[] }> {
   const session = (
     suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
   ).session;
   const prepare = session.prepareQuery.bind(session);
-  const statements: string[] = [];
+  const statements: Prepared[] = [];
   const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
-    statements.push((args[0] as { sql: string }).sql);
+    statements.push(args[0] as Prepared);
     return prepare(...args);
   });
   try {
@@ -739,7 +732,7 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
       medium: "a4",
       designation: "original",
       status: "queued",
-      pagePrinterId: v.officeId,
+      printerId: v.officeId,
       personId: v.staffId,
       generation: 1,
     });
@@ -779,7 +772,7 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
       body: { error: { code: "submission.id_reused", params: { submissionId: key } } },
     });
     expect(await deliveryRows(saleId)).toEqual(rows);
-    expect(rows).toEqual([expect.objectContaining({ medium: "a4", pagePrinterId: v.officeId })]);
+    expect(rows).toEqual([expect.objectContaining({ medium: "a4", printerId: v.officeId })]);
   });
 
   it("refuses an A4 request whose key already switched to paper, changing nothing", async () => {
@@ -837,7 +830,7 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
     expect(await deliveryRows(saleId)).toEqual([]);
     expect((await printInvoice(v, orderId, randomUUID(), undefined, upstairs)).status).toBe(200);
     expect(await deliveryRows(saleId)).toEqual([
-      expect.objectContaining({ medium: "a4", pagePrinterId: upstairs }),
+      expect.objectContaining({ medium: "a4", printerId: upstairs }),
     ]);
   });
 
@@ -845,7 +838,7 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
     const upstairs = await upstairsOffice(v);
-    await suite.db.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, upstairs));
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, upstairs));
     expect((await readStatus(v, orderId)).body).toMatchObject({ actions: { print: null } });
     for (const printerId of [upstairs, v.officeId]) {
       expect(await printInvoice(v, orderId, randomUUID(), undefined, printerId)).toEqual(
@@ -2294,22 +2287,26 @@ describe("what each delivery route reads", () => {
     const { orderId } = await invoice(v);
     const { answer, statements } = await statementsDuring(() => emailIt(v, orderId));
     expect(answer.status).toBe(200);
-    expect(statements.filter((statement) => SALE_LOCATION_READ.test(statement))).toHaveLength(0);
-    expect(statements.filter((statement) => INVOICE_PRINTER_READ.test(statement))).toEqual([]);
-    expect(statements.filter((statement) => RECEIPT_ORIGINAL_READ.test(statement))).toEqual([]);
+    expect(statements.filter(({ sql }) => SALE_LOCATION_READ.test(sql))).toHaveLength(0);
+    expect(statements.filter(invoicePrinterRead(v.officeId))).toEqual([]);
+    expect(statements.filter(({ sql }) => RECEIPT_ORIGINAL_READ.test(sql))).toEqual([]);
   });
 
   it("names the A4 printers in two statements to refuse a print while one is busy, and in one when none is set up", async () => {
     const v = await venue();
     const busy = await invoice(v);
     await printInvoice(v, busy.orderId);
-    expect(await readsDuring(INVOICE_PRINTER_READ, () => printInvoice(v, busy.orderId))).toEqual({
+    expect(
+      await readsDuring(invoicePrinterRead(v.officeId), () => printInvoice(v, busy.orderId)),
+    ).toEqual({
       answer: refusal(409, "invoice_delivery.active"),
       reads: 2,
     });
     await suite.db.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.role, "invoice"));
     const none = await invoice(v);
-    expect(await readsDuring(INVOICE_PRINTER_READ, () => printInvoice(v, none.orderId))).toEqual({
+    expect(
+      await readsDuring(invoicePrinterRead(v.officeId), () => printInvoice(v, none.orderId)),
+    ).toEqual({
       answer: refusal(409, "invoice_delivery.printer_invalid"),
       reads: 1,
     });
@@ -2339,12 +2336,8 @@ describe("what each delivery route reads", () => {
       send(v, "POST", `/api/sales/${orderId}/receipt/retry`, {}),
     );
     expect(retried.answer.status).toBe(200);
-    expect(
-      retried.statements.filter((statement) => RECEIPT_ORIGINAL_READ.test(statement)),
-    ).toHaveLength(1);
-    expect(
-      retried.statements.filter((statement) => SALE_LOCATION_READ.test(statement)),
-    ).toHaveLength(0);
+    expect(retried.statements.filter(({ sql }) => RECEIPT_ORIGINAL_READ.test(sql))).toHaveLength(1);
+    expect(retried.statements.filter(({ sql }) => SALE_LOCATION_READ.test(sql))).toHaveLength(0);
   });
 
   it("reads the receipt original once to switch to paper", async () => {

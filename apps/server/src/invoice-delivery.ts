@@ -7,7 +7,7 @@ import {
   isReceiptPrinter,
   printers,
   sales,
-  pagePrinters,
+  isA4Printer,
   type A4FailureCode,
   type Transaction,
 } from "@waitron/db";
@@ -74,12 +74,13 @@ export async function reserveInvoiceDelivery(
   let disabledDestination = false;
   if (input.medium === "a4") {
     const [printer] = await tx
-      .select({ active: pagePrinters.active })
-      .from(pagePrinters)
+      .select({ active: printers.active })
+      .from(printers)
       .where(
         and(
-          eq(pagePrinters.id, input.pagePrinterId),
-          options.allowInactivePagePrinter === true ? undefined : eq(pagePrinters.active, true),
+          isA4Printer(),
+          eq(printers.id, input.pagePrinterId),
+          options.allowInactivePagePrinter === true ? undefined : eq(printers.active, true),
         ),
       );
     if (printer === undefined) throw new AppError("invoice_delivery.printer_invalid", {});
@@ -161,7 +162,7 @@ export async function reserveInvoiceDelivery(
       ...(input.medium === "email"
         ? { recipient: input.recipient, madeByRetry: input.madeByRetry }
         : input.medium === "a4"
-          ? { pagePrinterId: input.pagePrinterId }
+          ? { printerId: input.pagePrinterId }
           : { printJobId: input.printJobId, printerChosen: input.printerChosen }),
     })
     .returning();

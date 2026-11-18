@@ -272,7 +272,6 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   print_agents: ["location_id"],
   printers: ["location_id", "ticket_scope", "pickup_roles"],
   print_jobs: ["location_id"],
-  page_printers: ["location_id"],
   department_sale_policies: ["receipt_print_mode"],
   zone_sale_policies: ["receipt_print_mode"],
   departments: ["location_id"],
@@ -325,6 +324,7 @@ const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
   "working_line_contexts",
   "printer_holders",
+  "page_printers",
   "order_service_contexts",
   "bill_edit_states",
   "working_order_counters",
@@ -470,7 +470,6 @@ const REBUILT_FOREIGN_KEY_ORDER: Record<string, readonly number[]> = {
   floor_today_zones: [1, 0],
   order_draft_lines: [2, 3, 4, 0, 1],
   order_drafts: [1, 0],
-  page_printers: [1, 0],
   print_jobs: [3, 4, 0, 1, 2],
   tenders: [1, 0],
 };
@@ -1433,6 +1432,20 @@ for (const locale of ["en", "es"] as const) {
           table.foreignKeys.filter((key) => key.id === capturedId).map((key) => ({ ...key, id })),
         );
       }
+      for (const [table, column] of [
+        ["devices", "invoice_page_printer_id"],
+        ["device_profile_printers", "page_printer_id"],
+      ] as const) {
+        const key = expected[phase].tables[table]!.foreignKeys.find((row) => row.from === column)!;
+        key.table = "printers";
+      }
+      const deliveries = expected[phase].tables.invoice_deliveries!;
+      deliveries.columns.find(({ name }) => name === "page_printer_id")!.name = "printer_id";
+      const deliveryPrinter = deliveries.foreignKeys.find(
+        ({ from }) => from === "page_printer_id",
+      )!;
+      deliveryPrinter.from = "printer_id";
+      deliveryPrinter.table = "printers";
       const printerTable = expected[phase].tables.printers!;
       printerTable.columns.splice(1, 0, {
         name: "kind",
@@ -1451,16 +1464,50 @@ for (const locale of ["en", "es"] as const) {
         { name: "picks_up_receipts", type: "INTEGER", notnull: 1, dflt_value: "true", pk: 0 },
         { name: "picks_up_payment_slips", type: "INTEGER", notnull: 1, dflt_value: "true", pk: 0 },
       );
-      printerTable.foreignKeys.push({
-        id: 0,
-        seq: 0,
-        table: "devices",
-        from: "held_by_device_id",
-        to: "id",
-        on_update: "NO ACTION",
-        on_delete: "NO ACTION",
-        match: "NONE",
-      });
+      for (const column of printerTable.columns) {
+        if (column.name === "paper_width" || column.name === "resolution") column.notnull = 0;
+      }
+      const officeColumns = [
+        ["resource_path", "TEXT"],
+        ["document_format", "TEXT"],
+        ["supported_formats", "TEXT"],
+        ["media", "TEXT"],
+        ["resolution_dpi", "INTEGER"],
+        ["agent_id", "TEXT"],
+      ] as const;
+      printerTable.columns.splice(
+        printerTable.columns.findIndex((column) => column.name === "active"),
+        0,
+        ...officeColumns.map(([name, type]) => ({
+          name,
+          type,
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        })),
+      );
+      printerTable.foreignKeys.push(
+        {
+          id: 0,
+          seq: 0,
+          table: "print_agents",
+          from: "agent_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        },
+        {
+          id: 1,
+          seq: 0,
+          table: "devices",
+          from: "held_by_device_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        },
+      );
       for (const row of Object.values(printerTable.rows)) {
         expect(row.pickup_roles).toEqual(["receipt", "payment_slip"]);
         row.kind = "receipt";
@@ -1468,6 +1515,7 @@ for (const locale of ["en", "es"] as const) {
         row.held_at = null;
         row.picks_up_receipts = 1;
         row.picks_up_payment_slips = 1;
+        for (const [name] of officeColumns) row[name] = null;
       }
       expected[phase] = madridWithDroppedColumns(expected[phase], DROPPED_COLUMNS);
       for (const name of ["attendance_days", "attendance_questions", "attendance_answers"]) {

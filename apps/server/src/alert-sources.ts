@@ -17,7 +17,7 @@ import {
   type A4HoldCode,
   invoiceDeliveries,
   invoiceSeries,
-  pagePrinters,
+  isA4Printer,
   printAgents,
   printJobs,
   isReceiptPrinter,
@@ -559,16 +559,14 @@ async function readUndeliveredContext(
   testPages: Pick<PageTestPages, "holdOn">,
 ): Promise<UndeliveredContext> {
   const attempts = await tx
-    .select({ id: invoiceDeliveries.id, printerId: pagePrinters.id, name: pagePrinters.name })
+    .select({ id: invoiceDeliveries.id, printerId: printers.id, name: printers.name })
     .from(invoiceDeliveries)
-    .innerJoin(pagePrinters, eq(pagePrinters.id, invoiceDeliveries.pagePrinterId))
+    .innerJoin(printers, and(isA4Printer(), eq(printers.id, invoiceDeliveries.printerId)))
     .where(inArray(invoiceDeliveries.saleId, [...saleIds]));
   const sending = await tx
-    .select({ printerId: invoiceDeliveries.pagePrinterId, hold: invoiceDeliveries.printerHold })
+    .select({ printerId: invoiceDeliveries.printerId, hold: invoiceDeliveries.printerHold })
     .from(invoiceDeliveries)
-    .where(
-      and(eq(invoiceDeliveries.status, "sending"), isNotNull(invoiceDeliveries.pagePrinterId)),
-    );
+    .where(and(eq(invoiceDeliveries.status, "sending"), isNotNull(invoiceDeliveries.printerId)));
   const holds = sending.filter((row) => row.hold !== null);
   return {
     officePrinters: new Map(attempts.map((a) => [a.id, { id: a.printerId, name: a.name }])),

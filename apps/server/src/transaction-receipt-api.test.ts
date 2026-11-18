@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
@@ -11,7 +12,6 @@ import {
   drawerOpens,
   invoiceSeries,
   invoiceDeliveries,
-  pagePrinters,
   printAgents,
   printJobs,
   receiptReprints,
@@ -485,27 +485,19 @@ it("sends an orderless A4 original to its receipt destination instead", async ()
     counterpartyAddress: "Stored address",
   });
   const profileId = await profile();
-  const office = await inTx(venue, async (tx) => {
+  const officeId = await inTx(venue, async (tx) => {
     const [agent] = await tx
       .insert(printAgents)
       .values({ name: "Office agent", tokenHash: "scrypt$test" })
       .returning();
-    const [printer] = await tx
-      .insert(pagePrinters)
-      .values({
-        name: "Office",
-        host: "192.0.2.20",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-        agentId: agent!.id,
-      })
-      .returning();
-    await listInvoicePrinter(tx, { profileId, pagePrinterId: printer!.id, isDefault: true });
-    return printer!;
+    const printerId = await insertA4Printer(tx, {
+      name: "Office",
+      host: "192.0.2.20",
+      resolutionDpi: 600,
+      agentId: agent!.id,
+    });
+    await listInvoicePrinter(tx, { profileId, pagePrinterId: printerId, isDefault: true });
+    return printerId;
   });
   const before = await snapshot();
   const original = await send(
@@ -513,7 +505,7 @@ it("sends an orderless A4 original to its receipt destination instead", async ()
     venue.cookie,
     "POST",
     `/api/transactions/${sale.id}/deliveries`,
-    { medium: "print", requestKey: randomUUID(), printerId: office.id },
+    { medium: "print", requestKey: randomUUID(), printerId: officeId },
   );
   expect(original.status, JSON.stringify(original.json)).toBe(200);
   expect(original.json).toMatchObject({ medium: "a4", designation: "original" });

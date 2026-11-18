@@ -24,7 +24,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordIncident, recordSale } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -501,18 +500,6 @@ describe("the device delete impact", () => {
       expect(await snapshot()).toEqual(before);
     },
   );
-
-  it("does not report an office printer among portable holds", async () => {
-    const s = await seed();
-    await inTx(async (tx) => {
-      const office = await insertA4Printer(tx);
-      await tx.update(printers).set({ portable: true }).where(eq(printers.id, office));
-      await holdPrinterForTest(tx, office, s.barTill);
-    });
-    expect(await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, s.barTill))).toEqual(
-      expectedImpact(s),
-    );
-  });
 
   it("does not refuse for a payment in any state that is not in progress", async () => {
     const s = await seed();

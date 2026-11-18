@@ -12495,7 +12495,7 @@ describe("office printers in discovery", () => {
     await userEvent.click(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")!);
     await vi.waitFor(() => expect(listPagePrinters).toHaveBeenCalledTimes(2));
     listPagePrinters.mockResolvedValue([moved]);
-    liveData.invalidate([{ type: "page_printers", id: "pp1" }]);
+    liveData.invalidate([{ type: "printers", id: "pp1" }]);
     await vi.waitFor(() => expect(listPagePrinters).toHaveBeenCalledTimes(3));
     await flush(el);
     expect(q(el, "[data-test='page-printer-added-a2:10.0.0.56:9100']")).not.toBeNull();
@@ -13281,7 +13281,7 @@ describe("an A4 printer's details", () => {
       expect(inDetails(el, "[data-test=page-printer-test-page-read-error]")).not.toBeNull(),
     );
     const reads = listPagePrinters.mock.calls.length;
-    liveData.invalidate([{ type: "page_printers", id: "pp1" }]);
+    liveData.invalidate([{ type: "printers", id: "pp1" }]);
     await vi.waitFor(() => expect(listPagePrinters.mock.calls.length).toBeGreaterThan(reads));
     await flush(el);
     expect(inDetails(el, "[data-test=page-printer-test-page-read-error]")).toBeNull();

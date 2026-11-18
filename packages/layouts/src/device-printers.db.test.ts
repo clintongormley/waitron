@@ -4,7 +4,6 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   devices,
-  pagePrinters,
   printers,
   restrictRefused,
   withTransaction,
@@ -61,20 +60,8 @@ async function seedPrinter(name: string): Promise<string> {
 }
 
 async function seedPagePrinter(name: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name,
-      host: "10.0.0.9",
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 300,
-    })
-    .returning({ id: pagePrinters.id });
-  return row!.id;
+  const printerId = await insertA4Printer(suite.db, { name, host: "10.0.0.9" });
+  return printerId;
 }
 
 async function devicePrinters(deviceId: string) {

@@ -50,7 +50,6 @@ export * from "./node-membership.js";
 export * from "./node-sealed-state.js";
 export * from "./recovery-packs.js";
 export * from "./invoice-deliveries.js";
-export * from "./page-printers.js";
 
 export * from "./tender-refunds.js";
 

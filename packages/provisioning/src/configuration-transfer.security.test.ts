@@ -309,10 +309,14 @@ it("imports printers disabled with fresh agent credentials and no page-printer a
         host: "192.0.2.10",
         active: true,
       },
-    ],
-    page_printers: [
       {
         id: "source-page",
+        kind: "a4",
+        transport: "ipp",
+        paper_width: null,
+        resolution: null,
+        picks_up_receipts: 0,
+        picks_up_payment_slips: 0,
         name: "Office printer",
         host: "192.0.2.11",
         port: 631,
@@ -326,11 +330,7 @@ it("imports printers disabled with fresh agent credentials and no page-printer a
       },
     ],
   };
-  const module = transfer([
-    { name: "print_agents" },
-    { name: "printers" },
-    { name: "page_printers" },
-  ]);
+  const module = transfer([{ name: "print_agents" }, { name: "printers" }]);
   await withTransaction(suite.db, (tx) =>
     importConfigurationTables(tx, bundle, [module], bundle.modules),
   );
@@ -343,11 +343,12 @@ it("imports printers disabled with fresh agent credentials and no page-printer a
       active: 0,
     },
   ]);
-  expect((await suite.db.execute(sql`select name, active from printers`)).rows).toEqual([
-    { name: "Receipt printer", active: 0 },
-  ]);
   expect(
-    (await suite.db.execute(sql`select name, active, agent_id from page_printers`)).rows,
+    (await suite.db.execute(sql`select name, active from printers where kind = 'receipt'`)).rows,
+  ).toEqual([{ name: "Receipt printer", active: 0 }]);
+  expect(
+    (await suite.db.execute(sql`select name, active, agent_id from printers where kind = 'a4'`))
+      .rows,
   ).toEqual([{ name: "Office printer", active: 0, agent_id: null }]);
   expect((await suite.db.execute(sql`pragma foreign_key_check`)).rows).toEqual([]);
 });

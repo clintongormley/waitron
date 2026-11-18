@@ -1,3 +1,4 @@
+import { insertA4Printer } from "../testing/printers.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { restrictRefused } from "../constraint-target.js";
@@ -10,7 +11,6 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { deviceProfilePrinters } from "./device-profile-printers.js";
 
-import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
 
 describe("device_profile_printers defaults", () => {
@@ -40,20 +40,8 @@ describe("device_profile_printers defaults", () => {
       )
       .returning({ id: printers.id });
     [printer1, printer2] = madePrinters.map((p) => p.id) as [string, string];
-    const [madePage] = await db
-      .insert(pagePrinters)
-      .values({
-        name: "Office printer",
-        host: "10.0.0.9",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-      })
-      .returning({ id: pagePrinters.id });
-    pagePrinter = madePage!.id;
+    const madePageId = await insertA4Printer(db, { name: "Office printer", host: "10.0.0.9" });
+    pagePrinter = madePageId;
   });
 
   it("refuses a second default for one role of one profile", async () => {
@@ -138,7 +126,7 @@ describe("device_profile_printers defaults", () => {
       withTransaction(suite.db, (tx) =>
         tx.insert(deviceProfilePrinters).values({
           deviceProfileId: profile,
-          pagePrinterId: printer2,
+          pagePrinterId: "unknown-printer",
           role: "invoice",
           position: 1,
         }),
@@ -157,9 +145,7 @@ describe("device_profile_printers defaults", () => {
       }),
     );
     const e = await captureError(() =>
-      withTransaction(suite.db, (tx) =>
-        tx.delete(pagePrinters).where(eq(pagePrinters.id, pagePrinter)),
-      ),
+      withTransaction(suite.db, (tx) => tx.delete(printers).where(eq(printers.id, pagePrinter))),
     );
     expect(restrictRefused(e)).toBe(true);
   });

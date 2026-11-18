@@ -650,6 +650,8 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Shared office-printer queues
 
+Receipt and office printers share the `printers` table ([A1308 dv4](../superpowers/plans/2026-11-08-a1308-dv4-a4-printers.md)).
+
 After A576, check two IPP queues on one real print server from the shipped print-agent container.
 Add Kitchen A4 and Reception A4 separately and print distinguishable pages to both. Record the
 announced server name, each queue path and where the paper emerges. Repeat with one queue

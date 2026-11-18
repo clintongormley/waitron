@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { personStaffRoles, staffRoles, persons } from "@waitron/db";
 import { seedDeviceProfiles, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
@@ -17,7 +18,6 @@ import {
   diningTables,
   floorZones,
   kitchenStations,
-  pagePrinters,
   printJobs,
   printers,
   shortNameColumns,
@@ -203,20 +203,12 @@ async function seedNamedPrinters(names: string[]): Promise<string[]> {
 }
 
 async function seedPagePrinter(): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name: "Office",
-      host: "10.0.0.8",
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 600,
-    })
-    .returning({ id: pagePrinters.id });
-  return row!.id;
+  const printerId = await insertA4Printer(suite.db, {
+    name: "Office",
+    host: "10.0.0.8",
+    resolutionDpi: 600,
+  });
+  return printerId;
 }
 
 /** An open till session on `deviceId` for a new staff member, as the cookie the till sends. */

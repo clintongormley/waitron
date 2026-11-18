@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -9,9 +10,9 @@ import {
   subscribeToChanges,
   invoiceDeliveries,
   invoiceSeries,
-  pagePrinterFormat,
-  pagePrinterMedia,
-  pagePrinters,
+  printerDocumentFormat,
+  printerMedia,
+  printers,
   printAgents,
   sales,
   taxpayer,
@@ -37,7 +38,7 @@ import { renderInvoiceRaster } from "./invoice-raster.js";
 import { encodeInvoiceRaster } from "./invoice-raster-encode.js";
 import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { mountPrintApi } from "./print-api.js";
-import { renderInvoicePage } from "./page-print-api.js";
+import { renderInvoicePage, type PageFormat } from "./page-print-api.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
@@ -67,7 +68,7 @@ const clock: TrustedClock = {
 
 type Render = (
   document: ReceiptDocumentInput,
-  format: (typeof pagePrinters.$inferSelect)["documentFormat"],
+  format: PageFormat,
   resolutionDpi: number,
 ) => Promise<Buffer>;
 
@@ -148,24 +149,16 @@ let hostCounter = 20;
 
 async function printer(
   agentId: string | null,
-  extra: Partial<typeof pagePrinters.$inferInsert> = {},
+  extra: Parameters<typeof insertA4Printer>[1] = {},
 ): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name: "Back office",
-      host: `192.0.2.${hostCounter++}`,
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf", "image/pwg-raster", "image/urf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 300,
-      agentId,
-      ...extra,
-    })
-    .returning({ id: pagePrinters.id });
-  return row!.id;
+  const printerId = await insertA4Printer(suite.db, {
+    name: "Back office",
+    host: `192.0.2.${hostCounter++}`,
+    supportedFormats: ["application/pdf", "image/pwg-raster", "image/urf"],
+    agentId,
+    ...extra,
+  });
+  return printerId;
 }
 
 /** A synthetic F1 written through the core, as part 1's delivery suites do. */
@@ -409,7 +402,7 @@ describe("claiming a page job", () => {
     const v = await venue();
     const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v), office);
-    await suite.db.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, office));
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, office));
 
     expect(await claim(v)).toBeUndefined();
     expect(await row(id)).toMatchObject({ status: "failed", failureCode: "printer_disabled" });
@@ -727,8 +720,8 @@ describe("reporting a page job", () => {
 
 describe("the print agent's own client", () => {
   it("accepts exactly the formats and paper the server stores for an office printer", () => {
-    expect([...PAGE_FORMATS].sort()).toEqual([...pagePrinterFormat.enumValues].sort());
-    expect([...PAGE_MEDIA].sort()).toEqual([...pagePrinterMedia.enumValues].sort());
+    expect([...PAGE_FORMATS].sort()).toEqual([...printerDocumentFormat.enumValues].sort());
+    expect([...PAGE_MEDIA].sort()).toEqual([...printerMedia.enumValues].sort());
   });
 
   it("reports exactly the holds the server stores", () => {
@@ -940,7 +933,7 @@ describe("fetching a page job's document", () => {
     );
     expect(repointed).toEqual({ id: office, outcome: "repointed" });
     expect(
-      (await suite.db.select().from(pagePrinters).where(eq(pagePrinters.id, office)))[0],
+      (await suite.db.select().from(printers).where(eq(printers.id, office)))[0],
     ).toMatchObject({ agentId: v.agentTwo, documentFormat: "application/pdf", resolutionDpi: 600 });
 
     v.state.now = at(2_000);
@@ -1024,13 +1017,17 @@ describe("rendering a page", () => {
   });
 });
 
-it("an A4 invoice queued during a held receipt pull wakes its agent", async () => {
+it.each(["queued", "reassigned"])("wakes a held pull for A4 work %s", async (action) => {
   const bus = new LiveEvents();
   onTestFinished(() => bus.close());
   const v = await venue({ bus });
-  const office = await printer(v.agentOne);
+  const office = await printer(action === "queued" ? v.agentOne : v.agentTwo);
   const sale = await fullInvoice(v);
-  await installChangeFeed(suite.db, [{ table: "invoice_deliveries", type: "invoice_deliveries" }]);
+  const queued = action === "reassigned" ? await queueA4(sale, office) : undefined;
+  await installChangeFeed(suite.db, [
+    { table: "invoice_deliveries", type: "invoice_deliveries" },
+    { table: "printers", type: "printers" },
+  ]);
   const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
   onTestFinished(unsubscribe);
   const pending = post(v, "/print-api/agent/jobs?wait=25", v.tokenOne, {
@@ -1038,7 +1035,12 @@ it("an A4 invoice queued during a held receipt pull wakes its agent", async () =
     scanned: [],
   });
   await vi.waitFor(() => expect(bus.subscriberCount).toBe(1));
-  const delivery = await queueA4(sale, office);
+  const delivery = queued ?? (await queueA4(sale, office));
+  if (queued !== undefined) {
+    await withTransaction(suite.db, (tx) =>
+      tx.update(printers).set({ agentId: v.agentOne }).where(eq(printers.id, office)),
+    );
+  }
   let answered = false;
   void Promise.resolve(pending).then(() => {
     answered = true;

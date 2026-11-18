@@ -39,7 +39,6 @@ import {
   invoiceSeries,
   mediaImages,
   tenders,
-  pagePrinters,
   workingOrders,
   nowIso,
   partyTables,
@@ -2132,21 +2131,12 @@ describe("a record with no device prints nothing", () => {
 
 describe("the device's invoice printer", () => {
   async function officePrinter(active = true): Promise<string> {
-    const [row] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: active ? "Back office" : "Old office",
-        host: `192.0.2.${active ? 40 : 41}`,
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-        active,
-      })
-      .returning({ id: pagePrinters.id });
-    return row!.id;
+    const printerId = await insertA4Printer(suite.db, {
+      name: active ? "Back office" : "Old office",
+      host: `192.0.2.${active ? 40 : 41}`,
+      active,
+    });
+    return printerId;
   }
 
   async function profileOf(cfg: DeviceRequestConfig): Promise<string> {
@@ -3227,17 +3217,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       const { cfg, saleId, orderId, ticket, personId } = await issued();
       const pagePrinterId = randomUUID();
       await withTransaction(suite.db, async (tx) => {
-        await tx.insert(pagePrinters).values({
-          id: pagePrinterId,
-          name: "Invoice A4",
-          host: "127.0.0.1",
-          port: 631,
-          resourcePath: "/ipp/print",
-          documentFormat: "application/pdf",
-          supportedFormats: ["application/pdf"],
-          media: "iso_a4_210x297mm",
-          resolutionDpi: 300,
-        });
+        await insertA4Printer(tx, { id: pagePrinterId, name: "Invoice A4", host: "127.0.0.1" });
         await tx
           .update(workingOrders)
           .set({
@@ -3262,8 +3242,8 @@ describe("automatic F1 receipt delivery enrollment", () => {
           generation: 1,
           printJobId: null,
           ...(medium === "email"
-            ? { recipient: "customer@example.test", pagePrinterId: null }
-            : { recipient: null, pagePrinterId }),
+            ? { recipient: "customer@example.test", printerId: null }
+            : { recipient: null, printerId: pagePrinterId }),
         }),
       ]);
       expect(await suite.db.select().from(printJobs)).toEqual([]);
@@ -3350,17 +3330,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     const { cfg, saleId, orderId, ticket, personId } = await issued(false);
     const pagePrinterId = randomUUID();
     await withTransaction(suite.db, async (tx) => {
-      await tx.insert(pagePrinters).values({
-        id: pagePrinterId,
-        name: "Invoice A4",
-        host: "127.0.0.1",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-      });
+      await insertA4Printer(tx, { id: pagePrinterId, name: "Invoice A4", host: "127.0.0.1" });
       const [device] = await tx
         .select({ profileId: devices.deviceProfileId })
         .from(devices)
@@ -3387,7 +3357,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       expect.objectContaining({
         saleId,
         medium: "a4",
-        pagePrinterId,
+        printerId: pagePrinterId,
         recipient: null,
         personId,
         designation: "original",

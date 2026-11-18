@@ -269,7 +269,7 @@ function deliveryStatus(
       sent: row.status === "sent",
       printerId:
         row.medium === "a4"
-          ? row.pagePrinterId
+          ? row.printerId
           : row.medium === "receipt"
             ? jobPrinter(row.printJobId)
             : null,

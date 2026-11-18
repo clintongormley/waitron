@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
@@ -14,7 +15,7 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   kitchenStations,
-  pagePrinters,
+  printers,
   parties,
   printJobs,
   ticketItems,
@@ -1869,17 +1870,7 @@ describe("a Restaurant profile in its own zones", () => {
       ["restaurant", ids.restaurant],
       ["deli", ids.deli],
     ] as const) {
-      await suite.db.insert(pagePrinters).values({
-        id,
-        name: `Invoices ${profile}`,
-        host: id,
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-      });
+      await insertA4Printer(suite.db, { id, name: `Invoices ${profile}`, host: id });
     }
     await withTransaction(suite.db, async (tx) => {
       await listInvoicePrinter(tx, {
@@ -1907,9 +1898,7 @@ describe("a Restaurant profile in its own zones", () => {
       await suite.db
         .delete(deviceProfilePrinters)
         .where(inArray(deviceProfilePrinters.pagePrinterId, [ids.restaurant, ids.deli]));
-      await suite.db
-        .delete(pagePrinters)
-        .where(inArray(pagePrinters.id, [ids.restaurant, ids.deli]));
+      await suite.db.delete(printers).where(inArray(printers.id, [ids.restaurant, ids.deli]));
     }
   });
 

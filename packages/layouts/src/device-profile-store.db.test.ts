@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import {
@@ -9,7 +10,6 @@ import {
   deviceProfiles,
   departments,
   devices,
-  pagePrinters,
   printers,
   withTransaction,
 } from "@waitron/db";
@@ -825,19 +825,7 @@ describe("device-profile store against a real migrated database", () => {
       .insert(printers)
       .values({ name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
       .returning({ id: printers.id });
-    const [office] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Office",
-        host: "10.0.0.9",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-      })
-      .returning({ id: pagePrinters.id });
+    const officeId = await insertA4Printer(suite.db, { name: "Office", host: "10.0.0.9" });
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
@@ -849,15 +837,15 @@ describe("device-profile store against a real migrated database", () => {
           receiptPrinterIds: [bar!.id],
           paymentSlipPrinterIds: [],
           ...NO_DRAWERS_OR_DEFAULTS,
-          invoicePrinterIds: [office!.id, bar!.id],
-          invoicePrinterDefaultId: office!.id,
+          invoicePrinterIds: [officeId, bar!.id],
+          invoicePrinterDefaultId: officeId,
         },
       }),
     );
     const [listed] = await inTx((tx) => listDeviceProfiles(tx));
     expect(listed).toEqual(created);
-    expect(listed!.invoicePrinterIds).toEqual([office!.id, bar!.id]);
-    expect(listed!.invoicePrinterDefaultId).toBe(office!.id);
+    expect(listed!.invoicePrinterIds).toEqual([officeId, bar!.id]);
+    expect(listed!.invoicePrinterDefaultId).toBe(officeId);
     expect(listed!.receiptPrinterIds).toEqual([bar!.id]);
   });
 

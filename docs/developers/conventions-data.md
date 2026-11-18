@@ -4044,8 +4044,8 @@ An env or prompt value set to `""` falls back to its default exactly as an unset
 
 ## Every read of printers names its kind
 
-Use `isReceiptPrinter()` from `@waitron/db`, or test the kind on the alias in raw SQL and aliased joins.
-The condition keeps office printers out of receipt queries once both kinds share the table.
+Use `isReceiptPrinter()` or `isA4Printer()` from `@waitron/db`. Test the kind on the alias in raw
+SQL and aliased joins. A lookup that takes both kinds says why at the query.
 Find reads and writes with `git grep -niw printers -- apps packages ':!*.test.ts' ':!*/testing/*' ':!*/drizzle/*'` and follow them to their callers.
 
 **Migrations**

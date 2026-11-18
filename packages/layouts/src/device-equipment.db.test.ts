@@ -4,7 +4,6 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   devices,
-  pagePrinters,
   printers,
   withTransaction,
 } from "@waitron/db";
@@ -87,20 +86,8 @@ async function seedPrinter(
 }
 
 async function seedPagePrinter(name: string, host = "10.0.0.9"): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name,
-      host,
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 300,
-    })
-    .returning({ id: pagePrinters.id });
-  return row!.id;
+  const printerId = await insertA4Printer(suite.db, { name, host });
+  return printerId;
 }
 
 async function invoiceColumns(deviceId: string) {
@@ -1144,7 +1131,7 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
   }
 
   async function setPageActive(id: string, active: boolean): Promise<void> {
-    await suite.db.update(pagePrinters).set({ active }).where(eq(pagePrinters.id, id));
+    await suite.db.update(printers).set({ active }).where(eq(printers.id, id));
   }
 
   it.each(["page", "receipt"] as const)(

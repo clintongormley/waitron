@@ -1,7 +1,7 @@
 import { optionalSearch } from "./orders-list.js";
 import { listOutsidePayments } from "./outside-payments-report.js";
 import { validatedRangeWindow } from "@waitron/reporting";
-import { tableInService } from "@waitron/db";
+import { receiptRollColumns, tableInService } from "@waitron/db";
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -554,8 +554,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const queued = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
         const [printer] = await tx
           .select({
-            paperWidth: printers.paperWidth,
-            resolution: printers.resolution,
+            ...receiptRollColumns,
           })
           .from(printers)
           .where(and(eq(printers.id, printerId), activePrinters()));

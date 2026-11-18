@@ -2,7 +2,13 @@ import { decimal } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
-import { invoiceSeries, printers, withTransaction } from "@waitron/db";
+import {
+  receiptRollColumns,
+  isReceiptPrinter,
+  invoiceSeries,
+  printers,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
@@ -202,7 +208,10 @@ it.each(["cash", "reader"] as const)(
     await withTransaction(v.db, async (tx) => {
       const historical = await readTransactionReceipt(v.backend, tx, v.cfg, saleId);
       expect(historical).toEqual(ticket);
-      const [printer] = await tx.select().from(printers);
+      const [printer] = await tx
+        .select({ id: printers.id, ...receiptRollColumns })
+        .from(printers)
+        .where(isReceiptPrinter());
       expect(
         await enqueueReceiptCopy(tx, v.cfg, historical, saleId, printer!, "en-GB"),
       ).toBeDefined();

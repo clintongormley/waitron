@@ -1,6 +1,7 @@
 import "./errors.js";
 import { and, eq, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import {
+  receiptRollColumns,
   kitchenPrintJobs,
   printJobs,
   isReceiptPrinter,
@@ -112,7 +113,7 @@ export async function reprintJobOn(
   const stuck = !resendable && isStuckJob(job, found.printer, seen);
   if (!resendable && !stuck) throw new AppError("print_job.not_resendable", { id: jobId });
   const [target] = await tx
-    .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
+    .select({ ...receiptRollColumns })
     .from(printers)
     .where(
       and(

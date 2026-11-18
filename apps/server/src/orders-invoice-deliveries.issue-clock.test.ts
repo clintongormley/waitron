@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -6,7 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { invoiceDeliveries, invoiceSeries, pagePrinters, printAgents, taxpayer } from "@waitron/db";
+import { invoiceDeliveries, invoiceSeries, printAgents, taxpayer } from "@waitron/db";
 import { recordSale } from "@waitron/core";
 import { seriesId as brandSeriesId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { inTx, send } from "./testing/bill-venue.js";
@@ -36,21 +37,12 @@ useVenueDb({
         .insert(printAgents)
         .values({ name: "Back office agent", tokenHash: "x" })
         .returning({ id: printAgents.id });
-      const [office] = await tx
-        .insert(pagePrinters)
-        .values({
-          name: "Oficina",
-          host: "192.0.2.20",
-          port: 631,
-          resourcePath: "/ipp/print",
-          documentFormat: "application/pdf",
-          supportedFormats: ["application/pdf"],
-          media: "iso_a4_210x297mm",
-          resolutionDpi: 600,
-          agentId: agent!.id,
-        })
-        .returning({ id: pagePrinters.id });
-      officeId = office!.id;
+      officeId = await insertA4Printer(tx, {
+        name: "Oficina",
+        host: "192.0.2.20",
+        resolutionDpi: 600,
+        agentId: agent!.id,
+      });
       const receipt = { operationDescription: "Restaurante", email: "facturas@example.test" };
       for (const { id } of await tx.select({ id: departments.id }).from(departments)) {
         await seedDepartmentReceipt(tx, id, receipt);

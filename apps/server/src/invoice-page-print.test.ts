@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -6,7 +7,7 @@ import {
   type A4HoldCode,
   invoiceDeliveries,
   invoiceSeries,
-  pagePrinters,
+  printers,
   printAgents,
   printJobs,
   taxpayer,
@@ -80,24 +81,17 @@ let hostCounter = 20;
 
 async function printer(
   agentId: string | null,
-  extra: Partial<typeof pagePrinters.$inferInsert> = {},
+  extra: Parameters<typeof insertA4Printer>[1] = {},
 ): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name: "Back office",
-      host: `192.0.2.${hostCounter++}`,
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf", "image/urf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 600,
-      agentId,
-      ...extra,
-    })
-    .returning({ id: pagePrinters.id });
-  return row!.id;
+  const printerId = await insertA4Printer(suite.db, {
+    name: "Back office",
+    host: `192.0.2.${hostCounter++}`,
+    supportedFormats: ["application/pdf", "image/urf"],
+    resolutionDpi: 600,
+    agentId,
+    ...extra,
+  });
+  return printerId;
 }
 
 /** A synthetic F1 written through the core, as part 1's delivery suites do. */
@@ -284,7 +278,7 @@ describe("claiming an A4 delivery", () => {
     const dead = await queueA4(await fullInvoice(v.nodeId), disabled, 1_000);
     const notDue = await queueA4(await fullInvoice(v.nodeId), disabled, 9_000);
     const live = await queueA4(await fullInvoice(v.nodeId), active, 2_000);
-    await suite.db.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, disabled));
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, disabled));
     const before = await row(dead);
 
     const job = await claim(v.agentOne, 5_000);
@@ -730,7 +724,7 @@ describe("one A4 job per printer", () => {
     await queueA4(await fullInvoice(v.nodeId), x, 0);
     expect((await pull(v.agentTwo, 1_000)).job).toBeDefined();
     const later = await queueA4(await fullInvoice(v.nodeId), x, 1_000);
-    await suite.db.update(pagePrinters).set({ agentId: v.agentOne }).where(eq(pagePrinters.id, x));
+    await suite.db.update(printers).set({ agentId: v.agentOne }).where(eq(printers.id, x));
 
     expect(await pull(v.agentOne, 2_000)).toEqual({
       job: undefined,

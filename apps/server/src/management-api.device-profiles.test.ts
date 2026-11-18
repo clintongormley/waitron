@@ -1,17 +1,11 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { staffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  deviceProfiles,
-  floorZones,
-  devices,
-  pagePrinters,
-  printers,
-  withTransaction,
-} from "@waitron/db";
+import { deviceProfiles, floorZones, devices, printers, withTransaction } from "@waitron/db";
 import { createMenu } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -1025,20 +1019,11 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("refuses an office printer's id on every printer list and default, creating or changing nothing", async () => {
     const app = mountApp();
-    const [office] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: uniqueName("Office"),
-        host: `office-${randomUUID()}.local`,
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-      })
-      .returning({ id: pagePrinters.id });
-    const officeId = office!.id;
+    const officeId = await insertA4Printer(suite.db, {
+      name: uniqueName("Office"),
+      host: `office-${randomUUID()}.local`,
+      resolutionDpi: 600,
+    });
     const base = { formFactor: "till", capabilities: [], ...ordering };
     const existing = await app.request("/management-api/device-profiles", {
       method: "POST",
@@ -1079,20 +1064,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   async function seedOfficePrinter(name: string): Promise<string> {
-    const [office] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name,
-        host: `office-${randomUUID()}.local`,
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-      })
-      .returning({ id: pagePrinters.id });
-    return office!.id;
+    const officeId = await insertA4Printer(suite.db, {
+      name,
+      host: `office-${randomUUID()}.local`,
+      resolutionDpi: 600,
+    });
+    return officeId;
   }
 
   it("stores an invoice list naming an office printer and a receipt printer on POST and PUT, and keeps it when a PUT omits it", async () => {

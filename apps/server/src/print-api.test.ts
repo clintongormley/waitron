@@ -12,12 +12,12 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
+  CORE_CHANGE_SOURCES,
   CORE_MIGRATIONS,
   type Database,
   deviceProfiles,
   devices,
   joinRequests,
-  pagePrinters,
   installChangeFeed,
   subscribeToChanges,
   nowIso,
@@ -6410,10 +6410,12 @@ describe("held print pulls", () => {
     const stop = new AbortController();
     const app = mountApp({ bus, gate, stopping: AbortSignal.any([gate.closed, stop.signal]) });
     const { token, agentId } = await joinAndAccept(app);
-    await installChangeFeed(suite.db, [
-      { table: "print_jobs", type: "print_jobs" },
-      { table: "invoice_deliveries", type: "invoice_deliveries" },
-    ]);
+    await installChangeFeed(
+      suite.db,
+      CORE_CHANGE_SOURCES.filter(({ table }) =>
+        ["print_jobs", "invoice_deliveries", "printers"].includes(table),
+      ),
+    );
     const unsubscribe = subscribeToChanges(changeSubscriber(bus, noopLog));
     onTestFinished(() => {
       stop.abort();
@@ -6625,26 +6627,17 @@ describe("held print pulls", () => {
 
   it("an office test page wakes a held receipt pull, then can be claimed", async () => {
     const r = await rig();
-    const [printer] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Office",
-        host: "192.0.2.9",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-        agentId: r.agentId,
-      })
-      .returning();
+    const printerId = await insertA4Printer(suite.db, {
+      name: "Office",
+      host: "192.0.2.9",
+      agentId: r.agentId,
+    });
     const pending = r.request();
     await held(r.bus);
     const requested = await send(
       r.app,
       "POST",
-      `/management-api/page-printers/${printer!.id}/test-page`,
+      `/management-api/page-printers/${printerId}/test-page`,
       { cookie: managerCookie },
     );
     expect(requested.status).toBe(202);

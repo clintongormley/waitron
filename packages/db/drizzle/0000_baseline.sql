@@ -788,7 +788,7 @@ CREATE TABLE `devices` (
 	FOREIGN KEY (`payment_slip_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`cash_drawer_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`invoice_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`invoice_page_printer_id`) REFERENCES `page_printers`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`invoice_page_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "devices_battery_level_ck" CHECK("devices"."battery_level" is null or "devices"."battery_level" between 0 and 100),
 	CONSTRAINT "devices_deleted_ck" CHECK("devices"."deleted_at" is null or "devices"."active" = 0),
 	CONSTRAINT "devices_made_here_station_ids_ck" CHECK(json_valid("devices"."made_here_station_ids") and json_type("devices"."made_here_station_ids") = 'array' and json_array_length("devices"."made_here_station_ids") <= 1),
@@ -840,19 +840,26 @@ CREATE TABLE `printers` (
 	`port` integer DEFAULT 9100,
 	`poll_id` text,
 	`poll_token_hash` text,
-	`paper_width` text DEFAULT '80mm' NOT NULL,
-	`resolution` text DEFAULT '180dpi' NOT NULL,
+	`paper_width` text DEFAULT '80mm',
+	`resolution` text DEFAULT '180dpi',
 	`has_cash_drawer` integer DEFAULT false NOT NULL,
 	`portable` integer DEFAULT false NOT NULL,
 	`held_by_device_id` text,
 	`held_at` text,
 	`picks_up_receipts` integer DEFAULT true NOT NULL,
 	`picks_up_payment_slips` integer DEFAULT true NOT NULL,
+	`resource_path` text,
+	`document_format` text,
+	`supported_formats` text,
+	`media` text,
+	`resolution_dpi` integer,
+	`agent_id` text,
 	`active` integer DEFAULT true NOT NULL,
 	`deleted_at` text,
 	FOREIGN KEY (`held_by_device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`agent_id`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "printers_kind_ck" CHECK("printers"."kind" in ('receipt', 'a4')),
-	CONSTRAINT "printers_transport_ck" CHECK("printers"."transport" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll')),
+	CONSTRAINT "printers_transport_ck" CHECK("printers"."transport" in ('usb', 'network_tcp', 'bluetooth', 'cloud_poll', 'ipp')),
 	CONSTRAINT "printers_paper_width_ck" CHECK("printers"."paper_width" in ('58mm', '80mm')),
 	CONSTRAINT "printers_resolution_ck" CHECK("printers"."resolution" in ('180dpi', '203dpi')),
 	CONSTRAINT "printers_held_pair_ck" CHECK(("printers"."held_by_device_id" is null) = ("printers"."held_at" is null)),
@@ -861,10 +868,30 @@ CREATE TABLE `printers` (
 	CONSTRAINT "printers_transport_fields_ck" CHECK(("printers"."transport" = 'usb' and "printers"."local_key" is not null)
           or ("printers"."transport" = 'bluetooth' and "printers"."local_key" is not null)
           or ("printers"."transport" = 'network_tcp' and "printers"."host" is not null)
-          or ("printers"."transport" = 'cloud_poll' and "printers"."poll_id" is not null))
+          or ("printers"."transport" = 'cloud_poll' and "printers"."poll_id" is not null)
+          or ("printers"."transport" = 'ipp' and "printers"."host" is not null)),
+	CONSTRAINT "printers_kind_fields_ck" CHECK(("printers"."kind" = 'receipt' and "printers"."transport" <> 'ipp'
+           and "printers"."paper_width" is not null and "printers"."resolution" is not null
+           and "printers"."resource_path" is null and "printers"."document_format" is null
+           and "printers"."supported_formats" is null and "printers"."media" is null
+           and "printers"."resolution_dpi" is null and "printers"."agent_id" is null)
+          or ("printers"."kind" = 'a4' and "printers"."transport" = 'ipp' and "printers"."host" is not null
+              and "printers"."port" is not null and "printers"."resource_path" is not null
+              and "printers"."document_format" is not null and "printers"."supported_formats" is not null
+              and "printers"."media" is not null and "printers"."resolution_dpi" is not null
+              and "printers"."paper_width" is null and "printers"."resolution" is null
+              and "printers"."has_cash_drawer" = 0 and "printers"."portable" = 0
+              and "printers"."picks_up_receipts" = 0 and "printers"."picks_up_payment_slips" = 0
+              and "printers"."local_key" is null and "printers"."poll_id" is null and "printers"."poll_token_hash" is null
+              and "printers"."held_by_device_id" is null and "printers"."deleted_at" is null)),
+	CONSTRAINT "printers_document_format_ck" CHECK("printers"."document_format" in ('application/pdf', 'image/pwg-raster', 'image/urf')),
+	CONSTRAINT "printers_media_ck" CHECK("printers"."media" in ('iso_a4_210x297mm', 'na_letter_8.5x11in')),
+	CONSTRAINT "printers_port_ck" CHECK("printers"."kind" <> 'a4' or "printers"."port" between 1 and 65535),
+	CONSTRAINT "printers_resolution_dpi_ck" CHECK("printers"."resolution_dpi" is null or "printers"."resolution_dpi" > 0)
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `printers_local_key_key` ON `printers` (`local_key`) WHERE "printers"."local_key" is not null and "printers"."deleted_at" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX `printers_endpoint_uq` ON `printers` (`host`,`port`,`resource_path`) WHERE "printers"."kind" = 'a4';--> statement-breakpoint
 CREATE TABLE `print_jobs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`printer_id` text NOT NULL,
@@ -1172,7 +1199,7 @@ CREATE TABLE `device_profile_printers` (
 	`is_default` integer DEFAULT false NOT NULL,
 	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`page_printer_id`) REFERENCES `page_printers`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`page_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "device_profile_printers_role_ck" CHECK("device_profile_printers"."role" in ('receipt', 'payment_slip', 'cash_drawer', 'invoice')),
 	CONSTRAINT "device_profile_printers_target_ck" CHECK(("device_profile_printers"."printer_id" is null) <> ("device_profile_printers"."page_printer_id" is null) and ("device_profile_printers"."page_printer_id" is null or "device_profile_printers"."role" = 'invoice'))
 );
@@ -1550,7 +1577,7 @@ CREATE TABLE `invoice_deliveries` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,
 	`print_job_id` text,
-	`page_printer_id` text,
+	`printer_id` text,
 	`request_key` text NOT NULL,
 	`medium` text NOT NULL,
 	`designation` text NOT NULL,
@@ -1575,7 +1602,7 @@ CREATE TABLE `invoice_deliveries` (
 	`reported_failure_code` text,
 	`printer_hold` text,
 	FOREIGN KEY (`print_job_id`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`page_printer_id`) REFERENCES `page_printers`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`claimed_agent_id`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "invoice_deliveries_medium_ck" CHECK("invoice_deliveries"."medium" in ('email', 'a4', 'receipt')),
@@ -1591,26 +1618,6 @@ CREATE UNIQUE INDEX `invoice_deliveries_print_job_uq` ON `invoice_deliveries` (`
 CREATE UNIQUE INDEX `invoice_deliveries_request_uq` ON `invoice_deliveries` (`sale_id`,`request_key`);--> statement-breakpoint
 CREATE UNIQUE INDEX `invoice_deliveries_generation_uq` ON `invoice_deliveries` (`sale_id`,`generation`);--> statement-breakpoint
 CREATE UNIQUE INDEX `invoice_deliveries_active_uq` ON `invoice_deliveries` (`sale_id`) WHERE "invoice_deliveries"."status" in ('queued', 'sending');--> statement-breakpoint
-CREATE TABLE `page_printers` (
-	`id` text PRIMARY KEY NOT NULL,
-	`name` text NOT NULL,
-	`host` text NOT NULL,
-	`port` integer NOT NULL,
-	`resource_path` text NOT NULL,
-	`document_format` text NOT NULL,
-	`supported_formats` text NOT NULL,
-	`media` text NOT NULL,
-	`resolution_dpi` integer NOT NULL,
-	`active` integer DEFAULT true NOT NULL,
-	`agent_id` text,
-	FOREIGN KEY (`agent_id`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "page_printers_format_ck" CHECK("page_printers"."document_format" in ('application/pdf', 'image/pwg-raster', 'image/urf')),
-	CONSTRAINT "page_printers_media_ck" CHECK("page_printers"."media" in ('iso_a4_210x297mm', 'na_letter_8.5x11in')),
-	CONSTRAINT "page_printers_port_ck" CHECK("page_printers"."port" between 1 and 65535),
-	CONSTRAINT "page_printers_resolution_ck" CHECK("page_printers"."resolution_dpi" > 0)
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `page_printers_endpoint_uq` ON `page_printers` (`host`,`port`,`resource_path`);--> statement-breakpoint
 CREATE TABLE `tender_refunds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,
@@ -2746,7 +2753,7 @@ CREATE INDEX `device_invoice_save_operations_recovery_idx` ON `device_invoice_sa
 CREATE TABLE `document_page_jobs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,
-	`page_printer_id` text NOT NULL,
+	`printer_id` text NOT NULL,
 	`language` text NOT NULL,
 	`designation` text NOT NULL,
 	`person_id` text NOT NULL,
@@ -2767,7 +2774,7 @@ CREATE TABLE `document_page_jobs` (
 	`printer_hold` text,
 	`receipt_handover` text,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`page_printer_id`) REFERENCES `page_printers`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`claimed_agent_id`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "document_page_jobs_status_ck" CHECK("document_page_jobs"."status" in ('queued', 'sending', 'sent', 'failed', 'unknown')),
 	CONSTRAINT "document_page_jobs_designation_ck" CHECK("document_page_jobs"."designation" in ('original', 'duplicate')),
@@ -2776,7 +2783,7 @@ CREATE TABLE `document_page_jobs` (
 	CONSTRAINT "document_page_jobs_attempts_ck" CHECK("document_page_jobs"."attempts" between 0 and 9007199254740991 and "document_page_jobs"."attempts" = cast("document_page_jobs"."attempts" as integer))
 );
 --> statement-breakpoint
-CREATE INDEX `document_page_jobs_claim_idx` ON `document_page_jobs` (`page_printer_id`,`status`);--> statement-breakpoint
+CREATE INDEX `document_page_jobs_claim_idx` ON `document_page_jobs` (`printer_id`,`status`);--> statement-breakpoint
 CREATE INDEX `document_page_jobs_sale_idx` ON `document_page_jobs` (`sale_id`);--> statement-breakpoint
 CREATE TABLE `document_page_reprints` (
 	`id` text PRIMARY KEY NOT NULL,

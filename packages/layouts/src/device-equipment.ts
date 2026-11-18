@@ -5,16 +5,18 @@ import {
   deviceProfiles,
   devices,
   nowIso,
-  pagePrinters,
   isReceiptPrinter,
   printers,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { and, asc, eq, inArray, isNull, ne, notInArray, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { refuseDeletedPrinters } from "@waitron/printing";
 import { AppError, mayTakeOver } from "@waitron/shared";
 import type { EquipmentVia } from "@waitron/shared";
 import type { ProfilePrinterRole } from "./device-printers.js";
+
+const officePrinters = alias(printers, "office_printers");
 
 const COLUMN = {
   receipt: "receiptPrinterId",
@@ -175,12 +177,18 @@ async function readStatesWith(
         profileId: deviceProfilePrinters.deviceProfileId,
         role: deviceProfilePrinters.role,
         printer: { id: printers.id, active: printers.active },
-        page: { id: pagePrinters.id, active: pagePrinters.active },
+        page: { id: officePrinters.id, active: officePrinters.active },
         isDefault: deviceProfilePrinters.isDefault,
       })
       .from(deviceProfilePrinters)
       .leftJoin(printers, and(isReceiptPrinter(), eq(printers.id, deviceProfilePrinters.printerId)))
-      .leftJoin(pagePrinters, eq(pagePrinters.id, deviceProfilePrinters.pagePrinterId))
+      .leftJoin(
+        officePrinters,
+        and(
+          eq(officePrinters.kind, "a4"),
+          eq(officePrinters.id, deviceProfilePrinters.pagePrinterId),
+        ),
+      )
       .where(
         and(
           inArray(deviceProfilePrinters.deviceProfileId, profileIds),
@@ -214,6 +222,7 @@ async function readStatesWith(
       ...(withLists ? profileRows.map((row) => row.id) : []),
     ]),
   ].filter((id): id is string => id !== null);
+  // Profiles can offer both receipt and A4 printers for the invoice role.
   const printerRows =
     ids.length === 0
       ? []
@@ -221,25 +230,13 @@ async function readStatesWith(
           .select({
             id: printers.id,
             name: printers.name,
+            kind: printers.kind,
             portable: printers.portable,
             active: printers.active,
             holderDeviceId: printers.heldByDeviceId,
           })
           .from(printers)
-          .where(and(isReceiptPrinter(), inArray(printers.id, ids)));
-  const found = new Set(printerRows.map((row) => row.id));
-  const unfound = ids.filter((id) => !found.has(id));
-  const pageRows =
-    unfound.length === 0
-      ? []
-      : await tx
-          .select({
-            id: pagePrinters.id,
-            name: pagePrinters.name,
-            active: pagePrinters.active,
-          })
-          .from(pagePrinters)
-          .where(inArray(pagePrinters.id, unfound));
+          .where(inArray(printers.id, ids));
   const portable = new Set(printerRows.filter((row) => row.portable).map((row) => row.id));
   const holderOf = new Map(
     printerRows.flatMap((row) =>
@@ -253,13 +250,7 @@ async function readStatesWith(
         { device, defaults: defaultsOf.get(device.id)!, portable, holderOf },
       ]),
     ),
-    printers: new Map<string, PrinterInfo>([
-      ...printerRows.map((row) => [row.id, { ...row, kind: "receipt" as const }] as const),
-      ...pageRows.map(
-        (row) =>
-          [row.id, { ...row, kind: "a4" as const, portable: false, holderDeviceId: null }] as const,
-      ),
-    ]),
+    printers: new Map<string, PrinterInfo>(printerRows.map((row) => [row.id, row])),
     listed: withLists ? profileRows : [],
   };
 }
@@ -408,14 +399,20 @@ export async function checkDevicePrinterChoice(
     })
     .from(deviceProfilePrinters)
     .leftJoin(printers, and(isReceiptPrinter(), eq(printers.id, deviceProfilePrinters.printerId)))
-    .leftJoin(pagePrinters, eq(pagePrinters.id, deviceProfilePrinters.pagePrinterId))
+    .leftJoin(
+      officePrinters,
+      and(
+        eq(officePrinters.kind, "a4"),
+        eq(officePrinters.id, deviceProfilePrinters.pagePrinterId),
+      ),
+    )
     .where(
       and(
         eq(deviceProfilePrinters.deviceProfileId, profileId),
         eq(deviceProfilePrinters.role, role),
         or(
           and(eq(printers.id, selection.id), eq(printers.active, true)),
-          and(eq(pagePrinters.id, selection.id), eq(pagePrinters.active, true)),
+          and(eq(officePrinters.id, selection.id), eq(officePrinters.active, true)),
         ),
       ),
     );

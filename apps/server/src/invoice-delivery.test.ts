@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
@@ -10,7 +11,6 @@ import {
   refusalOn,
   sales,
   nodes,
-  pagePrinters,
   invoiceSeries,
   invoiceDeliveries,
   printJobs,
@@ -161,41 +161,28 @@ describe("invoice delivery reservation", () => {
   it("reserves an A4 original with only the page-printer reference and replays it", async () => {
     const sale = await issue();
     await suite.db.select().from(nodes);
-    const [printer] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Office",
-        host: "192.0.2.20",
-        port: 8631,
-        resourcePath: "/ipp/printer",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf", "image/urf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-      })
-      .returning();
+    const printerId = await insertA4Printer(suite.db, {
+      supportedFormats: ["application/pdf", "image/urf"],
+    });
     const request = {
       requestKey: randomUUID(),
       personId: "staff-one",
       medium: "a4" as const,
-      pagePrinterId: printer!.id,
+      pagePrinterId: printerId,
     };
     const first = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, request),
     );
     expect(first).toMatchObject({
       medium: "a4",
-      pagePrinterId: printer!.id,
+      printerId,
       printJobId: null,
       recipient: null,
       status: "queued",
       attempts: 0,
       designation: "original",
     });
-    await suite.db
-      .update(pagePrinters)
-      .set({ active: false })
-      .where(eq(pagePrinters.id, printer!.id));
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, printerId));
     expect(
       await withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
     ).toEqual(first);
@@ -206,25 +193,16 @@ describe("invoice delivery reservation", () => {
   it.each(["disabled"])("refuses a %s A4 destination without queuing", async (kind) => {
     const sale = await issue();
     await suite.db.select().from(nodes);
-    const [printer] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Office",
-        host: "192.0.2.20",
-        port: 8631,
-        resourcePath: "/ipp/printer",
-        documentFormat: "image/urf",
-        supportedFormats: ["image/urf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-        active: kind !== "disabled",
-      })
-      .returning();
+    const printerId = await insertA4Printer(suite.db, {
+      documentFormat: "image/urf",
+      supportedFormats: ["image/urf"],
+      active: kind !== "disabled",
+    });
     const request = {
       requestKey: randomUUID(),
       personId: "staff-one",
       medium: "a4" as const,
-      pagePrinterId: printer!.id,
+      pagePrinterId: printerId,
     };
     await expect(
       withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
@@ -235,32 +213,19 @@ describe("invoice delivery reservation", () => {
   it("records issuance's A4 original for a disabled printer as failed, and the next one is still an original", async () => {
     const sale = await issue();
     await suite.db.select().from(nodes);
-    const [printer] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Office",
-        host: "192.0.2.20",
-        port: 8631,
-        resourcePath: "/ipp/printer",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-        active: false,
-      })
-      .returning();
+    const printerId = await insertA4Printer(suite.db, { active: false });
     const request = {
       requestKey: `issuance:${sale.saleId}`,
       personId: "staff-one",
       medium: "a4" as const,
-      pagePrinterId: printer!.id,
+      pagePrinterId: printerId,
     };
     const issued = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, request, { allowInactivePagePrinter: true }),
     );
     expect(issued).toMatchObject({
       medium: "a4",
-      pagePrinterId: printer!.id,
+      printerId,
       status: "failed",
       failureCode: "printer_disabled",
       designation: "original",
@@ -272,10 +237,7 @@ describe("invoice delivery reservation", () => {
         reserveInvoiceDelivery(tx, sale.saleId, request, { allowInactivePagePrinter: true }),
       ),
     ).toEqual(issued);
-    await suite.db
-      .update(pagePrinters)
-      .set({ active: true })
-      .where(eq(pagePrinters.id, printer!.id));
+    await suite.db.update(printers).set({ active: true }).where(eq(printers.id, printerId));
     const retry = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, { ...request, requestKey: randomUUID() }),
     );
@@ -290,19 +252,7 @@ describe("invoice delivery reservation", () => {
   it("queues issuance's A4 original for an active printer when inactive printers are allowed", async () => {
     const sale = await issue();
     await suite.db.select().from(nodes);
-    const [printer] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Office",
-        host: "192.0.2.20",
-        port: 8631,
-        resourcePath: "/ipp/printer",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-      })
-      .returning();
+    const printerId = await insertA4Printer(suite.db);
     expect(
       await withTransaction(suite.db, (tx) =>
         reserveInvoiceDelivery(
@@ -312,7 +262,7 @@ describe("invoice delivery reservation", () => {
             requestKey: `issuance:${sale.saleId}`,
             personId: "staff-one",
             medium: "a4",
-            pagePrinterId: printer!.id,
+            pagePrinterId: printerId,
           },
           { allowInactivePagePrinter: true },
         ),

@@ -1933,7 +1933,11 @@ function* solutions(
   };
 
   const candidatesFor = (column: Column): Value[] => {
-    const unique = shape.unique.has(column.name);
+    // A receipt needs its declared roll defaults. Only the partial A4 index needs a resource path.
+    const printerRoll =
+      shape.name === "printers" && (column.name === "paper_width" || column.name === "resolution");
+    const officePath = shape.name === "printers" && column.name === "resource_path";
+    const unique = shape.unique.has(column.name) && !officePath;
     const references = shape.foreignKeys.filter((fk) => fk.from.includes(column.name));
     let values: Value[];
     if (CANDIDATES[`${shape.name}.${column.name}`] !== undefined || references.length === 0) {
@@ -1950,9 +1954,8 @@ function* solutions(
     }
     values = values.filter((value) => value !== null);
     if (!column.notnull) {
-      // Guests need an answered parent; other nullable columns retain the null-first fixture.
       const answeredParty = shape.name === "parties" && column.name === "allergy_answer";
-      values = unique || answeredParty ? [...values, null] : [null, ...values];
+      values = unique || answeredParty || printerRoll ? [...values, null] : [null, ...values];
     }
     const seen = new Set<string>();
     values = values.filter((value) => !seen.has(key(value)) && seen.add(key(value)));

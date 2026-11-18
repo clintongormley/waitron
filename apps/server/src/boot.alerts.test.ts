@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
@@ -5,13 +6,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import {
-  invoiceDeliveries,
-  pagePrinters,
-  printAgents,
-  taxpayer,
-  withTransaction,
-} from "@waitron/db";
+import { invoiceDeliveries, printAgents, taxpayer, withTransaction } from "@waitron/db";
 import { hashDeviceToken } from "@waitron/identity";
 import { cardReaders } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -158,20 +153,12 @@ describe("the running server's undelivered invoice alert", () => {
         tokenHash: hashDeviceToken(secret),
       })
       .returning({ id: printAgents.id });
-    const [office] = await suite.db
-      .insert(pagePrinters)
-      .values({
-        name: "Back office",
-        host: "192.0.2.20",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 600,
-        agentId: agent!.id,
-      })
-      .returning({ id: pagePrinters.id });
+    const officeId = await insertA4Printer(suite.db, {
+      name: "Back office",
+      host: "192.0.2.20",
+      resolutionDpi: 600,
+      agentId: agent!.id,
+    });
     const saleId = await fullInvoice(venue);
 
     await withServer(venue, async (base) => {
@@ -179,13 +166,10 @@ describe("the running server's undelivered invoice alert", () => {
         authorization: `Bearer ${agent!.id}.${secret}`,
         "content-type": "application/json",
       };
-      const requested = await fetch(
-        `${base}/management-api/page-printers/${office!.id}/test-page`,
-        {
-          method: "POST",
-          headers: { cookie: venue.managerCookie },
-        },
-      );
+      const requested = await fetch(`${base}/management-api/page-printers/${officeId}/test-page`, {
+        method: "POST",
+        headers: { cookie: venue.managerCookie },
+      });
       expect(requested.status).toBe(202);
       const claimed = await fetch(`${base}/print-api/agent/page-jobs/claim`, {
         method: "POST",
@@ -210,7 +194,7 @@ describe("the running server's undelivered invoice alert", () => {
           designation: "original",
           status: "queued",
           generation: 1,
-          pagePrinterId: office!.id,
+          printerId: officeId,
           personId: "staff-one",
           nextAttemptAt: due,
         }),

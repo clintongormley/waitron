@@ -12,7 +12,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
-import { pagePrinters } from "./page-printers.js";
+import { printers } from "./printers.js";
 import { printAgents } from "./print-agents.js";
 import { sales } from "./sales.js";
 import {
@@ -30,9 +30,9 @@ export const documentPageJobs = table(
     saleId: id("sale_id")
       .notNull()
       .references(() => sales.id, { onDelete: "restrict" }),
-    pagePrinterId: id("page_printer_id")
+    printerId: id("printer_id")
       .notNull()
-      .references(() => pagePrinters.id, { onDelete: "restrict" }),
+      .references(() => printers.id, { onDelete: "restrict" }),
     language: label("language").notNull(),
     designation: invoiceDeliveryDesignation("designation").notNull(),
     // Identity owns people; removal must not erase the requesting operator's attribution.
@@ -58,7 +58,7 @@ export const documentPageJobs = table(
     receiptHandover: json<{ personId: string; confirmedAt: string }>("receipt_handover"),
   },
   (t) => [
-    index("document_page_jobs_claim_idx").on(t.pagePrinterId, t.status),
+    index("document_page_jobs_claim_idx").on(t.printerId, t.status),
     index("document_page_jobs_sale_idx").on(t.saleId),
     check("document_page_jobs_status_ck", enumCheck(t.status)),
     check("document_page_jobs_designation_ck", enumCheck(t.designation)),

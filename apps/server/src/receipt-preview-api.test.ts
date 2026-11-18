@@ -3,11 +3,12 @@ import {
   seedVenueSettings,
   seedDepartmentReceipt,
 } from "@waitron/db/testing/seed.js";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { Hono } from "hono";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import { devices, printers, readTaxpayer, withTransaction, type Database } from "@waitron/db";
 import { mediaImages, uploadImage, prepareImage, saveImage } from "@waitron/media";
@@ -141,7 +142,6 @@ async function withPrinters(
     resolution: "180dpi" | "203dpi";
     active?: boolean;
     deviceActive?: boolean;
-    kind?: "a4";
   }[],
   fn: () => Promise<void>,
 ): Promise<void> {
@@ -152,7 +152,6 @@ async function withPrinters(
         .insert(printers)
         .values({
           name: `Printer ${row.device}`,
-          kind: row.kind,
           transport: "network_tcp",
           host: "192.0.2.10",
           paperWidth: row.paperWidth,
@@ -391,13 +390,18 @@ describe("POST /management-api/receipt-preview", () => {
   });
 
   it("uses the default width when a device points to an office printer", async () => {
-    await withPrinters(
-      [{ device: "Office", paperWidth: "58mm", resolution: "203dpi", kind: "a4" }],
-      async () => {
-        const result = await rendered({});
-        expect([result.preview.widthDots, result.preview.columns]).toEqual([512, 42]);
-      },
-    );
+    const office = await insertA4Printer(suite.db);
+    const { deviceId } = await seedDevice(suite.db, { label: "Office" });
+    onTestFinished(async () => {
+      await suite.db.delete(devices).where(eq(devices.id, deviceId));
+      await suite.db.delete(printers).where(eq(printers.id, office));
+    });
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: office })
+      .where(eq(devices.id, deviceId));
+    const result = await rendered({});
+    expect([result.preview.widthDots, result.preview.columns]).toEqual([512, 42]);
   });
 
   it("is drawn at the width of the receipt printer of the venue's one device that has one", async () => {

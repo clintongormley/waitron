@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
@@ -8,7 +9,7 @@ import {
   devices,
   invoiceDeliveries,
   invoiceSeries,
-  pagePrinters,
+  printers,
   printJobs,
   saleLines,
   sales,
@@ -51,17 +52,7 @@ async function bill(kind: "email" | "a4" | "disabled-a4" | "receipt" | "unset") 
   const orderId = await tabWith(venue, "Caña");
   const pagePrinterId = randomUUID();
   await withTransaction(suite.db, async (tx) => {
-    await tx.insert(pagePrinters).values({
-      id: pagePrinterId,
-      name: "Office",
-      host: pagePrinterId,
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 300,
-    });
+    await insertA4Printer(tx, { id: pagePrinterId, name: "Office", host: pagePrinterId });
     const [device] = await tx
       .select({ profileId: devices.deviceProfileId })
       .from(devices)
@@ -97,7 +88,7 @@ async function bill(kind: "email" | "a4" | "disabled-a4" | "receipt" | "unset") 
   );
   if (kind === "disabled-a4") {
     await withTransaction(suite.db, (tx) =>
-      tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, pagePrinterId)),
+      tx.update(printers).set({ active: false }).where(eq(printers.id, pagePrinterId)),
     );
   }
   return { orderId, pagePrinterId };
@@ -158,7 +149,9 @@ describe("unpaid invoice delivery", () => {
               ? { status: "failed", failureCode: "printer_disabled" }
               : { status: "queued" }),
             personId: venue.operatorId,
-            ...(medium === "email" ? { recipient: "customer@example.test" } : { pagePrinterId }),
+            ...(medium === "email"
+              ? { recipient: "customer@example.test" }
+              : { printerId: pagePrinterId }),
           }),
         ]);
         expect(await tx.select().from(saleSettlements)).toEqual([]);

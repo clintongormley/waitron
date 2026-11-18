@@ -1,11 +1,11 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceDeliveries,
   invoiceSeries,
-  pagePrinters,
   printAgents,
   printJobs,
   printers,
@@ -96,22 +96,14 @@ async function seedNamedVenue(name: string): Promise<void> {
 }
 
 let hostCounter = 20;
-async function pagePrinter(extra: Partial<typeof pagePrinters.$inferInsert> = {}): Promise<string> {
-  const [row] = await suite.db
-    .insert(pagePrinters)
-    .values({
-      name: "Back office",
-      host: `192.0.2.${hostCounter++}`,
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 600,
-      ...extra,
-    })
-    .returning({ id: pagePrinters.id });
-  return row!.id;
+async function pagePrinter(extra: Parameters<typeof insertA4Printer>[1] = {}): Promise<string> {
+  const printerId = await insertA4Printer(suite.db, {
+    name: "Back office",
+    host: `192.0.2.${hostCounter++}`,
+    resolutionDpi: 600,
+    ...extra,
+  });
+  return printerId;
 }
 
 /** A synthetic invoice written through the core, as part 1's delivery suites do. */
@@ -274,10 +266,10 @@ const a4 = (id: string, name = "Back office"): OfferedPrinter => ({ id, name, ki
 const activePagePrinters: Offer = async () =>
   (
     await suite.db
-      .select({ id: pagePrinters.id, name: pagePrinters.name })
-      .from(pagePrinters)
-      .where(eq(pagePrinters.active, true))
-      .orderBy(pagePrinters.name)
+      .select({ id: printers.id, name: printers.name })
+      .from(printers)
+      .where(and(eq(printers.kind, "a4"), eq(printers.active, true)))
+      .orderBy(printers.name)
   ).map((row) => a4(row.id, row.name));
 
 function read(saleId: string, emailAvailable = true, printers: Offer = activePagePrinters) {

@@ -1,3 +1,4 @@
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -7,8 +8,8 @@ import {
   devices,
   invoiceDeliveries,
   invoiceSeries,
-  pagePrinters,
   printAgents,
+  printers,
   taxpayer,
   withTransaction,
 } from "@waitron/db";
@@ -35,6 +36,7 @@ import {
 import {
   deletePagePrinter,
   listPagePrinters,
+  pagePrinterColumns,
   registerPagePrinter,
   renamePagePrinter,
   type PagePrinterDiscovery,
@@ -108,7 +110,11 @@ function register(discovery: PagePrinterDiscovery | undefined, window = closed) 
 }
 
 async function printerRows() {
-  return suite.db.select().from(pagePrinters).orderBy(pagePrinters.name, pagePrinters.id);
+  return suite.db
+    .select(pagePrinterColumns)
+    .from(printers)
+    .where(eq(printers.kind, "a4"))
+    .orderBy(printers.name, printers.id);
 }
 
 async function deliveryRows() {
@@ -362,16 +368,10 @@ describe("listing and renaming page printers", () => {
     const upstairs = await register(entry(v.agentTwo, { host: "192.0.2.41" }));
     await withTransaction(suite.db, (tx) => deletePagePrinter(tx, upstairs.id));
     const unattached = randomUUID();
-    await suite.db.insert(pagePrinters).values({
+    await insertA4Printer(suite.db, {
       id: unattached,
       name: "Imported",
       host: "192.0.2.43",
-      port: 631,
-      resourcePath: "/ipp/print",
-      documentFormat: "application/pdf",
-      supportedFormats: ["application/pdf"],
-      media: "iso_a4_210x297mm",
-      resolutionDpi: 300,
       active: false,
     });
     await withTransaction(suite.db, (tx) => renamePagePrinter(tx, upstairs.id, "Upstairs"));

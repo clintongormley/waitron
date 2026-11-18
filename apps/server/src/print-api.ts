@@ -16,6 +16,7 @@ import { AppError, steadyNow } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import type { ReceiptQrText } from "@waitron/fiscal";
 import {
+  receiptRollColumns,
   deviceProfilePrinters,
   deviceProfiles,
   drawerOpens,
@@ -27,7 +28,7 @@ import {
   printResolution,
   isReceiptPrinter,
   printers,
-  printTransport,
+  receiptPrintTransport,
   readVenue,
   stationPrinterPairs,
   withTransaction,
@@ -401,7 +402,7 @@ function screenOfficeReport(raw: unknown): OfficePrinterReport | undefined {
 
 function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
   if (!Array.isArray(raw)) return [];
-  const members = printTransport.enumValues as readonly string[];
+  const members = receiptPrintTransport.enumValues as readonly string[];
   const out: DiscoveredDeviceWire[] = [];
   for (const entry of raw) {
     if (typeof entry !== "object" || entry === null) continue;
@@ -616,20 +617,19 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
     };
     const unsubscribe = deps.bus.subscribe((event) => {
-      if (event.kind === "close") end();
-      else if (
-        event.change.resources.some(({ type }) =>
-          ["print_jobs", "invoice_deliveries", "page_printers"].includes(type),
-        )
-      ) {
-        if (
-          event.change.resources.some(({ type }) =>
-            ["invoice_deliveries", "page_printers"].includes(type),
-          )
-        )
-          reply = true;
-        wake();
+      if (event.kind === "close") {
+        end();
+        return;
       }
+      const resources = event.change.resources;
+      const printJob = resources.some(({ type }) => type === "print_jobs");
+      // A job adds its printer to the event so the dashboard updates the queue. Only a separate
+      // printer change needs an empty reply so the agent checks for office pages.
+      const pageChange = resources.some(
+        ({ type }) => type === "invoice_deliveries" || (type === "printers" && !printJob),
+      );
+      if (pageChange) reply = true;
+      if (printJob || pageChange) wake();
     });
     pullWakes.add(wakeAgent);
     signal.addEventListener("abort", end, { once: true });
@@ -1355,7 +1355,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // Only the shape is screened here; `createPrinter` owns the required-field check.
       const input: CreatePrinterInput = {
         name: requireString(body.name, "name"),
-        transport: requireEnum(body.transport, "transport", printTransport.enumValues),
+        transport: requireEnum(body.transport, "transport", receiptPrintTransport.enumValues),
       };
       const host = optionalString(body.host, "host");
       if (host !== undefined) input.host = host;
@@ -1444,7 +1444,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const name = optionalString(body.name, "name");
       if (name !== undefined) patch.name = name;
       if (body.transport !== undefined) {
-        patch.transport = requireEnum(body.transport, "transport", printTransport.enumValues);
+        patch.transport = requireEnum(
+          body.transport,
+          "transport",
+          receiptPrintTransport.enumValues,
+        );
       }
       const host = nullableOptionalString(body.host, "host");
       if (host !== undefined) patch.host = host;
@@ -1535,7 +1539,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const id = requireBodyUuid(body.id, "id");
       const result = await gated(sessionId, async (tx) => {
         const [target] = await tx
-          .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
+          .select({ ...receiptRollColumns })
           .from(printers)
           .where(
             and(
@@ -1595,8 +1599,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const [printer] = await tx
           .select({
             name: printers.name,
-            paperWidth: printers.paperWidth,
-            resolution: printers.resolution,
+            ...receiptRollColumns,
           })
           .from(printers)
           .where(and(isReceiptPrinter(), eq(printers.id, id), eq(printers.active, true)));
@@ -1652,8 +1655,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
                 kind: printJobs.kind,
                 createdAt: printJobs.createdAt,
                 payload: printJobs.payload,
-                paperWidth: printers.paperWidth,
-                resolution: printers.resolution,
+                ...receiptRollColumns,
               })
               .from(printJobs)
               .innerJoin(printers, and(isReceiptPrinter(), eq(printJobs.printerId, printers.id)))
@@ -1777,8 +1779,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           await tx
             .select({
               id: printers.id,
-              paperWidth: printers.paperWidth,
-              resolution: printers.resolution,
+              ...receiptRollColumns,
             })
             .from(printers)
             .where(and(isReceiptPrinter(), eq(printers.active, true), isNull(printers.deletedAt)))
@@ -1879,8 +1880,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             kind: printJobs.kind,
             saleId: printJobs.saleId,
             payload: printJobs.payload,
-            paperWidth: printers.paperWidth,
-            resolution: printers.resolution,
+            ...receiptRollColumns,
           })
           .from(printJobs)
           .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
