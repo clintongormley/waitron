@@ -827,7 +827,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     } finally {
       await inTx(venue, (tx) =>
         insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `R${randomUUID().slice(0, 4)}`, purpose: "rectificative" },
+          { code: `R${randomUUID().slice(0, 8)}`, purpose: "rectificative" },
         ]),
       );
     }
@@ -850,7 +850,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     } finally {
       await inTx(venue, (tx) =>
         insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `R${randomUUID().slice(0, 4)}`, purpose: "rectificative" },
+          { code: `R${randomUUID().slice(0, 8)}`, purpose: "rectificative" },
         ]),
       );
     }
@@ -993,7 +993,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
 
   it("fails loudly when the node has two live rectificative series, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
-    const code = `R${randomUUID().slice(0, 4)}`;
+    const code = `R${randomUUID().slice(0, 8)}`;
     await inTx(venue, (tx) =>
       insertNodeSeriesTx(tx, venue.cfg.nodeId, [{ code, purpose: "rectificative" }]),
     );

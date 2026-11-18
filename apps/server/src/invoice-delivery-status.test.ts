@@ -112,7 +112,7 @@ async function invoice(nodeId: string, full = true): Promise<string> {
     .insert(invoiceSeries)
     .values({
       nodeId,
-      code: `F${randomUUID().slice(0, 4)}`,
+      code: `F${randomUUID().slice(0, 8)}`,
       purpose: full ? "full" : "standard",
     })
     .returning();
