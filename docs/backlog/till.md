@@ -501,14 +501,6 @@ use `wt-relative-time` is the owner's call. (2) `wt-relative-time`'s words are a
 below `--wt-tap-min`, under criterion 2.5.8's exception for a target in a sentence
 ([design-system.md](../developers/design-system.md)); whether that may stay is the owner's call.
 
-## What W105 left open (#1235)
-
-Review suggestions #1235 did not take, listed in its description: the edit
-route checks permission before the device id where revoke checks the id first; its body is the
-whole device rather than only the fields named (since W105e, made-here may be left out); and
-`rowClickable` and `rowActivation` could be one option. A save reading the device list twice is a decision, not
-open: [Decisions and deliberate limits](#decisions-and-deliberate-limits).
-
 ## What W104 left open (#1225)
 
 Left OPEN by W104, not acted on: (2) the Add a device and Pair dialogs were looked at only through the browser
@@ -1539,9 +1531,6 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   - W105b (#1248, a disabled device coming back as itself): (1) someone holding a copy of a
     disabled device's current cookie can ask first and so replace that cookie.
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
-  - W105 (#1235): review suggestions #1235 did not take that are still open: the edit route's
-    checks and request body, and two table options that could be one.
-    [Detail](till.md#what-w105-left-open-1235)
   - W104 (#1225), not acted on: the dialogs were never looked at on a box.
     [Detail](till.md#what-w104-left-open-1225)
   - W106 (#1240): whether the plain `YYYY-MM-DD HH:MM` times on Devices, Printers, the menu
@@ -1593,6 +1582,12 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   the notice stood in for after the screen's own read: one read from the save, a second from the
   notice ("… with no live notice, read once, and once more on the notice" in
   `apps/dashboard/src/screens/devices-screen.test.ts`).
+
+- **Editing a device still has to send its name, its profile and, unless the profile is a kitchen
+  display, its receipt and payment-slip printer choices (lane B, 2026-11-18, not the owner; the
+  owner may overrule).** The edit request (`PATCH /management-api/devices/:id`) does not treat every
+  field as optional, as #1235's review suggested: no screen sends a partial edit, so that would add
+  a path nothing uses.
 
 - **A sold-out extra stays on a reopened held order, flagged, and only a raise of its line is refused
   (owner, 2026-09-23, lane B Q1, option A: "keep sold-out lines in held work, flag them on the till,

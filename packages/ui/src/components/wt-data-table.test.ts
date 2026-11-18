@@ -4255,11 +4255,11 @@ test("activates a row on click when rowClick is set", async () => {
   expect(clicked).toEqual(["b"]);
 });
 
-test("a row rowClickable refuses has no activator and is not clickable, while the others are", async () => {
+test("a flat row whose rowActivation is 'none' has no activator and is not clickable, while the others are", async () => {
   const clicked: string[] = [];
   const el = await table({
     rowClick: (row: Row) => clicked.push(row.id),
-    rowClickable: (row: Row) => row.id !== "b",
+    rowActivation: (row: Row) => (row.id === "b" ? "none" : "click"),
   });
   const refused = el.shadowRoot!.querySelector('tr[data-row-key="b"]')!;
   const allowed = el.shadowRoot!.querySelector('tr[data-row-key="a"]')!;
@@ -4269,6 +4269,17 @@ test("a row rowClickable refuses has no activator and is not clickable, while th
   expect(allowed.classList.contains("clickable")).toBe(true);
   allowed.querySelector<HTMLButtonElement>(".row-activate")!.click();
   expect(clicked).toEqual(["a"]);
+});
+
+test("a flat row whose rowActivation is 'toggle' has no activator and is not clickable", async () => {
+  const el = await table({
+    rowClick: (row: Row) => row.id,
+    rowActivation: (row: Row) => (row.id === "b" ? "toggle" : "click"),
+  });
+  const toggling = el.shadowRoot!.querySelector('tr[data-row-key="b"]')!;
+  expect(toggling.querySelector(".row-activate")).toBeNull();
+  expect(toggling.classList.contains("clickable")).toBe(false);
+  expect(el.shadowRoot!.querySelectorAll('tr[data-row-key="a"] .row-activate')).toHaveLength(1);
 });
 
 test("labels a row's activator 'Open row' when the consumer names none", async () => {
@@ -6010,11 +6021,11 @@ test("a real click on a pinned cell's empty space opens its clickable row once",
   expect(clicked).toEqual(["b"]);
 });
 
-test("a real click on a pinned cell's empty space opens nothing in a row rowClickable refuses", async () => {
+test("a real click on a pinned cell's empty space opens nothing in a row whose rowActivation is 'none'", async () => {
   const clicked: string[] = [];
   const { el } = await narrowTable("end", {
     rowClick: (row: Row) => clicked.push(row.id),
-    rowClickable: () => false,
+    rowActivation: () => "none",
   });
   await clickPinnedPadding(el);
   expect(clicked).toEqual([]);
