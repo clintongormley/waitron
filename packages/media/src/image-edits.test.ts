@@ -21,7 +21,8 @@ import {
   updateImage,
   uploadImage,
 } from "./images.js";
-import { samplePreparedImage } from "./testing/sample-image.js";
+import { imageFilename } from "./stored-filename.js";
+import { sampleImage, samplePreparedImage } from "./testing/sample-image.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -267,6 +268,29 @@ it("detects unequal stored bytes before deduplication or reuse of a hash", async
     expect(await readImage(suite.db, a.id)).toEqual(a);
   } finally {
     await suite.db.execute(sql.raw(trigger.sql));
+  }
+});
+
+it("refuses replacement bytes that do not match their filename or are not a webp, keeping the image", async () => {
+  const a = (await upload()).image;
+  const png = await sampleImage({ width: 8, height: 6, format: "png" });
+  for (const replacement of [
+    { ...second, filename: third.filename },
+    { ...second, bytes: png, filename: imageFilename(png) },
+  ]) {
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        saveImage(
+          tx,
+          a.id,
+          { names: { en: "Wrong" }, framing, expectedRevision: 1 },
+          replacement,
+          rasters,
+          "en",
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "image.invalid_file" });
+    expect(await readImage(suite.db, a.id)).toEqual(a);
   }
 });
 

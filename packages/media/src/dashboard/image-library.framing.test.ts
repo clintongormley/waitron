@@ -292,6 +292,85 @@ it("conflict keeps the exact draft until explicit reload, which reads the new re
   expect(api.updateImage).toHaveBeenCalledTimes(1);
 });
 
+async function conflictedDraft() {
+  const api = await mount();
+  const file = await replace();
+  api.updateImage.mockRejectedValueOnce({ code: "image.changed" });
+  save().click();
+  await vi.waitFor(() => expect(reloadButton()).not.toBeNull());
+  return { api, file };
+}
+function reloadButton() {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=reload-photo]",
+  );
+}
+function formError() {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    "wt-modal wt-form-actions",
+  )!.error;
+}
+
+it("a reload that fails says why and keeps the draft", async () => {
+  const { api, file } = await conflictedDraft();
+  api.getImage.mockRejectedValueOnce({ code: "image.busy" });
+  await userEvent.click(page.elementLocator(reloadButton()!));
+  await vi.waitFor(() =>
+    expect(formError()).toBe(
+      "The image could not be saved. The photo service is busy. Try again shortly.",
+    ),
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=photo-filename]")?.textContent).toContain(
+    file.name,
+  );
+  expect(save().disabled).toBe(false);
+});
+
+it("a reload that fails after the editor moved on leaves the editor's message alone", async () => {
+  const { api } = await conflictedDraft();
+  const conflictMessage = formError();
+  let fail!: (reason: unknown) => void;
+  api.getImage.mockReturnValueOnce(
+    new Promise((_resolve, reject) => {
+      fail = reject;
+    }),
+  );
+  await userEvent.click(page.elementLocator(reloadButton()!));
+  await vi.waitFor(() => expect(reloadButton()!.disabled).toBe(true));
+  el.remove();
+  document.body.append(el);
+  await el.updateComplete;
+  fail({ code: "image.busy" });
+  await vi.waitFor(() => expect(reloadButton()?.disabled).not.toBe(true));
+  await el.updateComplete;
+  expect(formError()).toBe(conflictMessage);
+  expect(reloadButton()).not.toBeNull();
+});
+
+it("a reload that answers after the editor moved on does not replace the draft", async () => {
+  const { api, file } = await conflictedDraft();
+  let answer!: (value: unknown) => void;
+  api.getImage.mockReturnValueOnce(
+    new Promise((resolve) => {
+      answer = resolve;
+    }),
+  );
+  await userEvent.click(page.elementLocator(reloadButton()!));
+  await vi.waitFor(() => expect(reloadButton()!.disabled).toBe(true));
+  el.remove();
+  document.body.append(el);
+  await el.updateComplete;
+  answer({ image: { ...image, names: { en: "Newer" }, revision: 7 }, uses: [] });
+  await vi.waitFor(() => expect(reloadButton()?.disabled).not.toBe(true));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=photo-filename]")?.textContent).toContain(
+    file.name,
+  );
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-en]")!.value,
+  ).toBe("Spicy potatoes");
+});
+
 it("replacement URLs are revoked on replacement and disconnect, and reconnect makes a fresh URL", async () => {
   const create = vi.spyOn(URL, "createObjectURL");
   const revoke = vi.spyOn(URL, "revokeObjectURL");
