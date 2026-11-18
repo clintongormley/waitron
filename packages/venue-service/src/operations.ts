@@ -59,7 +59,8 @@ import type {
   ZoneMenuState,
   ZoneOffers,
 } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, type PublishedSetMenu } from "@waitron/shared";
+import { markNewestOnSale, serveSetMenuCopy, setMenuCopyKey } from "./set-menu-copies.js";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
 import { profilesBlockedByZoneChange, readProfileZones } from "./profile-access.js";
@@ -849,11 +850,6 @@ export async function listZoneOffers(
   const published = await zoneLiveDocuments(tx, zoneId, options.asserted, [
     ...new Set(membership.map((row) => row.menuId)),
   ]);
-  const { offers: served, liveFields } = await applyLiveFields(
-    tx,
-    published.map((menu) => menu.document),
-    options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
-  );
   const at = options.at ?? new Date();
   const state =
     options.withDefault === false
@@ -869,6 +865,8 @@ export async function listZoneOffers(
       )
     : null;
   const ended = new Map(service?.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
+  const isOrderable = (menuId: string) =>
+    service === null || service.orderableMenuIds.includes(menuId);
   const menus: ServiceZoneOffers["menus"] = published.map(({ menuId, versionId, document }) => ({
     id: menuId,
     name: document.menuName,
@@ -876,11 +874,45 @@ export async function listZoneOffers(
     audience: (membership.find(
       (row) => row.menuId === menuId && row.periodId === service?.periodId,
     ) ?? membership.find((row) => row.menuId === menuId))!.audience,
-    orderable: service === null || service.orderableMenuIds.includes(menuId),
+    orderable: isOrderable(menuId),
     endedPeriodName: ended.get(menuId) ?? null,
     versionId,
     structure: document.root,
     home: document.home,
+  }));
+  const copies = new Map<
+    string,
+    { menuId: string; copy: PublishedSetMenu; versionIds: string[]; orderable: boolean }
+  >();
+  if (options.menuItemIds === undefined) {
+    for (const { menuId, document, versionId } of published) {
+      const orderable = isOrderable(menuId);
+      for (const [setMenuId, copy] of Object.entries(document.setMenus ?? {})) {
+        const key = setMenuCopyKey(setMenuId, copy);
+        const previous = copies.get(key);
+        if (previous === undefined) {
+          copies.set(key, { menuId: setMenuId, copy, versionIds: [versionId], orderable });
+        } else {
+          previous.versionIds.push(versionId);
+          previous.orderable ||= orderable;
+        }
+      }
+    }
+  }
+  const {
+    offers: served,
+    setMenuOffers,
+    liveFields,
+  } = await applyLiveFields(
+    tx,
+    published.map((menu) => menu.document),
+    options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
+    [...copies.values()].map(({ copy }) => copy),
+  );
+  const setMenus = [...copies].map(([key, { menuId, copy, versionIds, orderable }]) => ({
+    ...serveSetMenuCopy(key, menuId, copy, setMenuOffers.get(copy)!),
+    versionIds: versionIds.sort(),
+    orderable,
   }));
   return {
     defaultMenuId,
@@ -894,6 +926,7 @@ export async function listZoneOffers(
     },
     menus,
     offers: published.flatMap((menu) => served.get(menu.menuId)!),
+    setMenus: markNewestOnSale(setMenus),
     liveFields,
   };
 }
@@ -970,6 +1003,7 @@ export async function menuState(
   const live = await readLiveState(
     tx,
     published.map((menu) => menu.document),
+    true,
   );
   return {
     service: {

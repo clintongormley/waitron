@@ -242,6 +242,7 @@ const till = {
 };
 
 const offers: ZoneOffers = {
+  setMenus: [],
   service: {
     open: true,
     zoneOpen: true,

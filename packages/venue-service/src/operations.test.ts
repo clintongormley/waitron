@@ -1137,6 +1137,7 @@ describe("venue service routing", () => {
         },
         menus: [{ id: menu.id, name: "Terrace", isDefault: true, versionId }],
         offers: [],
+        setMenus: [],
         liveFields: NO_LIVE_FIELDS,
       });
       await expect(
@@ -2639,6 +2640,7 @@ describe("zone offers from the published menus", () => {
         },
         menus: [],
         offers: [],
+        setMenus: [],
         liveFields: NO_LIVE_FIELDS,
       });
     });
@@ -2738,6 +2740,7 @@ describe("zone offers from the published menus", () => {
         },
         menus: [],
         offers: [],
+        setMenus: [],
         liveFields: NO_LIVE_FIELDS,
       });
     });

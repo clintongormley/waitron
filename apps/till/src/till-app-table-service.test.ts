@@ -176,6 +176,7 @@ function zoneOffers(
   defaultMenuId: string | null,
 ): ZoneOffers {
   const body: ZoneOffers = {
+    setMenus: [],
     service: {
       open: true,
       zoneOpen: true,

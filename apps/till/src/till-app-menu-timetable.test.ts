@@ -81,6 +81,7 @@ function offers(
   serviceMode: ZoneOffers["context"]["serviceMode"] = "prepay",
 ): ZoneOffers {
   return {
+    setMenus: [],
     service: {
       open: true,
       zoneOpen: true,

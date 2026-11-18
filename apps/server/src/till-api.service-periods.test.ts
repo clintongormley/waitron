@@ -10,6 +10,11 @@ import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   invoiceSeries,
+  kitchenCourses,
+  menuItems,
+  products,
+  setMenuDishCourses,
+  setMenuLineCourses,
   parties,
   printJobs,
   sales,
@@ -24,7 +29,10 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  addMember,
+  addProducts,
   addProductToMenu,
+  requireMenuRoot,
   createMenu,
   createCategory,
   createProduct,
@@ -53,6 +61,7 @@ import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { createPrinter } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
+import { deleteCourse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { lateUnsentDishes, unsentDishLines } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -256,6 +265,76 @@ async function replacePeriodMembership(
 }
 
 describe("ordering uses period membership while browsing follows the timetable", () => {
+  it("serves a set-menu copy on the till and falls back to the dish's course after deleting its override", async () => {
+    const v = await setupVenue({ timetable: true });
+    at(MONDAY_13_00);
+    const { daily, soup, starters, mains, versionId } = await withTransaction(
+      suite.db,
+      async (tx) => {
+        const [{ id: starters }, { id: mains }] = await tx
+          .insert(kitchenCourses)
+          .values([
+            { name: "Starters", displayOrder: 0 },
+            { name: "Mains", displayOrder: 1 },
+          ])
+          .returning({ id: kitchenCourses.id });
+        const { id: soup } = await createProduct(tx, {
+          categoryId: null,
+          name: "Cup of soup",
+          pricingUnit: "each",
+          unitPrice: "7.00",
+          vatClass: "reduced",
+        });
+        await tx.update(products).set({ courseId: starters }).where(eq(products.id, soup));
+        const { id: daily } = await createMenu(tx, {
+          kind: "set_menu",
+          name: "Daily menu",
+          setPrice: "14.00",
+          setVatClass: "reduced",
+        });
+        await addProducts(tx, await requireMenuRoot(tx, daily), [soup]);
+        const [{ id: menuItemId }] = await tx
+          .select({ id: menuItems.id })
+          .from(menuItems)
+          .where(eq(menuItems.menuId, daily));
+        await tx.insert(setMenuDishCourses).values({ menuItemId, courseId: mains });
+        await tx
+          .update(setMenuLineCourses)
+          .set({ courseId: mains })
+          .where(eq(setMenuLineCourses.courseId, starters));
+        const fullMenu = v.menus["Midday menu"];
+        await addMember(tx, await requireMenuRoot(tx, fullMenu), {
+          kind: "set_menu",
+          menuId: daily,
+        });
+        return { daily, soup, starters, mains, versionId: await publishWorkingMenu(tx, fullMenu) };
+      },
+    );
+    const route = `/api/service-zones/${v.diningZone}/offers`;
+    const before = await sendAsTill(v, "GET", route);
+    expect(before.status).toBe(200);
+    expect(before.body.setMenus).toMatchObject([
+      {
+        menuId: daily,
+        versionIds: [versionId],
+        orderable: true,
+        offers: [{ productId: soup, available: true, courseId: mains, countsAsCourseId: mains }],
+      },
+    ]);
+
+    await withTransaction(suite.db, (tx) => deleteCourse(tx, mains));
+    const after = await sendAsTill(v, "GET", route);
+    expect(after.status).toBe(200);
+    expect(after.body.setMenus).toMatchObject([
+      {
+        menuId: daily,
+        versionIds: [versionId],
+        offers: [{ productId: soup, available: true, courseId: starters, countsAsCourseId: mains }],
+      },
+    ]);
+    expect(after.body.liveFields).not.toBe(before.body.liveFields);
+  });
+
   it("keeps a stored Breakfast menu line at its published price after its period has ended", async () => {
     const v = await setupVenue({ timetable: true });
     at(MONDAY_10_00);

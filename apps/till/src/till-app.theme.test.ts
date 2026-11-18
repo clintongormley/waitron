@@ -144,6 +144,7 @@ const counterTill = {
 };
 
 const counterOffers: ZoneOffers = {
+  setMenus: [],
   service: {
     open: true,
     zoneOpen: true,

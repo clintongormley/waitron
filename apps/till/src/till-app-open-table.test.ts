@@ -84,6 +84,7 @@ function menu(
     offer("offer-flan", "Flan", "desserts"),
   ].map((each) => ({ ...each, unitPrice: prices[each.name] ?? each.unitPrice }));
   return {
+    setMenus: [],
     service: {
       open: true,
       zoneOpen: true,

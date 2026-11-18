@@ -35,6 +35,7 @@ const till = {
 };
 
 const counterOffers: ZoneOffers = {
+  setMenus: [],
   service: {
     open: true,
     zoneOpen: true,

@@ -169,6 +169,7 @@ export {
   diffMenuDocuments,
   documentOffers,
   documentSetMenuOffers,
+  setMenuCopyHash,
   menuDocumentHash,
   NO_LIVE_FIELDS,
   readLiveState,

@@ -182,6 +182,31 @@ export interface LiveOffer extends Omit<MenuOffer, "ordering" | "combined">, Pub
   offeredModifiers: LiveOfferedModifier[];
 }
 
+export type ServedSetMenuOffer = LiveOffer & {
+  /** The counting course in this published copy. The live course controls sending. */
+  countsAsCourseId: string | null;
+  variantCountsAs: Record<string, string>;
+};
+
+export interface ServedSetMenuCopy {
+  /** The set menu id and the hash of the published copy. */
+  key: string;
+  menuId: string;
+  name: string;
+  terms: SetMenuTerms;
+  changedAt: string;
+  structure: DocumentList;
+  offers: ServedSetMenuOffer[];
+}
+
+export interface ServedSetMenu extends ServedSetMenuCopy {
+  /** The live versions that hold this copy, sorted by code units. */
+  versionIds: string[];
+  orderable: boolean;
+  /** The one copy a new bill takes when this set menu is on sale. */
+  newestOnSale: boolean;
+}
+
 export type MenuField =
   | { kind: "summary" }
   | { kind: "name"; audience: "staff" | "customer" | "kitchen"; language?: string }

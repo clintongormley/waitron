@@ -148,6 +148,7 @@ function burgerOffer(cheesePrice = "1.00"): TillMenuOffer {
 
 function menu(version: string, offers: TillMenuOffer[]): ZoneOffers {
   return {
+    setMenus: [],
     service: {
       open: true,
       zoneOpen: true,

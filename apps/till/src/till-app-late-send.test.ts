@@ -114,6 +114,7 @@ function menu(
 ): ZoneOffers {
   const running = phase === "breakfast" ? BREAKFAST_MENU.id : LUNCH.id;
   return {
+    setMenus: [],
     service: phase === "breakfast" ? breakfastRunning : lunchRunning,
     context: {
       dining: null,
