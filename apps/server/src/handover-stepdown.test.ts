@@ -50,11 +50,10 @@ const BINDING: HandoverBinding = {
 const ABORTS = [
   "controller",
   "pendingCardController",
-  "invoiceEmailController",
   "tenderRefundController",
   "jobRunner",
 ] as const;
-const LOOPS = ["pendingCardLoop", "tenderRefundLoop", "invoiceEmailLoop", "loop"] as const;
+const LOOPS = ["pendingCardLoop", "tenderRefundLoop", "loop"] as const;
 const STOPPERS = [
   "certificateDiagnosis",
   "spareSettings",

@@ -44,7 +44,6 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { readZoneContext, validateRetainedZoneClock } from "./venue-zone-context.js";
 import { attendanceJob } from "./attendance-loop.js";
 import { mailSendJob } from "./mail-sender.js";
-import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { menuActivationJob } from "./menu-activation.js";
@@ -109,10 +108,6 @@ vi.mock("./mail-sender.js", async (load) => {
     }),
   };
 });
-vi.mock("./invoice-email-worker.js", async (load) => {
-  const a = await load<typeof import("./invoice-email-worker.js")>();
-  return { ...a, runInvoiceEmailLoop: vi.fn(a.runInvoiceEmailLoop) };
-});
 vi.mock("./pending-card-recovery.js", async (load) => {
   const a = await load<typeof import("./pending-card-recovery.js")>();
   return { ...a, runPendingCardLoop: vi.fn(a.runPendingCardLoop) };
@@ -134,7 +129,6 @@ const PATH = "/management-api/venue-details/time-zone-repair";
 const PASSWORD = "syntheticPassword123";
 const duties = [
   attendanceJob,
-  runInvoiceEmailLoop,
   mailSendJob,
   runPendingCardLoop,
   runTenderRefundRecoveryLoop,
@@ -367,7 +361,6 @@ describe("startup zone admission", () => {
     }
     expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
     expect(attendanceJob).toHaveBeenCalledOnce();
-    expect(runInvoiceEmailLoop).toHaveBeenCalledOnce();
     expect(mailSendJob).toHaveBeenCalledOnce();
   });
   it.each(["", "Invalid/Zone?secret=must-not-escape", " Europe/Madrid", "Europe/Madrid "])(

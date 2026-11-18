@@ -14,6 +14,8 @@ import {
   deviceProfiles,
   devices,
   invoiceDeliveries,
+  outgoingMail,
+  readMail,
   invoiceSeries,
   printAgents,
   printJobs,
@@ -79,7 +81,8 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { departments } from "@waitron/venue-service";
 import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { claimInvoiceReceipt } from "./invoice-print.js";
-import { runInvoiceEmailPass } from "./invoice-email-worker.js";
+import { invoiceMail } from "./invoice-mail.js";
+import { runMailPass } from "./mail-sender.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 const LOCALE = "es-ES";
@@ -1687,18 +1690,34 @@ const retry = (
 
 /** One pass of the email worker, the mail transport answering `outcome` (or throwing). */
 async function emailWorkerPass(outcome: "sent" | "failed" | "throws") {
-  return runInvoiceEmailPass({
+  return runMailPass({
     db: suite.db,
-    holder: "server-one",
+    owners: [
+      invoiceMail({
+        db: suite.db,
+        readDocument: async () => ({}) as ReceiptDocumentInput,
+        render: async () => ({ subject: "Invoice", text: "Invoice attached" }),
+      }),
+    ],
     now: () => new Date(),
-    readDocument: () => Promise.resolve({} as ReceiptDocumentInput),
+    isPrimary: () => true,
+    signal: new AbortController().signal,
+    resolveDelivery: async () => ({
+      mode: "smtp",
+      smtp: { url: "smtp://mail.example.test", from: "sender@example.test" },
+    }),
+    log: () => {},
     send: () =>
       outcome === "throws"
         ? Promise.reject(new Error("connection reset"))
         : Promise.resolve(
             outcome === "sent"
               ? { status: "sent" as const }
-              : { status: "failed" as const, failureCode: "transport_failed" as const },
+              : {
+                  status: "rejected" as const,
+                  reason: "email.test_refused" as const,
+                  serverRefused: true,
+                },
           ),
   });
 }
@@ -1711,9 +1730,9 @@ async function endedEmail(v: Venue, orderId: string, status: "failed" | "unknown
   if (status === "failed") {
     // The worker queues automatic retries until its fifth attempt; this one is the fifth.
     await suite.db
-      .update(invoiceDeliveries)
-      .set({ attempts: 4 })
-      .where(eq(invoiceDeliveries.id, id));
+      .update(outgoingMail)
+      .set({ params: { attempt: 5 } })
+      .where(eq(outgoingMail.dedupeKey, `invoice:${id}`));
   }
   await emailWorkerPass(status === "unknown" ? "throws" : status);
   const [row] = await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, id));
@@ -2107,9 +2126,9 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/retry (email again)", () =>
     const retried = await retry(v, orderId, failed, key);
     expect(retried.status).toBe(200);
     await suite.db
-      .update(invoiceDeliveries)
-      .set({ attempts: 4 })
-      .where(eq(invoiceDeliveries.saleId, saleId));
+      .update(outgoingMail)
+      .set({ params: { attempt: 5 } })
+      .where(eq(outgoingMail.dedupeKey, `invoice:${retried.body!.id}`));
     await emailWorkerPass("failed");
     const rows = await deliveryRows(saleId);
     expect(rows.map((row) => row.status)).toEqual(["failed", "failed"]);
@@ -2162,11 +2181,12 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/retry (email again)", () =>
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
     const first = await endedEmail(v, orderId, "failed");
-    expect((await retry(v, orderId, first)).status).toBe(200);
+    const retried = await retry(v, orderId, first);
+    expect(retried.status).toBe(200);
     await suite.db
-      .update(invoiceDeliveries)
-      .set({ attempts: 4 })
-      .where(eq(invoiceDeliveries.saleId, saleId));
+      .update(outgoingMail)
+      .set({ params: { attempt: 5 } })
+      .where(eq(outgoingMail.dedupeKey, `invoice:${retried.body!.id}`));
     await emailWorkerPass("failed");
     const rows = await deliveryRows(saleId);
     expect(rows.map((row) => row.status)).toEqual(["failed", "failed"]);
@@ -2217,7 +2237,7 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/to-receipt (paper instead o
       ["receipt", "original", "queued", null],
     ]);
     expect(answer.body).toMatchObject({ id: rows[1]!.id, medium: "receipt" });
-    // The worker finds nothing left to send.
+    expect(await readMail(suite.db, `invoice:${email}`)).toMatchObject({ status: "cancelled" });
     expect(await emailWorkerPass("sent")).toEqual({ processed: false });
   });
 

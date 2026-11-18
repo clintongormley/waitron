@@ -65,7 +65,7 @@ export interface MailKindOwner<Prepared = unknown> {
     prepared?: Prepared,
   ): Promise<void>;
   sweep?: {
-    due(db: Database, now: Date): Promise<{ now: boolean; nextAt: Date | null }>;
+    due(db: Transaction, now: Date): Promise<{ now: boolean; nextAt: Date | null }>;
     run(tx: Transaction, now: Date): Promise<void>;
   };
 }
@@ -73,6 +73,17 @@ export type MailTransport = (
   smtp: SmtpConnection,
   message: Omit<SendMailOptions, "from">,
 ) => Promise<SmtpSendOutcome>;
+
+export function smtpMailOutcome(
+  sent: SmtpSendOutcome,
+): Exclude<MailSettlement, { status: "expired" }> {
+  if (sent.status === "sent") return sent;
+  if (sent.status === "rejected") {
+    return { status: "rejected", failureCode: sent.reason, serverRefused: sent.serverRefused };
+  }
+  return { status: "unknown", failureCode: sent.reason };
+}
+
 export interface MailSenderDeps {
   bus?: LiveEvents;
   db: Database;
@@ -423,12 +434,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     } catch {
       sent = { status: "unknown", reason: "email.test_refused" };
     }
-    outcome =
-      sent.status === "sent"
-        ? sent
-        : sent.status === "rejected"
-          ? { status: "rejected", failureCode: sent.reason, serverRefused: sent.serverRefused }
-          : { status: "unknown", failureCode: sent.reason };
+    outcome = smtpMailOutcome(sent);
   }
   const settled = outcome!;
   if (settled.status === "sent" && delivery.mode === "local_capture" && deps.bus)
@@ -454,7 +460,23 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
         ),
       )
       .returning({ id: outgoingMail.id });
-    if (saved) await owner.settle(tx, mail, settled, now, prepared);
+    if (saved) {
+      await owner.settle(tx, mail, settled, now, prepared);
+    } else if (mail.kind === "invoice") {
+      const [abandoned] = await tx
+        .select({ id: outgoingMail.id })
+        .from(outgoingMail)
+        .where(
+          and(
+            eq(outgoingMail.id, mail.id),
+            eq(outgoingMail.status, "unknown"),
+            eq(outgoingMail.failureCode, "mail.claim_abandoned"),
+            eq(outgoingMail.claimToken, mail.claimToken!),
+          ),
+        );
+      // The invoice delivery keeps this report as history if another generation started.
+      if (abandoned) await owner.settle(tx, mail, settled, now, prepared);
+    }
   });
   if (settled.status !== "sent")
     deps.log("error", "mail.send_failed", {
@@ -520,7 +542,9 @@ export function mailSendJob(
   return {
     name: "mail.send",
     applies: deps.isPrimary,
-    wakeOn: ["outgoing_mail"],
+    wakeOn: deps.owners.some((owner) => owner.kind === "invoice" && owner.sweep)
+      ? ["outgoing_mail", "invoice_deliveries", "print_jobs"]
+      : ["outgoing_mail"],
     minSleepMs: 500,
     maxSleepMs: deps.maxSleepMs,
     backoff: { firstMs: 5_000, maxMs: 60_000 },

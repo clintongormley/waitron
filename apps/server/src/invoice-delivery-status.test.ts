@@ -6,6 +6,7 @@ import {
   CORE_MIGRATIONS,
   invoiceDeliveries,
   invoiceSeries,
+  outgoingMail,
   printAgents,
   printJobs,
   printers,
@@ -252,7 +253,24 @@ async function attempt(
   pagePrinterId?: string,
 ): Promise<InvoiceDelivery> {
   const delivery = await reserve(saleId, medium, pagePrinterId);
-  if (status !== "queued") {
+  if (medium === "email" && status === "sending") {
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(invoiceDeliveries)
+        .set({ status: "sending" })
+        .where(eq(invoiceDeliveries.id, delivery.id));
+      await tx
+        .update(outgoingMail)
+        .set({
+          status: "sending",
+          claimToken: randomUUID(),
+          claimedAt: START.toISOString(),
+          recipient: delivery.recipient,
+          attempts: 1,
+        })
+        .where(eq(outgoingMail.dedupeKey, `invoice:${delivery.id}`));
+    });
+  } else if (status !== "queued") {
     const held = await claim(v, delivery);
     if (status === "sent") await report(held, { status: "sent" });
     if (status === "failed") {

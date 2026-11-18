@@ -13,6 +13,8 @@ import {
   nodes,
   invoiceSeries,
   invoiceDeliveries,
+  outgoingMail,
+  readMail,
   printJobs,
   printAgents,
   printers,
@@ -42,14 +44,16 @@ import {
   reportInvoicePrintJob,
 } from "./invoice-print.js";
 import { venueModuleConfig } from "./provision.js";
-import { runInvoiceEmailPass, runInvoiceEmailLoop } from "./invoice-email-worker.js";
-import { readInvoiceEmailPrivacy } from "./invoice-email.js";
+import { invoiceMail } from "./invoice-mail.js";
+import { abandonMailClaims, runMailPass, type MailSenderDeps } from "./mail-sender.js";
+import { readInvoiceEmailPrivacy, type InvoiceEmailPrivacy } from "./invoice-email.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as documentFixture } from "./testing/full-invoice-fixture.js";
 import type { InvoiceDeliveryOutcome } from "./invoice-delivery.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import {
   reserveInvoiceDelivery,
+  startInvoiceEmail,
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
   invoiceDeliveryClaimsDue,
@@ -158,6 +162,18 @@ describe("invoice delivery reservation", () => {
       await withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
     ).toEqual(first);
     expect(await rows()).toHaveLength(1);
+    expect(await suite.db.select().from(outgoingMail)).toMatchObject([
+      {
+        kind: "invoice",
+        dedupeKey: `invoice:${first.id}`,
+        subjectId: first.id,
+        personId: null,
+        params: { attempt: 1 },
+        queuedAt: first.createdAt,
+        nextAttemptAt: first.nextAttemptAt,
+        notAfter: new Date(Date.parse(first.createdAt) + 7 * 86_400_000).toISOString(),
+      },
+    ]);
   });
 
   it("reserves an A4 original with only the page-printer reference and replays it", async () => {
@@ -450,9 +466,20 @@ async function queued() {
 }
 /** A reservation takes the real time; the suite's claims use fixed times, so date it to `start`. */
 async function dueAtStart(id: string) {
-  await suite.db.execute(
-    sql`update invoice_deliveries set next_attempt_at = ${start.toISOString()} where id = ${id}`,
-  );
+  await withTransaction(suite.db, async (tx) => {
+    await tx
+      .update(invoiceDeliveries)
+      .set({ nextAttemptAt: start.toISOString() })
+      .where(eq(invoiceDeliveries.id, id));
+    await tx
+      .update(outgoingMail)
+      .set({
+        queuedAt: start.toISOString(),
+        nextAttemptAt: start.toISOString(),
+        notAfter: "2026-10-14T12:00:00.000Z",
+      })
+      .where(eq(outgoingMail.dedupeKey, `invoice:${id}`));
+  });
 }
 async function claim(id: string, holder = "server-one", now = start) {
   return withTransaction(suite.db, (tx) => claimInvoiceDelivery(tx, id, holder, now));
@@ -1227,6 +1254,28 @@ describe("receipt delivery reservation", () => {
     },
   );
 
+  it("ends a lapsed receipt claim on a mail pass with no mail queued", async () => {
+    const ctx = await receiptClaimSetup();
+    await pulled(ctx);
+    expect(await claimReceipt(ctx)).toBeDefined();
+    expect(
+      await runInvoiceMailPass({
+        db: suite.db,
+        now: () => expired,
+        readDocument: async () => {
+          throw new Error("No email is due");
+        },
+        send: async () => ({ status: "sent" }),
+      }),
+    ).toEqual({ processed: false });
+    expect((await rows())[0]).toMatchObject({ status: "unknown", failure_code: "timeout" });
+    expect((await suite.db.select().from(printJobs))[0]).toMatchObject({
+      status: "failed",
+      lastError: "timeout",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+    });
+  });
+
   it.each(["sent", "failed"] as const)(
     "projects latest late receipt %s before retry",
     async (status) => {
@@ -1939,197 +1988,179 @@ describe("invoice email automatic retries", () => {
   });
 });
 
-describe("invoice email worker pass", () => {
-  it("stops the default idle wait when shutdown arrives", async () => {
-    const controller = new AbortController();
-    let entered!: () => void;
-    const started = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
-    let iterations = 0;
-    const work = runInvoiceEmailLoop({
-      db: suite.db,
-      holder: "server-one",
-      now: () => start,
-      readDocument: documentFor,
-      send: async () => {
-        throw new Error("Secondary cannot send");
-      },
-      signal: controller.signal,
-      isPrimary: () => {
-        iterations++;
-        entered();
-        return false;
-      },
-      onError: () => {
-        throw new Error("Unexpected loop failure");
-      },
-    });
-    try {
-      await within(started);
-      controller.abort();
-      await within(work);
-      expect(iterations).toBe(1);
-    } finally {
-      controller.abort();
-      await within(work);
-    }
-  });
+function runInvoiceMailPass(
+  deps: Parameters<typeof invoiceMail>[0] & {
+    now: () => Date;
+    send(message: {
+      recipient: string;
+      document: ReceiptDocumentInput;
+      privacy?: InvoiceEmailPrivacy;
+    }): Promise<InvoiceDeliveryOutcome>;
+    signal?: AbortSignal;
+  },
+) {
+  let content!: Omit<Parameters<typeof deps.send>[0], "recipient">;
+  const options: MailSenderDeps = {
+    ...deps,
+    signal: deps.signal ?? new AbortController().signal,
+    owners: [
+      invoiceMail({
+        ...deps,
+        render: async (message) => {
+          content = message;
+          return { subject: "Invoice", text: "Invoice attached" };
+        },
+      }),
+    ],
+    isPrimary: () => true,
+    log: () => {},
+    resolveDelivery: async () => ({
+      mode: "smtp",
+      smtp: { url: "smtp://mail.example.test", from: "sender@example.test" },
+    }),
+    send: async (_smtp, message) => {
+      const outcome = await deps.send({ ...content, recipient: String(message.to) });
+      if (outcome.status === "sent") return outcome;
+      if (outcome.status === "failed") {
+        return { status: "rejected", reason: "email.test_refused", serverRefused: true };
+      }
+      return {
+        status: "unknown",
+        reason: outcome.failureCode === "timeout" ? "email.test_timeout" : "email.test_refused",
+      };
+    },
+  };
+  return runMailPass(options);
+}
 
-  it("does not claim or send when already stopped", async () => {
-    await queued();
-    const controller = new AbortController();
-    controller.abort();
-    await runInvoiceEmailLoop({
-      db: suite.db,
-      holder: "server-one",
-      now: () => start,
-      readDocument: documentFor,
-      send: async () => {
-        throw new Error("Stopped worker cannot send");
-      },
-      signal: controller.signal,
-      isPrimary: () => true,
-      onError: () => {
-        throw new Error("Unexpected loop failure");
-      },
-    });
-    expect((await rows())[0]).toMatchObject({ status: "queued", attempts: 0 });
+async function claimMailAt(id: string, at: string) {
+  await withTransaction(suite.db, async (tx) => {
+    const delivery = await startInvoiceEmail(tx, id);
+    await tx
+      .update(outgoingMail)
+      .set({
+        status: "sending",
+        claimToken: randomUUID(),
+        claimedAt: at,
+        recipient: delivery!.recipient,
+        attempts: 1,
+      })
+      .where(eq(outgoingMail.dedupeKey, `invoice:${id}`));
   });
-  it("checks primary status on every iteration before claiming invoice email", async () => {
-    await queued();
-    const controller = new AbortController();
-    let primary = false;
-    let sleeps = 0;
-    let sent = 0;
-    await runInvoiceEmailLoop({
-      db: suite.db,
-      holder: "server-one",
-      now: () => start,
-      readDocument: documentFor,
-      send: async () => {
-        sent++;
-        return { status: "sent" };
-      },
-      signal: controller.signal,
-      isPrimary: () => primary,
-      onError: () => {
-        throw new Error("Unexpected loop failure");
-      },
-      sleep: async () => {
-        if (sleeps++ === 0) {
-          expect(sent).toBe(0);
-          expect((await rows())[0]).toMatchObject({ status: "queued", attempts: 0 });
-          primary = true;
-        } else controller.abort();
-      },
-    });
-    expect(sent).toBe(1);
-    expect((await rows())[0]).toMatchObject({ status: "sent", attempts: 1 });
-  });
+}
 
-  it("finishes and records an in-flight send before shutdown without another iteration", async () => {
-    await queued();
-    const controller = new AbortController();
-    let answer!: (outcome: InvoiceDeliveryOutcome) => void;
-    const pending = new Promise<InvoiceDeliveryOutcome>((resolve) => {
-      answer = resolve;
-    });
-    let started!: () => void;
-    const sending = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    let finished = false;
-    let slept = false;
-    const work = runInvoiceEmailLoop({
-      db: suite.db,
-      holder: "server-one",
-      now: () => start,
-      readDocument: documentFor,
-      send: async () => {
-        started();
-        return pending;
-      },
-      signal: controller.signal,
-      isPrimary: () => true,
-      onError: () => {
-        throw new Error("Unexpected loop failure");
-      },
-      sleep: async () => {
-        slept = true;
-      },
-    }).then(() => {
-      finished = true;
-    });
-    try {
-      await within(
-        Promise.race([
-          sending,
-          work.then(() => {
-            throw new Error("Worker ended before send");
-          }),
-        ]),
+describe("invoice mail pass", () => {
+  it.each(["queued", "released"] as const)(
+    "frees the sale if a %s mail reaches its seven-day deadline",
+    async (state) => {
+      const { sale, delivery } = await queued();
+      const controller = new AbortController();
+      const options = {
+        db: suite.db,
+        readDocument: documentFor,
+        send: async () => ({ status: "sent" as const }),
+      };
+      if (state === "released") {
+        await runInvoiceMailPass({
+          ...options,
+          now: () => start,
+          signal: controller.signal,
+          readDocument: async (tx, delivery) => {
+            controller.abort();
+            return documentFor(tx, delivery);
+          },
+        });
+        expect((await rows())[0]).toMatchObject({ status: "sending" });
+        expect(await readMail(suite.db, `invoice:${delivery.id}`)).toMatchObject({
+          status: "pending",
+          claimToken: null,
+          attempts: 0,
+        });
+      }
+      await runInvoiceMailPass({ ...options, now: () => new Date("2026-10-14T12:00:00.000Z") });
+      expect((await rows())[0]).toMatchObject({
+        status: "failed",
+        failure_code: "transport_failed",
+      });
+      expect(await readMail(suite.db, `invoice:${delivery.id}`)).toMatchObject({
+        status: "expired",
+        attempts: 0,
+      });
+      const next = await withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, email()),
       );
-      controller.abort();
-      await Promise.resolve();
-      expect(finished).toBe(false);
-      expect((await rows())[0]).toMatchObject({ status: "sending" });
-    } finally {
-      controller.abort();
-      answer({ status: "sent" });
-      await within(work);
+      expect(next).toMatchObject({ status: "queued", generation: 2 });
+    },
+  );
+
+  it("preserves the retry number across five refusals and starts a person's request at one", async () => {
+    const { sale } = await queued();
+    for (const [index, seconds] of [0, 5, 35, 155, 755].entries()) {
+      const pending = (await rows())[index]!;
+      expect(await readMail(suite.db, `invoice:${pending.id}`)).toMatchObject({
+        status: "pending",
+        params: { attempt: index + 1 },
+      });
+      await runInvoiceMailPass({
+        db: suite.db,
+        now: () => new Date(start.getTime() + seconds * 1_000),
+        readDocument: documentFor,
+        send: async () => ({ status: "failed", failureCode: "transport_failed" }),
+      });
     }
-    expect(slept).toBe(false);
-    expect((await rows())[0]).toMatchObject({ status: "sent", reported_outcome: "sent" });
+    expect((await rows()).map((row) => [row.status, row.attempts])).toEqual([
+      ["failed", 1],
+      ["failed", 2],
+      ["failed", 3],
+      ["failed", 4],
+      ["failed", 5],
+    ]);
+    expect(await suite.db.select().from(outgoingMail)).toHaveLength(5);
+    const next = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, email()),
+    );
+    expect(await readMail(suite.db, `invoice:${next.id}`)).toMatchObject({
+      status: "pending",
+      params: { attempt: 1 },
+    });
   });
 
-  it("contains a pass failure and retries the still-queued delivery on the next iteration", async () => {
-    await queued();
-    const controller = new AbortController();
-    const failure = new Error("Unexpected clock failure");
-    let broken = true;
-    const errors: unknown[] = [];
-    await runInvoiceEmailLoop({
-      db: suite.db,
-      holder: "server-one",
-      now: () => {
-        if (broken) throw failure;
-        return start;
-      },
-      readDocument: documentFor,
-      send: async () => {
-        controller.abort();
-        return { status: "sent" };
-      },
-      signal: controller.signal,
-      isPrimary: () => true,
-      onError: (error) => {
-        errors.push(error);
-      },
-      sleep: async () => {
-        broken = false;
-      },
+  it("ends a fresh invoice mail claim as uncertain when boot abandons it", async () => {
+    const { delivery } = await queued();
+    await claimMailAt(delivery.id, start.toISOString());
+    await withTransaction(suite.db, (tx) =>
+      abandonMailClaims(tx, [invoiceMail({ db: suite.db, readDocument: documentFor })], start),
+    );
+    expect((await rows())[0]).toMatchObject({
+      status: "unknown",
+      failure_code: "timeout",
+      attempts: 1,
+      expired_at: start.toISOString(),
     });
-    expect(errors).toEqual([failure]);
-    expect((await rows())[0]).toMatchObject({ status: "sent", attempts: 1 });
+    expect(await readMail(suite.db, `invoice:${delivery.id}`)).toMatchObject({
+      status: "unknown",
+      failureCode: "mail.claim_abandoned",
+    });
   });
+
   it("expires abandoned claims before selecting new work without replaying them", async () => {
     const { delivery } = await queued();
-    await claim(delivery.id);
+    await claimMailAt(delivery.id, start.toISOString());
     const options = {
       db: suite.db,
-      holder: "server-two",
       readDocument: documentFor,
       send: async (): Promise<InvoiceDeliveryOutcome> => {
         throw new Error("Uncertain replay");
       },
     };
     expect(
-      await runInvoiceEmailPass({ ...options, now: () => new Date(start.getTime() + 59_999) }),
+      await runInvoiceMailPass({ ...options, now: () => new Date(start.getTime() + 59_999) }),
     ).toEqual({ processed: false });
     expect((await rows())[0]!.status).toBe("sending");
-    expect(await runInvoiceEmailPass({ ...options, now: () => expired })).toEqual({
-      processed: false,
+    expect(await runInvoiceMailPass({ ...options, now: () => expired })).toEqual({
+      processed: true,
+      mailId: null,
+      subjectId: null,
     });
     expect(await rows()).toHaveLength(1);
     expect((await rows())[0]).toMatchObject({
@@ -2140,20 +2171,21 @@ describe("invoice email worker pass", () => {
   });
 
   it("marks the submitted document as a duplicate from delivery history", async () => {
-    const { sale, delivery } = await queued();
-    const original = (await claim(delivery.id))!;
-    await withTransaction(suite.db, (tx) =>
-      reportInvoiceDelivery(tx, original, { status: "sent" }, start),
-    );
+    const { sale } = await queued();
+    await runInvoiceMailPass({
+      db: suite.db,
+      now: () => start,
+      readDocument: documentFor,
+      send: async () => ({ status: "sent" }),
+    });
     const copy = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, email()),
     );
     await dueAtStart(copy.id);
     let duplicate: boolean | undefined;
-    await runInvoiceEmailPass({
+    await runInvoiceMailPass({
       db: suite.db,
-      holder: "server-one",
-      now: () => new Date("2026-12-01T00:00:00.000Z"),
+      now: () => start,
       readDocument: documentFor,
       send: async (message) => {
         duplicate = message.document.duplicate;
@@ -2171,9 +2203,8 @@ describe("invoice email worker pass", () => {
   it("sanitises a projection failure without a send or an automatic replay", async () => {
     await queued();
     let transported = false;
-    await runInvoiceEmailPass({
+    await runInvoiceMailPass({
       db: suite.db,
-      holder: "server-one",
       now: () => start,
       readDocument: async () => {
         throw new Error("Saved customer private data");
@@ -2199,10 +2230,9 @@ describe("invoice email worker pass", () => {
     const backend = { filedReceiptFor: async () => filed } as unknown as FiscalBackend;
     const sent: unknown[] = [];
     const pass = () =>
-      runInvoiceEmailPass({
+      runInvoiceMailPass({
         db: suite.db,
-        holder: "server-one",
-        now: () => new Date("2026-12-01T00:00:00.000Z"),
+        now: () => start,
         readDocument: documentFor,
         readPrivacy: (tx, queuedEmail) => readInvoiceEmailPrivacy(backend, tx, queuedEmail.saleId),
         send: async (message) => {
@@ -2223,13 +2253,21 @@ describe("invoice email worker pass", () => {
     };
 
     await store("privacy@example.com", "https://example.com/privacy");
-    expect(await pass()).toEqual({ processed: true, deliveryId: delivery.id });
+    expect(await pass()).toEqual({
+      processed: true,
+      mailId: expect.any(String),
+      subjectId: delivery.id,
+    });
     await store("rights@example.com", "https://example.com/rights");
     const second = await queueCopy();
-    expect(await pass()).toEqual({ processed: true, deliveryId: second });
+    expect(await pass()).toEqual({
+      processed: true,
+      mailId: expect.any(String),
+      subjectId: second,
+    });
     await store(null, null);
     const third = await queueCopy();
-    expect(await pass()).toEqual({ processed: true, deliveryId: third });
+    expect(await pass()).toEqual({ processed: true, mailId: expect.any(String), subjectId: third });
 
     expect(sent).toEqual([
       {
@@ -2249,9 +2287,8 @@ describe("invoice email worker pass", () => {
   it("sanitises a privacy read failure without a send or an automatic replay", async () => {
     await queued();
     let transported = false;
-    await runInvoiceEmailPass({
+    await runInvoiceMailPass({
       db: suite.db,
-      holder: "server-one",
       now: () => start,
       readDocument: documentFor,
       readPrivacy: async () => {
@@ -2288,9 +2325,8 @@ describe("invoice email worker pass", () => {
         savePrivacyContact(outside, { privacyEmail: "privacy@example.com" }, null),
       ),
     );
-    await runInvoiceEmailPass({
+    await runInvoiceMailPass({
       db: suite.db,
-      holder: "server-one",
       now: () => start,
       readDocument: async (tx, delivery) => {
         reads.push({ read: "document", saleId: delivery.saleId });
@@ -2359,9 +2395,8 @@ describe("invoice email worker pass", () => {
       started = resolve;
     });
     let submitted: { recipient: string; document: ReceiptDocumentInput } | undefined;
-    const work = runInvoiceEmailPass({
+    const work = runInvoiceMailPass({
       db: suite.db,
-      holder: "server-one",
       now: () => start,
       readDocument: documentFor,
       send: async (message) => {
@@ -2381,8 +2416,17 @@ describe("invoice email worker pass", () => {
       );
       expect((await rows())[0]).toMatchObject({
         status: "sending",
+        attempts: 0,
+        claim_token_hash: null,
+        claimed_at: null,
+        claimed_by: null,
+        claimed_agent_id: null,
+      });
+      expect(await readMail(suite.db, `invoice:${delivery.id}`)).toMatchObject({
+        status: "sending",
         attempts: 1,
-        claimed_by: "server-one",
+        claimToken: expect.any(String),
+        claimedAt: start.toISOString(),
       });
       expect(submitted).toMatchObject({
         recipient: "customer@example.test",
@@ -2430,9 +2474,8 @@ describe("invoice email worker pass", () => {
       expect(another.saleId).not.toBe(sale.saleId);
       expect(await suite.db.select().from(sales)).toHaveLength(2);
       expect(
-        await runInvoiceEmailPass({
+        await runInvoiceMailPass({
           db: suite.db,
-          holder: "server-two",
           now: () => start,
           readDocument: documentFor,
           send: async () => {
@@ -2456,51 +2499,53 @@ describe("invoice email worker pass", () => {
     const { delivery } = await queued();
     const options = {
       db: suite.db,
-      holder: "server-one",
       now: () => new Date(start.getTime() - 1),
       readDocument: documentFor,
       send: async (): Promise<InvoiceDeliveryOutcome> => {
         throw new Error("Early transport");
       },
     };
-    expect(await runInvoiceEmailPass(options)).toEqual({ processed: false });
+    expect(await runInvoiceMailPass(options)).toEqual({ processed: false });
     expect((await rows())[0]).toMatchObject({ id: delivery.id, status: "queued", attempts: 0 });
     await suite.db
       .update(invoiceDeliveries)
       .set({ medium: "a4", recipient: null })
       .where(eq(invoiceDeliveries.id, delivery.id));
-    expect(await runInvoiceEmailPass({ ...options, now: () => start })).toEqual({
-      processed: false,
+    expect(await runInvoiceMailPass({ ...options, now: () => start })).toEqual({
+      processed: true,
+      mailId: expect.any(String),
+      subjectId: delivery.id,
+    });
+    expect(await readMail(suite.db, `invoice:${delivery.id}`)).toMatchObject({
+      status: "cancelled",
     });
     expect((await rows())[0]).toMatchObject({ status: "queued", attempts: 0 });
   });
 
   it("records a certain refusal and claims its scheduled retry only when due", async () => {
     const { delivery } = await queued();
-    const first = await runInvoiceEmailPass({
+    const first = await runInvoiceMailPass({
       db: suite.db,
-      holder: "server-one",
       now: () => start,
       readDocument: documentFor,
       send: async () => ({ status: "failed", failureCode: "transport_failed" }),
     });
-    expect(first).toEqual({ processed: true, deliveryId: delivery.id });
+    expect(first).toEqual({ processed: true, mailId: expect.any(String), subjectId: delivery.id });
     expect(await rows()).toMatchObject([
       { status: "failed", attempts: 1 },
       { status: "queued", attempts: 1, next_attempt_at: "2026-10-07T12:00:05.000Z" },
     ]);
     const options = {
       db: suite.db,
-      holder: "server-two",
       readDocument: documentFor,
       send: async (): Promise<InvoiceDeliveryOutcome> => ({ status: "sent" }),
     };
     expect(
-      await runInvoiceEmailPass({ ...options, now: () => new Date("2026-10-07T12:00:04.999Z") }),
+      await runInvoiceMailPass({ ...options, now: () => new Date("2026-10-07T12:00:04.999Z") }),
     ).toEqual({ processed: false });
     expect(
-      await runInvoiceEmailPass({ ...options, now: () => new Date("2026-10-07T12:00:05.000Z") }),
-    ).toEqual({ processed: true, deliveryId: (await rows())[1]!.id });
+      await runInvoiceMailPass({ ...options, now: () => new Date("2026-10-07T12:00:05.000Z") }),
+    ).toEqual({ processed: true, mailId: expect.any(String), subjectId: (await rows())[1]!.id });
     expect((await rows())[1]).toMatchObject({
       status: "sent",
       attempts: 2,
@@ -2511,9 +2556,8 @@ describe("invoice email worker pass", () => {
 
   it("turns an unexpected transport throw into sanitised uncertainty without replay", async () => {
     await queued();
-    await runInvoiceEmailPass({
+    await runInvoiceMailPass({
       db: suite.db,
-      holder: "server-one",
       now: () => start,
       readDocument: documentFor,
       send: async () => {
@@ -2529,60 +2573,80 @@ describe("invoice email worker pass", () => {
     expect(JSON.stringify(await rows())).not.toContain("private:secret");
   });
 
-  it("keeps an expired worker result historical once a new attempt is reserved", async () => {
-    const { sale } = await queued();
-    let answer!: (outcome: InvoiceDeliveryOutcome) => void;
-    let started!: () => void;
-    const sending = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const waiting = new Promise<InvoiceDeliveryOutcome>((resolve) => {
-      answer = resolve;
-    });
-    const work = runInvoiceEmailPass({
-      db: suite.db,
-      holder: "server-one",
-      now: () => start,
-      readDocument: documentFor,
-      send: async () => {
-        started();
-        return waiting;
-      },
-    });
-    let nextId!: string;
-    try {
-      await within(
-        Promise.race([
-          sending,
-          work.then(() => {
-            throw new Error("Worker ended before transport");
+  it.each([true, false])(
+    "keeps an expired mail result as history only with its retained token (%s)",
+    async (sameToken) => {
+      const { sale, delivery } = await queued();
+      let answer!: (outcome: InvoiceDeliveryOutcome) => void;
+      let started!: () => void;
+      const sending = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const waiting = new Promise<InvoiceDeliveryOutcome>((resolve) => {
+        answer = resolve;
+      });
+      const work = runInvoiceMailPass({
+        db: suite.db,
+        now: () => start,
+        readDocument: documentFor,
+        send: async () => {
+          started();
+          return waiting;
+        },
+      });
+      let nextId!: string;
+      try {
+        await within(
+          Promise.race([
+            sending,
+            work.then(() => {
+              throw new Error("Worker ended before transport");
+            }),
+          ]),
+        );
+        await within(
+          runInvoiceMailPass({
+            db: suite.db,
+            now: () => expired,
+            readDocument: documentFor,
+            send: async () => {
+              throw new Error("An abandoned claim cannot send again");
+            },
           }),
-        ]),
-      );
-      await within(expire());
-      const next = await withTransaction(suite.db, (tx) =>
-        reserveInvoiceDelivery(tx, sale.saleId, email()),
-      );
-      nextId = next.id;
-    } finally {
-      answer({ status: "sent" });
-      await work;
-    }
-    expect(await rows()).toMatchObject([
-      { status: "unknown", reported_outcome: "sent" },
-      { id: nextId, status: "queued", attempts: 0, reported_at: null },
-    ]);
-  });
+        );
+        if (!sameToken) {
+          await suite.db
+            .update(outgoingMail)
+            .set({ claimToken: randomUUID() })
+            .where(eq(outgoingMail.dedupeKey, `invoice:${delivery.id}`));
+        }
+        const next = await withTransaction(suite.db, (tx) =>
+          reserveInvoiceDelivery(tx, sale.saleId, email()),
+        );
+        nextId = next.id;
+      } finally {
+        answer({ status: "sent" });
+        await work;
+      }
+      expect(await rows()).toMatchObject([
+        { status: "unknown", reported_outcome: sameToken ? "sent" : null },
+        { id: nextId, status: "queued", attempts: 0, reported_at: null },
+      ]);
+      expect(await readMail(suite.db, `invoice:${delivery.id}`)).toMatchObject({
+        status: "unknown",
+        failureCode: "mail.claim_abandoned",
+      });
+    },
+  );
   it("sends, as after a backward step, a queued email whose next attempt lies 400 days ahead on the worker's next pass", async () => {
     const { delivery } = await queued();
     await suite.db.execute(
-      sql`update invoice_deliveries set next_attempt_at = ${new Date(start.getTime() + 400 * 86_400_000).toISOString()} where id = ${delivery.id}`,
+      sql`update outgoing_mail set next_attempt_at = ${new Date(start.getTime() + 400 * 86_400_000).toISOString()} where subject_id = ${delivery.id}`,
     );
     const sent: string[] = [];
     expect(
-      await runInvoiceEmailPass({
+      await runInvoiceMailPass({
         db: suite.db,
-        holder: "server-one",
         now: () => start,
         readDocument: documentFor,
         send: async () => {
@@ -2590,19 +2654,15 @@ describe("invoice email worker pass", () => {
           return { status: "sent" };
         },
       }),
-    ).toEqual({ processed: true, deliveryId: delivery.id });
+    ).toEqual({ processed: true, mailId: expect.any(String), subjectId: delivery.id });
     expect(sent).toEqual([delivery.id]);
   });
 
   it("expires on the worker's next pass, as after a backward step, a claim taken 400 days ahead", async () => {
     const { delivery } = await queued();
-    await claim(delivery.id);
-    await suite.db.execute(
-      sql`update invoice_deliveries set claimed_at = ${new Date(start.getTime() + 400 * 86_400_000).toISOString()} where id = ${delivery.id}`,
-    );
-    await runInvoiceEmailPass({
+    await claimMailAt(delivery.id, new Date(start.getTime() + 400 * 86_400_000).toISOString());
+    await runInvoiceMailPass({
       db: suite.db,
-      holder: "server-two",
       now: () => start,
       readDocument: documentFor,
       send: async (): Promise<InvoiceDeliveryOutcome> => {
@@ -2629,9 +2689,8 @@ it("does not join the write queue while invoice email has no due work", async ()
     await gate;
   });
   await started;
-  const pass = runInvoiceEmailPass({
+  const pass = runInvoiceMailPass({
     db: suite.db,
-    holder: "server-idle",
     now: () => start,
     readDocument: async () => {
       throw new Error("Idle cannot read a document");

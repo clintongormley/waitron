@@ -308,8 +308,8 @@ import { configureDemoPrinter, demoPrinterJob } from "./demo-printer.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { readInvoiceDocument, readReceiptEmailDocument } from "./invoice-document.js";
 import { layOutSaleReceipt } from "./receipt-print.js";
-import { createRoutedInvoiceEmailSender, readInvoiceEmailPrivacy } from "./invoice-email.js";
-import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
+import { readInvoiceEmailPrivacy } from "./invoice-email.js";
+import { invoiceMail } from "./invoice-mail.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { attendanceJob } from "./attendance-loop.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
@@ -3050,8 +3050,6 @@ async function bootServer(
   );
   // Outside the block below so the alert sources have it on every node.
   const testPages = createPageTestPages();
-  const invoiceEmailController = new AbortController();
-  let invoiceEmailLoop: Promise<void> | undefined;
   if (workforceEnabled) {
     jobRunner.add(
       attendanceJob({
@@ -3081,27 +3079,15 @@ async function bootServer(
   // read-only node at all, so even its safe-verb reads are absent, not merely its writes refused.
   // Un-mounting at boot rather than gating per request is deliberate; see read-only-gate.ts's header.
   if (!fencedOrMirror) {
-    await withTransaction(db, (tx) => expireInvoiceDeliveryClaims(tx, now(), true));
-    invoiceEmailLoop = runInvoiceEmailLoop({
-      db,
-      holder: tradingContext.nodeId,
-      now,
-      signal: invoiceEmailController.signal,
-      isPrimary: () => holders.singletonRole.current === "primary",
-      readDocument: (tx, delivery) =>
-        readReceiptEmailDocument(nodeBackend, tx, tradingContext, delivery.saleId),
-      readPrivacy: (tx, delivery) => readInvoiceEmailPrivacy(nodeBackend, tx, delivery.saleId),
-      send: createRoutedInvoiceEmailSender({ db, ring, config }),
-      onError: (error) =>
-        log("error", "invoice_delivery.email_failed", { errorCode: codeOf(error) }),
-    });
-    undoOnFailure.push(async () => {
-      invoiceEmailController.abort();
-      await invoiceEmailLoop;
-    });
     // A clock step can date new mail before start, so identify prior episodes by their row ids.
     const previousEpisodeMailIds = new Set<string>();
     const owners = [
+      invoiceMail({
+        db,
+        readDocument: (tx, delivery) =>
+          readReceiptEmailDocument(nodeBackend, tx, tradingContext, delivery.saleId),
+        readPrivacy: (tx, delivery) => readInvoiceEmailPrivacy(nodeBackend, tx, delivery.saleId),
+      }),
       securityChangeMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
       emailChangedMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
       roleMembershipMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
@@ -3127,8 +3113,8 @@ async function bootServer(
           (await withTransaction(db, readPrivacyContact))?.privacyNoticeUrl ?? null,
       }),
     ];
-    if (isSingletonPrimary) {
-      await withTransaction(db, async (tx) => {
+    await withTransaction(db, async (tx) => {
+      if (isSingletonPrimary) {
         const rows = await tx
           .select({ id: outgoingMail.id })
           .from(outgoingMail)
@@ -3142,8 +3128,9 @@ async function bootServer(
           );
         for (const row of rows) previousEpisodeMailIds.add(row.id);
         await abandonMailClaims(tx, owners, now());
-      });
-    }
+      }
+      await expireInvoiceDeliveryClaims(tx, now(), true);
+    });
     jobRunner.add(
       mailSendJob({
         db,
@@ -4751,13 +4738,11 @@ async function bootServer(
   const duties = backgroundDuties({
     controller,
     pendingCardController,
-    invoiceEmailController,
     tenderRefundController,
     pendingCardLoop,
     tenderRefundLoop,
     certificateDiagnosis,
     fiscalReconciliation,
-    invoiceEmailLoop,
     unsubscribeFromChanges,
     jobRunner,
     liveEvents,

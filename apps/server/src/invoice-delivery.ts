@@ -2,7 +2,9 @@ import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, lte, isNull, gt, ne, or, sql, type SQL } from "drizzle-orm";
 import {
+  enqueueMail,
   invoiceDeliveries,
+  MAIL_LIFETIME_MS,
   printJobs,
   isReceiptPrinter,
   printers,
@@ -166,7 +168,28 @@ export async function reserveInvoiceDelivery(
           : { printJobId: input.printJobId, printerChosen: input.printerChosen }),
     })
     .returning();
+  if (delivery!.medium === "email") {
+    await queueInvoiceEmail(tx, delivery!, new Date(delivery!.createdAt), 1);
+  }
   return delivery!;
+}
+
+function queueInvoiceEmail(
+  tx: Transaction,
+  delivery: Pick<InvoiceDelivery, "id" | "nextAttemptAt">,
+  now: Date,
+  attempt: number,
+) {
+  return enqueueMail(tx, {
+    kind: "invoice",
+    dedupeKey: `invoice:${delivery.id}`,
+    subjectId: delivery.id,
+    personId: null,
+    notAfter: new Date(now.getTime() + MAIL_LIFETIME_MS.invoice),
+    nextAttemptAt: new Date(delivery.nextAttemptAt),
+    now,
+    params: { attempt },
+  });
 }
 
 export type InvoiceDeliveryClaim = {
@@ -188,7 +211,7 @@ const shifted = (now: Date, ms: number) => new Date(now.getTime() + ms).toISOStr
 
 /** The waits before each automatic retry of a refused email. */
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000, 600_000];
-const LONGEST_RETRY_WAIT_MS = Math.max(...RETRY_DELAYS_MS);
+export const LONGEST_RETRY_WAIT_MS = Math.max(...RETRY_DELAYS_MS);
 
 /** The latest a queued delivery's next attempt can lie ahead of `now` without a backward step. */
 export const latestNextAttempt = (now: Date) => shifted(now, LONGEST_RETRY_WAIT_MS);
@@ -282,6 +305,7 @@ export async function expireInvoiceDeliveryClaims(
   tx: Transaction,
   now = new Date(),
   restart = false,
+  printOnly = false,
 ): Promise<number> {
   const expired = await tx
     .update(invoiceDeliveries)
@@ -290,7 +314,12 @@ export async function expireInvoiceDeliveryClaims(
       expiredAt: now.toISOString(),
       failureCode: restart ? "restart" : "timeout",
     })
-    .where(expiringClaims(now, restart))
+    .where(
+      and(
+        expiringClaims(now, restart),
+        printOnly ? ne(invoiceDeliveries.medium, "email") : undefined,
+      ),
+    )
     .returning({ id: invoiceDeliveries.id, printJobId: invoiceDeliveries.printJobId });
   const jobIds = expired.flatMap((row) => (row.printJobId === null ? [] : [row.printJobId]));
   if (jobIds.length > 0) {
@@ -304,6 +333,62 @@ export async function expireInvoiceDeliveryClaims(
       .where(and(inArray(printJobs.id, jobIds), notEndedByDelete()));
   }
   return expired.length;
+}
+
+export async function startInvoiceEmail(tx: Transaction, deliveryId: string) {
+  const [delivery] = await tx
+    .select()
+    .from(invoiceDeliveries)
+    .where(
+      and(
+        eq(invoiceDeliveries.id, deliveryId),
+        eq(invoiceDeliveries.medium, "email"),
+        inArray(invoiceDeliveries.status, ["queued", "sending"]),
+      ),
+    );
+  if (!delivery || delivery.status === "sending") return delivery;
+  const [started] = await tx
+    .update(invoiceDeliveries)
+    .set({ status: "sending" })
+    .where(and(eq(invoiceDeliveries.id, deliveryId), eq(invoiceDeliveries.status, "queued")))
+    .returning();
+  return started;
+}
+
+export async function expireInvoiceEmail(tx: Transaction, deliveryId: string, now: Date) {
+  await tx
+    .update(invoiceDeliveries)
+    .set({ status: "failed", failureCode: "transport_failed", reportedAt: now.toISOString() })
+    .where(
+      and(
+        eq(invoiceDeliveries.id, deliveryId),
+        eq(invoiceDeliveries.medium, "email"),
+        inArray(invoiceDeliveries.status, ["queued", "sending"]),
+      ),
+    );
+}
+
+export async function abandonInvoiceEmail(
+  tx: Transaction,
+  deliveryId: string,
+  attempt: number,
+  now: Date,
+) {
+  await tx
+    .update(invoiceDeliveries)
+    .set({
+      status: "unknown",
+      expiredAt: now.toISOString(),
+      failureCode: "timeout",
+      attempts: attempt,
+    })
+    .where(
+      and(
+        eq(invoiceDeliveries.id, deliveryId),
+        eq(invoiceDeliveries.medium, "email"),
+        eq(invoiceDeliveries.status, "sending"),
+      ),
+    );
 }
 
 /** A print job neither ended by its printer's delete nor belonging to a deleted printer. */
@@ -356,6 +441,16 @@ export async function reportInvoiceDelivery(
       ),
     );
   if (delivery === undefined) return { updated: false, historical: false };
+  return recordDeliveryReport(tx, delivery, outcome, now, { holder: claim.holder });
+}
+
+async function recordDeliveryReport(
+  tx: Transaction,
+  delivery: InvoiceDelivery,
+  outcome: InvoiceDeliveryOutcome,
+  now: Date,
+  options: { holder?: string; attempt?: number },
+) {
   const [newer] = await tx
     .select({ id: invoiceDeliveries.id })
     .from(invoiceDeliveries)
@@ -394,6 +489,7 @@ export async function reportInvoiceDelivery(
         ? {}
         : {
             status,
+            attempts: options.attempt,
             completedAt: status === "sent" ? now.toISOString() : null,
             failureCode:
               outcome.status === "sent"
@@ -404,7 +500,7 @@ export async function reportInvoiceDelivery(
           }),
     })
     .where(eq(invoiceDeliveries.id, delivery.id));
-  if (!historical && delivery.printJobId !== null) {
+  if (!historical && delivery.printJobId !== null && options.holder !== undefined) {
     await tx
       .update(printJobs)
       .set(
@@ -412,7 +508,7 @@ export async function reportInvoiceDelivery(
           ? { status: "done", deliveredAt: now.toISOString(), lastError: null }
           : { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: outcome.failureCode },
       )
-      .where(and(eq(printJobs.id, delivery.printJobId), eq(printJobs.claimedBy, claim.holder)));
+      .where(and(eq(printJobs.id, delivery.printJobId), eq(printJobs.claimedBy, options.holder)));
   }
   return { updated: !historical, historical };
 }
@@ -429,21 +525,60 @@ export async function reportInvoiceEmailDelivery(
     .select()
     .from(invoiceDeliveries)
     .where(eq(invoiceDeliveries.id, claim.deliveryId));
-  if (delivery!.medium !== "email" || delivery!.status !== "failed" || delivery!.attempts >= 5) {
-    return result;
+  if (delivery!.medium === "email" && delivery!.status === "failed") {
+    await retryInvoiceEmail(tx, delivery!, delivery!.attempts, now);
   }
-  // Each automatic retry keeps the completed refusal and its authenticated claim in history.
-  await tx.insert(invoiceDeliveries).values({
-    saleId: delivery!.saleId,
-    requestKey: randomUUID(),
-    medium: "email",
-    designation: delivery!.designation,
-    generation: delivery!.generation + 1,
-    attempts: delivery!.attempts,
-    recipient: delivery!.recipient,
-    personId: delivery!.personId,
-    createdAt: now.toISOString(),
-    nextAttemptAt: new Date(now.getTime() + RETRY_DELAYS_MS[delivery!.attempts - 1]!).toISOString(),
-  });
   return result;
+}
+
+export async function settleInvoiceEmail(
+  tx: Transaction,
+  claim: Pick<InvoiceDelivery, "id" | "generation">,
+  attempt: number,
+  outcome: InvoiceDeliveryOutcome,
+  now: Date,
+) {
+  const [delivery] = await tx
+    .select()
+    .from(invoiceDeliveries)
+    .where(
+      and(
+        eq(invoiceDeliveries.id, claim.id),
+        eq(invoiceDeliveries.generation, claim.generation),
+        eq(invoiceDeliveries.medium, "email"),
+        isNull(invoiceDeliveries.reportedAt),
+        inArray(invoiceDeliveries.status, ["sending", "unknown"]),
+      ),
+    );
+  if (!delivery) return;
+  const result = await recordDeliveryReport(tx, delivery, outcome, now, { attempt });
+  if (result.updated && delivery.status === "sending" && outcome.status === "failed") {
+    await retryInvoiceEmail(tx, delivery, attempt, now);
+  }
+}
+
+async function retryInvoiceEmail(
+  tx: Transaction,
+  delivery: InvoiceDelivery,
+  attempt: number,
+  now: Date,
+) {
+  const delay = RETRY_DELAYS_MS[attempt - 1];
+  if (delay === undefined) return;
+  const [retry] = await tx
+    .insert(invoiceDeliveries)
+    .values({
+      saleId: delivery.saleId,
+      requestKey: randomUUID(),
+      medium: "email",
+      designation: delivery.designation,
+      generation: delivery.generation + 1,
+      attempts: attempt,
+      recipient: delivery.recipient,
+      personId: delivery.personId,
+      createdAt: now.toISOString(),
+      nextAttemptAt: shifted(now, delay),
+    })
+    .returning();
+  await queueInvoiceEmail(tx, retry!, now, attempt + 1);
 }

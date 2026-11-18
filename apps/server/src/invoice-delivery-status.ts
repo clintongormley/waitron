@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
-import { invoiceDeliveries, printJobs, sales, type Transaction } from "@waitron/db";
+import { invoiceDeliveries, outgoingMail, printJobs, sales, type Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import type { InvoiceDelivery } from "./invoice-delivery.js";
@@ -9,9 +9,17 @@ import { deliversAsFullInvoice } from "./invoice-selection.js";
 
 export const invoiceDeliveryAttemptColumns = {
   ...getTableColumns(invoiceDeliveries),
-  claimedAt: sql<string | null>`case when ${invoiceDeliveries.medium} = 'receipt'
-    then ${printJobs.claimedAt} else ${invoiceDeliveries.claimedAt} end`,
+  claimedAt: sql<string | null>`case ${invoiceDeliveries.medium}
+    when 'receipt' then ${printJobs.claimedAt}
+    when 'email' then ${outgoingMail.claimedAt}
+    else ${invoiceDeliveries.claimedAt} end`,
 };
+
+export const invoiceDeliveryMailJoin = and(
+  eq(invoiceDeliveries.medium, "email"),
+  eq(outgoingMail.kind, "invoice"),
+  eq(outgoingMail.dedupeKey, sql`'invoice:' || ${invoiceDeliveries.id}`),
+);
 
 export type InvoiceDeliveryMedium = InvoiceDelivery["medium"];
 
@@ -169,6 +177,7 @@ async function readStates(
     .select(invoiceDeliveryAttemptColumns)
     .from(invoiceDeliveries)
     .leftJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
+    .leftJoin(outgoingMail, invoiceDeliveryMailJoin)
     .where(inArray(invoiceDeliveries.saleId, ids))
     .orderBy(desc(invoiceDeliveries.generation));
   const jobs = await tx

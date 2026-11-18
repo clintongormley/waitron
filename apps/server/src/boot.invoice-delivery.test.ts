@@ -13,6 +13,7 @@ import {
   invoiceSeries,
   nodes,
   printJobs,
+  readMail,
   stampDeployment,
   taxpayer,
   withTransaction,
@@ -482,8 +483,8 @@ function textPart(message: string) {
     );
 }
 
-describe("invoice email worker at trading boot", () => {
-  it("sends a queued simplified receipt through the real boot worker", async () => {
+describe("invoice mail at trading boot", () => {
+  it("sends a queued simplified receipt through the real mail job", async () => {
     const ctx = await fixture();
     const smtp = await smtpFixture();
     let server: StartedServer | undefined;
@@ -530,6 +531,12 @@ describe("invoice email worker at trading boot", () => {
         { timeout: 5_000 },
       );
       expect(smtp.messages).toHaveLength(1);
+      expect(await readMail(suite.db, `invoice:${email.id}`)).toMatchObject({
+        kind: "invoice",
+        subjectId: email.id,
+        status: "sent",
+        attempts: 1,
+      });
       expect(textPart(smtp.messages[0]!)).toBe(
         `${receiptLabelsFor("es-ES").simplifiedInvoice} S/1`,
       );
@@ -647,7 +654,11 @@ describe("invoice email worker at trading boot", () => {
       const email = await queuedEmail(ctx, smtp.smtp);
       server = await startServer(ctx.env);
       await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 5_000 });
-      expect(await delivery(email.id)).toMatchObject({ status: "sending", attempts: 1 });
+      expect(await delivery(email.id)).toMatchObject({ status: "sending", attempts: 0 });
+      expect(await readMail(suite.db, `invoice:${email.id}`)).toMatchObject({
+        status: "sending",
+        attempts: 1,
+      });
       let closed = false;
       closing = server.close().then(() => {
         closed = true;
