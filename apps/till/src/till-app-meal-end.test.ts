@@ -252,6 +252,18 @@ describe("till-app: Print the bill", () => {
     expect(tableOrder(el).takesPayment).toBe(true);
   });
 
+  it("sends nothing while the bill's whole payment has no answer, even when asked directly", async () => {
+    const recordSale = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el, endMeal } = await openBill({ recordSale });
+    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "120.00", guestCount: 4 });
+    await flush(el, 6);
+    expect(recordSale).toHaveBeenCalledOnce();
+
+    await printBill(el);
+
+    expect(endMeal).not.toHaveBeenCalled();
+  });
+
   it("sends nothing for a new bill with no dishes", async () => {
     const { el, endMeal } = await openBill({
       getPartyBills: vi.fn(async () => [billOf({ total: "0.00", outstanding: "0.00" })]),
@@ -568,6 +580,76 @@ describe("till-app: Print the bill with dishes not served", () => {
 
     expect(warning(el)).toBeNull();
     expect(sentBodies(endMeal)).toHaveLength(1);
+  });
+
+  it("keeps the list down when this till serves a dish after unserving one, since the serve was sent from a revision the list never described", async () => {
+    let revision = 3;
+    const endMeal = vi.fn().mockRejectedValueOnce(unservedRefusal).mockResolvedValue(ended);
+    const { el } = await openBill({
+      endMeal,
+      getTablesState: vi.fn(async () => [heldTable({ revision })]),
+      unmarkServed: vi.fn(async () => ({ revision: ++revision })),
+      markServed: vi.fn(async () => ({ revision: ++revision })),
+    });
+    await printBill(el);
+    expect(warning(el)).not.toBeNull();
+    emit(tableOrder(el), "unserve-lines", { items: [{ lineId: "line-3", quantity: "1" }] });
+    await flush(el, 6);
+    expect(warning(el)).toBeNull();
+
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+
+    expect(vi.mocked(api.markServed).mock.calls[0]![2]).toEqual(
+      expect.objectContaining({ expectedPartyRevision: 4 }),
+    );
+    expect(tableOrder(el).party!.revision).toBe(5);
+    expect(warning(el)).toBeNull();
+  });
+
+  it("Print anyway sends the revision the list describes when the screen has not learnt it", async () => {
+    let answerServe: (answer: { revision: number }) => void = () => {};
+    const tablet = "tablet-landscape" as const;
+    const endMeal = vi.fn().mockRejectedValueOnce(unservedRefusal).mockResolvedValue(ended);
+    const { el } = await openBill({
+      endMeal,
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        formFactor: tablet,
+        capabilities: ["print-receipt", "take-cash", "hand-over-orders"],
+      }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "till-dev", name: "Till 1", formFactor: tablet }),
+      markServed: vi.fn(
+        () =>
+          new Promise<{ revision: number }>((resolve) => {
+            answerServe = resolve;
+          }),
+      ),
+    });
+    await printBill(el);
+    expect(warning(el)).not.toBeNull();
+
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+    expect(api.markServed).toHaveBeenCalledOnce();
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el, 6);
+    answerServe({ revision: 4 });
+    await flush(el, 6);
+    emit(shell(el), "screen-select", { screen: "order" });
+    await flush(el, 6);
+    expect(tableOrder(el).party!.revision).toBe(3);
+    expect(text(warning(el))).toContain("Chuletón");
+    expect(text(warning(el))).not.toContain("Paella");
+
+    warning(el)!.querySelector<HTMLElement>("[data-print-anyway]")!.click();
+    await flush(el, 6);
+
+    expect(sentBodies(endMeal)[1]).toEqual(
+      expect.objectContaining({ expectedPartyRevision: 4, printAnyway: true }),
+    );
   });
 
   it("Print anyway after Mark served sends the revision Mark served moved the table to", async () => {
