@@ -2700,6 +2700,23 @@ describe("mountPrintApi — management: print-test-page", () => {
 });
 
 describe("mountPrintApi — management: recent jobs", () => {
+  async function officeHistory(status: "done" | "failed") {
+    await withTransaction(suite.db, async (tx) => {
+      const printerId = await insertA4Printer(tx);
+      const { saleId } = await seedCashSale(tx);
+      const at = "2100-01-01T00:00:00.000Z";
+      await tx.insert(printJobs).values({
+        printerId,
+        saleId,
+        kind: "a4",
+        status,
+        createdAt: at,
+        attempts: MAX_DELIVERY_ATTEMPTS,
+        deliveredAt: status === "done" ? at : null,
+      });
+    });
+  }
+
   it("shows Demo paper and drawer openings newest first, only to managers in practice mode", async () => {
     const app = mountApp({ practiceMode: true });
     const printerId = await createUsbPrinter(app, "WAITRON-DEMO-PRINTER", "Demo printer");
@@ -3000,17 +3017,7 @@ describe("mountPrintApi — management: recent jobs", () => {
           }),
         )
         .returning({ id: printJobs.id, deliveredAt: printJobs.deliveredAt });
-      await withTransaction(suite.db, async (tx) => {
-        const office = await insertA4Printer(tx);
-        const { saleId } = await seedCashSale(tx);
-        await tx.insert(printJobs).values({
-          printerId: office,
-          saleId,
-          kind: "a4",
-          status: "done",
-          deliveredAt: "2100-01-01T00:00:00.000Z",
-        });
-      });
+      await officeHistory("done");
       const result = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,
       });
@@ -3084,6 +3091,7 @@ describe("mountPrintApi — management: recent jobs", () => {
           })),
         )
         .returning({ id: printJobs.id, createdAt: printJobs.createdAt });
+      await officeHistory("failed");
       const response = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,
       });

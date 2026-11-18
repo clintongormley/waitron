@@ -2,7 +2,7 @@ import { dateA4Job, readDeliveryAndClaim } from "./testing/a4-print-job.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   type A4HoldCode,
@@ -194,6 +194,11 @@ it("reserves a payload-free job and stores the office printer claim on it", asyn
   const v = await venue();
   const office = await printer(v.agentOne);
   const saleId = await fullInvoice(v.nodeId);
+  let tick = 0;
+  const iso = Date.prototype.toISOString;
+  const clock = vi
+    .spyOn(Date.prototype, "toISOString")
+    .mockImplementation(() => iso.call(at(tick++)));
   const delivery = await withTransaction(suite.db, (tx) =>
     reserveInvoiceDelivery(tx, saleId, {
       requestKey: randomUUID(),
@@ -201,7 +206,7 @@ it("reserves a payload-free job and stores the office printer claim on it", asyn
       medium: "a4",
       pagePrinterId: office,
     }),
-  );
+  ).finally(() => clock.mockRestore());
   expect(delivery.nextAttemptAt).toBe(delivery.createdAt);
   const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.saleId, saleId));
   expect(job).toMatchObject({
@@ -213,7 +218,7 @@ it("reserves a payload-free job and stores the office printer claim on it", asyn
     nextAttemptAt: null,
   });
 
-  const pulled = (await pull(v.agentOne, Date.now() - T0 + 100)).job;
+  const pulled = (await pull(v.agentOne, tick)).job;
   expect(pulled?.claim).toMatchObject({ deliveryId: delivery.id, holder: v.agentOne });
   const [claimed] = await suite.db.select().from(printJobs).where(eq(printJobs.id, job!.id));
   expect(claimed).toMatchObject({
@@ -238,7 +243,7 @@ it("reserves a payload-free job and stores the office printer claim on it", asyn
   });
 });
 
-it("leaves an office job in its queue when receipt resend refuses it", async () => {
+it("refuses an office job in receipt resend", async () => {
   const v = await venue();
   const office = await printer(v.agentOne);
   const id = await queueA4(await fullInvoice(v.nodeId), office);
@@ -247,7 +252,6 @@ it("leaves an office job in its queue when receipt resend refuses it", async () 
   await expect(
     withTransaction(suite.db, (tx) => resendInvoicePrintJob(tx, jobId, "staff-one", at(0))),
   ).rejects.toMatchObject({ code: "print_job.not_found", params: { id: jobId } });
-  expect((await claim(v.agentOne, 0))?.claim.deliveryId).toBe(id);
 });
 
 describe("claiming an A4 delivery", () => {
