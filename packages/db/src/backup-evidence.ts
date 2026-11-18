@@ -37,6 +37,7 @@ function same(a: BackupValue | undefined, b: BackupValue | undefined): boolean {
   return a === b;
 }
 
+// The verifier checks both copies' SQLite integrity before relying on their indexes.
 export async function compareBackupTables(input: {
   before: BackupQuery;
   after: BackupQuery;
@@ -62,7 +63,7 @@ export async function compareBackupTables(input: {
       added.some((name) => !Object.hasOwn(policy.addedColumns, name))
     )
       return false;
-    // A leading primary key lets SQLite read wide rows in index order.
+    // Putting id first lets SQLite use the print_jobs primary-key index.
     const orderColumns = columns.includes("id")
       ? ["id", ...columns.filter((name) => name !== "id")]
       : columns;

@@ -266,6 +266,8 @@ box refuses ciphertext above 2 GiB or expanded archives above 4 GiB with `cloud.
 A timed-out upload keeps its pending ciphertext for retries during the capture's first day.
 In the paired run, check grant renewal, publication within the trial deadline and the deployed
 verifier's time, peak memory and scratch on the representative capture.
+Measure the comparison of `payments`, `registros_facturacion`, `working_orders` and
+`working_order_lines`. Their full row orders still require a temporary sort on the verifier's SQLite.
 See the [Cloud transfer plan](../superpowers/plans/2026-11-17-cloud-snapshot-stream.md).
 
 Revisit content-named pieces, a read-only archive database and continuous Cloud copies after

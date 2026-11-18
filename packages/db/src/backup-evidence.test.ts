@@ -99,7 +99,7 @@ describe("complete backup table comparison", () => {
       ).toBe(true);
       expect(plans).toHaveLength(2);
       for (const plan of plans) {
-        expect(plan).not.toContain("USE TEMP B-TREE FOR ORDER BY");
+        expect(plan).not.toContainEqual(expect.stringContaining("TEMP B-TREE"));
         expect(plan).toContainEqual(expect.stringContaining("USING INDEX"));
       }
     });
