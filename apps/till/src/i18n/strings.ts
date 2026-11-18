@@ -1637,8 +1637,7 @@ export const en = {
     "An extra on this order is no longer offered. It stays on the order as saved until you save a change in that item's own window, which takes it off; until then + cannot raise that item's count. If it can no longer be sold and has not gone to the station, paying is refused until it is removed.",
   "held.extra_blocks_raise":
     "This item's count cannot be raised here: it has an extra that is no longer offered. To add more without that extra, open the item and change the count there. To keep this line as it is, add the dish from the menu: it goes on a line of its own.",
-  // Says what to DO, because reopening the line and choosing again is the only way out.
-  "held.options_changed": "An item's choices have changed — open the line and choose again",
+  "held.options_changed": "An item has a new choice to make — open the line and choose",
   "held.stale": "That order is no longer available",
   "held.open_failed": "The order could not be opened. Try again.",
   "held.discard_editing": "Someone else is editing this bill. Open it from Floor to review it.",
@@ -3734,8 +3733,7 @@ export const es: Record<StringKey, string> = {
     "Un extra de este pedido ya no se ofrece. Sigue en el pedido tal como se guardó hasta que guardes un cambio en la ventana de ese producto, lo que lo quita; mientras tanto, + no puede aumentar su cantidad. Si ya no se puede vender y no se ha enviado a la estación, no se podrá cobrar hasta que se quite.",
   "held.extra_blocks_raise":
     "Aquí no se puede aumentar la cantidad de este producto: lleva un extra que ya no se ofrece. Para añadir más sin ese extra, abre el producto y cambia ahí la cantidad. Para dejar esta línea como está, añade el plato desde la carta: va en una línea aparte.",
-  "held.options_changed":
-    "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
+  "held.options_changed": "Un producto necesita una elección nueva: abre la línea y elige",
   "held.stale": "Ese pedido ya no está disponible",
   "held.open_failed": "No se pudo abrir el pedido. Inténtalo de nuevo.",
   "held.discard_editing":

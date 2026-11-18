@@ -196,6 +196,20 @@ function pairEach<Entry, Candidate>(
 /** A frozen staff name is a one-entry map, keyed by the language it was frozen in. */
 const staffName = (names: Record<string, string>) => Object.values(names)[0];
 
+type AnswerFreezer = ReturnType<typeof answerFreezers>[number];
+
+/** Whether `freeze` gives `held` in the language `held` was frozen in (the one key of its staff list
+ * name). An unchanged answer keeps its recorded maps even when new fallback would produce different
+ * text. */
+function freezesTo(freeze: AnswerFreezer, held: OptionSnapshot): boolean {
+  const [language] = Object.keys(held.listName);
+  return (
+    language !== undefined &&
+    (isDeepStrictEqual(freeze(language), held) ||
+      isDeepStrictEqual(freeze(language, "recorded"), held))
+  );
+}
+
 /**
  * The options answer to an edit of a SAVED line, or `null` when the edit gives the answers the line
  * already holds. A stored answer is kept as it is when an answer of the edit, frozen in the language
@@ -214,15 +228,7 @@ export function editLineOptions(
   defaultLanguage: string,
 ): OptionSnapshot[] | null {
   const answers = answerFreezers(offered, requested);
-  const kept = pairEach(answers, stored, (freeze, answer) => {
-    const [language] = Object.keys(answer.listName);
-    // An unchanged answer keeps its recorded maps even when new fallback would produce different text.
-    return (
-      language !== undefined &&
-      (isDeepStrictEqual(freeze(language), answer) ||
-        isDeepStrictEqual(freeze(language, "recorded"), answer))
-    );
-  });
+  const kept = pairEach(answers, stored, freezesTo);
   if (answers.length === stored.length && kept.every((answer) => answer !== undefined)) return null;
   return answers.map((freeze, index) => kept[index] ?? freeze(defaultLanguage));
 }
@@ -259,32 +265,134 @@ export function asksNoNewAnswer(
   ).every((held) => held !== undefined);
 }
 
+/** The active lists `requested` answers with an available label, each with its answer. A malformed
+ * request or entry answers nothing here, and is left to the validator. */
+function answeredLists(
+  offered: readonly OptionList[],
+  requested: unknown,
+): { list: OptionList; answer: { listId: string; labelId: string } }[] {
+  const entries: unknown[] = Array.isArray(requested) ? requested : [];
+  return offered.flatMap((list) => {
+    if (!list.active) return [];
+    for (const entry of entries) {
+      const { listId, labelId } = (entry ?? {}) as { listId?: unknown; labelId?: unknown };
+      if (typeof listId !== "string" || typeof labelId !== "string") continue;
+      if (listId.toLowerCase() !== list.id) continue;
+      const label = list.labels.find(
+        (candidate) => candidate.available && candidate.id === labelId.toLowerCase(),
+      );
+      return label === undefined ? [] : [{ list, answer: { listId: list.id, labelId: label.id } }];
+    }
+    return [];
+  });
+}
+
 /**
- * Whether a request {@link asksNoNewAnswer} accepted leaves unanswered only lists that stored answers
- * the menu no longer matches could stand for. A frozen answer holds names and no ids, so an unanswered
- * list is taken for the renamed form of an unmatched answer; an answer the menu still matches must be
- * sent.
+ * Whether a request {@link asksNoNewAnswer} accepted re-sends every stored answer the menu still
+ * matches, at least one stored answer is left unmatched, and the dish has no more active lists than
+ * the line holds answers. Answers are counted, never tied to a list: a frozen answer holds no ids,
+ * and two lists can share a staff name.
  */
 export function onlyStoredAnswersUnmatched(
   offered: readonly OptionList[],
-  requested: readonly { listId: string; labelId: string }[],
+  requested: unknown,
   stored: readonly OptionSnapshot[],
 ): boolean {
   const active = offered.filter((list) => list.active);
-  const unmatched = pairEach(
+  const matched = pairEach(
     stored,
     active,
     (held, list) =>
       list.name === staffName(held.listName) &&
       list.labels.some((label) => label.available && label.name === staffName(held.labelName)),
-  ).filter((list) => list === undefined).length;
-  const unanswered = active.filter((list) => {
-    const answer = requested.find((entry) => entry.listId.toLowerCase() === list.id);
-    return !list.labels.some(
-      (label) => label.available && label.id === answer?.labelId.toLowerCase(),
-    );
-  }).length;
-  return unmatched > 0 && unanswered <= unmatched;
+  ).filter((list) => list !== undefined).length;
+  return (
+    matched < stored.length &&
+    answeredLists(offered, requested).length === matched &&
+    active.length <= stored.length
+  );
+}
+
+/**
+ * `stored` with each answer `requested` re-sends brought up to today's wording, or `null` when none
+ * differs. Everything else stays as stored and in its place, including an answer re-sent with a label
+ * since withdrawn.
+ */
+function refreshResentAnswers(
+  offered: readonly OptionList[],
+  requested: unknown,
+  stored: readonly OptionSnapshot[],
+  defaultLanguage: string,
+): OptionSnapshot[] | null {
+  const answered = answeredLists(offered, requested);
+  const freezers = answerFreezers(
+    answered.map(({ list }) => list),
+    answered.map(({ answer }) => answer),
+  );
+  const slots = stored.map((held, index) => ({ held, index }));
+  const unchanged = pairEach(freezers, slots, (freeze, { held }) => freezesTo(freeze, held));
+  const reworded = freezers
+    .filter((_, index) => unchanged[index] === undefined)
+    .map((freeze) => freeze(defaultLanguage));
+  if (reworded.length === 0) return null;
+  const taken = new Set(unchanged.map((slot) => slot?.index));
+  const refreshed = [...stored];
+  // Every re-sent answer pairs: asksNoNewAnswer found each a stored answer of the same staff names.
+  pairEach(
+    reworded,
+    slots.filter(({ index }) => !taken.has(index)),
+    (answer, { held }) =>
+      staffName(answer.listName) === staffName(held.listName) &&
+      staffName(answer.labelName) === staffName(held.labelName),
+  ).forEach((slot, index) => {
+    refreshed[slot!.index] = reworded[index]!;
+  });
+  return refreshed;
+}
+
+/**
+ * The stored answers left over once each active list is paired with one answer under its staff name,
+ * the answers `edited` keeps being paired first so that none is carried twice. A frozen answer holds
+ * no ids, so of two answers under one name either may be the one left over. None is left over while
+ * an active list finds no answer: that list may be a gone one, renamed.
+ */
+function answersOfGoneLists(
+  offered: readonly OptionList[],
+  stored: readonly OptionSnapshot[],
+  edited: readonly OptionSnapshot[],
+): OptionSnapshot[] {
+  const slots = stored.map((held) => ({ held }));
+  const paired = pairEach(
+    offered.filter((list) => list.active),
+    [
+      ...slots.filter(({ held }) => edited.includes(held)),
+      ...slots.filter(({ held }) => !edited.includes(held)),
+    ],
+    (list, { held }) => list.name === staffName(held.listName),
+  );
+  if (paired.includes(undefined)) return [];
+  return slots.filter((slot) => !paired.includes(slot)).map(({ held }) => held);
+}
+
+/**
+ * {@link editLineOptions} for a line not yet sent, on a whole-order save. When only stored answers the
+ * menu no longer matches are missing from the request ({@link onlyStoredAnswersUnmatched}), those stay
+ * as stored and the re-sent ones are compared as usual. Otherwise the request is validated and applied
+ * as usual, and the answers of lists gone from the dish are kept as {@link answersOfGoneLists} allows.
+ */
+export function editUnsentLineOptions(
+  offered: readonly OptionList[],
+  requested: unknown,
+  stored: readonly OptionSnapshot[],
+  defaultLanguage: string,
+): OptionSnapshot[] | null {
+  if (
+    asksNoNewAnswer(offered, requested, stored) &&
+    onlyStoredAnswersUnmatched(offered, requested, stored)
+  )
+    return refreshResentAnswers(offered, requested, stored, defaultLanguage);
+  const edited = editLineOptions(offered, requested, stored, defaultLanguage);
+  return edited === null ? null : [...edited, ...answersOfGoneLists(offered, stored, edited)];
 }
 
 /** One pick as a request names it, read leniently: a malformed one is left to the validator. */

@@ -6,11 +6,13 @@ import {
   type OptionList,
   type ResolvedExtraList,
 } from "@waitron/menu";
+import type { OptionSnapshot } from "@waitron/shared";
 import {
   asksNoNewAnswer,
   buildLineExtras,
   editLineExtras,
   editLineOptions,
+  editUnsentLineOptions,
   onlyStoredAnswersUnmatched,
   type ExtraProductFacts,
 } from "./modifier-selection.js";
@@ -912,6 +914,276 @@ describe("onlyStoredAnswersUnmatched", () => {
     expect(onlyStoredAnswersUnmatched([cooked, sauce], [shouted], [...stored, ...stored])).toBe(
       true,
     );
+  });
+
+  it("does not hold when the answer the menu still matches is left out beside an unmatched one", () => {
+    expect(onlyStoredAnswersUnmatched([sauce], [], storedBoth)).toBe(false);
+  });
+
+  describe("with two lists sharing a staff name", () => {
+    const twin: OptionList = {
+      ...sauce,
+      id: "list-sauce-twin",
+      labels: [{ ...sauce.labels[0]!, id: "label-pepper-twin" }],
+    };
+    const pepperOnTwin = { listId: twin.id, labelId: "label-pepper-twin" };
+
+    it.each([
+      { list: "the first", requested: [pepper] },
+      { list: "the second", requested: [pepperOnTwin] },
+    ])("holds whichever of them, $list, the till gave the answer to", ({ requested }) => {
+      expect(onlyStoredAnswersUnmatched([sauce, twin], requested, storedBoth)).toBe(true);
+    });
+
+    it("does not hold when neither is answered", () => {
+      expect(onlyStoredAnswersUnmatched([sauce, twin], [], storedBoth)).toBe(false);
+    });
+  });
+
+  it.each([
+    { case: "not a list", requested: "nonsense" },
+    {
+      case: "holding malformed entries",
+      requested: [null, { listId: 1, labelId: 2 }, { listId: sauce.id, labelId: 2 }],
+    },
+  ])("reads a request $case as answering nothing", ({ requested }) => {
+    expect(onlyStoredAnswersUnmatched([renamed], requested, stored)).toBe(true);
+    expect(onlyStoredAnswersUnmatched([sauce], requested, storedBoth)).toBe(false);
+  });
+});
+
+describe("editUnsentLineOptions", () => {
+  const rare = { listId: cooked.id, labelId: mediumRare.id };
+  const wellDone = { listId: cooked.id, labelId: "label-well-done" };
+  const pepper = { listId: sauce.id, labelId: "label-pepper" };
+  const stored = freeze({ options: [cooked, sauce] }, { options: [rare, pepper] }).optionSnapshots;
+  const [storedRare, storedPepper] = stored as [OptionSnapshot, OptionSnapshot];
+  const withdrawn: OptionList = {
+    ...cooked,
+    labels: cooked.labels.map((label) =>
+      label.id === mediumRare.id ? { ...label, available: false } : label,
+    ),
+  };
+  const renamed: OptionList = { ...cooked, name: "Doneness staff" };
+  const reworded: OptionList = {
+    ...sauce,
+    labels: [{ ...sauce.labels[0]!, kitchenName: "New pepper kitchen" }],
+  };
+  const staffLabels = (answers: readonly OptionSnapshot[] | null) =>
+    answers?.map((answer) => answer.labelName.en);
+
+  describe("when only stored answers went unmatched", () => {
+    it("gives no change when what the request re-sends is as stored", () => {
+      expect(editUnsentLineOptions([withdrawn, sauce], [pepper], stored, "en")).toBeNull();
+    });
+
+    it("gives no change for a re-sent answer frozen in a former default language", () => {
+      const inSpanish = buildLineExtras(
+        { extras: [], options: [cooked, sauce] },
+        products,
+        { options: [rare, pepper] },
+        "es",
+      ).optionSnapshots;
+
+      expect(editUnsentLineOptions([withdrawn, sauce], [pepper], inSpanish, "en")).toBeNull();
+    });
+
+    it("gives no change for a re-sent answer holding its recorded customer text", () => {
+      const list: OptionList = {
+        ...sauce,
+        customerName: { fr: "Recorded French list" },
+        labels: [{ ...sauce.labels[0]!, customerName: null }],
+      };
+      const recorded: OptionSnapshot = {
+        listName: { es: "Sauce staff" },
+        listCustomerName: { es: "Recorded French list" },
+        listKitchenName: "Sauce kitchen",
+        labelName: { es: "Pepper staff" },
+        labelCustomerName: null,
+        labelKitchenName: "Pepper kitchen",
+      };
+
+      expect(editUnsentLineOptions([list], [pepper], [storedRare, recorded], "en")).toBeNull();
+    });
+
+    it("freezes the new wording of a re-sent answer and leaves the unmatched one as stored", () => {
+      const edited = editUnsentLineOptions([withdrawn, reworded], [pepper], stored, "en");
+
+      expect(edited).toEqual([
+        storedRare,
+        { ...storedPepper, labelKitchenName: "New pepper kitchen" },
+      ]);
+      expect(edited![0]).toBe(storedRare);
+    });
+
+    it("keeps each answer in its stored place", () => {
+      const edited = editUnsentLineOptions(
+        [reworded],
+        [pepper],
+        [storedPepper, storedRare, storedRare],
+        "en",
+      );
+
+      expect(edited).toEqual([
+        { ...storedPepper, labelKitchenName: "New pepper kitchen" },
+        storedRare,
+        storedRare,
+      ]);
+    });
+
+    it("leaves as stored an answer a stale till re-sends with its withdrawn label", () => {
+      expect(editUnsentLineOptions([withdrawn, sauce], [rare, pepper], stored, "en")).toBeNull();
+      expect(editUnsentLineOptions([withdrawn, reworded], [rare, pepper], stored, "en")).toEqual([
+        storedRare,
+        { ...storedPepper, labelKitchenName: "New pepper kitchen" },
+      ]);
+    });
+  });
+
+  it("refuses leaving out an answer the menu still matches beside an unmatched one", () => {
+    expect(() => editUnsentLineOptions([sauce], [], stored, "en")).toThrow(
+      expect.objectContaining({
+        code: "options.label_required",
+        params: { optionListId: sauce.id },
+      }),
+    );
+  });
+
+  it("gives no change when the request gives the answers the line holds", () => {
+    expect(editUnsentLineOptions([cooked, sauce], [rare, pepper], stored, "en")).toBeNull();
+  });
+
+  describe("when the request changes an answer", () => {
+    it("keeps the answer of a list no longer on the dish, after the new answers", () => {
+      const edited = editUnsentLineOptions([cooked], [wellDone], stored, "en");
+
+      expect(staffLabels(edited)).toEqual(["Well done staff", "Pepper staff"]);
+      expect(edited![1]).toBe(storedPepper);
+    });
+
+    it("keeps the answer of a list switched off", () => {
+      const off: OptionList = { ...sauce, active: false };
+
+      expect(staffLabels(editUnsentLineOptions([cooked, off], [wellDone], stored, "en"))).toEqual([
+        "Well done staff",
+        "Pepper staff",
+      ]);
+    });
+
+    it("keeps nothing beside a list that may be the old one renamed", () => {
+      expect(staffLabels(editUnsentLineOptions([renamed], [wellDone], stored, "en"))).toEqual([
+        "Well done staff",
+      ]);
+    });
+
+    it("replaces the answer of a list renamed, keeping the other list's answer", () => {
+      const edited = editUnsentLineOptions([renamed, sauce], [wellDone, pepper], stored, "en");
+
+      expect(staffLabels(edited)).toEqual(["Well done staff", "Pepper staff"]);
+      expect(edited![0]!.listName).toEqual({ en: "Doneness staff" });
+    });
+
+    describe("with two lists sharing a staff name", () => {
+      const twin: OptionList = {
+        ...sauce,
+        id: "list-sauce-twin",
+        labels: [{ ...sauce.labels[0]!, id: "label-pepper-twin" }],
+      };
+      const pepperOnTwin = { listId: twin.id, labelId: "label-pepper-twin" };
+      const mayo = { listId: sauce.id, labelId: "label-mayo" };
+      const withMayo: OptionList = {
+        ...sauce,
+        labels: [...sauce.labels, { ...sauce.labels[0]!, id: mayo.labelId, name: "Mayo staff" }],
+      };
+
+      it("keeps an answer whose list is gone when each of them holds a stored answer", () => {
+        const held = freeze(
+          { options: [cooked, sauce, twin] },
+          { options: [rare, pepper, pepperOnTwin] },
+        ).optionSnapshots;
+
+        expect(
+          staffLabels(editUnsentLineOptions([withMayo, twin], [mayo, pepperOnTwin], held, "en")),
+        ).toEqual(["Mayo staff", "Pepper staff", "Medium rare staff"]);
+      });
+
+      it("keeps nothing when only one stored answer stands for the two", () => {
+        expect(
+          staffLabels(editUnsentLineOptions([withMayo, twin], [mayo, pepperOnTwin], stored, "en")),
+        ).toEqual(["Mayo staff", "Pepper staff"]);
+      });
+
+      describe("when one of them is deleted", () => {
+        const mayoTwin: OptionList = {
+          ...twin,
+          labels: [{ ...sauce.labels[0]!, id: "label-mayo-twin", name: "Mayo staff" }],
+        };
+        const mayoOnTwin = { listId: mayoTwin.id, labelId: "label-mayo-twin" };
+        const ketchup = { listId: sauce.id, labelId: "label-ketchup" };
+        const withKetchup: OptionList = {
+          ...sauce,
+          labels: [
+            ...sauce.labels,
+            { ...sauce.labels[0]!, id: ketchup.labelId, name: "Ketchup staff" },
+          ],
+        };
+
+        // Nothing recorded says which of the two same-named answers was the deleted list's.
+        it("keeps exactly one of their answers beside the changed one", () => {
+          const held = freeze(
+            { options: [sauce, mayoTwin] },
+            { options: [pepper, mayoOnTwin] },
+          ).optionSnapshots;
+
+          const labels = staffLabels(editUnsentLineOptions([withKetchup], [ketchup], held, "en"));
+
+          expect(labels).toHaveLength(2);
+          expect(labels![0]).toBe("Ketchup staff");
+          expect(["Pepper staff", "Mayo staff"]).toContain(labels![1]);
+        });
+
+        it("does not carry a second copy of the answer the request re-sends", () => {
+          const held = freeze(
+            { options: [mayoTwin, sauce, cooked] },
+            { options: [mayoOnTwin, pepper, rare] },
+          ).optionSnapshots;
+
+          expect(
+            staffLabels(editUnsentLineOptions([sauce, cooked], [pepper, wellDone], held, "en")),
+          ).toEqual(["Pepper staff", "Well done staff", "Mayo staff"]);
+        });
+      });
+    });
+
+    it("keeps no deleted list's answer when the dish has more lists than the line has answers", () => {
+      const milk: OptionList = {
+        ...sauce,
+        id: "list-milk",
+        name: "Milk staff",
+        labels: [{ ...sauce.labels[0]!, id: "label-oat", name: "Oat staff" }],
+      };
+      const size: OptionList = {
+        ...sauce,
+        id: "list-size",
+        name: "Size staff",
+        labels: [{ ...sauce.labels[0]!, id: "label-large", name: "Large staff" }],
+      };
+
+      expect(
+        staffLabels(
+          editUnsentLineOptions(
+            [cooked, milk, size],
+            [
+              wellDone,
+              { listId: milk.id, labelId: "label-oat" },
+              { listId: size.id, labelId: "label-large" },
+            ],
+            stored,
+            "en",
+          ),
+        ),
+      ).toEqual(["Well done staff", "Oat staff", "Large staff"]);
+    });
   });
 });
 

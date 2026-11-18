@@ -380,8 +380,7 @@ como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **
   hace lo mismo que después de publicar, como explica
   [Qué hace la caja con una lista](modifiers.md#till): con un nombre del personal nuevo, el pedido
   conserva la respuesta que tiene, y un nombre para el cliente o de estación nuevo se guarda en
-  esas líneas con el siguiente cambio del pedido, lo que puede volver a enviar a la estación, como
-  una comanda nueva, una línea que ya tiene. Esas líneas conservan sus precios.
+  las líneas aún no enviadas con el siguiente cambio del pedido. Esas líneas conservan sus precios.
 - No cambia nada más: ni los productos, ni los elementos y secciones de la propia carta, ni tus
   otras cartas. Un producto que está en dos cartas se corrige en cada una.
 - Una versión programada para más tarde conserva su fecha y su contenido, y entra en vigor entonces
@@ -406,7 +405,9 @@ contiene cada tipo, sus valores predeterminados y límites, y los precios de los
 Cuando aparcas o completas un pedido, Waitron guarda los nombres del producto y la variante elegidos,
 el nombre de estación de preparación, los precios y las respuestas de los modificadores. Los cambios posteriores en la
 carta se aplican a las selecciones nuevas. El pedido aparcado, la comanda de estación, el ticket y la
-reimpresión siguen mostrando los datos guardados con ese pedido.
+reimpresión siguen mostrando los datos guardados con ese pedido. Una línea aún no enviada toma el
+nombre nuevo para el cliente o de estación de una lista de opciones o de una opción con el siguiente
+cambio del pedido.
 
 Cuando preparas una demostración de Madrid en español, los nombres del personal y de estación están en
 español. La caja muestra **Menú del Día**, mientras que su nombre para el cliente es **Menú del

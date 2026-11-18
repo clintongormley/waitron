@@ -9776,7 +9776,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
             },
           ],
         });
-      return { id, coffeeId, cooking: cooking!, answers, dish: dish!, lines, save };
+      return { cfg, id, coffeeId, cooking: cooking!, answers, dish: dish!, lines, save };
     }
     type Parked = Awaited<ReturnType<typeof parkAnswered>>;
 
@@ -9880,13 +9880,121 @@ describe("what a held-order edit preserves and what it replaces", () => {
         { [CONTENT_LANGUAGE]: "Pepper staff" },
       ]);
     });
+
+    it("refuses leaving out an answer the menu still matches beside one it no longer does", async () => {
+      const parked = await parkAnswered();
+      await withTransaction(db, async (tx) => {
+        await menu.deleteOptionList(tx, parked.cooking.listId);
+        await republishMenus(tx);
+      });
+
+      await expect(parked.save([])).rejects.toMatchObject({
+        code: "options.label_required",
+        params: { optionListId: parked.answers[1]!.listId },
+      });
+      expect(await parked.lines()).toEqual([parked.dish]);
+    });
+
+    it("saves the new wording of a re-sent answer beside one the menu no longer matches", async () => {
+      const parked = await parkAnswered();
+      const [cooking, pepper] = parked.dish.optionSnapshots;
+      await withTransaction(db, async (tx) => {
+        await tx.execute(
+          sql`update option_labels set available = 0 where id = ${parked.cooking.labelIds[0]!}`,
+        );
+        await tx.execute(
+          sql`update option_labels set kitchen_name = 'New pepper kitchen' where id = ${parked.answers[1]!.labelId}`,
+        );
+        await republishMenus(tx);
+      });
+
+      await parked.save(parked.answers.slice(1), "2");
+
+      const after = await parked.lines();
+      expect(after).toHaveLength(2);
+      for (const line of after) {
+        expect(line.optionSnapshots).toEqual([
+          cooking,
+          { ...pepper, labelKitchenName: "New pepper kitchen" },
+        ]);
+      }
+    });
+
+    it("keeps the answer of a deleted list when staff change another answer", async () => {
+      const parked = await parkAnswered();
+      const pepper = parked.dish.optionSnapshots[1];
+      await withTransaction(db, async (tx) => {
+        await menu.deleteOptionList(tx, parked.answers[1]!.listId);
+        await republishMenus(tx);
+      });
+
+      await parked.save([{ listId: parked.cooking.listId, labelId: parked.cooking.labelIds[1]! }]);
+
+      const [after] = await parked.lines();
+      expect(after!.optionSnapshots.map((answer) => answer.labelName)).toEqual([
+        { [CONTENT_LANGUAGE]: "Well done staff" },
+        { [CONTENT_LANGUAGE]: "Pepper staff" },
+      ]);
+      expect(after!.optionSnapshots[1]).toEqual(pepper);
+
+      const revision = await revisionOf(parked.id);
+      await parked.save([{ listId: parked.cooking.listId, labelId: parked.cooking.labelIds[1]! }]);
+      expect(await revisionOf(parked.id)).toBe(revision);
+    });
+
+    it("keeps no old answer once staff answer a renamed list", async () => {
+      const parked = await parkAnswered();
+      await withTransaction(db, async (tx) => {
+        await tx.execute(
+          sql`update option_lists set name = 'Doneness' where id = ${parked.cooking.listId}`,
+        );
+        await menu.deleteOptionList(tx, parked.answers[1]!.listId);
+        await republishMenus(tx);
+      });
+
+      await parked.save([{ listId: parked.cooking.listId, labelId: parked.cooking.labelIds[1]! }]);
+
+      const [after] = await parked.lines();
+      expect(after!.optionSnapshots.map((answer) => answer.listName)).toEqual([
+        { [CONTENT_LANGUAGE]: "Doneness" },
+      ]);
+    });
+
+    it("leaves a change through the single-line edit to replace every answer", async () => {
+      const parked = await parkAnswered();
+      await withTransaction(db, async (tx) => {
+        await menu.deleteOptionList(tx, parked.answers[1]!.listId);
+        await republishMenus(tx);
+      });
+      const revision = await revisionOf(parked.id);
+
+      await withTransaction(db, (tx) =>
+        updateOrderLine(
+          tx,
+          parked.cfg,
+          parked.id,
+          parked.dish.lineNo,
+          {
+            portionLineNos: [],
+            options: [{ listId: parked.cooking.listId, labelId: parked.cooking.labelIds[1]! }],
+          },
+          revision,
+        ),
+      );
+
+      const [after] = await parked.lines();
+      expect(after!.optionSnapshots.map((answer) => answer.labelName)).toEqual([
+        { [CONTENT_LANGUAGE]: "Well done staff" },
+      ]);
+    });
   });
 
   /**
    * The body a till line sends is the same one an edit sends, so an edit that carries no `options`
    * key is refused exactly as a first order would be — `validateOptionSelections`
    * (`packages/menu/src/option-contract.ts`) walks the dish's ACTIVE lists and throws for the
-   * first one no answer names, whether the line is new or being changed.
+   * first one no answer names. A whole-order save reaches it through `editUnsentLineOptions` unless
+   * only unmatched answers are missing.
    *
    * The next case is the control: the same edit body against a dish carrying NO options list, which
    * succeeds — so the refusal below is the options list and not the shape of the edit.

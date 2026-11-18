@@ -76,7 +76,7 @@ function assignAnswers(candidates: readonly ReadonlyMap<number, string>[]): (num
  *
  * An offered list nothing matched comes back in `unanswered`. Its `defaultLabelId` is deliberately NOT
  * substituted: that would change what the diner asked for. A frozen answer matching no offered list is
- * left out, because sending it would be refused; a whole-order save keeps it on the line.
+ * left out, because sending it would be refused.
  */
 export function deriveOptionSelections(
   offered: readonly OfferedModifier[],

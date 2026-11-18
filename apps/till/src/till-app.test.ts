@@ -8162,6 +8162,108 @@ describe("till-app", () => {
     );
   });
 
+  describe("after a save changes one answer of a parked dish", () => {
+    const frozenRare = {
+      ...frozenDoneness,
+      labelName: { es: "Poco hecho" },
+      labelCustomerName: { es: "Poco hecho para el cliente" },
+      labelKitchenName: "PH",
+    };
+    const listedWith = (optionSnapshots: object[]) =>
+      ({
+        changesAfterSending: "held-or-waiting",
+        stationId: null,
+        movable: false,
+        id: "line-answered",
+        groupId: null,
+        lineNo: 1,
+        productId: "cafe",
+        quantity: "2.000",
+        unitPriceGross: "1.50",
+        servedAt: null,
+        courseId: null,
+        sentAt: null,
+        firedAt: null,
+        state: null,
+        note: null,
+        listId: null,
+        menuItemId: "menu-item-cafe-0",
+        parentProductId: null,
+        optionSnapshots,
+      }) as unknown as TabLine;
+    const orderWith = (answers: object[]) => {
+      const order = answeredOrder(answers[0] as Record<string, unknown>);
+      order.lines[0]!.optionSnapshots = answers as never;
+      return order;
+    };
+
+    /** The parked dish holds `frozenDoneness` and `frozenMilk`; staff pick "Poco hecho" and pay, and
+     * the refused payment leaves the basket showing what the save left. */
+    async function changeDoneness(offered: TillProduct["offeredModifiers"], stored: object[]) {
+      const offering: TillProduct = { ...coffee, offeredModifiers: offered };
+      const before = [frozenDoneness, frozenMilk];
+      const retrieveWorkingOrder = vi
+        .fn()
+        .mockResolvedValueOnce(orderWith(before))
+        .mockResolvedValue(orderWith(stored));
+      const { el } = await mountApp({
+        listDefaultZoneOffers: vi
+          .fn()
+          .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
+        retrieveWorkingOrder,
+        getTabLines: vi
+          .fn()
+          .mockResolvedValueOnce({ lines: [listedWith(before)], revision: 0 })
+          .mockResolvedValue({ lines: [listedWith(stored)], revision: 1 }),
+        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+      });
+      const counter = await toCounter(el);
+      emit(counter, "retrieve-order", { id: "wo-answered" });
+      await flush(el);
+      const kept = offered!.length > 1 ? [frozenMilk] : [];
+      const picked = offered!.length > 1 ? [{ listId: "list-leche", labelId: "label-avena" }] : [];
+      counter.store.setLineModifiers(0, {
+        selection: {
+          options: [{ listId: "list-punto", labelId: "label-rare" }, ...picked],
+          optionSnapshots: [frozenRare, ...kept],
+        },
+      });
+      await el.updateComplete;
+      emit(counter, "confirm-payment", { method: "cash", amount: "10" });
+      await flush(el);
+      return { counter, retrieveWorkingOrder };
+    }
+
+    it("shows the answer the server kept for a deleted list", async () => {
+      const { counter } = await changeDoneness([donenessList], [frozenRare, frozenMilk]);
+
+      expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith(
+        "wo-answered",
+        expect.objectContaining({
+          lines: [
+            expect.objectContaining({
+              workingOrderLineId: "line-answered",
+              options: [{ listId: "list-punto", labelId: "label-rare" }],
+            }),
+          ],
+        }),
+      );
+      expect(counter.store.lines[0]!.optionSnapshots).toEqual([frozenRare, frozenMilk]);
+      expect(counter.store.dirty).toBe(false);
+    });
+
+    it("does not read the order back when the row holds every stored answer", async () => {
+      const { counter, retrieveWorkingOrder } = await changeDoneness(
+        [donenessList, oatMilkList],
+        [frozenRare, frozenMilk],
+      );
+
+      expect(currentApi.updateWorkingOrder).toHaveBeenCalledOnce();
+      expect(retrieveWorkingOrder).toHaveBeenCalledOnce();
+      expect(counter.store.lines[0]!.optionSnapshots).toEqual([frozenRare, frozenMilk]);
+    });
+  });
+
   it("adds a fresh dish beside a line keeping an answer from a deleted list, never into it", async () => {
     const { el, counter } = await retrieveAnswered([], [frozenDoneness]);
 

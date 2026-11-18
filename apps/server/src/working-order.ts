@@ -116,8 +116,8 @@ import {
   buildLineExtras,
   editLineExtras,
   editLineOptions,
+  editUnsentLineOptions,
   namedPicks,
-  onlyStoredAnswersUnmatched,
 } from "./modifier-selection.js";
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type {
@@ -6248,8 +6248,8 @@ async function applyLineEdits(
     fresh: RequestedLine[];
     /** Refuse a lower count where a removal would be refused, rather than take it. */
     refuseSentDrop?: true;
-    /** Keep a line's options answers while the edit names none it does not hold, and the line was
-     * sent or only its stored answers went unmatched: a rename cannot be told from a change. */
+    /** A sent line keeps its options answers while the edit names none it does not hold: a rename
+     * cannot be told from a change. A line not yet sent goes through `editUnsentLineOptions`. */
     keepRecordedAnswers?: true;
   },
   operatorId: string | undefined,
@@ -6455,24 +6455,19 @@ async function applyLineEdits(
       await requireMakeAtStation(tx, intent.makeAt);
     const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
     let optionSnapshots = parent.optionSnapshots;
-    const keepAnswer =
-      plan.keepRecordedAnswers === true &&
-      intent.options !== null &&
-      asksNoNewAnswer(modifiers.options, intent.options.set, parent.optionSnapshots) &&
-      (wasSent(parent) ||
-        onlyStoredAnswersUnmatched(
-          modifiers.options,
-          intent.options.set as OptionSelection[],
-          parent.optionSnapshots,
-        ));
-    if (intent.options !== null && !keepAnswer) {
-      optionSnapshots =
-        editLineOptions(
-          modifiers.options,
-          intent.options.set,
-          parent.optionSnapshots,
-          defaultLanguage,
-        ) ?? parent.optionSnapshots;
+    if (intent.options !== null) {
+      const wholeOrder = plan.keepRecordedAnswers === true;
+      const sent = wasSent(parent);
+      if (
+        !wholeOrder ||
+        !sent ||
+        !asksNoNewAnswer(modifiers.options, intent.options.set, parent.optionSnapshots)
+      ) {
+        const edit = wholeOrder && !sent ? editUnsentLineOptions : editLineOptions;
+        optionSnapshots =
+          edit(modifiers.options, intent.options.set, parent.optionSnapshots, defaultLanguage) ??
+          parent.optionSnapshots;
+      }
     }
     const extras =
       intent.extras === null
