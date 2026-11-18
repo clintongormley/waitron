@@ -176,7 +176,7 @@ import {
   type SubmitGroup,
 } from "../state/draft-layout.js";
 import { billRequestOf } from "../state/table-signals.js";
-import { defaultReceiptGuests } from "../state/receipt-guests.js";
+import { defaultReceiptGuestCount } from "../state/receipt-guests.js";
 import { seatsGuests, shownName as tableShownName } from "../state/floor-today.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
@@ -1726,7 +1726,7 @@ export class TillTableOrderScreen extends LitElement {
   /** An untouched staying side follows the stored count; a typed one stays, measured against it. */
   #followStoredGuests(): void {
     if (this.actionStep !== "split-table-pick") return;
-    const stored = this.#savedGuests();
+    const stored = this.#savedGuestCount();
     const baseline = this.#actionBaseline!;
     if (sameGuestCount(stored, baseline.staying)) return;
     if (sameGuestCount(this.splitStaying, baseline.staying)) this.splitStaying = stored;
@@ -5276,7 +5276,7 @@ export class TillTableOrderScreen extends LitElement {
           .invoices=${false}
           .payQuiet=${this.#payQuiet("tender")}
           .asksGuests=${shown?.invoiceType !== "F1"}
-          .receiptGuests=${defaultReceiptGuests(this.party)}
+          .receiptGuests=${defaultReceiptGuestCount(this.party)}
           .confirmation=${this.paymentConfirmation}
         ></till-tender-pay>
         ${this.paymentConfirmation === undefined ? html`${this.#billChoices(shown)}` : nothing}
@@ -6069,10 +6069,10 @@ export class TillTableOrderScreen extends LitElement {
 
   #openCounting(): void {
     this.#closeActions();
-    this.counting = { value: this.#savedGuests(), refusal: "" };
+    this.counting = { value: this.#savedGuestCount(), refusal: "" };
   }
 
-  #savedGuests(): string {
+  #savedGuestCount(): string {
     const count = this.party?.guestCount ?? null;
     return count === null ? "" : String(count);
   }
@@ -6084,7 +6084,7 @@ export class TillTableOrderScreen extends LitElement {
     return html`<till-party-guests-dialog
       .tables=${partyTablesLabel(party, this.tables)}
       .value=${counting.value}
-      .savedValue=${this.#savedGuests()}
+      .savedValue=${this.#savedGuestCount()}
       .refusal=${counting.refusal}
       @party-guests-confirm=${(event: Event) => {
         event.stopPropagation();
@@ -6143,7 +6143,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #openSplitPick(tableId: string): void {
     this.#resetSplitPick();
-    this.splitStaying = this.#savedGuests();
+    this.splitStaying = this.#savedGuestCount();
     this.#splitPrompt = {};
     this.actionStep = "split-table-pick";
     this.#moveActionBaseline();
@@ -6236,7 +6236,7 @@ export class TillTableOrderScreen extends LitElement {
       ...this.#actionPayload(),
       whole: new Set(),
       billPicks: new Map(),
-      staying: this.#savedGuests(),
+      staying: this.#savedGuestCount(),
       leaving: "",
     };
     this.#splitObserved = null;

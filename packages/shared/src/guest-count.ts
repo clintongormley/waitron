@@ -5,3 +5,13 @@ export const MAX_GUEST_COUNT = 999;
 export function isValidGuestCount(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= MAX_GUEST_COUNT;
 }
+
+export interface PartyGuestCount {
+  guestCount: number | null;
+  billCount: number;
+}
+
+/** A party's default guest count: its own count, only while it has exactly one bill and the count is valid. */
+export function defaultGuestCount(party: PartyGuestCount): number | null {
+  return party.billCount === 1 && isValidGuestCount(party.guestCount) ? party.guestCount : null;
+}

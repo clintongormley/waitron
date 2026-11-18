@@ -2,7 +2,7 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import type { RecordSaleInput } from "@waitron/core";
 import { parties, saleReceiptGuests, sales, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { isValidGuestCount } from "@waitron/shared";
+import { defaultGuestCount, isValidGuestCount } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { partyFamily } from "./parties.js";
@@ -48,8 +48,8 @@ export async function recordReceiptGuests(
 
 /** The default as the row can hold it: a party's count above 999, which the parties table allows, stores no line. */
 async function storableDefault(tx: Transaction, workingOrderId: string): Promise<number | null> {
-  const guestCount = await readBillGuests(tx, workingOrderId);
-  return guestCount !== undefined && isValidGuestCount(guestCount) ? guestCount : null;
+  const party = await readBillParty(tx, workingOrderId);
+  return party === undefined ? null : defaultGuestCount(party);
 }
 
 /** What a paper receipt of the sale prints: a simplified sale's stored row when it has one, else {@link readReceiptGuests}. */
@@ -94,26 +94,33 @@ export async function readReceiptGuests(
     .innerJoin(workingOrders, eq(workingOrders.id, sales.workingOrderId))
     .innerJoin(parties, eq(parties.id, workingOrders.partyId))
     .where(eq(sales.id, saleId));
-  return guestsOfParty(tx, row);
+  const party = await countedParty(tx, row);
+  return party?.billCount === 1 ? party.guestCount : undefined;
 }
 
-/** {@link readReceiptGuests} for the sale of the bill `workingOrderId`. */
-async function readBillGuests(
+/** {@link countedParty} for the party of the bill `workingOrderId`. */
+async function readBillParty(
   tx: Transaction,
   workingOrderId: string,
-): Promise<number | undefined> {
+): Promise<CountedParty | undefined> {
   const [row] = await tx
     .select(BILL_PARTY)
     .from(workingOrders)
     .innerJoin(parties, eq(parties.id, workingOrders.partyId))
     .where(eq(workingOrders.id, workingOrderId));
-  return guestsOfParty(tx, row);
+  return countedParty(tx, row);
 }
 
-async function guestsOfParty(
+/** A party's count and how many bills its family holds that are not abandoned. `billCount` stops at 2: enough to tell one bill from several, never a total. */
+interface CountedParty {
+  guestCount: number;
+  billCount: number;
+}
+
+async function countedParty(
   tx: Transaction,
   row: { partyId: string; guestCount: number | null; mergedInto: string | null } | undefined,
-): Promise<number | undefined> {
+): Promise<CountedParty | undefined> {
   if (row === undefined || row.guestCount === null || row.mergedInto !== null) return undefined;
   const family = await partyFamily(tx, row.partyId);
   const bills = await tx
@@ -121,5 +128,5 @@ async function guestsOfParty(
     .from(workingOrders)
     .where(and(inArray(workingOrders.partyId, family), ne(workingOrders.status, "abandoned")))
     .limit(2);
-  return bills.length === 1 ? row.guestCount : undefined;
+  return { guestCount: row.guestCount, billCount: bills.length };
 }

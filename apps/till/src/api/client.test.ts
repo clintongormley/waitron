@@ -3311,12 +3311,15 @@ describe("TillApi", () => {
     ).rejects.toMatchObject({ code: "management.request_invalid", field: "name" });
   });
 
-  it("setPartyGuests PUTs the count, or null to clear it, and the revision to the party's /guests route", async () => {
+  it("setPartyGuestCount PUTs the count, or null to clear it, and the revision to the party's /guests route", async () => {
     const fetchStub = vi.fn(async () => jsonResponse({ revision: 4, guestCount: 5 }));
     const api = new TillApi("", fetchStub);
 
-    await expect(api.setPartyGuests("v1", 5, 3)).resolves.toEqual({ revision: 4, guestCount: 5 });
-    await api.setPartyGuests("v1", null, 4);
+    await expect(api.setPartyGuestCount("v1", 5, 3)).resolves.toEqual({
+      revision: 4,
+      guestCount: 5,
+    });
+    await api.setPartyGuestCount("v1", null, 4);
 
     expect(fetchStub).toHaveBeenNthCalledWith(
       1,
@@ -3336,7 +3339,7 @@ describe("TillApi", () => {
     );
   });
 
-  it("setPartyGuests surfaces a refusal naming the field as { code, field }", async () => {
+  it("setPartyGuestCount surfaces a refusal naming the field as { code, field }", async () => {
     const fetchStub = vi
       .fn()
       .mockResolvedValue(
@@ -3346,7 +3349,9 @@ describe("TillApi", () => {
         ),
       );
 
-    await expect(new TillApi("", fetchStub).setPartyGuests("v1", 1000, 3)).rejects.toMatchObject({
+    await expect(
+      new TillApi("", fetchStub).setPartyGuestCount("v1", 1000, 3),
+    ).rejects.toMatchObject({
       code: "management.request_invalid",
       field: "guestCount",
     });

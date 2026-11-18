@@ -283,7 +283,7 @@ export async function setPartyName(
   return { revision, name };
 }
 
-export async function setPartyGuests(
+export async function setPartyGuestCount(
   tx: Transaction,
   args: { partyId: string; guestCount: number | null; expectedPartyRevision: number },
 ): Promise<{ revision: number; guestCount: number | null }> {

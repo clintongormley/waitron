@@ -16,12 +16,13 @@ import {
 import { recordSale } from "@waitron/core";
 import {
   AppError,
+  defaultGuestCount,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { completeBillPayment } from "./bill-payments.js";
 import { mergeBills, transferItems } from "./testing/bill-action-fixture.js";
-import { setPartyGuests } from "./parties.js";
+import { setPartyGuestCount } from "./parties.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import {
   readGuestCountChoice,
@@ -36,6 +37,7 @@ import {
   billRow,
   commandFor,
   counterOrder,
+  floorRow,
   inTx,
   join,
   linesOf,
@@ -192,7 +194,9 @@ describe("the default guests (readReceiptGuests)", () => {
     const { partyId, tabId } = await seat(v, await v.table("Guests 8"), 4);
     await orderForParty(v, partyId, ["Burger"], tabId);
     const expectedPartyRevision = await revisionOf(v, partyId);
-    await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount: 6, expectedPartyRevision }));
+    await inTx(v, (tx) =>
+      setPartyGuestCount(tx, { partyId, guestCount: 6, expectedPartyRevision }),
+    );
 
     expect(await guestsOnPaying(tabId, "12.00")).toBe(6);
   });
@@ -455,6 +459,91 @@ describe("the guests row written beside a recorded sale", () => {
   });
 });
 
+/**
+ * The guests the till's payment screen fills in for the party seated at `tableId`, as the floor read
+ * hands it over, beside the guests stored for a simplified sale of `billId` paid with no count sent.
+ */
+async function tillAndStoredDefaults(
+  tableId: string,
+  billId: string,
+  sale?: Parameters<typeof saleWithNoRow>[1],
+): Promise<{ till: number | null; stored: number | null | undefined }> {
+  const { party } = await floorRow(v, tableId);
+  const till = defaultGuestCount(party!);
+  const saleId = await saleWithNoRow(billId, sale);
+  await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, billId), undefined));
+  const [row] = await storedRows(saleId);
+  return { till, stored: row?.guests };
+}
+
+describe("the default the till shows and the default stored for a sale paid with none", () => {
+  it("are both the party's count on its one bill", async () => {
+    const table = await v.table("Same 1");
+    const { partyId, tabId } = await seat(v, table, 4);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+
+    expect(await tillAndStoredDefaults(table, tabId)).toEqual({ till: 4, stored: 4 });
+  });
+
+  it("are both no line for a party that split a dish onto a second bill", async () => {
+    const table = await v.table("Same 2");
+    const { partyId, tabId } = await seat(v, table, 4);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
+    const second = await split(v, partyId, tabId, [2]);
+
+    expect(
+      await tillAndStoredDefaults(table, second, {
+        name: "Vino",
+        price: "30.00",
+        vatRate: "21.00",
+      }),
+    ).toEqual({ till: null, stored: null });
+  });
+
+  it("are both the sum on joined tables whose bills were merged", async () => {
+    const table4 = await v.table("Same 3 4");
+    const table5 = await v.table("Same 3 5");
+    const four = await seat(v, table4, 2);
+    const five = await seat(v, table5, 3);
+    await orderForParty(v, four.partyId, ["Burger"], four.tabId);
+    await orderForParty(v, five.partyId, ["Paella"], five.tabId);
+    await joinOther(four.partyId, table5, five.partyId, { into: four.tabId, from: five.tabId });
+
+    expect(await tillAndStoredDefaults(table5, four.tabId, { price: "32.00" })).toEqual({
+      till: 5,
+      stored: 5,
+    });
+  });
+
+  it("are both no line on joined tables, each keeping its bill", async () => {
+    const table4 = await v.table("Same 4 4");
+    const table5 = await v.table("Same 4 5");
+    const four = await seat(v, table4, 2);
+    const five = await seat(v, table5, 3);
+    await orderForParty(v, four.partyId, ["Burger"], four.tabId);
+    await orderForParty(v, five.partyId, ["Paella"], five.tabId);
+    await joinOther(four.partyId, table5, five.partyId);
+
+    expect(await tillAndStoredDefaults(table4, four.tabId)).toEqual({ till: null, stored: null });
+  });
+
+  it("are both no line for a party that joined a table whose party had already paid", async () => {
+    const xTable = await v.table("Same 5 X");
+    const yTable = await v.table("Same 5 Y");
+    const x = await seat(v, xTable, 2);
+    await orderForParty(v, x.partyId, ["Burger"], x.tabId);
+    await pay(v, x.tabId, "12.00");
+    const y = await seat(v, yTable, 3);
+    await orderForParty(v, y.partyId, ["Paella"], y.tabId);
+    await joinOther(y.partyId, xTable, x.partyId);
+
+    expect((await partyRow(v, y.partyId)).guestCount).toBe(5);
+    expect(
+      await tillAndStoredDefaults(yTable, y.tabId, { name: "Paella", price: "20.00" }),
+    ).toEqual({ till: null, stored: null });
+  });
+});
+
 describe("the guests a paper receipt of a sale prints", () => {
   it("prints the party's count for a sale with no row", async () => {
     const { saleId } = await paidPartyOfFour("Paper 1");
@@ -477,7 +566,9 @@ describe("the guests a paper receipt of a sale prints", () => {
     const { partyId, saleId } = await paidPartyOfFour("Paper 4");
     await storeRow(saleId, 5);
     const expectedPartyRevision = await revisionOf(v, partyId);
-    await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount: 6, expectedPartyRevision }));
+    await inTx(v, (tx) =>
+      setPartyGuestCount(tx, { partyId, guestCount: 6, expectedPartyRevision }),
+    );
     expect((await partyRow(v, partyId)).guestCount).toBe(6);
     expect(await printed(saleId)).toBe(5);
   });

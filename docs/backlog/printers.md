@@ -317,18 +317,8 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 
 ## Loose ends left by A663 Part 3b (#1827)
 
-- The default guests count is worked out twice, kept equal by hand: on the till to fill the
-  field (`defaultReceiptGuests`, `apps/till/src/state/receipt-guests.ts`) and on the server when
-  no count is sent (`storableDefault` and `readReceiptGuests`, `apps/server/src/receipt-guests.ts`).
-  A change to one that misses the other shows the waiter one number and stores another.
 - Leaving the payment screen after changing the count asks nothing, while a typed tip or cash
   amount does ask. The plan chose this; the owner has not said whether leaving should ask.
-- Some code names holding the guest count still say `guests` after A988 (#2163), which renamed
-  only the wire fields and the drizzle property: `readBillGuests` and `guestsOfParty`
-  (`apps/server/src/receipt-guests.ts`, `apps/till/src/state/receipt-guests.ts`),
-  `setPartyGuests` (server `parties.ts`, `till-api.ts`; till `api/client.ts`, `till-app.ts`), and
-  `#savedGuests` (`apps/till/src/screens/till-table-order-screen.ts`). Renaming
-  them to `…GuestCount` is free before go-live; no behaviour changes.
 - `#onConfirmPayment` and `#onPayTab` (`apps/till/src/till-app.ts`) pick one of several call
   shapes only so older tests that pin the exact argument count keep passing; one call per path
   sends the same request.
@@ -543,7 +533,7 @@ Hardware and inbox checks to complete in the owner session.
   use. Route paths
   (`PUT /api/parties/:id/guests`), file and table names, the printed receipt's guests line
   (`ReceiptDocument.guests`), and many function, property and event names (for example
-  `readReceiptGuests`, `setPartyGuests`) keep the word.
+  `readReceiptGuests`, `recordReceiptGuests`) keep the word.
 
 - **Sample wording (owner, 2026-10-28, A965).** The table and product names follow the sample receipt language. English uses “Outside 6” and “Coffee and toast”; Spanish uses “Terraza 6” and “Café y tostada”. The table name does not repeat the table caption. The synthetic number remains.
 

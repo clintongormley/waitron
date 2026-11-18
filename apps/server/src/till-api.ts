@@ -142,7 +142,7 @@ import {
   readPartyBills,
   seatTable,
   setPartyName,
-  setPartyGuests,
+  setPartyGuestCount,
   partyRevision,
   partyRevisionOfOrder,
   partyZone,
@@ -3148,7 +3148,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const guestCount = requireGuestCountOrNull(body.guestCount);
       const counted = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ partyId }]);
-        return setPartyGuests(tx, { partyId, guestCount, expectedPartyRevision });
+        return setPartyGuestCount(tx, { partyId, guestCount, expectedPartyRevision });
       });
       return c.json(counted);
     }),

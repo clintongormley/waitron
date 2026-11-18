@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TableParty } from "../api/client.js";
-import { defaultReceiptGuests } from "./receipt-guests.js";
+import { defaultReceiptGuestCount } from "./receipt-guests.js";
 
 function party(over: Partial<TableParty> = {}): TableParty {
   return {
@@ -21,26 +21,26 @@ function party(over: Partial<TableParty> = {}): TableParty {
   };
 }
 
-describe("defaultReceiptGuests", () => {
+describe("defaultReceiptGuestCount", () => {
   it("is the party's count when it holds one bill", () => {
-    expect(defaultReceiptGuests(party())).toBe(4);
+    expect(defaultReceiptGuestCount(party())).toBe(4);
   });
 
   it("is null when the party's bill is split", () => {
-    expect(defaultReceiptGuests(party({ billCount: 2 }))).toBeNull();
+    expect(defaultReceiptGuestCount(party({ billCount: 2 }))).toBeNull();
   });
 
   it("is null when the party has no count", () => {
-    expect(defaultReceiptGuests(party({ guestCount: null }))).toBeNull();
+    expect(defaultReceiptGuestCount(party({ guestCount: null }))).toBeNull();
   });
 
   it("is null with no party", () => {
-    expect(defaultReceiptGuests(null)).toBeNull();
-    expect(defaultReceiptGuests(undefined)).toBeNull();
+    expect(defaultReceiptGuestCount(null)).toBeNull();
+    expect(defaultReceiptGuestCount(undefined)).toBeNull();
   });
 
   it("is null for a count the receipt cannot hold", () => {
-    expect(defaultReceiptGuests(party({ guestCount: 1000 }))).toBeNull();
-    expect(defaultReceiptGuests(party({ guestCount: 999 }))).toBe(999);
+    expect(defaultReceiptGuestCount(party({ guestCount: 1000 }))).toBeNull();
+    expect(defaultReceiptGuestCount(party({ guestCount: 999 }))).toBe(999);
   });
 });
