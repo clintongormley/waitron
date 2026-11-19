@@ -540,8 +540,8 @@ export function checkMoves(
   set, and set only with `setMenuId`.
 - No trigger checks that a dish's set-menu line is on the dish's own bill (**my call (plan
   writer)**): a move takes the set menu and its dishes in one transaction. The rows can
-  briefly be on different bills inside that transaction. Task 11a tests that the menu and its
-  dishes end on the same bill.
+  briefly be on different bills inside that transaction. The move, table-split and merge tests
+  check that the menu and its dishes end on the same bill.
 - `billSetMenuCopies` (`bill_set_menu_copies`): `workingOrderId` → `working_orders.id` on delete
   cascade, `setMenuId` → `menus.id`, `menuVersionId` → `menu_versions.id`; primary key
   `(working_order_id, set_menu_id)`. Classified `state`. Every classified table is a live-update

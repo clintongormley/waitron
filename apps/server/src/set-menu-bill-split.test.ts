@@ -39,6 +39,33 @@ it("refuses to move an eat-in set-menu bill to the counter", async () => {
   expect(bill?.partyId).toBe(source.partyId);
 });
 
+it("refuses to leave a draft containing a set-menu dish at the eat-in counter", async () => {
+  const { venue, copy } = fixture;
+  const seated = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  const draft = await saveSetMenuDraft(venue, seated, {
+    menuItemId: copy.menuItemId,
+    menuVersionId: copy.versionId,
+    setMenuId: copy.menuId,
+    quantity: "1",
+  });
+  const command = await commandFor(venue, seated.partyId);
+  await expect(
+    inTx(venue, (tx) =>
+      moveBill(
+        tx,
+        venue.cfg,
+        seated.tabId,
+        { counter: { zoneId: null } },
+        { ...command, operatorId: draft.ownerId },
+      ),
+    ),
+  ).rejects.toMatchObject({ code: "set_menu.not_seated" });
+  expect(await inTx(venue, (tx) => readBillEditState(tx, seated.tabId))).toMatchObject({
+    draftId: draft.id,
+    draftRevision: draft.revision,
+  });
+});
+
 it("keeps the recorded menu and dish places when a whole bill moves to another table", async () => {
   const { venue } = fixture;
   const source = await setMenuBill(fixture);

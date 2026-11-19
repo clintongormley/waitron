@@ -51,6 +51,15 @@ export async function hasBillSetMenuLines(
   return line !== undefined;
 }
 
+export async function hasDraftSetMenuLines(tx: Transaction, draftId: string): Promise<boolean> {
+  const [line] = await tx
+    .select({ id: orderDraftLines.id })
+    .from(orderDraftLines)
+    .where(and(eq(orderDraftLines.draftId, draftId), isNotNull(orderDraftLines.setMenuId)))
+    .limit(1);
+  return line !== undefined;
+}
+
 // Set-menu billing replaces this refusal once it can price the menu and its dishes together.
 export async function refuseSetMenuMoney(
   tx: Transaction,

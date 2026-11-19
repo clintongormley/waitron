@@ -75,16 +75,17 @@ function copies(billId: string) {
 it("moves a menu and its dishes together, with their original places, prices and recorded copy", async () => {
   const source = await bills();
   const { venue, copy } = fixture;
-  await inTx(venue, (tx) =>
-    tx
+  const stayingId = await inTx(venue, async (tx) => {
+    await tx
       .update(workingOrderLines)
       .set({ unitPriceGross: 500, lineTotal: 500 })
-      .where(eq(workingOrderLines.id, source.dishId)),
-  );
+      .where(eq(workingOrderLines.id, source.dishId));
+    return seedBillSetMenu(tx, source.billId, special, 3, 2100);
+  });
   const before = await lines(source.billId);
   await move(source, source.menuLineId, source.dishId);
-  expect(await lines(source.billId)).toEqual([]);
-  expect(await lines(source.target)).toEqual(before);
+  expect(await lines(source.billId)).toEqual(before.filter(({ id }) => id === stayingId));
+  expect(await lines(source.target)).toEqual(before.filter(({ id }) => id !== stayingId));
   expect(await copies(source.target)).toEqual([{ menuId: copy.menuId, versionId: copy.versionId }]);
 });
 
