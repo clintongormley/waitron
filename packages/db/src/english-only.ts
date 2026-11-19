@@ -42,7 +42,7 @@ const VERIFACTU_NAMES =
   "names Veri*Factu tables or columns, which packages/fiscal-verifactu's schema spells in Spanish";
 
 const SPANISH_SCREEN_WORDING =
-  "checks the screen's Spanish wording: sentences with values filled in, plurals, dates, colour lists, and one literal check kept per screen";
+  "checks the screen's Spanish wording: sentences with values filled in, plurals, dates, colour lists, and at least one literal check of fixed wording per screen";
 const ACCENTED_INPUTS =
   "accented or Spanish-ordered sample input that the test exists to sort, search or keep through cleaning";
 const REAL_HOLIDAY_NAMES =
@@ -183,7 +183,7 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
     findings: 1,
   },
   "packages/venue-service/src/dashboard/painter-frame.test.ts": {
-    reason: SPANISH_SCREEN_WORDING,
+    reason: "a long Spanish season name the Spanish-language bar must fit",
     findings: 1,
   },
   "packages/venue-service/src/dashboard/period-delete-dialog.test.ts": {
@@ -271,8 +271,11 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
     findings: 8,
   },
   "packages/venue-service/src/holidays-routes.test.ts": { reason: REAL_HOLIDAY_NAMES, findings: 1 },
-  "packages/venue-service/src/holidays.test.ts": { reason: REAL_HOLIDAY_NAMES, findings: 4 },
-  "packages/venue-service/src/hours.live.test.ts": { reason: REAL_HOLIDAY_NAMES, findings: 1 },
+  "packages/venue-service/src/holidays.test.ts": {
+    reason:
+      "a real Spanish province alias (Lérida) and an accented invented city the holiday-area choice must keep apart",
+    findings: 3,
+  },
   "packages/venue-service/src/kitchen-screens.test.ts": { reason: ACCENTED_INPUTS, findings: 1 },
   "packages/venue-service/src/opening-hours-calendar.test.ts": {
     reason: REAL_HOLIDAY_NAMES,

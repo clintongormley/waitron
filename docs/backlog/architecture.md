@@ -799,6 +799,9 @@ also qualifies the historical operation-description references in this section.
   BillVenue's receipt printer, card readers and cash till use English display names.
   Local device-equipment and office-printer route fixtures use English printer and reader names;
   their shared BillVenue device names and venue/operation samples remain.
+  Venue-service's test files are off the list: ordinary samples are English, fixed Spanish screen
+  labels are read from its strings table, and the files that still need non-English text are held
+  at their counts in `KEEPS_NON_ENGLISH`, each with its reason; staffing is next.
 
 ## A1308. Rationalise the tables, background jobs, environment variables and files
 

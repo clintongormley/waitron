@@ -635,7 +635,7 @@ describe("territorial areas", () => {
     expect(await stored()).toEqual({ holidayArea: null, entries: [], dates: [] });
   });
 
-  it("offers the Arán choice for a Spanish venue in Lleida and none in Sevilla", async () => {
+  it("offers the Aran choice for a Spanish venue in Lleida and none in Sevilla", async () => {
     await venue({ country: "ES", province: "Lérida", city: "Vielha" });
     const options = (await run((tx) => packageIndex.readHolidayAreaModel(tx))).areaOptions;
     expect(options.map(({ key }) => key)).toEqual(["aran", "lleida-except-aran"]);

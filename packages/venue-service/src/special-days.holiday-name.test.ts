@@ -350,7 +350,7 @@ describe("a date saved on a day beats a holiday date that moved onto it", () => 
   it("gives the day to a repeating month and day standing there, not to the holiday that moved there", async () => {
     await venue();
     await yearly("Holy Friday", "2026-04-03");
-    const anniversary = await rawDay("Aniversario", "2027-03-26", true);
+    const anniversary = await rawDay("Anniversary", "2027-03-26", true);
     expect(await standing(["2027-03-26"])).toEqual({ "2027-03-26": anniversary.id });
   });
 
@@ -396,11 +396,11 @@ describe("a repeating month and day against a repeating holiday date", () => {
   it("refuses them where they first meet in a later year, though their stored dates differ", async () => {
     await venue();
     const thursday = await yearly("Holy Thursday", "2026-04-02");
-    expect(await refusal(yearly("Aniversario", "2026-03-25"))).toEqual({
+    expect(await refusal(yearly("Anniversary", "2026-03-25"))).toEqual({
       code: "special_day.date_taken",
       params: { date: "2027-03-25", specialDayId: thursday.id, name: "Holy Thursday" },
     });
-    await yearly("Aniversario", "2026-03-24");
+    await yearly("Anniversary", "2026-03-24");
   });
 });
 
@@ -457,11 +457,11 @@ describe("the readiness list warns when two special days come to share a date", 
   it("names a repeating holiday that moved onto a fixed date, which applies, in the current and next year", async () => {
     await venue();
     const friday = await yearly("Holy Friday", "2026-04-03");
-    const feria = await rawDay("Feria", "2026-03-26", true);
-    const expected = [clash("2027-03-26", feria, "Feria", friday, "Holy Friday")];
+    const fair = await rawDay("Fair", "2026-03-26", true);
+    const expected = [clash("2027-03-26", fair, "Fair", friday, "Holy Friday")];
     expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual(expected);
     expect(await clashes(new Date("2027-06-01T10:00:00Z"))).toEqual(expected);
-    expect(await standing(["2027-03-26"])).toEqual({ "2027-03-26": feria.id });
+    expect(await standing(["2027-03-26"])).toEqual({ "2027-03-26": fair.id });
   });
 
   it("names a one-off date the moved holiday meets as the one that applies", async () => {
@@ -483,25 +483,25 @@ describe("the readiness list warns when two special days come to share a date", 
   it("says nothing of a clash outside the current and next year", async () => {
     await venue();
     await yearly("Holy Friday", "2026-04-03");
-    await rawDay("Feria", "2026-03-26", true);
+    await rawDay("Fair", "2026-03-26", true);
     expect(await clashes(new Date("2028-06-01T10:00:00Z"))).toEqual([]);
   });
 
   it("gives two holiday-following dates that meet to the earlier stored date, the holiday's first", async () => {
     await venue();
     const friday = await yearly("Holy Friday", "2026-04-03");
-    const later = await rawDay("Vigilia", "2026-04-04", true, "Holy Friday");
+    const later = await rawDay("Vigil", "2026-04-04", true, "Holy Friday");
     expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual([
-      clash("2027-03-26", friday, "Holy Friday", later, "Vigilia"),
+      clash("2027-03-26", friday, "Holy Friday", later, "Vigil"),
     ]);
   });
 
   it("gives two holiday-following dates that meet to the earlier stored date, the other's first", async () => {
     await venue();
     const first = await yearly("Holy Friday", "2026-04-03");
-    const earlier = await rawDay("Vigilia", "2026-04-02", true, "Holy Friday");
+    const earlier = await rawDay("Vigil", "2026-04-02", true, "Holy Friday");
     expect(await clashes(new Date("2026-06-01T10:00:00Z"))).toEqual([
-      clash("2027-03-26", earlier, "Vigilia", first, "Holy Friday"),
+      clash("2027-03-26", earlier, "Vigil", first, "Holy Friday"),
     ]);
   });
 });
@@ -510,19 +510,19 @@ describe("saving either special day of a pair that came to share a date", () => 
   const pair = async () => {
     await venue();
     const friday = await yearly("Holy Friday", "2026-04-03");
-    const feria = await rawDay("Feria", "2026-03-26", true);
+    const fair = await rawDay("Fair", "2026-03-26", true);
     const update = (id: string, input: unknown) =>
       scoped((tx) => saveSpecialDay(tx, id, input, AT, 1));
-    return { friday, feria, update };
+    return { friday, fair, update };
   };
-  const feriaOn = (date: string) => ({
-    name: "Feria",
+  const fairOn = (date: string) => ({
+    name: "Fair",
     repeatsYearly: true,
     dates: [{ date, closedAllDay: true }],
   });
 
   it("refuses the repeating holiday unchanged, naming the fixed day that holds the shared date", async () => {
-    const { friday, feria, update } = await pair();
+    const { friday, fair, update } = await pair();
     expect(
       await refusal(
         update(friday.id, {
@@ -533,31 +533,31 @@ describe("saving either special day of a pair that came to share a date", () => 
       ),
     ).toEqual({
       code: "special_day.date_taken",
-      params: { date: "2027-03-26", specialDayId: feria.id, name: "Feria" },
+      params: { date: "2027-03-26", specialDayId: fair.id, name: "Fair" },
     });
   });
 
   it("refuses the fixed yearly day unchanged, naming the holiday that moved onto it", async () => {
-    const { friday, feria, update } = await pair();
-    expect(await refusal(update(feria.id, feriaOn("2026-03-26")))).toEqual({
+    const { friday, fair, update } = await pair();
+    expect(await refusal(update(fair.id, fairOn("2026-03-26")))).toEqual({
       code: "special_day.date_taken",
       params: { date: "2027-03-26", specialDayId: friday.id, name: "Holy Friday" },
     });
   });
 
   it("saves the fixed yearly day once it moves off the shared date", async () => {
-    const { friday, feria, update } = await pair();
-    const saved = await update(feria.id, feriaOn("2026-03-27"));
-    expect(saved.id).toBe(feria.id);
+    const { friday, fair, update } = await pair();
+    const saved = await update(fair.id, fairOn("2026-03-27"));
+    expect(saved.id).toBe(fair.id);
     expect(
       await db
         .select({ date: specialDayDates.date })
         .from(specialDayDates)
-        .where(eq(specialDayDates.specialDayId, feria.id)),
+        .where(eq(specialDayDates.specialDayId, fair.id)),
     ).toEqual([{ date: "2026-03-27" }]);
     expect(await standing(["2027-03-26", "2027-03-27"])).toEqual({
       "2027-03-26": friday.id,
-      "2027-03-27": feria.id,
+      "2027-03-27": fair.id,
     });
   });
 });

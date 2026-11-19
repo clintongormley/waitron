@@ -171,7 +171,11 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
     saveSpecialDay(
       tx,
       null,
-      { name: "Arán", repeatsYearly: false, dates: [{ date: "2026-06-17", closedAllDay: false }] },
+      {
+        name: "Local fair",
+        repeatsYearly: false,
+        dates: [{ date: "2026-06-17", closedAllDay: false }],
+      },
       new Date("2026-01-01T12:00:00Z"),
       1,
     ),

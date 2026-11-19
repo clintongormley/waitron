@@ -1,5 +1,10 @@
 # A976 venue-service and staffing test fixtures
 
+_2026-11-19: the watcher chose a second pass (fixed Spanish labels read from
+`VENUE_SERVICE_STRINGS.es`; plurals, dates, list joining, filled placeholders and at least one
+literal check per screen stay literal); 48 files went to `KEEPS_NON_ENGLISH`, staffing was left out,
+and the item moved to lane B as B-ENGLISH-VENUE-SERVICE._
+
 Lane J's J-ENGLISH-VENUE-SERVICE item in `~/waitron-campaign-j/queue.md` continues
 [A976](../../backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 Contributors can read ordinary venue-service test names in English and reuse those samples.

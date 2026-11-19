@@ -333,7 +333,6 @@ describe("the lists", () => {
       "packages/venue-service/src/department-receipts.test.ts",
       "packages/venue-service/src/holidays-routes.test.ts",
       "packages/venue-service/src/holidays.test.ts",
-      "packages/venue-service/src/hours.live.test.ts",
       "packages/venue-service/src/kitchen-screens.test.ts",
       "packages/venue-service/src/opening-hours-calendar.test.ts",
       "packages/venue-service/src/order-kitchen-notes.test.ts",
