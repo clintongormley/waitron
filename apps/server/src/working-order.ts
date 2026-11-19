@@ -6035,14 +6035,15 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
       menuItemId: menuItemByLine.get(line.id),
       children: lines.filter((child) => child.parentLineId === line.id),
     }));
+  const partyId = await partyOfOrder(tx, orderId);
   return {
-    partyId: await partyOfOrder(tx, orderId),
+    partyId,
     lines,
     parents,
     maxLineNo: Math.max(0, ...lines.map((line) => line.lineNo)),
     newWork: rows.some(
       (line) =>
-        line.setMenuRole !== "set_menu" &&
+        (partyId !== null || line.setMenuRole !== "set_menu") &&
         line.sentAt !== null &&
         (!line.madeHere || line.groupState !== "held"),
     )
@@ -7558,7 +7559,13 @@ export async function abandonHeldOrder(
     await refuseBillHoldingMoney(tx, [id]);
     await assertBillHasNoUnsent(tx, id);
     const lines = await readEditableOrder(tx, id);
-    if (lines.lines.some((line) => line.sentAt !== null || line.ticket !== null))
+    if (
+      lines.lines.some(
+        (line) =>
+          line.ticket !== null ||
+          (line.sentAt !== null && (locked.partyId !== null || line.setMenuRole !== "set_menu")),
+      )
+    )
       throw new AppError("ticket.already_fired", { workingOrderId: id });
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     if (locked.partyId !== null && (await ensureFamilyBill(tx, cfg, locked.partyId))) {

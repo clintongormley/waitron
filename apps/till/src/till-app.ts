@@ -3509,6 +3509,12 @@ export class TillApp extends LitElement {
     return this.#counterSetMenuBill?.id === this.#store.id ? this.#counterSetMenuBill : undefined;
   }
 
+  get #counterHasItems(): boolean {
+    return (
+      this.#store.lineCount > 0 || !!this.#currentCounterSetMenuBill?.setMenus?.setMenus.length
+    );
+  }
+
   #counterSetMenuLookup(): SetMenuOfferLookup {
     return this.#counterOffers.setMenuLookup(this.#currentCounterSetMenuBill);
   }
@@ -6398,7 +6404,7 @@ export class TillApp extends LitElement {
     this.deviceZoneSelection = null;
     this.deviceZonesUnread = false;
     let offerLoadFailed: CounterError | false = false;
-    const retainedZone = this.#store.lines.length > 0 ? this.counterServiceZoneId : undefined;
+    const retainedZone = this.#counterHasItems ? this.counterServiceZoneId : undefined;
     try {
       if (this.#choosesZones()) {
         if (this.formFactor === "till") {
@@ -6860,7 +6866,7 @@ export class TillApp extends LitElement {
 
   async #onCounterZoneSelected(event: Event): Promise<void> {
     const { zoneId } = (event as CustomEvent<{ zoneId: string }>).detail;
-    if (this.#store.lines.length > 0 || this.#counterOrderInFlight()) {
+    if (this.#counterHasItems || this.#counterOrderInFlight()) {
       // The zone the counter is already on changes no service area, so it acts as the Counter tab.
       if (zoneId === this.counterServiceZoneId) {
         if (this.errorKey === "service_zone.basket_active") this.errorKey = undefined;
@@ -6887,7 +6893,7 @@ export class TillApp extends LitElement {
       if (
         request !== this.#counterOfferRequest ||
         session !== this.#operatorSession ||
-        this.#store.lines.length > 0 ||
+        this.#counterHasItems ||
         this.#counterOrderInFlight() ||
         (this.formFactor === "till" && !this.#deviceNavigation()?.counterZoneIds.includes(zoneId))
       )
@@ -10183,7 +10189,7 @@ export class TillApp extends LitElement {
       this.#counterOrderInFlight() ||
       this.#diningSwitching
     )
-      return t("table.error");
+      return codeMessage("server.internal");
     const id = store.id;
     const visit = store.loadGeneration;
     const session = this.#operatorSession;
@@ -10204,7 +10210,7 @@ export class TillApp extends LitElement {
     this.counterSetMenuSaving = true;
     try {
       if (!store.persisted) {
-        if (!("count" in change) || change.count === 0) return t("table.error");
+        if (!("count" in change) || change.count === 0) return codeMessage("server.internal");
         const { revision, setMenus } = await api.parkOrder({
           id,
           zoneId,
@@ -10213,7 +10219,7 @@ export class TillApp extends LitElement {
           firstSetMenuId: change.menuId,
         });
         if (!current()) return;
-        if (revision === undefined || setMenus === undefined) return t("table.error");
+        if (revision === undefined || setMenus === undefined) return codeMessage("server.internal");
         store.markPersisted(true);
         this.counterDiningChoice = {
           orderId: id,
@@ -10543,6 +10549,7 @@ export class TillApp extends LitElement {
           ? live
           : {
               ...stored,
+              ...(recorded === undefined ? {} : { unit: recorded.offer.unit }),
               ...(line.menuVersionId === undefined ? {} : { menuVersionId: line.menuVersionId }),
               ...(live === undefined ? {} : { offeredModifiers: offeredListsOf(live) }),
             };
@@ -11460,7 +11467,7 @@ export class TillApp extends LitElement {
     input: Pick<DeviceZoneSelectionInput, "selectedZoneIds"> &
       Partial<Pick<DeviceZoneSelection, "zones">>,
   ): "counter" | "table" | undefined {
-    if (this.#store.lines.length > 0 && !input.selectedZoneIds.includes(this.counterServiceZoneId))
+    if (this.#counterHasItems && !input.selectedZoneIds.includes(this.counterServiceZoneId))
       return "counter";
     return this.#tableHoldsZone(input) ? "table" : undefined;
   }
@@ -11865,7 +11872,7 @@ export class TillApp extends LitElement {
       this.profileOpen = false;
       return;
     }
-    if (this.#store.lines.length > 0 || this.#partylessDraft.lines.length > 0) {
+    if (this.#counterHasItems || this.#partylessDraft.lines.length > 0) {
       this.profileNotice = "order_open";
       return;
     }
@@ -11892,7 +11899,7 @@ export class TillApp extends LitElement {
 
   async #switchProfile(profileId: string): Promise<void> {
     if (this.profileBusy) return;
-    if (this.#store.lines.length > 0 || this.#partylessDraft.lines.length > 0) {
+    if (this.#counterHasItems || this.#partylessDraft.lines.length > 0) {
       this.profileNotice = "order_open";
       return;
     }

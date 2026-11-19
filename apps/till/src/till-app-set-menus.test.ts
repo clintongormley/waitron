@@ -17,6 +17,7 @@ import {
   resetBillPayDrafts,
   stubApi as counterApi,
 } from "../test/bill-pay-app.js";
+import { deviceZonesFixture } from "../test/device-zones.js";
 import type { TillApp } from "./till-app.js";
 import { daily, bill, special } from "../test/set-menu-widgets.js";
 import { setMenuProduct } from "./widgets/product-pick.js";
@@ -289,9 +290,14 @@ it("parks a set-menu-only takeaway and orders from its original folder after rep
   const updateWorkingOrder = vi
     .fn()
     .mockRejectedValue({ code: "set_menu.no_place", dishName: "Sirloin" });
+  const otherZone = "other-counter";
   const api = counterApi({
+    getDeviceZones: vi.fn(async () => deviceZonesFixture([zone.context.zoneId, otherZone])),
     listDefaultZoneOffers: vi.fn(async () => zone),
-    listZoneOffers: vi.fn(async () => zone),
+    listZoneOffers: vi.fn(async (id: string) => ({
+      ...zone,
+      context: { ...zone.context, zoneId: id },
+    })),
     retrieveWorkingOrder,
     updateWorkingOrder,
     getTabLines: vi.fn(async () => ({ lines: [], revision: 9 })),
@@ -321,6 +327,10 @@ it("parks a set-menu-only takeaway and orders from its original folder after rep
   await reopen();
   const total = counter.shadowRoot!.querySelector("till-total")!;
   expect(total.shadowRoot!.textContent).toContain("€14.00");
+  emit(counter, "counter-zone-selected", { zoneId: otherZone });
+  await flushCounter(el);
+  expect(counter.selectedServiceZoneId).toBe(zone.context.zoneId);
+  expect(el.shadowRoot!.textContent).toContain("Clear the basket before changing service area");
   await park();
   await vi.waitFor(() => expect(counter.store.id).not.toBe("counter-takeaway"));
   expect(updateWorkingOrder).not.toHaveBeenCalled();
@@ -353,4 +363,59 @@ it("parks a set-menu-only takeaway and orders from its original folder after rep
     expect(el.shadowRoot!.textContent).toContain("Sirloin");
   });
   expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Sirloin"]);
+});
+
+it("renders a reopened set-menu dish from the recorded offer and saved price", async () => {
+  resetBillPayDrafts();
+  const offer = daily.offers.find(({ id }) => id === "sirloin")!;
+  const source = setMenuProduct({ offer, setMenuId: daily.menuId, versionId: "v1" });
+  const id = "reopened-takeaway";
+  const api = counterApi({
+    getTabLines: vi.fn(async () => ({ lines: [], revision: 6 })),
+    retrieveWorkingOrder: vi.fn(async () => ({
+      id,
+      orderNumber: 10,
+      revision: 6,
+      zoneId: offers.context.zoneId,
+      label: null,
+      expectedEdit: null,
+      invoiceType: "F2",
+      dining: "takeaway",
+      diningChoice: "locked",
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+      setMenus: {
+        copies: [setMenuCopyOf(daily, "v1")],
+        recorded: { [daily.menuId]: "v1" },
+        setMenus: [bill.setMenus[0]!],
+        dishes: [bill.dishes[0]!],
+      },
+      setMenuCopies: [daily],
+      lines: [
+        {
+          workingOrderLineId: bill.dishes[0]!.lineId,
+          menuItemId: offer.id,
+          menuVersionId: "v1",
+          setMenuId: daily.menuId,
+          quantity: "1.000",
+          product: {
+            ...source,
+            unit: { id: "each", name: { en: "each" }, precision: 0, hardwareUnit: null },
+          },
+        },
+      ],
+    })),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flushCounter(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flushCounter(el);
+  const counter = el.shadowRoot!.querySelector("till-counter-screen")!;
+  emit(counter, "retrieve-order", { id });
+  await vi.waitFor(() => expect(counter.store.id).toBe(id));
+  await expect
+    .element(page.elementLocator(counter).getByText("Sirloin", { exact: true }))
+    .toBeVisible();
+  expect(counter.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent).toContain(
+    "€19.00",
+  );
 });
