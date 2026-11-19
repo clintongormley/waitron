@@ -58,23 +58,38 @@ it("applies a saved count and uses its party revision for the next tap", async (
   ]);
 });
 
-it("opens the same choices when Send refuses a drafted set-menu dish", async () => {
+it("opens the same choices for the exact drafted dish Send refuses", async () => {
+  const sirloin = daily.offers[1]!;
+  const variant = {
+    ...sirloin,
+    id: "rare",
+    name: "Rare",
+    menuPrice: null,
+    pricingUnit: "each" as const,
+  };
+  const offer = { ...sirloin, variants: [variant], variantCountsAs: { rare: "main" } };
+  const withVariant = { ...daily, offers: [offer] };
   const zone = menu("lunch");
   zone.menus[0]!.structure.members.push({
     kind: "set_menu",
     menuId: daily.menuId,
     name: daily.name,
   });
-  zone.setMenus = [daily, special].map((copy) => ({
+  zone.setMenus = [withVariant, special].map((copy) => ({
     ...copy,
     versionIds: ["lunch"],
     orderable: true,
     newestOnSale: true,
   }));
-  const submitDraft = vi.fn().mockRejectedValue({
-    code: "set_menu.no_place",
-    status: 409,
-    dishName: "Sirloin",
+  const submitDraft = vi.fn(async (_party, _draft, request) => {
+    const ids = request.groups.flatMap((group: { lineIds: string[] }) => group.lineIds);
+    expect(ids).toHaveLength(2);
+    throw {
+      code: "set_menu.no_place",
+      status: 409,
+      dishName: "Sirloin",
+      draftLineId: ids[1],
+    };
   });
   const { el } = await mountApp({
     listZoneOffers: vi.fn(async () => zone),
@@ -82,7 +97,7 @@ it("opens the same choices when Send refuses a drafted set-menu dish", async () 
       {
         ...partyBillOf("v1", "wo-4", 1),
         setMenus: bill,
-        setMenuCopies: [daily, special],
+        setMenuCopies: [withVariant, special],
       },
     ]),
     previewPartyAllergy: vi.fn(async (_partyId, target) => allergyView("none", target)),
@@ -90,11 +105,14 @@ it("opens the same choices when Send refuses a drafted set-menu dish", async () 
   });
   const screen = await openTable(el);
   const product = setMenuProduct({
-    offer: daily.offers[1]!,
+    offer,
     setMenuId: daily.menuId,
     versionId: "lunch",
   });
-  screen.draftStore!.addProduct(product, "1", { setMenu: { id: daily.menuId } });
+  const selected = { ...product, variantId: "rare", variantName: "Rare" };
+  for (const note of ["First", "Second"])
+    screen.draftStore!.addProduct(selected, "1", { note, setMenu: { id: daily.menuId } });
+  const openPlace = vi.spyOn(screen, "openSetMenuPlace");
   await showView(screen, "order", { ifShown: true, scripted: true });
   await flush(el);
   const send = screen.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!;
@@ -109,5 +127,6 @@ it("opens the same choices when Send refuses a drafted set-menu dish", async () 
     expect(modal?.shadowRoot!.querySelector("dialog")?.open).toBe(true);
   });
   await userEvent.click(page.elementLocator(browser).getByRole("button", { name: "Cancel" }));
-  expect(screen.draftStore!.lines.map((line) => line.product.name)).toEqual(["Sirloin"]);
+  expect(openPlace).toHaveBeenCalledExactlyOnceWith(screen.draftStore!.lines[1]);
+  expect(screen.draftStore!.lines.map((line) => line.product.name)).toEqual(["Sirloin", "Sirloin"]);
 });

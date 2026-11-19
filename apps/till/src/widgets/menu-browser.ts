@@ -82,6 +82,7 @@ type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
 type MenuIndex = HomeIndex<TillProduct>;
 type SetMenuPlaceChoice = { label: string; run: () => Promise<string | undefined> };
+type SetMenuTarget = DishPlace | ReadonlySet<string>;
 type MenuPick = {
   detail: PickSetMenuDishDetail;
   confirmed?: ModifierConfirmDetail;
@@ -473,7 +474,7 @@ export class TillMenuBrowser extends LitElement {
   @state() private notFound = false;
 
   @state() private pickerProduct?: TillProduct;
-  #pickerSetMenu?: PickSetMenuDishDetail;
+  #pickerSetMenu?: { pick: MenuPick; target?: SetMenuTarget };
 
   @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = [];
   @property({ attribute: false }) setMenuBill?: BillSetMenuState;
@@ -639,11 +640,17 @@ export class TillMenuBrowser extends LitElement {
     if (trail.isConnected) trail.scrollIntoView({ block: "nearest" });
   }
 
-  #pick(product: TillProduct): void {
+  #pick(product: TillProduct, replacing?: OrderLine): void {
     this.notFound = false;
-    pickProduct(product, this.store, (picked) => {
-      this.pickerProduct = picked;
-    });
+    pickProduct(
+      product,
+      this.store,
+      (picked) => {
+        this.#replaceAfterPick = replacing;
+        this.pickerProduct = picked;
+      },
+      replacing,
+    );
   }
 
   #onSearch(event: CustomEvent<{ value: string }>): void {
@@ -667,31 +674,50 @@ export class TillMenuBrowser extends LitElement {
     }));
   }
 
-  #pickSetMenu(pick: MenuPick, reserved?: DishPlace): void {
+  #pickSetMenu(pick: MenuPick, target?: SetMenuTarget): void {
     const product = pick.confirmed?.product ?? setMenuProduct(pick.detail);
     if (!hasSomethingToSell(product) || this.store.editsLocked) return;
     const bill = this.setMenuBill ?? EMPTY_SET_MENUS;
+    const candidates = this.#pickCandidates(pick);
     const draft = draftMenuDishes(this.store.lines.filter((line) => line !== pick.existing));
+    const reserved =
+      target === undefined || "place" in target
+        ? target
+        : candidates.flatMap(
+            (dish) =>
+              placeInOrder(
+                {
+                  ...bill,
+                  setMenus: bill.setMenus.filter(({ lineId }) => target.has(lineId)),
+                },
+                [dish],
+              ).placed,
+          )[0];
     if (
       reserved === undefined &&
-      !this.#pickCandidates(pick).some(
-        (dish) => !placeInOrder(bill, [...draft, dish]).unplaced.includes(dish.id),
-      )
+      (target !== undefined ||
+        !candidates.some(
+          (dish) => !placeInOrder(bill, [...draft, dish]).unplaced.includes(dish.id),
+        ))
     ) {
       this.setMenuError = "";
-      this.placeRequest = pick;
+      this.placeRequest = { ...pick };
       return;
     }
     if (pick.confirmed === undefined && needsModifierPicker(product)) {
-      this.#pickerSetMenu = pick.detail;
+      this.#pickerSetMenu = { pick, target };
       this.pickerProduct = product;
       return;
     }
-    if (pick.existing !== undefined) this.store.removeLines([pick.existing]);
-    this.store.addProduct(product, "1", {
-      ...pick.confirmed,
-      setMenu: { id: pick.detail.setMenuId, reserved },
-    });
+    this.store.addProduct(
+      product,
+      "1",
+      {
+        ...pick.confirmed,
+        setMenu: { id: pick.detail.setMenuId, reserved },
+      },
+      pick.existing,
+    );
   }
 
   #onModifierConfirm(detail: ModifierConfirmDetail): void {
@@ -699,12 +725,12 @@ export class TillMenuBrowser extends LitElement {
     this.#pickerSetMenu = undefined;
     this.pickerProduct = undefined;
     if (setMenu !== undefined) {
-      this.#pickSetMenu({ detail: setMenu, confirmed: detail });
+      this.#pickSetMenu({ ...setMenu.pick, confirmed: detail }, setMenu.target);
       return;
     }
-    if (this.#replaceAfterPick !== undefined) this.store.removeLines([this.#replaceAfterPick]);
+    const replacing = this.#replaceAfterPick;
     this.#replaceAfterPick = undefined;
-    this.store.addProduct(detail.product, "1", detail);
+    this.store.addProduct(detail.product, "1", detail, replacing);
   }
 
   openSetMenuPlace(line: OrderLine): boolean {
@@ -750,11 +776,9 @@ export class TillMenuBrowser extends LitElement {
             if (error !== undefined || !this.isConnected) return error;
             const now = this.setMenuBill ?? EMPTY_SET_MENUS;
             const old = new Set(bill.setMenus.map(({ lineId }) => lineId));
-            const added = {
-              ...now,
-              setMenus: now.setMenus.filter(({ lineId }) => !old.has(lineId)),
-            };
-            const reserved = placeInOrder(added, candidates.slice(0, 1)).placed[0];
+            const added = new Set(
+              now.setMenus.map(({ lineId }) => lineId).filter((id) => !old.has(id)),
+            );
             const pinned = new Map<number, OrderLine>();
             for (const { id, place, setMenuLineId } of placed) {
               const line = draft.find((line, index) => draftPlacementId(line, index) === id)!;
@@ -763,7 +787,7 @@ export class TillMenuBrowser extends LitElement {
                 pinned.set(index, { ...line, setMenuReserved: { place, setMenuLineId } });
             }
             if (pinned.size > 0) this.store.adoptLines(pinned);
-            this.#pickSetMenu(pick, reserved);
+            this.#pickSetMenu(pick, added);
             return undefined;
           },
         });
@@ -811,11 +835,7 @@ export class TillMenuBrowser extends LitElement {
           price: formatMoney(ordinary.unitPrice, currentLocale()),
         }),
         run: async () => {
-          if (pick.existing !== undefined) {
-            if (needsModifierPicker(ordinary)) this.#replaceAfterPick = pick.existing;
-            else this.store.removeLines([pick.existing]);
-          }
-          this.#pick(ordinary);
+          this.#pick(ordinary, pick.existing);
           return undefined;
         },
       });
@@ -1155,10 +1175,12 @@ export class TillMenuBrowser extends LitElement {
 
   async #chooseSetMenu(run: () => Promise<string | undefined>, close = false): Promise<void> {
     if (this.changingSetMenu || this.store.editsLocked) return;
+    const request = this.placeRequest;
     this.changingSetMenu = true;
     this.setMenuError = (await run().catch(() => codeMessage("server.internal"))) ?? "";
     this.changingSetMenu = false;
-    if (close && this.setMenuError === "") this.placeRequest = undefined;
+    if (close && this.setMenuError === "" && this.placeRequest === request)
+      this.placeRequest = undefined;
   }
 
   #closeSetMenuPlace(event: Event): void {

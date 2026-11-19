@@ -4,12 +4,13 @@ import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { CATEGORY_PALETTE, currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { formatMoney, HOME_DISPLAY_DEFAULTS, setMenuCopyOf } from "@waitron/shared";
 import type { DocumentMember, DocumentTile, HomeDevice, HomeDisplay } from "@waitron/shared";
 import { countText, currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, measured, mountWidget, type Theme } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
+import { setMenuProduct } from "./product-pick.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
 
@@ -371,6 +372,83 @@ describe("set-menu folders", () => {
       ]),
     );
     expect(add).toHaveBeenCalledExactlyOnceWith(special.menuId);
+  });
+
+  it("keeps the promised new place when the dish requires a variant", async () => {
+    const bass = special.offers[1]!;
+    const grilled = {
+      ...bass,
+      id: "grilled",
+      name: "Grilled",
+      menuPrice: null,
+      pricingUnit: "each" as const,
+    };
+    const offer = { ...bass, variants: [grilled], variantCountsAs: { grilled: "main" } };
+    const copy = { ...special, offers: [offer] };
+    const withSpecial = {
+      ...setMenuBill,
+      copies: [setMenuBill.copies[0]!, setMenuCopyOf(copy, "lunch")],
+    };
+    const { el, store } = await mount({
+      menu: lunch({
+        structure: { members: [{ kind: "set_menu", menuId: copy.menuId, name: copy.name }] },
+      }),
+      setMenuCopies: [{ copy, versionId: "lunch" }],
+      setMenuBill: {
+        ...withSpecial,
+        setMenus: withSpecial.setMenus.filter(({ lineId }) => lineId !== "special-1"),
+      },
+    });
+    el.addSetMenu = async () => {
+      el.setMenuBill = withSpecial;
+      await el.updateComplete;
+      return undefined;
+    };
+    await tap(el, entry(el, "structure", copy.name));
+    const folder = root(el).querySelector("till-set-menu-folder")!;
+    await userEvent.click(page.elementLocator(folder).getByRole("button", { name: /Sea bass/ }));
+    const modal = root(el).querySelector("[data-set-menu-place]")!;
+    await userEvent.click(
+      page.elementLocator(modal).getByRole("button", { name: /Add a Special menu/ }),
+    );
+
+    const picker = root(el).querySelector("till-modifier-picker")!;
+    const detail: ModifierConfirmDetail = {
+      product: { ...picker.product, variantId: grilled.id, variantName: grilled.name },
+      extras: [],
+    };
+    picker.dispatchEvent(new CustomEvent("wt-modifier-confirm", { detail }));
+    expect(store.lines).toMatchObject([
+      {
+        setMenuReserved: { setMenuLineId: "special-1", place: 0 },
+        product: { variantId: "grilled" },
+      },
+    ]);
+  });
+
+  it("keeps the set-menu dish when replacing it à la carte is refused", async () => {
+    const offer = daily.offers[1]!;
+    const ordinary = product("ordinary", "Sirloin", {
+      productId: offer.productId,
+      unitPrice: "18.00",
+    });
+    const { el, store } = await mount({
+      menu,
+      servedProducts: [ordinary],
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+      setMenuBill,
+    });
+    const dish = setMenuProduct({ offer, setMenuId: daily.menuId, versionId: "lunch" });
+    store.addProduct(dish, "1", { setMenu: { id: daily.menuId } });
+    const original = store.lines[0]!;
+    store.simplifiedInvoiceLimit = "10.00";
+    expect(el.openSetMenuPlace(original)).toBe(true);
+    await el.updateComplete;
+    const modal = root(el).querySelector("[data-set-menu-place]")!;
+    await userEvent.click(
+      page.elementLocator(modal).getByRole("button", { name: /Order it à la carte/ }),
+    );
+    expect(store.lines).toEqual([original]);
   });
 
   it("hides set menus on a surface without set-menu ordering", async () => {

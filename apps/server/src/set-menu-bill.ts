@@ -449,10 +449,15 @@ export async function placeSetMenuRows(
       reserved: draft.reserved,
     }));
   const { placed, unplaced } = placeInOrder(state, dishes, held);
-  if (unplaced.length > 0)
+  const refused = unplaced[0];
+  if (refused !== undefined) {
+    const draftLineId = order.find(({ workingOrderLineId }) => workingOrderLineId === refused)!
+      .draft.draftLineId;
     throw new AppError("set_menu.no_place", {
-      dishName: rows.find((row) => row.id === unplaced[0])!.name,
+      dishName: rows.find((row) => row.id === refused)!.name,
+      ...(draftLineId === undefined ? {} : { draftLineId }),
     });
+  }
   const resultById = new Map(placed.map((place) => [place.id, place]));
   const menuOfRow = new Map(
     order.map(({ workingOrderLineId, draft }) => [workingOrderLineId, draft.setMenuId]),

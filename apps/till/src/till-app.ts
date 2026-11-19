@@ -699,7 +699,7 @@ type DraftFollowUp =
   | "mark-unsellable"
   | "recheck-dead-ends"
   | { landedOn: string }
-  | { setMenuNoPlace: string }
+  | { setMenuNoPlace: string; draftLineId?: string }
   | { lateSend: LateSendAsked; answered?: AnsweredAllergy }
   | { approval: LateSendApprovalAsked; answered?: AnsweredAllergy }
   | undefined;
@@ -14945,10 +14945,9 @@ export class TillApp extends LitElement {
     if (typeof followUp === "object" && "setMenuNoPlace" in followUp) {
       await this.#loadPartyBills(undefined, false, false, false, true);
       if (!live() || this.#hasLeftOrder(tabId, visit)) return;
-      const line = sent.find(
-        (line) =>
-          line.setMenuId !== undefined && lineProductName(line.product) === followUp.setMenuNoPlace,
-      );
+      const id = followUp.draftLineId;
+      const line =
+        id === undefined ? undefined : sent.find(({ draftLineId }) => draftLineId === id);
       const screen = this.renderRoot.querySelector<TillTableOrderScreen>("till-table-order-screen");
       if (line === undefined || !(await screen?.openSetMenuPlace(line)))
         this.errorKey = { code: "set_menu.no_place", dishName: followUp.setMenuNoPlace };
@@ -15330,9 +15329,12 @@ export class TillApp extends LitElement {
       submitted = written.value;
     } catch (error) {
       if (!live()) return;
-      const noPlace = error as { code?: string; dishName?: unknown } | null;
+      const noPlace = error as { code?: string; dishName?: unknown; draftLineId?: unknown } | null;
       if (noPlace?.code === "set_menu.no_place" && typeof noPlace.dishName === "string")
-        return { setMenuNoPlace: noPlace.dishName };
+        return {
+          setMenuNoPlace: noPlace.dishName,
+          draftLineId: typeof noPlace.draftLineId === "string" ? noPlace.draftLineId : undefined,
+        };
       const asked = lateSendAsked(error, sent);
       const kept = carried === undefined ? {} : { answered: carried };
       if (asked !== undefined) return { lateSend: asked, ...kept };

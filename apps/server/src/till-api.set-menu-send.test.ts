@@ -90,7 +90,10 @@ it("answers 409 when a set-menu dish has no place", async () => {
   const { path, body } = await draft(false);
   const result = await request("POST", path, body);
   expect(result.status).toBe(409);
-  expect(result.json).toMatchObject({ code: "set_menu.no_place", params: { dishName: "Soup" } });
+  expect(result.json).toMatchObject({
+    code: "set_menu.no_place",
+    params: { dishName: "Soup", draftLineId: body.groups[0]!.lineIds[0] },
+  });
 });
 
 it("lets a till mark a dish that only a set menu lists sold out", async () => {

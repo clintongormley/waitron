@@ -550,11 +550,20 @@ export class WorkingOrderStore {
     this.#changedLines();
   }
 
-  addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
+  addProduct(
+    product: TillProduct,
+    quantity: string,
+    selection?: LineSelection,
+    replacing?: OrderLine,
+  ): void {
     if (this.#refusesEdits) return;
+    const index = replacing === undefined ? -1 : this.#lines.indexOf(replacing);
+    if (replacing !== undefined && index < 0) return;
     if (this.#refusesSelection(product, selection?.setMenu?.id)) return;
     const line = newLine(product, quantity, selection);
-    if (this.#passesLimit(ZERO, lineGross(line))) return;
+    if (this.#passesLimit(replacing === undefined ? ZERO : lineGross(replacing), lineGross(line)))
+      return;
+    if (index >= 0) this.#lines.splice(index, 1);
     this.#lines.push(line);
     this.#lastAdded = line;
     this.#lastAddition++;

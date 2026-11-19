@@ -28,7 +28,7 @@ declare module "@waitron/shared" {
     "set_menu.holds_dishes": { setMenuName: string; dishNames: string[] };
     "set_menu.not_selling": { setMenuName: string };
     "set_menu.needed_by_draft": { setMenuName: string; dishNames: string[] };
-    "set_menu.no_place": { dishName: string };
+    "set_menu.no_place": { dishName: string; draftLineId?: string };
     "set_menu.no_place_on_target": { dishName: string };
     "set_menu.place_taken": { dishName: string };
     "set_menu.remove_from_summary": Record<string, never>;
