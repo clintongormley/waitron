@@ -7599,14 +7599,10 @@ export class TillApp extends LitElement {
         ? { revision: this.#store.revision, label: this.#store.label }
         : undefined;
     try {
-      if (!(await this.#flushCounterKitchenNote()) || basketVisit !== this.#store.loadGeneration)
-        return;
+      const basket = await this.#counterPaymentLines(lines, basketLines, edit !== undefined);
+      if (basket === undefined || basketVisit !== this.#store.loadGeneration) return;
       if (session !== this.#operatorSession) return;
       if (edit !== undefined) edit.revision = this.#store.revision;
-      const basket =
-        edit === undefined
-          ? lines
-          : lines.flatMap((wire, index) => portionWireLines(basketLines[index]!, wire));
       reachedFiscal = true;
       const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
       const language = this.#chosenReceiptLanguage(id);
@@ -7788,14 +7784,10 @@ export class TillApp extends LitElement {
         ? { revision: this.#store.revision, label: this.#store.label }
         : undefined;
     try {
-      if (!(await this.#flushCounterKitchenNote()) || basketVisit !== this.#store.loadGeneration)
-        return;
+      const basket = await this.#counterPaymentLines(lines, basketLines, edit !== undefined);
+      if (basket === undefined || basketVisit !== this.#store.loadGeneration) return;
       if (session !== this.#operatorSession) return;
       if (edit !== undefined) edit.revision = this.#store.revision;
-      const basket =
-        edit === undefined
-          ? lines
-          : lines.flatMap((wire, index) => portionWireLines(basketLines[index]!, wire));
       reachedFiscal = true;
       const language = this.#chosenReceiptLanguage(id);
       const out: PayOutcome = await this.#withReaderPayment(
@@ -8574,6 +8566,15 @@ export class TillApp extends LitElement {
         return false;
     }
     return true;
+  }
+
+  async #counterPaymentLines(
+    lines: SaleLine[],
+    rows: readonly OrderLine[],
+    edited: boolean,
+  ): Promise<SaleLine[] | undefined> {
+    if (!(await this.#flushCounterKitchenNote())) return undefined;
+    return edited ? lines.flatMap((wire, index) => portionWireLines(rows[index]!, wire)) : lines;
   }
 
   async #reloadRefusedCounterPaymentEdit(

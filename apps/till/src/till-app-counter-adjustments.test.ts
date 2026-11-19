@@ -867,7 +867,7 @@ describe("till-app: counter station choice", () => {
     expect(counter(el).store.lines[1]!.makeAt).toBe("bar");
     emit(counter(el), "confirm-payment", { method: "cash", amount: "10" });
     await flush(el);
-    expect(vi.mocked(api.updateWorkingOrder).mock.calls[0]![1].lines[1]!.makeAt).toBe("bar");
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
     expect(vi.mocked(api.recordSale).mock.calls[0]![0][1]!.makeAt).toBe("bar");
   });
 
@@ -2575,21 +2575,20 @@ describe("till-app: a counter save refused for a dish already sent", () => {
   ] as const)(
     "a %s refused because a dish was served loads the order again and says so, going no further",
     async (_, event, detail, next) => {
-      const updateWorkingOrder = vi
-        .fn()
-        .mockRejectedValue({ code: "ticket.already_served", status: 409 });
+      const combined = next === "recordSale" || next === "pay";
+      const refuse = vi.fn().mockRejectedValue({ code: "ticket.already_served", status: 409 });
       const onward = vi.fn();
       const el = await (event === "place-order" ? placeCounter : retrieved)({
         ...sentMeanwhile(),
-        updateWorkingOrder,
-        [next]: onward,
+        updateWorkingOrder: combined ? onward : refuse,
+        [next]: combined ? refuse : onward,
       });
       await removeCanaAddBravas(el);
 
       emit(counter(el), event, detail);
       await flush(el, 6);
 
-      expect(updateWorkingOrder).toHaveBeenCalledOnce();
+      expect(refuse).toHaveBeenCalledOnce();
       expect(onward).not.toHaveBeenCalled();
       expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
       expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
@@ -3104,21 +3103,33 @@ describe("till-app: no adjustment while the order is being paid, placed or held"
     expect(api.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
   });
 
-  it("does not pay a changed order after the save answers for a signed-out operator", async () => {
-    const saving = deferred<{ revision: number }>();
+  it("does not pay a changed order after its note save answers for a signed-out operator", async () => {
+    const saving = deferred<{
+      scope: { workingOrderId: string };
+      note: string;
+      revision: number;
+      ownerRevision: number;
+    }>();
     const recordSale = vi.fn();
     const el = await retrieved({
-      updateWorkingOrder: vi.fn(() => saving.promise),
+      setKitchenNote: vi.fn(() => saving.promise),
       recordSale,
     });
-    counter(el).store.setLineQuantity(1, "2");
+    const store = counter(el).store;
+    store.setLineQuantity(1, "2");
+    store.kitchenNote = "Together";
     emit(counter(el), "confirm-payment", { method: "cash", amount: "20" });
     await flush(el);
-    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(api.setKitchenNote).toHaveBeenCalledOnce();
 
     emit(counter(el), "logout");
     await flush(el);
-    saving.resolve({ revision: 5 });
+    saving.resolve({
+      scope: { workingOrderId: "wo-9" },
+      note: "Together",
+      revision: 1,
+      ownerRevision: 4,
+    });
     await flush(el);
 
     expect(recordSale).not.toHaveBeenCalled();
