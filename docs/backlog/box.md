@@ -48,7 +48,7 @@ scope and preserve the rules shown here before proposing any conversion.
 
 | Source and function/site | Rule read in the current code |
 | --- | --- |
-| `apps/server/src/alert-sources.ts:534–545` (`undeliveredInvoice`) | A queued A4 delivery created more than ten minutes ahead of the clock is due immediately, with unknown due time reported as now; otherwise wait the ordinary unclaimed-alert interval. |
+| `apps/server/src/alert-sources.ts:545–551` (`undeliveredInvoice`) | A queued A4 delivery created more than ten minutes ahead of the clock is due immediately, with unknown due time reported as now; otherwise wait the ordinary unclaimed-alert interval. |
 | `apps/server/src/backup-schedule.ts:68–75` (`longestFireAheadMs`) | Bound an interval fire by its interval; a calendar fire by the longest allowed weekday gap plus 25 hours. Supplies the sweep's backward-step bound, not an elapsed-clock read itself. |
 | `apps/server/src/backup-status.ts:80–101` (`freshness`) | Judge the newest own archive no more than `staleAfterMs` ahead. If none qualifies, report stale; otherwise stale only when its age exceeds that threshold. Archive mtimes are storage evidence, not process timestamps. |
 | `apps/server/src/backup-sweep.ts` (`createBackupSchedule`) | Hold a computed fire fixed while sleeping. Recompute when now precedes computation and the fire exceeds `longestFireAheadMs`. On startup with Cloud enabled, use the saved Cloud capture to recover a future deadline within that same bound. |
