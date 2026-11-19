@@ -960,6 +960,22 @@ describe("till-app: a refusal after a send that got no answer", () => {
     expect(third).not.toBe(first);
   });
 
+  it("forgets the bill when another person's press finds its ticket already issued", async () => {
+    let answer: unknown = refusal("meal_end.already_issued");
+    const { el, endMeal } = await pressLeftUnanswered(() => Promise.reject(answer));
+    await signInAs(el, "p2");
+    await printBill(el);
+    expect(banner(el)!.textContent).toContain(codeMessage("meal_end.already_issued"));
+
+    await signInAs(el, "p1");
+    answer = refusal("fiscal.record_invalid");
+    await printBill(el);
+
+    const [first, , third] = submissionIds(endMeal);
+    expect(third).not.toBe(first);
+    expect(banner(el)!.textContent).toContain(t("meal_end.cannot_file"));
+  });
+
   it("warns on submission.id_reused, then uses a new id, and the bill stays uncertain", async () => {
     let answer: unknown = refusal("submission.id_reused", { submissionId: "taken" });
     const { el, endMeal } = await pressLeftUnanswered(() => Promise.reject(answer));
