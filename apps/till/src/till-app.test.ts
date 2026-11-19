@@ -4058,12 +4058,14 @@ describe("till-app", () => {
     expect(currentApi.pay).not.toHaveBeenCalled();
   });
 
-  it("saves a chosen full-invoice recipient before placing a ticket-then-pay bill", async () => {
+  it("saves a chosen full-invoice recipient before placing and paying by reader", async () => {
     const placeOrder = vi.fn().mockResolvedValue(placedResult);
+    const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
     const { el } = await mountApp({
       ...fullInvoicesOn(),
       zonePolicy: { serviceMode: "ticket_then_pay" },
       placeOrder,
+      pay,
     });
     const c = await toCounter(el);
     c.store.addProduct(coffee, "2");
@@ -4100,6 +4102,50 @@ describe("till-app", () => {
     expect(vi.mocked(currentApi.setOrderInvoiceChoice).mock.invocationCallOrder[0]).toBeLessThan(
       placeOrder.mock.invocationCallOrder[0]!,
     );
+    emit(c, "collect-card", {});
+    await flush(el);
+    expect(pay).toHaveBeenCalledExactlyOnceWith({
+      id,
+      lines: [],
+      dining: "eat_in",
+      expectedEdit: null,
+    });
+  });
+
+  it("keeps a placed bill open when the reader would ignore an unsaved full-invoice choice", async () => {
+    const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+    const { el } = await mountApp({ ...fullInvoicesOn(), pay });
+    const c = await toCounter(el);
+    c.store.loadFrom("large-bill", [{ product: coffee, quantity: "2001" }]);
+    await flush(el);
+    emit(c, "place-order");
+    await flush(el);
+    expect(tenderPay(el).stage).toBe("collect");
+
+    emit(c, "collect-card", {});
+    await flush(el);
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          address: "1 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
+      },
+    );
+    await flush(el);
+    emit(c, "collect-card", {});
+    await flush(el);
+
+    expect(pay).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+      codeMessage("sale.full_invoice_unavailable"),
+    );
+    expect(ticket(el)).toBeNull();
   });
 
   it("offers A4 on the device's invoice printer at the counter and stages the chosen A4 before placing", async () => {
@@ -19914,6 +19960,41 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     await flush(el);
     expect(tenderPay(el).mode).toBe("prepay");
     expect(tenderPay(el).stage).toBe("order");
+  });
+
+  it("pays a reloaded bill above the simplified limit with its saved full invoice", async () => {
+    const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+    const { el, c } = await counterWaiting({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        fullInvoices: true,
+        simplifiedInvoiceLimit: "2.00",
+      }),
+      listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
+      retrievePlacedOrder: vi.fn().mockResolvedValue({
+        ...placedRead("wo-sent"),
+        invoiceType: "F1",
+        dining: "eat_in",
+        diningChoice: "locked",
+        expectedEdit: null,
+      }),
+      pay,
+    });
+    pressPay(el, "wo-sent");
+    await flush(el);
+    expect(tenderPay(el).stage).toBe("collect");
+    expect(c.store.total).toBe("3.00");
+
+    emit(c, "collect-card", {});
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(pay).toHaveBeenCalledExactlyOnceWith({
+      id: "wo-sent",
+      lines: [],
+      dining: "eat_in",
+      expectedEdit: null,
+    });
   });
 
   it("collects a sent order in its stored language, saving a new choice at once against the revision it was read at", async () => {

@@ -4487,7 +4487,7 @@ export class TillApp extends LitElement {
   @state() private invoiceRecipientSaved?: InvoiceDeliveryChoice;
   /** The delivery options are being read before the full-invoice dialog opens. */
   @state() private invoiceRecipientReading = false;
-  private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail };
+  private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail; saved?: true };
   /** The invoice type stored on the Counter order last read into the basket, which
    * {@link invoiceChoice} does not hold for an order this till did not set it on. */
   #counterStoredInvoice?: { orderId: string; invoiceType: "F1" | "F2" };
@@ -7743,7 +7743,16 @@ export class TillApp extends LitElement {
    */
   async #collectCard(event: Event, retried: boolean, lateSend?: LateSend): Promise<void> {
     if (this.submitting || this.#refusePaidInPart()) return;
-    if (this.#askInvoiceRecipientForLargeBill()) return;
+    const placed = this.stage === "collect";
+    const storedChoice = this.#counterStoredInvoice;
+    const savedFullInvoice =
+      placed && storedChoice?.orderId === this.#store.id && storedChoice.invoiceType === "F1";
+    if (!savedFullInvoice && this.#askInvoiceRecipientForLargeBill()) return;
+    const choice = this.invoiceChoice?.orderId === this.#store.id ? this.invoiceChoice : undefined;
+    if (placed && choice !== undefined && choice.saved !== true) {
+      this.errorKey = { code: "sale.full_invoice_unavailable" };
+      return;
+    }
     const retry = (confirmed: LateSend) => this.#onCollectCard(event, confirmed);
     if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.submitting = true;
@@ -7780,10 +7789,10 @@ export class TillApp extends LitElement {
           this.api.pay({
             expectedEdit: this.#counterExpectedEdit(id),
             id,
-            lines: this.stage === "collect" ? [] : lines,
+            lines: placed ? [] : lines,
             dining: this.#store.dining,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
-            ...(this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : {}),
+            ...(placed ? {} : choice?.invoice),
             ...(language === undefined ? {} : { receiptLanguage: language }),
             ...(detail.tip ? { tip: detail.tip } : {}),
             ...(detail.guestCount === undefined ? {} : { guestCount: detail.guestCount }),
@@ -8776,13 +8785,15 @@ export class TillApp extends LitElement {
           if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
           this.#commitBasket(payload);
         }
-        if (this.invoiceChoice?.orderId === id) {
+        const choiceToSave = this.invoiceChoice;
+        if (choiceToSave?.orderId === id) {
           const saved = await api.setOrderInvoiceChoice(id, {
             revision: this.#store.revision,
-            ...this.invoiceChoice.invoice,
+            ...choiceToSave.invoice,
             expectedEdit: null,
           });
           if (!current()) return;
+          choiceToSave.saved = true;
           this.#store.markSaved(saved.revision);
         }
         await this.#saveUnsavedReceiptLanguage(id);
@@ -21669,13 +21680,15 @@ export class TillApp extends LitElement {
       )
         return;
       if (this.#hasLeftCounterOrder(id, session)) return;
-      if (this.invoiceChoice?.orderId === id) {
+      const choiceToSave = this.invoiceChoice;
+      if (choiceToSave?.orderId === id) {
         const saved = await this.api.setOrderInvoiceChoice(id, {
           revision: this.#store.revision,
-          ...this.invoiceChoice.invoice,
+          ...choiceToSave.invoice,
           expectedEdit: this.#counterExpectedEdit(id),
         });
         if (this.#hasLeftCounterOrder(id, session)) return;
+        choiceToSave.saved = true;
         this.#store.markSaved(saved.revision);
       }
     } catch (error) {

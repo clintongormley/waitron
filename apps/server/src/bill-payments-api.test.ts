@@ -5901,3 +5901,57 @@ it("keeps cash and hand-keyed cards available while refusing reader collection w
     expect(await response.json()).toMatchObject({ outcome: "received" });
   }
 });
+
+it("files the placed bill's saved full invoice once when a reader payment is retried", async () => {
+  const id = await tabWith("Steak");
+  const [bill] = await inTx((tx) =>
+    tx.select().from(workingOrders).where(eq(workingOrders.id, id)),
+  );
+  const savedRecipient = {
+    taxId: "B12345674",
+    legalName: "Cliente SL",
+    address: "2 Main Street, 28013 Madrid, Madrid",
+    countryCode: "ES",
+  };
+  expect(
+    await request("PUT", `/api/working-orders/${id}/invoice-choice`, {
+      invoiceType: "F1",
+      recipient: savedRecipient,
+      revision: bill!.revision,
+    }),
+  ).toMatchObject({ status: 200 });
+  expect(await request("POST", `/api/working-orders/${id}/place`, {})).toMatchObject({
+    status: 200,
+  });
+  const body = {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "card",
+    entry: "reader",
+    applied: "25.00",
+    tip: "0.00",
+    simulationOutcome: "captured",
+  };
+
+  const pay = () => request("POST", `/api/working-orders/${id}/payments`, body);
+  const original = await pay();
+  expect(original).toMatchObject({
+    status: 200,
+    json: {
+      outcome: "received",
+      invoice: {
+        invoiceType: "F1",
+        total: "25.00",
+        recipient: savedRecipient,
+        invoiceNumber: expect.any(String),
+      },
+    },
+  });
+  expect(await pay()).toMatchObject({
+    status: 200,
+    json: { outcome: "received", payment: original.json.payment },
+  });
+  expect(await saleOf(id)).toHaveLength(1);
+  expect(fiscalRecordCount(id)).toBe(1);
+});
