@@ -279,6 +279,27 @@ place that refuses it does not undo the save. The window names the places that f
 them ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
+## Set menus {#set-menus}
+
+To sell several courses for one price, choose **Add menu**, then **Set menu**. Give it a name
+and price, and choose its eat-in VAT class. Choose a takeaway class if it differs from the eat-in
+one. Add customer names in the languages you use, then save.
+
+In **Dishes**, add the dishes you want to offer. Keep dishes sold by weight on the full menu,
+where staff can sell them separately. Use **Variants** to choose which versions are included.
+Enter a surcharge beside any dish or variant that costs extra. Change a dish's **Course** if
+you serve it differently in this set menu. For example, move a tapa to Starters so it counts
+as a starter and goes to the kitchen with that course when ordered from the set menu.
+
+Under **What one set menu includes**, set how many dishes you offer from each course. For example,
+use one line for one starter and another for one main. Put two courses on the same line to let
+guests choose from either.
+
+Open the full menu that will offer the set menu. In **Structure**, open the actions for the
+menu or section where it belongs, choose **Set menu…** and pick it. Use **Preview** to see the
+placement, later edits and anything you need to fix. Publish the full menu to send the current
+set menu to the tills. Each later edit reaches the tills when you publish the full menu again.
+
 ## Check the menu's home page {#menu-home}
 
 Open a menu's **Home page** tab to arrange its shortcuts and choose its tile layout.

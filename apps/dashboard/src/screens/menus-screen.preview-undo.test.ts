@@ -88,6 +88,7 @@ const structure: MenuStructure = {
     members: [],
   },
   nodes: [],
+  placeableSetMenus: [],
   includable: [],
   includedBy: [],
 };

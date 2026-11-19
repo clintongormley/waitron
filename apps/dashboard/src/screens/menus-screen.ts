@@ -91,6 +91,7 @@ import {
   HOME_ORDERS,
   HOME_TILE_MODES,
   formatMoney,
+  type VatClass,
 } from "@waitron/shared";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -730,6 +731,11 @@ export class MenusScreen extends LitElement {
   @state() private undoResult: string | null = null;
   @state() private patching = false;
 
+  @state() private choosingMenuKind = false;
+  @state() private creatingSetMenu = false;
+  @state() private defaultProductVatClass: VatClass = "general";
+  #newMenuKind: MenuSummary["kind"] | null = null;
+
   /** Null while closed; `id` is null while creating. */
   @state() private menuForm: { id: string | null; name: string } | null = null;
   /** Each name form's last refusal, less its name once the operator changes it. */
@@ -742,6 +748,7 @@ export class MenusScreen extends LitElement {
   @state() private deleteSectionError = "";
   @state() private includingMenu: ListTarget | null = null;
   #menuFormGeneration = 0;
+  @state() private placingSetMenu = false;
   @state() private includedRoot = "";
   @state() private includeError = "";
   @state() private menuPresentation: SectionDetails | null = null;
@@ -1077,6 +1084,7 @@ export class MenusScreen extends LitElement {
         }),
         this.#queries.watch("getMenuSettings", [], (value) => {
           this.defaultColor = value.defaultColor;
+          this.defaultProductVatClass = value.defaultProductVatClass;
           this.takeawayVat = value.takeawayVat;
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
@@ -1324,6 +1332,8 @@ export class MenusScreen extends LitElement {
     if (this.#url.read("dashboard") !== "menus") {
       this.#menuFormGeneration++;
       this.menuForm = null;
+      this.choosingMenuKind = false;
+      this.creatingSetMenu = false;
       return;
     }
     this.#select(this.#url.read("menu"));
@@ -1335,6 +1345,8 @@ export class MenusScreen extends LitElement {
     this.#menuOpenings++;
     this.#menuFormGeneration++;
     this.menuForm = null;
+    this.choosingMenuKind = false;
+    this.creatingSetMenu = false;
     this.#menuReads.release();
     this.#menuReadGeneration++;
     this.#menuReadKey = "";
@@ -1822,8 +1834,9 @@ export class MenusScreen extends LitElement {
       this.creatingSection = target;
       this.editingSection = null;
       this.newSectionErrors = {};
-    } else if (action === "include-menu") {
+    } else if (action === "include-menu" || action === "add-set-menu") {
       this.includingMenu = target;
+      this.placingSetMenu = action === "add-set-menu";
       this.includedRoot = "";
       this.includeError = "";
     } else {
@@ -1999,10 +2012,12 @@ export class MenusScreen extends LitElement {
     const target = this.includingMenu;
     this.busy = true;
     try {
-      await this.api.addSectionMember(target.listId, {
-        kind: "section",
-        sectionId: this.includedRoot,
-      });
+      await this.api.addSectionMember(
+        target.listId,
+        this.placingSetMenu
+          ? { kind: "set_menu", menuId: this.includedRoot }
+          : { kind: "section", sectionId: this.includedRoot },
+      );
     } catch (error) {
       if (!this.#closeRefusedElsewhere(target, error))
         this.includeError = codeMessage(codeOf(error));
@@ -2614,10 +2629,61 @@ export class MenusScreen extends LitElement {
       variant="primary"
       @click=${(event: Event) => {
         this.#addOpener = event.currentTarget as HTMLElement;
-        void this.#openMenuForm(null);
+        this.#newMenuKind = null;
+        this.choosingMenuKind = true;
       }}
       >${t("menus.add")}</wt-button
     >`;
+  }
+
+  #renderMenuKindChoice() {
+    return this.#formModal({
+      test: "menu-kind-choice",
+      open: this.choosingMenuKind,
+      heading: t("menus.add"),
+      body: (["menu", "set_menu"] as const).map(
+        (kind) =>
+          html`<wt-button
+            data-test=${`create-${kind}`}
+            variant="secondary"
+            @click=${() => {
+              this.#newMenuKind = kind;
+              this.choosingMenuKind = false;
+            }}
+            >${t(kind === "menu" ? "menus.menu_kind" : "menus.set_menu_kind")}</wt-button
+          >`,
+      ),
+      close: () => {
+        this.choosingMenuKind = false;
+      },
+      closed: () => {
+        const kind = this.#newMenuKind;
+        this.#newMenuKind = null;
+        if (kind === "menu") void this.#openMenuForm(null);
+        if (kind === "set_menu") this.creatingSetMenu = true;
+      },
+    });
+  }
+
+  #renderCreateSetMenu() {
+    if (!this.creatingSetMenu) return nothing;
+    return html`<dashboard-set-menu-terms-form
+      creating
+      .api=${this.api}
+      .languages=${currentContentLanguages()}
+      .defaultVatClass=${this.defaultProductVatClass}
+      @set-menu-terms-cancelled=${() => {
+        this.creatingSetMenu = false;
+      }}
+      @set-menu-terms-saved=${(event: CustomEvent<{ created: MenuSummary }>) => {
+        const { created } = event.detail;
+        if (!this.menus.some(({ id }) => id === created.id)) this.menus = [...this.menus, created];
+        this.#open(created.id, "set-menu");
+        void this.#watchMenus().catch(() => {
+          this.loadError = true;
+        });
+      }}
+    ></dashboard-set-menu-terms-form>`;
   }
 
   #renderList() {
@@ -2664,7 +2730,7 @@ export class MenusScreen extends LitElement {
             </div>`
           : nothing
       }
-      ${this.#renderMenuForm()}
+      ${this.#renderMenuKindChoice()} ${this.#renderMenuForm()} ${this.#renderCreateSetMenu()}
       <dashboard-menu-copy-dialog
         .open=${this.copyingMenu !== null}
         .menu=${this.copyingMenu}
@@ -2736,6 +2802,8 @@ export class MenusScreen extends LitElement {
       ${(structure.includedBy ?? []).length ? html`<p data-test="included-by">${t("menus.included_in")}: ${structure.includedBy.map((menu, index) => html`${index ? ", " : ""}<a href=${`/menus/menu/${menu.id}/view/structure`}>${menu.name}${this.statuses?.[menu.id]?.clashes ? ` (${this.statuses[menu.id]!.clashes} ${t(this.statuses[menu.id]!.clashes === 1 ? "menus.clash" : "menus.clashes")})` : ""}</a>`)}</p>` : nothing}
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
+        .menus=${this.menus}
+        .placeableSetMenus=${structure.placeableSetMenus ?? []}
         .products=${this.products}
         .categories=${this.categories}
         .defaultColor=${this.defaultColor}
@@ -2775,6 +2843,14 @@ export class MenusScreen extends LitElement {
           const { path, memberId } = event.detail;
           this.#returnFocusTo(path, true);
           this.#listWrite(path, (id) => this.api.removeSectionMember(id, memberId));
+        }}
+        @wt-set-menu-open=${(event: CustomEvent<{ menuId: string }>) => {
+          event.stopPropagation();
+          this.#open(event.detail.menuId, "set-menu");
+        }}
+        @wt-set-menu-move=${(event: CustomEvent<{ key: string }>) => {
+          event.stopPropagation();
+          this.#openMove([event.detail.key]);
         }}
         @wt-include-edit=${(event: CustomEvent<{ path: string[]; memberId: string }>) => {
           event.stopPropagation();
@@ -2877,9 +2953,7 @@ export class MenusScreen extends LitElement {
         .disabled=${count === 0 || this.busy}
         @click=${() => {
           if (count === 0 || this.busy) return;
-          this.moveSelectedError = "";
-          this.moveDestination = "";
-          this.movingSelected = this.#sentKeys(this.#inTreeOrder(this.structureSelected));
+          this.#openMove(this.#sentKeys(this.#inTreeOrder(this.structureSelected)));
         }}
         >${t("menus.move_selected")}</wt-button
       >
@@ -3008,9 +3082,13 @@ export class MenusScreen extends LitElement {
     return keys.flatMap((key) => {
       const path = key.split("/");
       const node = nodeAt(this.structure, path);
-      if (!node || node.ref.kind === "set_menu") return [];
+      if (!node) return [];
       const target = this.#targetAt(path.slice(0, -1));
-      const name = memberName(node.ref, productNames, this.#sectionNames);
+      const ref = node.ref;
+      const name =
+        ref.kind === "set_menu"
+          ? (this.menus.find(({ id }) => id === ref.menuId)?.name ?? t("members.missing"))
+          : memberName(ref, productNames, this.#sectionNames);
       return [
         {
           listId: target.listId,
@@ -3026,13 +3104,13 @@ export class MenusScreen extends LitElement {
    * `saved` closes, only while the menu it was asked in is still open; once another menu has been
    * opened, a refusal is named with the menu it was for, and a saved change clears nothing and
    * moves no focus there. `refused` shows a refusal in its confirm and says whether that confirm
-   * was still open; when it was not, the refusal is named with the menu too. `reread` runs after a
-   * saved change is read back. */
+   * was still open; when it was not, the refusal is named with the menu too. For a move outside
+   * Select mode, `reread` supplies the row to focus in the refreshed structure. */
   async #sendSelected(change: {
     send: () => Promise<unknown>;
     refused: (message: string) => boolean;
     saved: () => void;
-    reread?: () => void;
+    reread?: () => string | undefined;
   }): Promise<void> {
     const opened = this.#menuOpenings;
     const menu = this.#menuName();
@@ -3050,13 +3128,14 @@ export class MenusScreen extends LitElement {
       this.structureSelected = [];
     }
     await this.#refresh();
-    if (here()) change.reread?.();
+    const movedKey = here() ? change.reread?.() : undefined;
     this.busy = false;
     await this.updateComplete;
     if (!here()) return;
     if (this.structureSelecting)
       this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
-    else this.renderRoot.querySelector("dashboard-menu-structure-table")?.focusRowMenu("");
+    else
+      this.renderRoot.querySelector("dashboard-menu-structure-table")?.focusRowMenu(movedKey ?? "");
   }
 
   async #removeSelected(): Promise<void> {
@@ -3173,6 +3252,12 @@ export class MenusScreen extends LitElement {
     );
   };
 
+  #openMove(keys: string[]): void {
+    this.moveSelectedError = "";
+    this.moveDestination = "";
+    this.movingSelected = keys;
+  }
+
   async #moveSelected(): Promise<void> {
     const keys = this.movingSelected;
     const destination = this.moveDestination;
@@ -3195,7 +3280,10 @@ export class MenusScreen extends LitElement {
       },
       reread: () => {
         const path = this.#moveDestinations([]).find(({ value }) => value === destination)?.path;
-        if (path) this.#edit(path);
+        if (!path) return undefined;
+        this.#edit(path);
+        const member = members[0];
+        return member && [...path, member.memberId].join("/");
       },
     });
   }
@@ -3691,10 +3779,27 @@ export class MenusScreen extends LitElement {
     );
   }
 
+  #includeOptions() {
+    if (!this.placingSetMenu)
+      return (this.structure?.includable ?? []).map(({ rootSectionId, name }) => ({
+        value: rootSectionId,
+        label: name,
+      }));
+    const placed = new Set(
+      placesOf(this.structure, this.includingMenu?.listId ?? "")
+        .at(0)
+        ?.flatMap(({ ref }) => (ref.kind === "set_menu" ? [ref.menuId] : [])),
+    );
+    return (this.structure?.placeableSetMenus ?? []).flatMap(({ id, name }) =>
+      placed.has(id) ? [] : [{ value: id, label: name }],
+    );
+  }
+
   #renderNewSection() {
     const below = this.deletingSection
       ? new Set(ownedSectionIds(this.#sectionNode(this.deletingSection.id)?.children ?? [])).size
       : 0;
+    const includeLabel = t(this.placingSetMenu ? "menus.set_menu_kind" : "menus.include_menu");
     return html`<dashboard-section-details-form
         data-test="section-form"
         .open=${this.creatingSection !== null || this.editingSection !== null}
@@ -3723,19 +3828,16 @@ export class MenusScreen extends LitElement {
       ${this.#formModal({
         test: "include",
         open: this.includingMenu !== null,
-        heading: t("menus.include_menu"),
+        heading: this.placingSetMenu ? t("menus.add_set_menu") : includeLabel,
         body: html`<wt-combobox
-          name="included-menu"
+          name=${this.placingSetMenu ? "set-menu" : "included-menu"}
           required
-          label=${t("menus.include_menu")}
+          label=${includeLabel}
           search="auto"
           searchPlaceholder=${t("categories.combobox_search")}
           noResultsLabel=${t("categories.combobox_no_results")}
-          placeholder=${t("menus.choose_menu")}
-          .options=${(this.structure?.includable ?? []).map((menu) => ({
-            value: menu.rootSectionId,
-            label: menu.name,
-          }))}
+          placeholder=${t(this.placingSetMenu ? "menus.choose_set_menu" : "menus.choose_menu")}
+          .options=${this.#includeOptions()}
           .value=${this.includedRoot}
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -3985,7 +4087,17 @@ export class MenusScreen extends LitElement {
         </nav>
         <div class="title">
           <h1>${name || t("menus.title")}</h1>
-          ${setMenu ? nothing : this.#renderLiveWords()}
+          ${
+            setMenu
+              ? html`<wt-help-tooltip
+                  mode="help-mode"
+                  aria-label=${t("menus.set_menu_help_label")}
+                  guide-href=${guideHref("products.set-menus")}
+                  guide-label=${t("menus.set_menu_help_guide")}
+                  >${t("menus.set_menu_help")}</wt-help-tooltip
+                >`
+              : this.#renderLiveWords()
+          }
         </div>
       </div>
       ${this.#renderLoadState()} ${this.#renderMemberError()}

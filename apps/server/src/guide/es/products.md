@@ -290,6 +290,29 @@ entonces el producto ya está guardado, así que un sitio que lo rechaza no desh
 ventana nombra los sitios que fallaron y los deja marcados para que puedas volver a intentarlo. Las
 secciones de una carta se crean en **Productos y cartas → Cartas**.
 
+## Cartas a precio fijo {#set-menus}
+
+Para ofrecer varios platos por un precio único, elige **Añadir carta** y después
+**Carta a precio fijo**. Ponle un nombre y un precio y elige la clase de IVA para comer en el
+local. Elige otra clase para llevar si el IVA es distinto. Añade los nombres para clientes en
+los idiomas que uses y guarda.
+
+En **Platos**, añade los platos que quieras ofrecer. Deja los platos que se venden al peso en la
+carta completa, donde puedes venderlos por separado. En **Variantes**, elige qué versiones
+incluyes. Indica el suplemento junto al plato o la variante que cueste más. Cambia el **Curso**
+de un plato si lo sirves de otra manera en esta carta. Por ejemplo, pon una tapa en Entrantes
+para que cuente como entrante y salga con ese curso si la pides desde la carta a precio fijo.
+
+En **Qué incluye cada carta a precio fijo**, indica cuántos platos ofreces de cada curso. Por ejemplo,
+usa una línea para un entrante y otra para un principal. Pon dos cursos en la misma línea para
+que el cliente elija entre ambos.
+
+Abre la carta completa que ofrecerá la carta a precio fijo. En **Estructura**, abre las acciones
+de la carta o sección donde quieras incluirla, elige **Carta a precio fijo…** y selecciónala.
+En **Vista previa**, revisa dónde la has puesto, los cambios y cualquier problema que debas
+corregir. Publica la carta completa para enviar la versión actual a las cajas. Cada cambio
+posterior llega a las cajas cuando vuelves a publicar la carta completa.
+
 ## Revisa la página de inicio de la carta {#menu-home}
 
 Abre la pestaña **Página de inicio** de una carta para ordenar sus accesos directos y elegir

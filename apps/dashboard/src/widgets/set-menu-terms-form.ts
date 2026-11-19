@@ -1,10 +1,12 @@
-import { LitElement, css, html, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
   FormFeedback,
+  leaveCoordinatorFor,
+  type LeaveReason,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -21,7 +23,8 @@ import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { DashboardApi, SetMenuDetails } from "../api/client.js";
+import "@waitron/ui/src/components/wt-modal.js";
+import type { DashboardApi, MenuSummary, SetMenuDetails } from "../api/client.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { vatClassLabel } from "../i18n/domain.js";
 import { fill, t } from "../i18n/t.js";
@@ -51,8 +54,10 @@ export class SetMenuTermsForm extends LitElement {
         gap: var(--wt-space-3);
         min-width: 0;
       }
-      form {
+      form > wt-form-actions {
         --wt-form-actions-in-place: true;
+      }
+      form {
         max-width: var(--wt-form-max-width);
       }
       fieldset {
@@ -68,6 +73,7 @@ export class SetMenuTermsForm extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ type: Boolean }) creating = false;
   @property({ attribute: false }) value: Value | null = null;
   @property({ attribute: false }) defaultVatClass: VatClass = "general";
   @property({ attribute: false }) languages: ContentLanguages = {
@@ -87,6 +93,14 @@ export class SetMenuTermsForm extends LitElement {
   readonly #feedback = new FormFeedback(this);
   #scope?: DraftScope<Draft>;
   #baseline?: Draft;
+
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.saving) return false;
+    const leave = leaveCoordinatorFor(this);
+    return (
+      !leave || (await leave.request({ scopes: [this], reason, proceed() {} })) === "proceeded"
+    );
+  };
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -160,38 +174,61 @@ export class SetMenuTermsForm extends LitElement {
     event.preventDefault();
     const menuId = this.value?.id;
     const baseline = this.#baseline;
-    if (!menuId || !baseline || this.saving || saveActionState(this.#scope).unchanged) return;
+    if (
+      (!menuId && !this.creating) ||
+      !baseline ||
+      this.saving ||
+      saveActionState(this.#scope).unchanged
+    )
+      return;
     this.#feedback.press(...Object.keys(this.refusal));
     if (Object.keys(this.#validate()).length) {
       void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const submitted = this.#submitted();
-    const { name: internalName, ...terms } = Object.fromEntries(
-      (Object.keys(submitted) as (keyof Draft)[])
-        .filter((key) => !sameValue(baseline[key], submitted[key]))
-        .map((key) => [key, submitted[key]]),
-    ) as Partial<Draft>;
     this.saving = true;
     this.refusal = {};
     try {
-      await this.api.updateMenuDetails(menuId, {
-        ...(internalName === undefined ? {} : { internalName }),
-        ...terms,
-      });
+      let created: MenuSummary | undefined;
+      if (this.creating) {
+        const { name, ...terms } = submitted;
+        created = await this.api.createMenu(name, { kind: "set_menu", ...terms });
+      } else if (menuId) {
+        const { name: internalName, ...terms } = Object.fromEntries(
+          (Object.keys(submitted) as (keyof Draft)[])
+            .filter((key) => !sameValue(baseline[key], submitted[key]))
+            .map((key) => [key, submitted[key]]),
+        ) as Partial<Draft>;
+        await this.api.updateMenuDetails(menuId, {
+          ...(internalName === undefined ? {} : { internalName }),
+          ...terms,
+        });
+      }
       this.#baseline = submitted;
       this.#scope?.commit(submitted);
+      if (created) {
+        const dialog = this.renderRoot.querySelector("wt-modal")!;
+        dialog.closeAfter("saved");
+        await dialog.updateComplete;
+      }
       this.dispatchEvent(
         new CustomEvent("set-menu-terms-saved", {
-          detail: { menuId },
+          detail: created ? { menuId: created.id, created } : { menuId },
           bubbles: true,
           composed: true,
         }),
       );
     } catch (error) {
-      const field = fieldOf(error);
+      const code = codeOf(error);
+      const field = code === "menu.name_taken" ? "name" : fieldOf(error);
       this.#feedback.newRefusal();
-      this.refusal = { [field]: codeMessage(codeOf(error), undefined, { field }) };
+      this.refusal = {
+        [field]:
+          code === "menu.name_taken"
+            ? t("menus.name_taken")
+            : codeMessage(code, undefined, { field }),
+      };
       await this.updateComplete;
       void focusFirstInvalid(this.shadowRoot!);
     } finally {
@@ -244,7 +281,31 @@ export class SetMenuTermsForm extends LitElement {
     const action = saveActionState(this.#scope);
     const taxes = VAT_CLASSES.map((value) => ({ value, label: vatClassLabel(value) }));
     const same = fill("editor.takeaway_vat_same", { tax: vatClassLabel(this.draft.setVatClass) });
-    return html`<form
+    const actions = html`<wt-form-actions
+      slot=${this.creating ? "footer" : nothing}
+      .error=${this.#feedback.message(errors, fieldKeys, t("form.fix_fields"))}
+    >
+      ${
+        this.creating
+          ? html`<wt-button
+              slot="cancel"
+              variant="secondary"
+              .disabled=${this.saving}
+              @click=${() => void this.renderRoot.querySelector("wt-modal")!.requestClose("cancel")}
+              >${t("action.cancel")}</wt-button
+            >`
+          : nothing
+      }
+      <wt-button
+        data-test="save"
+        variant=${action.variant}
+        .disabled=${action.unchanged || this.saving || Object.keys(validation).length > 0}
+        .loading=${this.saving}
+        @click=${this.#save}
+        >${t("action.save")}</wt-button
+      >
+    </wt-form-actions>`;
+    const form = html`<form
       novalidate
       @submit=${this.#save}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector('[data-test="save"]'))}
@@ -270,18 +331,25 @@ export class SetMenuTermsForm extends LitElement {
       ${priceField(context, "setPrice", t("menus.set_menu_price"), this.draft.setPrice, (price) => this.#change("setPrice", price), true)}
       ${this.#vatField("setVatClass", t("menus.set_menu_eat_in_vat"), this.draft.setVatClass, taxes, errors)}
       ${this.#vatField("setTakeawayVatClass", t("editor.takeaway_vat"), this.draft.setTakeawayVatClass, [{ value: "", label: same }, ...taxes], errors)}
-      <wt-form-actions .error=${this.#feedback.message(errors, fieldKeys, t("form.fix_fields"))}>
-        <slot name="cancel" slot="start"></slot>
-        <wt-button
-          data-test="save"
-          variant=${action.variant}
-          .disabled=${action.unchanged || this.saving || Object.keys(validation).length > 0}
-          .loading=${this.saving}
-          @click=${this.#save}
-          >${t("action.save")}</wt-button
-        >
-      </wt-form-actions>
+      ${this.creating ? nothing : actions}
     </form>`;
+    return this.creating
+      ? html`<wt-modal
+          size="standard"
+          .open=${true}
+          .dismissible=${!this.saving}
+          .beforeClose=${this.#beforeClose}
+          heading=${t("menus.add_set_menu")}
+          @wt-close=${(event: Event) => {
+            event.stopPropagation();
+            if (!this.saving)
+              this.dispatchEvent(
+                new CustomEvent("set-menu-terms-cancelled", { bubbles: true, composed: true }),
+              );
+          }}
+          >${form}${actions}</wt-modal
+        >`
+      : form;
   }
 }
 

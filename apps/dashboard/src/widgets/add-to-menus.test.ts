@@ -62,6 +62,7 @@ const structures: MenuStructure[] = [
       color: null,
       members: [],
     },
+    placeableSetMenus: [],
     includable: [],
     includedBy: [{ id: "m-dinner", name: "Dinner Menu" }],
     nodes: [
@@ -107,6 +108,7 @@ const structures: MenuStructure[] = [
       color: null,
       members: [],
     },
+    placeableSetMenus: [],
     includable: [],
     includedBy: [],
     nodes: [

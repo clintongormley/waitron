@@ -551,6 +551,7 @@ function api(
               color: null,
               members: [],
             },
+            placeableSetMenus: [],
             includable: [],
             includedBy: [],
             nodes: structuredClone(root),
@@ -565,6 +566,7 @@ function api(
               color: null,
               members: [],
             },
+            placeableSetMenus: [],
             includable: [],
             includedBy: [],
             nodes: [],
@@ -859,7 +861,15 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+async function chooseOrdinaryMenu(el: MenusScreen, add: HTMLElement): Promise<void> {
+  add.click();
+  await el.updateComplete;
+  q(el, '[data-test="create-menu"]')!.click();
+  await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(true));
+}
+
 async function click(el: MenusScreen, testId: string): Promise<void> {
+  if (testId === "add-menu") return chooseOrdinaryMenu(el, headerAdd(el));
   (testId === "select" ? modeToggle(el) : q(el, `[data-test="${testId}"]`))!.click();
   await el.updateComplete;
 }
@@ -1003,6 +1013,7 @@ function lunchWith(nodes: MenuStructureNode[], extra: Partial<MenuStructure> = {
       color: null,
       members: [],
     },
+    placeableSetMenus: [],
     includable: [],
     includedBy: [],
     nodes,
@@ -1118,8 +1129,7 @@ it("puts Add menu under the empty menu table's sentence, opening the same form",
   const button = table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
   expect(button.assignedSlot).not.toBeNull();
   expect(button.textContent!.trim()).toBe(t("menus.add"));
-  button.click();
-  await el.updateComplete;
+  await chooseOrdinaryMenu(el, button);
   expect(modal(el, "menu-form").open).toBe(true);
 });
 
@@ -1127,8 +1137,7 @@ it("puts Add menu under the empty menu table's sentence, opening the same form",
 async function openFromEmptyTable(el: MenusScreen): Promise<HTMLElement> {
   const button = table(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
   button.focus();
-  button.click();
-  await el.updateComplete;
+  await chooseOrdinaryMenu(el, button);
   expect(modal(el, "menu-form").open).toBe(true);
   return button;
 }
@@ -1247,14 +1256,12 @@ describe("the menus list's heading row", () => {
       api({ listMenus: vi.fn().mockResolvedValueOnce(menus).mockResolvedValue(menus) }),
     );
     headerAdd(el).focus();
-    headerAdd(el).click();
-    await el.updateComplete;
+    await chooseOrdinaryMenu(el, headerAdd(el));
     inModal(el, "menu-form", '[data-test="cancel"]').click();
     await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
     await afterDialogCloses(el);
     expect(el.shadowRoot!.activeElement).toBe(headerAdd(el));
-    headerAdd(el).click();
-    await el.updateComplete;
+    await chooseOrdinaryMenu(el, headerAdd(el));
     type(inModal(el, "menu-form", 'wt-input[name="name"]'), "Brunch");
     await el.updateComplete;
     inModal(el, "menu-form", '[data-test="menu-save"]').click();
@@ -3038,6 +3045,7 @@ it("edits section details and deletes its owned descendants while keeping includ
       members: [],
     },
     nodes: lunchNodes(),
+    placeableSetMenus: [],
     includable: [],
     includedBy: [],
   };
@@ -3717,6 +3725,7 @@ function lunchWithoutFavourites(): MenuStructure {
       color: null,
       members: [],
     },
+    placeableSetMenus: [],
     includable: [],
     includedBy: [],
     nodes: [productNode("m-burger", "p-burger"), drinksNode("m-drinks")],
@@ -4600,6 +4609,7 @@ it("shows why a refused picker closed while the other menu's structure is still 
       color: null,
       members: [],
     },
+    placeableSetMenus: [],
     includable: [],
     includedBy: [],
     nodes: [],
@@ -4677,6 +4687,7 @@ it("keeps a picker whose add was refused open, and sends a second add, when the 
       color: null,
       members: [],
     },
+    placeableSetMenus: [],
     includable: [],
     includedBy: [],
     nodes: lunchNodes(),
@@ -12139,6 +12150,7 @@ describe("review fix: menu details opening", () => {
       members: [],
     },
     nodes: [],
+    placeableSetMenus: [],
     includable: [],
     includedBy: [],
   });

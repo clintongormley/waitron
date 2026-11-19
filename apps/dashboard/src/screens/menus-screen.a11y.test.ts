@@ -317,6 +317,12 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const { el, host } = await mount("populated", theme, "/menus");
     q(el, '[data-test="add-menu"]').click();
     await el.updateComplete;
+    q(el, '[data-test="create-menu"]').click();
+    await vi.waitFor(() =>
+      expect(q(el, '[data-test="menu-form"]').shadowRoot!.querySelector("wt-modal")?.open).toBe(
+        true,
+      ),
+    );
     q(el, '[data-test="menu-form"]')
       .shadowRoot!.querySelector('wt-input[name="names-es"]')!
       .dispatchEvent(

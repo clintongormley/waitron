@@ -2,7 +2,13 @@ import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { foldForSearch, textSearch, type TextSearch, categoryColor } from "@waitron/shared";
+import {
+  foldForSearch,
+  textSearch,
+  type TextSearch,
+  categoryColor,
+  formatMoney,
+} from "@waitron/shared";
 import {
   baseStyles,
   reorder,
@@ -39,8 +45,8 @@ import {
   FOLLOWING_FOLDER,
   folderPresentation,
 } from "@waitron/menu/src/include-folder-presentation.js";
-import type { Presentation, ShortcutRef } from "@waitron/shared";
-import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
+import type { MemberRef, Presentation } from "@waitron/shared";
+import type { CategorySummary, MenuStructureNode, MenuSummary, Product } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
 
@@ -57,15 +63,14 @@ const TOP_LIST = "";
  * helper sees members only. */
 export const ROOT_KEY = "root";
 
-type MemberRef = ShortcutRef;
-
-const sameRef = (a: MemberRef, b: MemberRef): boolean =>
-  a.kind === "product"
-    ? b.kind === "product" && a.productId === b.productId
-    : b.kind === "section" && a.sectionId === b.sectionId;
+const sameRef = (a: MemberRef, b: MemberRef): boolean => {
+  if (a.kind === "set_menu") return b.kind === "set_menu" && a.menuId === b.menuId;
+  if (a.kind === "product") return b.kind === "product" && a.productId === b.productId;
+  return b.kind === "section" && a.sectionId === b.sectionId;
+};
 
 const holds = (members: MenuStructureNode[], ref: MemberRef): boolean =>
-  members.some((member) => member.ref.kind !== "set_menu" && sameRef(member.ref, ref));
+  members.some((member) => sameRef(member.ref, ref));
 
 /** A section can be drawn in several places, so what lies inside a member is told by section id. */
 export function sectionIdsWithin(node: MenuStructureNode): string[] {
@@ -91,7 +96,7 @@ interface Row {
   /** ROOT_KEY for a member of the menu's own top level. */
   parentKey: string;
   path: string[];
-  node: MenuStructureNode & { ref: ShortcutRef };
+  node: MenuStructureNode;
   name: string;
   /** The name of the list holding this member: the menu's, or its section's. */
   holder: string;
@@ -116,11 +121,12 @@ type TableRow = RootRow | Row;
 const rowKey = (row: TableRow) => row.key;
 const rowParent = (row: TableRow) => row.parentKey;
 
-export type StructureAddAction = "new-section" | "include-menu" | "add-products";
+export type StructureAddAction = "new-section" | "include-menu" | "add-products" | "add-set-menu";
 
 const ADDS: { action: StructureAddAction; test: string; label: () => string }[] = [
   { action: "new-section", test: "new-section", label: () => t("menus.new_section") },
   { action: "include-menu", test: "include-menu", label: () => t("menus.include_menu") },
+  { action: "add-set-menu", test: "add-set-menu", label: () => t("menus.place_set_menu") },
   { action: "add-products", test: "open-add-products", label: () => t("sections.add_products") },
 ];
 
@@ -196,6 +202,9 @@ export class MenuStructureTable extends LitElement {
         font-size: var(--wt-font-size-sm);
         min-inline-size: 0;
       }
+      wt-data-table::part(set-menu-link) {
+        color: var(--wt-color-primary-text);
+      }
       wt-data-table::part(note) {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -260,6 +269,8 @@ export class MenuStructureTable extends LitElement {
   /** Where members' staff names and images come from. */
   @property({ attribute: false }) products: Product[] = [];
   /** With `defaultColor`, where a product without its own colour takes one from. */
+  @property({ attribute: false }) menus: MenuSummary[] = [];
+  @property({ attribute: false }) placeableSetMenus: readonly { id: string }[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
   @property({ attribute: false }) menuColor: string | null = null;
@@ -286,6 +297,7 @@ export class MenuStructureTable extends LitElement {
 
   #rowByKey = new Map<string, Row>();
   #productById = new Map<string, Product>();
+  #setMenuById = new Map<string, MenuSummary>();
   #productNames = new Map<string, string>();
   #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   #sectionNames = new Map<string, string>();
@@ -401,6 +413,10 @@ export class MenuStructureTable extends LitElement {
       this.#productById = new Map(this.products.map((product) => [product.id, product]));
       this.#productNames = new Map(this.products.map(({ id, name }) => [id, name]));
     }
+    if (changed.has("menus"))
+      this.#setMenuById = new Map(
+        this.menus.filter(({ kind }) => kind === "set_menu").map((menu) => [menu.id, menu]),
+      );
     if (changed.has("categories"))
       this.#categoryById = new Map(this.categories.map((category) => [category.id, category]));
     if (changed.has("nodes")) {
@@ -728,6 +744,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   #known(ref: MemberRef): boolean {
+    if (ref.kind === "set_menu") return this.#setMenuById.has(ref.menuId);
     return ref.kind === "section" || this.#productById.has(ref.productId);
   }
 
@@ -990,6 +1007,7 @@ export class MenuStructureTable extends LitElement {
       this.#order,
       this.#productNames,
       this.#sectionNames,
+      this.#setMenuById,
     ];
     if (this.#rowsMemo?.inputs.every((input, index) => input === inputs[index]))
       return this.#rowsMemo.rows;
@@ -1059,10 +1077,12 @@ export class MenuStructureTable extends LitElement {
       readOnly: boolean,
     ) => {
       for (const { ref, ...node } of this.#ordered(nodes, list)) {
-        if (ref.kind === "set_menu") continue;
         const path = [...parentPath, node.memberId];
         const key = path.join("/");
-        const staffName = memberName(ref, this.#productNames, this.#sectionNames);
+        const staffName =
+          ref.kind === "set_menu"
+            ? (this.#setMenuById.get(ref.menuId)?.name ?? t("members.missing"))
+            : memberName(ref, this.#productNames, this.#sectionNames);
         const name = node.includedMenuId
           ? fill("menus.menu_prefix", { name: staffName })
           : staffName;
@@ -1149,6 +1169,31 @@ export class MenuStructureTable extends LitElement {
 
   #nameCell(row: Row, searchRoot: boolean) {
     const { node, key } = row;
+    if (node.ref.kind === "set_menu") {
+      const { menuId } = node.ref;
+      const price = this.#setMenuById.get(menuId)?.setPrice;
+      return menuTreeCell(
+        "section",
+        nothing,
+        html`<span part="name-stack folder-stack">
+          ${
+            this.selecting
+              ? this.#nameSpan(row)
+              : html`<a
+                  part="set-menu-link"
+                  href=${`/menus/menu/${encodeURIComponent(menuId)}/view/set-menu`}
+                  @click=${(event: MouseEvent) => {
+                    if (leftToBrowser(event)) return;
+                    event.preventDefault();
+                    this.#send("wt-set-menu-open", { menuId });
+                  }}
+                  >${row.name}</a
+                >`
+          }
+          ${price == null ? nothing : html`<span part="note">${formatMoney(price, currentLocale())}</span>`}
+        </span>`,
+      );
+    }
     const path = searchRoot ? this.#sectionPath(row) : "";
     const stack = html`<span
       part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
@@ -1192,6 +1237,7 @@ export class MenuStructureTable extends LitElement {
         busy: this.busy,
       });
     }
+    if (node.ref.kind === "set_menu") return nothing;
     const sectionId = node.ref.sectionId;
     const own = ownPresentation(node);
     const chip = swatchChip(folderPresentation(own, node.folder ?? FOLLOWING_FOLDER).color);
@@ -1230,17 +1276,21 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
-  /** The three adds for the list at `path`, as a menu's items or, with `align` "center", as the
-   * empty box's buttons. */
   #adds(path: string[], suffix: string, align: "start" | "center" = "start") {
-    return ADDS.map(({ action, test, label }) =>
-      this.#button(
-        `${test}-${suffix}`,
-        label(),
-        "secondary",
-        () => this.#send("wt-structure-add", { action, path }),
-        align,
-      ),
+    const siblings =
+      path.length === 0 ? this.nodes : (this.#rowByKey.get(path.join("/"))?.node.children ?? []);
+    const canPlace = this.placeableSetMenus.some(
+      ({ id }) => !holds(siblings, { kind: "set_menu", menuId: id }),
+    );
+    return ADDS.filter(({ action }) => action !== "add-set-menu" || canPlace).map(
+      ({ action, test, label }) =>
+        this.#button(
+          `${test}-${suffix}`,
+          label(),
+          "secondary",
+          () => this.#send("wt-structure-add", { action, path }),
+          align,
+        ),
     );
   }
 
@@ -1255,6 +1305,10 @@ export class MenuStructureTable extends LitElement {
 
   #menuItems(row: Row) {
     const { node, key } = row;
+    if (node.ref.kind === "set_menu")
+      return html`${this.#button(`move-${key}`, t("menus.move_selected"), "secondary", () =>
+        this.#send("wt-set-menu-move", { key }),
+      )}${this.#remove(row, t("menus.remove_included"))}`;
     if (node.includedMenuId)
       return html`<a
           data-test=${`source-${key}`}
@@ -1345,6 +1399,10 @@ export class MenuStructureTable extends LitElement {
       this.#productNames,
       this.#categoryById,
       this.#sectionNames,
+      this.#setMenuById,
+      this.placeableSetMenus,
+      this.selecting,
+      this.nodes,
     ];
     if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
       return this.#columnsMemo.columns;
@@ -1372,7 +1430,7 @@ export class MenuStructureTable extends LitElement {
           row.kind === "root"
             ? nothing
             : html`<span part=${row.readOnly ? "kind read-only" : "kind"} data-test="kind"
-                >${memberKindLabel(row.node.ref)}</span
+                >${row.node.ref.kind === "set_menu" ? t("menus.set_menu_kind") : memberKindLabel(row.node.ref)}</span
               >`,
       },
       {
@@ -1452,8 +1510,16 @@ export class MenuStructureTable extends LitElement {
         }
         rowControlsLabel=${t("folders.drag")}
         rowControlsAlign="center"
-        .rowActivation=${(row: TableRow) =>
-          row.kind === "member" && row.node.ref.kind === "section" ? "toggle" : "none"}
+        .rowActivation=${(row: TableRow) => {
+          if (row.kind === "root") return "none";
+          if (row.node.ref.kind === "section") return "toggle";
+          return row.node.ref.kind === "set_menu" && !this.selecting ? "click" : "none";
+        }}
+        .rowClick=${(row: TableRow) => {
+          if (row.kind === "member" && row.node.ref.kind === "set_menu")
+            this.#send("wt-set-menu-open", { menuId: row.node.ref.menuId });
+        }}
+        .rowClickLabel=${(row: TableRow) => `${t("menus.open")}: ${row.name}`}
         .rowToggleLabel=${(row: TableRow, expanded: boolean) =>
           fill(expanded ? "menus.collapse" : "menus.expand", { name: row.name })}
         .rows=${rows}
