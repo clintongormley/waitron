@@ -1,6 +1,6 @@
 # Running a Waitron node
 
-A node runs the Waitron app, a local mail capture and the print agent. Back up the named
+A node runs the Waitron app, the print agent and the staff tunnel companion. Practice boxes also run a local mail capture. Back up the named
 Docker volumes below. During a held upgrade, also retain `/opt/waitron.upgrades` and
 `/opt/waitron-host`: they hold the stopped copy and the runtime that can restore it.
 
@@ -20,16 +20,16 @@ and key). Only `venue.db`
 streams to a bucket; a backup file carries both.
 There is no database server in the app's path, no connection string and no database password.
 
-| volume           | mounted at                                                              | holds                                                                                                                                                                       |
-| ---------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state`          | `/var/lib/waitron/state`                                                | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `stream/` (Litestream's configuration and process-id file), the CA and leaf PEMs |
-| `logs`           | `/var/lib/waitron/logs`                                                 | the rotating log file, and `crash-reports/`: one JSON file per process the venue watchdog killed                                                                            |
-| `backups`        | `/var/lib/waitron/backups`                                              | local encrypted backup archives, when they are switched on                                                                                                                  |
-| `mailpit`        | `/data`                                                                 | the Demo/development test inbox; ordinary Prepare and Live require SMTP                                                                                                     |
-| `print_agent`    | `/var/lib/waitron-print-agent`                                          | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                                                                         |
-| `tunnel_control` | `/var/lib/waitron/tunnel` in the app, `/control` in the optional tunnel | the peer public key and the non-secret connection configuration                                                                                                             |
-| `tunnel_keys`    | `/keys` in the optional tunnel only                                     | the box's private WireGuard key                                                                                                                                             |
-| `box_socket`     | `/run/waitron-box`                                                      | nothing: an empty stand-in until `waitron.sh install` names the host's socket folder in `.env`                                                                              |
+| volume           | mounted at                                                               | holds                                                                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`          | `/var/lib/waitron/state`                                                 | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `stream/` (Litestream's configuration and process-id file), the CA and leaf PEMs |
+| `logs`           | `/var/lib/waitron/logs`                                                  | the rotating log file, and `crash-reports/`: one JSON file per process the venue watchdog killed                                                                            |
+| `backups`        | `/var/lib/waitron/backups`                                               | local encrypted backup archives, when they are switched on                                                                                                                  |
+| `mailpit`        | `/data`                                                                  | the Demo/development test inbox; ordinary Prepare and Live require SMTP                                                                                                     |
+| `print_agent`    | `/var/lib/waitron-print-agent`                                           | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                                                                         |
+| `tunnel_control` | `/var/lib/waitron/tunnel` in the app, `/control` in the tunnel companion | the staff socket, peer public key and connection configuration                                                                                                              |
+| `tunnel_keys`    | `/keys` in the tunnel companion only                                     | the box's private WireGuard key                                                                                                                                             |
+| `box_socket`     | `/run/waitron-box`                                                       | nothing: an empty stand-in until `waitron.sh install` names the host's socket folder in `.env`                                                                              |
 
 A box installed before the box ran its own database server was retired also carries a `waitron_db`
 volume holding that old database. Nothing reads it and nothing on the box removes it, including
@@ -65,9 +65,9 @@ on anything else it says so and exits 2) and enables the daemon at boot. It then
 from the ref you are installing, replacing your local copy only after the download succeeds and
 printing a line to say so. It removes an old `.env.example` from the box and keeps `.env`.
 Read `deploy/.env.example` in the repository at the installed ref. The running image
-reports its own commit below. Finally it pulls the box's images, the two Waitron ones from GHCR and the
-mail catcher from Docker Hub, stopping with an error if any of them fails to download, and starts the
-containers.
+reports its own commit below. The installer pulls the app, print agent and tunnel images from
+GHCR, along with the practice inbox image from Docker Hub when enabled. It starts the box once
+the images are available.
 
 For a fresh development installation or a development `--reset install`, unless the copy you ran is inside a git checkout, `install` fetches
 `deploy/waitron.sh` itself from the ref you are installing and compares it with the copy you ran.
@@ -245,8 +245,8 @@ The main listener serves this guide during setup, trading, pending adoption and 
 While the listener presents your own TLS certificate, the guide directs you to whoever installed
 it. It does not offer the box's fallback CA, which cannot certify that connection.
 
-The optional [staff tunnel runtime](tunnel/README.md) is a separate container. It is not started
-by the default installation; automatic connection and Settings wiring remain open in A951-S.
+The [staff tunnel companion](tunnel/README.md) starts with the box. Pair your test box with Cloud
+and use the Remote access switch under **System → Cloud services** to control its connection.
 
 ## Checked manual upgrades
 
@@ -316,7 +316,7 @@ Compose-declared policies when reopening after the recorded decision. `waitron-u
 before Docker after a restart; a held manual attempt keeps the app stopped for your choice.
 
 After a fresh installation or `--reset install` whose box comes up healthy, `install`
-deletes each image the `app` and `print-agent` containers ran before it that Docker still holds and
+deletes each image the app, print agent and tunnel companion ran before it that Docker still holds and
 no Waitron container runs now, with `docker image rm` (never forced), and prints one line for
 each. A deletion Docker refuses is reported with the command to run later, and does not stop the
 install. On Docker's containerd image store, the default for a fresh Docker Engine 29 install,
@@ -469,11 +469,12 @@ sudo bash /opt/waitron-host/waitron.sh install v1.2.3
 ```
 
 The installer checks the release file against the two public keys retained under
-`/opt/waitron-host` before downloading the release's files. The file names the
-commit and identifies both images by digest, a fingerprint of the exact image. If the box has
+`/opt/waitron-host` before downloading the release's files. The file names the commit and
+identifies the app, print agent and tunnel by digest, a fingerprint of each exact image. If the box has
 venue data, the checked manual upgrade uses those images for the trial and for restart. You
 can reinstall the same version or move forward. An install that keeps the data refuses an
-older release. A confirmed reset can install an older signed release because it wipes the data.
+older release. A confirmed reset wipes the venue and can install an older signed release with
+all three image digests.
 Fresh and reset installs use the retained installer's steps and keep its verifier and keys.
 With the current installer, a checked upgrade to a numbered release loads the driver,
 verifier and keys from the signed commit. The old and new verifiers must both accept the same
@@ -482,8 +483,8 @@ keeps the installed trust and stops before applying the upgrade. If the upgrade 
 **Restore** or **Keep**, either choice keeps the verified driver and trust files. Restore
 returns your venue to the previous app and data.
 
-The USB recipe seeds release trust when built with both keys. On an existing development box,
-wait for a published main image that includes the verifier and keys. Download a new copy of
+The USB recipe seeds release trust when built with both keys. Numbered releases require the verifier that reads all three image digests. If your box has an
+earlier verifier, upgrade it to the published main image before you install the release. Download a new copy of
 the main installer and use that copy for the first checked upgrade to main. The old retained
 installer cannot seed the keys. The checked upgrade reports whether it loaded the verifier and
 keys.
@@ -510,8 +511,8 @@ CI does not publish an image for a pull request (only the nightly run, a manual 
 `v*` tags publish to GHCR), so there is no PR image to `pull`. Give `install` a ref — a branch name or a commit SHA —
 instead of relying on the default `main`, and it builds that ref's image on the box instead of
 pulling. A release tag such as `v1.2.3` is the exception: it pulls the published release (see
-Installing a release above). The script resolves the ref once through GitHub's commit API, then builds both Waitron
-images from that full commit. No checkout or `pnpm` is needed; a failed resolution stops the builds.
+Installing a release above). The script resolves the ref once through GitHub's commit API, then builds
+the app, print agent and tunnel from that commit. You can pass a branch or commit directly without a local checkout.
 
 ```bash
 sudo bash waitron.sh install <branch-or-ref>
@@ -521,10 +522,9 @@ The image it builds is not a release, so a box set to production refuses to star
 (`server.unreleased_build`, "This box is running a test build."); try branches on a preproduction box.
 
 It tags the image after the ref (`waitron:<ref>`, with unsafe characters dashed and the name capped
-to a valid length) and writes that tag into `.env` as `WAITRON_IMAGE` (and the print agent's
-equivalent as `WAITRON_PRINT_AGENT_IMAGE`), so the box STAYS on that build across reboots and a bare
-`docker compose up -d` — not just for the one run that installed it. Run `install` with no ref to go
-back to the published `main` image; that removes those two lines from `.env` again. Add `sudo` if
+to a valid length). The app, print agent and tunnel image tags go into `.env`, so the box stays on
+that build across reboots and a bare `docker compose up -d`. Run `install` with no ref to go back to
+the published `main` images and remove the overrides. Add `sudo` if
 your user is not in the `docker` group; the first build takes several minutes (it builds the whole
 app).
 
@@ -566,7 +566,7 @@ sudo bash waitron.sh reset          # wipe the database and settings, keep the c
 sudo bash waitron.sh reset --all    # also wipe those, so a new certificate is minted on next boot
 ```
 
-Both forms stop the optional staff tunnel and remove its control and key volumes. A reset box
+Both forms stop the staff tunnel companion and remove its control and key volumes. A reset box
 re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue databases and wizard settings, logs, local backups, the captured mail inbox and print-agent settings. Plain `reset` keeps two folders inside the box's
 `state` volume:
 
@@ -919,6 +919,7 @@ the wizard, not a file on the box.
 ```bash
 pnpm build:image              # docker build -f deploy/Dockerfile -t waitron:dev .
 pnpm build:image:print-agent  # docker build -f deploy/Dockerfile --target print-agent -t waitron-print-agent:dev .
+docker build -f deploy/tunnel/Dockerfile -t waitron-tunnel:dev .
 ```
 
 These development builds carry no release floor. To build a pinned image, pass the source commit
@@ -949,10 +950,9 @@ built, has no release-blocker line, and names that version. Built without it, th
 test build: it has no `/app/declaration/`, and its production start refuses with
 `server.unreleased_build`.
 
-Then point the compose at both in `.env`: `WAITRON_IMAGE=waitron:dev` and
-`WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:dev`. The print agent is an on-by-default service, so
-without the second one a local `docker compose up` still pulls the published
-`ghcr.io/clintongormley/waitron-print-agent:main`.
+Point Compose at your local images in `.env`. Set `WAITRON_IMAGE=waitron:dev`,
+`WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:dev` and `WAITRON_TUNNEL_IMAGE=waitron-tunnel:dev`.
+Compose uses the published `:main` tag for any image you leave unset.
 
 On a Mac, Docker Desktop cannot put a container on the LAN, so the shipped host-networking profile
 does not give you a reachable box. Run the bridge shape instead with an override file — which is

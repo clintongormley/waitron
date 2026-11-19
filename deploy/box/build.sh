@@ -84,7 +84,7 @@ install -d -m 0755 "$root/usr/lib/dracut/modules.d/95waitron"
 install -m 0755 "$repo/deploy/box/dracut/95waitron/"*.sh "$root/usr/lib/dracut/modules.d/95waitron/"
 install -m 0644 "$repo/deploy/compose.yml" "$root/opt/waitron/compose.yml"
 mkdir "$output/input-stage"
-for kind in app agent mailpit; do
+for kind in app agent tunnel mailpit; do
   archive="$inputs/$kind.tar"
   cp --reflink=auto "$archive" "$output/input-stage/$kind.tar"
   config="$(tar -xOf "$archive" manifest.json | jq -er '.[0].Config')"
@@ -95,7 +95,8 @@ for kind in app agent mailpit; do
 done
 app="$(tar -xOf "$inputs/app.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
 agent="$(tar -xOf "$inputs/agent.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
-printf 'WAITRON_IMAGE=%s\nWAITRON_PRINT_AGENT_IMAGE=%s\nWAITRON_INSTALLATION_ORIGIN=usb\nCOMPOSE_PROFILES=practice-inbox\nWAITRON_BOX_SOCKET_DIR=/run/waitron-box\n' "$app" "$agent" > "$root/opt/waitron/.env"
+tunnel="$(tar -xOf "$inputs/tunnel.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
+printf 'WAITRON_IMAGE=%s\nWAITRON_PRINT_AGENT_IMAGE=%s\nWAITRON_TUNNEL_IMAGE=%s\nWAITRON_INSTALLATION_ORIGIN=usb\nCOMPOSE_PROFILES=practice-inbox\nWAITRON_BOX_SOCKET_DIR=/run/waitron-box\n' "$app" "$agent" "$tunnel" > "$root/opt/waitron/.env"
 chmod 0600 "$root/opt/waitron/.env"
 install -D -m 0644 "$output/sandbox/usr/share/keyrings/docker.asc" "$root/usr/share/keyrings/docker.asc"
 install -D -m 0644 "$output/sandbox/etc/apt/sources.list.d/docker.sources" "$root/etc/apt/sources.list.d/docker.sources"

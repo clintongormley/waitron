@@ -107,6 +107,8 @@ declare module "@waitron/shared" {
     "cloud.emergency_code_rate_limited": { seconds: number };
     "cloud.tunnel_unavailable": Record<string, never>;
     "cloud.tunnel_conflict": Record<string, never>;
+    "cloud.tunnel_plan_required": Record<string, never>;
+    "cloud.tunnel_refused": Record<string, never>;
     "cloud.request_unavailable": Record<string, never>;
     "cloud.state_invalid": Record<string, never>;
     "cloud.binding_conflict": Record<string, never>;

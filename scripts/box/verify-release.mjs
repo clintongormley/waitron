@@ -48,7 +48,9 @@ export async function main(args, input, directory = import.meta.dirname, logger 
       const bytes = await readRelease(input);
       const release = verifyReleaseList(bytes, readKeys(directory));
       if (release.version !== version) throw new Error(`The signed version does not match ${tag}`);
-      logger.log(`${release.sourceSha} ${release.images.app} ${release.images.printAgent}`);
+      logger.log(
+        `${release.sourceSha} ${release.images.app} ${release.images.printAgent} ${release.images.tunnel}`,
+      );
     }
     return 0;
   } catch (error) {

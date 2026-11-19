@@ -86,7 +86,7 @@ export async function writeTunnelConfiguration(
   }
   const path = join(directory, "peer.json");
   const service = state?.lifecycle?.view?.services.find((s) => s.service === "remote_access");
-  if (!state?.view?.registration || !remoteAccessListed(state)) {
+  if (state?.environment !== "test" || !state.view?.registration || !remoteAccessListed(state)) {
     try {
       await rm(path, { force: true });
       for (const entry of await readdir(directory, { withFileTypes: true })) {

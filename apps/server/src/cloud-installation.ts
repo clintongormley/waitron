@@ -40,6 +40,7 @@ interface View extends CloudRegistration {
 }
 export interface CloudInstallationState {
   tunnelConflict?: true;
+  tunnelPlanRequired?: true;
   view?: View;
   lease?: Envelope;
   pending?: Pending;
@@ -185,6 +186,7 @@ export function readCloudInstallation(
     if (value.tunnelConflict !== true) unavailable();
     result.tunnelConflict = true;
   }
+  if (value.tunnelPlanRequired === true) result.tunnelPlanRequired = true;
   if (value.view !== undefined) result.view = readView(value.view, state);
   if (value.lease !== undefined) result.lease = readLease(value.lease, state);
   if (value.pending !== undefined) {
@@ -279,6 +281,7 @@ export function installationClient<T extends CloudInstallationCredentials>(
     p: (Omit<Pending, "action"> & { action: Action | "tunnel-provision" }) | undefined = c.pending,
   ): Promise<void> {
     if (!p) return;
+    if (p.action === "tunnel-provision") delete c.tunnelPlanRequired;
     try {
       const bytes = machinePayload(state, p),
         signature = signCloudPayload(bytes, state.privateKey);
@@ -304,6 +307,13 @@ export function installationClient<T extends CloudInstallationCredentials>(
         ) {
           c.tunnelConflict = true;
           throw new AppError("cloud.tunnel_conflict", {});
+        }
+        if (response.status === 403 && object(value) && p.action === "tunnel-provision") {
+          if (value.error === "remote_plan_required") {
+            c.tunnelPlanRequired = true;
+            throw new AppError("cloud.tunnel_plan_required", {});
+          }
+          if (value.error === "permission_denied") throw new AppError("cloud.tunnel_refused", {});
         }
         if (response.status === 403 && object(value) && value.error === "revoked") {
           markRevoked(c);

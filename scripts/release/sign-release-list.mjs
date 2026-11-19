@@ -34,7 +34,11 @@ export function main([keysDir, output], env, logger = console) {
         prerelease: false,
         sourceSha: env.RELEASE_SOURCE_SHA,
         platform: "linux/amd64",
-        images: { app: env.RELEASE_APP_DIGEST, printAgent: env.RELEASE_PRINT_AGENT_DIGEST },
+        images: {
+          app: env.RELEASE_APP_DIGEST,
+          printAgent: env.RELEASE_PRINT_AGENT_DIGEST,
+          tunnel: env.RELEASE_TUNNEL_DIGEST,
+        },
       },
       privateKey,
     );

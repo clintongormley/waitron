@@ -166,6 +166,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This tunnel setup conflicts with a connection already saved in Cloud. Automatic attempts have stopped. You can stop Cloud access here; local trading continues.",
     es: "Esta configuración del túnel entra en conflicto con una conexión ya guardada en Cloud. Los intentos automáticos se han detenido. Puedes detener el acceso a Cloud aquí; las ventas locales siguen funcionando.",
   },
+  "cloud.tunnel_plan_required": {
+    en: "Remote access needs a Cloud plan that includes it. Start the venue’s free trial in Waitron Cloud Billing.",
+    es: "El acceso remoto requiere un plan de Cloud que lo incluya. Inicia la prueba gratuita del local en Facturación de Waitron Cloud.",
+  },
+  "cloud.tunnel_refused": {
+    en: "Waitron Cloud refused remote access for this box. Open Waitron Cloud to check the box’s connection.",
+    es: "Waitron Cloud rechazó el acceso remoto para este servidor. Abre Waitron Cloud para revisar la conexión del servidor.",
+  },
   "cloud.request_unavailable": {
     en: "This request is unavailable. Start again to get a new code.",
     es: "Esta solicitud no está disponible. Empieza de nuevo para obtener otro código.",

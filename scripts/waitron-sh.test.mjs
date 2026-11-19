@@ -127,17 +127,17 @@ case "$1" in
         case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
         printf '%s\\n' "$profiles" >> "\${WT_LOG}.pull-profiles"
         if [ "\${WT_OBSERVE_RELEASE_IMAGES:-0}" = 1 ]; then
-          printf '%s\\n' "\${WAITRON_IMAGE:-}" "\${WAITRON_PRINT_AGENT_IMAGE:-}" > "\${WT_LOG}.pull-images"
+          printf '%s\\n' "\${WAITRON_IMAGE:-}" "\${WAITRON_PRINT_AGENT_IMAGE:-}" "\${WAITRON_TUNNEL_IMAGE:-}" > "\${WT_LOG}.pull-images"
         fi
         [ "\${WT_PULL_FAIL}" = "1" ] && exit 1 ;;
       ps)
         case "$args" in
-          *"-q app"|*"-q print-agent")
+          *"-q app"|*"-q print-agent"|*"-q tunnel")
             if [ "\${WT_STOPPED_APP:-0}" = 1 ] && [ "$args" = "ps -q app" ]; then exit 0; fi
             [ "\${WT_NO_CONTAINERS}" = 1 ] && exit 0
             [ "\${WT_NO_CONTAINERS}" = before ] && [ ! -e "\${WT_LOG}.up" ] && exit 0
             { [ ! -e "\${WT_LOG}.down" ] || [ -e "\${WT_LOG}.up" ]; } || exit 0
-            case "$args" in *"-q app") echo app-container ;; *) echo agent-container ;; esac
+            case "$args" in *"-q app") echo app-container ;; *"-q tunnel") echo tunnel-container ;; *) echo agent-container ;; esac
             exit 0 ;;
         esac
         # WT_DOCKER_PS_PENDING probes answer empty before the box reports WT_DOCKER_PS: a container
@@ -173,7 +173,13 @@ case "$1" in
       config)
         # Compose lists the active profiles' images, one per line.
         case "$args" in
-          *"--format json") printf '{"services":{"app":{"image":"%s"}}}\\n' "\${WAITRON_IMAGE:-waitron:configured}" ;;
+          *"--format json")
+            extra=''
+            case "\${WT_LEGACY_TUNNEL:-no}" in
+              no) extra=',"tunnel":{"image":"tunnel:default"}' ;;
+              optional) extra=',"tunnel":{"image":"tunnel:dev","profiles":["staff-tunnel"]}' ;;
+            esac
+            printf '{"services":{"app":{"image":"%s"}%s}}\\n' "\${WAITRON_IMAGE:-waitron:configured}" "$extra" ;;
           *--environment*) printf 'COMPOSE_PROFILES=%s\\n' "\${WT_COMPOSE_ENV_PROFILES-$profiles}" ;;
           *--images*)
             printf '%s\\n' "$profiles" >> "\${WT_LOG}.images-profiles"
@@ -185,7 +191,7 @@ case "$1" in
       up)
         printf '%s\\n' "$profiles" >> "\${WT_LOG}.up-profiles"; : > "\${WT_LOG}.up"
         if [ "\${WT_OBSERVE_RELEASE_IMAGES:-0}" = 1 ]; then
-          printf '%s\\n' "\${WAITRON_IMAGE:-}" "\${WAITRON_PRINT_AGENT_IMAGE:-}" > "\${WT_LOG}.up-images"
+          printf '%s\\n' "\${WAITRON_IMAGE:-}" "\${WAITRON_PRINT_AGENT_IMAGE:-}" "\${WAITRON_TUNNEL_IMAGE:-}" > "\${WT_LOG}.up-images"
         fi ;;
       down) printf '%s\\n' "\${COMPOSE_PROFILES:-}" >> "\${WT_LOG}.profiles"; : > "\${WT_LOG}.down" ;;
       *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
@@ -207,6 +213,12 @@ case "$1" in
           *"-f {{.Config.Image}}"*) echo waitron-print-agent:newer-tag ;;
           *) exit 97 ;;
         esac ;;
+      *tunnel-container*)
+        case "$args" in
+          *"-f {{.Image}}"*)
+            if [ "\${WT_OLD_IMAGES}" = 1 ] && [ ! -e "\${WT_LOG}.up" ]; then echo sha256:old-tunnel; else echo sha256:running-tunnel; fi ;;
+          *) exit 97 ;;
+        esac ;;
     esac ;;
   image)
     [ "\${WT_LOOKUP_FAIL}" = labels ] && [ "\${@: -1}" = sha256:running-app ] && exit 1
@@ -218,10 +230,14 @@ case "$1" in
           *) exit 97 ;;
         esac
         exit 0 ;;
-      *'--format {{index .Config.Labels "org.opencontainers.image.revision"}}'*) printf '%s\\n' "\${WT_CANDIDATE_REVISION:-0123456789abcdef0123456789abcdef01234567}"; exit 0 ;;
-      *'{{.Id}}'*) case "$args" in *print-agent*) echo sha256:candidate-agent ;; *) echo sha256:candidate-app ;; esac; exit 0 ;;
+      *'--format {{index .Config.Labels "org.opencontainers.image.revision"}}'*)
+        revision="\${WT_CANDIDATE_REVISION:-0123456789abcdef0123456789abcdef01234567}"
+        case "$args" in *sha256:candidate-tunnel*) revision="\${WT_TUNNEL_REVISION:-$revision}" ;; esac
+        printf '%s\\n' "$revision"; exit 0 ;;
+      *'{{.Id}}'*) case "$args" in *tunnel*) echo sha256:candidate-tunnel ;; *print-agent*) echo sha256:candidate-agent ;; *) echo sha256:candidate-app ;; esac; exit 0 ;;
       *--format*waitron:newer-tag*|*--format*waitron-print-agent:newer-tag*) echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|2026-10-12T12:00:00Z|newer-tag'; exit 0 ;;
       *--format*sha256:running-app*) printf '%s\\n' "\${WT_APP_LABELS}"; exit 0 ;;
+      *--format*sha256:running-tunnel*) printf '%s\\n' "\${WT_APP_LABELS}"; exit 0 ;;
       *--format*sha256:running-agent*) printf '%s\\n' "\${WT_AGENT_LABELS}"; exit 0 ;;
     esac
     if [ "$2" = inspect ] && [ "\${WT_IMAGE_STORE}" = containerd ]; then
@@ -234,7 +250,7 @@ case "$1" in
   build)
     previous=""; for value in "$@"; do
       if [ "$previous" = --iidfile ]; then
-        case "$value" in */agent.id) echo sha256:candidate-print-agent > "$value" ;; *) echo sha256:candidate-app > "$value" ;; esac
+        case "$value" in */tunnel.id) echo sha256:candidate-tunnel > "$value" ;; */agent.id) echo sha256:candidate-print-agent > "$value" ;; *) echo sha256:candidate-app > "$value" ;; esac
       fi
       previous="$value"
     done ;;
@@ -756,6 +772,7 @@ describe("waitron.sh candidate preparation", () => {
     expect(prepared.images).toEqual({
       app: "sha256:candidate-app",
       "print-agent": "sha256:candidate-agent",
+      tunnel: "sha256:candidate-tunnel",
     });
     expect(prepared.compose).toBe("stub\n");
     expect(readFileSync(join(sb.boxDir, "compose.yml"), "utf8")).toBe(original);
@@ -763,7 +780,7 @@ describe("waitron.sh candidate preparation", () => {
       "WAITRON_IMAGE=old:app\nKEEP=value\n",
     );
     const builds = loggedCalls(sb).filter((line) => line.startsWith("docker build "));
-    expect(builds).toHaveLength(2);
+    expect(builds).toHaveLength(3);
     expect(builds.every((line) => line.includes("--iidfile "))).toBe(true);
     expect(builds.some((line) => line.includes("-t waitron:my-branch"))).toBe(false);
     expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker compose .*\b(up|stop|down)\b/);
@@ -772,7 +789,7 @@ describe("waitron.sh candidate preparation", () => {
 });
 
 describe("waitron.sh published candidate", () => {
-  it("pulls immutable references without moving the installed main tags", () => {
+  it.each([undefined, "a".repeat(40)])("checks the published tunnel revision %s", (revision) => {
     const sb = sandbox();
     installedBox(sb);
     const host = join(sb.root, "host");
@@ -780,14 +797,42 @@ describe("waitron.sh published candidate", () => {
     const result = run(
       sb,
       ["__candidate", "main", "0123456789abcdef0123456789abcdef01234567:1792062000", sb.boxDir],
-      { WAITRON_HOST_DIR: host },
+      { WAITRON_HOST_DIR: host, ...(revision && { WT_TUNNEL_REVISION: revision }) },
     );
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(revision ? 1 : 0);
+    if (revision)
+      expect(result.stderr).toContain("candidate app and tunnel name different source revisions");
     const pulls = loggedCalls(sb).filter((line) => line.startsWith("docker pull "));
-    expect(pulls).toHaveLength(2);
+    expect(pulls).toHaveLength(3);
+    expect(pulls.some((line) => line.includes("/waitron-tunnel@sha256:"))).toBe(true);
     expect(pulls.every((line) => line.includes("@sha256:"))).toBe(true);
     expect(pulls.some((line) => line.endsWith(":main"))).toBe(false);
   });
+});
+
+it.each([
+  ["main", "missing"],
+  ["my-branch", "optional"],
+])("selects only app and agent for %s with a %s companion", (ref, legacy) => {
+  const sb = sandbox();
+  installedBox(sb);
+  const host = join(sb.root, "host");
+  mkdirSync(host);
+  const result = run(
+    sb,
+    ["__candidate", ref, "0123456789abcdef0123456789abcdef01234567:1792062000", sb.boxDir],
+    { WT_LEGACY_TUNNEL: legacy, WAITRON_HOST_DIR: host },
+  );
+  expect(result.status, result.stderr).toBe(0);
+  expect(JSON.parse(result.stdout).images).toEqual({
+    app: "sha256:candidate-app",
+    "print-agent": "sha256:candidate-agent",
+  });
+  expect(
+    loggedCalls(sb).filter(
+      (line) => line.startsWith("docker build ") || line.startsWith("docker pull "),
+    ),
+  ).toHaveLength(2);
 });
 
 describe("waitron.sh recovery owner", () => {
@@ -1045,19 +1090,20 @@ describe("waitron.sh image provenance", () => {
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toContain("app: not running");
     expect(r.stdout).toContain("print-agent: not running");
+    expect(r.stdout).toContain("tunnel: not running");
     expect(r.stdout).not.toContain("built");
   });
 
   it.each(["my-branch", "0123456", "release/v1", "feature#one"])(
-    "pins both builds of %s to the resolved commit and stamps the requested ref",
+    "pins all builds of %s to the resolved commit and stamps the requested ref",
     (ref) => {
       const sb = sandbox();
       const r = run(sb, ["install", ref], { WT_REF_SHA: app });
       expect(r.status, r.stderr).toBe(0);
       const calls = readFileSync(sb.log, "utf8").split("\n");
       const builds = calls.filter((line) => line.startsWith("docker build "));
-      expect(builds).toHaveLength(2);
-      for (const line of builds) {
+      expect(builds).toHaveLength(3);
+      for (const line of builds.slice(0, 2)) {
         expect(line).toContain(`waitron.git#${app}`);
         expect(line).toContain(`--build-arg WAITRON_BUILD_ID=${app}`);
         expect(line).toContain(`--build-arg WAITRON_IMAGE_REF=${ref}`);
@@ -1066,6 +1112,10 @@ describe("waitron.sh image provenance", () => {
         );
       }
       expect(builds[1]).toContain("--target print-agent");
+      expect(builds[2]).toContain("-f deploy/tunnel/Dockerfile");
+      expect(builds[2]).toContain(`waitron.git#${app}`);
+      expect(builds[2]).toContain(`--build-arg WAITRON_BUILD_ID=${app}`);
+      expect(builds[2]).toContain(`--label org.opencontainers.image.ref.name=${ref}`);
       expect(calls.filter((line) => line.includes("api.github.com"))).toHaveLength(1);
       if (ref.includes("#")) expect(calls.join("\n")).toContain("commits/feature%23one");
     },
@@ -1078,8 +1128,8 @@ describe("waitron.sh image provenance", () => {
     const builds = readFileSync(sb.log, "utf8")
       .split("\n")
       .filter((line) => line.startsWith("docker build "));
-    expect(builds).toHaveLength(2);
-    for (const line of builds)
+    expect(builds).toHaveLength(3);
+    for (const line of builds.slice(0, 2))
       expect(line).toContain(`--build-arg WAITRON_SOURCE_METADATA=${app}:1792062000`);
   });
 
@@ -1123,7 +1173,7 @@ describe("waitron.sh image provenance", () => {
     const calls = loggedCalls(sb);
     expect(calls).toContainEqual(expect.stringMatching(/^apt-get .* install .* jq$/));
     const builds = calls.filter((line) => line.startsWith("docker build "));
-    expect(builds).toHaveLength(2);
+    expect(builds).toHaveLength(3);
     for (const line of builds) {
       expect(line).toContain(`https://github.com/clintongormley/waitron.git#${app}`);
       expect(line).toContain(`--build-arg WAITRON_BUILD_ID=${app} `);
@@ -1376,7 +1426,7 @@ describe("waitron.sh install (published main) when the pull fails", () => {
 });
 
 describe("waitron.sh install <ref>", () => {
-  it("builds both images from the git context and records them in .env", () => {
+  it("builds all three images from the git context and records them in .env", () => {
     const sb = sandbox();
     const r = run(sb, ["install", "my-branch"]);
     expect(r.status).toBe(0);
@@ -1390,14 +1440,17 @@ describe("waitron.sh install <ref>", () => {
     const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
     expect(env).toMatch(/^WAITRON_IMAGE=waitron:my-branch$/m);
     expect(env).toMatch(/^WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:my-branch$/m);
+    expect(env).toMatch(/^WAITRON_TUNNEL_IMAGE=waitron-tunnel:my-branch$/m);
   });
 });
 
 const signedSource = "fedcba9876543210fedcba9876543210fedcba98";
 const appDigest = `sha256:${"a".repeat(64)}`;
 const agentDigest = `sha256:${"b".repeat(64)}`;
+const tunnelDigest = `sha256:${"d".repeat(64)}`;
 const signedApp = `ghcr.io/clintongormley/waitron@${appDigest}`;
 const signedAgent = `ghcr.io/clintongormley/waitron-print-agent@${agentDigest}`;
+const signedTunnel = `ghcr.io/clintongormley/waitron-tunnel@${tunnelDigest}`;
 const releaseKey = () =>
   generateKeyPairSync("ed25519", {
     publicKeyEncoding: { type: "spki", format: "pem" },
@@ -1416,7 +1469,7 @@ function writeSignedRelease(asset, version, key, prerelease = false) {
         platform: "linux/amd64",
         version,
         prerelease,
-        images: { app: appDigest, printAgent: agentDigest },
+        images: { app: appDigest, printAgent: agentDigest, tunnel: tunnelDigest },
       },
       key.privateKey,
     ),
@@ -1572,7 +1625,13 @@ describe("waitron.sh install of a release", () => {
     expect(loggedCalls(sb).some((call) => /^(install |host:.* apply )/.test(call))).toBe(false);
   });
 
-  it.each(["missing keys", "invalid keys", "no signing key", "different image order"])(
+  it.each([
+    "missing keys",
+    "invalid keys",
+    "no signing key",
+    "different image order",
+    "different tunnel digest",
+  ])(
     "leaves installed trust and the driver in place after an incoming trust failure (%s)",
     (problem) => {
       const sb = sandbox({ systemd: true });
@@ -1588,8 +1647,17 @@ describe("waitron.sh install of a release", () => {
         writeFileSync(
           verifier,
           `const log = console.log; console.log = (line) => {
+            const [sha, app, agent, tunnel] = line.split(" ");
+            log([sha, agent, app, tunnel].join(" "));
+          };\n${original}`,
+        );
+      }
+      if (problem === "different tunnel digest") {
+        writeFileSync(
+          verifier,
+          `const log = console.log; console.log = (line) => {
             const [sha, app, agent] = line.split(" ");
-            log([sha, agent, app].join(" "));
+            log([sha, app, agent, "sha256:" + "e".repeat(64)].join(" "));
           };\n${original}`,
         );
       }
@@ -1598,7 +1666,11 @@ describe("waitron.sh install of a release", () => {
         WT_INSTALLED_RELEASE_REF: "v1.2.2",
       });
       expect(result.status, result.stderr).toBe(1);
-      expect(result.stderr).toContain("release trust");
+      expect(result.stderr).toContain(
+        problem === "different tunnel digest"
+          ? "the new release trust could not verify v1.2.3 with the same image inventory"
+          : "release trust",
+      );
       expect(loggedCalls(sb).some((call) => /^(install |host:.* apply )/.test(call))).toBe(false);
       writeFileSync(spare, releaseKeys[1].publicKey);
       writeFileSync(verifier, original);
@@ -1635,7 +1707,7 @@ describe("waitron.sh install of a release", () => {
   );
 
   it.each(["1.2.3", `1.2.${"1".repeat(46)}`])(
-    "uses both signed %s digests in the environment file and during Compose pull and startup",
+    "uses the signed %s digests in the environment file and during Compose pull and startup",
     (version) => {
       const sb = sandbox();
       const release = signedRelease(sb, { version });
@@ -1644,15 +1716,17 @@ describe("waitron.sh install of a release", () => {
         WT_STATE_VOLUME_ABSENT: "1",
         WAITRON_IMAGE: "override:app",
         WAITRON_PRINT_AGENT_IMAGE: "override:agent",
+        WAITRON_TUNNEL_IMAGE: "override:tunnel",
       });
       expect(r.status, r.stderr).toBe(0);
       const env = readFileSync(join(sb.boxDir, ".env"), "utf8").split("\n");
       expect(env).toContain(`WAITRON_IMAGE=${signedApp}`);
       expect(env).toContain(`WAITRON_PRINT_AGENT_IMAGE=${signedAgent}`);
+      expect(env).toContain(`WAITRON_TUNNEL_IMAGE=${signedTunnel}`);
       expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^pull\b/));
       for (const phase of ["pull", "up"]) {
         expect(readFileSync(`${sb.log}.${phase}-images`, "utf8")).toBe(
-          `${signedApp}\n${signedAgent}\n`,
+          `${signedApp}\n${signedAgent}\n${signedTunnel}\n`,
         );
       }
       const calls = readFileSync(sb.log, "utf8");
@@ -1687,6 +1761,7 @@ describe("waitron.sh install of a release", () => {
       const r = run(sb, args, signedRelease(sb, { key: releaseKey() }));
       expect(r.status).toBe(1);
       expect(r.stderr).toContain("Invalid release signature");
+      expect(r.stderr).toContain("the current release verifier and keys");
       expect(r.stderr).not.toContain("needs confirmation");
       expect(loggedCalls(sb)).toEqual([
         "mktemp ",
@@ -1764,16 +1839,18 @@ describe("waitron.sh install of a release", () => {
     expect(versionCheck).toBeGreaterThan(calls.indexOf("flock -n 9"));
     expect(calls).toContainEqual(
       expect.stringContaining(
-        ` __candidate v1.2.3 ${signedSource}:1792062000 ${sb.boxDir} ${appDigest} ${agentDigest}`,
+        ` __candidate v1.2.3 ${signedSource}:1792062000 ${sb.boxDir} ${appDigest} ${agentDigest} ${tunnelDigest}`,
       ),
     );
     expect(calls.filter((call) => call.startsWith("docker pull "))).toEqual([
       `docker pull ${signedApp}`,
       `docker pull ${signedAgent}`,
+      `docker pull ${signedTunnel}`,
     ]);
     expect(JSON.parse(readFileSync(`${sb.log}.candidate`, "utf8")).images).toEqual({
       app: "sha256:candidate-app",
       "print-agent": "sha256:candidate-agent",
+      tunnel: "sha256:candidate-tunnel",
     });
     expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toMatch(
       /^WAITRON_IMAGE=waitron:pinned$/m,
@@ -1848,7 +1925,9 @@ describe("waitron.sh install of a release", () => {
     expect(pull).toBeGreaterThanOrEqual(0);
     expect(wipe).toBeGreaterThan(pull);
     expect(calls.findIndex((call) => call.startsWith("compose up "))).toBeGreaterThan(wipe);
-    expect(readFileSync(`${sb.log}.up-images`, "utf8")).toBe(`${signedApp}\n${signedAgent}\n`);
+    expect(readFileSync(`${sb.log}.up-images`, "utf8")).toBe(
+      `${signedApp}\n${signedAgent}\n${signedTunnel}\n`,
+    );
   });
 
   it(
@@ -1910,14 +1989,27 @@ describe("waitron.sh install of a release", () => {
       const r = run(sb, ["install", ref]);
       expect(r.status, r.stderr).toBe(0);
       const calls = readFileSync(sb.log, "utf8");
-      expect(calls.split("\n").filter((line) => line.startsWith("docker build "))).toHaveLength(2);
+      expect(calls.split("\n").filter((line) => line.startsWith("docker build "))).toHaveLength(3);
       expect(calls).toContain("api.github.com");
       expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).not.toContain("ghcr.io");
     },
   );
 
+  it("clears the saved tunnel image on a fresh install of a source with an optional companion", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_TUNNEL_IMAGE=waitron-tunnel:newer\n");
+    const r = run(sb, ["install", "my-branch"], { WT_LEGACY_TUNNEL: "optional" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).not.toContain("WAITRON_TUNNEL_IMAGE");
+    expect(loggedCalls(sb).filter((line) => line.startsWith("docker build "))).toHaveLength(2);
+  });
+
   it("install main still pulls compose.yml's own images and records no image override", () => {
     const sb = sandbox();
+    writeFileSync(
+      join(sb.boxDir, ".env"),
+      "WAITRON_IMAGE=old:app\nWAITRON_PRINT_AGENT_IMAGE=old:agent\nWAITRON_TUNNEL_IMAGE=old:tunnel\n",
+    );
     const r = run(sb, ["install", "main"]);
     expect(r.status, r.stderr).toBe(0);
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^pull\b/));
@@ -2601,7 +2693,7 @@ describe("waitron.sh install and the box's host service", () => {
 describe("waitron.sh install deletes the images the box ran before", () => {
   const removals = (sb) => loggedCalls(sb).filter((c) => c.startsWith("docker image rm"));
 
-  it("on the classic store, deletes both old images once the new box is healthy, and says so", () => {
+  it("on the classic store, deletes the old images once the new box is healthy, and says so", () => {
     const sb = sandbox({ oldImages: true });
     const r = run(sb, ["install"]);
     expect(r.status, r.stderr).toBe(0);
@@ -2610,6 +2702,7 @@ describe("waitron.sh install deletes the images the box ran before", () => {
     expect(lastProbe).toBeGreaterThanOrEqual(0);
     expect(calls.indexOf("docker image rm sha256:old-app")).toBeGreaterThan(lastProbe);
     expect(calls.indexOf("docker image rm sha256:old-agent")).toBeGreaterThan(lastProbe);
+    expect(calls.indexOf("docker image rm sha256:old-tunnel")).toBeGreaterThan(lastProbe);
     expect(r.stdout).toContain("deleted the image this box ran before the upgrade (old-app)");
   });
 

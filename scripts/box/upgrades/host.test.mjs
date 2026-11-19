@@ -594,6 +594,50 @@ it("retains the active tunnel's exact running image without trying its local-onl
   expect(calls.some((args) => args[1] === "pull" && args[2] === "tunnel:dev")).toBe(false);
 });
 
+it.each(["absent", "stopped", "running"])(
+  "installs the new default companion when the old companion was %s",
+  async (old) => {
+    const { f, images, fs, join, root } = await imageFixture({
+      activeTunnel: old === "running",
+      stoppedTunnel: old === "stopped",
+      prepareCandidate: ({ candidate }) => {
+        candidate.services.tunnel = { image: "tunnel:new" };
+        return { compose: JSON.stringify(candidate), images: { tunnel: "sha256:new-tunnel" } };
+      },
+    });
+    expect(images.old.tunnel).toBe(old === "running" ? "sha256:running-tunnel" : undefined);
+    expect(images.candidate.tunnel).toBe("sha256:new-tunnel");
+    await f.host.installCandidate(images.candidate);
+    const compose = JSON.parse(await fs.readFile(join(root, "compose.yml"), "utf8"));
+    expect(compose.services.tunnel.image).toBe("sha256:new-tunnel");
+  },
+);
+
+it("removes the interrupted staff socket before copying and keeps the saved peer", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const { f, root, fs, join } = await imageFixture();
+  const { copyStoppedTree } = await import("./copy.mjs");
+  const control = join(root, "tunnel_control");
+  const socket = join(control, "staff.sock");
+  const peer = join(control, "peer.json");
+  await fs.writeFile(peer, "saved peer");
+  execFileSync(process.execPath, [
+    "-e",
+    "require('node:net').createServer().listen(process.argv[1], () => process.exit(0))",
+    socket,
+  ]);
+  expect((await fs.lstat(socket)).isSocket()).toBe(true);
+  await f.host.stop();
+  try {
+    await expect(fs.lstat(socket)).rejects.toMatchObject({ code: "ENOENT" });
+    const snapshot = join(root, "snapshot");
+    await copyStoppedTree(control, snapshot);
+    expect(await fs.readFile(join(snapshot, "peer.json"), "utf8")).toBe("saved peer");
+  } finally {
+    await f.host.resume({ app: "sha256:old" });
+  }
+});
+
 it("captures an installed box without an optional .env without inventing one", async () => {
   const { f, root, fs, join } = await imageFixture({ noEnv: true });
   expect(f.paths).not.toContain(join(root, ".env"));
@@ -813,7 +857,8 @@ it.each([false, true])(
     expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "app-id"]);
     expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "agent-id"]);
     expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "tunnel-id"]);
-    expect(t.calls.findLast((args) => args.includes("up"))).not.toContain("staff-tunnel");
+    if (realCompose) expect(images.old.tunnel).toBe("sha256:running-tunnel");
+    else expect(t.calls.findLast((args) => args.includes("up"))).not.toContain("staff-tunnel");
     expect(t.calls.findIndex((args) => args.includes("--restart=unless-stopped"))).toBeLessThan(
       t.calls.findLastIndex((args) => args.includes("--wait")),
     );

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { chmod, mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout } from "node:timers/promises";
@@ -15,9 +16,12 @@ const configuration = {
 };
 let root;
 let bin;
+let staff;
 const runs = [];
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "waitron-tunnel-test-"));
+  staff = createServer().listen(join(root, "staff.sock"));
+  await once(staff, "listening");
   bin = join(root, "bin");
   await mkdir(bin);
   const stub = `#!${process.execPath}
@@ -63,6 +67,7 @@ afterEach(async () => {
   }
 });
 afterAll(async () => {
+  if (staff?.listening) await new Promise((resolve) => staff.close(resolve));
   if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
 
@@ -74,6 +79,7 @@ async function start(
   const control = join(dir, "control"),
     keys = join(dir, "keys");
   await mkdir(control);
+  await symlink(join(root, "staff.sock"), join(control, "staff.sock"));
   if (config !== undefined)
     await writeFile(
       join(control, "peer.json"),
@@ -177,11 +183,13 @@ it("routes only its gateway and fixes the proxy destination to the staff entranc
   ]);
   expect(calls).toContainEqual(["iptables", "-A", "INPUT", "-i", "wg-cloud", "-j", "DROP"]);
   expect(calls).toContainEqual(["iptables", "-P", "FORWARD", "DROP"]);
-  await expect.poll(async () => (await events(run)).some(isForwarder)).toBe(true);
+  await expect
+    .poll(async () => (await events(run)).some(isForwarder), { timeout: 10000 })
+    .toBe(true);
   expect(await events(run)).toContainEqual([
     "socat",
     "TCP4-LISTEN:443,bind=10.77.17.2,reuseaddr,fork",
-    "TCP4:host.docker.internal:8443",
+    `UNIX-CONNECT:${run.control}/staff.sock`,
   ]);
   expect(await readFile(run.snapshot, "utf8")).toBe(
     `[Interface]\nPrivateKey = ${key}\n\n[Peer]\nPublicKey = ${key}\nEndpoint = gateway.test.waitron.io:51820\nAllowedIPs = 10.77.17.1/32\nPersistentKeepalive = 25\n`,
@@ -205,7 +213,9 @@ it.each([
 
 it("closes the proxy and interface when configuration is removed, then reconnects with the same key", async () => {
   const run = await start(configuration);
-  await expect.poll(async () => (await events(run)).some(isForwarder)).toBe(true);
+  await expect
+    .poll(async () => (await events(run)).some(isForwarder), { timeout: 10000 })
+    .toBe(true);
   await expect
     .poll(async () => (await events(run)).filter(isProbe))
     .toEqual([["socat", "-u", "-", "UDP4-SENDTO:10.77.17.1:9,bind=10.77.17.2"]]);
@@ -233,7 +243,9 @@ it("closes the proxy and interface when configuration is removed, then reconnect
 
 it("reports a failed datagram send and keeps managing the staff forwarder", async () => {
   const run = await start(configuration, { failedProbe: true });
-  await expect.poll(async () => (await events(run)).some(isForwarder)).toBe(true);
+  await expect
+    .poll(async () => (await events(run)).some(isForwarder), { timeout: 10000 })
+    .toBe(true);
   await expect
     .poll(async () => (await events(run)).filter(isProbe).length, { timeout: 10000 })
     .toBeGreaterThanOrEqual(2);

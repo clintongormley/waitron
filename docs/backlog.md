@@ -1481,7 +1481,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/replication-cloud.md#loose-ends-left-by-the-cloud-connection-integration)
 
 
-- **A951-S provider trials.** Public staff-name changes and automatic certificates still need joint
+- **A951-S provider trials.** Public staff-name changes and certificate renewal still need joint
   qualification. Translate all returned one editable menu suggestion on the test box;
   address completion still needs its trial. Keep the approved consent and request limits.
   Idle gateway recovery still needs testing through Cloud’s staff and public HTTPS routes.

@@ -22,7 +22,7 @@ for attempt in $(seq 1 90); do
 done
 test "$status" = 200
 images="$(docker compose config --format json | jq -c '.services | with_entries(.value = .value.image)')"
-for name in app print-agent mailpit; do
+for name in app print-agent tunnel mailpit; do
   tag="$(jq -r --arg name "$name" '.[$name]' <<< "$images")"
   id="$(docker image inspect "$tag" --format '{{.Id}}')"
   jq -cn --arg name "$name" --arg id "$id" '{key:$name,value:$id}'

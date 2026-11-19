@@ -9,14 +9,24 @@ import { fileURLToPath, URL } from "node:url";
 const expected = {
   uuid: "5418a8bb-eeb9-4e94-832f-72629874781e",
   sha256: "original-root",
-  images: { app: "app-config", "print-agent": "agent-config", mailpit: "mail-config" },
+  images: {
+    app: "app-config",
+    "print-agent": "agent-config",
+    mailpit: "mail-config",
+    tunnel: "tunnel-config",
+  },
 };
 const complete = {
   uuid: expected.uuid,
   hashBefore: "original-root",
   hashAfter: "original-root",
-  images: { app: "app-config", "print-agent": "agent-config", mailpit: "mail-config" },
-  services: { app: "running", "print-agent": "running", mailpit: "running" },
+  images: {
+    app: "app-config",
+    "print-agent": "agent-config",
+    mailpit: "mail-config",
+    tunnel: "tunnel-config",
+  },
+  services: { app: "running", "print-agent": "running", mailpit: "running", tunnel: "running" },
   status: {
     provisioned: false,
     environment: "preproduction",
@@ -171,17 +181,17 @@ describe("recipe boot evidence", () => {
     [
       "an absent guest image report",
       { images: undefined },
-      ["image:app", "image:print-agent", "image:mailpit"],
+      ["image:app", "image:print-agent", "image:mailpit", "image:tunnel"],
     ],
     [
       "an incomplete guest",
       { services: {} },
-      ["service:app", "service:print-agent", "service:mailpit"],
+      ["service:app", "service:print-agent", "service:mailpit", "service:tunnel"],
     ],
     [
       "no service report",
       { services: undefined },
-      ["service:app", "service:print-agent", "service:mailpit"],
+      ["service:app", "service:print-agent", "service:mailpit", "service:tunnel"],
     ],
     ["another app", { images: { ...complete.images, app: "wrong" } }, ["image:app"]],
     [

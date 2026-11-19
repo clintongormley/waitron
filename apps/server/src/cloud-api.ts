@@ -49,6 +49,8 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       "cloud.emergency_code_rate_limited": 429,
       "cloud.tunnel_unavailable": 422,
       "cloud.tunnel_conflict": 409,
+      "cloud.tunnel_plan_required": 403,
+      "cloud.tunnel_refused": 403,
       "cloud.request_unavailable": 409,
       "cloud.state_invalid": 409,
       "cloud.binding_conflict": 409,

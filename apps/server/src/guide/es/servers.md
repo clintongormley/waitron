@@ -293,6 +293,11 @@ Cuando un servidor pase a ser el principal, abre **Copias de seguridad** y compr
 
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 
+Vincula tu servidor de pruebas con Waitron Cloud e inicia la prueba gratuita del local en
+**Facturación** para abrir la dirección del personal que se te asigna. **Servicios Cloud** te
+avisa si necesitas iniciar la prueba. Después de iniciarla, elige **Actualizar estado** para
+volver a comprobar la conexión.
+
 Activar el acceso remoto pide la [confirmación de identidad compartida](staff.md#account-access).
 Desactivarlo no pide una nueva confirmación de identidad.
 

@@ -13,6 +13,7 @@ import { main } from "./verify-release.mjs";
 const sourceSha = "1234567890abcdef1234567890abcdef12345678";
 const app = `sha256:${"a".repeat(64)}`;
 const printAgent = `sha256:${"b".repeat(64)}`;
+const tunnel = `sha256:${"d".repeat(64)}`;
 const release = {
   format: 1,
   kind: "release",
@@ -20,7 +21,7 @@ const release = {
   prerelease: true,
   sourceSha,
   platform: "linux/amd64",
-  images: { app, printAgent },
+  images: { app, printAgent, tunnel },
 };
 const keyPair = () =>
   generateKeyPairSync("ed25519", {
@@ -72,13 +73,13 @@ describe("verify-release on the box", () => {
   it("accepts a prerelease signed by the current key through the installed script", () => {
     const result = runInstalledVerifier(["v1.10.3"], signReleaseList(release, current.privateKey));
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toBe(`${sourceSha} ${app} ${printAgent}\n`);
+    expect(result.stdout).toBe(`${sourceSha} ${app} ${printAgent} ${tunnel}\n`);
   });
 
   it("accepts a release signed by the spare key", async () => {
     const result = await invoke(["v1.10.3"], signReleaseList(release, spare.privateKey));
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toBe(sourceSha + " " + app + " " + printAgent + "\n");
+    expect(result.stdout).toBe(`${sourceSha} ${app} ${printAgent} ${tunnel}\n`);
   });
 
   it("rejects a malformed release file", async () => {

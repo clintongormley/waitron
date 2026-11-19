@@ -36,6 +36,7 @@ services:
       # provider whose credential is restricted to its test environment.
       WAITRON_PAYMENT_TEST_PROVIDERS: ${WAITRON_PAYMENT_TEST_PROVIDERS:-}
       WAITRON_TUNNEL_CONTROL_DIR: /var/lib/waitron/tunnel
+      WAITRON_STAFF_SOCKET: /var/lib/waitron/tunnel/staff.sock
     volumes:
       - state:/var/lib/waitron/state
       - logs:/var/lib/waitron/logs
@@ -170,15 +171,13 @@ services:
         max-file: "5"
 
   tunnel:
-    image: ${WAITRON_TUNNEL_IMAGE:-waitron-tunnel:dev}
-    profiles: [staff-tunnel]
+    image: ${WAITRON_TUNNEL_IMAGE:-ghcr.io/clintongormley/waitron-tunnel:main}
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
     cap_add: [NET_ADMIN]
     security_opt: [no-new-privileges:true]
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    group_add: ["10001"]
     sysctls:
       net.ipv4.ip_forward: "0"
     volumes:

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
+import { cloudConnectionJob } from "./cloud-worker.js";
 
 async function fixture() {
   let mode = "ok";
@@ -15,7 +16,13 @@ async function fixture() {
     tunnel: async (_values, saved, req, res, sent) => {
       urls.push(req.url ?? "");
       envelopeFields.push(Object.keys(sent).sort());
-      const refusals: Record<string, number> = { off: 503, absent: 404, denied: 403, limited: 429 };
+      const refusals: Record<string, number> = {
+        temporarily_unavailable: 503,
+        absent: 404,
+        permission_denied: 403,
+        remote_plan_required: 403,
+        limited: 429,
+      };
       if (mode in refusals) {
         res.writeHead(refusals[mode]!);
         res.end(mode === "absent" ? "<h1>Not found</h1>" : JSON.stringify({ error: mode }));
@@ -447,20 +454,62 @@ async function configuredRemote(
   });
 }
 
-it.each(["off", "absent", "denied", "limited"])(
-  "keeps control active when the tunnel receiver is %s",
-  async (mode) => {
-    const f = await fixture();
-    try {
-      f.mode(mode);
-      await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
-      expect((await f.client.status()).installation?.state).toBe("active");
-      expect((await f.saved()).lifecycle.tunnelConflict).toBeUndefined();
-    } finally {
-      await f.close();
-    }
-  },
-);
+it.each([
+  ["temporarily_unavailable", "cloud.unavailable"],
+  ["absent", "cloud.unavailable"],
+  ["permission_denied", "cloud.tunnel_refused"],
+  ["limited", "cloud.unavailable"],
+] as const)("keeps control active when the tunnel receiver answers %s", async (mode, code) => {
+  const f = await fixture();
+  try {
+    f.mode(mode);
+    await expect(f.client.refresh()).rejects.toMatchObject({ code });
+    expect((await f.client.status()).installation?.state).toBe("active");
+    expect((await f.saved()).lifecycle.tunnelConflict).toBeUndefined();
+  } finally {
+    await f.close();
+  }
+});
+
+it("reports that the plan excludes remote access and retries after the venue starts its trial", async () => {
+  const f = await fixture();
+  try {
+    f.mode("remote_plan_required");
+    const logged: unknown[] = [];
+    const menuChecks: AbortSignal[] = [];
+    const signal = new AbortController().signal;
+    const job = cloudConnectionJob({
+      connection: f.client,
+      isPrimary: () => true,
+      onError: (error) => logged.push(error),
+      onGuestMenu: (menuSignal) => menuChecks.push(menuSignal),
+    });
+    await job.pass({ now: new Date(), signal });
+    expect(logged).toMatchObject([{ code: "cloud.tunnel_plan_required" }]);
+    expect(menuChecks).toEqual([signal]);
+    const restarted = createCloudConnection(f.options);
+    expect(await restarted.status()).toMatchObject({
+      installation: { state: "active" },
+      remoteAccessPlanRequired: true,
+    });
+    expect(await restarted.setRemoteAccess(false, async () => {})).not.toHaveProperty(
+      "remoteAccessPlanRequired",
+    );
+    await restarted.setRemoteAccess(true, async () => {});
+    await expect(readFile(join(f.directory, "peer.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    f.mode("ok");
+    expect(await restarted.refresh()).not.toHaveProperty("remoteAccessPlanRequired");
+    expect(await restarted.status()).not.toHaveProperty("remoteAccessPlanRequired");
+    expect(f.submissions()).toHaveLength(2);
+    expect(JSON.parse(await readFile(join(f.directory, "peer.json"), "utf8")).address).toBe(
+      f.placement.address,
+    );
+  } finally {
+    await f.close();
+  }
+});
 
 it.each(["provisioning", "ready", "failed"])(
   "does not reprovision a %s placement with the saved key",

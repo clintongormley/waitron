@@ -95,13 +95,21 @@ for (const [locale, on, off, theme] of [
   });
 
 for (const locale of ["en", "es"] as const)
-  for (const code of ["cloud.tunnel_unavailable", "cloud.tunnel_conflict"] as const)
+  for (const [code, status] of [
+    ["cloud.tunnel_unavailable", 422],
+    ["cloud.tunnel_conflict", 409],
+    ["cloud.tunnel_plan_required", 403],
+    ["cloud.tunnel_refused", 403],
+  ] as const)
     it(`${locale} explains ${code} and keeps the stop confirmation available`, async () => {
       const previous = currentLocale();
       try {
         setLocale(locale);
         const message = codeMessage(code);
         expect(message).not.toContain("cloud.");
+        expect(message).not.toBe(codeMessage("unrecognised", locale));
+        if (code === "cloud.tunnel_plan_required" && locale === "en")
+          expect(message).toContain("free trial");
         expect(message).not.toBe(
           codeMessage(
             code === "cloud.tunnel_conflict" ? "cloud.tunnel_unavailable" : "cloud.tunnel_conflict",
@@ -109,7 +117,7 @@ for (const locale of ["en", "es"] as const)
         );
         const api = new DashboardApi("", async (url) => {
           if (String(url).endsWith("/refresh"))
-            return Response.json({ error: { code, params: {} } }, { status: 503 });
+            return Response.json({ error: { code, params: {} } }, { status });
           if (String(url).endsWith("/billing"))
             return Response.json(
               { error: { code: "cloud.unavailable", params: {} } },
@@ -142,6 +150,30 @@ for (const locale of ["en", "es"] as const)
         setLocale(previous);
       }
     });
+
+it("shows the free-trial reason on opening Cloud services and clears it after refresh", async () => {
+  const status = {
+    state: "complete",
+    configured: true,
+    isPrimary: true,
+    remoteAccessEnabled: true,
+    installation: { state: "active", revision: 1, services: [] },
+  };
+  const api = new DashboardApi("", async (url) => {
+    if (String(url).endsWith("/refresh")) return Response.json(status);
+    if (String(url).endsWith("/billing")) return new Response(null, { status: 503 });
+    return Response.json({ ...status, remoteAccessPlanRequired: true });
+  });
+  const { el, host } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+    api,
+  });
+  const message = () =>
+    el.shadowRoot!.querySelector("[data-test=remote-access-status]")?.textContent;
+  await expect.poll(message).toContain(codeMessage("cloud.tunnel_plan_required"));
+  await expectNoA11yViolations(host);
+  el.shadowRoot!.querySelector<HTMLElement>("#refresh")!.click();
+  await expect.poll(message).toContain(t("cloud.remote_on"));
+});
 
 for (const enabled of [false, true])
   it(`reads the saved ${enabled} choice after a failed reply and preserves the refusal`, async () => {

@@ -1784,7 +1784,7 @@ describe("the workflow's concurrency group", () => {
     const setters = body
       .map((line, index) => ({ line, index }))
       .filter(({ line }) => setsMainTag(line));
-    expect(setters.length).toBeGreaterThanOrEqual(2);
+    expect(setters.length).toBeGreaterThanOrEqual(3);
     expect(setters.filter(({ index }) => index < moveArm || index > armEnd)).toEqual([]);
   });
 });
@@ -5407,12 +5407,12 @@ describe("CodeQL's workflow", () => {
 
 describe("CI image provenance", () => {
   it.each(["ci.yml", "image-smoke.yml"])(
-    "stamps both images in %s and inspects smoke labels",
+    "stamps all three images in %s and inspects smoke labels",
     (file) => {
       const workflow = readFileSync(join(repoRoot, ".github", "workflows", file), "utf8");
       const builds = workflow.split(/uses: docker\/build-push-action@[^\n]+/).slice(1);
       // ci.yml builds the app image twice: once to check, once to push.
-      expect(builds).toHaveLength(file === "ci.yml" ? 3 : 2);
+      expect(builds).toHaveLength(file === "ci.yml" ? 4 : 3);
       for (const build of builds) {
         const withBlock = build.split(/\n {6}- /)[0];
         expect(withBlock).toContain("org.opencontainers.image.revision=${{ github.sha }}");
@@ -5427,7 +5427,9 @@ describe("CI image provenance", () => {
       expect(workflow).toContain("date -u '+%Y-%m-%dT%H:%M:%SZ'");
       if (file === "image-smoke.yml") {
         expect(workflow).toContain("docker image inspect --format '{{json .Config.Labels}}'");
-        expect(workflow).toContain("for image in waitron:ci waitron-print-agent:ci");
+        expect(workflow).toContain(
+          "for image in waitron:ci waitron-print-agent:ci waitron-tunnel:ci",
+        );
         expect(workflow).toContain("org.opencontainers.image.revision");
       }
     },
@@ -6967,7 +6969,10 @@ function runPublishScript(script, env, bin, timeout = 30_000) {
 describe("the publish job carries the producer's settings into the image", () => {
   const steps = publishSteps();
   const appBuilds = steps.filter(
-    (step) => /uses: docker\/build-push-action@/.test(step.text) && !/target:/.test(step.text),
+    (step) =>
+      /uses: docker\/build-push-action@/.test(step.text) &&
+      /^ {10}file: deploy\/Dockerfile$/m.test(step.text) &&
+      !/target:/.test(step.text),
   );
 
   it("passes the three secrets to both app builds, which differ only in load, push and tags", () => {
@@ -7436,6 +7441,7 @@ const RELEASE_ON_MAIN_STEP = "Refuse a release tag that is not on main";
 const RELEASE_CHECK_STEP = "Check the release inside the built image";
 const RELEASE_UNPUBLISHED_STEP = "Refuse a release version the registry already holds";
 const AGENT_PUSH_STEP = "Publish the print-agent image to GHCR";
+const TUNNEL_PUSH_STEP = "Publish the tunnel image to GHCR";
 const ON_A_RELEASE_TAG = "        if: startsWith(github.ref, 'refs/tags/v')";
 
 describe("the publish job on a release tag", () => {
@@ -7499,6 +7505,8 @@ describe("the publish job on a release tag", () => {
       expect(outputs(result.output)).toMatchObject({
         release_version: "1.20.3",
         release_image: "ghcr.io/example/waitron:1.20.3",
+        tunnel_tags:
+          "ghcr.io/example/waitron-tunnel:sha-aaaaaaa,ghcr.io/example/waitron-tunnel:1.20.3",
       });
     });
 
@@ -7521,12 +7529,13 @@ describe("the publish job on a release tag", () => {
   });
 
   it("passes the tag's version to both app builds and the print-agent build", () => {
-    expect(builds.map((step) => step.name)).toEqual([
+    const buildsWithVersion = builds.filter((step) => step.name !== TUNNEL_PUSH_STEP);
+    expect(buildsWithVersion.map((step) => step.name)).toEqual([
       PRODUCER_LOAD_STEP,
       AGENT_PUSH_STEP,
       "Publish to GHCR",
     ]);
-    for (const build of builds)
+    for (const build of buildsWithVersion)
       expect(withBlock(build), build.name).toContain(
         "            WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}",
       );
@@ -7726,7 +7735,11 @@ describe("the publish job on a release tag", () => {
     // push after it would leave a version the check refuses and the registry lacks half of.
     it("is followed by the print-agent push and then the app push, the app image last", () => {
       const pushes = steps.filter((step) => /^ {10}push: true$/m.test(step.text));
-      expect(pushes.map((step) => step.name)).toEqual([AGENT_PUSH_STEP, "Publish to GHCR"]);
+      expect(pushes.map((step) => step.name)).toEqual([
+        AGENT_PUSH_STEP,
+        TUNNEL_PUSH_STEP,
+        "Publish to GHCR",
+      ]);
       expect(at(RELEASE_UNPUBLISHED_STEP)).toBeLessThan(steps.indexOf(pushes[0]));
       expect(steps.at(-1).name).toBe("Publish to GHCR");
     });
@@ -7920,6 +7933,12 @@ describe("the release job", () => {
     const pushes = workflowSteps(publish.join("\n")).filter((step) => step.with.push === "true");
     const app = pushes.find((step) => step.with.tags === "${{ steps.tags.outputs.tags }}");
     const printAgent = pushes.find((step) => step.with.target === "print-agent");
+    const tunnel = pushes.find((step) => step.with.file === "deploy/tunnel/Dockerfile");
+    expect(tunnel?.id).toBeTruthy();
+    expect(tunnel.with.tags).toBe("${{ steps.tags.outputs.tunnel_tags }}");
+    expect(tunnel.with.platforms).toBe("linux/amd64");
+    expect(pushes.indexOf(tunnel)).toBeLessThan(pushes.indexOf(app));
+    expect(publish).toContain("      tunnel_digest: ${{ steps." + tunnel.id + ".outputs.digest }}");
     expect(app?.id).toBeTruthy();
     expect(printAgent?.id).toBeTruthy();
     expect(app.id).not.toBe(printAgent.id);
@@ -7930,6 +7949,7 @@ describe("the release job", () => {
       "      print_agent_digest: ${{ steps." + printAgent.id + ".outputs.digest }}",
     );
     const sign = named(RELEASE_SIGN_STEP);
+    expect(sign.envOf("RELEASE_TUNNEL_DIGEST")).toBe("${{ needs.publish.outputs.tunnel_digest }}");
     expect(sign.envOf("RELEASE_APP_DIGEST")).toBe("${{ needs.publish.outputs.app_digest }}");
     expect(sign.envOf("RELEASE_PRINT_AGENT_DIGEST")).toBe(
       "${{ needs.publish.outputs.print_agent_digest }}",

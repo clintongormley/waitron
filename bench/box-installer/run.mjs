@@ -71,7 +71,7 @@ jq -r 'to_entries[] | [.key,.value] | @tsv' /tmp/tags.json | while read -r name 
  test "$digest" = "$expected"
  rm /tmp/check.tar
 done
-for name in app print-agent mailpit; do
+for name in app print-agent tunnel mailpit; do
  tag=$(jq -r --arg name "$name" '.[$name]' /tmp/tags.json)
  id=$(docker image inspect "$tag" --format '{{.Id}}')
  jq -cn --arg name "$name" --arg id "$id" '{name:$name,id:$id}'
@@ -95,7 +95,7 @@ echo B3_HTTP_STATUS:$code
 echo B3_STATUS:$(cat /tmp/status.json)
 echo B3_UUID:$(findmnt -n -o UUID /)
 echo B3_SERVICES:$(docker inspect $(docker compose ps -q) | jq -c 'map({key:.Config.Labels["com.docker.compose.service"],value:.State.Status})|from_entries')
-for name in app print-agent mailpit; do
+for name in app print-agent tunnel mailpit; do
  tag=$(docker compose config --format json | jq -r --arg name "$name" '.services[$name].image')
  id=$(docker image inspect "$tag" --format '{{.Id}}')
  jq -cn --arg name "$name" --arg id "$id" '{name:$name,id:$id}'

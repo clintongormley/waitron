@@ -758,7 +758,11 @@ export class CloudServicesScreen extends LitElement {
           ? html`<section aria-labelledby="remote-access-heading">
               <h2 id="remote-access-heading">${t("cloud.remote_local")}</h2>
               <p data-test="remote-access-status" role="status">
-                ${t(s.remoteAccessEnabled ? "cloud.remote_on" : "cloud.remote_off")}
+                ${
+                  s.remoteAccessPlanRequired && this.error !== "cloud.tunnel_plan_required"
+                    ? codeMessage("cloud.tunnel_plan_required")
+                    : t(s.remoteAccessEnabled ? "cloud.remote_on" : "cloud.remote_off")
+                }
               </p>
               <p>${t("cloud.remote_help")}</p>
               ${

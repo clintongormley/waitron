@@ -4475,6 +4475,7 @@ jobs:
       release_image: ${{ format('{0}@{1}', steps.tags.outputs.release_repository, steps.push_app.outputs.digest) }}
       app_digest: ${{ steps.push_app.outputs.digest }}
       print_agent_digest: ${{ steps.push_print_agent.outputs.digest }}
+      tunnel_digest: ${{ steps.push_tunnel.outputs.digest }}
     steps:
       - id: checkout
         name: Check out the code
@@ -4576,10 +4577,12 @@ jobs:
           repo="ghcr.io/$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')/waitron"
           # The print-agent image is the app repo with a `-print-agent` suffix, so the casing fold is shared.
           agent_repo="$repo-print-agent"
+          tunnel_repo="$repo-tunnel"
           # Always the immutable one, so a box can be pinned to an exact commit.
           short="sha-$(printf '%s' "$SHA" | cut -c1-7)"
           tags="$repo:$short"
           agent_tags="$agent_repo:$short"
+          tunnel_tags="$tunnel_repo:$short"
           release_version=""
           release_image=""
           case "$REF" in
@@ -4597,6 +4600,7 @@ jobs:
                 move)
                   tags="$tags,$repo:main"
                   agent_tags="$agent_tags,$agent_repo:main"
+                  tunnel_tags="$tunnel_tags,$tunnel_repo:main"
                   ;;
                 hold) echo "leaving :main alone - it is already built from a newer commit than $SHA" ;;
                 # Neither answer means the guard changed under this step. Refusing here is what
@@ -4622,11 +4626,13 @@ jobs:
                 exit 1
               fi
               tags="$tags,$release_image"; agent_tags="$agent_tags,$agent_repo:$release_version"
+              tunnel_tags="$tunnel_tags,$tunnel_repo:$release_version"
               ;;
           esac
-          echo "$tags"; echo "$agent_tags"
+          echo "$tags"; echo "$agent_tags"; echo "$tunnel_tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "agent_tags=$agent_tags" >> "$GITHUB_OUTPUT"
+          echo "tunnel_tags=$tunnel_tags" >> "$GITHUB_OUTPUT"
           echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
           echo "release_image=$release_image" >> "$GITHUB_OUTPUT"
           echo "release_repository=$repo" >> "$GITHUB_OUTPUT"
@@ -4763,7 +4769,7 @@ jobs:
       # docker 29.9.3 against ghcr.io, 2026-11-12: a missing tag answers `manifest unknown`;
       # `no such manifest: ` is accepted as the same answer, unmeasured); any
       # other failure, such as `denied`, stops the publish. The app image is pushed last, so a version
-      # whose app image exists is a whole publication and a retry after any failed push redoes both.
+      # whose app image exists is a whole publication.
       - name: Refuse a release version the registry already holds
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -4798,6 +4804,22 @@ jobs:
           build-args: |
             WAITRON_BUILD_ID=${{ github.sha }}
             WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
+            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
+
+      - name: Publish the tunnel image to GHCR
+        id: push_tunnel
+        uses: docker/build-push-action@v7
+        timeout-minutes: 10
+        with:
+          context: .
+          file: deploy/tunnel/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.tunnel_tags }}
+          build-args: WAITRON_BUILD_ID=${{ github.sha }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
@@ -4921,6 +4943,7 @@ jobs:
           RELEASE_SOURCE_SHA: ${{ github.sha }}
           RELEASE_APP_DIGEST: ${{ needs.publish.outputs.app_digest }}
           RELEASE_PRINT_AGENT_DIGEST: ${{ needs.publish.outputs.print_agent_digest }}
+          RELEASE_TUNNEL_DIGEST: ${{ needs.publish.outputs.tunnel_digest }}
         run: |
           timeout 30 node scripts/release/sign-release-list.mjs deploy/box/release-keys "$RUNNER_TEMP/waitron-release.json"
 

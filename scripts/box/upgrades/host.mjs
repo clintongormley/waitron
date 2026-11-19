@@ -73,7 +73,7 @@ export async function createUpgradeHost({
   const compose = composeFor(boxDirectory);
   const config = await composeConfig(boxDirectory, run);
   let rawCandidate = typeof candidate === "string" ? candidate : JSON.stringify(candidate);
-  const paths = [];
+  const volumePaths = new Map();
   for (const key of COPIED_VOLUMES) {
     const name = config.volumes[key].name;
     await run("docker", [
@@ -86,8 +86,10 @@ export async function createUpgradeHost({
       name,
     ]);
     const [volume] = JSON.parse((await run("docker", ["volume", "inspect", name])).stdout);
-    paths.push(volume.Mountpoint);
+    volumePaths.set(key, volume.Mountpoint);
   }
+  const paths = [...volumePaths.values()];
+  const staffSocket = join(volumePaths.get("tunnel_control"), "staff.sock");
   const pins = (images, raw) => pinImages(boxDirectory, images, raw);
   const idOf = async (image) =>
     (await run("docker", ["image", "inspect", image, "--format", "{{.Id}}"])).stdout.trim();
@@ -164,7 +166,7 @@ export async function createUpgradeHost({
           const next = {};
           for (const [key, service] of Object.entries(candidateConfig.services)) {
             if (service.profiles?.length && old[key] === undefined) continue;
-            if (key === "tunnel" && old[key] !== undefined) {
+            if (key === "tunnel" && service.profiles?.includes("staff-tunnel")) {
               next[key] = old[key];
             } else if (prepared?.images?.[key]) {
               next[key] = prepared.images[key];
@@ -215,6 +217,12 @@ export async function createUpgradeHost({
           compose: rawCandidate,
         });
         await stopUpgradeWriters({ compose, run });
+        // GNU cp preserves sockets, and the snapshot flush cannot open them.
+        try {
+          if ((await fs.lstat(staffSocket)).isSocket()) await fs.unlink(staffSocket);
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+        }
         releaseState ??= await holdUpgradeState(paths[0]);
       },
       async installCandidate(images) {
