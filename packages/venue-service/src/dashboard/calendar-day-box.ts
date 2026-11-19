@@ -11,6 +11,8 @@ export interface DayBoxRow {
   name: string;
   station?: boolean;
   text: string;
+  additionalRanges?: readonly string[];
+  spokenText?: string;
   /** Starts a section when the box uses sectioned rows. */
   strong?: boolean;
   inheritedFrom?: string;
@@ -99,6 +101,9 @@ export class CalendarDayBox extends LitElement {
         grid-template-columns: auto 1fr;
         gap: var(--wt-space-1) var(--wt-space-3);
         margin: var(--wt-space-2) 0 0;
+      }
+      dl:has(dd > [aria-hidden="true"]) {
+        grid-template-columns: fit-content(40%) 1fr;
       }
       dt {
         color: var(--wt-color-text-muted);
@@ -268,6 +273,22 @@ export class CalendarDayBox extends LitElement {
     return sections;
   }
 
+  #rowText({ text, additionalRanges }: DayBoxRow) {
+    const ranges = additionalRanges
+      ? [text, ...additionalRanges]
+      : this.sectioned
+        ? text.split(" · ")
+        : undefined;
+    return (
+      ranges?.map(
+        (range, index) =>
+          html`${index ? " " : nothing}<span class="range"
+              >${range}${index < ranges.length - 1 ? "\u00a0·" : nothing}</span
+            >`,
+      ) ?? text
+    );
+  }
+
   #rows(rows: readonly DayBoxRow[]) {
     return html`<dl class=${this.sectioned ? "sectioned" : ""}>
       ${rows.map(
@@ -282,16 +303,10 @@ export class CalendarDayBox extends LitElement {
             class=${row.inheritedFrom !== undefined ? "inherited" : ""}
           >
             ${
-              this.sectioned
-                ? row.text
-                    .split(" · ")
-                    .map(
-                      (range, index, all) =>
-                        html`${index ? " " : nothing}<span class="range"
-                            >${range}${index < all.length - 1 ? "\u00a0·" : nothing}</span
-                          >`,
-                    )
-                : row.text
+              row.spokenText === undefined
+                ? this.#rowText(row)
+                : html`<span aria-hidden="true">${this.#rowText(row)}</span
+                    ><span class="visually-hidden">${row.spokenText}</span>`
             }${row.inheritedFrom !== undefined ? html`<span class="visually-hidden">, ${format("day.as_department", { name: row.inheritedFrom })}</span>` : nothing}
           </dd>
         `,

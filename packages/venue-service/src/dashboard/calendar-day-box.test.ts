@@ -89,6 +89,20 @@ describe("calendar-day-box", () => {
     expect(Number(getComputedStyle(terms[1]!).fontWeight)).toBeLessThan(600);
   });
 
+  it("offers the spoken wording while drawing only the compact row text", async () => {
+    box.rows = [{ name: "Kitchen", text: "Head chef ×1", spokenText: "Head chef, 1 person" }];
+    await box.updateComplete;
+    box.show(anchor);
+    const detail = box.shadowRoot!.querySelector("dd")!;
+    const visible = detail.querySelector<HTMLElement>('span[aria-hidden="true"]');
+    const spoken = detail.querySelector<HTMLElement>(".visually-hidden");
+    expect(visible?.textContent).toBe("Head chef ×1");
+    expect(visible?.checkVisibility()).toBe(true);
+    expect(spoken?.textContent).toBe("Head chef, 1 person");
+    expect(spoken?.closest("[aria-hidden]")).toBeNull();
+    expect(spoken?.getBoundingClientRect().width).toBe(1);
+  });
+
   it("shows a message instead of the rows, and nothing for an empty name or line", async () => {
     box.rows = [{ name: "Front Bar", text: "Open" }];
     box.message = "Loading…";

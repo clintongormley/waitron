@@ -96,6 +96,28 @@ async function pressBoxButton(el: StaffingMonthView, label: string) {
   await closed;
   await settled(el);
 }
+function visibleRowText(box: HTMLElementTagNameMap["calendar-day-box"]) {
+  return [...box.shadowRoot!.querySelectorAll('dd > [aria-hidden="true"]')].map((detail) =>
+    detail
+      .textContent!.replace(/\u2060/g, "")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+}
+
+function textRects(element: Element, text: string) {
+  const nodes = document.createNodeIterator(element, NodeFilter.SHOW_TEXT);
+  for (let node = nodes.nextNode(); node; node = nodes.nextNode()) {
+    const start = node.textContent!.indexOf(text);
+    if (start < 0) continue;
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + text.length);
+    return [...range.getClientRects()];
+  }
+  throw new Error(`Visible text missing: ${text}`);
+}
+
 async function useViewport(width: number, height: number) {
   const before = [innerWidth, innerHeight] as const;
   await page.viewport(width, height);
@@ -338,7 +360,14 @@ describe("the Staffing view's month", () => {
       read.days[1] = { ...read.days[1]!, seasonId: null };
       read.days[2] = {
         ...read.days[2]!,
-        areas: [{ area: { kind: "station", id: "st-new" }, needed: 3, unfilled: null }],
+        areas: [
+          {
+            area: { kind: "station", id: "st-new" },
+            needed: 3,
+            unfilled: null,
+            blocks: [{ staffRoleName: "Waiter", headcount: 3, startsAt: "12:00", endsAt: "16:00" }],
+          },
+        ],
       };
       return read;
     });
@@ -457,6 +486,8 @@ describe("the Staffing view's month", () => {
     const { api } = fakeApi(async (month) => {
       const read = staffingMonth(month);
       read.seasons = [...read.seasons.slice(0, 1), { ...read.seasons[1]!, name }];
+      const kitchen = read.days.find(({ date }) => date === "2026-12-03")!.areas[2]!;
+      kitchen.blocks[1]!.staffRoleName = "Night sous chef";
       return read;
     });
     const { el } = await mount({ api, width: "390px", canWrite: true });
@@ -472,6 +503,38 @@ describe("the Staffing view's month", () => {
     expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(placed.right);
     for (const button of box.querySelectorAll<HTMLElement>("wt-button"))
       expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(placed.right);
+
+    const visible = box.shadowRoot!.querySelectorAll("dd")[2]!.querySelector("[aria-hidden]")!;
+    const tops = [
+      "Head chef ×1\u00a016:00–\u206001:30",
+      "Night sous chef ×3\u00a017:00–\u206023:00",
+    ].map((block) => {
+      const rects = textRects(visible, block);
+      expect(rects, block).toHaveLength(1);
+      return rects[0]!.top;
+    });
+    expect(tops[1]).toBeGreaterThan(tops[0]!);
+  });
+
+  it("keeps the count and full time on one line when a long role name wraps", async () => {
+    await useViewport(390, 800);
+    const roleName = "Encargado de sala de fin de semana";
+    const { api } = fakeApi(async (month) => {
+      const read = staffingMonth(month);
+      read.areas = read.areas.map((entry, index) =>
+        index === 0 ? { ...entry, name: "Restaurant and the dining room" } : entry,
+      );
+      const kitchen = read.days.find(({ date }) => date === "2026-12-03")!.areas[2]!;
+      kitchen.blocks[1]!.staffRoleName = roleName;
+      return read;
+    });
+    const { el } = await mount({ api, width: "390px" });
+    const box = await openBox(el, "2026-12-03");
+    const kitchen = box.shadowRoot!.querySelectorAll("dd")[2]!;
+    const visible = kitchen.querySelector('[aria-hidden="true"]')!;
+    expect(textRects(visible, roleName).length).toBeGreaterThan(1);
+    for (const word of roleName.split(" ")) expect(textRects(visible, word), word).toHaveLength(1);
+    expect(textRects(visible, "×3\u00a017:00–\u206023:00")).toHaveLength(1);
   });
 
   it("draws no bar for an area that needs nobody, beside its 0", async () => {
@@ -481,7 +544,7 @@ describe("the Staffing view's month", () => {
       read.days[day] = {
         ...read.days[day]!,
         areas: read.days[day]!.areas.map((line, index) =>
-          index === 0 ? { ...line, needed: 0 } : line,
+          index === 0 ? { ...line, needed: 0, blocks: [] } : line,
         ),
       };
       return read;
@@ -932,7 +995,9 @@ describe("the day box", () => {
     const box = await openBox(el, "2026-12-03");
     expect(box.line).toBe("Winter standard staffing");
     expect(box.name).toBe("");
-    expect(box.rows).toEqual([{ name: "Bar", text: "2" }]);
+    expect(box.rows.map(({ name }) => name)).toEqual(["Bar"]);
+    expect(visibleRowText(box)).toEqual(["2 · Bartender ×2 16:00–01:30"]);
+    expect(box.rows[0]!.spokenText).toBe("2, Bartender, 2 people, 16:00–01:30");
     await openBox(el, "2026-12-24");
     expect(box.line).toBe("Special day — replaces Winter's standard staffing");
     await openBox(el, "2026-12-07");
@@ -940,10 +1005,11 @@ describe("the day box", () => {
     expect(box.message).toBe("Closed");
     const { el: every } = await mount();
     const all = await openBox(every, "2026-12-03");
-    expect(all.rows).toEqual([
-      { name: "Restaurant", text: "6" },
-      { name: "Bar", text: "2" },
-      { name: "Kitchen", text: "4" },
+    expect(all.rows.map(({ name }) => name)).toEqual(["Restaurant", "Bar", "Kitchen"]);
+    expect(visibleRowText(all)).toEqual([
+      "6 · Waiter ×6 12:00–23:00",
+      "2 · Bartender ×2 16:00–01:30",
+      "4 · Head chef ×1 16:00–01:30 · Sous chef ×3 17:00–23:00",
     ]);
   });
 
@@ -955,10 +1021,10 @@ describe("the day box", () => {
     });
     const { el } = await mount({ api });
     const box = await openBox(el, "2026-12-01");
-    expect(box.rows).toEqual([
-      { name: "Restaurant", text: "6" },
-      { name: "Bar", text: "2, 1 unfilled" },
-      { name: "Kitchen", text: "4" },
+    expect(box.rows.map(({ name, text }) => [name, text])).toEqual([
+      ["Restaurant", "6"],
+      ["Bar", "2, 1 unfilled"],
+      ["Kitchen", "4"],
     ]);
   });
 
@@ -994,7 +1060,14 @@ describe("the day box", () => {
           if (!day.closedAllDay)
             day.areas = [
               ...day.areas,
-              ...extra.map(({ area }) => ({ area, needed: 3, unfilled: null })),
+              ...extra.map(({ area }) => ({
+                area,
+                needed: 3,
+                unfilled: null,
+                blocks: [
+                  { staffRoleName: "Waiter", headcount: 3, startsAt: "12:00", endsAt: "16:00" },
+                ],
+              })),
             ];
         return read;
       }).api;
@@ -1011,12 +1084,16 @@ describe("the day box", () => {
       };
     };
     const kept = { left: true, right: true, top: true, bottom: true, clearOfTheDay: true };
+    // Measure after the resize observer places the box with its actions laid out.
+    const afterLayout = () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
 
     it("on a Sunday at the right edge of a wide window", async () => {
       await useViewport(1280, 800);
       const { el } = await mount({ api: manyAreas(), canWrite: true, canOpenRota: true });
       const box = await openBox(el, "2026-12-06");
       expect(boxButtons(el)).toEqual(["Edit Winter's standard week", "Rota for this week"]);
+      await afterLayout();
       expect(placement(box, dayButton(el, "2026-12-06")!)).toEqual(kept);
     });
 
@@ -1032,6 +1109,7 @@ describe("the day box", () => {
       el.parentElement!.style.paddingTop = `${innerHeight - 40 - day.getBoundingClientRect().bottom}px`;
       const box = await openBox(el, "2026-12-30");
       expect(boxButtons(el)).toEqual(["Edit Winter's standard week", "Rota for this week"]);
+      await afterLayout();
       expect(placement(box, day)).toEqual(kept);
     });
 
@@ -1051,6 +1129,7 @@ describe("the day box", () => {
       const day = dayButton(el, "2026-12-30")!;
       el.parentElement!.style.paddingTop = `${innerHeight - 40 - day.getBoundingClientRect().bottom}px`;
       const box = await openBox(el, "2026-12-30");
+      await afterLayout();
       expect(placement(box, day)).toEqual(kept);
       const before = box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect().height;
       special = true;
@@ -1061,6 +1140,7 @@ describe("the day box", () => {
         box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect().height,
       ).toBeGreaterThan(before);
       expect(box.shown).toBe(true);
+      await afterLayout();
       expect(placement(box, day)).toEqual(kept);
     });
   });

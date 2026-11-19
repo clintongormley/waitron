@@ -419,9 +419,8 @@ the season painter continues saving through the season-week route._
   instead.
 
 - **Staffing's month (A720, 2026-10-15)** has no legend, and its year is plain text, since Staffing
-  has no Year view (A759). Its day box lists each area's number of people; role names and times
-  wait for the month read to carry each block (backlog: "Staffing's day box: each area's staff
-  roles and times").
+  has no Year view (A759). Its day box shows each area's total and the role, headcount and times
+  of each staffing block, as the [19 November plan](../superpowers/plans/2026-11-19-dash-staffing-day-box.md) describes.
 
 - **The "VAT class for new products" default is a venue setting (owner, 2026-10-16, A755).** It sits
   on Venue settings' Defaults card beside the default receipt language, and both are saved together
