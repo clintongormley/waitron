@@ -561,11 +561,11 @@ describe("till-app: Print the bill", () => {
 
   it("words a bill that cannot be filed exactly, in English and Spanish", () => {
     expect(t("meal_end.cannot_file")).toBe(
-      "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help.",
+      "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help. If this bill has a full invoice, check its customer's details.",
     );
     setLocale("es");
     expect(t("meal_end.cannot_file")).toBe(
-      "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada.",
+      "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada. Si esta cuenta lleva factura completa, revisa los datos del cliente.",
     );
   });
 
