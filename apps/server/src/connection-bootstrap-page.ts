@@ -24,14 +24,14 @@ const STYLE = `
 :root {
 color-scheme: light dark;
 --wt-color-bg: light-dark(#f7f7f8, #101216);
---wt-color-text: light-dark(#16181d, #eceef2);
---wt-color-text-muted: light-dark(#5c626e, #a1a7b3);
---wt-color-primary: light-dark(#1f6feb, #4c8dff);
---wt-color-on-primary: light-dark(#ffffff, #06101f);
---wt-color-primary-text: light-dark(#1a5fd0, #78a9ff);
+--wt-color-text: light-dark(#231f20, #eceef2);
+--wt-color-text-muted: light-dark(#626366, #a1a7b3);
+--wt-color-primary: light-dark(#007392, #71cfeb);
+--wt-color-on-primary: light-dark(#ffffff, #001016);
+--wt-color-primary-text: light-dark(#007392, #71cfeb);
 --wt-color-danger: light-dark(#b3261e, #ff7f73);
 --wt-color-border: light-dark(#d6d9e0, #333945);
---wt-color-focus: light-dark(#1f6feb, #4c8dff);
+--wt-color-focus: light-dark(#007392, #71cfeb);
 --wt-space-1: 4px; --wt-space-2: 8px; --wt-space-3: 12px; --wt-space-4: 16px; --wt-space-5: 24px; --wt-space-6: 32px;
 --wt-radius-md: 8px;
 --wt-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -44,7 +44,7 @@ h1 { font-size: var(--wt-font-size-xl); line-height: 1.3; }
 h2 { font-size: var(--wt-font-size-lg); }
 section { margin-block: var(--wt-space-6); }
 a { color: var(--wt-color-primary-text); overflow-wrap: anywhere; }
-.logo svg { width: 150px; height: auto; }
+.logo svg { width: auto; height: 26px; }
 nav { display: flex; gap: var(--wt-space-4); margin-block: var(--wt-space-4); }
 button, .button { display: inline-block; box-sizing: border-box; max-width: 100%; border: 0; border-radius: var(--wt-radius-md); padding: var(--wt-space-3) var(--wt-space-4); background: var(--wt-color-primary); color: var(--wt-color-on-primary); font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
 button:disabled { cursor: wait; }

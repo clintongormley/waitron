@@ -6409,7 +6409,7 @@ it.each(
       );
       const top = root.querySelector<HTMLElement>('tr[data-row-key="root"]')!;
       const color = getComputedStyle(top).color;
-      expect(color).toBe(theme === "light" ? "rgb(22, 24, 29)" : "rgb(236, 238, 242)");
+      expect(color).toBe(theme === "light" ? "rgb(35, 31, 32)" : "rgb(236, 238, 242)");
     };
     await openRow(el, "folder:d");
     await openRow(el, "folder:b");

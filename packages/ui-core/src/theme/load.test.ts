@@ -12,7 +12,7 @@ test("the contrast rules build when their module loads", async () => {
 
 test("Waitron's values are read from the token text when their module loads", async () => {
   const { WAITRON_DEFAULTS } = await import("./waitron.js");
-  expect(WAITRON_DEFAULTS.light["--wt-color-primary"]).toBe("#1f6feb");
+  expect(WAITRON_DEFAULTS.light["--wt-color-primary"]).toBe("#007392");
   expect(WAITRON_DEFAULTS.dark["--wt-color-bg"]).toBe("#101216");
   expect(WAITRON_DEFAULTS.structure["--wt-radius-md"]).toBe("8px");
 });

@@ -22,22 +22,24 @@ const darkToken = (name) => {
   if (value === undefined) throw new Error(`colors.css declares no dark --wt-color-${name}`);
   return value;
 };
-const MARK_BLUE_DARK = darkToken("primary");
-const WORD_INK_DARK = darkToken("text");
-const ICON_CANVAS = 136; // mark is 124 x 84.91, so this leaves an even margin on the long axis
+const INK_DARK = darkToken("text");
+// The icon canvas's side is the mark's long axis times this.
+const ICON_MARGIN = 136 / 124;
 
 /**
- * The body must carry no fill of its own: a `fill` attribute on an inner element beats an inherited
- * CSS rule, so it would make the favicon's dark-mode rule inert.
+ * A source drawing: a tight `viewBox`, then a `<g class="ink" fill="…">` holding every near-black
+ * piece, then the W's fixed blues. Only the ink group may change colour, so the dark copies and the
+ * favicon's dark rule replace that one fill and nothing else.
  */
 function readSource(name) {
   const svg = readFileSync(join(here, name), "utf8");
-  const open = svg.match(/^<svg[^>]*viewBox="([^"]+)"[^>]*fill="([^"]+)"[^>]*>/);
-  if (open === null) throw new Error(`${name}: opening <svg> needs both a viewBox and a fill`);
+  const open = svg.match(/^<svg[^>]*viewBox="([^"]+)"[^>]*>/);
+  if (open === null) throw new Error(`${name}: opening <svg> needs a viewBox`);
+  const ink = svg.match(/<g class="ink" fill="(#[0-9a-f]{6})">/);
+  if (ink === null) throw new Error(`${name}: needs a <g class="ink" fill="#rrggbb"> group`);
   const body = svg.slice(open[0].length, svg.lastIndexOf("</svg>"));
-  if (/\bfill=/.test(body)) throw new Error(`${name}: body must carry no fill — see readSource`);
   const [x, y, w, h] = open[1].split(/\s+/).map(Number);
-  return { body, x, y, w, h, fill: open[2] };
+  return { svg, body, ink: ink[0], x, y, w, h };
 }
 
 /** Run Inkscape, and say what it printed if it fails — a bare spawn error names no cause. */
@@ -86,25 +88,8 @@ function packIco(pngs) {
   return Buffer.concat([header, ...entries, ...blobs]);
 }
 
+const lockup = readSource("waitron-lockup.svg");
 const mark = readSource("waitron-mark.svg");
-const word = readSource("waitron-wordmark.svg");
-// The icons centre the mark by its width and height alone, so a non-zero origin would silently
-// mis-place it and an oversized drawing would silently clip. Both are cheap to refuse.
-if (mark.x !== 0 || mark.y !== 0) {
-  throw new Error(
-    `waitron-mark.svg: viewBox origin must be 0 0 for centring, got ${mark.x} ${mark.y}`,
-  );
-}
-if (mark.w > ICON_CANVAS || mark.h > ICON_CANVAS) {
-  throw new Error(`waitron-mark.svg is ${mark.w}x${mark.h}, over the ${ICON_CANVAS} icon canvas`);
-}
-// The two drawings are cut to one shared height, so they sit side by side unscaled.
-if (word.x !== 0 || word.y !== 0 || word.h !== mark.h) {
-  throw new Error(
-    `waitron-wordmark.svg: viewBox must be 0 0 <width> ${mark.h}, the mark's height, got ` +
-      `${word.x} ${word.y} ${word.w} ${word.h}`,
-  );
-}
 const written = [];
 const write = (path, text) => {
   writeFileSync(path, text);
@@ -112,39 +97,34 @@ const write = (path, text) => {
 };
 
 // The mark centred on a square, which is the shape every icon wants.
-const pad = (w, h) => `translate(${(ICON_CANVAS - w) / 2},${(ICON_CANVAS - h) / 2})`;
-const square = (fill, extra = "") =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ICON_CANVAS} ${ICON_CANVAS}" ` +
-  `width="${ICON_CANVAS}" height="${ICON_CANVAS}">${extra}` +
-  `<g fill="${fill}" transform="${pad(mark.w, mark.h)}">${mark.body}</g></svg>\n`;
+const side = +(Math.max(mark.w, mark.h) * ICON_MARGIN).toFixed(2);
+const squareX = +(mark.x - (side - mark.w) / 2).toFixed(2);
+const squareY = +(mark.y - (side - mark.h) / 2).toFixed(2);
+const square = (extra = "") =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${squareX} ${squareY} ${side} ${side}" ` +
+  `width="${side}" height="${side}">${extra}${mark.body}</svg>\n`;
 
-// Only browsers that read SVG favicons see this rule; the rasters below are stuck on the light blue.
+// A browser draws its tab strip in its own light or dark, not the page's, so only the ink follows
+// it; the rasters below cannot, and keep the light ink.
 write(
   join(pub, "favicon.svg"),
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ICON_CANVAS} ${ICON_CANVAS}" ` +
-    `width="${ICON_CANVAS}" height="${ICON_CANVAS}">` +
-    `<style>.m{fill:${mark.fill}}@media (prefers-color-scheme: dark){.m{fill:${MARK_BLUE_DARK}}}</style>` +
-    `<g class="m" transform="${pad(mark.w, mark.h)}">${mark.body}</g></svg>\n`,
+  square(`<style>@media (prefers-color-scheme: dark){.ink{fill:${INK_DARK}}}</style>`),
 );
 
-const gap = 14.44;
-const wordX = mark.w + gap;
-const lockup = (markFill, wordFill) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${+(wordX + word.w).toFixed(2)} ${mark.h}">` +
-  `<g fill="${markFill}">${mark.body}</g>` +
-  `<g fill="${wordFill}" transform="translate(${wordX.toFixed(2)},0)">${word.body}</g></svg>\n`;
-write(join(here, "waitron-lockup.svg"), lockup(mark.fill, word.fill));
 // For an `<img>` on a dark ground, which cannot read the theme's tokens.
-write(join(here, "waitron-lockup-dark.svg"), lockup(MARK_BLUE_DARK, WORD_INK_DARK));
+write(
+  join(here, "waitron-lockup-dark.svg"),
+  lockup.svg.replace(lockup.ink, `<g class="ink" fill="${INK_DARK}">`),
+);
 
 const scratch = mkdtempSync(join(tmpdir(), "waitron-icons-"));
 try {
   // iOS does not honour an icon's alpha on the home screen: it flattens onto an opaque backing, so
-  // a transparent icon arrives as a blue mark on a black tile. Give it a ground of its own.
+  // a transparent icon arrives as its mark on a black tile. Give it a ground of its own.
   const appleSrc = join(scratch, "apple-touch.svg");
   writeFileSync(
     appleSrc,
-    square(mark.fill, `<rect width="${ICON_CANVAS}" height="${ICON_CANVAS}" fill="#ffffff"/>`),
+    square(`<rect x="${squareX}" y="${squareY}" width="${side}" height="${side}" fill="#ffffff"/>`),
   );
   render(appleSrc, join(pub, "apple-touch-icon.png"), 180, { opaque: true });
   written.push("public/apple-touch-icon.png");
@@ -155,7 +135,7 @@ try {
   }
 
   const markSquare = join(scratch, "mark-square.svg");
-  writeFileSync(markSquare, square(mark.fill));
+  writeFileSync(markSquare, square());
   const icoSizes = [16, 32, 48];
   for (const size of icoSizes) render(markSquare, join(scratch, `${size}.png`), size);
   write(

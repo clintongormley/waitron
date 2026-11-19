@@ -83,8 +83,8 @@ test("a forced light root paints the light version and a forced dark root the da
   const light = mount("light");
   const dark = mount("dark");
 
-  expect(token(light, "--wt-color-primary")).toBe("#1f6feb");
-  expect(token(dark, "--wt-color-primary")).toBe("#4c8dff");
+  expect(token(light, "--wt-color-primary")).toBe("#007392");
+  expect(token(dark, "--wt-color-primary")).toBe("#71cfeb");
   expect(token(light, "--wt-radius-md")).toBe("8px");
   expect(token(dark, "--wt-radius-md")).toBe("8px");
 
@@ -93,16 +93,16 @@ test("a forced light root paints the light version and a forced dark root the da
   document.adoptedStyleSheets = [...document.adoptedStyleSheets, adopted];
 
   expect(theme.light["--wt-color-primary"]).not.toBe(theme.dark["--wt-color-primary"]);
-  expect(theme.light["--wt-color-primary"]).not.toBe("#1f6feb");
-  expect(theme.dark["--wt-color-primary"]).not.toBe("#4c8dff");
+  expect(theme.light["--wt-color-primary"]).not.toBe("#007392");
+  expect(theme.dark["--wt-color-primary"]).not.toBe("#71cfeb");
   expect(token(light, "--wt-color-primary")).toBe(theme.light["--wt-color-primary"]);
   expect(token(dark, "--wt-color-primary")).toBe(theme.dark["--wt-color-primary"]);
   expect(token(light, "--wt-radius-md")).toBe("14px");
   expect(token(dark, "--wt-radius-md")).toBe("14px");
 
   removeAdopted();
-  expect(token(light, "--wt-color-primary")).toBe("#1f6feb");
-  expect(token(dark, "--wt-color-primary")).toBe("#4c8dff");
+  expect(token(light, "--wt-color-primary")).toBe("#007392");
+  expect(token(dark, "--wt-color-primary")).toBe("#71cfeb");
   expect(token(light, "--wt-radius-md")).toBe("8px");
 });
 

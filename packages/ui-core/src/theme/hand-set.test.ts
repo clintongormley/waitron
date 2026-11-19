@@ -46,7 +46,7 @@ describe("colours set by hand", () => {
     expect(light[P("primary")]).toBe("#1e5b3a");
     expect(ratio(light[P("primary")]!, CREAM)).toBe("7.14");
     expect(ratio(light[P("primary-text")]!, CREAM)).toBe("7.14");
-    expect(ratio(light[P("text")]!, CREAM)).toBe("15.78");
+    expect(ratio(light[P("text")]!, CREAM)).toBe("14.48");
     expect(ratio(light[P("track")]!, CREAM)).toBe("1.42");
     expect(light[P("surface-lifted")]).toBe("#d3ecdb");
     expect(deriveTheme(DARK_GREEN_FIXED).light[P("surface-lifted")]).toBe("#d8f1e0");
@@ -119,13 +119,13 @@ describe("colours set by hand", () => {
     // Moving primary-disabled to within 1.5 of both hand-set surfaces would take on-primary-disabled
     // on it below 4.5: two rules would pass, and one naming only worked-out colours would newly fail.
     const theme = deriveTheme(
-      withHand(WAITRON_CHOICES, "dark", { surface: "#c22d7d", "surface-raised": "#6319dd" }),
+      withHand(WAITRON_CHOICES, "dark", { surface: "#8fd294", "surface-raised": "#04bced" }),
     );
     expect(theme.dark[P("primary-disabled")]).toBe(
       deriveTheme(WAITRON_CHOICES).dark[P("primary-disabled")],
     );
     expect(ratio(theme.dark[P("on-primary-disabled")]!, theme.dark[P("primary-disabled")]!)).toBe(
-      "4.75",
+      "5.28",
     );
     expect(theme.warnings.find(({ field }) => field === "handSet.dark.surface")?.against).toContain(
       "primary-disabled",

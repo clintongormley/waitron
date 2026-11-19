@@ -268,24 +268,24 @@ export function textBaseline(element: Element): number {
 }
 
 /**
- * Where the lockup's word sits on the page: the bottom of its "w", the first outline of the word's
- * path. The path's box would not do: round letters dip below the line the others sit on.
+ * Where the lockup's word sits on the page: the bottom of its "I", the one rectangle among the
+ * word's letters. A letter's outline box would not do: the "W" and "N" points dip below the line.
  */
 export function lockupWordBaseline(lockup: Element): number {
-  const word = [...lockup.shadowRoot!.querySelectorAll("svg > g")].at(-1)!;
-  const path = word.querySelector<SVGPathElement>("path")!;
-  const firstOutline = path.getAttribute("d")!.split(/z/i)[0]!;
-  const ys = [...firstOutline.matchAll(/-?[\d.]+,(-?[\d.]+)/g)].map((m) => Number(m[1]));
-  const point = new DOMPoint(0, Math.max(...ys)).matrixTransform(path.getScreenCTM()!);
-  return point.y;
+  const bar = lockup.shadowRoot!.querySelector<SVGRectElement>("svg > .ink > rect")!;
+  const bottom = bar.y.baseVal.value + bar.height.baseVal.value;
+  return new DOMPoint(0, bottom).matrixTransform(bar.getScreenCTM()!).y;
 }
 
 /**
- * A lockup file's inks, cloche then word, spelled as computed styles spell them, so a test can
- * compare them with what the drawn lockup's groups compute to.
+ * A lockup file's inks in file order — the near-black pieces, then the sky and the teal of the W —
+ * spelled as computed styles spell them, so a test can compare them with what the drawn lockup's
+ * pieces compute to.
  */
 export function lockupFileInks(svg: string): string[] {
-  return [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)].map(
+  return [
+    ...svg.matchAll(/class="(?:ink|sky|teal)" fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g),
+  ].map(
     (m) =>
       `rgb(${m
         .slice(1, 4)

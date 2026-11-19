@@ -3927,6 +3927,37 @@ describe("page shell", () => {
     },
   );
 
+  it("draws the logo at full size where the header has room, shrinks it before wrapping, and keeps its narrowest width on a phone", async () => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(1280, 844);
+      const el = await mountSetupApp();
+      const header = wizard(el).querySelector<HTMLElement>(":scope > header")!;
+      const logo = header.querySelector<HTMLElement>("[data-test=setup-logo]")!;
+      const report = header.querySelector<HTMLElement>("setup-problem-report")!;
+      const controls = header.querySelector<HTMLElement>(".header-controls")!;
+      const space6 = parseFloat(getComputedStyle(header).getPropertyValue("--wt-space-6"));
+      const gap = parseFloat(getComputedStyle(header).columnGap);
+
+      let box = logo.getBoundingClientRect();
+      expect(box.width).toBeCloseTo((space6 * 27) / 4, 0);
+      expect(box.height).toBeCloseTo((space6 * 27) / 32, 0);
+
+      const room = header.clientWidth - controls.getBoundingClientRect().width - 2 * gap;
+      report.style.flex = `0 0 ${room - space6 * 5.5}px`;
+      box = logo.getBoundingClientRect();
+      expect(box.width).toBeCloseTo(space6 * 5.5, 0);
+      expect(controls.getBoundingClientRect().top).toBe(report.getBoundingClientRect().top);
+
+      await page.viewport(390, 844);
+      report.style.flex = "";
+      box = logo.getBoundingClientRect();
+      expect(box.width).toBeCloseTo(space6 * 5, 0);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  });
+
   it.each([
     [1280, "English", "name", "English"],
     [390, "EN", "code", "EN English"],
@@ -3991,7 +4022,7 @@ describe("page shell", () => {
   });
 
   it.each(["light", "dark"] as const)(
-    "paints the logo's word in the text colour and its cloche in the primary colour (%s theme)",
+    "paints the logo's near-black pieces in the text colour and keeps the W's blues (%s theme)",
     async (theme) => {
       const el = await mountSetupApp();
       const host = el.parentElement!;
@@ -4006,11 +4037,13 @@ describe("page shell", () => {
       expect(logo.localName).toBe("wt-waitron-lockup");
       await logo.updateComplete;
       const svg = logo.shadowRoot!.querySelector("svg")!;
-      // Found by the brand file's own ink, not by position, so a reordered file fails here.
-      const cloche = svg.querySelector(':scope > g[fill="#1f6feb"]');
-      const word = svg.querySelector(':scope > g[fill="#16181d"]');
-      expect(getComputedStyle(word!).fill).toBe(colourOf("--wt-color-text"));
-      expect(getComputedStyle(cloche!).fill).toBe(colourOf("--wt-color-primary"));
+      // Found by the brand file's own fills, not by position, so a reordered file fails here.
+      const ink = svg.querySelector(':scope > .ink[fill="#231f20"]');
+      const sky = svg.querySelector(':scope > .sky[fill="#71cfeb"]');
+      const teal = svg.querySelector(':scope > .teal[fill="#007392"]');
+      expect(getComputedStyle(ink!).fill).toBe(colourOf("--wt-color-text"));
+      expect(getComputedStyle(sky!).fill).toBe("rgb(113, 207, 235)");
+      expect(getComputedStyle(teal!).fill).toBe("rgb(0, 115, 146)");
     },
   );
 });

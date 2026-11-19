@@ -8,7 +8,7 @@ const ownFile = (name: string) =>
 
 describe("SERVER_THEME_DEFAULTS", () => {
   it("reads Waitron's values from ui-core's token files", () => {
-    expect(SERVER_THEME_DEFAULTS.light["--wt-color-primary"]).toBe("#1f6feb");
+    expect(SERVER_THEME_DEFAULTS.light["--wt-color-primary"]).toBe("#007392");
     expect(SERVER_THEME_DEFAULTS.dark["--wt-color-bg"]).toBe("#101216");
     expect(SERVER_THEME_DEFAULTS.structure["--wt-radius-md"]).toBe("8px");
   });

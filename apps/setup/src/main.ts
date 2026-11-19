@@ -1,5 +1,5 @@
 import { html, render } from "lit";
-import { applyTokens, startWithPopover, startThemeChoice, startThemedFavicon } from "@waitron/ui";
+import { applyTokens, startWithPopover, startThemeChoice } from "@waitron/ui";
 import { createInstrumentedFetch, installErrorCapture, watchBuild } from "@waitron/diagnostics";
 import { diag, setReportBuild } from "./diagnostics.js";
 import { makeSetupId } from "./random-id.js";
@@ -11,7 +11,6 @@ import { setLocale } from "./i18n/t.js";
 
 applyTokens(document.documentElement);
 startThemeChoice(document.documentElement);
-startThemedFavicon();
 
 const app = document.querySelector<HTMLElement>("#app")!;
 const transport = createInstrumentedFetch(

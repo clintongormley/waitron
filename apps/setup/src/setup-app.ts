@@ -790,9 +790,18 @@ export class SetupApp extends LitElement {
         margin-block-end: var(--wt-space-1);
       }
 
+      /* The row wraps as if the logo were at its narrowest, then the logo grows into the spare room
+         up to its full size, so a longer translation shrinks the logo before it pushes the
+         controls onto a second row. */
       .logo {
-        flex: 0 0 auto;
-        width: calc(var(--wt-space-6) * 5);
+        flex: 1 0 calc(var(--wt-space-6) * 5);
+        max-width: calc(var(--wt-space-6) * 27 / 4);
+      }
+
+      @media (max-width: 40rem) {
+        .logo {
+          flex-grow: 0;
+        }
       }
     `,
   ];

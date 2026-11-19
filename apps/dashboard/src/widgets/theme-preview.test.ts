@@ -196,8 +196,8 @@ it("a new draft repaints", async () => {
 it("control: Waitron's draft paints Waitron's colours while the page's root keeps its own", async () => {
   paintPage();
   const el = await mountOutside(WAITRON_CHOICES);
-  expect(primary(panel(el, "light"))).toBe("#1f6feb");
-  expect(primary(panel(el, "dark"))).toBe("#4c8dff");
+  expect(primary(panel(el, "light"))).toBe("#007392");
+  expect(primary(panel(el, "dark"))).toBe("#71cfeb");
   expect(primary(document.documentElement)).toBe("#9d8a15");
 });
 
@@ -374,27 +374,25 @@ it("with a dark image the dark panel draws it, unplated", async () => {
   expect(boxOf(dark).hasAttribute("data-plate")).toBe(false);
 });
 
-it("with no logo, Waitron's lockup in each panel's colours", async () => {
+it("with no logo, Waitron's lockup's ink in each panel's text colour, and the W's blues fixed", async () => {
   const { el } = await mountWithLogo(null);
   expect(strip(el, "light").querySelector("wt-venue-logo")).toBeNull();
   const lockup = (mode: "light" | "dark") =>
     strip(el, mode).querySelector<WtWaitronLockup>("wt-waitron-lockup.lockup")!;
   const inks = async (mode: "light" | "dark") => {
     await lockup(mode).updateComplete;
-    return [...lockup(mode).shadowRoot!.querySelectorAll("svg > g")].map(
-      (g) => getComputedStyle(g).fill,
+    return [".ink", ".sky", ".teal"].map(
+      (piece) => getComputedStyle(lockup(mode).shadowRoot!.querySelector(`svg > ${piece}`)!).fill,
     );
   };
   const tokens = (mode: "light" | "dark") => {
     const style = getComputedStyle(lockup(mode));
-    return ["--wt-color-primary", "--wt-color-text"].map((name) => {
-      const probe = document.createElement("span");
-      probe.style.color = style.getPropertyValue(name);
-      strip(el, mode).append(probe);
-      const value = getComputedStyle(probe).color;
-      probe.remove();
-      return value;
-    });
+    const probe = document.createElement("span");
+    probe.style.color = style.getPropertyValue("--wt-color-text");
+    strip(el, mode).append(probe);
+    const text = getComputedStyle(probe).color;
+    probe.remove();
+    return [text, "rgb(113, 207, 235)", "rgb(0, 115, 146)"];
   };
   expect(await inks("light")).toEqual(tokens("light"));
   expect(await inks("dark")).toEqual(tokens("dark"));

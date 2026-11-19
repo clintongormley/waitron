@@ -6,6 +6,7 @@ import {
   rulesIn,
   type ContrastGroupId,
 } from "../theme/contrast-rules.js";
+import { WAITRON_DEFAULTS } from "../theme/waitron.js";
 import { mountTokenRoot, token } from "./token-test-helpers.js";
 // The tokens barrel, not the package's — `token-test-helpers.ts` beside this file imports the same way.
 import { applyTokens } from "./index.js";
@@ -41,6 +42,16 @@ afterEach(async () => {
   host?.remove();
   // Reset OS colour-scheme emulation so it can't leak into other test files.
   await commands.emulateColorScheme(null);
+});
+
+test("Waitron's brand colours are the logo's teal in light mode and sky blue in dark mode", () => {
+  expect(WAITRON_DEFAULTS.light["--wt-color-primary"]).toBe("#007392");
+  expect(WAITRON_DEFAULTS.dark["--wt-color-primary"]).toBe("#71cfeb");
+  expect(WAITRON_DEFAULTS.light["--wt-color-text"]).toBe("#231f20");
+  expect(WAITRON_DEFAULTS.light["--wt-color-text-muted"]).toBe("#626366");
+  expect(WAITRON_DEFAULTS.light["--wt-color-table-seated"]).toBe("#1f6feb");
+  expect(WAITRON_DEFAULTS.dark["--wt-color-table-seated"]).toBe("#4c8dff");
+  expect(WAITRON_DEFAULTS.light["--wt-color-table-calm-edge"]).toBe("#8fb7f5");
 });
 
 test("defines the core colour contract", () => {
@@ -547,11 +558,6 @@ test("in light, each dim colour is its full colour at 30% over the surface", () 
       ).toBeLessThanOrEqual(1),
     );
   }
-});
-
-test("in light, the calm edge is the disabled primary", () => {
-  const el = mount("light");
-  expect(token(el, "--wt-color-table-calm-edge")).toBe(token(el, "--wt-color-primary-disabled"));
 });
 
 const STATION_FILLS = [

@@ -98,8 +98,16 @@ describe("the brand colour's readability warning", () => {
     expect(ratio("#f91fc8", "#fee9f6")).toBe("3.00");
   });
 
-  test("Waitron's blue typed as a brand colour, and Waitron's own look, warn in neither mode", () => {
-    expect(deriveTheme({ ...WAITRON_CHOICES, brandColor: "#1f6feb" }).warnings).toEqual([]);
+  test("Waitron's teal typed as a brand colour warns in dark mode, where Waitron's own look sets sky blue and warns in neither mode", () => {
+    expect(deriveTheme({ ...WAITRON_CHOICES, brandColor: "#007392" }).warnings).toEqual([
+      {
+        field: "brandColor",
+        mode: "dark",
+        against: ["field-fill", "surface-raised", "stepper-button"],
+        fix: "#167c9b",
+        blockedBy: [],
+      },
+    ]);
     expect(deriveTheme(WAITRON_CHOICES).warnings).toEqual([]);
   });
 

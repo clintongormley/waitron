@@ -600,7 +600,13 @@ const TWO_FIXES = setHand(
   "surface-sunken",
   "#bbbbbb",
 );
-const HOVER = setHand(openDraft(WAITRON_CHOICES), "light", "primary-hover", "#787878");
+// Against the default teal no single hover colour fails both hover rules; the old blue leaves room.
+const HOVER = setHand(
+  openDraft({ ...WAITRON_CHOICES, brandColor: "#1f6feb" }),
+  "light",
+  "primary-hover",
+  "#787878",
+);
 const DARK = setHand(
   setHand(openDraft(WAITRON_CHOICES), "dark", "bg", "#000000"),
   "dark",

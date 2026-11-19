@@ -143,8 +143,8 @@ describe("the dark-green brand (#1e5b3a), Tinted, Round", () => {
       [P("surface-sunken")]: "#d2dcd5",
       [P("track")]: "#c5cfc8",
       [P("border")]: "#d2dcd5",
-      [P("text")]: "#16181d",
-      [P("text-muted")]: "#5c626e",
+      [P("text")]: "#231f20",
+      [P("text-muted")]: "#626366",
       [P("primary")]: "#1e5b3a",
       [P("primary-hover")]: "#074a2a",
       [P("on-primary")]: "#ffffff",
@@ -345,12 +345,15 @@ describe("text warnings", () => {
   });
 });
 
-describe("Waitron's blue typed as a custom colour (#1f6feb), Neutral", () => {
-  test("works out its own link colour rather than Waitron's", () => {
-    const theme = deriveTheme({ ...WAITRON_CHOICES, brandColor: "#1f6feb" });
-    expect(theme.dark[P("primary")]).toBe("#1f6feb");
+describe("Waitron's teal typed as a custom colour (#007392), Neutral", () => {
+  test("works out its own dark link colour rather than Waitron's, and offers #167c9b for its dark buttons", () => {
+    const theme = deriveTheme({ ...WAITRON_CHOICES, brandColor: "#007392" });
+    expect(theme.dark[P("primary")]).toBe("#007392");
     expect(theme.dark[P("on-primary")]).toBe("#ffffff");
-    expect(theme.dark[P("primary-text")]).toBe("#67a0fd");
+    expect(theme.dark[P("primary-text")]).toBe("#52accd");
+    expect(theme.warnings).toEqual([
+      expect.objectContaining({ field: "brandColor", mode: "dark", fix: "#167c9b" }),
+    ]);
     expect(theme.dark[P("primary-text")]).not.toBe(WAITRON_DEFAULTS.dark[P("primary-text")]);
     expectFullList(theme);
   });

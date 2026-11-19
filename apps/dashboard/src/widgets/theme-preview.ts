@@ -87,9 +87,12 @@ export class ThemePreview extends LitElement {
       .strip:has(> .lockup) {
         align-items: baseline;
       }
+      /* As wide as the drawing is at --wt-space-5 tall; it shrinks in a narrow panel so the legal
+         name keeps its room. */
       .lockup {
-        flex: none;
-        height: var(--wt-space-5);
+        flex: 0 1 auto;
+        width: calc(var(--wt-space-5) * 8);
+        min-width: calc(var(--wt-space-5) * 35 / 6);
       }
       .legal-name {
         min-width: 0;

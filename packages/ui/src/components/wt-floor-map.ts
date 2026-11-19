@@ -303,7 +303,6 @@ export class WtFloorMap extends LitElement {
         border-color: var(--wt-color-warning);
       }
 
-      /* Outside the edge, with --wt-focus-offset: the seated fill is the primary colour itself. */
       [part="table"][data-held]:not([data-merge]) [part="shape"],
       [part="table"][data-held][data-merge],
       [part="table"][data-drop-target]:not([data-merge]) [part="shape"],

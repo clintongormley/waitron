@@ -315,7 +315,7 @@ test("deployment rules override the token layer's defaults even when data-theme 
   el.setAttribute("data-theme", "light");
 
   // First, prove the token layer itself is supplying the default value for this theme.
-  expect(token(el, "--wt-color-primary")).toBe("#1f6feb");
+  expect(token(el, "--wt-color-primary")).toBe("#007392");
 
   overrideSheet = new CSSStyleSheet();
   overrideSheet.replaceSync(".wt-color-override-target { --wt-color-primary: purple; }");

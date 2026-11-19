@@ -726,9 +726,16 @@ export class DashboardApp extends LitElement {
         align-items: baseline;
       }
 
+      /* The lockup's letters stand on its bottom edge, so the name's descent would hang below it and
+         the centred row would lift the lockup off the toggle's middle. Trimming the name's last line
+         at its baseline keeps the row as tall as the lockup; a wrapped name still grows the row. */
+      .brand-line.on-lockup .venue-name {
+        text-box: trim-end text alphabetic;
+      }
+
       .brand-logo {
         flex: 0 0 auto;
-        width: calc(var(--wt-space-6) * 4);
+        height: calc(var(--wt-space-6) * 11 / 16);
       }
 
       .venue-logo {
@@ -860,8 +867,12 @@ export class DashboardApp extends LitElement {
           grid-area: toggle;
           margin-inline-end: 0;
         }
+        /* By its width here: by its height, the wider drawing does not fit beside the controls at
+           400px. */
         .brand-logo {
           grid-area: logo;
+          height: auto;
+          width: calc(var(--wt-space-6) * 4);
           max-width: 100%;
         }
         .banner-actions {
@@ -880,9 +891,11 @@ export class DashboardApp extends LitElement {
           align-items: center;
           gap: var(--wt-space-2) var(--wt-space-3);
         }
-        .venue-name {
+        .venue-name,
+        .brand-line.on-lockup .venue-name {
           padding-inline-start: 0;
           border-inline-start: 0;
+          text-box: none;
         }
         .banner-powered-by {
           padding-inline-end: 0;

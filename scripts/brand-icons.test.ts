@@ -89,10 +89,11 @@ describe("the detector itself", () => {
 
 /**
  * The lockup's dark copy is for an `<img>` on a dark ground, which cannot read a CSS custom
- * property, so it carries the dark token values literally. Weaker than its name: it reads
- * `colors.css` as TEXT, takes each light value from the file's first declaration and each dark
- * value from the `@media (prefers-color-scheme: dark)` block, so a `[data-theme]` block that
- * disagrees with either is not seen.
+ * property, so it carries the dark text token literally. The W's two blues are fixed in every
+ * mode. Weaker than its name: it reads `colors.css` as TEXT, takes the light value from the file's
+ * first declaration and the dark value from the `@media (prefers-color-scheme: dark)` block, so a
+ * `[data-theme]` block that disagrees with either is not seen; and it reads each piece's `fill`
+ * attribute, not what a browser paints.
  */
 describe("the lockups' colours", () => {
   const BRAND = join(REPO_ROOT, "packages", "ui", "brand");
@@ -113,19 +114,28 @@ describe("the lockups' colours", () => {
     if (value === undefined) throw new Error(`colors.css declares no --wt-color-${name}`);
     return value;
   };
+  /** Every fill given to an element of the class, in source order. */
+  const fills = (svg: string, piece: string): string[] =>
+    [...svg.matchAll(new RegExp(`<[a-z]+ class="${piece}" fill="([^"]+)"`, "g"))].map((m) => m[1]);
+  const read = (file: string) => readFileSync(join(BRAND, file), "utf8");
 
-  it("paints the light lockup with the light tokens and the dark lockup with the dark ones", () => {
-    const light = readFileSync(join(BRAND, "waitron-lockup.svg"), "utf8");
-    const lightCloche = `<g fill="${token(colors, "primary")}"`;
-    const lightWord = `<g fill="${token(colors, "text")}"`;
-    expect({ cloche: light.includes(lightCloche), word: light.includes(lightWord) }).toEqual({
-      cloche: true,
-      word: true,
-    });
-    expect(readFileSync(join(BRAND, "waitron-lockup-dark.svg"), "utf8")).toBe(
-      light
-        .replace(lightCloche, `<g fill="${token(darkBlock, "primary")}"`)
-        .replace(lightWord, `<g fill="${token(darkBlock, "text")}"`),
+  it("paints the light lockup's ink with the light text token and the dark one's with the dark", () => {
+    const light = read("waitron-lockup.svg");
+    const lightInk = `<g class="ink" fill="${token(colors, "text")}"`;
+    expect(fills(light, "ink")).toEqual([token(colors, "text")]);
+    expect(read("waitron-lockup-dark.svg")).toBe(
+      light.replace(lightInk, `<g class="ink" fill="${token(darkBlock, "text")}"`),
     );
   });
+
+  it.each(["waitron-lockup.svg", "waitron-lockup-dark.svg", "waitron-mark.svg"])(
+    "%s paints the W's blues with the guide's fixed values",
+    (file) => {
+      const svg = read(file);
+      expect({ sky: fills(svg, "sky"), teal: fills(svg, "teal") }).toEqual({
+        sky: ["#71cfeb"],
+        teal: ["#007392"],
+      });
+    },
+  );
 });

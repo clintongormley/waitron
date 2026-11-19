@@ -16,9 +16,12 @@ declare module "vitest/browser" {
 const label = (el: WtPoweredBy) => el.shadowRoot!.querySelector<HTMLElement>("[part=label]")!;
 const lockup = (el: WtPoweredBy) => el.shadowRoot!.querySelector<WtWaitronLockup>("[part=lockup]")!;
 const drawing = (el: WtPoweredBy) => lockup(el).shadowRoot!.querySelector("svg")!;
-/** The paint of the lockup's cloche and word. */
+/** The paint of the lockup's near-black pieces, then the W's sky blue and teal. */
 const inks = (el: WtPoweredBy) =>
-  [...drawing(el).querySelectorAll(":scope > g")].map((g) => getComputedStyle(g).fill);
+  [".ink", ".sky", ".teal"].map(
+    (piece) => getComputedStyle(drawing(el).querySelector(`:scope > ${piece}`)!).fill,
+  );
+const BLUES = ["rgb(113, 207, 235)", "rgb(0, 115, 146)"];
 /** A colour token as the element it is read on resolves it. */
 function token(el: Element, name: string): string {
   const probe = document.createElement("span");
@@ -28,7 +31,7 @@ function token(el: Element, name: string): string {
   probe.remove();
   return value;
 }
-const themeInks = (el: Element) => [token(el, "--wt-color-primary"), token(el, "--wt-color-text")];
+const themeInks = (el: Element) => [token(el, "--wt-color-text"), ...BLUES];
 
 async function poweredBy(theme?: "light" | "dark"): Promise<WtPoweredBy> {
   const el = (await mountThemed(
@@ -77,12 +80,12 @@ describe("wt-powered-by", () => {
   });
 
   it.each(["light", "dark"] as const)(
-    "draws the lockup 64 px wide in the %s theme's colours",
+    "draws the lockup 11 px tall in the %s theme's colours",
     async (theme) => {
       const el = await poweredBy(theme);
       await lockup(el).updateComplete;
-      expect(drawing(el).getBoundingClientRect().width).toBe(64);
-      expect(drawing(el).getBoundingClientRect().height).toBeGreaterThan(0);
+      expect(drawing(el).getBoundingClientRect().height).toBe(11);
+      expect(drawing(el).getBoundingClientRect().width).toBeCloseTo((11 * 416.8) / 52.1, 1);
       expect(inks(el)).toEqual(themeInks(el));
     },
   );
@@ -113,12 +116,12 @@ describe("wt-powered-by", () => {
     expect(asked.filter((url) => url.includes("/api/theme"))).toEqual([]);
   });
 
-  it("paints the lockup from a custom theme's colours", async () => {
+  it("paints the lockup's ink from a custom theme's text colour and keeps the W's blues", async () => {
     const el = await poweredBy("light");
     el.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
     el.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
     await lockup(el).updateComplete;
-    expect(inks(el)).toEqual(["rgb(1, 2, 3)", "rgb(4, 5, 6)"]);
+    expect(inks(el)).toEqual(["rgb(4, 5, 6)", ...BLUES]);
   });
 
   it("is named 'Powered by Waitron'", async () => {
@@ -142,12 +145,12 @@ describe("wt-powered-by", () => {
     expect(Math.abs(box.left + box.width / 2 - (host.left + host.width / 2))).toBeLessThan(0.5);
   });
 
-  it("sizes the lockup at twice --wt-space-6", async () => {
+  it("sizes the lockup's height at eleven thirty-seconds of --wt-space-6", async () => {
     const el = await poweredBy("light");
-    el.style.setProperty("--wt-space-6", "50px");
+    el.style.setProperty("--wt-space-6", "64px");
     const image = lockup(el);
     await image.updateComplete;
-    expect(image.getBoundingClientRect().width).toBe(100);
+    expect(image.getBoundingClientRect().height).toBe(22);
   });
 
   it("has no link", async () => {

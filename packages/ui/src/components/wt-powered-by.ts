@@ -20,7 +20,7 @@ export class WtPoweredBy extends LitElement {
 
       wt-waitron-lockup {
         flex: none;
-        inline-size: calc(var(--wt-space-6) * 2);
+        block-size: calc(var(--wt-space-6) * 11 / 32);
       }
     `,
   ];

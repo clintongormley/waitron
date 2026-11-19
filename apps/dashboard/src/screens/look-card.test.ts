@@ -677,7 +677,7 @@ describe("editing the Look card in place", () => {
     const waitrons = q(el, 'button.swatch.none[role="radio"]')!;
     expect(waitrons.getAttribute("aria-checked")).toBe("true");
     expect(text(waitrons)).toBe("Waitron's");
-    expect(waitrons.querySelector(".chip")!.getAttribute("style")).toBe("background:#1f6feb");
+    expect(waitrons.querySelector(".chip")!.getAttribute("style")).toBe("background:#007392");
     expect(segmented(el, "background").value).toBe("neutral");
     expect(segmented(el, "corners").value).toBe("standard");
     expect(codeField(el).value).toBe("");

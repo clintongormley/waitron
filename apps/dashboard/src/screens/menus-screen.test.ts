@@ -13199,7 +13199,7 @@ it.each(
     );
     expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(width);
     const color = getComputedStyle(inStructure(el, '[data-test="root-name"]')!).color;
-    expect(color).toBe(theme === "dark" ? "rgb(236, 238, 242)" : "rgb(22, 24, 29)");
+    expect(color).toBe(theme === "dark" ? "rgb(236, 238, 242)" : "rgb(35, 31, 32)");
     await expectNoA11yViolations(el.parentElement!);
     await page.screenshot({
       element: el,

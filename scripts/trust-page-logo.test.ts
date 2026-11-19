@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
  * It reads TEXT and never imports, renders or executes either file. WHAT THAT CANNOT SEE:
  *
  *   - It proves the two DRAWINGS match. It proves nothing about whether the pasted svg actually
- *     renders, whether the wordmark and mark are readable against the page in either theme, or
+ *     renders, whether the logo is readable against the page in either theme, or
  *     whether the `prefers-color-scheme` rule inside the svg works at all.
  *   - Paint and labelling are ignored deliberately, because they are the parts that differ: `fill`,
  *     `class`, `style`, the whole inline `<style>` block, `role` and `aria-label`. A wrong colour
@@ -61,8 +61,9 @@ const ROOT_TAG = /^<svg\b[^>]*>/;
 const RE_COPY =
   `The logo in apps/server/src/trust-page-logo.ts no longer draws the same picture as ` +
   `packages/ui/brand/waitron-lockup.svg. Re-copy the lockup's markup into that constant and ` +
-  `re-apply only the three deliberate differences: the inline <style> block, class= in place of ` +
-  `fill= on the two groups, and role/aria-label plus width/height on the root <svg>.`;
+  `re-apply only the four deliberate differences: the inline <style> block, no fill= on the ink ` +
+  `group (the <style> paints it), the classes ink, sky and teal renamed wt-logo-ink, wt-logo-sky ` +
+  `and wt-logo-teal, and role/aria-label plus width/height on the root <svg>.`;
 
 /** The svg element out of a file that may be TypeScript wrapping it in a template literal. */
 function inlineSvg(source: string, path: string): string {

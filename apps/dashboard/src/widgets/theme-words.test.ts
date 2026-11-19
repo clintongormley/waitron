@@ -97,8 +97,10 @@ const BLOCKED: ThemeChoices = {
   ...WAITRON_CHOICES,
   handSet: { light: { text: "#555555", "surface-sunken": "#555555" }, dark: {} },
 };
+// Against the default teal no single hover colour fails both hover rules; the old blue leaves room.
 const HOVER: ThemeChoices = {
   ...WAITRON_CHOICES,
+  brandColor: "#1f6feb",
   handSet: { light: { "primary-hover": "#787878" }, dark: {} },
 };
 const BOTH_WAYS: ThemeChoices = {
