@@ -1496,6 +1496,8 @@ export interface HeldOrder {
   /** The order's own way, whatever its department now says. */
   dining: Dining;
   diningChoice: DiningChoice;
+  setMenus?: BillSetMenuState;
+  setMenuCopies?: ServedSetMenuCopy[];
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
     /**

@@ -285,7 +285,7 @@ it("returns each bill's recorded copy in full with one lookup, even after republ
   }
 });
 
-it("starts a counter takeaway with one set menu and replays the same order number", async () => {
+async function counterTakeaway() {
   const { venue, copy } = fixture;
   const id = crypto.randomUUID();
   const zoneId = venue.counter.zoneId;
@@ -301,7 +301,13 @@ it("starts a counter takeaway with one set menu and replays the same order numbe
       "till_choice",
     );
   });
-  const body = { id, zoneId, dining: "takeaway", lines: [], firstSetMenuId: copy.menuId };
+  return { id, zoneId, dining: "takeaway", lines: [], firstSetMenuId: copy.menuId };
+}
+
+it("starts a counter takeaway with one set menu and replays the same order number", async () => {
+  const { venue } = fixture;
+  const body = await counterTakeaway();
+  const { id } = body;
   const opened = await request("POST", "/api/working-orders", body);
   expect(opened.status).toBe(200);
   const answer = await opened.json();
@@ -347,4 +353,37 @@ it("requires the shown counter zone before opening a bill for a set menu", async
       .from(workingOrders)
       .where(eq(workingOrders.id, id)),
   ).toEqual([]);
+});
+
+it("reopens a counter takeaway with the original menu's price and dishes after republishing", async () => {
+  const { venue, copy } = fixture;
+  const original = await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, copy.menuId, { setPrice: "14.00" });
+    return publishWorkingMenu(tx, copy.fullMenuId);
+  });
+  const body = await counterTakeaway();
+  expect((await request("POST", "/api/working-orders", body)).status).toBe(200);
+  await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, copy.menuId, { setPrice: "15.00" });
+    await publishWorkingMenu(tx, copy.fullMenuId);
+  });
+  const reopened = await request("GET", `/api/working-orders/${body.id}`);
+  expect(reopened.status).toBe(200);
+  expect(await reopened.json()).toMatchObject({
+    dining: "takeaway",
+    lines: [],
+    setMenus: { recorded: { [copy.menuId]: original }, setMenus: [{ lineNo: 1 }] },
+    setMenuCopies: [
+      { menuId: copy.menuId, terms: { price: "14.00" }, offers: [{ id: copy.menuItemId }] },
+    ],
+  });
+  const parked = await request("GET", "/api/working-orders");
+  expect(parked.status).toBe(200);
+  expect(await parked.json()).toContainEqual(
+    expect.objectContaining({
+      id: body.id,
+      items: [],
+      total: "14.00",
+    }),
+  );
 });

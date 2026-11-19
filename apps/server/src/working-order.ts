@@ -125,6 +125,8 @@ import type {
   OptionSnapshot,
   SaleLineClassification,
   TableSignal,
+  BillSetMenuState,
+  ServedSetMenuCopy,
 } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
 import { placementOf } from "./floor-today-store.js";
@@ -139,6 +141,7 @@ import {
   carryBillSetMenuCopies,
   placeSetMenuRows,
   readBillSetMenus,
+  readBillsSetMenus,
   refuseSetMenuMoney,
   refuseDraftLosingSetMenuPlace,
   refuseUnlessSetMenuBill,
@@ -193,6 +196,7 @@ import {
   billPartyTables,
   billPaymentRefunds,
   billPayments,
+  billSetMenuCopies,
   devices,
   diningTables,
   tableMerges,
@@ -1490,7 +1494,7 @@ export interface ParkOrderResult {
   id: string;
   orderNumber: number;
   revision?: number;
-  setMenus?: Awaited<ReturnType<typeof readBillSetMenus>>;
+  setMenus?: BillSetMenuState;
 }
 
 /**
@@ -5297,6 +5301,8 @@ export interface HeldOrder {
   /** The order's own way of selling, whatever its department now says. */
   dining: Dining;
   diningChoice: DiningChoice;
+  setMenus?: BillSetMenuState;
+  setMenuCopies?: ServedSetMenuCopy[];
   /**
    * PARENT rows only, each dish's child lines nested as `extras`.
    */
@@ -5453,6 +5459,12 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         receiptLocale: workingOrders.receiptLocale,
         invoiceType: workingOrders.invoiceType,
         partyId: workingOrders.partyId,
+        hasSetMenus: exists(
+          tx
+            .select({ id: billSetMenuCopies.workingOrderId })
+            .from(billSetMenuCopies)
+            .where(eq(billSetMenuCopies.workingOrderId, id)),
+        ).mapWith(Boolean),
       })
       .from(workingOrders)
       .where(and(eq(workingOrders.id, id), which));
@@ -5485,7 +5497,12 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       })
       .from(workingOrderLines)
       .leftJoin(products, eq(products.id, workingOrderLines.productId))
-      .where(eq(workingOrderLines.workingOrderId, id))
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, id),
+          or(isNull(workingOrderLines.setMenuRole), ne(workingOrderLines.setMenuRole, "set_menu")),
+        ),
+      )
       .orderBy(workingOrderLines.lineNo);
     const declarations = await readProductDeclarations(
       tx,
@@ -5615,6 +5632,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       ...(order.receiptLocale === null ? {} : { receiptLanguage: order.receiptLocale }),
       invoiceType: order.invoiceType,
       ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
+      ...(order.hasSetMenus ? (await readBillsSetMenus(tx, [id])).get(id)! : {}),
       lines,
     };
   });
