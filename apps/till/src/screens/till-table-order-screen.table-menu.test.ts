@@ -380,6 +380,30 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(item(el, '[data-action="print-bill"]')).toBeNull();
   });
 
+  it("offers no Print the bill for a bill that needs paper where receipts may not print", async () => {
+    const el = await mountScreen();
+    el.canPrintReceipts = false;
+    await el.updateComplete;
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
+  });
+
+  it.each([
+    ["A4", { medium: "a4", pagePrinterId: "printer-1" }],
+    ["email", { medium: "email", recipient: "guest@example.test" }],
+  ] as const)(
+    "offers Print the bill for a full invoice going to %s where receipts may not print",
+    async (_medium, invoiceDelivery) => {
+      const el = await mountScreen({
+        bills: [partyBill("wo-2", 2, "54.00", { invoiceType: "F1", invoiceDelivery })],
+      });
+      el.canPrintReceipts = false;
+      await el.updateComplete;
+
+      expect(item(el, '[data-action="print-bill"]')).not.toBeNull();
+    },
+  );
+
   it("offers Print the bill on a presented bill with no invoice number", async () => {
     const presented = partyBill("wo-2", 2, "54.00", { status: "placed" });
     const el = await mountScreen({ bills: [presented] });

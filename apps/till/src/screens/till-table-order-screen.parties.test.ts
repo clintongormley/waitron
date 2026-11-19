@@ -597,6 +597,14 @@ describe("till-table-order-screen: Print the bill beside Finish table's refusal"
     expect(shadow(el).querySelector("[data-finish-refusal] [data-print-bill]")).not.toBeNull();
   });
 
+  it("offers no Print the bill for a bill that needs paper where receipts may not print", async () => {
+    const el = await mountScreen({ finishRefused: true, canPrintReceipts: false });
+
+    const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    expect(refusal.querySelector("[data-take-payment]")).not.toBeNull();
+    expect(refusal.querySelector("[data-print-bill]")).toBeNull();
+  });
+
   it("offers no Print the bill when the bill it names already has its receipt", async () => {
     const printed: PartyBill = {
       ...check,

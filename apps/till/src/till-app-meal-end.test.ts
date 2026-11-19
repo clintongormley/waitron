@@ -1097,6 +1097,68 @@ describe("till-app: Print the bill with dishes not served", () => {
   });
 });
 
+describe("till-app: Print the bill on a device that may not print receipts", () => {
+  const noReceipts: CapabilityFlag[] = ["take-cash", "hand-over-orders"];
+  const tablet = "tablet-landscape" as const;
+  const devices = [
+    ["till", {}],
+    [
+      "tablet",
+      {
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, formFactor: tablet, capabilities: noReceipts }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "till-dev", name: "Till 1", formFactor: tablet }),
+      },
+    ],
+  ] as const;
+  const printInMenu = (el: TillApp) =>
+    shadow(el).querySelector('[data-table-menu] [data-action="print-bill"]');
+
+  it.each(devices)(
+    "offers no Print the bill for a bill that needs paper on a %s, and sends nothing if asked",
+    async (_device, device) => {
+      const { el, endMeal } = await openBill(device, noReceipts);
+
+      expect(printInMenu(el)).toBeNull();
+      await printBill(el);
+
+      expect(endMeal).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["A4", { medium: "a4", pagePrinterId: "printer-1" }],
+    ["email", { medium: "email", recipient: "guest@example.test" }],
+  ] as const)("offers and prints a full invoice going to %s", async (_medium, invoiceDelivery) => {
+    const { el, endMeal } = await openBill(
+      {
+        getPartyBills: vi.fn(async () => [billOf({ invoiceType: "F1", invoiceDelivery })]),
+      },
+      noReceipts,
+    );
+
+    expect(printInMenu(el)).not.toBeNull();
+    await printBill(el);
+
+    expect(endMeal).toHaveBeenCalledOnce();
+  });
+
+  it("offers and prints a paper bill on a till with no device, which the server lets through", async () => {
+    const { el, endMeal } = await openBill(
+      { getDeviceIdentity: vi.fn().mockRejectedValue(new Error("network")) },
+      noReceipts,
+    );
+
+    expect(printInMenu(el)).not.toBeNull();
+    await printBill(el);
+
+    expect(endMeal).toHaveBeenCalledOnce();
+  });
+});
+
 describe("till-app: Print the bill from Finish table's refusal", () => {
   it("sends nothing when the table was left, reopened and moved on while the pressed bill was read", async () => {
     let revision = 3;

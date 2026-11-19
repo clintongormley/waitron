@@ -20131,6 +20131,7 @@ export class TillApp extends LitElement {
       !printBillOffered(bill, {
         dishes: this.tabLines.length,
         paymentUnanswered: this.#unansweredWholePayments.has(workingOrderId),
+        printsReceipts: this.#mayPrintReceipts(),
         takesPayment: this.permissions.includes("payment.take"),
       })
     )
@@ -20237,6 +20238,11 @@ export class TillApp extends LitElement {
       await this.#loadPartyBills();
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
     }
+  }
+
+  /** The server lets a request from no device through, so only a device's profile can forbid it. */
+  #mayPrintReceipts(): boolean {
+    return this.deviceId === undefined || this.capabilities.includes("print-receipt");
   }
 
   /** Print the bill's answer, while the party it was sent for is on screen, and a not-served list
@@ -22986,6 +22992,7 @@ export class TillApp extends LitElement {
       .finishRefused=${this.finishRefused}
       .mealEnd=${this.#mealEndShown()}
       .canMarkServed=${this.capabilities.includes("hand-over-orders")}
+      .canPrintReceipts=${this.#mayPrintReceipts()}
       .takesPayment=${this.permissions.includes("payment.take")}
       .nameRefusal=${this.nameRefusal}
       .billNameRefusal=${this.billNameRefusal}
@@ -23180,6 +23187,7 @@ export class TillApp extends LitElement {
           .finishRefused=${this.finishRefused}
           .mealEnd=${this.#mealEndShown()}
           .canMarkServed=${this.capabilities.includes("hand-over-orders")}
+          .canPrintReceipts=${this.#mayPrintReceipts()}
           .takesPayment=${this.permissions.includes("payment.take")}
           .nameRefusal=${this.nameRefusal}
           .billNameRefusal=${this.billNameRefusal}

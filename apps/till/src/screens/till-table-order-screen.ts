@@ -1428,6 +1428,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) canSettle = true;
   /** The signed-in person may take payment, which Print the bill needs; `false` hides it. */
   @property({ type: Boolean }) takesPayment = true;
+  /** This device may print receipts; `false` hides what would need one. */
+  @property({ type: Boolean }) canPrintReceipts = true;
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
   /** Mounted inside a card host, which supplies the header. */
@@ -5323,6 +5325,7 @@ export class TillTableOrderScreen extends LitElement {
     return printBillOffered(bill, {
       dishes: onScreen ? this.lines.length : undefined,
       paymentUnanswered: onScreen && this.paymentConfirmation !== undefined,
+      printsReceipts: this.canPrintReceipts,
       takesPayment: this.takesPayment,
     });
   }

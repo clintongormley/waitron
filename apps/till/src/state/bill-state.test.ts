@@ -189,9 +189,33 @@ describe("stillToPay", () => {
 });
 
 describe("printBillOffered", () => {
-  const seen = { dishes: 1, paymentUnanswered: false, takesPayment: true };
+  const seen = { dishes: 1, paymentUnanswered: false, printsReceipts: true, takesPayment: true };
+  const noReceipts = { ...seen, printsReceipts: false };
+  const toA4 = { medium: "a4", pagePrinterId: "printer-1" } as const;
+  const byEmail = { medium: "email", recipient: "guest@example.test" } as const;
 
   it.each([
+    ["a simplified bill where receipts may not print", {}, noReceipts, false],
+    ["a simplified bill staged for A4 there", { invoiceDelivery: toA4 }, noReceipts, false],
+    ["a full invoice with no delivery chosen there", { invoiceType: "F1" }, noReceipts, false],
+    [
+      "a full invoice going on a receipt there",
+      { invoiceType: "F1", invoiceDelivery: { medium: "receipt" } },
+      noReceipts,
+      false,
+    ],
+    [
+      "a full invoice going to A4 there",
+      { invoiceType: "F1", invoiceDelivery: toA4 },
+      noReceipts,
+      true,
+    ],
+    [
+      "a full invoice going by email there",
+      { invoiceType: "F1", invoiceDelivery: byEmail },
+      noReceipts,
+      true,
+    ],
     ["an open bill with dishes", {}, seen, true],
     ["a presented bill with no ticket", { status: "placed" }, seen, true],
     ["a bill with dishes all given away", { total: "0.00", outstanding: "0.00" }, seen, true],

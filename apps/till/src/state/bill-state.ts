@@ -7,18 +7,34 @@ export function owing(bill: Pick<PartyBill, "status">): boolean {
   return bill.status === "open" || bill.status === "placed";
 }
 
+/** As the server's `needsPaper`: only a full invoice going to A4 or by email prints no receipt. */
+function needsReceiptPaper(bill: Pick<PartyBill, "invoiceType" | "invoiceDelivery">): boolean {
+  const medium = bill.invoiceDelivery?.medium;
+  return bill.invoiceType !== "F1" || (medium !== "a4" && medium !== "email");
+}
+
 /**
  * Print the bill is offered for a bill with no ticket that still owes and was not left unpaid, with
- * no whole payment awaiting its answer, to a person who may take payment, and with dishes on it; the
- * server's other refusals are said when it is pressed. `dishes` is the
- * count of the bill's sent dishes when the till has read them; for a bill it has not read, the bills
- * read's total stands in, so an open bill off screen at 0.00 is not offered, given away or empty.
+ * no whole payment awaiting its answer, to a person who may take payment, on a device that may print
+ * what the bill needs, and with dishes on it; the server's other refusals are said when it is
+ * pressed. `dishes` is the count of the bill's sent dishes when the till has read them; for a bill it
+ * has not read, the bills read's total stands in, so an open bill off screen at 0.00 is not offered,
+ * given away or empty.
  */
 export function printBillOffered(
-  bill: Pick<PartyBill, "status" | "invoiceNumber" | "leftUnpaid" | "total">,
-  seen: { dishes: number | undefined; paymentUnanswered: boolean; takesPayment: boolean },
+  bill: Pick<
+    PartyBill,
+    "status" | "invoiceNumber" | "leftUnpaid" | "total" | "invoiceType" | "invoiceDelivery"
+  >,
+  seen: {
+    dishes: number | undefined;
+    paymentUnanswered: boolean;
+    printsReceipts: boolean;
+    takesPayment: boolean;
+  },
 ): boolean {
   if (!seen.takesPayment || seen.paymentUnanswered) return false;
+  if (!seen.printsReceipts && needsReceiptPaper(bill)) return false;
   if (bill.invoiceNumber !== undefined || bill.leftUnpaid === true || !owing(bill)) return false;
   return seen.dishes === undefined
     ? bill.status === "placed" || compareDecimal(decimal(bill.total), decimal("0")) !== 0
