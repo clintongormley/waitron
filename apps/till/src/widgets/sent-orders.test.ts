@@ -1157,18 +1157,20 @@ it("combines covered soups of the same type but separates a surcharge and anothe
     ["daily-one", "daily"],
     ["daily-two", "daily"],
     ["special-one", "special"],
-    ["daily-three", "daily"],
+    ["daily-three", "daily-older"],
+    ["daily-four", "daily-later"],
   ] as const;
   const copies = [
     ["daily-copy", "daily"],
     ["special-copy", "special"],
     ["daily-older-copy", "daily"],
+    ["daily-later-copy", "daily"],
   ] as const;
   const setMenus: BillSetMenuState = {
     copies: copies.map(([id, setMenuId]) => ({
       id,
       setMenuId,
-      versionId: "lunch",
+      versionId: id,
       name: setMenuId,
       priceCents: 1400,
       terms: { vatClass: "reduced", takeawayVatClass: "reduced" },
@@ -1178,13 +1180,14 @@ it("combines covered soups of the same type but separates a surcharge and anothe
     recorded: {},
     setMenus: types.map(([id, type], index) => ({
       lineId: id,
-      copyId: id === "daily-three" ? "daily-older-copy" : `${type}-copy`,
+      copyId: `${type}-copy`,
       lineNo: 10 + index,
     })),
     dishes: (
       [
         ["soup-one", "daily-one", 0],
         ["soup-two", "daily-two", 0],
+        ["soup-three", "daily-four", 0],
         ["soup-surcharge", "daily-three", 500],
         ["soup-special", "special-one", 0],
       ] as const
@@ -1217,7 +1220,7 @@ it("combines covered soups of the same type but separates a surcharge and anothe
   );
   const el = await mount(data, { lines, setMenus });
   expect(shownLines(el, "data-fired-line")).toEqual([
-    ["soup-one", "Soup ×2 menu", "€0.00"],
+    ["soup-one", "Soup ×3 menu", "€0.00"],
     ["soup-special", "Soup ×1 menu", "€0.00"],
     ["soup-surcharge", "Soup ×1 +€5.00", "€5.00"],
   ]);

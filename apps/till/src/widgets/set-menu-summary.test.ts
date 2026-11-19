@@ -82,6 +82,14 @@ it("offers only open compatible move targets and shows the destination price bef
     lineId: "sent-sirloin",
     to: { setMenuLineId: "special-1", place: 0 },
   });
+  el.draft = [seaBass];
+  await el.updateComplete;
+  await userEvent.click(moveButton!);
+  expect(
+    Array.from(root!.querySelectorAll("[data-move-options] wt-button"), (button) =>
+      button.textContent!.replace(/\s+/g, " ").trim(),
+    ),
+  ).toEqual(["Daily menu 2 · Main or Starter · +€5.00"]);
 });
 
 it("omits the place a dish already occupies even when it has spare capacity", async () => {

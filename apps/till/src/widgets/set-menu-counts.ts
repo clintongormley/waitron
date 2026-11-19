@@ -47,8 +47,7 @@ export class TillSetMenuCounts extends LitElement {
     new LocaleChangeController(this);
   }
 
-  protected override willUpdate(changed: ReadonlyMap<PropertyKey, unknown>) {
-    if (!changed.has("bill") && !changed.has("onSale")) return;
+  protected override willUpdate() {
     const counts = new Map<string, Count>();
     if (this.bill !== null) {
       for (const { menu, copy } of menusWithCopies(this.bill)) {
