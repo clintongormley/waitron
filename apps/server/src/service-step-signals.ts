@@ -19,6 +19,7 @@ import {
   type StepFacts,
   type StepRule,
 } from "./service-step-reckoning.js";
+import { notSetMenuLine } from "./set-menu-bill.js";
 
 export interface StepParty {
   partyId: string;
@@ -114,6 +115,7 @@ export async function readStepFacts(
         // The NULL-parent index range includes historical top-level dishes.
         isNull(sql`+${workingOrderLines.parentLineId}`),
         onShownBill(),
+        notSetMenuLine(),
       ),
     );
   const dishes = new Map<string, DishServing[]>();

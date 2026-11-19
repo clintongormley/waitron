@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   parties,
   products,
@@ -41,6 +41,7 @@ import { extraQuantityFor } from "./working-order.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { readLineCancellations } from "./line-service-state.js";
 import "./errors.js";
+import { notSetMenuLine } from "./set-menu-bill.js";
 
 function invalid(field: string): never {
   throw new AppError("allergy.invalid", { field });
@@ -189,7 +190,7 @@ export async function readArrivingAllergyDishes(
   const lines = await tx
     .select()
     .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, billId))
+    .where(and(eq(workingOrderLines.workingOrderId, billId), notSetMenuLine()))
     .orderBy(workingOrderLines.lineNo);
   const nutrition = await productNutrition(
     tx,

@@ -1,7 +1,8 @@
-import { inArray } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 import { workingOrderLines, type Transaction } from "@waitron/db";
 import { staffPresentationName } from "@waitron/menu";
 import { thousandthsToDecimal } from "@waitron/shared";
+import { notSetMenuLine } from "./set-menu-bill.js";
 
 export interface OrderPreviewItem {
   lineId: string;
@@ -28,7 +29,7 @@ export async function readOrderPreviewItems(
       note: workingOrderLines.note,
     })
     .from(workingOrderLines)
-    .where(inArray(workingOrderLines.workingOrderId, [...orderIds]))
+    .where(and(inArray(workingOrderLines.workingOrderId, [...orderIds]), notSetMenuLine()))
     .orderBy(workingOrderLines.lineNo);
   const children = new Map<string, OrderPreviewItem["extras"]>();
   for (const row of rows) {

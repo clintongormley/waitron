@@ -13,6 +13,7 @@ import {
 } from "@waitron/db";
 import { parentJoin, parentProducts, menuItems, unitOwnerJoin, units } from "@waitron/menu";
 import { initiatedAt } from "./kitchen-phase.js";
+import { notSetMenuLine } from "./set-menu-bill.js";
 
 export interface OrderStateCounts {
   ordered: number;
@@ -142,7 +143,7 @@ export async function readOrderStateCounts(
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(units, unitOwnerJoin)
-    .where(inArray(workingOrderLines.workingOrderId, [...orderIds]));
+    .where(and(inArray(workingOrderLines.workingOrderId, [...orderIds]), notSetMenuLine()));
   const extras = new Map<string, KitchenPart[]>();
   for (const line of lines) {
     if (line.parentLineId === null) continue;

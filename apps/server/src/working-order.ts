@@ -2243,12 +2243,10 @@ export async function fireLines(
   if (parentLines.length === 0) {
     return [];
   }
-  const partyId = await partyOfOrder(tx, orderId);
-  if (partyId !== null) await assertPartyAllergyAnswered(tx, partyId);
-  lines = parentLines;
   const chosenRows = await tx
     .select({
       id: workingOrderLines.id,
+      setMenuRole: workingOrderLines.setMenuRole,
       makeAtStationId: workingOrderLines.makeAtStationId,
       stationActive: kitchenStations.active,
     })
@@ -2257,9 +2255,17 @@ export async function fireLines(
     .where(
       inArray(
         workingOrderLines.id,
-        lines.map((line) => line.id),
+        parentLines.map((line) => line.id),
       ),
     );
+  const menuLineIds = new Set(
+    chosenRows.filter((row) => row.setMenuRole === "set_menu").map((row) => row.id),
+  );
+  lines =
+    menuLineIds.size === 0 ? parentLines : parentLines.filter((line) => !menuLineIds.has(line.id));
+  if (lines.length === 0) return [];
+  const partyId = await partyOfOrder(tx, orderId);
+  if (partyId !== null) await assertPartyAllergyAnswered(tx, partyId);
   const chosenStations = new Map(
     chosenRows.flatMap((row) =>
       row.makeAtStationId !== null && row.stationActive
