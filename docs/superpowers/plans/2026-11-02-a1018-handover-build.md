@@ -17,7 +17,7 @@ AEAT's answers.
 
 **2026-11-12:** the owner's later [returned-fact decision](../../backlog/replication-cloud.md#returned-originals-and-their-recorded-facts-a1342-2026-11-10)
 supersedes the fiscal-only return wording in this historical plan. The emergency page follows
-that decision and its [bounded Slice 8 plan](2026-11-12-a1018-8-emergency-page.md).
+that decision and its [bounded Slice 8 plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1018-8-emergency-page.md).
 
 **2026-11-16:** the [offer checks](2026-11-16-check-at-offer.md) supersede this plan's
 version-only key comparison. Offers now carry key fingerprints and a logical copy-size estimate;
@@ -149,7 +149,7 @@ is not.** Every other slice is the same under either answer.
 alone. The owner answered the same day: yes (Slice 9 as built).
 
 **2026-11-10 update:** the owner’s 2026-11-09 20:11 returned-fact decision supersedes the
-records-only boundary below for the [A1342 plan’s](2026-11-09-a1342-return-records.md) named tables.
+records-only boundary below for the [A1342 plan’s](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-a1342-return-records.md) named tables.
 It does not replay live business side effects. The historical reasoning remains below.
 
 **Dropped from the draft: "may a returned invoice come back as a tax record only?"** The approved
@@ -3233,7 +3233,7 @@ Notes from Slice 5's build:
 - M1 up with its final copy gone: both boxes wait on `handover.final_copy_changed`, and the exit is
   this slice's emergency path (read, not run).
 
-> **2026-11-11:** the [connected Slice 7 plan](2026-11-11-a1018-7-emergency-server.md)
+> **2026-11-11:** the [connected Slice 7 plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-a1018-7-emergency-server.md)
 > supersedes Tasks 7.1–7.4’s gap-table and preview boundary. The watcher deferred both tables
 > to Slice 12a; committed signed activation evidence records the interval until then.
 
@@ -3397,7 +3397,7 @@ qualification).
 
 ### Slice 8 — Emergency declaration page and guide
 
-**2026-11-12, cleared by the watcher:** the bounded [page plan](2026-11-12-a1018-8-emergency-page.md)
+**2026-11-12, cleared by the watcher:** the bounded [page plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1018-8-emergency-page.md)
 accounts for the current API, the one-way declaration decision and Lane A’s checked-address
 persistence. The original steps below remain historical.
 
@@ -3522,7 +3522,7 @@ and a limit the task texts left open. The task texts are left as written.
 
 ### Slice 10 — Return batch: evidence, and the exchange both scenarios use
 
-**2026-11-12:** Superseded by [A1342's existing return path](2026-11-09-a1342-return-records.md) and the [later returned-fact/reset decision](../../backlog/replication-cloud.md#returned-originals-and-their-recorded-facts-a1342-2026-11-10); Task 10.6 remains with A1342.
+**2026-11-12:** Superseded by [A1342's existing return path](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-a1342-return-records.md) and the [later returned-fact/reset decision](../../backlog/replication-cloud.md#returned-originals-and-their-recorded-facts-a1342-2026-11-10); Task 10.6 remains with A1342.
 
 **FISCAL**. The owner lands it. Waits for Slice 9's PASS. A fresh-context review of this slice's
 tasks, against A947 §7.1 as amended, runs before its first implementer (topology §5.2, risk 2).
@@ -3691,7 +3691,7 @@ it to M1 as a `return-receipt` envelope and records it. Test
 
 ### Slice 11 — Return batch: originals M2 never saw
 
-**2026-11-12:** Superseded by [A1342's existing return path](2026-11-09-a1342-return-records.md) and the [later returned-fact/reset decision](../../backlog/replication-cloud.md#returned-originals-and-their-recorded-facts-a1342-2026-11-10).
+**2026-11-12:** Superseded by [A1342's existing return path](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-a1342-return-records.md) and the [later returned-fact/reset decision](../../backlog/replication-cloud.md#returned-originals-and-their-recorded-facts-a1342-2026-11-10).
 
 **FISCAL — LOUD.** The owner lands it. It adds a store of returned tax records and a second filing
 path. It **does not** write `registros_facturacion`, never recomputes a huella and never builds a
@@ -3817,7 +3817,7 @@ guide (`box-status.md` `{#returned-invoices}`, both languages). Tests in their s
 
 ---
 
-**2026-11-13:** The watcher-cleared [returned-invoice detail cut](2026-11-12-a1018-returned-invoice-detail.md)
+**2026-11-13:** The watcher-cleared [returned-invoice detail cut](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1018-returned-invoice-detail.md)
 adds only a receipt marker beside originals and a read-only paged list. It supersedes the
 per-invoice reconciliation record below for this cut; acknowledgement, assignment and resolution
 remain unbuilt. Existing returned originals stay in their original tables, as A1342’s later

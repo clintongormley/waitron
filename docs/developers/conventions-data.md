@@ -4641,7 +4641,7 @@ opening the folder with `exclusive: false` never files.
 _Removed 2026-11-12 by A1420 PRs 5 and 6:_ the stop while the box's clock read behind the latest
 fiscal record, and the confirmation that lifted it. See the
 [A1420 plan](../superpowers/plans/2026-11-09-a1420-start-clock-corrects-itself.md) and the
-[A1506 plan](../superpowers/plans/2026-11-12-a1506-clock-rules.md).
+[A1506 plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1506-clock-rules.md).
 
 ### Every start confirms the box's time before it trades
 
@@ -4838,7 +4838,7 @@ start waits for its time. It opens no stop of its own.
 _2026-11-12, B3:_ the installed recipe also forwards `tag.write` (up to 4096 characters) and
 `network.read` (up to 700) to their installed adapters. An absent adapter keeps `unknown_request`
 for a line within the shell's existing limit. The clock wire described below keeps its syntax
-and 700-character limit. See the [host-read cut](../superpowers/plans/2026-11-12-b3-19-network-status.md).
+and 700-character limit. See the [host-read cut](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-b3-19-network-status.md).
 
 **The host service** (`deploy/box/`). `waitron-box.socket` listens on `/run/waitron-box/box.sock`
 (`Accept=yes`, owner `root`, group `waitron-box`, mode `0660`, at most four connections at once) and
@@ -4913,7 +4913,7 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
   PIN, while the start waits or the clock reads before 28-10-2024;
 - the person on the first-setup, restore or handover page, from their own device, when the clocks
   differ and they choose **This device** (A1482,
-  [plan](../superpowers/plans/2026-11-12-a1482-this-device-in-setup.md)). The page sends
+  [plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1482-this-device-in-setup.md)). The page sends
   `clock-challenge` then `set-clock` through the preparation path it already uses for
   `compare-clocks`, so each page's own authority admits it: the setup owner's pass on first setup,
   the recovery key or kit on restore, a `node.manage` sign-in on handover

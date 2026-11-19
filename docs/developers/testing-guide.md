@@ -4613,7 +4613,7 @@ their names):
 The dropping runs exit 0 and print a passing count, so a filtered run that "passed" may have run
 the whole file. `pnpm help test` prints `Usage: pnpm test [-- <args>...]`. This guide's own
 commands use `exec vitest run`; some landed plans name the dropping form (for example
-`docs/superpowers/plans/2026-11-12-a1209-help-tooltip-placement.md:33`). This was measured on that
+[2026-11-12-a1209-help-tooltip-placement.md:33](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1209-help-tooltip-placement.md)). This was measured on that
 one package's script.
 
 ## A matrix that varies two inputs separately never tests them together

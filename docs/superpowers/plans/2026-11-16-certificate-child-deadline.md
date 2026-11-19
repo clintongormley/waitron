@@ -10,7 +10,7 @@
 ## Small test-only repair
 
 - [x] In `apps/server/src/fiscal-certificate-diagnosis-process.test.ts`, use production’s 2,000 ms cleanup for the helper default and the explicit startup/native cases. Keep result, immediate exact-PID disappearance and next-admission checks. Change native elapsed `<3,000` to `<4,000` ms explicitly: 1,500 work + 2,000 cleanup + 500 margin; startup stays `<3,000`.
-- [x] For the cache case, use 2,000 ms cleanup and a 2,500 ms directory-opening delay, preserving the compiled-fixture regression check. Prove the source-loader variant still fails before restoring the compiled fixture. The watcher’s 11:12 clearance supersedes `2026-11-12-ci-flaky-test-rig.md:19` (cleared November 12, 16:39, per its Authority).
+- [x] For the cache case, use 2,000 ms cleanup and a 2,500 ms directory-opening delay, preserving the compiled-fixture regression check. Prove the source-loader variant still fails before restoring the compiled fixture. The watcher’s 11:12 clearance supersedes [`2026-11-12-ci-flaky-test-rig.md:19`](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-ci-flaky-test-rig.md) (cleared November 12, 16:39, per its Authority).
 - [x] Print the timeline despite empty/partial/unreadable markers and always remove owned scratch. Use raw marker text for diagnostics; keep `records()` assertions. Demonstrate the old empty-marker teardown failure first.
 - [x] Keep `fiscal-certificate-diagnosis-runner.test.ts`’s exact deadline/signal/admission assertions unchanged. Leave product code, fixture protocol, workflow, dependencies and shared settings unchanged. No new helper or framework.
 

@@ -1,6 +1,6 @@
 # B3-15: retained-key sealing and development startup
 
-The owner authorised the [parent](2026-10-26-b3-usb-installer.md), not this draft. Sol high wrote it; Claude read it (514 seconds); watcher 2026-11-10 22:20 clears the corrected development cut without another read. Apply [design §§7.2–7.3](../specs/2026-10-21-b3-usb-installer-design.md#72-what-the-key-is-sealed-to-requirements-the-exact-registers-are-slice-1s-measurement) after [B3-14](2026-11-10-b3-14-encrypted-layout.md).
+The owner authorised the [parent](2026-10-26-b3-usb-installer.md), not this draft. Sol high wrote it; Claude read it (514 seconds); watcher 2026-11-10 22:20 clears the corrected development cut without another read. Apply [design §§7.2–7.3](../specs/2026-10-21-b3-usb-installer-design.md#72-what-the-key-is-sealed-to-requirements-the-exact-registers-are-slice-1s-measurement) after [B3-14](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-10-b3-14-encrypted-layout.md).
 
 **Usable result.** A disposable disk bootstraps without Docker, restarts through a virtual TPM, removes its empty password, then reaches setup twice unattended. Its retained key independently unlocks it in the rig. Empty-password authentication keeps Waitron stopped, including Docker’s automatic restart. Unsigned development boot provides no theft-protection claim.
 

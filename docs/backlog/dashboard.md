@@ -338,7 +338,7 @@ specific existing sentence applies.
 
 The smaller Forms plan accepts the malformed-value exclusions: Boolean and enum controls, setup's
 matching series pairs and derived geography, and configuration export's matching passphrase
-minimum. Their source references are [in the approved plan](../superpowers/plans/2026-11-10-forms-refusal-placement.md), read, not run. Provider forms keep their existing credential,
+minimum. Their source references are [in the approved plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-10-forms-refusal-placement.md), read, not run. Provider forms keep their existing credential,
 merchant and Reader ID handling.
 
 

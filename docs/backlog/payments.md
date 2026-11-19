@@ -314,6 +314,11 @@ Remaining Stripe qualification and maintenance.
 
 ## Decisions and deliberate limits
 
+- **A cancellation's refund is approved on the server, not carried by the till** (owner,
+  2026-11-12, R6-5: "Approval on server"; the watcher cleared the detail below, #2983). Once a
+  €14 cancellation with a refund is approved, staff can refund that €14 without another PIN;
+  refunding more needs fresh refund authority, and the till keeps no approval credential.
+
 - **Closing a bill as a deferred payment is final in Waitron** (owner, 2026-10-21 02:40, A275;
   the words "Deferred payment" / «Pago aplazado», owner, 2026-11-11). The invoice is issued at the
   meal and the table freed; there is no awaiting-payment balance, later money-received entry,

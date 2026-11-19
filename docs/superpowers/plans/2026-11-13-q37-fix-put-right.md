@@ -469,7 +469,7 @@ Behaviour:
   names the case. A body that sends `caseId` keeps today's checks, which refuse a case for another
   record (`record-remedy.ts:156`, `record-remedy-corrective.ts:119`). Why: no case id leaves the
   read model (`filing-overview-types.ts:67`), deliberately
-  (`docs/superpowers/plans/2026-11-09-w41s-9-fiscal-filing-screen.md:70-84`).
+  ([2026-11-09-w41s-9-fiscal-filing-screen.md:70-84](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-w41s-9-fiscal-filing-screen.md)).
 - `putRightFor` is the Refusal → fix table, with the `1112` F2 row answering `not-yet` until Task
   3c, and the `1100` row offering `record-correction` only when the case's latest AEAT message
   (`submission.mensajeError`, else `evidence.mensaje`) contains `DescripcionOperacion`, ignoring

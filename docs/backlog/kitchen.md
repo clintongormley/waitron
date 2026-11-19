@@ -183,7 +183,7 @@ fired" dropdown (A773) is not adopted.
 
 ### Changes after sending: every part of a dish decides, and removal is not gated (A756 PR 8, 2026-10-24)
 
-**2026-11-11:** [R3-owner](../superpowers/plans/2026-11-11-r3-owner-retire-recall.md)
+**2026-11-11:** [R3-owner](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-r3-owner-retire-recall.md)
 retires Recall and moves every sent-dish removal to Cancel item. The following dated ruling
 records the earlier order-edit removal path; the station setting still governs Change dish.
 

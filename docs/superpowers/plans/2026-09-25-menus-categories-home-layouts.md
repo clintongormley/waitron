@@ -453,7 +453,7 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
       Tasks 14 and 15) instead.
       _(2026-10-01: lifted for held groups by B20, owner 2026-09-30; see docs/backlog.md.)_
       _(2026-11-11: the owner's R4 answer retires this remaining refusal; see
-      [the R4 build plan](2026-11-11-r4-bill-rules.md).)_
+      [the R4 build plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-r4-bill-rules.md).)_
     - **A no-route line under a HELD course** is not stamped when `fireLines` skips it, because its
       course has not fired. `fireCourse` and `sendLines` today act on `ticket_items` alone
       (`working-order.ts:942-1020`), so they gain a lookup of the course's no-route LINES and stamp

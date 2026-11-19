@@ -62,11 +62,11 @@ A reload or another device resumes the saved declaration without declaring it ag
 restart rechecks the copy against its signed declaration at activation. The page retains the one
 entered password/code in memory and asks for a replacement only if the authenticator code expires,
 as the watcher cleared at 03:59. Real-box and Cloud qualification remain open. The bounded
-[page plan](../superpowers/plans/2026-11-12-a1018-8-emergency-page.md) was cleared by the watcher on 12 November;
+[page plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1018-8-emergency-page.md) was cleared by the watcher on 12 November;
 the last checked address it needs is kept across restarts since A947 3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898)), so it no longer waits on that.
 
 The read-only interval list shows both current box names, the copy’s latest sale/order time or Unknown, labelled
-venue-zone declaration and activation times, and the entered reason. **12a follow-up PR 1** adds a [warning beside sales/cash-up/category reports and VAT](../superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md), linking report viewers to the handover dates. It does not identify affected report periods. The interval read remains passive. The [durable receiver completion work](../superpowers/plans/2026-11-12-a1018-return-completion.md) records accounted batch digests against the matched emergency takeover in venue.db; a complete advertised inventory confirms receipt across restart and later venue copies. Report warnings remain general date reminders; receipt does not reconstruct cash-ups or confirm missing activity and amounts. Already stopped senders need a restricted restart to resend; no backfill is performed. Acknowledgement, assignment and resolution remain outside this cut. A1342’s marker is now stored and returned invoices are listed. Reports show a general notice, without identifying affected invoices or periods; duplicates are not identified.
+venue-zone declaration and activation times, and the entered reason. **12a follow-up PR 1** adds a [warning beside sales/cash-up/category reports and VAT](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md), linking report viewers to the handover dates. It does not identify affected report periods. The interval read remains passive. The [durable receiver completion work](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1018-return-completion.md) records accounted batch digests against the matched emergency takeover in venue.db; a complete advertised inventory confirms receipt across restart and later venue copies. Report warnings remain general date reminders; receipt does not reconstruct cash-ups or confirm missing activity and amounts. Already stopped senders need a restricted restart to resend; no backfill is performed. Acknowledgement, assignment and resolution remain outside this cut. A1342’s marker is now stored and returned invoices are listed. Reports show a general notice, without identifying affected invoices or periods; duplicates are not identified.
 
 Left for the slices that add the callers:
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
@@ -743,14 +743,14 @@ stopped and no return filing case or acceptance.
 **2026-11-11:** The owner's 10 November 21:41 choice “1” puts exact-clash acceptance in a separate
 signed handover record, checked against signed return evidence. The 19:30 split says “no new
 acceptance rule in fiscal-verifactu”; `filing-cases.ts` remains untouched. The watcher cleared the
-payment-only [PR2 plan](../superpowers/plans/2026-11-11-a1342-clash-acceptance.md) at 16:59 on
+payment-only [PR2 plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-a1342-clash-acceptance.md) at 16:59 on
 11 November. Node-local signed evidence and decisions drive retry; venue activity history retains
 who accepted which clash across backup and handover for the live log’s 30-day retention,
 without deciding product behaviour. Earlier backup points retain their own history.
 
 **2026-11-12, A1342-3:** The owner's 13:52 direction is that a spare taking over becomes the new
 main, and the old main returns its data to it; switching roles again uses the same handover.
-The watcher at 15:58 cleared the [plain-stop rework](../superpowers/plans/2026-11-12-a1342-plain-stop-rework.md):
+The watcher at 15:58 cleared the [plain-stop rework](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1342-plain-stop-rework.md):
 record clashes stop the return with a specific message on the old box, without record acceptance,
 downloads or a new receipt field. Payment-clash acceptance stays separate.
 
@@ -758,7 +758,7 @@ The owner said at 16:25 on 11 November, recorded by the watcher in Lane J's `que
 “i don't think we should refuse, just warn. It may be impossible to transfer the data for some
 reason, we shouldn't block them from reusing the box”. Reset therefore remains available, with a
 warning that it deletes venue data and that an unfinished return is not confirmed.
-The reviewed plan is [return originals before reset](../superpowers/plans/2026-11-09-a1342-return-records.md).
+The reviewed plan is [return originals before reset](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-a1342-return-records.md).
 
 **A mirror serves no dashboard (owner, 2026-10-26; scope narrowed by the watcher, 2026-11-08).**
 A spare shows its status and refuses restaurant screens and data. Its ambient administrator is

@@ -27,6 +27,11 @@ note should become its own document type.
 
 ## Decisions and deliberate limits
 
+- **Takings by department count a whole bill under its recorded department (owner, 2026-11-11,
+  A897: "All under Restaurant").** A Restaurant bill with €80 food and €20 drinks, paid €40 cash
+  and €60 card, adds all €100 and one closed bill to Restaurant; a bill's lines are never split
+  between departments.
+
 - **Recipes are dropped, not parked (owner, 2026-11-04).** Recipe depth (nested sub-recipes, plate
   costing, stock depletion) ended with this decision: it assumed an authoring surface that no longer
   exists. If recipes are ever wanted again, they start from a new design. A product's allergens and

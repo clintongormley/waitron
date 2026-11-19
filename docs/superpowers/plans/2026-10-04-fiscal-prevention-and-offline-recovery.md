@@ -596,7 +596,7 @@ rename the original sale or replace its stored payload.
 
 ## Task 9: fiscal filing screen and missing-history investigation
 
-**2026-11-09 execution remap:** follow the [W41s-9 plan](2026-11-09-w41s-9-fiscal-filing-screen.md)
+**2026-11-09 execution remap:** follow the [W41s-9 plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-w41s-9-fiscal-filing-screen.md)
 for this task's current files, scope and gates. The original task below remains the acceptance
 outline; this pointer claims no implementation.
 

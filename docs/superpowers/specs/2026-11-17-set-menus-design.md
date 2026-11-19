@@ -9,7 +9,7 @@ placed (sections 2 and 3, rewritten), so the bill no longer works out a mix of t
 itself, and nothing needs freezing at payment (section 4). The rewritten sections are for the
 owner to read. Plans: one per piece, under
 "The pieces, for planning". Replaces the set-lunch design in
-[2026-11-12-a1515-set-lunch-proposal.md](2026-11-12-a1515-set-lunch-proposal.md), whose build is
+[2026-11-12-a1515-set-lunch-proposal.md](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md), whose build is
 being removed first (A1515-REMOVE, queued on lane D).
 
 Decisions marked **owner** were made by the owner on 17 November 2026. Decisions marked **my call**

@@ -1,4 +1,4 @@
-> **2026-11-09 amendment:** [Demo notice capture](2026-11-09-a987-demo-account-capture.md)
+> **2026-11-09 amendment:** [Demo notice capture](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-a987-demo-account-capture.md)
 
 > **2026-11-14:** [A1308 env4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP storage shape below: only the URL is sealed; the sender is in `settings.mail`. Use dashboard Email settings for SMTP saves/removals; the generic credentials CLI refuses SMTP set/delete.
 > keeps account mail, reminders and alerts in local capture outside development even with saved SMTP

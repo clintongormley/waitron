@@ -500,9 +500,9 @@ Plan one multi-platform application image with arm64 smoke, and an arm64 install
 
 - Live updates of existing installations keep the practice inbox profile, through both `waitron.sh`’s checked manual-upgrade path and the USB recipe’s updater: `scripts/box/upgrades/host.mjs` restarts it without the production selector (env5 limit; watcher, 2026-11-13 06:07).
 
-The [network display](../superpowers/plans/2026-11-12-b3-20-network-screen.md) shows the installed host’s wired and Wi-Fi observation on System → Box status. The [first Wi-Fi host cut](../superpowers/plans/2026-11-14-b3-wifi-host.md) adds installed-host scan/join and a separately reported, restart-persistent boot copy through the existing protected API. [Slice 2a](../superpowers/plans/2026-11-14-b3-wifi-host-reconcile.md) adds forget and reconciles the boot copy at startup and after operations. [Slice 2b](../superpowers/plans/2026-11-15-b3-wifi-host-monitor.md) observes outside NetworkManager changes and starts the existing locked worker to refresh the boot copy. The [Box status controls](../superpowers/plans/2026-11-15-b3-wifi-controls.md) offer scan, join and confirmed Forget through that API, with running and boot-copy outcomes reported separately. Real adapter/restart/power-cut qualification remains open.
+The [network display](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-b3-20-network-screen.md) shows the installed host’s wired and Wi-Fi observation on System → Box status. The [first Wi-Fi host cut](../superpowers/plans/2026-11-14-b3-wifi-host.md) adds installed-host scan/join and a separately reported, restart-persistent boot copy through the existing protected API. [Slice 2a](../superpowers/plans/2026-11-14-b3-wifi-host-reconcile.md) adds forget and reconciles the boot copy at startup and after operations. [Slice 2b](../superpowers/plans/2026-11-15-b3-wifi-host-monitor.md) observes outside NetworkManager changes and starts the existing locked worker to refresh the boot copy. The [Box status controls](../superpowers/plans/2026-11-15-b3-wifi-controls.md) offer scan, join and confirmed Forget through that API, with running and boot-copy outcomes reported separately. Real adapter/restart/power-cut qualification remains open.
 
-The development console shows Spanish and English together, names the checked venue and warns when its tag marks it Live; missing or unusable tags leave Live status unknown. It returns through a one-time EFI boot choice after 15 seconds. Keys pause it until 120 seconds without typing. The `existing-stick` rig completes Prepare, waits for the real startup counter to clear, and requires a continuous return with USB attached, unchanged disk hash before installed startup, unchanged chip unlock and `/health`. The graphical warning, reinstall controls and physical qualification remain open. [Return cut](../superpowers/plans/2026-11-11-b3-18b-firmware-return.md).
+The development console shows Spanish and English together, names the checked venue and warns when its tag marks it Live; missing or unusable tags leave Live status unknown. It returns through a one-time EFI boot choice after 15 seconds. Keys pause it until 120 seconds without typing. The `existing-stick` rig completes Prepare, waits for the real startup counter to clear, and requires a continuous return with USB attached, unchanged disk hash before installed startup, unchanged chip unlock and `/health`. The graphical warning, reinstall controls and physical qualification remain open. [Return cut](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-b3-18b-firmware-return.md).
 
 **2026-11-11 development rehearsal:** the [recipe and installed boot checks](../../bench/box-installer/README.md)
 install five btrfs areas inside LUKS2 onto a second virtual disk. The first disk boot retains a recovery
@@ -516,10 +516,10 @@ update resealing and real stick/box/Android checks remain release gates. B3 rema
 complete. A1187 part 3 and A950 cuts 4+ can reassess their startup dependency once this cut lands;
 other prerequisites still apply. [Startup plan](../superpowers/plans/2026-11-10-b3-15-retained-key-startup.md).
 
-The [11 November firmware measurement](../superpowers/plans/2026-11-11-b3-17-existing-stick.md#measured-on-11-november-2026)
+The [11 November firmware measurement](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-b3-17-existing-stick.md#measured-on-11-november-2026)
 observed one guest-requested restart into an exact target EFI entry, with the USB attached and
 first, BootNext consumed, BootOrder unchanged and both read-only disk hashes unchanged.
-That measurement preceded the [development console return](../superpowers/plans/2026-11-11-b3-18b-firmware-return.md).
+That measurement preceded the [development console return](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-b3-18b-firmware-return.md).
 Physical-box checks remain unqualified.
 
 APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
@@ -852,7 +852,7 @@ nothing yet: one typed method for each of PR 7's seven requests.
   `boxHostRequests()` only; the clock client still answers `lost` there. Tests with a stand-in
   connection and with the real shell handler cover it; on Linux the handler answers a line over 700
   characters and then resets the connection (measured in Docker, the plan's re-map finding 9).
-**11 November update:** the development shell uses the longer 4096-character read only when its tag adapter is installed; clock requests still have the 700-character limit. A clock-only installation retains its original short read and Linux reset. The unchanged real-shell client assertions cover that legacy path; the forwarding test covers a complete long tag. [Console cut](../superpowers/plans/2026-11-11-b3-18a-name-notice.md).
+**11 November update:** the development shell uses the longer 4096-character read only when its tag adapter is installed; clock requests still have the 700-character limit. A clock-only installation retains its original short read and Linux reset. The unchanged real-shell client assertions cover that legacy path; the forwarding test covers a complete long tag. [Console cut](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-b3-18a-name-notice.md).
 
 - The two reads wait 5 seconds, the five other requests 20; `readMs` and `changeMs` override them,
   and the tests run both defaults on fake timers.

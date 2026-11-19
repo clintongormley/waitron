@@ -1950,7 +1950,7 @@ These app checks use a controlled API boundary; server persistence and the physi
 remain separate. The quantity buttons use the standard size; their previous small setting measured
 32 px high in those cases on 2026-10-19.
 
-**2026-11-11:** [R3-owner](../superpowers/plans/2026-11-11-r3-owner-retire-recall.md)
+**2026-11-11:** [R3-owner](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-r3-owner-retire-recall.md)
 retires the Recall paths in the following historical test receipt.
 
 The [modifiers integration guide](../developers/modifiers.md#ordering-and-stored-facts) distinguishes
@@ -2599,7 +2599,7 @@ following Receipt Email (#2840, `e0fa9c300f7aa43178404461efd3d5e498328650`).
 The remaining physical printer, reader and inbox checks are in the existing
 [real-box session](printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer),
 with no new prerequisite for A840/A842/A848. The following records the decisions;
-the [current payment-flow plan](../superpowers/plans/2026-11-10-a739-current-payment-flow.md)
+the [current payment-flow plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-10-a739-current-payment-flow.md)
 and [memory-only slip plan](../superpowers/plans/2026-11-10-a739-memory-only-card-slips.md)
 remain historical implementation references.
 

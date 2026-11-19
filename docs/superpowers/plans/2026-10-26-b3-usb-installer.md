@@ -1,8 +1,8 @@
-> 2026-11-12: the watcher cleared the [host-only network read](2026-11-12-b3-19-network-status.md), with installed-image qualification, ahead of the later interface.
+> 2026-11-12: the watcher cleared the [host-only network read](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-b3-19-network-status.md), with installed-image qualification, ahead of the later interface.
 
 > 2026-11-14: [Wi-Fi host slice 1](2026-11-14-b3-wifi-host.md) extends the installed executable with scan/join and boot-copy publication/restart repair. The read entry point remains read-only. Its earlier join-refusal control proves only that entry point; canonical scan/join now have positive and malformed/actor-refusal controls. Forget, external-change reconciliation and dashboard controls remain later work.
 
-> 2026-11-11: the [console warning cut](2026-11-11-b3-18c-console-warning.md) adds paired Spanish/English wording and the checked Live marking. The watcher deferred graphics to later kiosk/physical work; it is not dropped.
+> 2026-11-11: the [console warning cut](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-b3-18c-console-warning.md) adds paired Spanish/English wording and the checked Live marking. The watcher deferred graphics to later kiosk/physical work; it is not dropped.
 
 > 2026-11-06: PR 9's plan (the server's routes for six of the host's requests, behind `system.manage`, built and mounted at boot): [2026-11-06-b3-9-host-routes.md](2026-11-06-b3-9-host-routes.md); `tag.write`'s duty is left to its own pull request (its D11).
 
@@ -26,7 +26,7 @@
 
 # B3 USB Installer Implementation Plan
 
-**2026-11-10 PR B:** the [image-origin slice](2026-11-10-b3-12-image-origin.md)
+**2026-11-10 PR B:** the [image-origin slice](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-10-b3-12-image-origin.md)
 connects the development recipe’s USB origin to setup choices and the server’s
 Demo refusal, using `setup.mode_not_allowed`. Physical installation and same-box
 production re-setup remain open.
@@ -238,7 +238,7 @@ No boot-side backups, per-profile history or arbitrary-directory cleanup.
 
 ### Task 3.2: network page and display-only local till enrolment
 
-> 2026-11-12: watcher05:52/05:54 moved the read-only network display to existing Settings → Box status, with its EN/ES guide section there; no `this-box.md` guides are planned. [B3-20](2026-11-12-b3-20-network-screen.md) records the cleared cut. Watcher06:01 requires visible working-card screenshots in both themes on a box or VM built by the B3 recipe before its PR; the read-only display is implemented by B3-20; network-changing controls remain later work.
+> 2026-11-12: watcher05:52/05:54 moved the read-only network display to existing Settings → Box status, with its EN/ES guide section there; no `this-box.md` guides are planned. [B3-20](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-b3-20-network-screen.md) records the cleared cut. Watcher06:01 requires visible working-card screenshots in both themes on a box or VM built by the B3 recipe before its PR; the read-only display is implemented by B3-20; network-changing controls remain later work.
 
 **Interfaces:** `this-box-screen.ts` consumes the typed server client and `draftScopeFor`; only Red and start-screen choice ship here. New self-enrol action calls the real join-window/request/number-check/manager-acceptance flow under `device.manage`, not a new bypass. Existing session APIs are traced before binding; no new cookie names prescribed.
 

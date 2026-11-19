@@ -604,7 +604,7 @@ for a stolen device on that basis._
 _2026-11-11: A1484 replaces the hardware steps above with Delete and Add. Device Delete ends
 sign-ins and hides the device while keeping its proof and settings; that browser can ask a manager
 to add it again. The EN/ES data-protection guides now tell you to delete a lost device and never
-accept a request from it. See [the build plan](../plans/2026-11-10-a1484-hardware-delete-readd-build.md)._
+accept a request from it. See [the build plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-10-a1484-hardware-delete-readd-build.md)._
 
 ### 4.6 Record of processing
 

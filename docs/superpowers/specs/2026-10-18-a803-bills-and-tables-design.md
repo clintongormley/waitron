@@ -155,7 +155,7 @@ Boards 08–10.
 `~/waitron-campaign-d/queue.md`): an open part-paid bill may receive another bill by merge,
 keeping its payments. It still cannot be merged away. A still-seated party keeps at least one
 bill, creating an empty one after its last bill moves or is discarded/cancelled. See
-[the R4 build plan](../plans/2026-11-11-r4-bill-rules.md).
+[the R4 build plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-r4-bill-rules.md).
 
 - **One payment pays one bill.** Separate bills mean separate payments and separate receipts; a
   guest paying for two bills has them merged first (owner, 2026-10-18).

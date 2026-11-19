@@ -1,9 +1,9 @@
-> **10 November 2026, watcher01:26 approval:** follow the [current payment-flow plan](2026-11-10-a739-current-payment-flow.md). Build its non-slip cuts in order; slip recovery remains held for the owner. This supersedes conflicting build instructions below; history is preserved.
+> **10 November 2026, watcher01:26 approval:** follow the [current payment-flow plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-10-a739-current-payment-flow.md). Build its non-slip cuts in order; slip recovery remains held for the owner. This supersedes conflicting build instructions below; history is preserved.
 
 **10 November 2026 update:** the owner chose “Memory only (Recommended)” at 16:53, relayed by the watcher at 17:38. The [revised slip plan](2026-11-10-a739-memory-only-card-slips.md) supersedes the durable slip-request proposal here; Claude reviewed it and watcher17:32 cleared it with reader-only balance writes, no copy audit and a build hold until #2736 lands. This earlier plan remains historical input.
 
 > **9 November 2026, owner20:34 direction; watcher23:10 documentation approval:**
-> A739 follows A790’s [till document/printer slice](2026-11-09-a790-till-document-printer.md),
+> A739 follows A790’s [till document/printer slice](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-a790-till-document-printer.md),
 > rather than the complete historical Cut B. G4/A947, the recovery-origin file, browser journal,
 > prepare/accept exchange and all-writer revisions are dropped. A739 must replan its document-command
 > rows on today’s print path without adding a protocol. This pointer supersedes conflicting

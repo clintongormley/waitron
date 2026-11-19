@@ -248,7 +248,7 @@ prints as one line, so its contents are not compared by the tool). Any other lin
 ## Needs
 
 - Batch 1, all of it: 1a's rebuild command; slice 5 (no `location_id` anywhere).
-- A1002 cut 2 (design §10: "A1002 lands before the people slice"): the replacement [roles design](2026-11-11-a1002-roles-redesign.md) has landed; this plan carries its account-action shape unchanged.
+- A1002 cut 2 (design §10: "A1002 lands before the people slice"): the replacement [roles design](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-a1002-roles-redesign.md) has landed; this plan carries its account-action shape unchanged.
 - Inside this area: nothing (first plan).
 
 ## Assumptions about batch 1 and A1002

@@ -17,7 +17,7 @@ No helper redesign, APIs, dependencies, fake field keys or flattened Map errors.
 
 **Inventory: source inspection, not runtime verification.** Unless qualified, paths below
 are under `packages/venue-service/src/dashboard/`; all listed form sources end in `.ts`.
-The [provider plan](2026-11-12-d-form-plumbing-provider-batch.md) supplies the prior partial inventory.
+The [provider plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-d-form-plumbing-provider-batch.md) supplies the prior partial inventory.
 
 | Sources | Decision and reason |
 | --- | --- |
