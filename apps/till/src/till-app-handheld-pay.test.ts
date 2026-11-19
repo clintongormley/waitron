@@ -2532,6 +2532,50 @@ describe("till-app: the next guest on a handheld", () => {
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("payment_slip.capture_failed"));
   });
 
+  it("leaves the slip warning behind on the next guest's form, keeping Print a copy for the share paid", async () => {
+    const paid = balanceOf({
+      received: "40.00",
+      outstanding: "80.00",
+      payments: [
+        paymentOf({ canCopySlip: true, method: "card", entry: "reader", applied: "40.00" }),
+      ],
+    });
+    const getBillBalance = vi.fn().mockResolvedValue(balanceOf());
+    const { el } = await mountApp(
+      onPhone({
+        getBillBalance,
+        previewBillPayment: vi.fn().mockResolvedValue(share),
+        takeBillPayment: vi.fn().mockResolvedValue({
+          ...takenOf(
+            { method: "card", entry: "reader", applied: "40.00", tip: "0.00", change: null },
+            { received: "40.00", outstanding: "80.00" },
+          ),
+          balance: paid,
+          slipPrintFailed: true,
+        }),
+      }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    await press(el, 'input[name="way"][value="share"]');
+    await type(el, "people", "3");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    getBillBalance.mockResolvedValue(paid);
+    await press(el, "[data-pay-confirm]");
+    await vi.waitFor(() => expect(inDialog(el, "[data-pay-next]")).not.toBeNull());
+    await flush(el);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("payment_slip.capture_failed"));
+
+    await press(el, "[data-pay-next]");
+    await flush(el);
+
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    expect(inDialog(el, "wt-form-actions")!.error).toBe("");
+    expect(el.shadowRoot!.querySelector('.error[role="alert"]')).toBeNull();
+    expect(inDialog(el, '[data-payment-slip-copy="pay-1"]')).not.toBeNull();
+  });
+
   it("after the first of three shares, the sheet offers the second, which previews a share among two", async () => {
     const { el } = await mountApp(
       onPhone({

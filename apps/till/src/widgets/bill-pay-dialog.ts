@@ -1334,6 +1334,8 @@ export class TillBillPayDialog extends LitElement {
           if (!this.isConnected || !this.#active || this.busy) return;
           this.nextOffered = false;
           this.#leftTaken = true;
+          if (this.refusal?.code === "payment_slip.capture_failed")
+            this.#feedback.dismiss("refusal");
         }}
       >
         ${label}
