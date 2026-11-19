@@ -240,7 +240,10 @@ export function mountAdjustmentsApi(
               deps.attendance === undefined
                 ? undefined
                 : { recorder: deps.attendance, clock: deps.clock },
-              () => issueIfFullyPaid(tx, fiscal, saleCfg, id, personId),
+              () =>
+                issueIfFullyPaid(tx, fiscal, saleCfg, id, personId, {
+                  closeZero: ask.action === "comp" || ask.action === "discount_percent",
+                }),
             );
             await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
             return {

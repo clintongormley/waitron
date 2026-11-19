@@ -537,6 +537,46 @@ describe("giving back a part payment on a sent bill before its invoice", () => {
     expect(salesOf(id)).toEqual([]);
   });
 
+  it("settles the same issued invoice after an earlier part was refunded in full", async () => {
+    const id = await placed("uninvoiced");
+    const paymentId = await partCash(id);
+    expect((await refundOf(id, paymentId)).status).toBe(200);
+    await issueOrderInvoice(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+    const issued = salesOf(id);
+
+    const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "manual",
+      externalRef: "MANUAL-117",
+      applied: "3.00",
+      tip: "0.00",
+    });
+
+    expect(paid).toMatchObject({
+      status: 200,
+      json: {
+        balance: { status: "settled", received: "3.00", outstanding: "0.00" },
+        invoice: { total: "3.00" },
+      },
+    });
+    expect(salesOf(id)).toEqual(issued);
+    expect(tendersOf(id)).toEqual([{ method: "card", amount: 300 }]);
+    expect(paymentsOf(id)).toMatchObject([{ state: "captured", saleId: issued[0]!.id }]);
+  });
+
   it("refuses the refund once the sent bill's invoice is issued, writing nothing", async () => {
     const id = await placed("uninvoiced");
     const paymentId = await partCash(id);

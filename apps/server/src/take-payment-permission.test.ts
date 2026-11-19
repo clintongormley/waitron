@@ -253,10 +253,15 @@ describe("POST /api/pay needs payment.take", () => {
   });
 });
 
-describe("POST /api/working-orders/:id/collect needs payment.take", () => {
-  function collectCash(id: string) {
-    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/collect`, {
-      tender: { method: "cash", amount: "20.00" },
+describe("paying a presented bill needs payment.take", () => {
+  function payPresented(id: string) {
+    return billPayment(id, {
+      kind: "share",
+      amount: undefined,
+      shareOf: 1,
+      method: "cash",
+      tendered: "20.00",
+      applied: "18.00",
     });
   }
 
@@ -264,7 +269,7 @@ describe("POST /api/working-orders/:id/collect needs payment.take", () => {
     const id = await presentedCake();
     gate.deny = true;
 
-    expectRefused(await collectCash(id));
+    expectRefused(await payPresented(id));
 
     expectAsked();
     expect(await statusOf(venue, id)).toBe("placed");
@@ -273,15 +278,38 @@ describe("POST /api/working-orders/:id/collect needs payment.take", () => {
     expect(await tendersOfBill(venue, id)).toEqual([]);
   });
 
-  it("collects the same order when the permission is held", async () => {
+  it("collects the same order with payment.take on a till that cannot take orders", async () => {
     const id = await presentedCake();
 
-    const answer = await collectCash(id);
+    const profile = await inTx(venue, async (tx) => {
+      const [owner] = await tx
+        .select({ id: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
+        .from(devices)
+        .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+        .where(eq(devices.id, venue.deviceId));
+      await tx
+        .update(deviceProfiles)
+        .set({
+          capabilities: (owner!.capabilities as string[]).filter((flag) => flag !== "take-orders"),
+        })
+        .where(eq(deviceProfiles.id, owner!.id));
+      return owner!;
+    });
+    try {
+      const answer = await payPresented(id);
 
-    expect(answer.status).toBe(200);
-    expectAsked();
-    expect(await statusOf(venue, id)).toBe("settled");
-    expect(fiscalRecordCount(venue, id)).toBe(1);
+      expect(answer.status).toBe(200);
+      expectAsked();
+      expect(await statusOf(venue, id)).toBe("settled");
+      expect(fiscalRecordCount(venue, id)).toBe(1);
+    } finally {
+      await inTx(venue, (tx) =>
+        tx
+          .update(deviceProfiles)
+          .set({ capabilities: profile.capabilities })
+          .where(eq(deviceProfiles.id, profile.id)),
+      );
+    }
   });
 });
 

@@ -57,7 +57,12 @@ import {
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { cancelBody, cancelItemRequest, cancelReasonId, giveAway } from "./testing/cancel-line.js";
+import {
+  cancelBody,
+  cancelItemRequest,
+  cancelReasonId,
+  seedGivenAwayLine,
+} from "./testing/cancel-line.js";
 import { heldRow } from "./testing/held-row.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -500,7 +505,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
   },
   "POST /api/pay, a bill that owes nothing": async () => {
     const { tabId } = await seatedWith(venue, threeEuroDish());
-    await giveAway(venue, tabId, 1);
+    await seedGivenAwayLine(venue, tabId, 1);
     return {
       send: (app) => as(app, "POST", "/api/pay", { dining: "eat_in", id: tabId, lines: [] }),
       grows: ["sales", "records"],

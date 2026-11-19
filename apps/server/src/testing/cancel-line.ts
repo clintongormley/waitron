@@ -163,19 +163,28 @@ export async function cancelLine(
   );
 }
 
-/** Gives away line `lineNo` of the bill in full through the adjustment route, under
- * {@link GIVE_AWAY_REASON}. */
-export async function giveAway(venue: BillVenue, billId: string, lineNo: number): Promise<void> {
-  const reasonId = await withTransaction(venue.db, (tx) => reasonIdOf(tx, GIVE_AWAY_REASON));
-  const body = await cancelBody(venue.db, billId, lineNo);
-  const given = await send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    `/api/working-orders/${billId}/adjustments`,
-    { ...body, reasonId, action: "comp" },
-  );
-  expect(given.status).toBe(200);
+/** Seeds a comp on an open bill for tests of a later operation that settles it. */
+export async function seedGivenAwayLine(venue: BillVenue, billId: string, lineNo: number) {
+  return withTransaction(venue.db, async (tx) => {
+    const { lineId, revision } = await lineAndRevision(tx, billId, lineNo);
+    await applyAdjustment(
+      tx,
+      venue.cfg,
+      {
+        admission: testTradingAdmission(),
+        orderId: billId,
+        expectedEdit: await readBillEditState(tx, billId),
+        submissionId: randomUUID(),
+        expectedRevision: revision,
+        lineId,
+        reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON),
+        action: "comp",
+        note: null,
+        operatorId: venue.operatorId,
+      },
+      venue.cfg.locale,
+    );
+  });
 }
 
 /** Takes `percentBp` off the whole bill through the adjustment route, under

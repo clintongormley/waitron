@@ -44,7 +44,8 @@ import {
   toScale,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import type { Decimal, Dining } from "@waitron/shared";
+import { refuseOtherDining } from "./order-dining.js";
 import { recordSale, settleSale } from "@waitron/core";
 import { IssuanceRefusedError } from "@waitron/fiscal";
 import type { SettleSaleTender } from "@waitron/core";
@@ -96,6 +97,7 @@ import type { PrinterLookup } from "./receipt-print.js";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import {
+  captureWholePayment,
   fireDishesAtPayment,
   readBillTenderLines,
   readSettledTicket,
@@ -103,6 +105,8 @@ import {
   readTenderBlock,
   receiptQr,
   refusePlacedPaymentInFlight,
+  settleIssuedOrder,
+  storeSentReceiptLanguage,
 } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { fingerprint } from "./parties.js";
@@ -139,6 +143,7 @@ export type BillPaymentDeps = TillSaleDeps & {
 /** What a payment request asks for, before the operator has seen an allocation. */
 export interface BillPaymentAsk {
   expectedEdit: BillEditExpected | null;
+  dining?: Dining;
   kind: "items" | "contribution" | "share";
   /** `items` only. A line's `quantity`, absent, is the whole line. */
   lines?: { lineNo: number; quantity?: string }[];
@@ -167,6 +172,7 @@ export interface BillPaymentRequest extends BillPaymentAsk, OutsideCardDetails {
   simulationOutcome?: "captured" | "declined" | "attempting";
   applied: string;
   tip: string;
+  receiptLanguage?: string;
   /** What the receipt prints if this payment completes the bill; absent stores the default then. */
   guestCount?: number | null;
 }
@@ -765,6 +771,7 @@ async function issueWhenFullyPaid(
   operatorId: string | undefined,
   options: {
     moneyMoved?: boolean;
+    closeZero?: boolean;
     total?: Decimal;
     printers?: PrinterLookup;
     guestCount?: GuestCountChoice;
@@ -782,18 +789,58 @@ async function issueWhenFullyPaid(
   if (order?.status !== "open" && order?.status !== "placed") return notYet;
   const { rows, refunds } = await readPaymentsAndRefunds(tx, workingOrderId);
   const received = rows.filter((row) => row.state === "received");
-  if (received.length === 0 || rows.some((row) => row.state === "pending")) return notYet;
+  if (
+    (received.length === 0 && options.closeZero !== true) ||
+    rows.some((row) => row.state === "pending")
+  )
+    return notYet;
   // A card refund still pending leaves the bill's received money unknown.
   if (refunds.some((refund) => refund.state === "pending")) return notYet;
   // A captured reservation must finish even if a restored draft is still open.
   if (options.moneyMoved !== true && (await readBillUnsent(tx, workingOrderId)).length > 0)
     return notYet;
   const held = moneyOf(rows, refunds);
-  const total = await billPaymentTotal(tx, workingOrderId, options.total);
-  if (compareDecimal(total, ZERO) === 0) return { invoice: null, total };
+  const issued = await readOutstandingSaleForOrder(tx, workingOrderId);
+  const total = issued?.amountDue ?? options.total ?? (await storedOrderTotal(tx, workingOrderId));
+  const zero = compareDecimal(total, ZERO) === 0;
+  if (zero && options.closeZero !== true) return { invoice: null, total };
   if (compareDecimal(fundsOf(workingOrderId, total, held).received, total) !== 0) {
     return { invoice: null, total };
   }
+  if (zero && held.some(receivedHoldsMoney)) return { invoice: null, total };
+  const tendersOfBill: SettleSaleTender[] = held
+    .filter(receivedHoldsMoney)
+    .sort((a, b) => a.row.receivedAt!.localeCompare(b.row.receivedAt!))
+    .map(({ row, netApplied, netTip }) => ({
+      method: row.method,
+      amount: money(addDecimal(netApplied, netTip)),
+      tipAmount: money(netTip),
+      cashTendered: row.tendered === null ? null : centsToDecimal(row.tendered),
+      settledAt: new Date(row.receivedAt!),
+      billPaymentId: row.id,
+    }));
+
+  const lastReceipt = received
+    .map((row) => row.receivedAt!)
+    .reduce<string | undefined>(
+      (latest, at) => (latest === undefined || at > latest ? at : latest),
+      undefined,
+    );
+  if (issued !== undefined) {
+    const settledAt = zero ? deps.clock.now().instant : new Date(lastReceipt!);
+    await settleIssuedOrder(
+      tx,
+      { workingOrderId, saleId: issued.saleId },
+      tendersOfBill,
+      settledAt,
+      deps.log,
+    );
+    await linkCardBillPayments(tx, received, issued.saleId);
+    const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
+    if (!zero) await enqueueSaleReceipt(tx, cfg, ticket, issued.saleId, options.printers);
+    return { invoice: ticket, total };
+  }
+
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
   let stored: GrossOrder;
@@ -813,20 +860,6 @@ async function issueWhenFullyPaid(
     await issuancePass(tx, workingOrderId, stored),
     deps.backend,
   );
-  const tendersOfBill: SettleSaleTender[] = held
-    .filter(receivedHoldsMoney)
-    .sort((a, b) => a.row.receivedAt!.localeCompare(b.row.receivedAt!))
-    .map(({ row, netApplied, netTip }) => ({
-      method: row.method,
-      amount: money(addDecimal(netApplied, netTip)),
-      tipAmount: money(netTip),
-      cashTendered: row.tendered === null ? null : centsToDecimal(row.tendered),
-      settledAt: new Date(row.receivedAt!),
-      billPaymentId: row.id,
-    }));
-
-  // Deferred, then settled with the bill's tenders in this transaction: the filed record is the one
-  // an immediate sale files, and settlement is what writes each tender's bill payment.
   const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
   const language = await saleLanguageFor(tx, selected.receiptLocale, {
     log: deps.log,
@@ -836,42 +869,33 @@ async function issueWhenFullyPaid(
     kind: "order",
     orderId: workingOrderId,
   });
-  const outstanding = await readOutstandingSaleForOrder(tx, workingOrderId);
-  const recorded =
-    outstanding === undefined
-      ? await recordSale(tx, deps.backend, {
-          receipt: await saleReceiptFacts(
-            tx,
-            workingOrderId,
-            selected.sale.counterparty,
-            options.guestCount,
-          ),
-          origin: cfg.origin,
-          nodeId: cfg.nodeId,
-          ...selected.sale,
-          operationDescription,
-          workingOrderId: brandWorkingOrderId(workingOrderId),
-          ...language,
-          total: priced.total,
-          lines: withReceiptListPrices(priced.lines, stored.identities),
-          vatBreakdown: priced.vatBreakdown,
-          clock,
-          operatorId,
-          settlement: { kind: "deferred" },
-        })
-      : { saleId: outstanding.saleId, fiscal: undefined };
-  const { saleId, fiscal } = recorded;
-  if (fiscal !== undefined) {
-    await linkSaleDishes(tx, saleId, stored.identities);
-  }
+  const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+    receipt: await saleReceiptFacts(
+      tx,
+      workingOrderId,
+      selected.sale.counterparty,
+      options.guestCount,
+    ),
+    origin: cfg.origin,
+    nodeId: cfg.nodeId,
+    ...selected.sale,
+    operationDescription,
+    workingOrderId: brandWorkingOrderId(workingOrderId),
+    ...language,
+    total: priced.total,
+    lines: withReceiptListPrices(priced.lines, stored.identities),
+    vatBreakdown: priced.vatBreakdown,
+    clock,
+    operatorId,
+    settlement: { kind: "deferred" },
+  });
+  await linkSaleDishes(tx, saleId, stored.identities);
   await settleSale(tx, { saleId, tenders: tendersOfBill });
   await linkCardBillPayments(tx, received, saleId);
 
   const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, order.partyId);
   await storePrepayMadeHere(tx, workingOrderId, [...(cfg.madeHereSink ?? [])]);
-  const settledAt = received
-    .map((row) => row.receivedAt!)
-    .reduce((latest, at) => (at > latest ? at : latest));
+  const settledAt = zero ? clock.now().instant.toISOString() : lastReceipt!;
   const receiptOrder = await readReceiptOrder(tx, workingOrderId, { atIssuance: true });
   await tx
     .update(workingOrders)
@@ -910,7 +934,7 @@ async function issueWhenFullyPaid(
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
     ...(await receiptLines(tx, workingOrderId, gross, stored.identities, saleId)),
     tender: await readTenderBlock(tx, saleId, workingOrderId),
-    payments: await readBillTenderLines(tx, saleId),
+    ...(zero ? {} : { payments: await readBillTenderLines(tx, saleId) }),
     ...receiptQr(deps.backend, fiscal.verificationUrl),
   };
   await enqueueSaleReceipt(tx, cfg, ticket, saleId, options.printers);
@@ -923,7 +947,7 @@ export async function issueIfFullyPaid(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId?: string,
-  options: { moneyMoved: boolean } = { moneyMoved: false },
+  options: { moneyMoved?: boolean; closeZero?: boolean } = {},
 ): Promise<TillSaleResult | null> {
   return (await issueWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, options)).invoice;
 }
@@ -1086,32 +1110,36 @@ export async function requireRefundableBill(
   return "open";
 }
 
-/** `held` is the bill's payments when this read them, for the caller to reuse. */
+interface PayableBill {
+  status: "open" | "placed";
+  dining: Dining;
+  revision: number;
+  receiptLocale: string | null;
+  held?: PaymentMoney[];
+  invoiced?: true;
+}
+
 async function requirePayableBill(
   tx: Transaction,
   workingOrderId: string,
-): Promise<{ payable: "open" | "placed"; held?: PaymentMoney[] }> {
+): Promise<PayableBill> {
   const [order] = await tx
-    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+    .select({
+      status: workingOrders.status,
+      dining: workingOrders.dining,
+      revision: workingOrders.revision,
+      receiptLocale: workingOrders.receiptLocale,
+    })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
-  if (order?.status === "placed") {
-    const invoiced = await hasInvoice(tx, workingOrderId);
-    if (order.partyId === null && !invoiced) return { payable: "placed" };
-    if (invoiced) {
-      return { payable: "placed", held: await readPaymentMoney(tx, [workingOrderId]) };
-    }
-    const [part] = await tx
-      .select({ id: billPayments.id })
-      .from(billPayments)
-      .where(
-        and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")),
-      )
-      .limit(1);
-    if (part !== undefined) return { payable: "placed" };
+  if (order === undefined) throw new AppError("working_order.not_found", { workingOrderId });
+  if (order.status === "open") return { ...order, status: "open" };
+  if (order.status === "placed") {
+    if (!(await hasInvoice(tx, workingOrderId))) return { ...order, status: "placed" };
+    const held = await readPaymentMoney(tx, [workingOrderId]);
+    return { ...order, status: "placed", held, invoiced: true };
   }
-  await requireOpenBill(tx, workingOrderId);
-  return { payable: "open" };
+  throw new AppError("working_order.not_open", { workingOrderId });
 }
 
 /** Design §3.6: what a payment of the bill would be, writing nothing. */
@@ -1124,7 +1152,8 @@ export async function previewBillPayment(
 ): Promise<AllocationPreview> {
   return withTransaction(deps.db, async (tx) => {
     const payable = await requirePayableBill(tx, workingOrderId);
-    if (payable.payable === "placed") {
+    refuseOtherDining(workingOrderId, payable, ask.dining);
+    if (payable.status === "placed") {
       await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId], { wholeOrderOnly: true });
     }
     await requireOrderBillEditor(tx, workingOrderId, {
@@ -1213,6 +1242,106 @@ export async function findSubmission(
   return { payment, refund: found?.refund };
 }
 
+async function requireReadyForPayment(
+  tx: Transaction,
+  db: Database,
+  workingOrderId: string,
+  payable: "open" | "placed",
+  operatorId: string,
+  expectedEdit: BillEditExpected | null,
+): Promise<void> {
+  await requireOrderBillEditor(tx, workingOrderId, {
+    operatorId,
+    expectedEdit,
+  });
+  await assertBillHasNoUnsent(tx, workingOrderId);
+  await refuseSetMenuMoney(tx, workingOrderId);
+  await refuseRefundInProgress(tx, [workingOrderId]);
+  await refuseOrderPaymentMarked(tx, [workingOrderId]);
+  // A part payment's card reserves its share, as on an open bill (design §5.2).
+  if (payable === "placed") {
+    await refusePlacedPaymentInFlight(db, tx, [workingOrderId], { wholeOrderOnly: true });
+  }
+}
+
+/** Close a zero bill through Pay using the same issuance transaction as a money payment. */
+export async function closeZeroBill(
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+): Promise<{ outcome: "settled"; balance: BillBalance; invoice: TillSaleResult }> {
+  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
+  return withIssuanceTransaction(
+    deps.db,
+    async (tx) => {
+      await assertStillSignedIn(tx, {
+        deviceId: cfg.origin.deviceId,
+        sessionId: operator.sessionId,
+        personId: operator.personId,
+      });
+      const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
+      if (earlier.payment !== undefined || earlier.refund !== undefined) {
+        throw new AppError("submission.id_reused", { submissionId: req.submissionId });
+      }
+      const balance = await readBillBalance(tx, workingOrderId);
+      if (compareDecimal(balance.total, ZERO) !== 0) throw invalid("amount");
+      if (compareDecimal(decimal(req.applied), ZERO) !== 0) throw invalid("applied");
+      if (
+        compareDecimal(decimal(req.tip), ZERO) !== 0 ||
+        compareDecimal(decimal(req.addedTip ?? ZERO), ZERO) !== 0
+      ) {
+        throw new AppError("bill.tip_not_allowed", { workingOrderId, chargeable: ZERO });
+      }
+      if (balance.status === "settled") {
+        return {
+          outcome: "settled",
+          balance,
+          invoice: await readSettledTicket(deps.backend, tx, cfg, workingOrderId),
+        };
+      }
+
+      const payable = await requirePayableBill(tx, workingOrderId);
+      refuseOtherDining(workingOrderId, payable, req.dining);
+      await requireReadyForPayment(
+        tx,
+        deps.db,
+        workingOrderId,
+        payable.status,
+        operator.personId,
+        req.expectedEdit,
+      );
+      if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, workingOrderId);
+      const reading = deps.clock.now();
+      await deps.backend.refuseUntilRecordable(tx, reading);
+      await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
+      if (!payable.invoiced)
+        await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);
+      const { invoice } = await issueWhenFullyPaid(
+        tx,
+        { ...deps, clock: pinnedAt(deps.clock, reading) },
+        cfg,
+        workingOrderId,
+        operator.personId,
+        { closeZero: true, total: ZERO, guestCount: req.guestCount },
+      );
+      if (invoice === null) {
+        throw new AppError("bill.nothing_outstanding", { workingOrderId });
+      }
+      await captureWholePayment(
+        tx,
+        deps.attendance,
+        workingOrderId,
+        operator.personId,
+        reading.instant,
+      );
+      return { outcome: "settled", balance: await readBillBalance(tx, workingOrderId), invoice };
+    },
+    deps.log,
+  );
+}
+
 /**
  * The start every payment of a bill shares, in the caller's transaction: the operator must still
  * be signed in on the requesting device ({@link assertStillSignedIn}); a retry finds its first row;
@@ -1262,25 +1391,25 @@ async function beginBillPayment(
   await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
   const payable = await requirePayableBill(tx, workingOrderId);
-  await requireOrderBillEditor(tx, workingOrderId, {
-    operatorId: operator.personId,
-    expectedEdit: req.expectedEdit,
-  });
-  await assertBillHasNoUnsent(tx, workingOrderId);
-  await refuseSetMenuMoney(tx, workingOrderId);
-  await refuseRefundInProgress(tx, [workingOrderId]);
-  await refuseOrderPaymentMarked(tx, [workingOrderId]);
-  // A part payment's card reserves its share, as on an open bill (design §5.2).
-  if (payable.payable === "placed") {
-    await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId], { wholeOrderOnly: true });
-  }
+  refuseOtherDining(workingOrderId, payable, req.dining);
+  await requireReadyForPayment(
+    tx,
+    deps.db,
+    workingOrderId,
+    payable.status,
+    operator.personId,
+    req.expectedEdit,
+  );
   const held = payable.held ?? (await readPaymentMoney(tx, [workingOrderId]));
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await billPaymentTotal(tx, workingOrderId);
   deps.backend.assertRecordableAt(reading);
   if (refusals.diskFull()) refuseForDiskStop(refusals.log, workingOrderId);
-  await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, total);
-  await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: workingOrderId });
+  if (!payable.invoiced) {
+    await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);
+    await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, total);
+    await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: workingOrderId });
+  }
   const allocation = confirmAllocation(
     fundsOf(workingOrderId, total, held),
     request,
