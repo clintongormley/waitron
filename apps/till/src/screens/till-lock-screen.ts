@@ -19,9 +19,8 @@ import { chooserStyles } from "../widgets/chooser-styles.js";
 import { themeChooser } from "../widgets/theme-chooser.js";
 import "../widgets/about-button.js";
 import "../widgets/main-server-strip.js";
-import { noticeIcon, noticeLineStyles, toneOf } from "../widgets/notice-strip.js";
+import { noticeLine, noticeLineStyles } from "../widgets/notice-strip.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
-import { staffNoticeText } from "../i18n/staff-notices.js";
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { queuedLiveRefresh } from "../state/live-gate.js";
 import type { ServerStatus } from "../api/server-router.js";
@@ -107,10 +106,6 @@ export class TillLockScreen extends LitElement {
       .servers,
       .clock {
         margin-top: var(--wt-space-4);
-      }
-
-      .clock.line {
-        background: var(--wt-color-surface-raised);
       }
 
       .servers wt-button {
@@ -414,12 +409,10 @@ export class TillLockScreen extends LitElement {
       </div>
       <div class="screen">
         ${this.#renderLogo()} ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
-        ${this.storageNotices.map((notice) => {
-          const words = staffNoticeText(notice);
-          return html`<p class="clock status" role="status" data-storage-notice>
-            ${words.main} · ${words.hint}
-          </p>`;
-        })}
+        ${this.storageNotices.map(
+          (notice) =>
+            html`<div class="clock" role="status" data-storage-notice>${noticeLine(notice)}</div>`,
+        )}
         ${
           this.loggedOutByOther
             ? html`<p class="clock status" role="status" data-logged-out-by-other>
@@ -430,16 +423,9 @@ export class TillLockScreen extends LitElement {
         ${
           this.clockNotice === undefined
             ? nothing
-            : html`<p
-                class="clock line"
-                role="status"
-                data-clock-notice
-                data-notice-tone=${toneOf(this.clockNotice.severity)}
-              >
-                ${noticeIcon(this.clockNotice)}<span class="words"
-                  ><strong class="main">${staffNoticeText(this.clockNotice).main}</strong></span
-                >
-              </p>`
+            : html`<div class="clock" role="status" data-clock-notice>
+                ${noticeLine(this.clockNotice, { hint: false })}
+              </div>`
         }
         ${
           this.canChooseDevice

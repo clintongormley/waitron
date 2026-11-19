@@ -1,6 +1,14 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget, tokenColour } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  loadPhoneFont,
+  mountWidget,
+  pageAt,
+  PHONE_FONT,
+  resetPage,
+  tokenColour,
+} from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import type { StaffNotice } from "../api/client.js";
@@ -316,23 +324,32 @@ describe("till-notice-strip", () => {
       },
     );
 
-    it.each([
-      ["one notice", [WAITING]],
-      ["two notices", [WAITING, DISK]],
-    ])(
-      "puts Check the time after the whole sentence at 390 px wide, with %s",
-      async (_form, notices) => {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-        try {
-          await page.viewport(390, 844);
+    describe("on a phone", () => {
+      let phoneFont: FontFace;
+      beforeAll(async () => {
+        phoneFont = await loadPhoneFont();
+      });
+      afterAll(() => {
+        document.fonts.delete(phoneFont);
+      });
+      afterEach(resetPage);
+
+      it.each([
+        ["one notice", [WAITING]],
+        ["two notices", [WAITING, DISK]],
+      ])(
+        "puts Check the time after the whole sentence at 390 px wide, with %s",
+        async (_form, notices) => {
+          await pageAt(390, 844);
           const { el, host } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
             notices,
             checkTimeOffered: true,
           });
+          host.style.setProperty("--wt-font-family", PHONE_FONT);
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
           const line = root(el).querySelector<HTMLElement>("[data-notice-tone]")!;
           const main = line.querySelector<HTMLElement>(".main")!;
+          expect(getComputedStyle(main).fontFamily).toBe(PHONE_FONT);
           const action = checkButton(line)!;
           const rects = main.getClientRects();
           const last = rects[rects.length - 1]!;
@@ -340,22 +357,16 @@ describe("till-notice-strip", () => {
           expect(rects.length).toBeGreaterThan(1);
           expect(box.top >= last.bottom - 1 || box.left >= last.right).toBe(true);
           expect(box.top).toBeGreaterThanOrEqual(main.getBoundingClientRect().bottom - 1);
-          const probe = document.createElement("div");
-          probe.style.blockSize = "var(--wt-tap-min)";
-          host.append(probe);
-          const tapMin = probe.getBoundingClientRect().height;
-          probe.remove();
+          const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
           const control = action.shadowRoot!.querySelector("button")!.getBoundingClientRect();
           expect(control.height).toBeGreaterThanOrEqual(tapMin);
           expect(control.width).toBeGreaterThanOrEqual(tapMin);
           expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(
             host.getBoundingClientRect().right,
           );
-        } finally {
-          await page.viewport(width, height);
-        }
-      },
-    );
+        },
+      );
+    });
 
     it("sends one till-check-time out of its shadow root on a press", async () => {
       const { el, host } = await mountWidget<TillNoticeStrip>("till-notice-strip", {

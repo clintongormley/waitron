@@ -19,9 +19,9 @@ línea roja significa que algo no se puede guardar, una ámbar que algo necesita
 azul que es información.
 
 Cuando hay más de un aviso, la línea termina con un número como **+1**. Toca ese número para abrir
-la lista de todos los avisos, del más grave al menos grave. La lista aparece bajo la línea y
-desplaza la pantalla hacia abajo, así que nunca tapa el pedido. Vuelve a tocar el número para
-cerrarla.
+la lista de los demás avisos, del más grave al menos grave. La lista aparece bajo la línea y
+desplaza la pantalla hacia abajo, así que nunca tapa el pedido. Mientras está abierta, en lugar del
+número aparece **Ocultar**: tócalo para cerrar la lista.
 
 No hay botón para cerrar un aviso. Una pantalla de estación no muestra la línea de avisos.
 

@@ -15,8 +15,9 @@ For example, **Nothing can be saved: the server is out of space · Tell a manage
 something cannot be saved, an amber line means something needs attention but work is still saved, and a blue line is for information.
 
 When more than one notice is showing, the line ends with a count such as **+1**. Tap that count to
-open the list of every notice, most serious first. The list sits under the line and pushes the
-screen down, so it never covers the order. Tap the count again to close it.
+open the list of the other notices, most serious first. The list sits under the line and pushes the
+screen down, so it never covers the order. While it is open, the count reads **Hide**: tap it to
+close the list.
 
 There is no close button for a notice. A prep station display shows no notice line.
 
