@@ -718,6 +718,21 @@ describe.each(Object.keys(signOutBy) as (keyof typeof signOutBy)[])(
       await vi.waitFor(() => expect(signedInName(el)).toBe("Sam"));
     });
 
+    it("closed, with a sign-out the server does not answer, lets the next person sign in at once", async () => {
+      const api = samSigningInApi({
+        getTill: vi.fn().mockResolvedValue(idle),
+        logout: vi.fn(() => new Promise<never>(() => {})),
+      });
+      const el = await mountForSignOut(api);
+      await openTable(el);
+      await signOutBy[way](el);
+      expect(api.logout).toHaveBeenCalledOnce();
+      await keyInSam(el);
+      await flush(el);
+      expect(api.login).toHaveBeenCalledExactlyOnceWith("p2", "5555");
+      expect(api.printReceipt).not.toHaveBeenCalled();
+    });
+
     it("closed asks for nothing", async () => {
       const api = closingApi({ getTill: vi.fn().mockResolvedValue(idle) });
       const el = await mountForSignOut(api);

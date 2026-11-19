@@ -22259,7 +22259,8 @@ export class TillApp extends LitElement {
   }
 
   /** A sign-in waits for this before it asks the server: its new session replaces the cookie that
-   * names the session a sign-out is still to end. */
+   * names the session a sign-out is still to end. Only a sign-out that waits for the owed receipt
+   * sets it. */
   #serverSignOut: Promise<void> | undefined;
   readonly #untilSignedOut = (): Promise<void> | undefined => this.#serverSignOut;
 
@@ -22332,7 +22333,7 @@ export class TillApp extends LitElement {
         answered = api.logout().catch(() => undefined);
         await settledWithin(answered, SIGN_OUT_ANSWER_WAIT_MS);
       })();
-      this.#serverSignOut = sent;
+      if (owedReceipt !== undefined) this.#serverSignOut = sent;
       await sent;
       if (this.#serverSignOut === sent) this.#serverSignOut = undefined;
       await answered;
