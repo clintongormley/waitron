@@ -2833,6 +2833,26 @@ for (const locale of ["en", "es"] as const) {
       }
 
       if (phase !== "seeded") expected[phase] = madridWithPhotos(expected[phase]);
+      const themes = expected[phase].tables.custom_themes!;
+      for (const name of ["logo_dark_image", "logo_light_image"]) {
+        themes.columns.splice(-1 - themes.foreignKeys.length, 0, {
+          name,
+          type: "TEXT",
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        });
+        themes.foreignKeys.push({
+          id: themes.foreignKeys.length,
+          seq: 0,
+          table: "media_images",
+          from: name,
+          to: "filename",
+          on_update: "NO ACTION",
+          on_delete: "RESTRICT",
+          match: "NONE",
+        });
+      }
       phases[phase]!.media_blobs = Object.keys(expected[phase].tables.media_blobs!.rows).length;
       delete phases[phase]!.media_image_data;
       delete phases[phase]!.media_image_blobs;

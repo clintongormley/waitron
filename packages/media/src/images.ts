@@ -108,13 +108,6 @@ export type ImageUsage =
   | { kind: "department_receipt"; id: string; name: string; active: boolean }
   /** A theme naming the photo as its light or dark logo, or both: one use per theme. */
   | { kind: "theme_logo"; id: string; name: string };
-/** The file name a theme's stored document gives its `side` logo, or NULL when it cannot be read. */
-export function themeLogoName(side: "light" | "dark") {
-  const path = `$.logo.${side}`;
-  return sql<string | null>`case when json_valid(${customThemes.theme}) then
-    case when json_type(${customThemes.theme}) = 'object' and json_type(${customThemes.theme}, ${path}) = 'text'
-    then json_extract(${customThemes.theme}, ${path}) end end`;
-}
 const folderImage = sectionMembers.folderImage;
 const includedRoots = alias(sections, "included_roots");
 const includedMenus = alias(menus, "included_menus");
@@ -255,7 +248,7 @@ async function listImageUsagesForFilename(
   const themeRows = await tx
     .select({ id: customThemes.id, name: customThemes.name })
     .from(customThemes)
-    .where(or(eq(themeLogoName("light"), filename), eq(themeLogoName("dark"), filename)))
+    .where(or(eq(customThemes.logoLightImage, filename), eq(customThemes.logoDarkImage, filename)))
     .orderBy(customThemes.nameKey, customThemes.id);
   const usage = ({
     parentId,
@@ -615,9 +608,11 @@ async function countUsages(
     tally(row.image);
   }
   for (const row of await tx
-    .select({ light: themeLogoName("light"), dark: themeLogoName("dark") })
+    .select({ light: customThemes.logoLightImage, dark: customThemes.logoDarkImage })
     .from(customThemes)
-    .where(or(inArray(themeLogoName("light"), wanted), inArray(themeLogoName("dark"), wanted)))) {
+    .where(
+      or(inArray(customThemes.logoLightImage, wanted), inArray(customThemes.logoDarkImage, wanted)),
+    )) {
     tally(row.light);
     if (row.dark !== row.light) tally(row.dark);
   }

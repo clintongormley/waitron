@@ -19,11 +19,14 @@ describe("saveThemeThroughRoute", () => {
       logo: null,
     });
     expect(response.status).toBe(200);
-    const rows = await suite.db.all<{ theme: string }>(
-      sql`select theme from custom_themes where id = ${id}`,
-    );
+    const rows = await suite.db.all<{
+      theme: string;
+      logo_light_image: string | null;
+      logo_dark_image: string | null;
+    }>(sql`select theme, logo_light_image, logo_dark_image from custom_themes where id = ${id}`);
     const stored = JSON.parse(rows[0]!.theme) as Record<string, unknown>;
-    expect(stored.logo).toBeNull();
+    expect(rows[0]).toMatchObject({ logo_light_image: null, logo_dark_image: null });
+    expect(stored).not.toHaveProperty("logo");
     expect("printedLogo" in stored).toBe(false);
     await clearThemes(suite.db);
     expect(await suite.db.all(sql`select id from custom_themes`)).toEqual([]);

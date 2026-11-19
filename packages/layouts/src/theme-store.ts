@@ -9,6 +9,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { printableLogoRasters, readLogoRaster, storedPictureMaxBytes } from "./logo-rasters.js";
 import { parseThemeChoices, parseThemeName } from "./theme-input.js";
 import type { ReceiptLogoRasters } from "./types.js";
+import { isPlainObject } from "./validate.js";
 
 export interface StoredTheme {
   readonly id: string;
@@ -43,6 +44,11 @@ const THEME_TEXT = sql<string | null>`case
   when json_type(${customThemes.theme}, '$.printedLogo') is null then ${customThemes.theme}
   else json_remove(${customThemes.theme}, '$.printedLogo') end`;
 
+const LOGO_COLUMNS = {
+  logoLightImage: customThemes.logoLightImage,
+  logoDarkImage: customThemes.logoDarkImage,
+};
+
 const STORED_TEXT = sql<
   string | null
 >`case when json_valid(${customThemes.theme}) then ${customThemes.theme} else null end`;
@@ -56,10 +62,18 @@ function storedPicture(paper: PaperWidth) {
 
 const NAME_KEY: ConstraintTarget = { table: "custom_themes", columns: ["name_key"] };
 
-function choicesOf(text: string | null): ThemeChoices | null {
-  if (text === null) return null;
+function choicesOf(row: {
+  theme: string | null;
+  logoLightImage: string | null;
+  logoDarkImage: string | null;
+}): ThemeChoices | null {
+  if (row.theme === null) return null;
   try {
-    const result = readThemeDocument(JSON.parse(text));
+    const document: unknown = JSON.parse(row.theme);
+    if (!isPlainObject(document) || "logo" in document) return null;
+    const { logoLightImage: light, logoDarkImage: dark } = row;
+    const logo = light === null ? null : { light, ...(dark === null ? {} : { dark }) };
+    const result = readThemeDocument({ ...document, logo });
     return result.ok ? result.choices : null;
   } catch {
     return null;
@@ -95,12 +109,15 @@ function requireTheme(tx: Transaction, id: string): Promise<{ name: string }> {
 }
 
 /** The route always supplies dots with a logo, so the row never names a logo it cannot print. */
-function documentFor(choices: ThemeChoices, printedLogo: unknown): object {
-  if (choices.logo === null) return choices;
-  if (!printableLogoRasters(printedLogo)) {
+function documentFor({ logo, ...choices }: ThemeChoices, printedLogo: unknown) {
+  if (logo !== null && !printableLogoRasters(printedLogo)) {
     throw new Error("a theme logo needs printable dots for both papers");
   }
-  return { ...choices, printedLogo };
+  return {
+    theme: logo === null ? choices : { ...choices, printedLogo },
+    logoLightImage: logo?.light ?? null,
+    logoDarkImage: logo?.dark ?? null,
+  };
 }
 
 /** Clears before it sets: the unique index on `in_use` refuses a second row holding 1. */
@@ -117,6 +134,7 @@ export async function listCustomThemes(tx: Transaction): Promise<ThemeList> {
       id: customThemes.id,
       name: customThemes.name,
       theme: THEME_TEXT,
+      ...LOGO_COLUMNS,
       inUse: customThemes.inUse,
       updatedAt: customThemes.updatedAt,
     })
@@ -126,7 +144,7 @@ export async function listCustomThemes(tx: Transaction): Promise<ThemeList> {
     themes: rows.map((row) => ({
       id: row.id,
       name: row.name,
-      choices: choicesOf(row.theme),
+      choices: choicesOf(row),
       updatedAt: row.updatedAt,
     })),
     inUse: rows.find((row) => row.inUse === 1)?.id ?? null,
@@ -135,10 +153,10 @@ export async function listCustomThemes(tx: Transaction): Promise<ThemeList> {
 
 export async function readThemeInUse(tx: Transaction): Promise<ThemeInUse | null> {
   const [row] = await tx
-    .select({ id: customThemes.id, theme: THEME_TEXT })
+    .select({ id: customThemes.id, theme: THEME_TEXT, ...LOGO_COLUMNS })
     .from(customThemes)
     .where(eq(customThemes.inUse, 1));
-  return row === undefined ? null : { id: row.id, choices: choicesOf(row.theme) };
+  return row === undefined ? null : { id: row.id, choices: choicesOf(row) };
 }
 
 /** `null` when no theme is in use, it has no logo, or this release cannot read it. */
@@ -147,11 +165,11 @@ export async function readPrintedThemeLogo(
   paperWidth: PaperWidth,
 ): Promise<PrintedThemeLogo | null> {
   const [row] = await tx
-    .select({ theme: THEME_TEXT, picture: storedPicture(paperWidth) })
+    .select({ theme: THEME_TEXT, ...LOGO_COLUMNS, picture: storedPicture(paperWidth) })
     .from(customThemes)
     .where(eq(customThemes.inUse, 1));
   if (row === undefined) return null;
-  const logo = choicesOf(row.theme)?.logo;
+  const logo = choicesOf(row)?.logo;
   if (logo === null || logo === undefined) return null;
   return { name: logo.light, picture: readLogoRaster(row.picture, paperWidth) };
 }
@@ -169,13 +187,13 @@ export async function createCustomTheme(
   await authorize(tx, input.managementSessionId);
   const choices = parseThemeChoices(input.theme);
   const { name, key } = parseThemeName(input.name);
-  const theme = documentFor(choices, input.printedLogo);
+  const document = documentFor(choices, input.printedLogo);
   const updatedAt = nowIso();
   let id: string;
   try {
     const [row] = await tx
       .insert(customThemes)
-      .values({ name, nameKey: key, theme, updatedAt })
+      .values({ name, nameKey: key, ...document, updatedAt })
       .returning({ id: customThemes.id });
     id = row!.id;
   } catch (error) {
@@ -197,20 +215,19 @@ export async function saveCustomTheme(
   await authorize(tx, input.managementSessionId);
   const { name } = await requireTheme(tx, input.id);
   const choices = parseThemeChoices(input.theme);
-  const theme = documentFor(choices, input.printedLogo);
+  const document = documentFor(choices, input.printedLogo);
   const updatedAt = nowIso();
-  await tx.update(customThemes).set({ theme, updatedAt }).where(eq(customThemes.id, input.id));
+  await tx
+    .update(customThemes)
+    .set({ ...document, updatedAt })
+    .where(eq(customThemes.id, input.id));
   return { id: input.id, name, choices, updatedAt };
 }
 
-function storedPrintedLogo(text: string | null, light: string): ReceiptLogoRasters | null {
+function storedPrintedLogo(text: string | null): ReceiptLogoRasters | null {
   try {
-    const stored: unknown = JSON.parse(text!);
-    const { logo, printedLogo } = stored as {
-      logo?: { light?: unknown } | null;
-      printedLogo?: unknown;
-    };
-    return logo?.light === light && printableLogoRasters(printedLogo) ? printedLogo : null;
+    const { printedLogo } = JSON.parse(text!) as { printedLogo?: unknown };
+    return printableLogoRasters(printedLogo) ? printedLogo : null;
   } catch {
     return null;
   }
@@ -232,7 +249,7 @@ export async function prepareThemeSave(
       ? null
       : await requireThemeRow(id, async () => {
           const [row] = await tx
-            .select({ theme: STORED_TEXT })
+            .select({ theme: STORED_TEXT, logoLightImage: customThemes.logoLightImage })
             .from(customThemes)
             .where(eq(customThemes.id, id));
           return row;
@@ -243,7 +260,7 @@ export async function prepareThemeSave(
     return { choices, keptPrintedLogo: null };
   }
   const keptPrintedLogo =
-    choices.logo === null ? null : storedPrintedLogo(stored.theme, choices.logo.light);
+    choices.logo?.light === stored.logoLightImage ? storedPrintedLogo(stored.theme) : null;
   return { choices, keptPrintedLogo };
 }
 
@@ -255,18 +272,17 @@ export async function renameCustomTheme(
   await requireTheme(tx, input.id);
   const { name, key } = parseThemeName(input.name);
   const updatedAt = nowIso();
-  let theme: string | null;
+  let row;
   try {
-    const [row] = await tx
+    [row] = await tx
       .update(customThemes)
       .set({ name, nameKey: key, updatedAt })
       .where(eq(customThemes.id, input.id))
-      .returning({ theme: THEME_TEXT });
-    theme = row!.theme;
+      .returning({ theme: THEME_TEXT, ...LOGO_COLUMNS });
   } catch (error) {
     throw nameTakenOr(error);
   }
-  return { id: input.id, name, choices: choicesOf(theme), updatedAt };
+  return { id: input.id, name, choices: choicesOf(row!), updatedAt };
 }
 
 /** Deleting the theme in use puts Waitron's own theme in use. */

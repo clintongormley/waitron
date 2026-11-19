@@ -281,9 +281,12 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 - The paper-width dropdown names widths only, not printers, so two printers of one width at
   different resolutions cannot be told apart (owner's call).
 
-## Left open by #1261's review, not acted on (2026-10-05)
+## Share printed logo dots per library photo (A1308 dv16 M3)
 
-- **Left open by #1261's review:** a theme's logo (`custom_themes`) is protected from library deletion only by the application.
+- Keep the cached dots when printing. On the Intel Core i5-6400T test box, drawing both paper sizes
+  from a synthetic 1,600 × 1,600 library photo took a median of 1,065 ms (95th percentile 1,091 ms).
+  Reading one paper's cached dots took a median of 0.65 ms (95th percentile 1.41 ms), over 50 runs
+  per path. Move the printed dots to the photo library so themes using the same image share a copy.
 
 ## Loose ends left by #367
 

@@ -48,11 +48,7 @@ describe("custom themes", () => {
     );
   });
 
-  it("has nothing pointing at it and points at nothing", async () => {
-    const outgoing = await suite.db.execute(
-      sql`select * from pragma_foreign_key_list('custom_themes')`,
-    );
-    expect(outgoing.rows).toEqual([]);
+  it("has nothing pointing at it", async () => {
     const incoming = await suite.db.execute(sql`
       select m.name from sqlite_master m, pragma_foreign_key_list(m.name) f
       where m.type = 'table' and f."table" = 'custom_themes'

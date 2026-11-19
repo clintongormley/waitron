@@ -1265,8 +1265,13 @@ CREATE TABLE `custom_themes` (
 	`name_key` text NOT NULL,
 	`in_use` integer,
 	`theme` text NOT NULL,
+	`logo_light_image` text,
+	`logo_dark_image` text,
 	`updated_at` text NOT NULL,
-	CONSTRAINT "custom_themes_in_use_ck" CHECK("custom_themes"."in_use" = 1)
+	FOREIGN KEY (`logo_light_image`) REFERENCES `media_images`(`filename`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`logo_dark_image`) REFERENCES `media_images`(`filename`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "custom_themes_in_use_ck" CHECK("custom_themes"."in_use" = 1),
+	CONSTRAINT "custom_themes_logo_ck" CHECK("custom_themes"."logo_dark_image" is null or "custom_themes"."logo_light_image" is not null)
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `custom_themes_name_key_uq` ON `custom_themes` (`name_key`);--> statement-breakpoint

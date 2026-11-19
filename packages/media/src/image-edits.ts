@@ -7,7 +7,6 @@ import {
   pruneBlobs,
   readImage,
   readImageBytes,
-  themeLogoName,
   validateImageMetadata,
   type ImageRecord,
 } from "./images.js";
@@ -73,7 +72,7 @@ export async function saveImage(
   const logoMatch = eq(departments.receiptLogoImageId, current.id);
   if (pixelsChanged) {
     const users = await tx.select({ id: departments.id }).from(departments).where(logoMatch);
-    const themeMatch = sql`${themeLogoName("light")} = ${current.filename}`;
+    const themeMatch = eq(customThemes.logoLightImage, current.filename);
     const themes = await tx.select({ id: customThemes.id }).from(customThemes).where(themeMatch);
     if ((users.length || themes.length) && (!rasters?.["58mm"] || !rasters["80mm"]))
       throw new Error("Receipt logo requires both printable pictures");

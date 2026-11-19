@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e5cd8bf3-2d02-4e3f-ac5a-74a123769df7",
+  "id": "63affe7a-d235-403a-8ac2-483b6c514cc6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8156,6 +8156,20 @@
           "notNull": true,
           "autoincrement": false
         },
+        "logo_light_image": {
+          "name": "logo_light_image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "logo_dark_image": {
+          "name": "logo_dark_image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "text",
@@ -8180,13 +8194,44 @@
           "isUnique": true
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "custom_themes_logo_light_image_media_images_filename_fk": {
+          "name": "custom_themes_logo_light_image_media_images_filename_fk",
+          "tableFrom": "custom_themes",
+          "tableTo": "media_images",
+          "columnsFrom": [
+            "logo_light_image"
+          ],
+          "columnsTo": [
+            "filename"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "custom_themes_logo_dark_image_media_images_filename_fk": {
+          "name": "custom_themes_logo_dark_image_media_images_filename_fk",
+          "tableFrom": "custom_themes",
+          "tableTo": "media_images",
+          "columnsFrom": [
+            "logo_dark_image"
+          ],
+          "columnsTo": [
+            "filename"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
         "custom_themes_in_use_ck": {
           "name": "custom_themes_in_use_ck",
           "value": "\"custom_themes\".\"in_use\" = 1"
+        },
+        "custom_themes_logo_ck": {
+          "name": "custom_themes_logo_ck",
+          "value": "\"custom_themes\".\"logo_dark_image\" is null or \"custom_themes\".\"logo_light_image\" is not null"
         }
       }
     },

@@ -119,16 +119,24 @@ const refusal = (code: string, params: Record<string, unknown> = {}) => ({
 
 async function themeRows(): Promise<{ id: string; name: string; theme: string }[]> {
   const { rows } = await suite.db.execute<{ id: string; name: string; theme: string }>(
-    sql`select id, name, theme from custom_themes order by id`,
+    sql`select id, name, theme, logo_light_image, logo_dark_image from custom_themes order by id`,
   );
   return rows;
 }
 
 async function storedTheme(id: string): Promise<Record<string, unknown>> {
-  const rows = await suite.db.execute<{ theme: string }>(
-    sql`select theme from custom_themes where id = ${id}`,
-  );
-  return JSON.parse(rows.rows[0]!.theme) as Record<string, unknown>;
+  const row = suite.db.get<{
+    theme: string;
+    logo_light_image: string | null;
+    logo_dark_image: string | null;
+  }>(sql`select theme, logo_light_image, logo_dark_image from custom_themes where id = ${id}`)!;
+  const document = JSON.parse(row.theme) as Record<string, unknown>;
+  expect(document).not.toHaveProperty("logo");
+  const { logo_light_image: light, logo_dark_image: dark } = row;
+  return {
+    ...document,
+    logo: light === null ? null : { light, ...(dark === null ? {} : { dark }) },
+  };
 }
 
 async function expected(filename: string): Promise<unknown> {
@@ -562,47 +570,42 @@ describe("GET /api/theme with a logo", () => {
   });
 
   it("an image that is gone answers no logo, and a dark one that is gone answers no dark", async () => {
-    const [gone] = await suite.db
-      .insert(customThemes)
-      .values({
-        name: "Gone",
-        nameKey: "gone",
-        inUse: 1,
-        theme: { ...LEMON, logo: { light: ABSENT } },
-      })
-      .returning({ id: customThemes.id });
+    const { logo: _, ...theme } = LEMON;
+    const corruptTheme = async (name: string, light: string, dark?: string) => {
+      await suite.db.execute(sql`delete from custom_themes`);
+      await suite.db.execute(sql`pragma foreign_keys = off`);
+      try {
+        const [row] = await suite.db
+          .insert(customThemes)
+          .values({
+            name,
+            nameKey: name.toLowerCase(),
+            inUse: 1,
+            theme,
+            logoLightImage: light,
+            logoDarkImage: dark,
+          })
+          .returning({ id: customThemes.id });
+        return row!.id;
+      } finally {
+        await suite.db.execute(sql`pragma foreign_keys = on`);
+      }
+    };
+    const gone = await corruptTheme("Gone", ABSENT);
     const answer = await themeAnswer();
     expect(answer.logo).toBeNull();
     expect(answer.css).toBe(
-      venueThemeAnswer({ inUse: { id: gone!.id, choices: LEMON }, logo: null }).css,
+      venueThemeAnswer({ inUse: { id: gone, choices: LEMON }, logo: null }).css,
     );
     expect(answer.css).not.toBe("");
 
-    await suite.db.execute(sql`delete from custom_themes`);
-    await suite.db.insert(customThemes).values({
-      name: "Dark gone",
-      nameKey: "dark gone",
-      inUse: 1,
-      theme: { ...LEMON, logo: { light: A, dark: ABSENT } },
-    });
+    await corruptTheme("Dark gone", A, ABSENT);
     expect((await themeAnswer()).logo).toEqual({ light: await displayOf(A), dark: null });
 
     for (const name of ["constructor", "__proto__"]) {
-      await suite.db.execute(sql`delete from custom_themes`);
-      await suite.db.insert(customThemes).values({
-        name: "Inherited",
-        nameKey: "inherited",
-        inUse: 1,
-        theme: { ...LEMON, logo: { light: A, dark: name } },
-      });
+      await corruptTheme("Inherited", A, name);
       expect((await themeAnswer()).logo).toEqual({ light: await displayOf(A), dark: null });
-      await suite.db.execute(sql`delete from custom_themes`);
-      await suite.db.insert(customThemes).values({
-        name: "Inherited",
-        nameKey: "inherited",
-        inUse: 1,
-        theme: { ...LEMON, logo: { light: name } },
-      });
+      await corruptTheme("Inherited", name);
       expect((await themeAnswer()).logo).toBeNull();
     }
   });
