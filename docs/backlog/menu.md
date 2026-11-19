@@ -993,9 +993,11 @@ and edits. Its existing allergen review and extras-portion warnings include set-
 The live correction dialog starts from the full menu's own dishes and modifiers. Wording, VAT and
 modifier corrections also reach matching dishes and modifiers in the copies. A dish offered only
 by a set menu can be corrected through the API. Extras usage and routing include set-menu dishes.
+The till's zone offers now include published set-menu copies. They identify the newest copy on sale,
+and the server can read a bill's recorded copy after its full menu is republished.
 The dashboard editor and placement controls, the Preview editor link and draft problems on screen,
-and selecting copy-only dishes in the live correction dialog remain open. Serving the copies, till
-ordering and payment, bill documents, and the demo and guides also remain open.
+and selecting copy-only dishes in the live correction dialog remain open. Till ordering and payment,
+bill documents, and the demo and guides also remain open.
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer
 (owner, 2026-11-18, question 4 of the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md);

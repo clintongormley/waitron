@@ -26,6 +26,7 @@ export {
 } from "@waitron/db";
 export type { ServiceStepStart } from "@waitron/db";
 export * from "./operations.js";
+export { serveRecordedSetMenus } from "./set-menu-copies.js";
 export * from "./dining.js";
 export * from "./service-delete.js";
 export * from "./keep-open.js";

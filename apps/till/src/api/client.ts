@@ -65,6 +65,7 @@ import type {
   MenuState,
   MenuUnavailable,
   ServedMenu,
+  ServedSetMenu,
   DiningStart,
 } from "@waitron/shared";
 import { readEventStream } from "./transfer-events.js";
@@ -456,6 +457,7 @@ export interface ZoneOffers {
   defaultMenuId: string | null;
   menus: TillZoneMenu[];
   offers: TillMenuOffer[];
+  setMenus?: readonly ServedSetMenu[];
   zones?: ServiceZoneSummary[];
   liveFields?: string;
 }

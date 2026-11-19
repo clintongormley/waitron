@@ -9,6 +9,7 @@ import {
   optionLabels,
   optionLists,
   extraLists,
+  kitchenCourses,
   products,
   sections,
   type Transaction,
@@ -43,6 +44,7 @@ import type {
   PublishedSetMenu,
   SetMenuFrozenOffer,
   SetMenuChangeField,
+  ServedSetMenuOffer,
 } from "@waitron/shared";
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
@@ -538,6 +540,10 @@ export function menuDocumentHash(document: MenuDocument): string {
   return createHash("sha256").update(canonicalJson(document)).digest("hex");
 }
 
+export function setMenuCopyHash(copy: PublishedSetMenu): string {
+  return createHash("sha256").update(canonicalJson(copy)).digest("hex");
+}
+
 /** Every photo the document names, each once, sorted. */
 export function documentImages(document: MenuDocument): string[] {
   const images = new Set<string>();
@@ -582,12 +588,13 @@ export function documentSetMenuOffers(document: MenuDocument): SetMenuFrozenOffe
   const copies = document.setMenus ?? {};
   return Object.keys(copies)
     .sort()
-    .flatMap((id) => {
-      const copy = copies[id]!;
-      return copy.root.members.flatMap((member) =>
-        member.kind === "product" ? [copy.offers[member.menuItemId]!] : [],
-      );
-    });
+    .flatMap((id) => setMenuOffersInOrder(copies[id]!));
+}
+
+function setMenuOffersInOrder(copy: PublishedSetMenu): SetMenuFrozenOffer[] {
+  return copy.root.members.flatMap((member) =>
+    member.kind === "product" ? [copy.offers[member.menuItemId]!] : [],
+  );
 }
 
 interface LiveProductRow {
@@ -607,6 +614,8 @@ interface LiveRows {
   /** Each option label the offers name that still exists, with its availability. */
   labels: Map<string, boolean>;
   missingLists: Set<string>;
+  overrideCourses: Map<string, boolean>;
+  setMenuProductIds: Set<string>;
 }
 
 /** A product can be sold now. */
@@ -620,10 +629,19 @@ async function readLiveRows(
   tx: Transaction,
   offers: readonly FrozenOffer[],
   checkLists = true,
+  setMenuOffers: readonly SetMenuFrozenOffer[] = [],
 ): Promise<LiveRows> {
   const productIds = new Set<string>();
   const labelIds = new Set<string>();
-  for (const offer of offers) {
+  const overrideCourses = new Map<string, boolean>();
+  const setMenuProductIds = new Set<string>();
+  for (const offer of setMenuOffers) {
+    setMenuProductIds.add(offer.productId);
+    for (const variant of offer.variants) setMenuProductIds.add(variant.id);
+    if (offer.courseOverrideId !== null) overrideCourses.set(offer.courseOverrideId, false);
+  }
+  const allOffers = setMenuOffers.length === 0 ? offers : [...offers, ...setMenuOffers];
+  for (const offer of allOffers) {
     productIds.add(offer.productId);
     for (const variant of offer.variants) productIds.add(variant.id);
     for (const entry of offer.offeredModifiers)
@@ -666,7 +684,7 @@ async function readLiveRows(
       ["extras", extraLists],
     ] as const) {
       const ids = new Set(
-        offers.flatMap((offer) =>
+        allOffers.flatMap((offer) =>
           offer.offeredModifiers.filter((entry) => entry.kind === kind).map((entry) => entry.id),
         ),
       );
@@ -679,24 +697,42 @@ async function readLiveRows(
       for (const id of ids) missingLists.add(`${kind}:${id}`);
     }
   }
-  return { products: productRows, labels, missingLists };
+  for (const batch of batches([...overrideCourses.keys()]))
+    for (const row of await tx
+      .select({ id: kitchenCourses.id, active: kitchenCourses.active })
+      .from(kitchenCourses)
+      .where(inArray(kitchenCourses.id, batch)))
+      overrideCourses.set(row.id, row.active);
+  return { products: productRows, labels, missingLists, overrideCourses, setMenuProductIds };
 }
 
-/** Availability changes do not require reloading offers; deleted list membership does. */
-function liveFieldsDigest(
-  products: ReadonlyMap<string, LiveProductRow>,
-  missingLists: ReadonlySet<string> = new Set(),
-): string {
+function liveFieldsDigest({
+  products,
+  missingLists,
+  overrideCourses,
+  setMenuProductIds,
+}: Pick<LiveRows, "products" | "missingLists" | "overrideCourses" | "setMenuProductIds">): string {
   const rows = [...products]
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([id, row]) => [id, row.courseId, row.category, productDeclarationValues(row)]);
-  return createHash("sha256")
-    .update(canonicalJson(missingLists.size === 0 ? rows : [rows, [...missingLists].sort()]))
-    .digest("hex");
+  const ordinary = missingLists.size === 0 ? rows : [rows, [...missingLists].sort()];
+  // The till applies polled availability to ordinary offers. Copies refresh on a full read.
+  const snapshot =
+    setMenuProductIds.size === 0
+      ? ordinary
+      : [
+          ordinary,
+          [...overrideCourses.keys()].sort().map((id) => [id, overrideCourses.get(id)]),
+          [...setMenuProductIds].sort().map((id) => {
+            const row = products.get(id);
+            return [id, row !== undefined && sellable(row)];
+          }),
+        ];
+  return createHash("sha256").update(canonicalJson(snapshot)).digest("hex");
 }
 
 /** The digest of no rows, which every read of no documents answers. */
-export const NO_LIVE_FIELDS = liveFieldsDigest(new Map());
+export const NO_LIVE_FIELDS = createHash("sha256").update("[]").digest("hex");
 
 /**
  * Each product, variant or extras item's product the documents' offers name that is Inactive or
@@ -706,16 +742,18 @@ export const NO_LIVE_FIELDS = liveFieldsDigest(new Map());
 export async function readLiveState(
   tx: Transaction,
   documents: readonly MenuDocument[],
+  includeSetMenus = false,
 ): Promise<{ unavailable: MenuUnavailable; liveFields: string }> {
   const offers = documents.flatMap(documentOffers);
-  const rows = await readLiveRows(tx, offers);
+  const copyOffers = includeSetMenus ? documents.flatMap(documentSetMenuOffers) : [];
+  const rows = await readLiveRows(tx, offers, true, copyOffers);
   const unsellableProducts = new Set<string>();
   const labels = new Set<string>();
   const unsellable = (productId: string) => {
     const row = rows.products.get(productId);
     if (row !== undefined && !sellable(row)) unsellableProducts.add(productId);
   };
-  for (const offer of offers) {
+  for (const offer of [...offers, ...copyOffers]) {
     unsellable(offer.productId);
     for (const variant of offer.variants) unsellable(variant.id);
     for (const entry of offer.offeredModifiers) {
@@ -730,7 +768,7 @@ export async function readLiveState(
   }
   return {
     unavailable: { products: [...unsellableProducts], optionLabels: [...labels] },
-    liveFields: liveFieldsDigest(rows.products, rows.missingLists),
+    liveFields: liveFieldsDigest(rows),
   };
 }
 
@@ -740,15 +778,24 @@ export async function readLiveState(
  * With `menuItemIds`, only the offers it names are read and returned, and `liveFields` digests
  * only their rows, so it is not comparable with {@link readLiveState}'s.
  *
- * Deleted modifier lists and missing products are left out.
+ * Set-menu copies get their own offers, so editions of one item can preserve different frozen
+ * prices or wording. Deleted modifier lists and missing products are left out.
  */
 export async function applyLiveFields(
   tx: Transaction,
   documents: readonly MenuDocument[],
   menuItemIds?: ReadonlySet<string>,
-): Promise<{ offers: Map<string, LiveOffer[]>; liveFields: string }> {
-  const live = new Map<string, LiveOffer[]>();
-  if (documents.length === 0) return { offers: live, liveFields: NO_LIVE_FIELDS };
+  setMenuCopies: readonly PublishedSetMenu[] = [],
+): Promise<{
+  offers: Map<string, LiveOffer[]>;
+  setMenuOffers: Map<PublishedSetMenu, ServedSetMenuOffer[]>;
+  liveFields: string;
+}> {
+  const offers = new Map<string, LiveOffer[]>();
+  const setMenuOffers = new Map<PublishedSetMenu, ServedSetMenuOffer[]>();
+  if (documents.length === 0 && setMenuCopies.length === 0)
+    return { offers, setMenuOffers, liveFields: NO_LIVE_FIELDS };
+
   const offersOf = new Map(
     documents.map((document) => [
       document.menuId,
@@ -757,71 +804,107 @@ export async function applyLiveFields(
       ),
     ]),
   );
-  const rows = await readLiveRows(tx, [...offersOf.values()].flat());
-
-  for (const [menuId, offers] of offersOf)
-    live.set(
+  const copies = new Map(setMenuCopies.map((copy) => [copy, setMenuOffersInOrder(copy)]));
+  const rows = await readLiveRows(
+    tx,
+    [...offersOf.values()].flat(),
+    true,
+    [...copies.values()].flat(),
+  );
+  for (const [menuId, frozen] of offersOf)
+    offers.set(
       menuId,
-      offers.flatMap((offer): LiveOffer[] => {
-        const dish = rows.products.get(offer.productId);
-        if (dish === undefined) return [];
-        return [
-          {
-            ...offer,
-            ...productDeclarationValues(dish),
-            available: sellable(dish),
-            courseId: dish.courseId,
-            category: dish.category,
-            variants: offer.variants.flatMap((variant) => {
-              const row = rows.products.get(variant.id);
-              return row === undefined
-                ? []
-                : [
-                    {
-                      ...variant,
-                      ...productDeclarationValues(row),
-                      available: sellable(row),
-                      courseId: row.courseId,
-                      category: row.category,
-                    },
-                  ];
-            }),
-            offeredModifiers: offer.offeredModifiers
-              .filter((entry) => !rows.missingLists.has(`${entry.kind}:${entry.id}`))
-              .map((entry): LiveOfferedModifier => {
-                if (entry.kind === "options") {
-                  const withAvailability = entry.labels.map((label) => ({
-                    ...label,
-                    available: labelAvailable(rows, label.id),
-                  }));
-                  return {
-                    ...entry,
-                    labels: withAvailability,
-                    defaultLabelId: effectiveDefaultLabelId(withAvailability, entry.defaultLabelId),
-                    publishedDefaultLabelId: entry.defaultLabelId,
-                  };
-                }
-                return {
-                  ...entry,
-                  items: entry.items.flatMap((item) => {
-                    const row = rows.products.get(item.productId);
-                    return row === undefined
-                      ? []
-                      : [
-                          {
-                            ...item,
-                            ...extraDeclarationValues(row),
-                            available: sellable(row),
-                          },
-                        ];
-                  }),
-                };
-              }),
-          },
-        ];
+      frozen.flatMap((offer) => {
+        const live = serveOffer(offer, rows);
+        return live === undefined ? [] : [live];
       }),
     );
-  return { offers: live, liveFields: liveFieldsDigest(rows.products, rows.missingLists) };
+  for (const [copy, frozen] of copies)
+    setMenuOffers.set(
+      copy,
+      frozen.flatMap((offer) => {
+        const live = serveSetMenuOffer(offer, rows);
+        return live === undefined ? [] : [live];
+      }),
+    );
+  return { offers, setMenuOffers, liveFields: liveFieldsDigest(rows) };
+}
+
+function serveSetMenuOffer(
+  offer: SetMenuFrozenOffer,
+  rows: LiveRows,
+): ServedSetMenuOffer | undefined {
+  const { countsAsCourseId, courseOverrideId, variants, ...frozen } = offer;
+  const live = serveOffer(
+    { ...frozen, variants: variants.map((variant) => without(variant, ["countsAsCourseId"])) },
+    rows,
+  );
+  if (live === undefined) return;
+  const variantCountsAs = Object.fromEntries(
+    variants.map((variant) => [variant.id, variant.countsAsCourseId]),
+  );
+  if (courseOverrideId !== null && rows.overrideCourses.get(courseOverrideId) === true) {
+    live.courseId = courseOverrideId;
+    for (const variant of live.variants) variant.courseId = courseOverrideId;
+  }
+  return { ...live, countsAsCourseId, variantCountsAs };
+}
+
+function serveOffer(offer: FrozenOffer, rows: LiveRows): LiveOffer | undefined {
+  const dish = rows.products.get(offer.productId);
+  if (dish === undefined) return;
+  return {
+    ...offer,
+    ...productDeclarationValues(dish),
+    available: sellable(dish),
+    courseId: dish.courseId,
+    category: dish.category,
+    variants: offer.variants.flatMap((variant) => {
+      const row = rows.products.get(variant.id);
+      return row === undefined
+        ? []
+        : [
+            {
+              ...variant,
+              ...productDeclarationValues(row),
+              available: sellable(row),
+              courseId: row.courseId,
+              category: row.category,
+            },
+          ];
+    }),
+    offeredModifiers: offer.offeredModifiers
+      .filter((entry) => !rows.missingLists.has(`${entry.kind}:${entry.id}`))
+      .map((entry): LiveOfferedModifier => {
+        if (entry.kind === "options") {
+          const withAvailability = entry.labels.map((label) => ({
+            ...label,
+            available: labelAvailable(rows, label.id),
+          }));
+          return {
+            ...entry,
+            labels: withAvailability,
+            defaultLabelId: effectiveDefaultLabelId(withAvailability, entry.defaultLabelId),
+            publishedDefaultLabelId: entry.defaultLabelId,
+          };
+        }
+        return {
+          ...entry,
+          items: entry.items.flatMap((item) => {
+            const row = rows.products.get(item.productId);
+            return row === undefined
+              ? []
+              : [
+                  {
+                    ...item,
+                    ...extraDeclarationValues(row),
+                    available: sellable(row),
+                  },
+                ];
+          }),
+        };
+      }),
+  };
 }
 
 export async function hydrateDeclarationDocument(

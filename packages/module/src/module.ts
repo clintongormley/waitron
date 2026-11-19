@@ -17,6 +17,7 @@ import type {
   Dining,
   DiningPolicy,
   DiningStart,
+  ServedSetMenu,
 } from "@waitron/shared";
 import type { PartyAllergySnapshot, TicketAllergyCopy } from "./party-allergy.js";
 import type { BillIdentity } from "./bill-identity.js";
@@ -388,7 +389,9 @@ export interface ZoneOffers {
   readonly defaultMenuId: string | null;
   readonly menus: readonly ZoneMenu[];
   readonly offers: readonly ZoneMenuOffer[];
-  /** Digest of current declarations, course, reporting category and deleted modifier lists.
+  readonly setMenus: readonly ServedSetMenu[];
+  /** Digest of current declarations, course, reporting category, deleted modifier lists and
+   *  published set-menu dish availability and course overrides.
    *  A read limited by `menuItemIds`
    *  digests only those offers' rows and is not comparable with `ZoneMenuState.liveFields`. */
   readonly liveFields: string;
@@ -432,7 +435,8 @@ export interface ZoneMenuState {
     readonly endedPeriodName: string | null;
   }[];
   readonly unavailable: ZoneUnavailable;
-  /** Digest of current declarations, course, reporting category and deleted modifier lists. */
+  /** Digest of current declarations, course, reporting category, deleted modifier lists and
+   *  published set-menu dish availability and course overrides. */
   readonly liveFields: string;
 }
 
@@ -1031,9 +1035,9 @@ export interface VenueServiceContribution {
     actor: ActivityActor,
   ): Promise<void>;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
-   *  the zone's active menus. With `menuItemIds`, only the offers it names are served. The default
-   *  is the menu timetable's at `at` (now when absent); with `withDefault: false` the timetable is
-   *  not read, `defaultMenuId` is null and no menu is the default, which is what pricing passes. */
+   *  the zone's active menus. A read for `menuItemIds` returns the ordinary offers it names and
+   *  an empty `setMenus` array. The default comes from the timetable at `at` (now when absent).
+   *  Pricing passes `withDefault: false` to skip the timetable and receive a null `defaultMenuId`. */
   listZoneOffers(
     tx: Transaction,
     zoneId: string,

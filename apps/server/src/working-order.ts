@@ -667,6 +667,7 @@ export async function priceOrderLines(
         defaultMenuId: null,
         menus: [],
         offers: [],
+        setMenus: [],
         liveFields: NO_LIVE_FIELDS,
       },
     };
