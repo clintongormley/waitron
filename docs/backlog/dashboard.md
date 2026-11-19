@@ -188,9 +188,10 @@ cloud-recovery code.
 
 - **Covered-dialog reinsertion and the department and zone wrappers.** Putting a lower dialog
   back can blur the upper field and close its choices. The source trace found no screen that
-  puts back a retained lower editor under an open upper editor. Raising the lower window alone
-  sent Escape to the wrong dialog or swallowed it in `native-escape-main.log` (Lane D's dialog
-  receipts). Keep the wrappers' current behavior until a screen can demonstrate and verify a fix.
+  puts back a retained lower editor under an open upper editor. After the lower window was raised
+  alone, Escape closed it or did nothing. See
+  `~/waitron-campaign-d/receipts/dash-dialog-lifecycle/native-escape-main.log`.
+  Keep the wrappers' current behavior until a screen can demonstrate and verify a fix.
 
 ## Bundle: Form implementation leftovers
 
