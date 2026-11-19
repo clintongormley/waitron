@@ -8011,3 +8011,23 @@ describe("the release job", () => {
     });
   });
 });
+
+describe("publish-upgrade-offer.yml", () => {
+  it("declares manual dispatch and runs the publisher from tags in the release environment", () => {
+    const workflow = readFileSync(join(workflowsDir, "publish-upgrade-offer.yml"), "utf8");
+    expect(workflow).toMatch(/^on:\n {2}workflow_dispatch:\n {4}inputs:\n {6}offer:/m);
+    expect(workflow).toContain("group: publish-upgrade-offer");
+    expect(workflow).toContain("cancel-in-progress: false");
+    expect(workflow).toContain("github.ref_type == 'tag'");
+    expect(workflow).toContain("environment: release");
+    const publisher = workflowSteps(workflow).find(({ command }) =>
+      command.includes("scripts/release/publish-upgrade-offer.mjs"),
+    );
+    expect(publisher).toBeDefined();
+    expect(publisher.env.OFFER_INPUT).toBe("${{ inputs.offer }}");
+    expect(publisher.env.WAITRON_RELEASE_SIGNING_KEY).toBe(
+      "${{ secrets.WAITRON_RELEASE_SIGNING_KEY }}",
+    );
+    expect(publisher.command).not.toContain("${{");
+  });
+});

@@ -6,6 +6,7 @@ import { exactRecord } from "./upgrades/contracts.mjs";
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const SHA = /^[a-f0-9]{40}$/;
 const IMAGE_DIGEST = /^sha256:[a-f0-9]{64}$/;
+export const MAX_SIGNED_RELEASE_BYTES = 16 * 1024;
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
 export function isNumberedVersion(version) {
@@ -73,13 +74,13 @@ function decodeField(value) {
   return decoded;
 }
 
-export function signReleaseList(release, privateKey) {
+function signPayload(value, privateKey) {
   if (!privateKey.startsWith("-----BEGIN PRIVATE KEY-----"))
     throw new Error("Expected a PKCS#8 release signing key");
   const key = createPrivateKey(privateKey);
   if (key.asymmetricKeyType !== "ed25519")
     throw new Error("Expected an Ed25519 release signing key");
-  const payload = Buffer.from(JSON.stringify(releasePayload(release)));
+  const payload = Buffer.from(JSON.stringify(value));
   const signature = sign(null, payload, key);
   return Buffer.from(
     JSON.stringify({
@@ -87,6 +88,10 @@ export function signReleaseList(release, privateKey) {
       signature: signature.toString("base64url"),
     }) + "\n",
   );
+}
+
+export function signReleaseList(release, privateKey) {
+  return signPayload(releasePayload(release), privateKey);
 }
 
 function readSignedPayload(bytes, trustedPublicKeys) {
@@ -113,6 +118,7 @@ function readSignedPayload(bytes, trustedPublicKeys) {
 }
 
 export function verifyReleaseList(bytes, trustedPublicKeys) {
+  if (bytes.byteLength > MAX_SIGNED_RELEASE_BYTES) throw new Error("Release file exceeds 16 KiB");
   return releasePayload(readSignedPayload(bytes, trustedPublicKeys));
 }
 
@@ -161,6 +167,15 @@ function offerPayload(value) {
   return value;
 }
 
+export function signUpgradeOffer(offer, privateKey) {
+  return signPayload(offerPayload(offer), privateKey);
+}
+
+export function verifyUpgradeOffer(bytes, trustedPublicKeys) {
+  if (bytes.byteLength > MAX_SIGNED_RELEASE_BYTES) throw new Error("Upgrade offer exceeds 16 KiB");
+  return offerPayload(readSignedPayload(bytes, trustedPublicKeys));
+}
+
 function matchesOffer({ condition, target }, boxId, installedVersion) {
   if (Object.hasOwn(condition, "installations")) return condition.installations.includes(boxId);
   if (Object.hasOwn(condition, "atLeast"))
@@ -176,8 +191,7 @@ export function selectUpgradeOffer(
   trustedPublicKeys,
   { boxId, installedVersion, previous },
 ) {
-  if (bytes.byteLength > 16 * 1024) throw new Error("Upgrade offer exceeds 16 KiB");
-  const offer = offerPayload(readSignedPayload(bytes, trustedPublicKeys));
+  const offer = verifyUpgradeOffer(bytes, trustedPublicKeys);
   const { serial } = offer;
   const digest = createHash("sha256").update(bytes).digest("hex");
   if (

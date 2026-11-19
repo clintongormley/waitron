@@ -1,9 +1,12 @@
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { compareReleaseVersions, isNumberedVersion, verifyReleaseList } from "./release-list.mjs";
-
-const MAX_BYTES = 16 * 1024;
+import {
+  MAX_SIGNED_RELEASE_BYTES,
+  compareReleaseVersions,
+  isNumberedVersion,
+  verifyReleaseList,
+} from "./release-list.mjs";
 
 function versionFromTag(tag) {
   const version = typeof tag === "string" && tag.startsWith("v") ? tag.slice(1) : null;
@@ -21,7 +24,7 @@ async function readRelease(input) {
   let size = 0;
   for await (const chunk of input) {
     size += chunk.length;
-    if (size > MAX_BYTES) throw new Error("Release file exceeds 16 KiB");
+    if (size > MAX_SIGNED_RELEASE_BYTES) throw new Error("Release file exceeds 16 KiB");
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
