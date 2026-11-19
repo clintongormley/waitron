@@ -179,9 +179,10 @@ styles.
 
 This works whether or not `#app` also carries `data-theme` — see "Themes" above.
 
-Overriding `--wt-color-primary` leaves every token that holds Waitron's brand colour, or a shade of it, as
-its own value at that value — among them `--wt-color-primary-text`, `--wt-color-primary-hover`,
-`--wt-color-focus`, `--wt-color-field-label-focus` and `--wt-color-primary-disabled` — and
+Overriding `--wt-color-primary` leaves every token that holds Waitron's brand colour, or a shade of it, at
+Waitron's values — `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-focus`,
+`--wt-color-field-label-focus`, `--wt-color-primary-disabled`, `--wt-color-surface-lifted` and
+`--wt-color-stepper-button` — and
 overriding `--wt-color-danger` leaves `--wt-color-danger-hover`, `--wt-color-danger-disabled`,
 `--wt-color-danger-pulse-dim` and `--wt-color-tab-danger-tint` at Waitron's red (and overriding
 `--wt-color-warning` leaves `--wt-color-warning-pulse-dim` and `--wt-color-tab-warning-tint` at
@@ -300,8 +301,8 @@ the icons and spinners its `GRAPHIC_USES` list names by file and selector
 
 One use of the button colour it cannot see was checked by hand on 2026-10-21 and stays, being a
 graphic: the floor map's drag line, `stroke: var(--wt-color-primary)` in
-`packages/ui/src/components/wt-floor-map.ts:374`. The one text site of that kind found then, the
-printer name's redeclared `--wt-color-text` (`apps/dashboard/src/screens/printers-screen.ts:218`),
+`packages/ui/src/components/wt-floor-map.ts`. The one text site of that kind found then, the
+printer name's redeclared `--wt-color-text` (`apps/dashboard/src/screens/printers-screen.ts`),
 moved to `--wt-color-primary-text`, and a case in `printers-screen.test.ts` sets the two tokens to
 different values and checks the name takes the text one.
 
@@ -7017,7 +7018,7 @@ after the department's settings; if that request is refused, the field shows the
 unsaved while the settings stand. Service holds “Orders and payment”, with the service settings
 and the zones that differ, and “Courses and stations”, with the manager's
 PIN switch for sending after a period ends. Tables follows Service: grey fixed moments for seating,
-bill requested and leaving, blue service-step rows placed by their named starts,
+bill requested and leaving, service-step rows placed by their named starts,
 Delete and Add step, and amber course rows in course order with Fire now / Hold for later
 and, while held, each course’s own reminder delay, including At once and Off. These choices join
 the department’s shared Save. Courses keeps shared names and ordering. New courses default to held
