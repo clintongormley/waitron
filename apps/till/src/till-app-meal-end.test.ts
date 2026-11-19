@@ -531,13 +531,33 @@ describe("till-app: Print the bill", () => {
     expect(banner(el)!.textContent).toContain(overLimitText("3000.00"));
   });
 
-  it.each([
-    "fiscal.record_invalid",
-    "fiscal.foreign_recipient_unsupported",
-    "sale.number_reused",
-    "management.request_invalid",
-    "some.refusal_the_till_has_no_words_for",
-  ])("says %s printed nothing and issued no ticket, sending nobody elsewhere", async (code) => {
+  it.each(["fiscal.record_invalid", "fiscal.foreign_recipient_unsupported", "sale.number_reused"])(
+    "says %s cannot be filed, that nothing was issued and that trying again will not help",
+    async (code) => {
+      const { el } = await openBill({
+        endMeal: vi.fn().mockRejectedValue({ code, status: 409 }),
+      });
+
+      await printBill(el);
+
+      const said = banner(el)!.textContent!;
+      expect(said).toContain(t("meal_end.cannot_file"));
+      expect(said).not.toContain(t("meal_end.refused"));
+      expect(said).not.toContain(t("place.refused"));
+    },
+  );
+
+  it("words a bill that cannot be filed exactly, in English and Spanish", () => {
+    expect(t("meal_end.cannot_file")).toBe(
+      "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help.",
+    );
+    setLocale("es");
+    expect(t("meal_end.cannot_file")).toBe(
+      "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada.",
+    );
+  });
+
+  it.each(["management.request_invalid", "some.refusal_the_till_has_no_words_for"])("says %s printed nothing and issued no ticket, sending nobody elsewhere", async (code) => {
     const { el } = await openBill({
       endMeal: vi.fn().mockRejectedValue({ code, status: 409 }),
     });
@@ -634,6 +654,186 @@ describe("till-app: Print the bill", () => {
     await printBill(el);
     expect(endMeal).toHaveBeenCalledTimes(2);
     expect(sentBodies(endMeal)[1]!.expectedPartyRevision).toBe(5);
+  });
+});
+
+describe("till-app: a refusal after a send that got no answer", () => {
+  /** Every refusal the server can give before it looks for the earlier send. */
+  const beforeTheLookup = [
+    "handover.stepping_down",
+    "till.origin_refused",
+    "venue.time_zone_not_ready",
+    "session.required",
+    "session.not_open",
+    "session.person_not_signed_in",
+    "device.unauthorized",
+    "device.forbidden_action",
+    "device_profile.not_admitted",
+    "authorization.not_permitted",
+    "service_zone.not_allowed",
+  ];
+  const refusal = (code: string, more: Record<string, unknown> = {}) => ({
+    code,
+    status: 409,
+    ...more,
+  });
+  const expectWarned = (el: TillApp) => {
+    const said = banner(el)!.textContent!;
+    expect(said).toContain(t("meal_end.unconfirmed"));
+    expect(said).not.toContain(t("meal_end.refused"));
+  };
+
+  /** A first press whose only send runs out of time, then whatever `next` answers. */
+  async function pressLeftUnanswered(next: unknown, overrides: Record<string, unknown> = {}) {
+    const deadlines = deadlinesByHand();
+    const endMeal = vi.fn();
+    endMeal.mockImplementationOnce(unansweredUntilDeadline);
+    if (next instanceof Function) endMeal.mockImplementation(next as () => Promise<unknown>);
+    else endMeal.mockRejectedValue(next);
+    const opened = await openBill({ endMeal, ...overrides });
+    await printBill(opened.el);
+    deadlines.expire();
+    await flush(opened.el, 6);
+    expectWarned(opened.el);
+    return { ...opened, deadlines };
+  }
+
+  it.each(beforeTheLookup)(
+    "does not treat %s as final when a resend of the same press meets it",
+    async (code) => {
+      const endMeal = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockRejectedValue(refusal(code));
+      const { el } = await openBill({ endMeal });
+
+      await printBill(el);
+      await expect
+        .poll(() => banner(el)?.textContent ?? "", { timeout: GIVE_UP_MS })
+        .toContain(t("meal_end.unconfirmed"));
+
+      expect(endMeal).toHaveBeenCalledTimes(2);
+      expectWarned(el);
+    },
+  );
+
+  it.each([...beforeTheLookup, "management.request_invalid", "some.unknown_refusal"])(
+    "does not treat %s as final on a later press of a bill left without an answer",
+    async (code) => {
+      const { el, endMeal } = await pressLeftUnanswered(refusal(code));
+
+      await printBill(el);
+
+      expect(endMeal).toHaveBeenCalledTimes(2);
+      expectWarned(el);
+    },
+  );
+
+  it.each(["fiscal.record_invalid", "fiscal.foreign_recipient_unsupported", "sale.number_reused"])(
+    "does not say %s issued nothing on a later press of a bill left without an answer",
+    async (code) => {
+      const { el } = await pressLeftUnanswered(refusal(code));
+
+      await printBill(el);
+
+      expectWarned(el);
+      expect(banner(el)!.textContent).not.toContain(t("meal_end.cannot_file"));
+    },
+  );
+
+  it("does not say another person's takeover stopped the print on a later press", async () => {
+    const { el } = await pressLeftUnanswered(refusal("draft.taken_over", { ownerName: "Marta" }));
+
+    await printBill(el);
+
+    expectWarned(el);
+    expect(banner(el)!.textContent).not.toContain("Marta");
+  });
+
+  it.each([
+    ["meal_end.no_printer", {}],
+    ["meal_end.delivery_unavailable", {}],
+    ["meal_end.already_issued", {}],
+    ["bill.unsent_dishes", {}],
+    ["bill.nothing_outstanding", {}],
+    ["device.forbidden_action", { action: "receipt" }],
+  ])("keeps %s's own words on a later press: the command itself said it", async (code, more) => {
+    const { el } = await pressLeftUnanswered(refusal(code, more));
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage(code));
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+  });
+
+  it.each([
+    ["a failed response with no Waitron error", { code: "server.internal", status: 502 }],
+  ])("remembers %s as no answer", async (_case, first) => {
+    const endMeal = vi
+      .fn()
+      .mockRejectedValueOnce(first)
+      .mockRejectedValue(refusal("authorization.not_permitted"));
+    const { el } = await openBill({ endMeal });
+    await printBill(el);
+    expectWarned(el);
+
+    await printBill(el);
+
+    expect(endMeal).toHaveBeenCalledTimes(2);
+    expectWarned(el);
+  });
+
+  it("remembers an empty answer as no answer", async () => {
+    const endMeal = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValue(refusal("authorization.not_permitted"));
+    const { el } = await openBill({ endMeal, getPartyBills: vi.fn(async () => [billOf()]) });
+    await printBill(el);
+    expectWarned(el);
+
+    await printBill(el);
+
+    expect(endMeal).toHaveBeenCalledTimes(2);
+    expectWarned(el);
+  });
+
+  it("remembers it per bill: another bill's refusal keeps its own words", async () => {
+    const { el, endMeal } = await pressLeftUnanswered(refusal("authorization.not_permitted"), {
+      getPartyBills: twoBills(),
+    });
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+
+    emit(tableOrder(el), "end-meal", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+
+    expect(sentBodies(endMeal)[1]!.billId).toBe("wo-9");
+    expect(banner(el)!.textContent).toContain(t("take_payment.not_permitted"));
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+  });
+
+  it.each([
+    ["a confirmed answer", async () => ended],
+    [
+      "meal_end.already_issued",
+      async () => {
+        throw refusal("meal_end.already_issued");
+      },
+    ],
+  ])("forgets it after %s", async (_case, second) => {
+    let presses = 0;
+    const { el } = await pressLeftUnanswered(
+      () => (++presses === 1 ? second() : Promise.reject(refusal("authorization.not_permitted"))),
+      { getPartyBills: vi.fn(async () => [billOf()]) },
+    );
+    await printBill(el);
+    expect(banner(el)?.textContent ?? "").not.toContain(t("meal_end.unconfirmed"));
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(t("take_payment.not_permitted"));
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
   });
 });
 

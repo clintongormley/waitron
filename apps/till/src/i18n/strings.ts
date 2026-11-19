@@ -1763,6 +1763,10 @@ export const en = {
     "Print the bill got no answer, so the bill may have been printed. Check this bill before trying again.",
   "meal_end.refused":
     "The bill was not printed and no ticket was issued. Nothing on the bill has changed.",
+  "meal_end.cannot_file":
+    "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help.",
+  "meal_end.unserved_full_invoice":
+    "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot file a correction for it, so take off any dish that may not come before you print.",
   // The confirmation before closing a whole bill as a deferred payment.
   "deferred_close.title": "Close as deferred payment",
   "deferred_close.bill": "Bill",
@@ -3895,6 +3899,10 @@ export const es: Record<StringKey, string> = {
     "Imprimir la cuenta no obtuvo respuesta, así que puede que se haya impreso. Revisa esta cuenta antes de volver a intentarlo.",
   "meal_end.refused":
     "La cuenta no se ha impreso y no se ha emitido ningún ticket. La cuenta no ha cambiado.",
+  "meal_end.cannot_file":
+    "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada.",
+  "meal_end.unserved_full_invoice":
+    "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede presentar una rectificación para ella, así que quita antes de imprimir los platos que puedan no llegar.",
   "deferred_close.title": "Cerrar como pago aplazado",
   "deferred_close.bill": "Cuenta",
   "deferred_close.invoice": "Factura",

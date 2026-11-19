@@ -711,9 +711,10 @@ const dishesKey = (view: PartyAllergyRead) => JSON.stringify(view.dishes);
 type OpenedDraft = { sync: DraftSync | undefined; read: boolean } | undefined;
 
 /**
- * Sale refusals a retry can never clear: the same basket meets the same refusal. Every handler
- * whose server call reaches `recordSale` checks them. The settle paths show `sale.refused`, because
- * money may already have been taken; `#onPlaceOrder` takes no tender and shows `place.refused`.
+ * Sale refusals a retry can never clear: the same basket meets the same refusal. `settlingErrorOf`,
+ * `#onConfirmPayment` and `#collectCard` show `sale.refused`, because money may already have been
+ * taken; `#onPlaceOrder` takes no tender and shows `place.refused`; `mealEndError` shows
+ * `meal_end.cannot_file`, or `meal_end.unconfirmed` after a send that got no answer.
  */
 const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.record_invalid",
@@ -742,25 +743,57 @@ const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
   "submission.id_reused",
 ]);
 
+/** The server refuses these before it looks for an earlier send, so they say nothing of what that
+ * send did. */
+const MEAL_END_REFUSED_BEFORE_LOOKUP: ReadonlySet<string> = new Set([
+  "handover.stepping_down",
+  "till.origin_refused",
+  "venue.time_zone_not_ready",
+  "session.required",
+  "session.not_open",
+  "session.person_not_signed_in",
+  "device.unauthorized",
+  "device.forbidden_action",
+  "device_profile.not_admitted",
+  "authorization.not_permitted",
+  "service_zone.not_allowed",
+]);
+
+function refusedBeforeLookup(error: unknown): boolean {
+  const { code, action } = (error ?? {}) as { code?: unknown; action?: unknown };
+  return (
+    typeof code === "string" &&
+    MEAL_END_REFUSED_BEFORE_LOOKUP.has(code) &&
+    // Paper is checked inside the command, once it has found no earlier send and no ticket.
+    !(code === "device.forbidden_action" && action === "receipt")
+  );
+}
+
 /**
- * A refused Print the bill as said, the party, draft and not-served refusals aside. Nobody approves
- * Print the bill, so a refused permission is the signed-in person's own.
+ * A refused Print the bill as said, the party and not-served refusals aside. Nobody approves Print
+ * the bill, so a refused permission is the signed-in person's own.
  *
- * `meal_end.refused` says no ticket was issued, which the server's own refusal can say: its
- * transaction rolled back or never began. `server.internal` is not such a refusal: the client also
- * names any failed response without Waitron's error body that way. Nor is a refusal after a send
- * went unanswered: the server checks the session and device before it looks for that send, so a
- * resend can be refused while the first send's ticket stands.
+ * `meal_end.refused`, `meal_end.cannot_file` and a takeover's words say nothing was printed, which
+ * the server's own refusal can say: its transaction rolled back or never began. `server.internal` is
+ * not such a refusal: the client also names any failed response without Waitron's error body that
+ * way. Nor is anything after an `earlierUnanswered` send: a resend can be refused before the server
+ * finds that send, and a later press has a new submission id that cannot find it at all, so the first
+ * send's ticket may stand.
  */
-function mealEndError(error: unknown, earlierSendUnanswered: boolean): CounterError {
+function mealEndError(error: unknown, earlierUnanswered: boolean): CounterError {
   const refusal = (error ?? {}) as {
     code?: unknown;
     reason?: unknown;
     clockAt?: unknown;
     offsetMinutes?: unknown;
+    ownerName?: unknown;
   };
   const code = typeof refusal.code === "string" ? refusal.code : undefined;
-  const nothingIssued = earlierSendUnanswered ? "meal_end.unconfirmed" : "meal_end.refused";
+  if (earlierUnanswered && refusedBeforeLookup(error)) return "meal_end.unconfirmed";
+  if (code === "draft.taken_over")
+    return earlierUnanswered
+      ? "meal_end.unconfirmed"
+      : { printTakenOver: typeof refusal.ownerName === "string" ? refusal.ownerName : "" };
   if (code === "authorization.not_permitted") return "take_payment.not_permitted";
   if (code === "device_profile.not_admitted") return "meal_end.not_admitted";
   if (code === "session.not_open") return { code: "session.required" };
@@ -770,13 +803,16 @@ function mealEndError(error: unknown, earlierSendUnanswered: boolean): CounterEr
     const reading = clockReadingOf(refusal);
     return reading === undefined ? { code } : { clockUnusable: reading };
   }
-  if (isPermanentSaleRefusal(error)) return nothingIssued;
+  if (isPermanentSaleRefusal(error))
+    return earlierUnanswered ? "meal_end.unconfirmed" : "meal_end.cannot_file";
   const overLimit = overLimitOf(error);
   if (overLimit !== undefined) return overLimit;
   const said =
     code !== undefined && MEAL_END_REFUSALS.has(code) ? { code } : tableWriteError(error);
   if (said !== "table.error") return said;
-  return code === undefined || code === "server.internal" ? "meal_end.unconfirmed" : nothingIssued;
+  return code === undefined || code === "server.internal" || earlierUnanswered
+    ? "meal_end.unconfirmed"
+    : "meal_end.refused";
 }
 
 /** The server's word that it issued `billId`'s ticket: an empty answer, or one about anything else,
@@ -4340,6 +4376,10 @@ export class TillApp extends LitElement {
   @state() private mealEnd: (MealEndShown & { partyId: string; revision?: number }) | null = null;
   /** The Print the bill request out, and the sign-in that pressed it; see {@link #billPrinting}. */
   @state() private mealEndPrinting: { billId: string; session: number } | null = null;
+  /** Bills a press left with no confirmed answer: its ticket may exist, and a later press, under a
+   * new submission id, cannot find it. Kept across visits, since what the bill may hold does not
+   * change with who is looking at it. */
+  #mealEndUnanswered = new Set<string>();
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
   @state() private departureApprovers?: StaffMember[];
@@ -20195,7 +20235,10 @@ export class TillApp extends LitElement {
       if (isNetworkFailure(outcome.error)) this.#onMealEndUnconfirmed(asked);
       else await this.#onMealEndRefused(asked, request, outcome.error, earlierSendUnanswered);
     } else if (!confirmsTicket(outcome.answer, workingOrderId)) this.#onMealEndUnconfirmed(asked);
-    else if (live()) await this.#onMealEnded(asked);
+    else {
+      this.#mealEndUnanswered.delete(workingOrderId);
+      if (live()) await this.#onMealEnded(asked);
+    }
   }
 
   async #onMealEnded(asked: BillComposition): Promise<void> {
@@ -20227,6 +20270,7 @@ export class TillApp extends LitElement {
 
   /** The warning and the released controls come first: the read after them may never answer. */
   #onMealEndUnconfirmed(asked: BillComposition): void {
+    this.#mealEndUnanswered.add(asked.billId);
     if (!this.#mealEndPartyCurrent(asked)) return;
     if (this.#onPressedBill(asked)) this.errorKey = "meal_end.unconfirmed";
     void this.#rereadBillsAfterPrint(asked, "meal_end.unconfirmed");
@@ -20250,10 +20294,16 @@ export class TillApp extends LitElement {
     error: unknown,
     earlierSendUnanswered: boolean,
   ): Promise<void> {
+    const refusal = error as { code?: unknown; dishes?: unknown } | undefined;
+    const said = mealEndError(
+      error,
+      earlierSendUnanswered || this.#mealEndUnanswered.has(request.billId),
+    );
+    if (said === "meal_end.unconfirmed") this.#mealEndUnanswered.add(request.billId);
+    else if (refusal?.code === "meal_end.already_issued")
+      this.#mealEndUnanswered.delete(request.billId);
     if (!this.#mealEndPartyCurrent(asked)) return;
     const stillOnBill = () => this.#onPressedBill(asked);
-    const refusal = error as
-      { code?: unknown; dishes?: unknown; ownerName?: string | null } | undefined;
     if (refusal?.code === "meal_end.unserved_dishes" && Array.isArray(refusal.dishes)) {
       if (asked.visit !== this.#orderVisit) return;
       this.mealEnd = {
@@ -20272,10 +20322,6 @@ export class TillApp extends LitElement {
       if (stillOnBill()) this.errorKey = tableWriteError(error);
       return;
     }
-    const said: CounterError =
-      refusal?.code === "draft.taken_over"
-        ? { printTakenOver: refusal.ownerName ?? "" }
-        : mealEndError(error, earlierSendUnanswered);
     if (stillOnBill()) this.errorKey = said;
     await this.#rereadBillsAfterPrint(asked, said);
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
