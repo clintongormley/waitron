@@ -1,6 +1,13 @@
 import { stringToCents } from "./cents.js";
+import { isAppError } from "./errors.js";
 import type { ServedSetMenuCopy } from "./menu-document/menu-document-types.js";
-import type { SetMenuOffer, SetMenuOfferDish } from "./set-menu-fit.js";
+import {
+  fitSetMenus,
+  type SetMenuFit,
+  type SetMenuOffer,
+  type SetMenuOfferDish,
+  type SetMenuPlace,
+} from "./set-menu-fit.js";
 
 export interface SetMenuCopy extends SetMenuOffer {
   setMenuId: string;
@@ -224,4 +231,106 @@ export function withPlacements(
       : [{ ...place, lineId: id, productId, variantId, movable: true }];
   });
   return { ...state, dishes: [...state.dishes, ...added] };
+}
+
+export interface DishMove {
+  lineId: string;
+  to: DishPlace;
+}
+
+export interface MoveSuggestion {
+  moves: (DishMove & { from: DishPlace; priceCents: number; countsAsCourseId: string })[];
+  place: PlacementResult;
+}
+
+function fitPlace({ setMenuLineId, place }: DishPlace): SetMenuPlace {
+  return { setMenuId: setMenuLineId, lineIndex: place };
+}
+
+export function suggestMove(
+  state: BillSetMenuState,
+  drafted: readonly (PlacementResult & DishChoice)[],
+  dish: Omit<DishToPlace, "reserved">,
+): MoveSuggestion | null {
+  const offerBySetMenu = new Map(state.setMenus.map(({ lineId, copyId }) => [lineId, copyId]));
+  const copyIds = new Set(offerBySetMenu.values());
+  const placeByDish = new Map(state.dishes.map((placed) => [placed.lineId, fitPlace(placed)]));
+  let fit: SetMenuFit;
+  try {
+    fit = fitSetMenus({
+      offers: state.copies.filter(({ id }) => copyIds.has(id)),
+      setMenus: state.setMenus.map(({ lineId, copyId }) => ({ id: lineId, fixedOfferId: copyId })),
+      dishes: [
+        ...state.dishes.map((placed) => ({
+          id: placed.lineId,
+          productId: placed.productId,
+          variantId: placed.variantId,
+          pinnedTo: placed.movable ? null : fitPlace(placed),
+        })),
+        ...drafted.map((draft) => ({
+          id: draft.id,
+          productId: draft.productId,
+          variantId: draft.variantId,
+          pinnedTo: fitPlace(draft),
+        })),
+        { ...dish, pinnedTo: null },
+      ],
+      previous: { offerBySetMenu, placeByDish },
+    });
+  } catch (error) {
+    if (isAppError(error) && error.code === "set_menu.fit_invalid_input") return null;
+    throw error;
+  }
+  if (fit.kind !== "fitted") return null;
+
+  const targets = new Map(
+    fit.dishes.map(({ id, place: { setMenuId, lineIndex } }) => [
+      id,
+      { setMenuLineId: setMenuId, place: lineIndex },
+    ]),
+  );
+  const moves: MoveSuggestion["moves"] = [];
+  for (const placed of state.dishes) {
+    const to = targets.get(placed.lineId)!;
+    if (samePlace(placed, to)) continue;
+    const { priceCents, countsAsCourseId } = placesFor(state, placed).find((place) =>
+      samePlace(place, to),
+    )!;
+    moves.push({
+      lineId: placed.lineId,
+      from: { setMenuLineId: placed.setMenuLineId, place: placed.place },
+      to,
+      priceCents,
+      countsAsCourseId,
+    });
+  }
+  const to = targets.get(dish.id)!;
+  const destination = placesFor(state, dish).find((place) => samePlace(place, to))!;
+  return { moves, place: pricePlace(dish.id, destination) };
+}
+
+export function checkMoves(
+  state: BillSetMenuState,
+  moves: readonly DishMove[],
+):
+  | { kind: "ok"; results: PlacementResult[] }
+  | { kind: "place_taken"; lineId: string }
+  | { kind: "not_placed"; lineId: string } {
+  const moving = new Set(moves.map(({ lineId }) => lineId));
+  const dishes = new Map(state.dishes.map((dish) => [dish.lineId, dish]));
+  const occupied = new Map<string, number>();
+  for (const dish of state.dishes) {
+    if (!moving.has(dish.lineId)) occupy(occupied, dish);
+  }
+  const results: PlacementResult[] = [];
+  for (const { lineId, to } of moves) {
+    const dish = dishes.get(lineId);
+    if (dish === undefined) return { kind: "not_placed", lineId };
+    if (!dish.movable || !moving.delete(lineId)) return { kind: "place_taken", lineId };
+    const target = placesFor(state, dish).find((place) => samePlace(place, to));
+    if (target === undefined || !isOpen(occupied, target)) return { kind: "place_taken", lineId };
+    occupy(occupied, target);
+    results.push(pricePlace(lineId, target));
+  }
+  return { kind: "ok", results };
 }
