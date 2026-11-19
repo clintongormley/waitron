@@ -66,6 +66,7 @@
   "src/popup-helpers.ts": 801.2,
   "src/reorder-table.ts": 829,
   "src/reorder.ts": 31.4,
+  "src/tabbable.ts": 846,
   "src/theme-choice.ts": 298.7,
   "src/theme-choices.ts": 7.9,
   "src/themed-favicon.ts": 27.9,

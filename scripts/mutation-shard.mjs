@@ -26,9 +26,7 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
  * limit at 325 of 382, 21% of its mutants static and 42 timed out. Run 44021607120 (50-minute
  * limit) cancelled shards 23 and 30; shard 23 held wt-floor-plan-canvas.ts, whose tested mutants'
  * recorded durations sum to about 5,500 s a night (summed, not elapsed), about 2,900 and 2,600 s
- * per half. tabbable.ts recorded 811 s with 0 of 61 mutants static in run 44039833658 and 4,986 s
- * with 37 static in run 44241780388 (summed, not elapsed); its shard 26 hit the 50-minute limit in
- * run 44462750256, which left no report.
+ * per half.
  * ui-core: no file split. At 4 shards, timed locally on 2026-10-20 at `--concurrency 2`, shard 1
  * (derive.ts and colour.ts among its 544 mutants) took 643 s and shard 4 (contrast-rules.ts among
  * its 448) 468 s.
@@ -42,7 +40,6 @@ export const HEAVY_FILES = {
     "src/components/wt-data-table.ts": 12,
     "src/components/wt-dialog.ts": 6,
     "src/components/wt-floor-plan-canvas.ts": 2,
-    "src/tabbable.ts": 1,
   },
   "ui-core": {},
   shared: {},
