@@ -38,7 +38,11 @@ function signedRelease(tag, metadata = {}) {
       prerelease: metadata.signedPrerelease ?? false,
       sourceSha: metadata.signedSha ?? sourceSha,
       platform: "linux/amd64",
-      images: { app: `sha256:${"a".repeat(64)}`, printAgent: `sha256:${"b".repeat(64)}` },
+      images: {
+        app: `sha256:${"a".repeat(64)}`,
+        printAgent: `sha256:${"b".repeat(64)}`,
+        tunnel: `sha256:${"c".repeat(64)}`,
+      },
     },
     privateKey,
   );
