@@ -505,3 +505,80 @@ it("says nothing about closing until the receipt printer is known", async () => 
   );
   expect(el.shadowRoot!.querySelector("[data-settlement-closing]")).toBeNull();
 });
+
+it.each<[string, Partial<TillSettlementDocumentDialog>]>([
+  ["no receipt printer", { receiptEquipment: roleOf("receipt", null, []) }],
+  ["equipment not yet read", { receiptEquipment: undefined }],
+])(
+  "says the device may not print before anything about its printer, with %s",
+  async (_case, props) => {
+    const { el } = await mountWidget<TillSettlementDocumentDialog>(
+      "till-settlement-document-dialog",
+      { ...closingProps("not-allowed"), ...props },
+    );
+    const lines = [...el.shadowRoot!.querySelectorAll("[data-settlement-closing]")];
+    expect(lines.map((line) => line.getAttribute("data-settlement-closing"))).toEqual([
+      "not-allowed",
+    ]);
+  },
+);
+
+it.each([
+  ["emailed", "email", "sending", false],
+  ["sent on A4", "a4", "sent", true],
+] as const)(
+  "says nothing about closing once a full invoice's original is %s",
+  async (_case, medium, status, originalCompleted) => {
+    const attempt = {
+      id: "original",
+      medium,
+      designation: "original" as const,
+      status,
+      failureCode: null,
+      requestedAt: "2026-11-11T12:00:00.000Z",
+      at: null,
+      personId: "p1",
+      printerHold: null,
+      lateSuccess: false,
+    };
+    for (const state of Object.keys(closingLines) as ClosingState[]) {
+      const { el } = await mountWidget<TillSettlementDocumentDialog>(
+        "till-settlement-document-dialog",
+        {
+          ...closingProps(state),
+          result: {
+            ...invoiceOf("30.00"),
+            invoiceType: "F1",
+            recipient: {
+              legalName: "Harbour Ltd",
+              taxId: "B12345678",
+              address: "1 Harbour Road",
+              countryCode: "ES",
+            },
+          },
+          deliveries: {
+            current: attempt,
+            history: [attempt],
+            originalCompleted,
+            originalPrinterId: null,
+            actions: { print: null, receiptInstead: null, retryOriginal: null, email: null },
+          },
+        },
+      );
+      expect(el.shadowRoot!.querySelector("[data-settlement-closing]")).toBeNull();
+      cleanupWidgets();
+    }
+  },
+);
+
+it("tells a full invoice with nothing sent that closing prints its receipt", async () => {
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    { ...closingProps("prints"), result: { ...invoiceOf("30.00"), invoiceType: "F1" } },
+  );
+  expect(
+    el
+      .shadowRoot!.querySelector("[data-settlement-closing]")
+      ?.getAttribute("data-settlement-closing"),
+  ).toBe("prints");
+});
