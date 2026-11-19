@@ -160,6 +160,22 @@ describe("moving between states", () => {
   });
 });
 
+describe("counting the waits that begin", () => {
+  it("counts the start's wait, and each move back to waiting from a confirmed time, not a repeat while waiting", () => {
+    const state = startClockState();
+    expect(state.waitsBegun()).toBe(1);
+    state.backToWaiting("clock_jumped");
+    expect(state.waitsBegun()).toBe(1);
+    state.confirm("by_person", HEADS);
+    expect(state.waitsBegun()).toBe(1);
+    state.backToWaiting("future_date_refused", "2027-03-15");
+    expect(state.waitsBegun()).toBe(2);
+    state.confirm("by_devices", HEADS);
+    state.backToWaiting("start");
+    expect(state.waitsBegun()).toBe(3);
+  });
+});
+
 describe("waiting because AEAT refused a sale as dated in the future", () => {
   it("keeps that cause and the refused sale's date when sent back to waiting for a jump, and clears the date on confirmation", () => {
     const state = startClockState();

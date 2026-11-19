@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
   dayCutoverChanges,
@@ -52,6 +52,12 @@ let today: string;
 /** The trusted clock's reading, in ms. */
 let at = 0;
 let seatHolds = false;
+/** How many holds have begun, as the box's clock sources count them. */
+let holdsBegun = 0;
+function hold() {
+  seatHolds = true;
+  holdsBegun++;
+}
 let jobSeesHold: () => boolean = () => seatHolds;
 let onLog: Logger = () => {};
 const logged: { event: string; fields: Record<string, unknown> | undefined }[] = [];
@@ -105,6 +111,7 @@ function job(opts: { startMark?: number; selling?: Selling } = {}) {
     },
     selling: opts.selling ?? primary,
     clockUnconfirmed: () => jobSeesHold(),
+    clockHoldsBegun: () => holdsBegun,
     startMark: opts.startMark ?? highestBillRow(venue.db),
   });
 }
@@ -150,6 +157,10 @@ describe("openedAtInWindows", () => {
 });
 
 describe("bills.close_of_day", () => {
+  beforeEach(() => {
+    seatHolds = false;
+  });
+
   it("issues nothing before the day's end, and every due bill at the next look after it", async () => {
     const first = await billOpenedAt(day(0).startAt + HOUR);
     const second = await billOpenedAt(day(0).startAt + 2 * HOUR);
@@ -181,7 +192,7 @@ describe("bills.close_of_day", () => {
   });
 
   it("issues no ticket when the gate lets go on a box whose clock ran a day behind, only at the end of the corrected day", async () => {
-    seatHolds = true;
+    hold();
     const definition = job();
     at = day(6).startAt + 9 * HOUR;
     await look(definition);
@@ -208,7 +219,7 @@ describe("bills.close_of_day", () => {
     const definition = job();
     at = day(7).startAt + 9 * HOUR;
     await look(definition);
-    seatHolds = true;
+    hold();
     await look(definition);
     const bill = await billOpenedAt(day(6).startAt + 10 * HOUR);
     seatHolds = false;
@@ -224,7 +235,7 @@ describe("bills.close_of_day", () => {
   it("writes nothing and throws nothing while the gate holds; released, issues dated with the reading then", async () => {
     const bill = await billOpenedAt(day(8).startAt + HOUR);
     const definition = job();
-    seatHolds = true;
+    hold();
     at = day(9).startAt + HOUR;
     await expect(look(definition)).resolves.toBeDefined();
     at += 60_000;
@@ -251,7 +262,7 @@ describe("bills.close_of_day", () => {
       const definition = job();
       if (!jobSees) jobSeesHold = () => false;
       onLog = (_level, event) => {
-        if (event === "close_of_day.issued") seatHolds = true;
+        if (event === "close_of_day.issued") hold();
       };
       try {
         at = day(11).startAt + HOUR;
@@ -271,14 +282,14 @@ describe("bills.close_of_day", () => {
     },
   );
 
-  it("issues the fine bill when another is refused, logs the refused one and throws naming it", async () => {
+  it("issues the fine bill when another is refused, logs the refused one and throws its refusal", async () => {
     const bad = await billOpenedAt(day(12).startAt + HOUR);
     const fine = await billOpenedAt(day(12).startAt + 2 * HOUR);
     refused.set(bad, new AppError("bill.nothing_outstanding", { workingOrderId: bad }));
     const definition = job();
     at = day(13).startAt + HOUR;
     try {
-      await expect(look(definition)).rejects.toThrow(bad);
+      await expect(look(definition)).rejects.toMatchObject({ code: "bill.nothing_outstanding" });
       expect(issued(fine)).toBe(true);
       expect(issued(bad)).toBe(false);
       expect(logged).toContainEqual({
@@ -290,6 +301,56 @@ describe("bills.close_of_day", () => {
     }
     at += 5_000;
     await look(definition);
+    expect(issued(bad)).toBe(true);
+  });
+
+  it("still throws for a refused bill when a later bill ends the pass quietly", async () => {
+    const bad = await billOpenedAt(day(14).startAt + HOUR);
+    const later = await billOpenedAt(day(14).startAt + 2 * HOUR);
+    refused.set(bad, new AppError("bill.nothing_outstanding", { workingOrderId: bad }));
+    const definition = job();
+    jobSeesHold = () => false;
+    onLog = (_level, event) => {
+      if (event === "close_of_day.issue_failed") hold();
+    };
+    at = day(15).startAt + HOUR;
+    try {
+      await expect(look(definition)).rejects.toMatchObject({ code: "bill.nothing_outstanding" });
+      expect(issued(later)).toBe(false);
+    } finally {
+      onLog = () => {};
+      jobSeesHold = () => seatHolds;
+      refused.clear();
+    }
+    seatHolds = false;
+    at += 5_000;
+    await look(definition);
+    expect(issued(bad)).toBe(true);
+    expect(issued(later)).toBe(true);
+  });
+
+  it("issues no bill opened during a hold that began and ended between two looks", async () => {
+    const bad = await billOpenedAt(day(16).startAt + HOUR);
+    refused.set(bad, new AppError("bill.nothing_outstanding", { workingOrderId: bad }));
+    const definition = job();
+    at = day(17).startAt + 3 * HOUR;
+    let bill: string;
+    try {
+      await expect(look(definition)).rejects.toBeDefined();
+      hold();
+      // Seated while the box's clock reads a day behind; no look sees the hold.
+      bill = await billOpenedAt(day(16).startAt + 10 * HOUR);
+      seatHolds = false;
+      at += 5_000;
+      await look(definition).catch(() => {});
+      expect(issued(bill)).toBe(false);
+      expect(fiscalRecordCount(venue, bill)).toBe(0);
+    } finally {
+      refused.clear();
+    }
+    at = day(17).endAt + 60_000;
+    await look(definition);
+    expect(issued(bill)).toBe(true);
     expect(issued(bad)).toBe(true);
   });
 

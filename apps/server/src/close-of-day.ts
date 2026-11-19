@@ -242,6 +242,8 @@ export interface CloseOfDayJobDeps extends CloseOfDayDeps {
   log: Logger;
   selling: { mode: () => string; role: () => string; fenced: () => boolean };
   clockUnconfirmed: () => boolean;
+  /** Grows each time a hold `clockUnconfirmed` covers begins, so a hold between two looks is seen. */
+  clockHoldsBegun: () => number;
   /** The highest bill row when the start began waiting for its time: the first window opens here. */
   startMark: number;
 }
@@ -259,6 +261,7 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
   let mark = deps.startMark;
   // The start's wait for its time is the first window.
   let held = true;
+  let holdsSeen: number | undefined;
   let queryAgain = true;
   let queriedDayStart = 0;
 
@@ -272,9 +275,12 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
         },
       })),
     );
-    const failed: string[] = [];
+    const failures: unknown[] = [];
     for (const billId of due.ids) {
-      if (deps.clockUnconfirmed()) return endUntilRelease();
+      if (deps.clockUnconfirmed()) {
+        endUntilRelease();
+        break;
+      }
       try {
         const outcome = await withIssuanceTransaction(
           deps.db,
@@ -283,18 +289,24 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
         );
         if (outcome.kind === "money_moving") queryAgain = true;
       } catch (error) {
-        if (clockUnconfirmedRefusal(error)) return endUntilRelease();
-        if (codeOf(error) === "venue.time_zone_not_ready") return void (queryAgain = true);
+        if (clockUnconfirmedRefusal(error)) {
+          endUntilRelease();
+          break;
+        }
+        if (codeOf(error) === "venue.time_zone_not_ready") {
+          queryAgain = true;
+          break;
+        }
         deps.log("warn", "close_of_day.issue_failed", {
           workingOrderId: billId,
           errorCode: codeOf(error),
         });
-        failed.push(billId);
+        failures.push(error);
       }
     }
-    if (failed.length > 0) {
+    if (failures.length > 0) {
       queryAgain = true;
-      throw new Error(`close_of_day.issue_failed: ${failed.join(", ")}`);
+      throw failures[0];
     }
   }
 
@@ -315,10 +327,13 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
     maxSleepMs: LOOK_MS,
     backoff: { firstMs: 5_000, maxMs: 300_000 },
     async pass() {
+      const holds = deps.clockHoldsBegun();
       if (deps.clockUnconfirmed()) {
         held = true;
         return { nextDueAt: null };
       }
+      if (holds !== holdsSeen) held = true;
+      holdsSeen = holds;
       const top = highestBillRow(deps.db);
       const reading = deps.clock.now().instant;
       if (held) {

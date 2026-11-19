@@ -589,7 +589,7 @@ export const ALERT_WORDS: Readonly<
       },
       "bills.close_of_day": {
         en: "issuing the tickets of bills left open at the end of the business day",
-        es: "emitir los tiques de las cuentas abiertas al cierre de la jornada",
+        es: "la emisión de los tiques de las cuentas abiertas al cierre de la jornada",
       },
       "fiscal.tamper_watch": {
         en: "checking the invoice record's protections",

@@ -4453,6 +4453,8 @@ async function bootServer(
     }),
   );
 
+  // Read before any till can open a bill: bills above it were opened while the start waited.
+  const closeOfDayStartMark = highestBillRow(db);
   // A mirror's ambient administrator session must stay off the staff entrance.
   const staffAdmitted = () => cloudConnection?.staffAdmitted() ?? Promise.resolve(false);
   let staffListener =
@@ -4467,8 +4469,6 @@ async function bootServer(
     await staffListener?.close();
   });
 
-  // Read before any till can open a bill: bills above it were opened while the start waited.
-  const closeOfDayStartMark = highestBillRow(db);
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
   undoOnFailure.push(() => closeListener(server));
@@ -4521,6 +4521,8 @@ async function bootServer(
         fenced: () => fenced,
       },
       clockUnconfirmed: startClockHolds,
+      // A set with the host holds from its step on (`clockCorrection`'s `steps`).
+      clockHoldsBegun: () => startClock.waitsBegun() + correction.steps(),
       startMark: closeOfDayStartMark,
     }),
   );

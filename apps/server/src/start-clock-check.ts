@@ -34,6 +34,8 @@ export interface StartClockState {
   /** False while the latest look could not hear from the host's time service. */
   readonly hostAnswers: boolean;
   unconfirmed(): boolean;
+  /** Grows by one each time a wait begins, the start's included. */
+  waitsBegun(): number;
   confirm(by: StartClockConfirmation, heads: ChainHeads): void;
   /** Moves any status to waiting, `by_internet` included: the caller decides by the reading. A
    * box waiting because AEAT refused a sale as dated in the future keeps that cause. */
@@ -54,6 +56,7 @@ export function startClockState(): StartClockState {
   let mark: ChainHeads | null = null;
   let refusedOn: string | null = null;
   let hostAnswers = true;
+  let waits = 1;
   const current = (): StartClockStatus => status;
 
   const confirm = (by: StartClockConfirmation, heads: ChainHeads) => {
@@ -81,9 +84,11 @@ export function startClockState(): StartClockState {
       return hostAnswers;
     },
     unconfirmed: () => status === "waiting",
+    waitsBegun: () => waits,
     confirm,
     backToWaiting(next, refusedDate) {
       if (status === "waiting" && cause === "future_date_refused") return;
+      if (status !== "waiting") waits++;
       status = "waiting";
       cause = next;
       refusedOn = next === "future_date_refused" ? (refusedDate ?? null) : null;
