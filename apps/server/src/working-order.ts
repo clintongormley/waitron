@@ -328,7 +328,12 @@ import { dishKitchenItems, onDishesOrTheirExtras, type DishKitchenItem } from ".
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
-import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./trading-context.js";
+import type {
+  DeviceRequestConfig,
+  OriginConfig,
+  SaleOriginConfig,
+  TradingContext,
+} from "./trading-context.js";
 import { saleReceiptFacts } from "./receipt-guests.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket, resolveInvoicePrinter } from "./receipt-print.js";
@@ -7638,7 +7643,7 @@ export interface IssuedInvoice {
 export async function issueUnpaidInvoice(
   tx: Transaction,
   backend: FiscalBackend,
-  cfg: DeviceRequestConfig,
+  cfg: SaleOriginConfig,
   invoice: PricedInvoice,
   operatorId: string,
   admission: TradingAdmission,

@@ -26,6 +26,7 @@ describe("the source vocabulary", () => {
       "demo_seed",
       "readiness_test",
       "operator_script",
+      "trading_day_close",
     ]);
   });
 
@@ -34,7 +35,13 @@ describe("the source vocabulary", () => {
   });
 
   it("allows only named sale sources", () => {
-    expect(SALE_SOURCES).toEqual(["device", "demo_seed", "readiness_test", "operator_script"]);
+    expect(SALE_SOURCES).toEqual([
+      "device",
+      "demo_seed",
+      "readiness_test",
+      "operator_script",
+      "trading_day_close",
+    ]);
   });
 });
 

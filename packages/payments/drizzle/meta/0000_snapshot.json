@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "df4647b7-1f19-4354-81cd-9ce68a01442d",
+  "id": "7ef4930c-3215-4135-b1fa-676a2391817b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "card_readers": {
@@ -720,7 +720,7 @@
         },
         "payments_source_ck": {
           "name": "payments_source_ck",
-          "value": "\"payments\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"payments\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')"
         },
         "payments_source_device_ck": {
           "name": "payments_source_device_ck",

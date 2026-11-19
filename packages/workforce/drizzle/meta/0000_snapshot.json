@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ad32abf3-9b9d-4ad5-ab92-bd4eb3fd4ea0",
+  "id": "dba6e23a-a2c0-40e7-8b5b-5c5366ec6b93",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -2003,7 +2003,7 @@
         },
         "time_entries_captured_by_source_ck": {
           "name": "time_entries_captured_by_source_ck",
-          "value": "\"time_entries\".\"captured_by_source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"time_entries\".\"captured_by_source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')"
         },
         "time_entries_captured_by_source_device_ck": {
           "name": "time_entries_captured_by_source_device_ck",

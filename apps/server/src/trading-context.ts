@@ -1,4 +1,4 @@
-import type { Decimal, DeviceOrigin, Origin } from "@waitron/shared";
+import type { Decimal, DeviceOrigin, Origin, SaleOrigin } from "@waitron/shared";
 import type { NodeIdentityConfig } from "./node-config.js";
 import type { TillAppSettings } from "./till-config.js";
 
@@ -27,4 +27,8 @@ export interface OriginConfig extends TradingContext {
 
 export interface DeviceRequestConfig extends TradingContext {
   origin: DeviceOrigin;
+}
+
+export interface SaleOriginConfig extends TradingContext {
+  origin: SaleOrigin;
 }
