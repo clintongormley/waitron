@@ -661,10 +661,14 @@ describe("till-app: Print the bill", () => {
 });
 
 describe("till-app: a refusal after a send that got no answer", () => {
-  /** Every refusal the server can give before it looks for the earlier send. */
+  /** The till's list of refusals the server gives before it looks for the earlier send. */
   const beforeTheLookup = [
     "handover.stepping_down",
     "till.origin_refused",
+    "node.read_only",
+    "server.waiting_for_clock",
+    "storage.disk_full",
+    "management.request_invalid",
     "venue.time_zone_not_ready",
     "session.required",
     "session.not_open",
@@ -720,22 +724,203 @@ describe("till-app: a refusal after a send that got no answer", () => {
     },
   );
 
-  it.each([...beforeTheLookup, "management.request_invalid", "some.unknown_refusal"])(
-    "does not treat %s as final on a later press of a bill left without an answer",
+  const submissionIds = (endMeal: ReturnType<typeof vi.fn>) =>
+    sentBodies(endMeal).map((body) => body.submissionId);
+
+  /** The person on the till signs out and `personId` signs in and opens the table again. */
+  async function signInAs(el: TillApp, personId: string) {
+    emit(shell(el), "logout");
+    await flush(el, 6);
+    await openTable(el, ["payment.take"], personId);
+    await flush(el, 6);
+  }
+
+  it.each([...beforeTheLookup, "some.unknown_refusal"])(
+    "does not treat %s as final on a later press, and keeps the press's id for the next one",
     async (code) => {
       const { el, endMeal } = await pressLeftUnanswered(refusal(code));
 
       await printBill(el);
+      expectWarned(el);
+      await printBill(el);
 
-      expect(endMeal).toHaveBeenCalledTimes(2);
+      expect(endMeal).toHaveBeenCalledTimes(3);
+      expect(new Set(submissionIds(endMeal)).size).toBe(1);
       expectWarned(el);
     },
   );
 
-  it.each(["fiscal.record_invalid", "fiscal.foreign_recipient_unsupported", "sale.number_reused"])(
-    "does not say %s issued nothing on a later press of a bill left without an answer",
+  it("sends a lost press again under its id, and says Bill issued when the server replays its answer", async () => {
+    const { el, endMeal } = await pressLeftUnanswered(async () => ended);
+
+    await printBill(el);
+
+    expect(endMeal).toHaveBeenCalledTimes(2);
+    expect(new Set(submissionIds(endMeal)).size).toBe(1);
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+    expect(banner(el)).toBeNull();
+  });
+
+  it("keeps the id and sends the table's newer revision when a lost press is pressed again", async () => {
+    const { el, endMeal } = await pressLeftUnanswered(async () => ended);
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+    expect(tableOrder(el).party!.revision).toBe(4);
+
+    await printBill(el);
+
+    const [first, second] = sentBodies(endMeal);
+    expect(second!.submissionId).toBe(first!.submissionId);
+    expect(first!.expectedPartyRevision).toBe(3);
+    expect(second!.expectedPartyRevision).toBe(4);
+  });
+
+  it("uses a new id for another person, and the bill stays uncertain", async () => {
+    const { el, endMeal } = await pressLeftUnanswered(refusal("fiscal.record_invalid"));
+    await signInAs(el, "p2");
+
+    await printBill(el);
+
+    const [first, second] = submissionIds(endMeal);
+    expect(second).not.toBe(first);
+    expectWarned(el);
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.cannot_file"));
+  });
+
+  it("resends under the same id when the same person signs back in", async () => {
+    const { el, endMeal } = await pressLeftUnanswered(async () => ended);
+    await signInAs(el, "p1");
+
+    await printBill(el);
+
+    expect(new Set(submissionIds(endMeal)).size).toBe(1);
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+  });
+
+  it("uses a new id for Print anyway after a lost ordinary press", async () => {
+    const { el, endMeal } = await pressLeftUnanswered(unservedRefusal);
+    await printBill(el);
+    expect(warning(el)).not.toBeNull();
+
+    warning(el)!.querySelector<HTMLElement>("[data-print-anyway]")!.click();
+    await flush(el, 6);
+
+    const [first, second, third] = sentBodies(endMeal);
+    expect(second!.submissionId).toBe(first!.submissionId);
+    expect(third!.printAnyway).toBe(true);
+    expect(third!.submissionId).not.toBe(first!.submissionId);
+  });
+
+  /** An ordinary press lists the dishes, and its Print anyway gets no answer. */
+  async function printAnywayLeftUnanswered(
+    next: (body: EndMealRequest, options: unknown) => Promise<unknown>,
+  ) {
+    const deadlines = deadlinesByHand();
+    const endMeal = vi.fn();
+    endMeal.mockRejectedValueOnce(unservedRefusal);
+    endMeal.mockImplementationOnce(unansweredUntilDeadline);
+    endMeal.mockImplementation((_party: unknown, body: EndMealRequest, options: unknown) =>
+      next(body, options),
+    );
+    const opened = await openBill({ endMeal });
+    await printBill(opened.el);
+    warning(opened.el)!.querySelector<HTMLElement>("[data-print-anyway]")!.click();
+    await flush(opened.el, 6);
+    deadlines.expire();
+    await flush(opened.el, 6);
+    expectWarned(opened.el);
+    return { ...opened, deadlines };
+  }
+
+  it("uses a new id for an ordinary press after a lost Print anyway, and resends Print anyway under its own", async () => {
+    const { el, endMeal } = await printAnywayLeftUnanswered((body) =>
+      body.printAnyway === true ? Promise.resolve(ended) : Promise.reject(unservedRefusal),
+    );
+
+    await printBill(el);
+    warning(el)!.querySelector<HTMLElement>("[data-print-anyway]")!.click();
+    await flush(el, 6);
+
+    const [, lost, ordinary, again] = sentBodies(endMeal);
+    expect(ordinary!.printAnyway).toBeUndefined();
+    expect(ordinary!.submissionId).not.toBe(lost!.submissionId);
+    expect(again!.printAnyway).toBe(true);
+    expect(again!.submissionId).toBe(lost!.submissionId);
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+  });
+
+  it("stays uncertain when one of two lost sends is proved never recorded", async () => {
+    let answer = (options: unknown): Promise<unknown> =>
+      unansweredUntilDeadline(undefined, undefined, options);
+    const { el, endMeal, deadlines } = await printAnywayLeftUnanswered((_body, options) =>
+      answer(options),
+    );
+    await printBill(el);
+    deadlines.expire();
+    await flush(el, 6);
+    expectWarned(el);
+    const ordinaryId = sentBodies(endMeal).at(-1)!.submissionId;
+
+    answer = () => Promise.reject(refusal("meal_end.no_printer"));
+    await printBill(el);
+    expect(sentBodies(endMeal).at(-1)!.submissionId).toBe(ordinaryId);
+    expect(banner(el)!.textContent).toContain(codeMessage("meal_end.no_printer"));
+
+    answer = () => Promise.reject(refusal("fiscal.record_invalid"));
+    await printBill(el);
+    expect(sentBodies(endMeal).at(-1)!.submissionId).not.toBe(ordinaryId);
+    expectWarned(el);
+  });
+
+  it("shows a refusal raised after the lookup in its own words, and the next press has a new id", async () => {
+    const { el, endMeal } = await pressLeftUnanswered(refusal("meal_end.no_printer"));
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("meal_end.no_printer"));
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+    await printBill(el);
+    const [first, second, third] = submissionIds(endMeal);
+    expect(second).toBe(first);
+    expect(third).not.toBe(first);
+  });
+
+  it.each([
+    ["fiscal.record_invalid", "meal_end.cannot_file"],
+    ["fiscal.foreign_recipient_unsupported", "meal_end.cannot_file"],
+  ] as const)("says %s in its own words for a resent press", async (code, words) => {
+    const { el } = await pressLeftUnanswered(refusal(code));
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(t(words));
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+  });
+
+  it("names who took the order over when a resent press meets that refusal", async () => {
+    const { el } = await pressLeftUnanswered(refusal("draft.taken_over", { ownerName: "Marta" }));
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain("Marta");
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+  });
+
+  it("does not say another person's takeover stopped a press with a new id on an uncertain bill", async () => {
+    const { el } = await pressLeftUnanswered(refusal("draft.taken_over", { ownerName: "Marta" }));
+    await signInAs(el, "p2");
+
+    await printBill(el);
+
+    expectWarned(el);
+    expect(banner(el)!.textContent).not.toContain("Marta");
+  });
+
+  it.each(["some.unknown_refusal", "fiscal.record_invalid", "sale.number_reused"])(
+    "warns when %s meets a press with a new id on an uncertain bill",
     async (code) => {
       const { el } = await pressLeftUnanswered(refusal(code));
+      await signInAs(el, "p2");
 
       await printBill(el);
 
@@ -744,13 +929,92 @@ describe("till-app: a refusal after a send that got no answer", () => {
     },
   );
 
-  it("does not say another person's takeover stopped the print on a later press", async () => {
-    const { el } = await pressLeftUnanswered(refusal("draft.taken_over", { ownerName: "Marta" }));
+  it("forgets the id after meal_end.already_issued", async () => {
+    const { el, endMeal } = await pressLeftUnanswered(refusal("meal_end.already_issued"));
+
+    await printBill(el);
+    expect(banner(el)!.textContent).toContain(codeMessage("meal_end.already_issued"));
+    await printBill(el);
+
+    const [first, second, third] = submissionIds(endMeal);
+    expect(second).toBe(first);
+    expect(third).not.toBe(first);
+  });
+
+  it("warns on submission.id_reused, then uses a new id, and the bill stays uncertain", async () => {
+    let answer: unknown = refusal("submission.id_reused", { submissionId: "taken" });
+    const { el, endMeal } = await pressLeftUnanswered(() => Promise.reject(answer));
+
+    await printBill(el);
+    expectWarned(el);
+    expect(banner(el)!.textContent).not.toContain(codeMessage("submission.id_reused"));
+
+    answer = refusal("fiscal.record_invalid");
+    await printBill(el);
+
+    const [first, second, third] = submissionIds(endMeal);
+    expect(second).toBe(first);
+    expect(third).not.toBe(first);
+    expectWarned(el);
+  });
+
+  it("forgets a send a resend of the same press proves was never recorded", async () => {
+    const endMeal = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValue(refusal("meal_end.no_printer"));
+    const { el } = await openBill({ endMeal });
+
+    await printBill(el);
+    await expect
+      .poll(() => banner(el)?.textContent ?? "", { timeout: GIVE_UP_MS })
+      .toContain(codeMessage("meal_end.no_printer"));
+    await printBill(el);
+
+    const [first, second, third] = submissionIds(endMeal);
+    expect(second).toBe(first);
+    expect(third).not.toBe(first);
+  });
+
+  it("says the table changed when a resent press is refused for it, and forgets the id", async () => {
+    let moved = false;
+    const { el, endMeal } = await pressLeftUnanswered(
+      refusal("party.out_of_date", { partyId: "v1", revision: 5 }),
+      { getTablesState: vi.fn(async () => [heldTable(moved ? { revision: 5 } : {})]) },
+    );
+    moved = true;
 
     await printBill(el);
 
+    expect(banner(el)!.textContent).toContain(t("party.try_again"));
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+    await printBill(el);
+    const [first, , third] = submissionIds(endMeal);
+    expect(third).not.toBe(first);
+  });
+
+  it("keeps the warning up through and after the reload when a new-id press finds the table changed", async () => {
+    const read = heldAnswer<ReturnType<typeof heldTable>[]>();
+    let holding = false;
+    const { el } = await pressLeftUnanswered(
+      refusal("party.out_of_date", { partyId: "v1", revision: 5 }),
+      {
+        getTablesState: vi.fn(() => (holding ? read.promise : Promise.resolve([heldTable()]))),
+      },
+    );
+    await signInAs(el, "p2");
+    holding = true;
+
+    await printBill(el);
     expectWarned(el);
-    expect(banner(el)!.textContent).not.toContain("Marta");
+    expect(tableOrder(el).party!.revision).toBe(3);
+
+    read.resolve([heldTable({ revision: 5 })]);
+    await flush(el, 6);
+
+    expect(tableOrder(el).party!.revision).toBe(5);
+    expectWarned(el);
+    expect(banner(el)!.textContent).not.toContain(t("party.try_again"));
   });
 
   it.each([
