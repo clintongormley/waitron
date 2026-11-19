@@ -23,7 +23,6 @@ import { listZoneOffers } from "@waitron/venue-service";
 import {
   readBillSetMenus,
   refuseUnlessSetMenuBill,
-  setMenuDishColumns,
   setMenuLineDescriptions,
 } from "./set-menu-bill.js";
 import { setMenuOfferLookup } from "./set-menu-offers.js";
@@ -240,23 +239,19 @@ it.each([false, true])(
   async (recorded) => {
     const id = await tableBill();
     await inTx(venue, async (tx) => {
-      const zone = await listZoneOffers(tx, venue.tables.zoneId);
+      await updateMenuDetails(tx, daily.menuId, { setPrice: recorded ? "19.00" : "18.00" });
+      const liveVersionId = await publishWorkingMenu(tx, daily.fullMenuId);
+      const zoneMenus = [{ id: daily.fullMenuId, versionId: liveVersionId }];
       if (recorded)
         await tx.insert(billSetMenuCopies).values({
           workingOrderId: id,
           setMenuId: daily.menuId,
-          menuVersionId: special.versionId,
+          menuVersionId: daily.versionId,
         });
-      await expect(setMenuOfferLookup(tx, id, [asked(daily)], zone.menus)).rejects.toMatchObject({
+      const tapped = asked(daily, recorded ? liveVersionId : daily.versionId);
+      await expect(setMenuOfferLookup(tx, id, [tapped], zoneMenus)).rejects.toMatchObject({
         code: "menu.version_changed",
-        params: {
-          menus: [
-            {
-              menuId: daily.fullMenuId,
-              liveVersionId: zone.menus.find(({ id }) => id === daily.fullMenuId)!.versionId,
-            },
-          ],
-        },
+        params: { menus: [{ menuId: daily.fullMenuId, liveVersionId }] },
       });
     });
   },
@@ -353,24 +348,6 @@ it("keeps a dish reduced by a bill-wide discount placed but unavailable for move
       .values({ adjustmentId, lineId, quantity: 1000, reduction: 100 });
   });
   expect((await read(id)).dishes).toMatchObject([{ lineId, movable: false }]);
-});
-
-it("writes the chosen place and its surcharge without taking the menu price", () => {
-  expect(
-    setMenuDishColumns({
-      id: "dish",
-      setMenuLineId: "lunch",
-      place: 2,
-      priceCents: 450,
-      countsAsCourseId: "starter",
-    }),
-  ).toEqual({
-    setMenuLineId: "lunch",
-    setMenuPlace: 2,
-    setMenuCountsAsCourseId: "starter",
-    unitPriceGross: 450,
-    lineTotal: 450,
-  });
 });
 
 it("loads the requested versions in a single read across the basket", async () => {

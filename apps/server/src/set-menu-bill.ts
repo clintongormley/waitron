@@ -15,7 +15,6 @@ import {
   contentLanguageCode,
   setMenuCopyOf,
   type BillSetMenuState,
-  type PlacementResult,
   type ServedSetMenuCopy,
   type SetMenuCopy,
 } from "@waitron/shared";
@@ -186,14 +185,4 @@ export function setMenuLineDescriptions(
       terms.names[locale]?.trim() || terms.names[contentLanguageCode(locale)]?.trim() || name,
     ]),
   );
-}
-
-export function setMenuDishColumns(result: PlacementResult) {
-  return {
-    setMenuLineId: result.setMenuLineId,
-    setMenuPlace: result.place,
-    setMenuCountsAsCourseId: result.countsAsCourseId,
-    unitPriceGross: result.priceCents,
-    lineTotal: result.priceCents,
-  };
 }

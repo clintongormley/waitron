@@ -34,7 +34,6 @@ import {
   decimalToCents,
   diskFullIn,
   firstCodeInCauseChain,
-  hasCode,
   isAppError,
   MONEY_SCALE,
   multiplyDecimal,
@@ -790,7 +789,7 @@ async function issueWhenFullyPaid(
     });
   } catch (error) {
     // Automatic issuance must leave an edit intact while set-menu billing is unavailable.
-    if (options.moneyMoved !== true && hasCode(error, "set_menu.payment_not_ready")) {
+    if (isAppError(error) && error.code === "set_menu.payment_not_ready") {
       return { invoice: null, total };
     }
     throw error;

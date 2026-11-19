@@ -34,7 +34,7 @@ import {
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration,
 } from "./till-sale.js";
-import { cancelLine } from "./testing/cancel-line.js";
+import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 
 let venue: PartyVenue;
@@ -312,7 +312,7 @@ it("keeps the cancellation when the remaining set-menu bill matches cash already
   await inTx(venue, (tx) => seedBillSetMenu(tx, id, copy, 3));
 
   const invoice = await inTx(venue, async (tx) => {
-    await cancelLine(tx, venue.cfg, id, 2, undefined, venue.operator.personId);
+    await cancelItemForTest(tx, venue.cfg, id, 2, undefined, venue.operator.personId);
     return issueIfFullyPaid(tx, deps(), venue.cfg, id, venue.operator.personId);
   });
   expect(invoice).toBeNull();
