@@ -6923,9 +6923,10 @@ Table bills open one Pay window from the foot. Its amount choices are An amount,
 Items and Whole bill, in that order; Whole bill starts selected at the right. Keep all four choices
 in one row at phone width, allowing their labels to wrap within equal columns. The amount choices
 carry one help-mode badge linked to the payment guide. Existing cash, card, equipment, recovery and
-unsaved-input handling stays in the payment window. A presented bill with no ticket keeps
-whole-only collection; a printed bill takes the same amount choices;
-retained whole-payment confirmations and zero-total completion keep their existing paths.
+unsaved-input handling stays in the payment window. A printed bill opens these payment choices
+directly. For a presented bill that still has a balance and no issued invoice, **Pay in parts**
+opens the same choices. Retained whole-payment confirmations and zero-total completion keep their
+existing paths.
 Counter bills use the same window for their first and remaining payments.
 
 Whole bill asks the server for one share of the current balance. Its confirmation heading and

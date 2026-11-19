@@ -56,6 +56,7 @@ import { DEFAULT_PROFILE_CAPABILITIES } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, loginWithPin, persons } from "@waitron/identity";
 import {
+  captureAttempting,
   cardReaders,
   insertCapturedPayment,
   payments,
@@ -1183,6 +1184,45 @@ describe("a contribution (design §8 test 2)", () => {
     );
     expect(provided.map((row) => row.state).sort()).toEqual(["captured", "failed"]);
     expect(new Set(provided.map((row) => row.provider))).toEqual(new Set(["simulator"]));
+  });
+
+  it("settles a captured whole-bill reader payment when the till retries before the recovery pass", async () => {
+    const billId = await bill120();
+    expect((await request("POST", `/api/working-orders/${billId}/place`, {})).status).toBe(200);
+    const path = `/api/working-orders/${billId}/payments`;
+    const body = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      applied: "120.00",
+      tip: "0.00",
+      simulationOutcome: "attempting",
+    };
+    const first = await request("POST", path, body);
+    expect(first.json).toMatchObject({ outcome: "timeout", balance: { reserved: "120.00" } });
+    await inTx(async (tx) => {
+      const [attempt] = await tx.select().from(payments).where(eq(payments.workingOrderId, billId));
+      await captureAttempting(tx, {
+        provider: "simulator",
+        paymentRef: attempt!.paymentRef,
+        externalRef: attempt!.paymentRef,
+        settledAt: clock.now().instant,
+      });
+    });
+
+    const replay = await request("POST", path, body);
+    expect(replay.status).toBe(200);
+    expect(replay.json).toMatchObject({
+      outcome: "received",
+      payment: { id: (first.json.payment as { id: string }).id },
+      balance: { status: "settled", received: "120.00", reserved: "0.00" },
+      invoice: { total: "120.00" },
+    });
+    expect(
+      await inTx((tx) => tx.select().from(payments).where(eq(payments.workingOrderId, billId))),
+    ).toHaveLength(1);
   });
 
   it("refuses a tip with the venue's tips off, showing what can be charged, and writes nothing", async () => {
@@ -5154,6 +5194,17 @@ describe("a reader payment on a device that changes profile while it is starting
     expect(await retry.json()).toMatchObject({ outcome: "received" });
   });
 
+  it("returns the reader's reason when a card is declined", async () => {
+    const { client, pay } = await readerOnStripe();
+    vi.spyOn(client, "readerOutcome").mockResolvedValue({
+      status: "failed",
+      failureCode: "lost_card",
+    });
+    const res = await pay("30.00");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ outcome: "declined", failureReason: "lost_card" });
+  });
+
   it("charges the card and receives the bill payment when the device stays on its profile", async () => {
     const { billId, client, pay } = await readerOnStripe();
 
@@ -5849,4 +5900,58 @@ it("keeps cash and hand-keyed cards available while refusing reader collection w
     expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
     expect(await response.json()).toMatchObject({ outcome: "received" });
   }
+});
+
+it("files the placed bill's saved full invoice once when a reader payment is retried", async () => {
+  const id = await tabWith("Steak");
+  const [bill] = await inTx((tx) =>
+    tx.select().from(workingOrders).where(eq(workingOrders.id, id)),
+  );
+  const savedRecipient = {
+    taxId: "B12345674",
+    legalName: "Cliente SL",
+    address: "2 Main Street, 28013 Madrid, Madrid",
+    countryCode: "ES",
+  };
+  expect(
+    await request("PUT", `/api/working-orders/${id}/invoice-choice`, {
+      invoiceType: "F1",
+      recipient: savedRecipient,
+      revision: bill!.revision,
+    }),
+  ).toMatchObject({ status: 200 });
+  expect(await request("POST", `/api/working-orders/${id}/place`, {})).toMatchObject({
+    status: 200,
+  });
+  const body = {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "card",
+    entry: "reader",
+    applied: "25.00",
+    tip: "0.00",
+    simulationOutcome: "captured",
+  };
+
+  const pay = () => request("POST", `/api/working-orders/${id}/payments`, body);
+  const original = await pay();
+  expect(original).toMatchObject({
+    status: 200,
+    json: {
+      outcome: "received",
+      invoice: {
+        invoiceType: "F1",
+        total: "25.00",
+        recipient: savedRecipient,
+        invoiceNumber: expect.any(String),
+      },
+    },
+  });
+  expect(await pay()).toMatchObject({
+    status: 200,
+    json: { outcome: "received", payment: original.json.payment },
+  });
+  expect(await saleOf(id)).toHaveLength(1);
+  expect(fiscalRecordCount(id)).toBe(1);
 });

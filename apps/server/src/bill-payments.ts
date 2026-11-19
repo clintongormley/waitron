@@ -232,6 +232,7 @@ export interface BillBalance {
 }
 
 export interface BillPaymentResult {
+  failureReason?: string;
   slipPrintFailed?: true;
   /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending),
    * `network_unavailable` (failed, nothing charged). A retry whose own sign-in is open on an active
@@ -1612,6 +1613,12 @@ function chargedNotRecorded(
 /** {@link takeReaderBillPayment}'s deps: the fiscal ones, and the reader's provider. */
 export type ReaderBillPaymentDeps = BillPaymentDeps & {
   provider: PaymentProvider;
+  settleCapturedReplay?: (
+    tx: Transaction,
+    paymentId: string,
+    now: Date,
+    guestCount: GuestCountChoice,
+  ) => Promise<TillSaleResult | null>;
   /** The chosen reader's vendor reference, passed to `collect`; absent for the simulator. */
   readerRef?: string;
   /** The device profile the route checked the request under, passed to `collect`. */
@@ -1780,39 +1787,69 @@ export async function takeReaderBillPayment(
   operator: { personId: string; sessionId: string },
 ): Promise<BillPaymentResult> {
   let release = (): void => {};
+  let capturedReplay = false;
   try {
     // Read before the queue wait; `noted()` then catches a refusal noted while this payment waited.
     // Awaited only while `since()` names a refusal: otherwise payment preparation enters the write
     // queue in this turn.
     const preRead =
       deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
-    const begun = await withTransaction(deps.db, async (tx) => {
-      const started = await beginBillPayment(
-        tx,
-        deps,
-        cfg,
-        workingOrderId,
-        req,
-        operator,
-        "pending",
-        () => deps.clock.now(),
-        { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
-        deps.attendance,
-      );
-      if ("replay" in started) {
+    const begun = await withIssuanceTransaction(
+      deps.db,
+      async (tx) => {
+        const started = await beginBillPayment(
+          tx,
+          deps,
+          cfg,
+          workingOrderId,
+          req,
+          operator,
+          "pending",
+          () => deps.clock.now(),
+          { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
+          deps.attendance,
+        );
+        if ("replay" in started) {
+          let payment = started.replay;
+          let invoice: TillSaleResult | null = null;
+          if (
+            payment.state === "pending" &&
+            req.kind === "share" &&
+            req.shareOf === 1 &&
+            deps.settleCapturedReplay !== undefined &&
+            !billPaymentIsLive(deps.db, payment.id) &&
+            (await findPaymentByBillPayment(tx, payment.id))?.state === "captured"
+          ) {
+            capturedReplay = true;
+            const reading = deps.clock.now();
+            await deps.backend.refuseUntilRecordable(tx, reading);
+            invoice = await deps.settleCapturedReplay(
+              tx,
+              payment.id,
+              reading.instant,
+              req.guestCount,
+            );
+            const [recorded] = await tx
+              .select()
+              .from(billPayments)
+              .where(eq(billPayments.id, payment.id));
+            payment = recorded!;
+          }
+          return {
+            kind: "replay" as const,
+            result: await resultOf(tx, deps, cfg, payment, invoice),
+          };
+        }
+        // Inside the transaction, so no loop pass runs between the insert and its registration.
+        release = claimLive(liveBillPaymentsOf(deps.db), started.payment.id);
         return {
-          kind: "replay" as const,
-          result: await resultOf(tx, deps, cfg, started.replay, null),
+          kind: "collect" as const,
+          payment: started.payment,
+          slip: await freezeCardSlip(tx, cfg, workingOrderId, req.printCardSlip, deps.readerId),
         };
-      }
-      // Inside the transaction, so no loop pass runs between the insert and its registration.
-      release = claimLive(liveBillPaymentsOf(deps.db), started.payment.id);
-      return {
-        kind: "collect" as const,
-        payment: started.payment,
-        slip: await freezeCardSlip(tx, cfg, workingOrderId, req.printCardSlip, deps.readerId),
-      };
-    });
+      },
+      deps.log,
+    );
     if (begun.kind === "replay") return begun.result;
     const { payment } = begun;
     if (deps.disk?.noted() === true) {
@@ -1895,8 +1932,14 @@ export async function takeReaderBillPayment(
       return {
         ...(await resultOf(tx, deps, cfg, failed, null)),
         outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",
+        ...(result.state === "failed" && result.failureReason !== undefined
+          ? { failureReason: result.failureReason }
+          : {}),
       };
     });
+  } catch (error) {
+    if (!capturedReplay) throw error;
+    return afterCardCharged(deps, workingOrderId, () => Promise.reject(error));
   } finally {
     release();
   }

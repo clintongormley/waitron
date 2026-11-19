@@ -4487,7 +4487,7 @@ export class TillApp extends LitElement {
   @state() private invoiceRecipientSaved?: InvoiceDeliveryChoice;
   /** The delivery options are being read before the full-invoice dialog opens. */
   @state() private invoiceRecipientReading = false;
-  private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail };
+  private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail; saved?: true };
   /** The invoice type stored on the Counter order last read into the basket, which
    * {@link invoiceChoice} does not hold for an order this till did not set it on. */
   #counterStoredInvoice?: { orderId: string; invoiceType: "F1" | "F2" };
@@ -7743,7 +7743,16 @@ export class TillApp extends LitElement {
    */
   async #collectCard(event: Event, retried: boolean, lateSend?: LateSend): Promise<void> {
     if (this.submitting || this.#refusePaidInPart()) return;
-    if (this.#askInvoiceRecipientForLargeBill()) return;
+    const placed = this.stage === "collect";
+    const storedChoice = this.#counterStoredInvoice;
+    const savedFullInvoice =
+      placed && storedChoice?.orderId === this.#store.id && storedChoice.invoiceType === "F1";
+    if (!savedFullInvoice && this.#askInvoiceRecipientForLargeBill()) return;
+    const choice = this.invoiceChoice?.orderId === this.#store.id ? this.invoiceChoice : undefined;
+    if (placed && choice !== undefined && choice.saved !== true) {
+      this.errorKey = { code: "sale.full_invoice_unavailable" };
+      return;
+    }
     const retry = (confirmed: LateSend) => this.#onCollectCard(event, confirmed);
     if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.submitting = true;
@@ -7780,10 +7789,10 @@ export class TillApp extends LitElement {
           this.api.pay({
             expectedEdit: this.#counterExpectedEdit(id),
             id,
-            lines,
+            lines: placed ? [] : lines,
             dining: this.#store.dining,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
-            ...(this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : {}),
+            ...(placed ? {} : choice?.invoice),
             ...(language === undefined ? {} : { receiptLanguage: language }),
             ...(detail.tip ? { tip: detail.tip } : {}),
             ...(detail.guestCount === undefined ? {} : { guestCount: detail.guestCount }),
@@ -8776,12 +8785,14 @@ export class TillApp extends LitElement {
           if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
           this.#commitBasket(payload);
         }
-        if (this.invoiceChoice?.orderId === id) {
+        const choiceToSave = this.invoiceChoice;
+        if (choiceToSave?.orderId === id) {
           const saved = await api.setOrderInvoiceChoice(id, {
             revision: this.#store.revision,
-            ...this.invoiceChoice.invoice,
+            ...choiceToSave.invoice,
             expectedEdit: null,
           });
+          choiceToSave.saved = true;
           if (!current()) return;
           this.#store.markSaved(saved.revision);
         }
@@ -12641,6 +12652,10 @@ export class TillApp extends LitElement {
       open === null ? undefined : this.partyBills.find((row) => row.workingOrderId === open.billId);
     if (open === null || bill === undefined) return nothing;
     const reason = this.#payReaderReason();
+    const canPayInParts =
+      !bill.receiptAvailable &&
+      !this.#unknownCardOutcome.has(open.billId) &&
+      compareDecimal(decimal(bill.outstanding), decimal("0")) > 0;
     return html`<till-presented-pay-dialog
       .slipPrinterAvailable=${this.#slipPrinterAvailable()}
       .checkTimeOffered=${this.checkTimeOffered}
@@ -12666,6 +12681,7 @@ export class TillApp extends LitElement {
       .busy=${this.submitting}
       .refusal=${open.refusal}
       .confirmation=${this.#unansweredWholePayments.get(open.billId)}
+      .canPayInParts=${canPayInParts}
       .deferredOffered=${this.#deferredOfferOn(bill)}
       @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
         void this.#onPayEquipmentPick(event.detail)}
@@ -12674,6 +12690,11 @@ export class TillApp extends LitElement {
       @pay-equipment-nfc=${() => this.#askNfc()}
       @presented-pay=${(event: Event) => void this.#onPresentedPay(event)}
       @presented-pay-resend=${() => void this.#onPresentedResend()}
+      @presented-pay-parts=${() => {
+        if (!canPayInParts || this.submitting || this.#presentedNow(open.id) === null) return;
+        this.#closePresented(open.id);
+        void this.#openBillPaying("contribution", this.#payLinesOnScreen());
+      }}
       @presented-pay-deferred=${() => this.#onPresentedPayDeferred()}
       @presented-pay-close=${() => this.#closePresented(open.id)}
     ></till-presented-pay-dialog>`;
@@ -21338,8 +21359,7 @@ export class TillApp extends LitElement {
   #onPayPresented(event: Event): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     if (workingOrderId !== this.activeTabId) return;
-    // The presented sheet cannot check a bill payment again, and the bill takes nothing while one
-    // holds it, so that payment's own sheet opens instead.
+    // The presented sheet cannot check an unanswered part payment.
     if (this.#billPaymentHeld(workingOrderId)) {
       void this.#openBillPaying("whole", this.#payLinesOnScreen());
       return;
@@ -21386,9 +21406,7 @@ export class TillApp extends LitElement {
     };
   }
 
-  /** The presented bill's sheet asks to take its whole amount: a card on the phone's reader through
-   * `POST /api/pay`, cash or another card machine through {@link #payWholeTab}. A send with no answer
-   * closes the sheet; it opens again locked on that payment. */
+  /** The presented bill's whole-payment sheet reopens locked on a tender that got no answer. */
   async #onPresentedPay(event: Event): Promise<void> {
     const open = this.#presentedNow();
     if (open === null || this.submitting) return;
@@ -21662,12 +21680,14 @@ export class TillApp extends LitElement {
       )
         return;
       if (this.#hasLeftCounterOrder(id, session)) return;
-      if (this.invoiceChoice?.orderId === id) {
+      const choiceToSave = this.invoiceChoice;
+      if (choiceToSave?.orderId === id) {
         const saved = await this.api.setOrderInvoiceChoice(id, {
           revision: this.#store.revision,
-          ...this.invoiceChoice.invoice,
+          ...choiceToSave.invoice,
           expectedEdit: this.#counterExpectedEdit(id),
         });
+        choiceToSave.saved = true;
         if (this.#hasLeftCounterOrder(id, session)) return;
         this.#store.markSaved(saved.revision);
       }

@@ -86,11 +86,12 @@ describe("kitchen note client", () => {
       null,
       "eat_in",
     );
+    const freshLines = [{ menuItemId: "mi-coffee", quantity: "1" }];
     await api.pay({
       dining: "eat_in",
       expectedEdit: null,
       id: "o",
-      lines: [],
+      lines: freshLines,
       kitchenNote: "Together",
     });
     await api.parkOrder({ dining: "eat_in", id: "o", lines: [], kitchenNote: "Together" });
@@ -103,7 +104,7 @@ describe("kitchen note client", () => {
         expectedEdit: null,
         dining: "eat_in",
       },
-      { dining: "eat_in", id: "o", lines: [], kitchenNote: "Together", expectedEdit: null },
+      { dining: "eat_in", id: "o", lines: freshLines, kitchenNote: "Together", expectedEdit: null },
       { dining: "eat_in", id: "o", lines: [], kitchenNote: "Together" },
     ]);
   });

@@ -1132,6 +1132,7 @@ export type AllocationChoice = "full_with_tip" | "use_pool";
 /** What a bill payment asks for, before the operator has seen its allocation. */
 export interface BillPaymentAsk {
   expectedEdit: BillEditExpected | null;
+  dining?: Dining;
   kind: "items" | "contribution" | "share";
   /** `items` only: parent lines; a line with no `quantity` is paid whole. */
   lines?: { lineNo: number; quantity?: string }[];
@@ -1163,6 +1164,7 @@ export interface BillPaymentRequest extends BillPaymentAsk, OutsideCardDetails {
   /** The practice simulator only. */
   simulationOutcome?: "captured" | "declined" | "attempting";
   guestCount?: number | null;
+  receiptLanguage?: string;
 }
 
 /** How one payment splits between the bill, change and tip, or the two ways an item payment that
@@ -1245,6 +1247,7 @@ export interface BillBalance {
 
 export interface BillPaymentResult {
   slipPrintFailed?: true;
+  failureReason?: string;
   /** A reader card's own answer is `declined`, `timeout` (still pending) or `network_unavailable`
    * (failed, nothing charged); a resend answers the state it finds. */
   outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
@@ -1253,6 +1256,14 @@ export interface BillPaymentResult {
   /** Present when the bill is invoiced: by this payment, or, on a resend, since. */
   invoice?: TillSaleResult;
 }
+
+type WholeBillTender = Omit<
+  BillPaymentRequest,
+  "kind" | "shareOf" | "lines" | "amount" | "choice" | "submissionId" | "applied" | "tip"
+>;
+
+type WholeBillResult =
+  BillPaymentResult | { outcome: "settled"; balance: BillBalance; invoice: TillSaleResult };
 
 /** Money to give back from one bill payment. `override` is a holder of the refund permission;
  * `manualConfirmed` says staff has already refunded a hand-keyed card on its terminal. */
@@ -2704,6 +2715,10 @@ export interface BoxClockConfirmed {
 
 export class TillApi {
   #madeHereListener?: (items: MadeHereItem[]) => void;
+  readonly #unansweredWholeBills = new Map<
+    string,
+    { person: SessionPerson | null; key: string; request: BillPaymentRequest }
+  >();
 
   onMadeHere(listener: (items: MadeHereItem[]) => void): void {
     this.#madeHereListener = listener;
@@ -3104,6 +3119,15 @@ export class TillApi {
     dining: Dining,
     lateSend?: LateSend,
   ): Promise<TillSaleResult> {
+    // The table's whole-payment caller sends its observed bill and no basket.
+    if (lines.length === 0 && expectedEdit !== null) {
+      return this.#collectWholeBill(workingOrderId, "open", tender, {
+        expectedEdit,
+        dining,
+        receiptLanguage,
+        guestCount,
+      });
+    }
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
       tender,
@@ -3119,13 +3143,7 @@ export class TillApi {
     });
   }
 
-  /**
-   * Pay over the INTEGRATED card terminal → `POST /api/pay`. `id` is the pay-idempotency key, as in
-   * {@link recordSale}; `lines` is ignored server-side for a retrieved or placed order, which files its
-   * own stored lines.
-   * `readerId` names a reader other than the device default; omitted, the server uses the default. A
-   * decline is data, not a throw — see {@link PayOutcome}.
-   */
+  /** Pay by reader. A placed order pays for the stored bill. A decline is an outcome. */
   pay(req: {
     expectedEdit: BillEditExpected | null;
     id: string;
@@ -3151,6 +3169,39 @@ export class TillApi {
     guestCount?: number | null;
     lateSend?: LateSend;
   }): Promise<PayOutcome> {
+    if (req.lines.length === 0) {
+      return this.#payWholeBill(req.id, "placed", {
+        method: "card",
+        entry: "reader",
+        expectedEdit: req.expectedEdit,
+        dining: req.dining,
+        addedTip: req.tip,
+        printCardSlip: req.printCardSlip,
+        simulationOutcome: req.simulationOutcome,
+        readerId: req.readerId,
+        receiptLanguage: req.receiptLanguage,
+        guestCount: req.guestCount,
+      }).then((result): PayOutcome => {
+        const captureWarning = result.balance.captureWarning;
+        const facts = captureWarning === undefined ? {} : { captureWarning };
+        if (result.outcome === "settled")
+          return { ...facts, outcome: "captured", ticket: result.invoice };
+        const print = result.slipPrintFailed === true ? { slipPrintFailed: true as const } : {};
+        if (result.invoice !== undefined)
+          return { ...facts, ...print, outcome: "captured", ticket: result.invoice };
+        if (result.outcome === "received")
+          return { ...facts, ...print, outcome: "partial", balance: result.balance };
+        if (result.outcome === "pending" || result.outcome === "timeout")
+          return { ...facts, outcome: "timeout" };
+        if (result.outcome === "network_unavailable")
+          return { ...facts, outcome: "network_unavailable" };
+        return {
+          ...facts,
+          outcome: "declined",
+          ...(result.failureReason === undefined ? {} : { failureReason: result.failureReason }),
+        };
+      });
+    }
     return this.#request<PayOutcome>("/api/pay", "POST", {
       ...req,
       zoneId: req.zoneId ?? this.#serviceZoneId,
@@ -3556,12 +3607,7 @@ export class TillApi {
     });
   }
 
-  /**
-   * Collect and finalise a PLACED order → `POST /api/working-orders/:id/collect`. When an invoice was
-   * already issued for the order, collect settles it with `tender`; otherwise it files one from the
-   * order's stored lines — never a client basket. A still-open or absent id rejects with
-   * `working_order.not_placed`.
-   */
+  /** Collect the remaining balance of a placed order and return its ticket. */
   collectOrder(
     id: string,
     tender: Tender,
@@ -3569,12 +3615,109 @@ export class TillApi {
     guestCount: number | null | undefined,
     expectedEdit: BillEditExpected | null,
   ): Promise<TillSaleResult> {
-    return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", {
-      tender,
-      receiptLanguage,
-      ...(guestCount === undefined ? {} : { guestCount }),
+    return this.#collectWholeBill(id, "placed", tender, {
       expectedEdit,
+      receiptLanguage,
+      guestCount,
     });
+  }
+
+  async #collectWholeBill(
+    id: string,
+    status: "open" | "placed",
+    tender: Tender,
+    bill: Pick<WholeBillTender, "expectedEdit" | "receiptLanguage" | "guestCount" | "dining">,
+  ): Promise<TillSaleResult> {
+    const { amount, ...details } = tender;
+    const ask: WholeBillTender =
+      details.method === "cash"
+        ? { ...bill, method: "cash", tendered: amount }
+        : { ...bill, ...details, entry: "manual" };
+    const result = await this.#payWholeBill(
+      id,
+      status,
+      ask,
+      tender.method === "card" ? amount : undefined,
+    );
+    if (result.invoice === undefined) throw { code: "bill.payments_received", workingOrderId: id };
+    return result.invoice;
+  }
+
+  async #payWholeBill(
+    id: string,
+    status: "open" | "placed",
+    tender: WholeBillTender,
+    manualAmount?: string,
+  ): Promise<WholeBillResult> {
+    const person = this.#personSource?.() ?? null;
+    const key = JSON.stringify([
+      status,
+      tender.method,
+      tender.entry,
+      tender.tendered,
+      manualAmount,
+      tender.addedTip,
+      tender.externalRef,
+      tender.externalProvider,
+      tender.externalMachine,
+      tender.readerId,
+      tender.simulationOutcome,
+      tender.dining,
+      tender.receiptLanguage,
+    ]);
+    const pending = this.#unansweredWholeBills.get(id);
+    const earlier = pending?.person === person && pending.key === key ? pending.request : undefined;
+    let request = earlier;
+    if (request === undefined) {
+      const balance = await this.getBillBalance(id);
+      if (person !== (this.#personSource?.() ?? null)) throw { code: SESSION_PERSON_REFUSAL };
+      if (balance.status === "settled")
+        return { outcome: "settled", balance, invoice: await this.getFiledTicket(id) };
+      if (balance.status !== status)
+        throw {
+          code: status === "placed" ? "working_order.not_placed" : "working_order.not_open",
+          workingOrderId: id,
+        };
+      if (balance.payments.some((payment) => payment.state === "pending"))
+        throw { code: "order.payment_in_flight", workingOrderId: id };
+      if (
+        tender.tendered !== undefined &&
+        compareDecimal(decimal(tender.tendered), decimal(balance.outstanding)) < 0
+      )
+        throw { code: "sale.tender_shortfall", workingOrderId: id };
+      const zero = compareDecimal(decimal(balance.total), decimal("0")) === 0;
+      request = {
+        ...tender,
+        ...(zero ? { kind: "contribution", amount: "0.00" } : { kind: "share", shareOf: 1 }),
+        applied: manualAmount ?? balance.outstanding,
+        tip: tender.addedTip ?? "0.00",
+        submissionId: crypto.randomUUID(),
+      };
+    }
+
+    const sent = { person, key, request };
+    try {
+      const result = await this.#request<WholeBillResult>(
+        `/api/working-orders/${id}/payments`,
+        "POST",
+        request,
+      );
+      if (result.outcome === "pending" || result.outcome === "timeout")
+        this.#unansweredWholeBills.set(id, sent);
+      else this.#unansweredWholeBills.delete(id);
+      return result;
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        this.#unansweredWholeBills.set(id, sent);
+        throw new TypeError("The payment response could not be read", { cause: error });
+      }
+      const refusal = error as { code?: string; status?: number };
+      if (isNetworkFailure(error) || (refusal.status ?? 0) >= 500)
+        this.#unansweredWholeBills.set(id, sent);
+      else if (refusal.code !== "handover.stepping_down" || earlier === undefined)
+        this.#unansweredWholeBills.delete(id);
+      throw error;
+    }
   }
 
   /** The venue's ACTIVE kitchen stations → `GET /api/stations`, by display order then name. */
