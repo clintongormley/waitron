@@ -19323,10 +19323,16 @@ export class TillApp extends LitElement {
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
-  /** Whether `lineIds` are every dish of the bill on screen, as last read: its extras go with them. */
+  /** Whether the move empties the bill. A selected set menu carries its dishes as well. */
   #movesEveryDish(lineIds: readonly string[]): boolean {
     const dishes = this.tabLines.filter((line) => line.parentLineNo == null);
-    return dishes.length > 0 && dishes.every((line) => lineIds.includes(line.id));
+    const moved = new Set(lineIds);
+    const setMenus = this.partyBills.find(
+      ({ workingOrderId }) => workingOrderId === this.activeTabId,
+    )?.setMenus;
+    for (const { lineId, setMenuLineId } of setMenus?.dishes ?? [])
+      if (moved.has(setMenuLineId)) moved.add(lineId);
+    return dishes.length > 0 && dishes.every((line) => moved.has(line.id));
   }
 
   /** Opens the full-invoice question moving every dish of the bill on screen raises in `bills`, if

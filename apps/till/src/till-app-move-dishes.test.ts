@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { formatMoney } from "@waitron/shared";
-import type { BillBalance, PartyBill, TabLine, TabLines } from "./api/client.js";
+import { formatMoney, type BillSetMenuState } from "@waitron/shared";
+import type { BillBalance, BillSetMenusReply, PartyBill, TabLine, TabLines } from "./api/client.js";
 import { codeMessage } from "./i18n/codes.js";
 import { currentLocale, differentPeopleText, setLocale, t } from "./i18n/t.js";
-import { cleanupWidgets, partyBillOf } from "./widgets/test-helpers.js";
+import { bill as setMenuBill } from "../test/set-menu-widgets.js";
+import { cleanupWidgets, partyBillOf, partyDraftSnapshot } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import type { TillPortionPicker } from "./widgets/portion-picker.js";
 import {
@@ -130,6 +131,367 @@ function heldRead<T>() {
   );
   return { call, settle: (value: T) => settle(value) };
 }
+
+const MENU_LINE: TabLine = {
+  ...DISH,
+  id: "daily-1",
+  lineNo: 1,
+  name: "Daily menu",
+  productId: null,
+  unitPriceGross: "14.00",
+  portion: false,
+};
+
+const SIRLOIN_LINE: TabLine = {
+  ...DISH,
+  id: "sent-sirloin",
+  lineNo: 2,
+  name: "Sirloin",
+  productId: "product-sirloin",
+  unitPriceGross: "5.00",
+};
+
+const sourceMenus = {
+  ...setMenuBill,
+  setMenus: setMenuBill.setMenus.filter(({ lineId }) => lineId === MENU_LINE.id),
+};
+
+const targetMenus: BillSetMenuState = {
+  ...setMenuBill,
+  setMenus: setMenuBill.setMenus.filter(({ lineId }) => lineId === "special-1"),
+  dishes: [],
+};
+
+async function openSetMenuMove(overrides: Record<string, unknown> = {}, target = targetMenus) {
+  const { el, order } = await open({
+    getPartyBills: vi
+      .fn()
+      .mockResolvedValue([
+        bill("wo-4", 1, { setMenus: sourceMenus }),
+        bill("bill-1", 2, { setMenus: target }),
+      ]),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [MENU_LINE, SIRLOIN_LINE], revision: 0 }),
+    readBillSetMenus: vi.fn().mockResolvedValue({ setMenus: target, partyRevision: 3 }),
+    ...overrides,
+  });
+  const root = order.shadowRoot!;
+  const menu = root.querySelector<HTMLElement>("[data-table-menu]")!;
+  await userEvent.click(menu);
+  await userEvent.click(menu.querySelector<HTMLElement>('[data-action="move-dishes"]')!);
+  const picker = () => root.querySelector<TillPortionPicker>("till-portion-picker")!;
+  await vi.waitFor(() => expect(picker()).not.toBeNull());
+  return {
+    el,
+    order,
+    root,
+    pick: async (id: string) => {
+      await picker().updateComplete;
+      await userEvent.click(
+        picker().shadowRoot!.querySelector<HTMLElement>(`[data-pick="${id}"]`)!,
+      );
+    },
+    chooseBill: (id: string) =>
+      userEvent.click(root.querySelector<HTMLElement>(`[data-move-dishes-to="${id}"]`)!),
+    confirm: () => userEvent.click(root.querySelector<HTMLElement>("[data-move-dishes-confirm]")!),
+    preview: () => root.querySelector("[data-move-price-preview]")?.textContent ?? "",
+  };
+}
+
+describe("set menus in Move dishes", () => {
+  it("names the dishes included in a set-menu move and sends the menu to the new bill", async () => {
+    const moved = vi.fn().mockResolvedValue({ billId: "wo-new" });
+    const move = await openSetMenuMove({ moveDishes: moved });
+    const menu = move.root
+      .querySelector<TillPortionPicker>("till-portion-picker")!
+      .shadowRoot!.querySelector('[data-pick-row="daily-1"]')!;
+    expect(menu.textContent).toContain("Sirloin");
+
+    await move.pick("daily-1");
+    await move.chooseBill("new");
+    await move.confirm();
+    await vi.waitFor(() =>
+      expect(moved).toHaveBeenCalledWith("wo-4", ["daily-1"], null, expect.any(Object)),
+    );
+  });
+
+  it("asks about the invoice customer before moving all the lines with one menu pick", async () => {
+    const { el, order } = await openSetMenuMove({
+      getPartyBills: vi.fn().mockResolvedValue([
+        bill("wo-4", 1, {
+          setMenus: sourceMenus,
+          invoiceType: "F1",
+          recipient: {
+            taxId: "12345678Z",
+            legalName: "Table Guest",
+            address: "1 Oak Street",
+            countryCode: "ES",
+          },
+        }),
+        bill("bill-1", 2, { setMenus: targetMenus }),
+      ]),
+    });
+    emit(order, "move-dishes", { lineIds: ["daily-1"], toBillId: "bill-1" });
+    await flush(el, 6);
+
+    expect(el.shadowRoot!.querySelector("[data-merge-invoice]")?.textContent).toContain(
+      "Table Guest",
+    );
+    expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
+  it("shows a loose dish's target surcharge before submitting the move", async () => {
+    const move = await openSetMenuMove({
+      getPartyBills: vi.fn().mockResolvedValue([
+        bill("wo-4", 1, {
+          setMenus: {
+            ...sourceMenus,
+            dishes: sourceMenus.dishes.map((dish) => ({ ...dish, movable: false })),
+          },
+        }),
+        bill("bill-1", 2, { setMenus: targetMenus }),
+      ]),
+    });
+    await move.pick("sent-sirloin");
+    await move.chooseBill("bill-1");
+
+    await vi.waitFor(() => expect(move.preview()).toContain(money("0.00")));
+    expect(move.preview()).toContain("Sirloin");
+    expect(move.preview()).not.toContain(money("5.00"));
+    expect(api.moveDishes).not.toHaveBeenCalled();
+
+    await move.confirm();
+    await vi.waitFor(() =>
+      expect(api.moveDishes).toHaveBeenCalledWith(
+        "wo-4",
+        ["sent-sirloin"],
+        "bill-1",
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it("shows the paid surcharge when an unsent dish holds the free place on the target", async () => {
+    const target = {
+      ...targetMenus,
+      setMenus: [
+        ...targetMenus.setMenus,
+        { lineId: "target-daily", copyId: "daily-copy", lineNo: 4 },
+      ],
+    };
+    const saved = partyDraftSnapshot([
+      {
+        id: "target-draft",
+        partyId: "v1",
+        billId: "bill-1",
+        ownerId: "server",
+        ownerName: "Ana",
+        revision: 1,
+        takenOverFrom: null,
+        lines: [
+          {
+            id: "held-dish",
+            setMenuId: "special",
+            setMenuReservedLineId: "special-1",
+            setMenuReservedPlace: 0,
+            source: null,
+            sourceLineId: null,
+            menuItemId: "sirloin",
+            variantId: null,
+            menuVersionId: "lunch",
+            options: [],
+            extras: [],
+            note: null,
+            quantity: "1",
+            courseId: null,
+            noMerge: false,
+            slot: 0,
+            joinGroupId: null,
+            afterGroupId: null,
+            unavailable: false,
+          },
+        ],
+      },
+    ]);
+    const listDrafts = vi.fn().mockResolvedValue({
+      ...saved,
+      billEdits: [...saved.billEdits, { ...sourceEdit, editorId: null, editorName: null }],
+    });
+    const move = await openSetMenuMove({ listDrafts }, target);
+    await move.pick("sent-sirloin");
+    await move.chooseBill("bill-1");
+
+    await vi.waitFor(() => expect(move.preview()).toContain(money("5.00")));
+    expect(move.preview()).not.toContain(money("0.00"));
+  });
+
+  it("keeps a loose dish on its bill when the chosen new bill has no place", async () => {
+    const move = await openSetMenuMove();
+    await move.pick("sent-sirloin");
+    await move.chooseBill("new");
+
+    expect(move.preview()).toContain("The other bill has no place for Sirloin");
+    expect(move.root.querySelector("[data-move-dishes-confirm]")).toHaveAttribute("disabled");
+    move.root
+      .querySelector("[data-move-dishes-confirm]")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await flush(move.el, 6);
+    expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
+  it("keeps a newer price when an older read of the same target arrives later", async () => {
+    const older = heldRead<BillSetMenusReply>();
+    const newer = heldRead<BillSetMenusReply>();
+    const readBillSetMenus = vi
+      .fn()
+      .mockImplementationOnce(older.call)
+      .mockImplementationOnce(newer.call);
+    const move = await openSetMenuMove({ readBillSetMenus });
+    await move.pick("sent-sirloin");
+    await move.chooseBill("bill-1");
+    await vi.waitFor(() => expect(older.call).toHaveBeenCalledWith("bill-1"));
+    await move.chooseBill("new");
+    await move.chooseBill("bill-1");
+    await vi.waitFor(() => expect(newer.call).toHaveBeenCalledWith("bill-1"));
+    newer.settle({ setMenus: targetMenus, partyRevision: 3 });
+    await vi.waitFor(() => expect(move.preview()).toContain(money("0.00")));
+
+    older.settle({ setMenus: { ...targetMenus, setMenus: [] }, partyRevision: 3 });
+    await flush(move.el, 6);
+
+    expect(move.preview()).toContain(money("0.00"));
+    expect(move.root.querySelector("[data-move-dishes-confirm]")).not.toHaveAttribute("disabled");
+    expect(readBillSetMenus).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries the target read when the same bill is chosen again after a failure", async () => {
+    const readBillSetMenus = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("read failed"))
+      .mockResolvedValue({ setMenus: targetMenus, partyRevision: 3 });
+    const move = await openSetMenuMove({ readBillSetMenus });
+    await move.pick("sent-sirloin");
+    await move.chooseBill("bill-1");
+    await vi.waitFor(() => expect(move.preview()).toContain("Could not check places on that bill"));
+    expect(move.root.querySelector("[data-move-dishes-confirm]")).toHaveAttribute("disabled");
+
+    await move.chooseBill("bill-1");
+
+    await vi.waitFor(() => expect(move.preview()).toContain(money("0.00")));
+    expect(move.root.querySelector("[data-move-dishes-confirm]")).not.toHaveAttribute("disabled");
+  });
+
+  it("separates identical dishes with different menu places only in the move picker", async () => {
+    const extraDish = { ...SIRLOIN_LINE, id: "other-sirloin", lineNo: 4 };
+    const extraMenu = { ...MENU_LINE, id: "daily-2", lineNo: 3 };
+    const move = await openSetMenuMove({
+      getPartyBills: vi.fn().mockResolvedValue([
+        bill("wo-4", 1, {
+          setMenus: {
+            ...sourceMenus,
+            setMenus: setMenuBill.setMenus.slice(0, 2),
+            dishes: [
+              ...sourceMenus.dishes,
+              { ...sourceMenus.dishes[0]!, lineId: extraDish.id, setMenuLineId: extraMenu.id },
+            ],
+          },
+        }),
+        bill("bill-1", 2, { setMenus: targetMenus }),
+      ]),
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [MENU_LINE, SIRLOIN_LINE, extraMenu, extraDish],
+        revision: 0,
+      }),
+    });
+    const picker = move.root.querySelector<TillPortionPicker>("till-portion-picker")!;
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.querySelectorAll('[data-pick-row$="sirloin"]')).toHaveLength(2);
+
+    move.order.currentOrders = null;
+    await move.order.updateComplete;
+
+    const fallback = move.root.querySelector("[data-sent-fallback]")!;
+    expect(fallback.querySelectorAll('[data-sent-fallback-line$="sirloin"]')).toHaveLength(1);
+    expect(
+      fallback.querySelector('[data-sent-fallback-line="sent-sirloin"]')?.textContent,
+    ).toContain("×2");
+  });
+
+  it("keeps a cancelled dish's charge with its set menu", async () => {
+    const move = await openSetMenuMove({
+      getPartyBills: vi.fn().mockResolvedValue([
+        bill("wo-4", 1, {
+          setMenus: {
+            ...sourceMenus,
+            dishes: sourceMenus.dishes.map((dish) => ({ ...dish, movable: false })),
+          },
+        }),
+        bill("bill-1", 2, { setMenus: targetMenus }),
+      ]),
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [MENU_LINE, { ...SIRLOIN_LINE, cancelledQuantity: "1.000" }],
+        revision: 0,
+      }),
+    });
+    await move.pick("sent-sirloin");
+    await move.chooseBill("bill-1");
+    await vi.waitFor(() =>
+      expect(move.preview()).toContain("Move Sirloin with its set menu to keep the charge."),
+    );
+    expect(move.root.querySelector("[data-move-dishes-confirm]")).toHaveAttribute("disabled");
+
+    await move.pick("daily-1");
+    await move.confirm();
+
+    await vi.waitFor(() =>
+      expect(api.moveDishes).toHaveBeenCalledWith(
+        "wo-4",
+        expect.arrayContaining(["daily-1"]),
+        "bill-1",
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it("refreshes the price when the chosen bill's revision changes", async () => {
+    const readBillSetMenus = vi
+      .fn()
+      .mockResolvedValueOnce({ setMenus: targetMenus, partyRevision: 3 })
+      .mockResolvedValueOnce({ setMenus: { ...targetMenus, setMenus: [] }, partyRevision: 4 });
+    const move = await openSetMenuMove({ readBillSetMenus });
+    await move.pick("sent-sirloin");
+    await move.chooseBill("bill-1");
+    await vi.waitFor(() => expect(move.preview()).toContain(money("0.00")));
+
+    move.order.bills = move.order.bills.map((bill) =>
+      bill.workingOrderId === "bill-1" ? { ...bill, revision: bill.revision + 1 } : bill,
+    );
+
+    await vi.waitFor(() =>
+      expect(move.preview()).toContain("The other bill has no place for Sirloin"),
+    );
+    expect(move.root.querySelector("[data-move-dishes-confirm]")).toHaveAttribute("disabled");
+  });
+
+  it("shows what to do when the server refuses a move after the preview", async () => {
+    const move = await openSetMenuMove({
+      moveDishes: vi.fn().mockRejectedValue({
+        code: "set_menu.no_place_on_target",
+        dishName: "Sirloin",
+        status: 409,
+      }),
+    });
+    await move.pick("sent-sirloin");
+    await move.chooseBill("bill-1");
+    await vi.waitFor(() => expect(move.preview()).toContain(money("0.00")));
+    await move.confirm();
+
+    await vi.waitFor(() =>
+      expect(bannerText(move.el)).toContain(
+        "The other bill has no place for Sirloin. Move its set menu with it, or leave it on this bill.",
+      ),
+    );
+  });
+});
 
 describe("A803 move dishes app:", () => {
   it("Move to a new bill sends the picked ids with the two revisions and the source's editor, then shows the new bill", async () => {

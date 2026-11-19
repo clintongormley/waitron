@@ -53,14 +53,18 @@ import {
   conjunctionList,
   addDecimal,
   allowsChangeAfterSending,
+  centsToDecimal,
   compareDecimal,
   decimal,
   formatMoney,
   multiplyDecimal,
   perDishOptionQuantity,
+  placeInOrder,
   subtractDecimal,
   sumDecimals,
+  type BillSetMenuState,
   type Decimal,
+  type PlacedDish,
   type Dining,
 } from "@waitron/shared";
 import { diningControl, diningShown, type UnreadDiningChoice } from "../widgets/dining-choice.js";
@@ -398,10 +402,16 @@ interface DishSources {
   lines: readonly TabLine[];
   balance: BillBalance | null;
   allergy: PartyAllergyRead["snapshot"] | null;
+  setMenus?: BillSetMenuState;
 }
 
 function sameSources(a: DishSources, b: DishSources): boolean {
-  return a.lines === b.lines && a.balance === b.balance && a.allergy === b.allergy;
+  return (
+    a.lines === b.lines &&
+    a.balance === b.balance &&
+    a.allergy === b.allergy &&
+    a.setMenus === b.setMenus
+  );
 }
 
 /** The key that groups a bill's dishes as the screen lists them. Portions also differ by what the
@@ -1044,6 +1054,10 @@ export class TillTableOrderScreen extends LitElement {
       .move-dishes-to {
         min-width: var(--wt-tap-min);
         text-align: start;
+      }
+
+      [data-move-price-preview] p {
+        margin: 0 0 var(--wt-space-2);
       }
 
       .draft-product-name {
@@ -1690,6 +1704,11 @@ export class TillTableOrderScreen extends LitElement {
   #dishGroups?: { sources: DishSources; groups: PickGroups };
   /** {@link moveDishesTo} while it is offered, as unsaved work last counted it. */
   #moveDishesCounted: string | null | undefined;
+  @state() private moveTargetRead?: {
+    revision: number;
+    api: TillApi;
+    result: BillSetMenuState | "loading" | "failed";
+  };
 
   readonly #actionId = {};
   #actionScope?: DraftScope<ActionDraft>;
@@ -2402,6 +2421,9 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchActions();
     this.#followStoredGuests();
     this.#countMoveDestination();
+    // A revision belongs to its bill, so a different destination starts with no answer.
+    if ((changed as PropertyValues).has("moveDishesTo")) this.moveTargetRead = undefined;
+    void this.#readMoveTarget();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
     if (changed.has("busy")) this.#followBusyFocus();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
@@ -3323,7 +3345,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #sentFallback(): TemplateResult | typeof nothing {
-    const { groups } = this.#dishGroupsFor(this.#dishSources());
+    const { groups } = this.#dishGroupsFor({ ...this.#dishSources(), setMenus: undefined });
     if (groups.length === 0) return nothing;
     // Bill lines lack partial serving quantities, so this fallback offers no actions.
     return html`<section class="sent-fallback" data-sent-fallback>
@@ -5860,6 +5882,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#resetSplitPick();
     this.moveDishesPicks = new Set();
     this.moveDishesTo = undefined;
+    this.moveTargetRead = undefined;
   }
 
   #dispatch(type: string, detail: unknown): void {
@@ -7028,13 +7051,23 @@ export class TillTableOrderScreen extends LitElement {
       lines: this.lines,
       balance: this.#balanceShown(),
       allergy: this.#allergy()?.snapshot ?? null,
+      setMenus: this.bills.find((bill) => bill.workingOrderId === this.orderId)?.setMenus,
     };
   }
 
   #dishGroupsFor(sources: DishSources): PickGroups {
     const grouped = this.#dishGroups;
     if (grouped !== undefined && sameSources(grouped.sources, sources)) return grouped.groups;
-    const groups = pickGroups(sources.lines, fallbackPortionKeys(sources), sources.balance);
+    const separate = new Set([
+      ...(sources.setMenus?.setMenus.map(({ lineId }) => lineId) ?? []),
+      ...(sources.setMenus?.dishes.map(({ lineId }) => lineId) ?? []),
+    ]);
+    const keyOf = fallbackPortionKeys(sources);
+    const groups = pickGroups(
+      sources.lines,
+      (dish) => (separate.has(dish.id) ? null : keyOf(dish)),
+      sources.balance,
+    );
     this.#dishGroups = { sources, groups };
     return groups;
   }
@@ -7074,13 +7107,148 @@ export class TillTableOrderScreen extends LitElement {
     this.#actionScope?.changed();
   }
 
+  #looseMenuDishes(source: BillSetMenuState | undefined, picks: Picks): PlacedDish[] {
+    return (
+      source?.dishes.filter(
+        ({ lineId, setMenuLineId }) => picks.has(lineId) && !picks.has(setMenuLineId),
+      ) ?? []
+    );
+  }
+
+  #moveTargetBill(): PartyBill | undefined {
+    const chosen = this.#moveDishesChosen();
+    return this.bills.find((bill) => bill.workingOrderId === chosen);
+  }
+
+  #moveTargetResult(target: PartyBill) {
+    const read = this.moveTargetRead;
+    return read?.revision === target.revision && read.api === this.api ? read.result : undefined;
+  }
+
+  async #readMoveTarget(): Promise<void> {
+    const api = this.api;
+    if (this.actionStep !== "move-dishes" || api === undefined) return;
+    const target = this.#moveTargetBill();
+    if (
+      target === undefined ||
+      this.#moveTargetResult(target) !== undefined ||
+      this.#looseMenuDishes(this.#dishSources().setMenus, this.moveDishesPicks).length === 0
+    )
+      return;
+    const read = {
+      revision: target.revision,
+      api,
+      result: "loading",
+    } as const;
+    this.moveTargetRead = read;
+    let result: BillSetMenuState | "failed";
+    try {
+      result = (await api.readBillSetMenus(target.workingOrderId)).setMenus;
+    } catch {
+      result = "failed";
+    }
+    if (this.isConnected && this.moveTargetRead === read) this.moveTargetRead = { ...read, result };
+  }
+
+  #moveDishPrices(
+    chosen: string | null | undefined,
+    source: BillSetMenuState | undefined,
+    lineIds: readonly string[],
+  ): { message?: string; prices?: string[]; blocked: boolean } {
+    const picks = new Set(lineIds);
+    const loose = this.#looseMenuDishes(source, picks);
+    if (source === undefined || chosen === undefined || loose.length === 0)
+      return { blocked: false };
+    const cancelled = this.lines.find(
+      (line) =>
+        compareDecimal(decimal(line.cancelledQuantity ?? "0"), decimal("0")) > 0 &&
+        loose.some(({ lineId }) => lineId === line.id),
+    );
+    if (cancelled !== undefined)
+      return {
+        blocked: true,
+        message: fill(t("table.move_dishes_cancelled"), { dish: this.#nameForLine(cancelled) }),
+      };
+    const target = this.#moveTargetBill();
+    const result = target === undefined ? undefined : this.#moveTargetResult(target);
+    if (result === "loading" || (chosen !== null && result === undefined))
+      return { blocked: true, message: t("table.loading") };
+    if (result === "failed") return { blocked: true, message: t("table.move_dishes_read_failed") };
+
+    const carried = source.setMenus.filter(({ lineId }) => picks.has(lineId));
+    const targetMenus = result?.setMenus ?? [];
+    const lastLine = Math.max(0, ...targetMenus.map(({ lineNo }) => lineNo));
+    const holds = this.partyDrafts
+      .filter(({ billId }) => billId === chosen)
+      .flatMap(({ lines }) =>
+        lines.flatMap(({ setMenuReservedLineId, setMenuReservedPlace }) =>
+          setMenuReservedLineId == null || setMenuReservedPlace == null
+            ? []
+            : [{ setMenuLineId: setMenuReservedLineId, place: setMenuReservedPlace }],
+        ),
+      );
+    const { placed, unplaced } = placeInOrder(
+      {
+        copies: [...(result?.copies ?? []), ...source.copies],
+        recorded: result?.recorded ?? {},
+        setMenus: [
+          ...targetMenus,
+          ...carried.map((menu, index) => ({ ...menu, lineNo: lastLine + index + 1 })),
+        ],
+        dishes: [
+          ...(result?.dishes ?? []),
+          ...source.dishes.filter(({ setMenuLineId }) => picks.has(setMenuLineId)),
+        ],
+      },
+      loose.map(({ lineId, productId, variantId }) => ({
+        id: lineId,
+        productId,
+        variantId,
+        reserved: null,
+      })),
+      holds,
+    );
+    const nameOf = (id: string) => {
+      const line = this.lines.find((line) => line.id === id);
+      return line === undefined ? "" : this.#nameForLine(line);
+    };
+    if (unplaced.length > 0)
+      return {
+        blocked: true,
+        message: codeMessage("set_menu.no_place_on_target", undefined, {
+          dishName: nameOf(unplaced[0]!),
+        }),
+      };
+    return {
+      blocked: false,
+      prices: placed.map(({ id, priceCents }) =>
+        fill(t("table.move_dishes_target_price"), {
+          dish: nameOf(id),
+          amount: this.#money(centsToDecimal(priceCents)),
+        }),
+      ),
+    };
+  }
+
   #moveDishesStep(): TemplateResult {
     const sources = this.#dishSources();
     const rows = this.#moveDishesRows(this.moveDishesPicks, sources);
     this.#moveDishesDrawn = { ...sources, rows };
     const lineIds = pickedLineIds(rows, this.moveDishesPicks);
     const chosen = this.#moveDishesChosen();
-    const canMove = lineIds.length > 0 && chosen !== undefined;
+    const preview = this.#moveDishPrices(chosen, sources.setMenus, lineIds);
+    const canMove = lineIds.length > 0 && chosen !== undefined && !preview.blocked;
+    const mark = (line: TabLine) => {
+      const names = sources.setMenus?.dishes
+        .filter(({ setMenuLineId }) => setMenuLineId === line.id)
+        .flatMap(({ lineId }) => {
+          const dish = sources.lines.find(({ id }) => id === lineId);
+          return dish === undefined ? [] : [this.#nameForLine(dish)];
+        });
+      return names?.length
+        ? fill(t("table.move_dishes_includes"), { dishes: conjunctionList(names, currentLocale()) })
+        : this.#waitingMark(line);
+    };
     const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
     const destination = (key: string, label: string, to: string | null) =>
       html`<button
@@ -7090,6 +7258,7 @@ export class TillTableOrderScreen extends LitElement {
         aria-pressed=${chosen === to}
         @click=${(event: Event) => {
           if (!this.#actionControlCurrent(event)) return;
+          if (this.moveTargetRead?.result === "failed") this.moveTargetRead = undefined;
           this.moveDishesTo = to;
           this.#actionScope?.changed();
         }}
@@ -7108,7 +7277,7 @@ export class TillTableOrderScreen extends LitElement {
         .rows=${rows}
         .picks=${this.moveDishesPicks}
         .nameOf=${(line: TabLine) => this.#nameForLine(line)}
-        .markOf=${(line: TabLine) => this.#waitingMark(line)}
+        .markOf=${mark}
         .money=${(amount: string) => this.#money(amount)}
         @portion-picks=${(event: CustomEvent<{ picks: string[] }>) => {
           event.stopPropagation();
@@ -7118,6 +7287,11 @@ export class TillTableOrderScreen extends LitElement {
         }}
       ></till-portion-picker>
       <h3 id="move-dishes-to-heading" data-move-dishes-to-heading>${t("table.move_dishes_to")}</h3>
+      <div role="status" data-move-price-preview>
+        ${(preview.message === undefined ? preview.prices : [preview.message])?.map(
+          (line) => html`<p>${line}</p>`,
+        )}
+      </div>
       <div class="action-options" role="group" aria-labelledby="move-dishes-to-heading">
         ${this.#otherOpenBills().map(({ bill }) =>
           destination(bill.workingOrderId, billLabel(bill), bill.workingOrderId),
@@ -7139,7 +7313,8 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #confirmMoveDishes(event: Event): void {
-    if (!this.#actionControlCurrent(event)) return;
+    const button = event.currentTarget as HTMLElementTagNameMap["wt-button"];
+    if (!this.#actionControlCurrent(event) || button.disabled) return;
     const lineIds = pickedLineIds(this.#moveDishesRows(), this.moveDishesPicks);
     const toBillId = this.#moveDishesChosen();
     if (lineIds.length === 0 || toBillId === undefined) return;
