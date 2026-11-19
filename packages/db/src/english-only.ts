@@ -41,6 +41,13 @@ export interface Keep {
 const VERIFACTU_NAMES =
   "names Veri*Factu tables or columns, which packages/fiscal-verifactu's schema spells in Spanish";
 
+const SPANISH_SCREEN_WORDING =
+  "checks the screen's Spanish wording: sentences with values filled in, plurals, dates, colour lists, and one literal check kept per screen";
+const ACCENTED_INPUTS =
+  "accented or Spanish-ordered sample input that the test exists to sort, search or keep through cleaning";
+const REAL_HOLIDAY_NAMES =
+  "real Spanish holiday or place names that the holiday data and its display are checked against";
+
 /**
  * Files outside the homes whose job needs non-English text, with why. Each is held to its number of
  * findings, not to which lines hold them.
@@ -99,6 +106,184 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
     reason: VERIFACTU_NAMES,
     findings: 2,
   },
+  "packages/venue-service/src/configuration-transfer.test.ts": {
+    reason: REAL_HOLIDAY_NAMES,
+    findings: 2,
+  },
+  "packages/venue-service/src/dashboard/add-dates-calendar.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/calendar-day-names.test.ts": {
+    reason: REAL_HOLIDAY_NAMES,
+    findings: 2,
+  },
+  "packages/venue-service/src/dashboard/calendar-station-month.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 2,
+  },
+  "packages/venue-service/src/dashboard/clock-change-conflict.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 3,
+  },
+  "packages/venue-service/src/dashboard/department-service-steps.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/department-settings.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/departments-list-readiness.a11y.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/departments-list.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 2,
+  },
+  "packages/venue-service/src/dashboard/departments-zones-list.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 3,
+  },
+  "packages/venue-service/src/dashboard/floor-plan-set-delete-dialog.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/floor-plan-set-dialog.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/floor-plans-screen.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 2,
+  },
+  "packages/venue-service/src/dashboard/opening-hours-day.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 3,
+  },
+  "packages/venue-service/src/dashboard/opening-hours-month.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/opening-hours-screen.test.ts": {
+    reason: "a time-zone name (Pacific/Pago_Pago) and a Spanish catalogue the test supplies",
+    findings: 6,
+  },
+  "packages/venue-service/src/dashboard/opening-hours-week.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/opening-hours-year.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 3,
+  },
+  "packages/venue-service/src/dashboard/paint-grid.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/painter-frame.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/period-delete-dialog.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 2,
+  },
+  "packages/venue-service/src/dashboard/period-dialog.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 4,
+  },
+  "packages/venue-service/src/dashboard/periods-list.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/prep-stations-screen.a11y.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 3,
+  },
+  "packages/venue-service/src/dashboard/prep-stations-screen.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/routing-cell-editor.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/routing-grid-model.test.ts": {
+    reason: ACCENTED_INPUTS,
+    findings: 20,
+  },
+  "packages/venue-service/src/dashboard/routing-grid.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 5,
+  },
+  "packages/venue-service/src/dashboard/season-chips.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/season-painter.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 4,
+  },
+  "packages/venue-service/src/dashboard/service-delete-copy.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 47,
+  },
+  "packages/venue-service/src/dashboard/service-edit-dialog.legacy.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 5,
+  },
+  "packages/venue-service/src/dashboard/special-day-painter.paint.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/special-day-painter.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 2,
+  },
+  "packages/venue-service/src/dashboard/station-delete-copy.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 30,
+  },
+  "packages/venue-service/src/dashboard/station-show.test.ts": {
+    reason: ACCENTED_INPUTS,
+    findings: 4,
+  },
+  "packages/venue-service/src/dashboard/station-table.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/strings.test.ts": {
+    reason: "checks that Spanish calls a menu a carta, never a menú",
+    findings: 2,
+  },
+  "packages/venue-service/src/dashboard/venue-operations-loader.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/dashboard/week-rows.test.ts": {
+    reason: SPANISH_SCREEN_WORDING,
+    findings: 1,
+  },
+  "packages/venue-service/src/department-receipts.test.ts": {
+    reason: "receipt text the test stores per language (Catalan and Spanish)",
+    findings: 8,
+  },
+  "packages/venue-service/src/holidays-routes.test.ts": { reason: REAL_HOLIDAY_NAMES, findings: 1 },
+  "packages/venue-service/src/holidays.test.ts": { reason: REAL_HOLIDAY_NAMES, findings: 4 },
+  "packages/venue-service/src/hours.live.test.ts": { reason: REAL_HOLIDAY_NAMES, findings: 1 },
+  "packages/venue-service/src/kitchen-screens.test.ts": { reason: ACCENTED_INPUTS, findings: 1 },
+  "packages/venue-service/src/opening-hours-calendar.test.ts": {
+    reason: REAL_HOLIDAY_NAMES,
+    findings: 1,
+  },
+  "packages/venue-service/src/order-kitchen-notes.test.ts": {
+    reason: ACCENTED_INPUTS,
+    findings: 2,
+  },
+  "packages/venue-service/src/routing-store.test.ts": { reason: ACCENTED_INPUTS, findings: 2 },
+  "packages/venue-service/src/station-times.test.ts": { reason: ACCENTED_INPUTS, findings: 4 },
 };
 
 /** There is deliberately no list of forgiven words: if a column's name needs one, rename the column. */

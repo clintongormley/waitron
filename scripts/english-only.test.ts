@@ -37,7 +37,7 @@ const repoRoot = join(import.meta.dirname, "..");
  * `STILL_TO_CLEAN`'s length, pinned equal so a change in either direction fails: deleting entries
  * lowers this in the same change, and adding one has to raise it where the diff shows it.
  */
-const STILL_TO_CLEAN_COUNT = 1026;
+const STILL_TO_CLEAN_COUNT = 970;
 
 // A per-call kill timeout for a hung `git` (Vitest's timer cannot interrupt a blocking child), and
 // a per-test bound above it for the case that builds a repository.
@@ -290,6 +290,55 @@ describe("the lists", () => {
       "packages/identity/src/passkey-providers.ts",
       "packages/migrations/migrations.manifest.json",
       "packages/shared/src/locales.ts",
+      "packages/venue-service/src/configuration-transfer.test.ts",
+      "packages/venue-service/src/dashboard/add-dates-calendar.test.ts",
+      "packages/venue-service/src/dashboard/calendar-day-names.test.ts",
+      "packages/venue-service/src/dashboard/calendar-station-month.test.ts",
+      "packages/venue-service/src/dashboard/clock-change-conflict.test.ts",
+      "packages/venue-service/src/dashboard/department-service-steps.test.ts",
+      "packages/venue-service/src/dashboard/department-settings.test.ts",
+      "packages/venue-service/src/dashboard/departments-list-readiness.a11y.test.ts",
+      "packages/venue-service/src/dashboard/departments-list.test.ts",
+      "packages/venue-service/src/dashboard/departments-zones-list.test.ts",
+      "packages/venue-service/src/dashboard/floor-plan-set-delete-dialog.test.ts",
+      "packages/venue-service/src/dashboard/floor-plan-set-dialog.test.ts",
+      "packages/venue-service/src/dashboard/floor-plans-screen.test.ts",
+      "packages/venue-service/src/dashboard/opening-hours-day.test.ts",
+      "packages/venue-service/src/dashboard/opening-hours-month.test.ts",
+      "packages/venue-service/src/dashboard/opening-hours-screen.test.ts",
+      "packages/venue-service/src/dashboard/opening-hours-week.test.ts",
+      "packages/venue-service/src/dashboard/opening-hours-year.test.ts",
+      "packages/venue-service/src/dashboard/paint-grid.test.ts",
+      "packages/venue-service/src/dashboard/painter-frame.test.ts",
+      "packages/venue-service/src/dashboard/period-delete-dialog.test.ts",
+      "packages/venue-service/src/dashboard/period-dialog.test.ts",
+      "packages/venue-service/src/dashboard/periods-list.test.ts",
+      "packages/venue-service/src/dashboard/prep-stations-screen.a11y.test.ts",
+      "packages/venue-service/src/dashboard/prep-stations-screen.test.ts",
+      "packages/venue-service/src/dashboard/routing-cell-editor.test.ts",
+      "packages/venue-service/src/dashboard/routing-grid-model.test.ts",
+      "packages/venue-service/src/dashboard/routing-grid.test.ts",
+      "packages/venue-service/src/dashboard/season-chips.test.ts",
+      "packages/venue-service/src/dashboard/season-painter.test.ts",
+      "packages/venue-service/src/dashboard/service-delete-copy.test.ts",
+      "packages/venue-service/src/dashboard/service-edit-dialog.legacy.test.ts",
+      "packages/venue-service/src/dashboard/special-day-painter.paint.test.ts",
+      "packages/venue-service/src/dashboard/special-day-painter.test.ts",
+      "packages/venue-service/src/dashboard/station-delete-copy.test.ts",
+      "packages/venue-service/src/dashboard/station-show.test.ts",
+      "packages/venue-service/src/dashboard/station-table.test.ts",
+      "packages/venue-service/src/dashboard/strings.test.ts",
+      "packages/venue-service/src/dashboard/venue-operations-loader.test.ts",
+      "packages/venue-service/src/dashboard/week-rows.test.ts",
+      "packages/venue-service/src/department-receipts.test.ts",
+      "packages/venue-service/src/holidays-routes.test.ts",
+      "packages/venue-service/src/holidays.test.ts",
+      "packages/venue-service/src/hours.live.test.ts",
+      "packages/venue-service/src/kitchen-screens.test.ts",
+      "packages/venue-service/src/opening-hours-calendar.test.ts",
+      "packages/venue-service/src/order-kitchen-notes.test.ts",
+      "packages/venue-service/src/routing-store.test.ts",
+      "packages/venue-service/src/station-times.test.ts",
     ]);
     for (const [path, keep] of Object.entries(KEEPS_NON_ENGLISH)) {
       expect(keep.reason, path).toMatch(/^[^\n]{10,}$/);

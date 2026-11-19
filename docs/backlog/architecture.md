@@ -301,9 +301,6 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   suite its legal name, Madrid street addresses and the drink
   "Mojito", the errors suite its guest surname "Soler", and the clearing suite the Spanish names its
   shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
-  The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
-  still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
-  Copas, "Deli para llevar") and uses "Sala" and "Terraza".
   The device-api suite (`apps/server/src/device-api.test.ts`) gives English names to what it
   creates; two of its comments still name the shared helper's default station "Cocina" and one its
   products (café, agua), names no check in it reads. The station-alert and party suites still
@@ -735,9 +732,6 @@ also qualifies the historical operation-description references in this section.
   suite its legal name, Madrid street addresses and the drink
   "Mojito", the errors suite its guest surname "Soler", and the clearing suite the Spanish names its
   shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
-  The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
-  still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
-  Copas, "Deli para llevar") and uses "Sala" and "Terraza".
   The server's adjustment venue gives English customer-facing and kitchen dish names and English
   category, printer, device, location and administrator names; its locale, street address,
   reasons' Spanish translations and setup's default station "Cocina" stay, and its legal name
