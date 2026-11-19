@@ -308,10 +308,16 @@ export class SetMenuDishes extends LitElement {
               : nothing
           }`,
       },
-      { key: "course", label: t("menus.set_menu_course"), cell: (dish) => this.#course(dish) },
+      {
+        key: "course",
+        label: t("menus.set_menu_course"),
+        choosable: "shown",
+        cell: (dish) => this.#course(dish),
+      },
       {
         key: "surcharge",
         label: t("menus.set_menu_surcharge"),
+        choosable: "shown",
         cell: (dish) => this.#surcharge(dish),
       },
       {
@@ -399,6 +405,17 @@ export class SetMenuDishes extends LitElement {
           ${id === null ? html`<p>${t("menus.set_menu_no_course_help")}</p>` : nothing}
           <wt-data-table
             aria-label=${name}
+            viewKey=${`waitron.menus.set-menu.dishes.${id ?? "no-course"}`}
+            customiseColumnsLabel=${t("table.customise_columns")}
+            customiseLabel=${t("table.customise")}
+            restoreColumnsLabel=${t("table.restore_columns")}
+            doneLabel=${t("table.done")}
+            moveColumnLabel=${t("table.move_column")}
+            showColumnLabel=${t("table.show_column")}
+            hideColumnLabel=${t("table.hide_column")}
+            alwaysShownColumnLabel=${t("table.column_always_shown")}
+            lastShownColumnLabel=${t("table.column_last_shown")}
+            columnPositionLabel=${t("table.column_position")}
             .rows=${groups.get(id)!}
             .columns=${columns}
             .rowKey=${rowKey}

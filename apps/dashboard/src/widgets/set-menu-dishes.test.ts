@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { useLocale } from "../testing/locale-setup.js";
 import { cleanupWidgets } from "./test-helpers.js";
@@ -43,6 +43,43 @@ it("groups dishes in course order and links from No course to the product", asyn
     .getByRole("region", { name: "No course" })
     .getByRole("link", { name: "Edit Hake" });
   await expect.element(link).toHaveAttribute("href", "/products/product/hake");
+});
+
+it("remembers a course table's column choice when the editor is reopened", async () => {
+  const key = "waitron.menus.set-menu.dishes.starters:columns";
+  localStorage.removeItem(key);
+  onTestFinished(() => localStorage.removeItem(key));
+  const { el } = await mountDishes();
+  await expect.element(page.getByRole("region", { name: "Starters" })).toBeVisible();
+  const table = page.elementLocator(
+    el
+      .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
+      .shadowRoot!.querySelector('wt-data-table[aria-label="Starters"]')!,
+  );
+  const chooser = table.getByRole("button", { name: "Customise columns" });
+  await vi.waitFor(() => expect(chooser.element()).toBeVisible());
+  await chooser.click();
+  const hideSurcharge = page.getByRole("checkbox", { name: /Hide.*Surcharge/ });
+  await expect.element(hideSurcharge).toBeChecked();
+  await page.elementLocator(hideSurcharge.element().closest("label")!).click();
+  await page.getByRole("button", { name: "Done" }).click();
+
+  cleanupWidgets();
+  await mountDishes();
+  await expect.element(page.getByRole("region", { name: "Starters" })).toBeVisible();
+  expect(
+    page
+      .getByRole("region", { name: "Starters" })
+      .getByRole("columnheader", { name: "Surcharge" })
+      .elements(),
+  ).toHaveLength(0);
+  await expect
+    .element(
+      page
+        .getByRole("region", { name: "Sharing plates" })
+        .getByRole("columnheader", { name: "Surcharge" }),
+    )
+    .toBeVisible();
 });
 
 it("moves Bravas to Starters and explains both line changes, then restores its product course", async () => {
