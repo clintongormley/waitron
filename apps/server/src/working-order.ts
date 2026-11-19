@@ -7263,91 +7263,101 @@ export async function updateHeldOrder(
 ): Promise<number | { revision: number; invoice?: TillSaleResult }> {
   return withIssuanceTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, cfg, deps.admission);
-    const { label } = await requireEditableOrder(tx, id, req.revision);
-    await requireOrderDining(tx, id, req.dining);
-    await requireOrderBillEditor(tx, id, {
-      operatorId: req.operatorId,
-      expectedEdit: req.expectedEdit,
-    });
-    // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
-    if (req.lines.length === 0) {
-      throw new AppError("sale.empty_basket", {});
-    }
-    const order = await readEditableOrder(tx, id);
-    const byId = new Map(order.parents.map((parent) => [parent.id, parent]));
-    const claimed = new Set<string>();
-    const edits: { parent: EditableParent; intent: LineIntent }[] = [];
-    const fresh: RequestedLine[] = [];
-    for (const line of req.lines) {
-      const parent =
-        line.workingOrderLineId === undefined ? undefined : byId.get(line.workingOrderLineId);
-      if (parent === undefined || claimed.has(parent.id) || parent.productId === null) {
-        fresh.push(line);
-        continue;
-      }
-      claimed.add(parent.id);
-      // An offer line sells the variant it names, else the offer's own product. A line naming a
-      // product or carrying a settled answer goes to the new-line path, which refuses it.
-      const sameItem =
-        parent.menuItemId === line.menuItemId &&
-        !Object.hasOwn(line, "productId") &&
-        !Object.hasOwn(line, "frozenOptions") &&
-        !Object.hasOwn(line, "frozenExtras") &&
-        (line.variantId ?? parent.parentProductId ?? parent.productId) === parent.productId;
-      if (!sameItem) {
-        claimed.delete(parent.id);
-        fresh.push(line);
-        continue;
-      }
-      edits.push({
-        parent,
-        intent: {
-          quantity: line.quantity,
-          note: screenNote(line.note),
-          options: { set: line.options ?? [] },
-          extras: { set: line.extras ?? [] },
-          makeAt: line.makeAt,
-        },
-      });
-    }
-    const { changed, chargesUnchanged, at } = await applyLineEdits(
-      tx,
-      cfg,
-      id,
-      order,
-      {
-        edits,
-        removed: order.parents.filter((parent) => !claimed.has(parent.id)),
-        fresh,
-        refuseSentDrop: true,
-        keepRecordedAnswers: true,
-      },
-      req.operatorId,
-      attendance,
-      req.lateSend,
-    );
-    const relabelled = (req.label ?? null) !== label;
-    if (relabelled) {
-      await tx
-        .update(workingOrders)
-        .set({ label: req.label ?? null })
-        .where(eq(workingOrders.id, id));
-    }
-    const revision = await countEdit(
-      tx,
-      id,
-      req.revision,
-      changed || relabelled,
-      !changed || chargesUnchanged,
-    );
+    const { revision, changed, at } = await saveHeldOrderIn(tx, cfg, id, req, attendance);
     const invoice =
       issue === undefined
         ? null
         : await issueIfFullyPaid(tx, issue.fiscal, issue.saleCfg, id, req.operatorId);
-    if (changed || relabelled)
-      await captureOrderEdit(tx, attendance, id, req.operatorId, revision, "save", at);
+    if (changed) await captureOrderEdit(tx, attendance, id, req.operatorId, revision, "save", at);
     return issue === undefined ? revision : { revision, ...(invoice === null ? {} : { invoice }) };
   });
+}
+
+export async function saveHeldOrderIn(
+  tx: Transaction,
+  cfg: TradingContext,
+  id: string,
+  req: UpdateHeldOrderRequest,
+  attendance?: OrderAttendance,
+) {
+  const { label } = await requireEditableOrder(tx, id, req.revision);
+  await requireOrderDining(tx, id, req.dining);
+  await requireOrderBillEditor(tx, id, {
+    operatorId: req.operatorId,
+    expectedEdit: req.expectedEdit,
+  });
+  // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
+  if (req.lines.length === 0) {
+    throw new AppError("sale.empty_basket", {});
+  }
+  const order = await readEditableOrder(tx, id);
+  const byId = new Map(order.parents.map((parent) => [parent.id, parent]));
+  const claimed = new Set<string>();
+  const edits: { parent: EditableParent; intent: LineIntent }[] = [];
+  const fresh: RequestedLine[] = [];
+  for (const line of req.lines) {
+    const parent =
+      line.workingOrderLineId === undefined ? undefined : byId.get(line.workingOrderLineId);
+    if (parent === undefined || claimed.has(parent.id) || parent.productId === null) {
+      fresh.push(line);
+      continue;
+    }
+    claimed.add(parent.id);
+    // An offer line sells the variant it names, else the offer's own product. A line naming a
+    // product or carrying a settled answer goes to the new-line path, which refuses it.
+    const sameItem =
+      parent.menuItemId === line.menuItemId &&
+      !Object.hasOwn(line, "productId") &&
+      !Object.hasOwn(line, "frozenOptions") &&
+      !Object.hasOwn(line, "frozenExtras") &&
+      (line.variantId ?? parent.parentProductId ?? parent.productId) === parent.productId;
+    if (!sameItem) {
+      claimed.delete(parent.id);
+      fresh.push(line);
+      continue;
+    }
+    edits.push({
+      parent,
+      intent: {
+        quantity: line.quantity,
+        note: screenNote(line.note),
+        options: { set: line.options ?? [] },
+        extras: { set: line.extras ?? [] },
+        makeAt: line.makeAt,
+      },
+    });
+  }
+  const { changed, chargesUnchanged, at } = await applyLineEdits(
+    tx,
+    cfg,
+    id,
+    order,
+    {
+      edits,
+      removed: order.parents.filter((parent) => !claimed.has(parent.id)),
+      fresh,
+      refuseSentDrop: true,
+      keepRecordedAnswers: true,
+    },
+    req.operatorId,
+    attendance,
+    req.lateSend,
+  );
+  const relabelled = (req.label ?? null) !== label;
+  if (relabelled) {
+    await tx
+      .update(workingOrders)
+      .set({ label: req.label ?? null })
+      .where(eq(workingOrders.id, id));
+  }
+  const revision = await countEdit(
+    tx,
+    id,
+    req.revision,
+    changed || relabelled,
+    !changed || chargesUnchanged,
+  );
+  return { revision, changed: changed || relabelled, at };
 }
 
 /**

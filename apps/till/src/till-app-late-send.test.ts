@@ -1522,10 +1522,10 @@ describe("counter pay", () => {
   it("keeps the confirmation on the pay it repeats after the dead-ends question", async () => {
     const el = await lateCounter(
       {
-        updateWorkingOrder: vi
+        recordSale: vi
           .fn()
           .mockRejectedValueOnce({ code: "route.station_inactive", status: 409 })
-          .mockResolvedValue({ revision: 4 }),
+          .mockResolvedValue(saleResult),
         askSaleDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [], stations: [] }),
       },
       { products: ["Omelette"], held: true },
@@ -1536,12 +1536,11 @@ describe("counter pay", () => {
     await choose(el, "data-late-agreed");
 
     expect(api.askSaleDeadEnds).toHaveBeenCalledOnce();
-    expect(api.updateWorkingOrder!.mock.calls.map(([, request]) => request.lateSend)).toEqual([
+    expect(api.recordSale!.mock.calls.map((args) => args[10])).toEqual([
       BREAKFAST_CONFIRMED,
       BREAKFAST_CONFIRMED,
     ]);
-    expect(api.recordSale).toHaveBeenCalledOnce();
-    expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
     expect(windowOf(el)).toBeNull();
   });
 
@@ -1549,10 +1548,10 @@ describe("counter pay", () => {
     const el = await lateCounter(
       {
         ...integratedCard(),
-        updateWorkingOrder: vi
+        pay: vi
           .fn()
           .mockRejectedValueOnce({ code: "route.station_inactive", status: 409 })
-          .mockResolvedValue({ revision: 4 }),
+          .mockResolvedValue({ outcome: "captured", ticket: saleResult }),
         askSaleDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [], stations: [] }),
       },
       { products: ["Omelette"], held: true },
@@ -1563,12 +1562,11 @@ describe("counter pay", () => {
     await choose(el, "data-late-agreed");
 
     expect(api.askSaleDeadEnds).toHaveBeenCalledOnce();
-    expect(api.updateWorkingOrder!.mock.calls.map(([, request]) => request.lateSend)).toEqual([
+    expect(api.pay!.mock.calls.map((args) => args[0].lateSend)).toEqual([
       BREAKFAST_CONFIRMED,
       BREAKFAST_CONFIRMED,
     ]);
-    expect(api.pay).toHaveBeenCalledOnce();
-    expect(api.pay!.mock.calls[0]![0].lateSend).toEqual(BREAKFAST_CONFIRMED);
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
     expect(windowOf(el)).toBeNull();
   });
 
@@ -1658,7 +1656,7 @@ describe("counter pay", () => {
     expect(lastArgument(recordSale, 1)).toEqual(BREAKFAST_CONFIRMED);
   });
 
-  it("saves a retrieved order and records its sale with the confirmation, listing only the new dish", async () => {
+  it("saves and pays a retrieved order with the confirmation, listing only the new dish", async () => {
     const el = await lateCounter({}, { products: ["Omelette"], held: true });
     emit(counterScreen(el), "confirm-payment", CASH);
     await flush(el, 6);
@@ -1667,12 +1665,9 @@ describe("counter pay", () => {
 
     await choose(el, "data-late-agreed");
 
-    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
-    expect(api.updateWorkingOrder!.mock.calls[0]![1].lateSend).toEqual(BREAKFAST_CONFIRMED);
-    expect(lastArgument(api.recordSale!, 0)).toEqual(BREAKFAST_CONFIRMED);
-    expect(api.updateWorkingOrder!.mock.invocationCallOrder[0]).toBeLessThan(
-      api.recordSale!.mock.invocationCallOrder[0]!,
-    );
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    expect(api.recordSale!.mock.calls[0]![10]).toEqual(BREAKFAST_CONFIRMED);
   });
 
   it("keeps a retrieved order's stored dish on Remove them", async () => {
@@ -1688,17 +1683,15 @@ describe("counter pay", () => {
     expect(api.updateWorkingOrder).not.toHaveBeenCalled();
   });
 
-  it("lists only the new dish from a refusal of a retrieved order's save", async () => {
-    const updateWorkingOrder = vi
-      .fn()
-      .mockRejectedValueOnce(BREAKFAST_ENDED)
-      .mockResolvedValue({ revision: 4 });
-    const el = await counterBasket({ updateWorkingOrder }, { products: ["Omelette"], held: true });
+  it("lists only the new dish from a refusal of a retrieved order's payment", async () => {
+    const recordSale = vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED).mockResolvedValue(saleResult);
+    const el = await counterBasket({ recordSale }, { products: ["Omelette"], held: true });
     emit(counterScreen(el), "confirm-payment", CASH);
     await flush(el, 6);
 
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
-    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(recordSale).toHaveBeenCalledOnce();
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
 
     await choose(el, "data-late-remove");
 

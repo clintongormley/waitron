@@ -647,7 +647,7 @@ export interface PayWorkingOrderRequest {
   dining?: Dining;
 }
 
-function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknown): void {
+export function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknown): void {
   if (invoiceType !== undefined && invoiceType !== "F1" && invoiceType !== "F2") {
     throw new AppError("management.request_invalid", { field: "invoiceType" });
   }

@@ -194,6 +194,29 @@ describe("closed zones take no new service", () => {
     const after = await orderRows();
     expect(after).toHaveLength(before.length + 1);
     expect(after.find((row) => row.id === id)).toMatchObject({ id, status: "open" });
+
+    const paidId = randomUUID();
+    const paymentPath = `/api/working-orders/${paidId}/payments`;
+    const basket = { zoneId: v.zoneId, lines: [line(v)] };
+    const payment = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "5.00",
+      dining: "eat_in",
+    };
+    expect(await request(v, "POST", paymentPath, { ...payment, basket })).toMatchObject({
+      status: 409,
+      json: { code: "menu_period.ended" },
+    });
+    expect(await orderRows()).toEqual(after);
+    expect(
+      await request(v, "POST", paymentPath, {
+        ...payment,
+        basket: { ...basket, lateSend: { menuIds: [period.menuId] } },
+      }),
+    ).toMatchObject({ status: 200, json: { invoice: { total: "3.00" } } });
   });
 
   it("seats immediately before closure and refuses at the exact start without writing a party", async () => {

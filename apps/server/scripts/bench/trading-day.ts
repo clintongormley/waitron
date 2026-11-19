@@ -407,27 +407,14 @@ async function pay(
 ): Promise<void> {
   const tabId = bill.tabId!;
   const route = bill.plan.route;
-  if (route === "pay") {
-    await call(cookie, "POST", "/api/pay", {
-      id: tabId,
-      lines: [],
-      expectedEdit: await editOf(tabId),
-      dining: "eat_in",
-    });
-    return;
-  }
-  const { json: balance } = await call(cookie, "GET", `/api/working-orders/${tabId}/payments`);
-  const due = balance.outstanding as string;
+  const paymentPath = `/api/working-orders/${tabId}/payments`;
   if (route === "collect") {
     await call(cookie, "POST", `/api/working-orders/${tabId}/place`, {
       expectedEdit: await editOf(tabId),
     });
-    await call(cookie, "POST", `/api/working-orders/${tabId}/collect`, {
-      expectedEdit: await editOf(tabId),
-      tender: { method: "cash", amount: cashHandedOver(due) },
-    });
-    return;
   }
+  const { json: balance } = await call(cookie, "GET", paymentPath);
+  const due = balance.outstanding as string;
   const common = {
     submissionId: randomUUID(),
     expectedEdit: await editOf(tabId),
@@ -439,8 +426,8 @@ async function pay(
   await call(
     cookie,
     "POST",
-    `/api/working-orders/${tabId}/payments`,
-    route === "payments-reader"
+    paymentPath,
+    route === "payments-reader" || route === "pay"
       ? { ...common, method: "card", entry: "reader" }
       : { ...common, method: "cash", tendered: cashHandedOver(due) },
   );

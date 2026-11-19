@@ -693,7 +693,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       const healthBody = (await health.json()) as { tradingAvailable?: unknown };
       expect(healthBody.tradingAvailable, JSON.stringify(healthBody)).not.toBe(false);
 
-      const sold = await fetch(`${urlM}/api/sales`, {
+      const sold = await fetch(`${urlM}/api/working-orders/${workingOrderId}/payments`, {
         ...viaM,
         method: "POST",
         headers: {
@@ -703,10 +703,12 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
         },
         body: JSON.stringify({
           dining: "eat_in",
-          lines: [{ menuItemId: till.menuItemId, quantity: "1" }],
-          tender: { method: "cash", amount: "5.00" },
-          workingOrderId,
-          zoneId: till.zoneId,
+          submissionId: workingOrderId,
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "5.00",
+          basket: { zoneId: till.zoneId, lines: [{ menuItemId: till.menuItemId, quantity: "1" }] },
         }),
       });
       expect(sold.status, await sold.text()).toBe(200);

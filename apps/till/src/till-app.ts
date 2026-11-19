@@ -7586,7 +7586,6 @@ export class TillApp extends LitElement {
     const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
     const basketLines = [...this.#store.lines];
-    const label = this.#store.label;
     const payload = this.#basketPayload();
     this.errorKey = undefined;
     let reachedFiscal = false;
@@ -7595,20 +7594,22 @@ export class TillApp extends LitElement {
     let recheck = false;
     let inactiveChoice = false;
     let paid = false;
+    const edit =
+      this.#store.persisted && this.#store.dirty
+        ? { revision: this.#store.revision, label: this.#store.label }
+        : undefined;
     try {
-      // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
-      // after retrieving must be saved first or it is silently dropped from the charge and the record.
-      if (
-        !(await this.#syncIfDirty(id, lines, basketLines, label, lateSend)) ||
-        basketVisit !== this.#store.loadGeneration
-      )
-        return;
+      const basket = await this.#counterPaymentLines(lines, basketLines, edit !== undefined);
+      if (basket === undefined || basketVisit !== this.#store.loadGeneration) return;
       if (session !== this.#operatorSession) return;
+      if (edit !== undefined) edit.revision = this.#store.revision;
       reachedFiscal = true;
       const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
       const language = this.#chosenReceiptLanguage(id);
+      const change: [lateSend?: LateSend, edit?: typeof edit] =
+        edit !== undefined ? [lateSend, edit] : lateSend === undefined ? [] : [lateSend];
       const result = await this.api.recordSale(
-        lines,
+        basket,
         tender,
         id,
         undefined,
@@ -7618,12 +7619,13 @@ export class TillApp extends LitElement {
         guestCount,
         this.#counterExpectedEdit(id),
         this.#store.dining,
-        ...(lateSend === undefined ? [] : ([lateSend] as const)),
+        ...change,
       );
       this.#saleSendEnded(id);
       if (session !== this.#operatorSession) return;
       this.result = result;
-      if (this.#store.id === id) this.#commitBasket(payload);
+      if (this.#store.id === id && basketVisit === this.#store.loadGeneration)
+        this.#commitBasket(payload);
       this.#showTicket(id, true, {
         surface: "counter",
         cashChange: result.tender.method === "cash" ? result.tender.change : null,
@@ -7634,7 +7636,7 @@ export class TillApp extends LitElement {
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
       // filed.
       const unknown = reachedFiscal && this.#saleSendEnded(id, error);
-      if (session !== this.#operatorSession) return;
+      if (session !== this.#operatorSession || basketVisit !== this.#store.loadGeneration) return;
       if (
         tender.method === "card" &&
         (error as { code?: string }).code === "bill.tip_not_allowed"
@@ -7650,7 +7652,6 @@ export class TillApp extends LitElement {
       else if (approval !== undefined)
         await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
       else if (
-        !reachedFiscal &&
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
@@ -7658,6 +7659,11 @@ export class TillApp extends LitElement {
       ) {
         recheck = true;
         inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if (
+        edit !== undefined &&
+        (await this.#reloadRefusedCounterPaymentEdit(id, error, basketVisit))
+      ) {
+        return;
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else if (unknown) this.errorKey = "sale.unconfirmed";
       else
@@ -7764,7 +7770,6 @@ export class TillApp extends LitElement {
     const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
     const basketLines = [...this.#store.lines];
-    const label = this.#store.label;
     const payload = this.#basketPayload();
     this.errorKey = undefined;
     this.#clearCardOutcome();
@@ -7774,13 +7779,15 @@ export class TillApp extends LitElement {
     let recheck = false;
     let inactiveChoice = false;
     let paid = false;
+    const edit =
+      this.#store.persisted && this.#store.dirty
+        ? { revision: this.#store.revision, label: this.#store.label }
+        : undefined;
     try {
-      if (
-        !(await this.#syncIfDirty(id, lines, basketLines, label, lateSend)) ||
-        basketVisit !== this.#store.loadGeneration
-      )
-        return;
+      const basket = await this.#counterPaymentLines(lines, basketLines, edit !== undefined);
+      if (basket === undefined || basketVisit !== this.#store.loadGeneration) return;
       if (session !== this.#operatorSession) return;
+      if (edit !== undefined) edit.revision = this.#store.revision;
       reachedFiscal = true;
       const language = this.#chosenReceiptLanguage(id);
       const out: PayOutcome = await this.#withReaderPayment(
@@ -7789,7 +7796,8 @@ export class TillApp extends LitElement {
           this.api.pay({
             expectedEdit: this.#counterExpectedEdit(id),
             id,
-            lines: placed ? [] : lines,
+            lines: placed ? [] : basket,
+            ...(placed || edit === undefined ? {} : { edit }),
             dining: this.#store.dining,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
             ...(placed ? {} : choice?.invoice),
@@ -7808,6 +7816,11 @@ export class TillApp extends LitElement {
       );
       this.#saleSendEnded(id);
       if (session !== this.#operatorSession) return;
+      if (out.outcome !== "captured" && out.outcome !== "partial") {
+        this.#cardOutcomes.set(id, { outcome: { ...out }, detail });
+        this.requestUpdate();
+      }
+      if (out.outcome !== "captured" && basketVisit !== this.#store.loadGeneration) return;
       if (out.slipPrintFailed) this.errorKey = slipFailureKey(out.outcome === "partial", "counter");
       if (out.outcome === "partial") {
         await this.#reloadCounterOrder(id, session);
@@ -7825,10 +7838,18 @@ export class TillApp extends LitElement {
       this.captureWarning = out.captureWarning ?? null;
       if (out.outcome === "captured") {
         this.result = out.ticket;
-        if (this.#store.id === id) this.#commitBasket(payload);
+        if (this.#store.id === id && basketVisit === this.#store.loadGeneration)
+          this.#commitBasket(payload);
         this.#showTicket(id, true, { surface: "counter", cashChange: null });
         paid = true;
       } else {
+        if (
+          edit !== undefined &&
+          !placed &&
+          out.outcome !== "timeout" &&
+          basketVisit === this.#store.loadGeneration
+        )
+          await this.#reloadCounterOrder(id, session);
         if (
           !this.#store.persisted &&
           (await this.#adoptCreatedCounterNote(id, basketVisit, session))
@@ -7847,16 +7868,12 @@ export class TillApp extends LitElement {
                   : "open",
           };
         }
-        if (session === this.#operatorSession) {
-          this.#cardOutcomes.set(id, { outcome: { ...out }, detail });
-          this.requestUpdate();
-        }
       }
     } catch (error) {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,
       // `apps/server/src/till-sale.ts`), which is what `sale.refused`'s refund sentence is for.
       const unknown = reachedFiscal && this.#saleSendEnded(id, error);
-      if (session !== this.#operatorSession) return;
+      if (session !== this.#operatorSession || basketVisit !== this.#store.loadGeneration) return;
       const asked = lateSendAsked(error, basketLines);
       const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
       if (asked !== undefined) this.#openCounterLateSend(asked, retry);
@@ -7865,7 +7882,6 @@ export class TillApp extends LitElement {
       else if (approval !== undefined)
         await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);
       else if (
-        !reachedFiscal &&
         !retried &&
         ["station.no_replacement", "route.station_inactive"].includes(
           (error as { code?: string }).code ?? "",
@@ -7873,6 +7889,11 @@ export class TillApp extends LitElement {
       ) {
         recheck = true;
         inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if (
+        edit !== undefined &&
+        (await this.#reloadRefusedCounterPaymentEdit(id, error, basketVisit))
+      ) {
+        return;
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else if (unknown) this.errorKey = "sale.unconfirmed";
       else
@@ -8544,6 +8565,33 @@ export class TillApp extends LitElement {
       if (generation !== this.#store.loadGeneration || noteSession !== this.#operatorSession)
         return false;
     }
+    return true;
+  }
+
+  async #counterPaymentLines(
+    lines: SaleLine[],
+    rows: readonly OrderLine[],
+    edited: boolean,
+  ): Promise<SaleLine[] | undefined> {
+    if (!(await this.#flushCounterKitchenNote())) return undefined;
+    return edited ? lines.flatMap((wire, index) => portionWireLines(rows[index]!, wire)) : lines;
+  }
+
+  async #reloadRefusedCounterPaymentEdit(
+    id: string,
+    error: unknown,
+    visit: number,
+  ): Promise<boolean> {
+    const code = (error as { code?: string }).code;
+    if (code === "working_order.not_open") {
+      const session = this.#operatorSession;
+      const current = () =>
+        session === this.#operatorSession && visit === this.#store.loadGeneration;
+      return (await this.#recoverSettlingEdit(id, error, "counter", current)) || !current();
+    }
+    const sentDish = code === undefined ? undefined : SENT_DISH_SAVE_REFUSALS.get(code);
+    if (code !== "working_order.out_of_date" && sentDish === undefined) return false;
+    await this.#reloadChangedOrder(id, sentDish);
     return true;
   }
 

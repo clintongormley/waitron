@@ -442,17 +442,23 @@ async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGr
       await finish(bill.partyId);
       return { outcome: outcomeOf(answers), seen: 1 };
     };
-  const counterSale = async () => ({
-    cookie,
-    method: "POST",
-    path: "/api/sales",
-    body: {
-      expectedEdit: null,
-      lines: nextDishes(2).map((menuItemId) => ({ menuItemId, quantity: "1" })),
-      tender: { method: "cash", amount: "200.00" },
-      dining: "eat_in",
-    },
-  });
+  const counterSale = async () => {
+    const id = randomUUID();
+    return {
+      cookie,
+      method: "POST",
+      path: `/api/working-orders/${id}/payments`,
+      body: {
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "200.00",
+        dining: "eat_in",
+        basket: { lines: nextDishes(2).map((menuItemId) => ({ menuItemId, quantity: "1" })) },
+      },
+    };
+  };
 
   const floorTabs = new Set<string>();
   /** The floor's own dishes not yet ready, by id: a dish carries a name, its group does not. */

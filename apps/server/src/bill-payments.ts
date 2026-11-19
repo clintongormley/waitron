@@ -104,6 +104,7 @@ import {
   readOutstandingSaleForOrder,
   readTenderBlock,
   receiptQr,
+  refuseUnavailableInvoiceRequest,
   refusePlacedPaymentInFlight,
   settleIssuedOrder,
   storeSentReceiptLanguage,
@@ -111,14 +112,20 @@ import {
 import type { TillSaleResult } from "./till-sale.js";
 import { fingerprint } from "./parties.js";
 import {
+  captureOrderEdit,
+  createOpenOrder,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
   refuseOrderPaymentMarked,
+  refusePaymentInFlight,
   refuseRefundInProgress,
+  refuseUnavailableFullInvoice,
+  saveHeldOrderIn,
   storedOrderTotal,
   toVatBreakdown,
 } from "./working-order.js";
-import type { GrossOrder, TillSaleDeps } from "./working-order.js";
+import type { GrossOrder, TillSaleDeps, UpdateHeldOrderRequest } from "./working-order.js";
+import type { LateSendConfirmation } from "./late-send.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import { storePrepayMadeHere } from "./made-here.js";
 import { assertStillSignedIn } from "./till-session.js";
@@ -158,6 +165,18 @@ export interface BillPaymentAsk {
   addedTip?: string;
   choice?: AllocationChoice;
 }
+
+export interface CounterPaymentBasket {
+  lines: UpdateHeldOrderRequest["lines"];
+  revision?: number;
+  label?: string;
+  zoneId?: string;
+  kitchenNote?: string | null;
+  invoiceType?: unknown;
+  recipient?: unknown;
+}
+
+type CounterPayment = CounterPaymentBasket & { lateSend?: LateSendConfirmation };
 
 /** A payment request as taken: the ask, the allocation the operator saw, and its retry key. */
 export interface BillPaymentRequest extends BillPaymentAsk, OutsideCardDetails {
@@ -242,6 +261,12 @@ export interface BillPaymentResult {
   balance: BillBalance;
   /** Present when the bill is invoiced: by this payment, or, on a replay, since. */
   invoice?: TillSaleResult;
+}
+
+type SettledBill = { outcome: "settled"; balance: BillBalance; invoice: TillSaleResult };
+
+function settledBill(balance: BillBalance, invoice: TillSaleResult): SettledBill {
+  return { outcome: "settled", balance, invoice };
 }
 
 type PaymentRow = typeof billPayments.$inferSelect;
@@ -1270,7 +1295,7 @@ export async function closeZeroBill(
   workingOrderId: string,
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
-): Promise<{ outcome: "settled"; balance: BillBalance; invoice: TillSaleResult }> {
+): Promise<SettledBill> {
   const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
   return withIssuanceTransaction(
     deps.db,
@@ -1293,44 +1318,121 @@ export async function closeZeroBill(
       ) {
         throw new AppError("bill.tip_not_allowed", { workingOrderId, chargeable: ZERO });
       }
-      if (balance.status === "settled") {
-        return {
-          outcome: "settled",
-          balance,
-          invoice: await readSettledTicket(deps.backend, tx, cfg, workingOrderId),
-        };
-      }
-
-      const payable = await requirePayableBill(tx, workingOrderId);
-      await requireReadyForPayment(tx, deps.db, workingOrderId, payable, operator, req);
-      if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, workingOrderId);
-      const reading = deps.clock.now();
-      await deps.backend.refuseUntilRecordable(tx, reading);
-      await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
-      if (!payable.invoiced)
-        await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);
-      const { invoice } = await issueWhenFullyPaid(
+      return closeZeroBillIn(
         tx,
-        { ...deps, clock: pinnedAt(deps.clock, reading) },
+        deps,
         cfg,
         workingOrderId,
-        operator.personId,
-        { closeZero: true, total: ZERO, guestCount: req.guestCount },
+        req,
+        operator,
+        balance,
+        preRead || (deps.disk?.noted() ?? false),
       );
-      if (invoice === null) {
-        throw new AppError("bill.nothing_outstanding", { workingOrderId });
-      }
-      await captureWholePayment(
-        tx,
-        deps.attendance,
-        workingOrderId,
-        operator.personId,
-        reading.instant,
-      );
-      return { outcome: "settled", balance: await readBillBalance(tx, workingOrderId), invoice };
     },
     deps.log,
   );
+}
+
+async function closeZeroBillIn(
+  tx: Transaction,
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string },
+  balance: BillBalance,
+  diskFull: boolean,
+): Promise<SettledBill> {
+  if (balance.status === "settled") {
+    return settledBill(balance, await readSettledTicket(deps.backend, tx, cfg, workingOrderId));
+  }
+
+  const payable = await requirePayableBill(tx, workingOrderId);
+  await requireReadyForPayment(tx, deps.db, workingOrderId, payable, operator, req);
+  if (diskFull) refuseForDiskStop(deps.log, workingOrderId);
+  const reading = deps.clock.now();
+  await deps.backend.refuseUntilRecordable(tx, reading);
+  await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
+  if (!payable.invoiced)
+    await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);
+  const { invoice } = await issueWhenFullyPaid(
+    tx,
+    { ...deps, clock: pinnedAt(deps.clock, reading) },
+    cfg,
+    workingOrderId,
+    operator.personId,
+    { closeZero: true, total: ZERO, guestCount: req.guestCount },
+  );
+  if (invoice === null) {
+    throw new AppError("bill.nothing_outstanding", { workingOrderId });
+  }
+  await captureWholePayment(
+    tx,
+    deps.attendance,
+    workingOrderId,
+    operator.personId,
+    reading.instant,
+  );
+  return settledBill(await readBillBalance(tx, workingOrderId), invoice);
+}
+
+async function saveCounterBasket(
+  tx: Transaction,
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operatorId: string,
+  basket: CounterPayment,
+  status: typeof workingOrders.$inferSelect.status | undefined,
+): Promise<void> {
+  refuseUnavailableInvoiceRequest(basket.invoiceType, basket.recipient);
+  if (status !== undefined) {
+    if (status !== "open") throw new AppError("working_order.not_open", { workingOrderId });
+    await refusePaymentInFlight(tx, [workingOrderId]);
+    await refuseUnavailableFullInvoice(tx, workingOrderId);
+    if (basket.revision !== undefined) {
+      const attendance =
+        deps.attendance === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.clock };
+      const saved = await saveHeldOrderIn(
+        tx,
+        cfg,
+        workingOrderId,
+        {
+          ...basket,
+          revision: basket.revision,
+          expectedEdit: req.expectedEdit,
+          dining: req.dining,
+          operatorId,
+        },
+        attendance,
+      );
+      if (saved.changed)
+        await captureOrderEdit(
+          tx,
+          attendance,
+          workingOrderId,
+          operatorId,
+          saved.revision,
+          "save",
+          saved.at,
+        );
+    }
+    return;
+  }
+  if (basket.revision !== undefined)
+    throw new AppError("working_order.not_open", { workingOrderId });
+  if (basket.lines.length === 0) throw new AppError("sale.empty_basket", {});
+  await createOpenOrder(tx, cfg, workingOrderId, basket.lines, null, {
+    kitchenNote: basket.kitchenNote,
+    zoneId: basket.zoneId,
+    creditedTo: operatorId,
+    invalidMakeAt: "ignore",
+    lateSend: basket.lateSend,
+    dining: req.dining,
+  });
 }
 
 /**
@@ -1356,14 +1458,26 @@ async function beginBillPayment(
   read: TillSaleDeps["clock"]["now"],
   refusals: { diskFull: () => boolean; log?: Logger },
   attendance?: AttendanceRecorder,
-): Promise<{ replay: PaymentRow } | { payment: PaymentRow; total: Decimal }> {
+  basket?: CounterPayment,
+): Promise<
+  { replay: PaymentRow } | { payment: PaymentRow; total: Decimal } | { settled: SettledBill }
+> {
   // Before the replay lookup: a retry the route would now refuse is refused too.
   await assertStillSignedIn(tx, {
     deviceId: cfg.origin.deviceId,
     sessionId: operator.sessionId,
     personId: operator.personId,
   });
-  const print = fingerprint(retryShapeOf(req));
+  const print = fingerprint({
+    ...retryShapeOf(req),
+    basket:
+      basket === undefined
+        ? undefined
+        : {
+            ...basket,
+            lateSend: undefined,
+          },
+  });
   const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
   if (earlier.payment !== undefined) {
     if (earlier.payment.fingerprint !== print) {
@@ -1374,6 +1488,24 @@ async function beginBillPayment(
   if (earlier.refund !== undefined) {
     throw new AppError("submission.id_reused", { submissionId: req.submissionId });
   }
+  let counterStatus: typeof workingOrders.$inferSelect.status | undefined;
+  if (basket !== undefined) {
+    const [order] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, workingOrderId));
+    counterStatus = order?.status;
+    if (counterStatus === "settled") {
+      if (basket.revision !== undefined)
+        throw new AppError("working_order.not_open", { workingOrderId });
+      return {
+        settled: settledBill(
+          await readBillBalance(tx, workingOrderId),
+          await readSettledTicket(deps.backend, tx, cfg, workingOrderId),
+        ),
+      };
+    }
+  }
   deps.admission.require();
   const reading = read();
   if (!Number.isFinite(reading.instant.getTime()))
@@ -1381,11 +1513,67 @@ async function beginBillPayment(
   await deps.backend.refuseUntilRecordable(tx, reading);
   await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
+  if (basket !== undefined) {
+    if (refusals.diskFull()) refuseForDiskStop(refusals.log, workingOrderId);
+    await requireEconomicWrite(tx, cfg, deps.admission);
+    await saveCounterBasket(
+      tx,
+      deps,
+      cfg,
+      workingOrderId,
+      req,
+      operator.personId,
+      basket,
+      counterStatus,
+    );
+  }
   const payable = await requirePayableBill(tx, workingOrderId);
   await requireReadyForPayment(tx, deps.db, workingOrderId, payable, operator, req);
   const held = payable.held ?? (await readPaymentMoney(tx, [workingOrderId]));
-  const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await billPaymentTotal(tx, workingOrderId);
+  if (basket !== undefined && held.some(({ row }) => HOLDING_STATES.includes(row.state))) {
+    if (
+      basket.revision !== undefined &&
+      compareDecimal(fundsOf(workingOrderId, total, held).received, total) === 0
+    ) {
+      const { invoice } = await issueWhenFullyPaid(
+        tx,
+        { ...deps, clock: pinnedAt(deps.clock, reading) },
+        cfg,
+        workingOrderId,
+        operator.personId,
+        { total, guestCount: req.guestCount },
+      );
+      if (invoice !== null) {
+        return { settled: settledBill(await readBillBalance(tx, workingOrderId, total), invoice) };
+      }
+    }
+    throw new AppError("bill.payments_received", { workingOrderId });
+  }
+  if (basket !== undefined && compareDecimal(total, ZERO) === 0) {
+    if (compareDecimal(decimal(req.addedTip ?? ZERO), ZERO) > 0 && req.entry !== "reader")
+      throw new AppError("bill.tip_not_allowed", { workingOrderId, chargeable: ZERO });
+    return {
+      settled: await closeZeroBillIn(
+        tx,
+        { ...deps, clock: pinnedAt(deps.clock, reading) },
+        cfg,
+        workingOrderId,
+        req,
+        operator,
+        await readBillBalance(tx, workingOrderId, total),
+        refusals.diskFull(),
+      ),
+    };
+  }
+  const addedTip =
+    basket !== undefined && req.entry === "reader" && !cfg.tipsEnabled ? ZERO : req.addedTip;
+  const { request, items } = await allocationRequestFor(
+    tx,
+    workingOrderId,
+    { ...req, addedTip },
+    held,
+  );
   deps.backend.assertRecordableAt(reading);
   if (refusals.diskFull()) refuseForDiskStop(refusals.log, workingOrderId);
   if (!payable.invoiced) {
@@ -1398,8 +1586,8 @@ async function beginBillPayment(
     request,
     { tipsEnabled: cfg.tipsEnabled },
     {
-      applied: decimal(req.applied),
-      tip: decimal(req.tip),
+      applied: basket === undefined ? decimal(req.applied) : total,
+      tip: decimal(basket === undefined ? req.tip : (addedTip ?? ZERO)),
     },
   );
   // A reserved card may finish on recovery, so save the language once the bill is covered.
@@ -1473,7 +1661,23 @@ export async function takeBillPayment(
   workingOrderId: string,
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
-): Promise<BillPaymentResult> {
+  basket: CounterPayment | undefined,
+): Promise<BillPaymentResult | SettledBill>;
+export async function takeBillPayment(
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+): Promise<BillPaymentResult>;
+export async function takeBillPayment(
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+  basket?: CounterPayment,
+): Promise<BillPaymentResult | SettledBill> {
   // Awaited only while `since()` names a refusal: otherwise the payment enters the write queue in
   // this turn.
   const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
@@ -1491,7 +1695,9 @@ export async function takeBillPayment(
         () => deps.clock.now(),
         { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
         deps.attendance,
+        basket,
       );
+      if ("settled" in begun) return begun.settled;
       if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
       const { payment } = begun;
       const receivedAt = new Date(payment.receivedAt!);
@@ -1785,7 +1991,23 @@ export async function takeReaderBillPayment(
   workingOrderId: string,
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
-): Promise<BillPaymentResult> {
+  basket: CounterPayment | undefined,
+): Promise<BillPaymentResult | SettledBill>;
+export async function takeReaderBillPayment(
+  deps: ReaderBillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+): Promise<BillPaymentResult>;
+export async function takeReaderBillPayment(
+  deps: ReaderBillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+  basket?: CounterPayment,
+): Promise<BillPaymentResult | SettledBill> {
   let release = (): void => {};
   let capturedReplay = false;
   try {
@@ -1808,7 +2030,9 @@ export async function takeReaderBillPayment(
           () => deps.clock.now(),
           { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
           deps.attendance,
+          basket,
         );
+        if ("settled" in started) return { kind: "replay" as const, result: started.settled };
         if ("replay" in started) {
           let payment = started.replay;
           let invoice: TillSaleResult | null = null;

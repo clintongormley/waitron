@@ -2715,11 +2715,12 @@ describe("till-app sends the way the counter order sells (A1522)", () => {
     expect(parkOrder.mock.calls[0]![0].dining).toBe("takeaway");
   });
 
-  it("saving an edited retrieved takeaway order before its sale sends takeaway", async () => {
-    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 3 });
+  it("paying an edited retrieved takeaway order sends takeaway and its revision", async () => {
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
     const { el } = await mountApp({
+      updateWorkingOrder: vi.fn(),
       getTill: vi.fn().mockResolvedValue(cashTill),
-      updateWorkingOrder,
+      recordSale,
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         zoneId: null,
         kitchenNote: {
@@ -2747,7 +2748,12 @@ describe("till-app sends the way the counter order sells (A1522)", () => {
 
     await payCash(el);
 
-    expect(updateWorkingOrder.mock.calls[0]![1].dining).toBe("takeaway");
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(recordSale.mock.calls[0]!.slice(9)).toEqual([
+      "takeaway",
+      undefined,
+      { revision: 2, label: undefined },
+    ]);
   });
 
   it("a retrieved takeaway order in a department since set to eat in holds and sends takeaway", async () => {
@@ -3689,7 +3695,8 @@ describe("till-app logout while a request is waiting for the server", () => {
 
   it("an edit that settles a counter bill opens documents without taking another payment", async () => {
     const { el } = await mountApp({
-      updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 1, invoice: saleResult }),
+      updateWorkingOrder: vi.fn(),
+      recordSale: vi.fn().mockResolvedValue(saleResult),
     });
     const c = await toCounter(el);
     c.store.addProduct(c.products[0]!, "1");
@@ -3697,8 +3704,8 @@ describe("till-app logout while a request is waiting for the server", () => {
     c.store.setLineQuantity(0, "2");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
-    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
-    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(api.recordSale).toHaveBeenCalledOnce();
     expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
   });
@@ -3725,7 +3732,7 @@ describe("till-app logout while a request is waiting for the server", () => {
     c.store.markPersisted();
     c.store.setLineQuantity(0, "2");
     const billId = c.store.id;
-    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    emit(c, "park-order", { label: "Later" });
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
     );
@@ -3739,11 +3746,11 @@ describe("till-app logout while a request is waiting for the server", () => {
   it.each(["en-GB", "es-ES"])(
     "a retrieved order's save refused for too many portions at once says so when parked or paid (%s)",
     async (locale) => {
+      const refusal = { code: "tab.portions_too_many", status: 400, limit: 99 };
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, locale }),
-        updateWorkingOrder: vi
-          .fn()
-          .mockRejectedValue({ code: "tab.portions_too_many", status: 400, limit: 99 }),
+        updateWorkingOrder: vi.fn().mockRejectedValue(refusal),
+        recordSale: vi.fn().mockRejectedValue(refusal),
       });
       const c = await toCounter(el);
       c.store.addProduct(c.products[0]!, "1");
@@ -3802,10 +3809,10 @@ describe("till-app logout while a request is waiting for the server", () => {
 
   it("does not retry a cash sale after its save-refusal recheck outlives sign-out", async () => {
     let answerDeadEnds!: (result: { sends: false; deadEnds: [] }) => void;
-    const recordSale = vi.fn();
+    const recordSale = vi.fn().mockRejectedValue({ code: "station.no_replacement" });
     const { el } = await mountApp({
+      updateWorkingOrder: vi.fn(),
       recordSale,
-      updateWorkingOrder: vi.fn().mockRejectedValue({ code: "station.no_replacement" }),
       askSaleDeadEnds: vi.fn(() => new Promise((resolve) => (answerDeadEnds = resolve))),
     });
     const c = await toCounter(el);
@@ -3821,16 +3828,16 @@ describe("till-app logout while a request is waiting for the server", () => {
     answerDeadEnds({ sends: false, deadEnds: [] });
     await flush(el);
 
-    expect(recordSale).not.toHaveBeenCalled();
-    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(recordSale).toHaveBeenCalledOnce();
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
   });
 
   it("does not retry a card sale after its save-refusal recheck outlives sign-out", async () => {
     let answerDeadEnds!: (result: { sends: false; deadEnds: [] }) => void;
-    const pay = vi.fn();
+    const pay = vi.fn().mockRejectedValue({ code: "station.no_replacement" });
     const { el } = await mountApp({
+      updateWorkingOrder: vi.fn(),
       pay,
-      updateWorkingOrder: vi.fn().mockRejectedValue({ code: "station.no_replacement" }),
       askSaleDeadEnds: vi.fn(() => new Promise((resolve) => (answerDeadEnds = resolve))),
     });
     const c = await toCounter(el);
@@ -3846,8 +3853,8 @@ describe("till-app logout while a request is waiting for the server", () => {
     answerDeadEnds({ sends: false, deadEnds: [] });
     await flush(el);
 
-    expect(pay).not.toHaveBeenCalled();
-    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(pay).toHaveBeenCalledOnce();
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
   });
 
   it("does not show a place refusal to the next operator", async () => {
@@ -7301,10 +7308,52 @@ describe("A1208 a retrieved counter order's portions", () => {
           lines: { workingOrderLineId?: string; quantity: string }[];
         }
       ).lines.map((line) => [line.workingOrderLineId, line.quantity]);
-    const refusedPay = (el: TillApp, c: TillCounterScreen) => {
-      emit(c, "confirm-payment", { method: "cash", amount: "10" });
+    const refusedPlace = (el: TillApp, c: TillCounterScreen) => {
+      emit(c, "place-order");
       return flush(el);
     };
+    const twoBaskets = () => {
+      const savedReads = reads();
+      return {
+        ...savedReads,
+        listWorkingOrders: vi.fn().mockResolvedValue([{ ...summary(false), id: "wo-2" }]),
+        retrieveWorkingOrder: vi.fn((id: string) =>
+          id === "wo-2"
+            ? Promise.resolve({
+                ...held(1),
+                id: "wo-2",
+                kitchenNote: { ...held(1).kitchenNote, scope: { workingOrderId: "wo-2" } },
+                lines: [
+                  {
+                    workingOrderLineId: "t1",
+                    menuItemId: "menu-item-tostada-0",
+                    quantity: "1.000",
+                    product: toast,
+                  },
+                ],
+              })
+            : savedReads.retrieveWorkingOrder(),
+        ),
+      };
+    };
+    async function moveToOtherBasket(el: TillApp, c: TillCounterScreen) {
+      c.orderList = "parked";
+      await c.updateComplete;
+      const heldList = c.shadowRoot!.querySelector("till-held-orders")!;
+      expect(heldList).not.toBeNull();
+      await heldList.updateComplete;
+      heldList.shadowRoot!.querySelector<HTMLElement>(".retrieve")!.click();
+      await flush(el);
+      const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      expect(question.open).toBe(true);
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await flush(el);
+      expect(c.store.id).toBe("wo-2");
+      expect(c.store.revision).toBe(1);
+      expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+        ["Tostada", "1"],
+      ]);
+    }
 
     it("leaves a newer basket alone when a save sent from an earlier one answers late", async () => {
       let answerSave!: (value: { revision: number }) => void;
@@ -7314,49 +7363,15 @@ describe("A1208 a retrieved counter order's portions", () => {
             answerSave = resolve;
           }),
       );
-      const savedReads = reads();
       const { el, c } = await retrieved({
-        ...savedReads,
+        ...twoBaskets(),
         updateWorkingOrder,
-        listWorkingOrders: vi.fn().mockResolvedValue([{ ...summary(false), id: "wo-2" }]),
-        retrieveWorkingOrder: vi.fn((id: string) =>
-          id === "wo-2"
-            ? Promise.resolve({
-                ...held(1),
-                id: "wo-2",
-                kitchenNote: { ...held(1).kitchenNote, scope: { workingOrderId: "wo-2" } },
-                lines: [
-                  {
-                    workingOrderLineId: "t1",
-                    menuItemId: "menu-item-tostada-0",
-                    quantity: "1.000",
-                    product: toast,
-                  },
-                ],
-              })
-            : savedReads.retrieveWorkingOrder(),
-        ),
-        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+        placeOrder: vi.fn().mockRejectedValue({ code: "place.refused" }),
       });
       c.store.setLineQuantity(0, "4");
-      emit(c, "confirm-payment", { method: "cash", amount: "10" });
+      emit(c, "place-order");
       await vi.waitFor(() => expect(answerSave).toBeTypeOf("function"));
-      c.orderList = "parked";
-      await c.updateComplete;
-      const heldList = c.shadowRoot!.querySelector("till-held-orders")!;
-      expect(heldList).not.toBeNull();
-      await heldList.updateComplete;
-      heldList.shadowRoot!.querySelector<HTMLElement>(".retrieve")!.click();
-      await flush(el);
-      const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
-      expect(question.open).toBe(true);
-      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-      await flush(el);
-      expect(c.store.id).toBe("wo-2");
-      expect(c.store.revision).toBe(1);
-      expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
-        ["Tostada", "1"],
-      ]);
+      await moveToOtherBasket(el, c);
       answerSave({ revision: 5 });
       await flush(el);
       expect(c.store.id).toBe("wo-2");
@@ -7366,73 +7381,106 @@ describe("A1208 a retrieved counter order's portions", () => {
       ]);
     });
 
-    it("leaves a newer basket alone when a save sent from an earlier one is refused late", async () => {
-      let rejectSave!: (error: { code: string }) => void;
-      const updateWorkingOrder = vi.fn(
-        () =>
-          new Promise<{ revision: number }>((_resolve, reject) => {
-            rejectSave = reject;
-          }),
-      );
-      const savedReads = reads();
-      const { el, c } = await retrieved({
-        ...savedReads,
-        updateWorkingOrder,
-        listWorkingOrders: vi.fn().mockResolvedValue([{ ...summary(false), id: "wo-2" }]),
-        retrieveWorkingOrder: vi.fn((id: string) =>
-          id === "wo-2"
-            ? Promise.resolve({
-                ...held(1),
-                id: "wo-2",
-                kitchenNote: { ...held(1).kitchenNote, scope: { workingOrderId: "wo-2" } },
-                lines: [
-                  {
-                    workingOrderLineId: "t1",
-                    menuItemId: "menu-item-tostada-0",
-                    quantity: "1.000",
-                    product: toast,
-                  },
-                ],
-              })
-            : savedReads.retrieveWorkingOrder(),
-        ),
-        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
-      });
-      c.store.setLineQuantity(0, "4");
-      emit(c, "confirm-payment", { method: "cash", amount: "10" });
-      await vi.waitFor(() => expect(rejectSave).toBeTypeOf("function"));
-      c.orderList = "parked";
-      await c.updateComplete;
-      const heldList = c.shadowRoot!.querySelector("till-held-orders")!;
-      expect(heldList).not.toBeNull();
-      await heldList.updateComplete;
-      heldList.shadowRoot!.querySelector<HTMLElement>(".retrieve")!.click();
-      await flush(el);
-      const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
-      expect(question.open).toBe(true);
-      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-      await flush(el);
-      expect(c.store.id).toBe("wo-2");
-      expect(c.store.revision).toBe(1);
-      expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
-        ["Tostada", "1"],
-      ]);
-      rejectSave({ code: "working_order.out_of_date" });
-      await flush(el);
-      expect(c.store.id).toBe("wo-2");
-      expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
-        ["Tostada", "1"],
-      ]);
-      expect(banner(el)?.textContent ?? "").not.toContain(t("held.changed_elsewhere"));
-    });
+    it.each(["placement", "payment"])(
+      "leaves a newer basket alone when a %s save is refused late",
+      async (action) => {
+        let rejectSave!: (error: { code: string }) => void;
+        const refuseLate = vi.fn(
+          () =>
+            new Promise<{ revision: number }>((_resolve, reject) => {
+              rejectSave = reject;
+            }),
+        );
+        const { el, c } = await retrieved({
+          ...twoBaskets(),
+          ...(action === "placement"
+            ? { updateWorkingOrder: refuseLate }
+            : { recordSale: refuseLate }),
+        });
+        c.store.setLineQuantity(0, "4");
+        if (action === "placement") emit(c, "place-order");
+        else emit(c, "confirm-payment", { method: "cash", amount: "10" });
+        await vi.waitFor(() => expect(rejectSave).toBeTypeOf("function"));
+        await moveToOtherBasket(el, c);
+        rejectSave({ code: "working_order.out_of_date" });
+        await flush(el);
+        expect(c.store.id).toBe("wo-2");
+        expect(c.store.revision).toBe(1);
+        expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+          ["Tostada", "1"],
+        ]);
+        expect(banner(el)?.textContent ?? "").not.toContain(t("held.changed_elsewhere"));
+      },
+    );
+
+    it.each(["cash", "reader"])(
+      "shows the earlier basket's receipt when its %s payment completes after switching baskets",
+      async (method) => {
+        let finish!: () => void;
+        const payment = new Promise<void>((resolve) => (finish = resolve));
+        const recordSale = vi.fn<TillApi["recordSale"]>(async () => {
+          await payment;
+          return saleResult;
+        });
+        const pay = vi.fn<TillApi["pay"]>(async () => {
+          await payment;
+          return { outcome: "captured", ticket: saleResult };
+        });
+        const { el, c } = await retrieved({ ...twoBaskets(), recordSale, pay });
+        c.store.setLineQuantity(0, "4");
+        if (method === "cash") emit(c, "confirm-payment", { method: "cash", amount: "10" });
+        else emit(c, "collect-card", {});
+        await vi.waitFor(() => expect(method === "cash" ? recordSale : pay).toHaveBeenCalledOnce());
+        const lines =
+          method === "cash" ? recordSale.mock.calls[0]![0] : pay.mock.calls[0]![0].lines;
+        expect(lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+          ["l1", "1"],
+          ["l2", "1"],
+          ["l3", "2"],
+        ]);
+        await moveToOtherBasket(el, c);
+
+        finish();
+        await flush(el);
+
+        expect(ticket(el)?.result).toEqual(saleResult);
+        expect(c.store.id).toBe("wo-2");
+        expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+          ["Tostada", "1"],
+        ]);
+      },
+    );
+
+    it.each(["cash", "reader"])(
+      "shows the filed receipt when a closed order refuses a %s payment edit",
+      async (method) => {
+        const closed = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+        const getBillBalance = vi.fn().mockResolvedValue({ status: "settled" });
+        const getFiledTicket = vi.fn().mockResolvedValue(saleResult);
+        const { el, c } = await retrieved({
+          recordSale: closed,
+          pay: closed,
+          getBillBalance,
+          getFiledTicket,
+        });
+        c.store.setLineQuantity(0, "4");
+        if (method === "cash") emit(c, "confirm-payment", { method: "cash", amount: "10" });
+        else emit(c, "collect-card", {});
+        await flush(el);
+
+        expect(closed).toHaveBeenCalledOnce();
+        expect(getFiledTicket).toHaveBeenCalledWith("wo-1");
+        expect(ticket(el)?.result).toEqual(saleResult);
+      },
+    );
 
     it("names every stored portion in the next save, the ones the first save added included", async () => {
       const { el, c, updateWorkingOrder } = await retrieved({
         ...reads(),
-        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+        placeOrder: vi.fn().mockRejectedValue({ code: "place.refused" }),
       });
       c.store.setLineQuantity(0, "4");
-      await refusedPay(el, c);
+      await refusedPlace(el, c);
       expect(updateWorkingOrder).toHaveBeenCalledOnce();
       expect(c.store.lines.map((line) => line.quantity)).toEqual(["4"]);
 
@@ -7450,18 +7498,18 @@ describe("A1208 a retrieved counter order's portions", () => {
     });
 
     it("holds the basket when the order cannot be read back, and saves nothing more from it", async () => {
-      const recordSale = vi.fn();
+      const placeOrder = vi.fn();
       const { el, c, updateWorkingOrder } = await retrieved({
         retrieveWorkingOrder: vi
           .fn()
           .mockResolvedValueOnce(held())
           .mockRejectedValue(new TypeError("Failed to fetch")),
-        recordSale,
+        placeOrder,
       });
       c.store.setLineQuantity(0, "4");
-      await refusedPay(el, c);
+      await refusedPlace(el, c);
       expect(banner(el)!.textContent).toBe(t("held.reread_failed"));
-      expect(recordSale).not.toHaveBeenCalled();
+      expect(placeOrder).not.toHaveBeenCalled();
       expect(c.store.editsLocked).toBe(true);
 
       emit(c, "park-order", { label: "Later" });
@@ -7490,7 +7538,7 @@ describe("A1208 a retrieved counter order's portions", () => {
           if (terraceUnreadable) throw new TypeError("Failed to fetch");
           return terrace;
         }),
-        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+        placeOrder: vi.fn().mockRejectedValue({ code: "place.refused" }),
       };
     };
 
@@ -7500,7 +7548,7 @@ describe("A1208 a retrieved counter order's portions", () => {
         ["3", undefined],
       ]);
       c.store.setLineQuantity(0, "4");
-      await refusedPay(el, c);
+      await refusedPlace(el, c);
       expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
       expect(c.store.lines.map((line) => [line.portionLineIds, line.notOffered])).toEqual([
         [four, undefined],
@@ -7512,7 +7560,7 @@ describe("A1208 a retrieved counter order's portions", () => {
       const { el, c, updateWorkingOrder } = await retrieved(inTerrace());
       terraceUnreadable = true;
       c.store.setLineQuantity(0, "4");
-      await refusedPay(el, c);
+      await refusedPlace(el, c);
       expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
       expect(banner(el)!.textContent).toBe(t("held.reread_failed"));
       expect(c.store.lines.map((line) => [line.quantity, line.notOffered])).toEqual([
@@ -7526,18 +7574,18 @@ describe("A1208 a retrieved counter order's portions", () => {
     });
 
     it("takes the order unfolded and goes on when only its lines cannot be read back", async () => {
-      const recordSale = vi.fn().mockRejectedValue({ code: "sale.refused" });
+      const placeOrder = vi.fn().mockRejectedValue({ code: "place.refused" });
       const { el, c } = await retrieved({
         ...reads(),
         getTabLines: vi
           .fn()
           .mockResolvedValueOnce({ revision: 4, lines: ids.map((id, i) => listedLine(id, i + 1)) })
           .mockRejectedValue(new TypeError("Failed to fetch")),
-        recordSale,
+        placeOrder,
       });
       c.store.setLineQuantity(0, "4");
-      await refusedPay(el, c);
-      expect(recordSale).toHaveBeenCalledOnce();
+      await refusedPlace(el, c);
+      expect(placeOrder).toHaveBeenCalledOnce();
       expect(c.store.editsLocked).toBe(false);
       expect(c.store.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual(
         four.map((id) => [id, "1"]),
@@ -7550,11 +7598,11 @@ describe("A1208 a retrieved counter order's portions", () => {
       const { el, c, updateWorkingOrder } = await retrieved({
         retrieveWorkingOrder,
         getTabLines: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+        placeOrder: vi.fn().mockRejectedValue({ code: "place.refused" }),
       });
       expect(c.store.lines.map((line) => line.quantity)).toEqual(["1", "1", "1"]);
       c.store.removeLine(2);
-      await refusedPay(el, c);
+      await refusedPlace(el, c);
       expect(lastSent(updateWorkingOrder)).toEqual([
         ["l1", "1"],
         ["l2", "1"],
@@ -7566,16 +7614,16 @@ describe("A1208 a retrieved counter order's portions", () => {
       let answer!: () => void;
       const { el, c } = await retrieved({
         ...reads(() => new Promise<void>((resolve) => (answer = resolve))),
-        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+        placeOrder: vi.fn().mockRejectedValue({ code: "place.refused" }),
       });
       c.store.setLineQuantity(0, "4");
-      const paying = refusedPay(el, c);
+      const placing = refusedPlace(el, c);
       await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
       expect(c.store.editsLocked).toBe(true);
       c.store.setLineQuantity(0, "9");
       expect(c.store.lines.map((line) => line.quantity)).toEqual(["4"]);
       answer();
-      await paying;
+      await placing;
       await flush(el);
       expect(c.store.editsLocked).toBe(false);
       expect(c.store.lines.map((line) => line.portionLineIds)).toEqual([four]);

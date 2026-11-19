@@ -72,10 +72,15 @@ describe("kitchen note client", () => {
     ).rejects.toMatchObject({ code: "kitchen_note.out_of_date", status: 409 });
   });
   it("passes the initial note through cash, integrated card and Hold requests", async () => {
-    const fetcher = vi.fn().mockImplementation(() => Promise.resolve(response({})));
+    const fetcher = vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(response({ outcome: "received", balance: {}, invoice: { total: "3.00" } })),
+      );
     const api = new TillApi("", fetcher);
+    const freshLines = [{ menuItemId: "mi-coffee", quantity: "1" }];
     await api.recordSale(
-      [],
+      freshLines,
       { method: "cash", amount: "5.00" },
       "o",
       undefined,
@@ -86,7 +91,6 @@ describe("kitchen note client", () => {
       null,
       "eat_in",
     );
-    const freshLines = [{ menuItemId: "mi-coffee", quantity: "1" }];
     await api.pay({
       dining: "eat_in",
       expectedEdit: null,
@@ -95,16 +99,32 @@ describe("kitchen note client", () => {
       kitchenNote: "Together",
     });
     await api.parkOrder({ dining: "eat_in", id: "o", lines: [], kitchenNote: "Together" });
+    expect(fetcher.mock.calls.map((call) => call[0])).toEqual([
+      "/api/working-orders/o/payments",
+      "/api/working-orders/o/payments",
+      "/api/working-orders",
+    ]);
     expect(fetcher.mock.calls.map((call) => JSON.parse(call[1].body))).toEqual([
       {
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-        workingOrderId: "o",
-        kitchenNote: "Together",
+        basket: { lines: freshLines, kitchenNote: "Together" },
+        method: "cash",
+        tendered: "5.00",
         expectedEdit: null,
         dining: "eat_in",
+        kind: "share",
+        shareOf: 1,
+        submissionId: expect.any(String),
       },
-      { dining: "eat_in", id: "o", lines: freshLines, kitchenNote: "Together", expectedEdit: null },
+      {
+        basket: { lines: freshLines, kitchenNote: "Together" },
+        method: "card",
+        entry: "reader",
+        expectedEdit: null,
+        dining: "eat_in",
+        kind: "share",
+        shareOf: 1,
+        submissionId: expect.any(String),
+      },
       { dining: "eat_in", id: "o", lines: [], kitchenNote: "Together" },
     ]);
   });

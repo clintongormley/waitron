@@ -153,7 +153,7 @@ mark is for rows written some other way.
 
 ## Ordering and stored facts
 
-A requested line carries two optional fields, `options` and `extras`. Six routes take them,
+A requested line carries two optional fields, `options` and `extras`. These routes take them,
 each threading them into `priceOrderLines` (`apps/server/src/working-order.ts`): the walk-up sale
 `POST /api/sales`, the park `POST /api/working-orders`, the held-order edit
 `PUT /api/working-orders/:id`, the one-line edit `PUT /api/working-orders/:id/lines/:lineNo`
@@ -161,6 +161,9 @@ each threading them into `priceOrderLines` (`apps/server/src/working-order.ts`):
 and the integrated card pay `POST /api/pay` — the last on its WALK-UP branch only, since a retrieved or
 placed order ignores the request's lines and files its own stored ones (`IntegratedPayRequest`,
 `apps/server/src/till-sale.ts`).
+
+`POST /api/working-orders/:id/payments` takes the selections in the counter basket. A fresh basket
+uses the park route’s order creation. An edited basket uses the held-order edit’s line changes.
 
 The table draft save, `PUT /api/parties/:id/drafts`, also takes these selections
 (`apps/server/src/order-drafts.ts`). These are fresh dishes, priced when you submit them.

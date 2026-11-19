@@ -31,6 +31,9 @@ antes de cobrar el siguiente.
 
 Añade un artículo antes de cobrar o enviar un pedido.
 
+Si se rechaza el cobro en efectivo de un pedido aparcado que has editado, los cambios siguen en
+la cesta. Corrige el importe y vuelve a intentarlo, o aparca el pedido para guardar los cambios sin cobrar.
+
 ## Usar otro datáfono {#outside-card}
 
 Cobra primero la tarjeta en el otro datáfono. En **Cobrar**, elige **Otro datáfono** e introduce
