@@ -867,7 +867,7 @@ describe("till-app: a refusal after a send that got no answer", () => {
     expect(text(printedNotice(el))).toBe(t("bill.issued"));
   });
 
-  it("stays uncertain when one of two lost sends is proved never recorded", async () => {
+  it("keeps both lost sends when a resend of one is refused", async () => {
     let answer = (options: unknown): Promise<unknown> =>
       unansweredUntilDeadline(undefined, undefined, options);
     const { el, endMeal, deadlines } = await printAnywayLeftUnanswered((_body, options) =>
@@ -886,43 +886,87 @@ describe("till-app: a refusal after a send that got no answer", () => {
 
     answer = () => Promise.reject(refusal("fiscal.record_invalid"));
     await printBill(el);
-    expect(sentBodies(endMeal).at(-1)!.submissionId).not.toBe(ordinaryId);
+    expect(sentBodies(endMeal).at(-1)!.submissionId).toBe(ordinaryId);
     expectWarned(el);
   });
 
-  it("shows a refusal raised after the lookup in its own words, and the next press has a new id", async () => {
-    const { el, endMeal } = await pressLeftUnanswered(refusal("meal_end.no_printer"));
+  it("shows a resend's no-printer refusal in its own words, then the same id gets Bill issued from the replayed answer", async () => {
+    let answer = (): Promise<unknown> => Promise.reject(refusal("meal_end.no_printer"));
+    const { el, endMeal } = await pressLeftUnanswered(() => answer());
 
     await printBill(el);
 
     expect(banner(el)!.textContent).toContain(codeMessage("meal_end.no_printer"));
     expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+
+    answer = async () => ended;
     await printBill(el);
-    const [first, second, third] = submissionIds(endMeal);
-    expect(second).toBe(first);
-    expect(third).not.toBe(first);
+
+    expect(endMeal).toHaveBeenCalledTimes(3);
+    expect(new Set(submissionIds(endMeal)).size).toBe(1);
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+    expect(banner(el)).toBeNull();
   });
 
   it.each([
     ["fiscal.record_invalid", "meal_end.cannot_file"],
     ["fiscal.foreign_recipient_unsupported", "meal_end.cannot_file"],
     ["sale.number_reused", "meal_end.refused"],
-  ] as const)("says %s in its own words for a resent press", async (code, words) => {
-    const { el } = await pressLeftUnanswered(refusal(code));
+  ] as const)(
+    "does not say no ticket was issued when a resent press meets %s, and keeps its id",
+    async (code, words) => {
+      const { el, endMeal } = await pressLeftUnanswered(refusal(code));
+
+      await printBill(el);
+
+      expectWarned(el);
+      expect(banner(el)!.textContent).not.toContain(t(words));
+      await printBill(el);
+      expect(new Set(submissionIds(endMeal)).size).toBe(1);
+    },
+  );
+
+  it("does not say a takeover stopped the bill when a resent press meets it, and keeps its id", async () => {
+    const { el, endMeal } = await pressLeftUnanswered(
+      refusal("draft.taken_over", { ownerName: "Marta" }),
+    );
 
     await printBill(el);
 
-    expect(banner(el)!.textContent).toContain(t(words));
-    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+    expectWarned(el);
+    expect(banner(el)!.textContent).not.toContain("Marta");
+    await printBill(el);
+    expect(new Set(submissionIds(endMeal)).size).toBe(1);
   });
 
-  it("names who took the order over when a resent press meets that refusal", async () => {
-    const { el } = await pressLeftUnanswered(refusal("draft.taken_over", { ownerName: "Marta" }));
+  it("does not say nothing was printed when the table moves while an uncertain bill is opened", async () => {
+    const read = heldAnswer<{ lines: TabLine[]; revision: number }>();
+    let holding = false;
+    const { el, endMeal } = await pressLeftUnanswered(refusal("meal_end.no_printer"), {
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines: vi.fn((billId: string) => {
+        if (billId === "wo-4" && holding) {
+          holding = false;
+          return read.promise;
+        }
+        return Promise.resolve({ lines: bill120, revision: 0 });
+      }),
+    });
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    holding = true;
+    await pressPrintFromFinishRefusal(el);
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
 
-    await printBill(el);
+    read.resolve({ lines: bill120, revision: 0 });
+    await flush(el, 6);
 
-    expect(banner(el)!.textContent).toContain("Marta");
-    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+    expect(endMeal).toHaveBeenCalledOnce();
+    expect(tableOrder(el).orderId).toBe("wo-4");
+    expectWarned(el);
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.table_moved"));
   });
 
   it("does not say another person's takeover stopped a press with a new id on an uncertain bill", async () => {
@@ -993,7 +1037,7 @@ describe("till-app: a refusal after a send that got no answer", () => {
     expectWarned(el);
   });
 
-  it("forgets a send a resend of the same press proves was never recorded", async () => {
+  it("keeps a send's id when its own automatic resend is refused", async () => {
     const endMeal = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
@@ -1006,12 +1050,11 @@ describe("till-app: a refusal after a send that got no answer", () => {
       .toContain(codeMessage("meal_end.no_printer"));
     await printBill(el);
 
-    const [first, second, third] = submissionIds(endMeal);
-    expect(second).toBe(first);
-    expect(third).not.toBe(first);
+    expect(endMeal).toHaveBeenCalledTimes(3);
+    expect(new Set(submissionIds(endMeal)).size).toBe(1);
   });
 
-  it("says the table changed when a resent press is refused for it, and forgets the id", async () => {
+  it("keeps the warning and the id when a resent press finds the table changed", async () => {
     let moved = false;
     const { el, endMeal } = await pressLeftUnanswered(
       refusal("party.out_of_date", { partyId: "v1", revision: 5 }),
@@ -1021,11 +1064,11 @@ describe("till-app: a refusal after a send that got no answer", () => {
 
     await printBill(el);
 
-    expect(banner(el)!.textContent).toContain(t("party.try_again"));
-    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+    expect(tableOrder(el).party!.revision).toBe(5);
+    expectWarned(el);
+    expect(banner(el)!.textContent).not.toContain(t("party.try_again"));
     await printBill(el);
-    const [first, , third] = submissionIds(endMeal);
-    expect(third).not.toBe(first);
+    expect(new Set(submissionIds(endMeal)).size).toBe(1);
   });
 
   it("keeps the warning up through and after the reload when a new-id press finds the table changed", async () => {
@@ -1059,7 +1102,7 @@ describe("till-app: a refusal after a send that got no answer", () => {
     ["bill.unsent_dishes", {}],
     ["bill.nothing_outstanding", {}],
     ["device.forbidden_action", { action: "receipt" }],
-  ])("keeps %s's own words on a later press: the command itself said it", async (code, more) => {
+  ])("still shows %s's own words on a resent press", async (code, more) => {
     const { el } = await pressLeftUnanswered(refusal(code, more));
 
     await printBill(el);

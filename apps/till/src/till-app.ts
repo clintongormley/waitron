@@ -780,9 +780,8 @@ function refusedBeforeLookup(error: unknown): boolean {
  * `meal_end.refused`, `meal_end.cannot_file` and a takeover's words say nothing was printed, which
  * the server's own refusal can say: its transaction rolled back or never began. `server.internal` is
  * not such a refusal: the client also names any failed response without Waitron's error body that
- * way. Nor is anything while the bill is `uncertain`: an earlier send got no answer, and a refusal of
- * this send, under its own submission id or before the server looked, says nothing of that one, whose
- * ticket may stand.
+ * way. Nor is anything while the bill is `uncertain`: an earlier send got no answer and can still
+ * issue its ticket after this one is refused, so words saying none was issued give way to the warning.
  */
 function mealEndError(error: unknown, uncertain: boolean): CounterError {
   const refusal = (error ?? {}) as {
@@ -819,20 +818,6 @@ function mealEndError(error: unknown, uncertain: boolean): CounterError {
   return code === undefined || code === "server.internal" || uncertain
     ? "meal_end.unconfirmed"
     : "meal_end.refused";
-}
-
-/** Whether the command itself raised this refusal, after its lookup found nothing recorded under the
- * submission id. A code the till has no words for is not known to have come from there. */
-function raisedAfterLookup(error: unknown): boolean {
-  if (refusedBeforeLookup(error)) return false;
-  if (
-    (error as { code?: unknown }).code === "meal_end.unserved_dishes" ||
-    isPartyOutOfDate(error) ||
-    isPermanentSaleRefusal(error)
-  )
-    return true;
-  const said = mealEndError(error, false);
-  return said !== "meal_end.refused" && said !== "meal_end.unconfirmed";
 }
 
 /** The server's word that it issued `billId`'s ticket: an empty answer, or one about anything else,
@@ -20215,7 +20200,9 @@ export class TillApp extends LitElement {
       if (pressed?.revision !== this.orderParty?.revision) {
         if (pressed !== null)
           this.#sayMealEnd(this.#mealEndPressOf(pressed.id, workingOrderId), {
-            error: "meal_end.table_moved",
+            error: this.#mealEndUnanswered.has(workingOrderId)
+              ? "meal_end.unconfirmed"
+              : "meal_end.table_moved",
           });
         return;
       }
@@ -20391,12 +20378,6 @@ export class TillApp extends LitElement {
     if (!sends.includes(send)) this.#mealEndUnanswered.set(billId, [...sends, send]);
   }
 
-  #forgetUnanswered(billId: string, send: UnansweredPrint): void {
-    const rest = (this.#mealEndUnanswered.get(billId) ?? []).filter((other) => other !== send);
-    if (rest.length > 0) this.#mealEndUnanswered.set(billId, rest);
-    else this.#mealEndUnanswered.delete(billId);
-  }
-
   /** The warning and the released controls come first: the read after them may never answer. */
   #onMealEndUnconfirmed(asked: BillComposition, send: UnansweredPrint): void {
     this.#rememberUnanswered(asked.billId, send);
@@ -20412,7 +20393,9 @@ export class TillApp extends LitElement {
   }
 
   /** What a refusal says of the sends this bill has out: `sentBefore`, this send may already have
-   * reached the server under its id. Returns what staff are told. */
+   * reached the server under its id. A refusal describes only the request it answers, and an earlier
+   * one still on its way can issue the ticket afterwards, so only `meal_end.already_issued` ends the
+   * uncertainty here. Returns what staff are told. */
   #settleMealEndSends(
     billId: string,
     send: UnansweredPrint,
@@ -20425,8 +20408,7 @@ export class TillApp extends LitElement {
       send.submissionId = null;
       this.#rememberUnanswered(billId, send);
       return "meal_end.unconfirmed";
-    } else if (sentBefore && raisedAfterLookup(error)) this.#forgetUnanswered(billId, send);
-    else if (sentBefore || mealEndError(error, false) === "meal_end.unconfirmed")
+    } else if (sentBefore || mealEndError(error, false) === "meal_end.unconfirmed")
       this.#rememberUnanswered(billId, send);
     return mealEndError(error, this.#mealEndUnanswered.has(billId));
   }
