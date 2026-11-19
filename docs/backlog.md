@@ -1029,9 +1029,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Every login failure is one answer (C95, #930, owner decision 2026-09-30)** — remaining PIN-slot saturation, form focus and reset timing.
   [Detail](backlog/dashboard.md#every-login-failure-is-one-answer-c95-930-owner-decision-2026-09-30)
 
-- **Move remaining dashboard tables onto shared database-backed requests.** Users, Orders and returned invoices now have
-  50-row server pages with whole-dataset search/sort and passive refresh. Find a bill retains its
-  existing request state until its own adoption.
+- **Measure Print Queue before moving it to shared table requests.** Check whether loading its
+  recent history and unfinished jobs would benefit from 50-row server pages. Find a bill retains
+  its existing request state until its own adoption.
   [Detail and decision](backlog/dashboard.md#shared-database-backed-table-paging-search-and-sorting)
 
 - **Account security email decisions still open** (owner, 2026-09-12): notify the old address on an

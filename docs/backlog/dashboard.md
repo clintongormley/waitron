@@ -84,10 +84,16 @@ Not observed in a real password manager — the tests replace the browser's meth
 
 ## Shared database-backed table paging, search and sorting
 
-- **Move the remaining dashboard tables onto shared database-backed requests.** Users, Orders and returned invoices now use
-  `TableRequestController`, 50-row server pages, whole-dataset search/sort and passive live reads.
-  Find a bill retains its existing request state until its own adoption.
-  Large datasets keep SQL sorting or need a measurement before using Users' in-memory key sort.
+- **Measure Print Queue before moving it to shared table requests.** Measure the current response
+  on a busy queue, including unfinished jobs and the two capped recent histories. Adopt the same
+  50-row server pages, search, sort and passive refresh used by Users, Orders and returned invoices
+  if the measurement shows a worthwhile reduction. Preserve the current history limits and
+  search across that same set of jobs. Large datasets keep SQL sorting unless a measurement
+  justifies sorting matching keys in memory.
+- Products stays on its current read. The nested extras editor uses the whole catalogue for its
+  picker and for saved items. Folder counts, move selections and archive warnings also use
+  products beyond the rows on screen. Moving Products to server pages needs its own plan.
+- Find a bill retains its existing request state until its own adoption.
 
 ## Typed values are only partly checked — a generic phone-format check landed, a country-specific one has not.
 
