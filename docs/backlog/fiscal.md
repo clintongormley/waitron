@@ -1169,7 +1169,10 @@ the owner's "(a) By meal date", relayed by the watcher at 20:59 (lane L `questio
 adviser is asked about these points in questions 3 and 7 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md).
 [Plan](../superpowers/plans/2026-11-15-later-sale-date.md)._
-_2026-11-19 (LATER-SALE-DATE rework): serving marks no longer date anything, and
+_2026-11-19 (LATER-SALE-DATE rework): the owner's answer to D2, "Yes, leave them to close of day"
+(relayed by the watcher, lane L `questions.md`, "WATCHER 2026-11-19 17:05"), retired the note above's
+rule that the sale's day is when the last dish was served, and with it Q1's "Monday, last dish".
+Serving marks no longer date anything, and
 `working_order_lines.last_served_at` is gone. An order's invoice carries a sale date only when card
 recovery or a bill payment the box completes later issues it on a later calendar day than the
 moment it passes (`issueOrderMoment`); every other path issues it with one date. The plan's

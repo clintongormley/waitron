@@ -19,6 +19,7 @@ import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { clockAtIso as clockAt, filedFor } from "./testing/later-sale-date-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
+import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { fireAll, openPartyTab } from "./testing/serve-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { parkOrder } from "./working-order.js";
@@ -157,6 +158,36 @@ describe("a bill's serving marks never date its invoice", () => {
     );
 
     expect(departed.status, JSON.stringify(departed.json)).toBe(200);
+    const { supplyDay, ticket, record } = await filedFor(venue, party.tabId);
+    expect(supplyDay).toBeNull();
+    expect(ticket).not.toHaveProperty("saleDay");
+    expect(record).toEqual({ operationDate: null, issueDate: "2026-03-19" });
+  });
+
+  it("keeps one date for a Monday meal served on Monday whose bill is printed (Print the bill) on Thursday", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const party = await seatedWith(venue, "Croquettes");
+    await serveAt(venue, party.tabId, MON_2230);
+    venue.db.run(sql`
+      update device_profiles
+      set capabilities = json_insert(capabilities, '$[#]', 'print-receipt')
+      where name = 'Counter till'
+    `);
+
+    const printed = await send(
+      venue.appAt(clockAt(THU_1200)),
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/end-meal`,
+      {
+        billId: party.tabId,
+        expectedPartyRevision: partyRevisionNow(venue, party.partyId),
+        expectedEdits: await closingEditsForTest(venue.db, party.partyId),
+        submissionId: randomUUID(),
+      },
+    );
+
+    expect(printed.status, JSON.stringify(printed.json)).toBe(200);
     const { supplyDay, ticket, record } = await filedFor(venue, party.tabId);
     expect(supplyDay).toBeNull();
     expect(ticket).not.toHaveProperty("saleDay");
