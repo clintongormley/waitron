@@ -2473,6 +2473,7 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
 - **The meal list places each step by its named start, with no dragging; a step not done five minutes after it is due gets an amber outline; colours are fixed by kind, with no colour choice per venue (owner, 2026-11-14 21:09, relayed by the watcher; A1526).** The design's words: "The three accepted choices are placement by named start without dragging, an amber outline five minutes after a step is due, and fixed colours by kind with no per-venue picker."
 - **Dishes are not moved, and bills not merged, between an eaten-here order and a takeaway one (`order.dining_differs`): lines follow their order, so a move would quietly change a sent line's VAT rate. A whole bill may move, to another table or from the counter to a table, and keeps its way, even into a department set the other way (owner, 2026-11-14, A1522: "Keep the refusal").**
 - **A takeaway order moved to a table stays takeaway, whatever the department (owner, 2026-11-14, A1522: "Stays Take away"; the offered alternative, becoming eaten here on arrival, was not taken).**
+- **Seated tables, and the calm and tint table-state colours, keep the old blue rather than the new brand teal (owner, 2026-11-19, in conversation; the new brand, #3840).** The design's words: "The builder check measured the teal as almost as dark as the green of a "ready" table, close enough in hue that staff could confuse "seated" and "ready" at a glance."
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 

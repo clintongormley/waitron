@@ -1,6 +1,6 @@
 # A1018 — controlled and emergency handover between two boxes — Build Plan
 
-_2026-11-16: [The bucket stop-order change](2026-11-16-bucket-pointer-and-stop.md) moves only
+_2026-11-16: [The bucket stop-order change](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-bucket-pointer-and-stop.md) moves only
 the Cloud snapshot wait after the stream stop; venue-database writers still stop before the stream._
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
@@ -19,7 +19,7 @@ AEAT's answers.
 supersedes the fiscal-only return wording in this historical plan. The emergency page follows
 that decision and its [bounded Slice 8 plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1018-8-emergency-page.md).
 
-**2026-11-16:** the [offer checks](2026-11-16-check-at-offer.md) supersede this plan's
+**2026-11-16:** the [offer checks](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-check-at-offer.md) supersede this plan's
 version-only key comparison. Offers now carry key fingerprints and a logical copy-size estimate;
 the destination checks room before recording and checks the actual copy size again at acceptance.
 
@@ -3098,7 +3098,7 @@ name. The receipts are in the slice's ledger and review files, and the PR.
   `packages/handover/src/states.ts:35`, and no code outside tests writes `emergency_declared`); a
   person's way out is Slice 7's emergency declaration. A check for such a row on the old box before
   it stops selling would avoid the stop; not built (backlog).
-  **2026-11-16 update:** [Source preflight](2026-11-16-handover-source-check.md) now runs the full
+  **2026-11-16 update:** [Source preflight](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-handover-source-check.md) now runs the full
   check before an offer or prepared resend. The spare still checks the later copy.
 - R53, the other returned points change no code: slow-to-explain waits in rare cases, before real
   boxes can reach them (backlog).
@@ -3122,7 +3122,7 @@ PR says FISCAL and the owner lands it). Lands after Slice 5. The codes whose wor
 change are listed in the backlog: [Slice 6's list](../../backlog/replication-cloud.md#slice-6s-list-the-handover-words-no-screen-shows-yet).
 
 **2026-11-16:** that backlog list is retired. The remaining wording and the restarted old box’s
-sale refusal are covered by the [handover refusal plan](2026-11-16-handover-refusal-words.md); its
+sale refusal are covered by the [handover refusal plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-handover-refusal-words.md); its
 full-disk and bill-payment limits are stated there.
 
 #### Task 6.1: "Hand over to this box" on the Servers screen

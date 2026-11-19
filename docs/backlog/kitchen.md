@@ -389,3 +389,10 @@ the change (plan PR 8 Decision 1).
 
 - **A doneness answer prints as an indented `+` sub-line on the kitchen ticket (owner,
   2026-10-17: fine as built).**
+
+- **A dark kitchen screen raises no dark-screen warning for a dish whose paper ticket for its
+  current station printed after it was fired, even in a kitchen that works from the screen; a resend
+  to another printer that staff chose counts too (watcher, 2026-11-16 21:51, lane H questions; not
+  the owner's; built by #3576).** The plan's words: "completed line/station paper replaces the
+  dark-screen warning even for screen-dependent kitchens; a staff-selected alternate-printer resend
+  qualifies."

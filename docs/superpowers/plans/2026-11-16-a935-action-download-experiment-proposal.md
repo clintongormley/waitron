@@ -1,7 +1,7 @@
 # A935: proposed action-download experiment
 
 **Status:** proposal only, prepared under the watcher's 16 November 14:15 clearance
-of the [qualification slice](2026-11-16-ci-routing-post-3514-qualification.md).
+of the [qualification slice](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-ci-routing-post-3514-qualification.md).
 The watcher parked it at 14:56 pending a natural setup-download stall. Build no new
 guest capability now. On a captured recurrence, bring the capture and this proposal back.
 Neither the mechanism nor a fault run is cleared. No guest was changed or started.

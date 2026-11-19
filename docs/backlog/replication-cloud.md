@@ -827,6 +827,15 @@ against this box's own key and that pinned key (`assertHeldDocumentTrusted`,
   Demo venue never has and no restore path names a Demo invoice series. The Backups screen shows a
   line saying so in place of the bucket-copy settings when the venue's setup choice is Demo; an
   unknown choice still shows them.
+- **A placed Cloud emergency copy seals its new signing key with a fresh key ring of its own; the
+  venue's ring, and with it the AEAT certificate and card credentials, reaches the copy only at
+  A1188 part 4's activation** (watcher, 2026-11-17 02:31, A1425-3 decision 5, answer (a); not the
+  owner's). The plan's words: "The venue's ring, and with it the AEAT certificate and card
+  credentials, reaches the copy only at part 4".
+- **Approving or refusing a Cloud owner recovery is allowed only from the venue's own network; a
+  request through the Cloud remote-staff tunnel is refused** (watcher, 2026-11-17 14:51; built by
+  #3653). The plan's words: "Venue access only: refuse Cloud remote-staff tunnel access, since
+  recovery through Cloud itself does not establish local presence".
 
 From the Cloud connection integration (2026-09-24): Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS
 override, gateway replacement and revocation.

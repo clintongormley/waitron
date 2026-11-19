@@ -1388,7 +1388,7 @@ Not in any track until the standalone primary is done.
 - **A1425. Every restore takes its own identity (owner, 2026-11-07).** A restored box still
   keeps the old box's identity. Part 3, cut to Cloud's emergency copy (Cloud agreed on 15 November),
   gives a copy Cloud placed a machine identity of its own, in three pull requests
-  ([plan](superpowers/plans/2026-11-17-a1425-3-fresh-identity-restore.md)), all three built: the
+  ([plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-17-a1425-3-fresh-identity-restore.md)), all three built: the
   read-only checks of the placed file and the placement that gives the copy its own `node.db`,
   signing key and `trading.env`, which nothing calls until A1188 part 3's locked start; and an
   ordinary start's refusal of a placed copy not yet activated, or started under another id

@@ -29,7 +29,7 @@ at `33be7eaaf3` before those two landed, is in the owner's checkout at
 `docs/handoffs/2026-11-18-set-menu-ordering-code-map.md` (gitignored); its line numbers are stale.
 
 **Builds on:**
-- **Piece 3's follow-up** ([2026-11-18-a1515-set-menu-fit-counts-as.md](2026-11-18-a1515-set-menu-fit-counts-as.md)):
+- **Piece 3's follow-up** ([2026-11-18-a1515-set-menu-fit-counts-as.md](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-18-a1515-set-menu-fit-counts-as.md)):
   `SetMenuOfferDish` gains `countsAsCourseId`; `SetMenuDish` loses it. **Only the till calls
   `fitSetMenus`** (Task 3's `suggestMove`, run by Task 16a). No server path calls it: the server
   places dishes with `placeInOrder` and checks a chosen move with `checkMoves`, neither of which

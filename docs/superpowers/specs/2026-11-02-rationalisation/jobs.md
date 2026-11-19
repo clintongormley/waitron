@@ -2,7 +2,7 @@
 
 # Background jobs — a rationalised design
 
-_2026-11-16: [The bucket stop-order change](../../plans/2026-11-16-bucket-pointer-and-stop.md) moves
+_2026-11-16: [The bucket stop-order change](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-bucket-pointer-and-stop.md) moves
 only the Cloud snapshot wait after the stream stop. The stream still stops after venue-database
 writers; earlier slow waits can still consume its shutdown budget._
 

@@ -1,6 +1,6 @@
 # A913 — non-English text in general code: the audit
 
-_2026-11-17, SumUp real-card followups: the practice mark and conditional simulator no-charge line are now separate; see [the current plan](../superpowers/plans/2026-11-17-sumup-real-card-followups.md). The wording below records the audited tree._
+_2026-11-17, SumUp real-card followups: the practice mark and conditional simulator no-charge line are now separate; see [the current plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-17-sumup-real-card-followups.md). The wording below records the audited tree._
 
 _2026-11-17, A1308 pp4: the comparison fold moved to `packages/db/src/schema/identity/fold.ts`; identity re-exports it. The person schema no longer carries the accented fallback example. Bucket A below records the audited tree._
 

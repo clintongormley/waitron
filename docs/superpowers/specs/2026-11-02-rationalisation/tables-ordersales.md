@@ -377,7 +377,7 @@ None. No current table in this area is a switch, number, time or text. The one c
 **Orders history.** On 19 November 2026 the owner chose to keep both append-only history tables
 for good. Orders uses `receipt_reprints` for receipt copies and `invoice_pdf_downloads` for
 PDF downloads, with a live subscription to each table. The
-[os9 amendment](../../plans/2026-11-18-a1308-os9-sale-activity-amendment.md) records the decision.
+[os9 amendment](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-18-a1308-os9-sale-activity-amendment.md) records the decision.
 
 **Typed histories that remain:** `order_events` (§1.23; README U3). Attendance reads the group and
 draft kinds by day (`apps/server/src/attendance-facts.ts:22-30`, `attendance-discovery.ts:129-140`;

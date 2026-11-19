@@ -739,7 +739,7 @@ Configuration-transfer verification is recorded under
 **2026-11-17, off-quarter changeovers:** Opening-hours endpoints may also equal the
 business-day changeover. Interior endpoints and separately authored staffing blocks remain on
 clock quarter hours. The
-[changeover plan](../superpowers/plans/2026-11-17-d-paint-changeover-edge.md) names the saved-range consumers.
+[changeover plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-17-d-paint-changeover-edge.md) names the saved-range consumers.
 
 You set a department's opening hours by placing its periods on the normal week. Each period has
 a name, a colour, one customer menu and zero or more staff-only menus. Its ranges run inside the
@@ -5161,7 +5161,7 @@ out.
 account-action limits and reset/invitation cooldown describe their earlier wall-clock guards.
 Those in-memory families now measure elapsed time on a steady clock: wall-clock steps no longer
 change their waits or windows. The persisted PIN helpers keep their wall-clock meaning.
-See the [steady-clock plan and changed checks](../superpowers/plans/2026-11-16-signin-steady-clock.md).
+See the [steady-clock plan and changed checks](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-signin-steady-clock.md).
 
 **2026-11-17, jr4:** attendance day processing now runs through `attendanceJob` and
 `runAttendancePass`; the row below retains the earlier loop name from the clock-step experiment.

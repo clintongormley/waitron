@@ -148,7 +148,7 @@ The retained dataset is `/srv/waitron-bench/a1544-j-20261116-2240/history`, 12,4
 the whole owned folder is 12,707,240,467 bytes after cleanup. The unchanged source and all three
 result files sit beside it. Owned round copies, private Node and dependencies were removed;
 the host's Node remains 26.13.0. To reuse the dataset, restore the checksum-verified private
-Node 26.13.1 and frozen dependencies. The [cleared plan](../superpowers/plans/2026-11-16-a1544-memory-measurement.md)
+Node 26.13.1 and frozen dependencies. The [cleared plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-a1544-memory-measurement.md)
 gives the commands.
 
 Lane J's `receipts/a1544-plan-20261116/` retains `unlimited.json`, `remainder.json`, `8g.json`,

@@ -2,7 +2,7 @@
 
 _2026-11-15, A1529: The card-payment recovery destinations named below moved to **Check card payments** in Reporting. Their existing checks and confirmed-outcome actions stay together. [Move plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a1529-card-pages.md)._
 
-_2026-11-16, Bluetooth pairing commands: the `printer.bluetooth_command_busy` row under *Temporary waits and other screened matches* is superseded by one pending operation per agent. A differing request names the current action and remaining seconds before retry. [Plan](../superpowers/plans/2026-11-16-bluetooth-pairing-commands.md)._
+_2026-11-16, Bluetooth pairing commands: the `printer.bluetooth_command_busy` row under *Temporary waits and other screened matches* is superseded by one pending operation per agent. A differing request names the current action and remaining seconds before retry. [Plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-bluetooth-pairing-commands.md)._
 
 You should be able to resolve an operational refusal without paid Waitron support. Start with the
 actual refusal and name an action you can perform. Do not replace a support instruction with a
@@ -522,9 +522,9 @@ State: A partially prepared database carries a stamp for another environment. Ch
 
 Route: The authenticated reset route only accepts a half-finished adopt, as setup-api.ts:1067 checks. It is not a general reset for this state. Missing: an applicable self-service fresh-server/reinstall path that does not erase trading data.
 
-_2026-11-16, SETUP-OTHER-ENVIRONMENT (chosen by the watcher; not owner-reviewed): the wizard's handling of this code and these words are deleted. A run of the real setup routes found the wizard never receives `deployment.already_stamped`: after a refused attempt the server answers first with that attempt's own refusal. The dead end that remains is under [stamp-order plan](../superpowers/plans/2026-11-16-live-setup-stamp-order.md). The rest of this entry records the earlier tree._
+_2026-11-16, SETUP-OTHER-ENVIRONMENT (chosen by the watcher; not owner-reviewed): the wizard's handling of this code and these words are deleted. A run of the real setup routes found the wizard never receives `deployment.already_stamped`: after a refused attempt the server answers first with that attempt's own refusal. The dead end that remains is under [stamp-order plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-live-setup-stamp-order.md). The rest of this entry records the earlier tree._
 
-_2026-11-16, LIVE-SETUP-STAMP-ORDER: the [stamp-order fix](../superpowers/plans/2026-11-16-live-setup-stamp-order.md) prevents a new attempt refused before activation starts from leaving a production stamp; existing stranded attempts are outside that change._
+_2026-11-16, LIVE-SETUP-STAMP-ORDER: the [stamp-order fix](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-live-setup-stamp-order.md) prevents a new attempt refused before activation starts from leaving a production stamp; existing stranded attempts are outside that change._
 
 ### `shell.reset.resetting`
 
@@ -1201,9 +1201,9 @@ _2026-11-11, A1089 slice 1: the held-database page (`holderStalledText`) now say
 
 _2026-11-11, A1501: the wrong-environment database row now offers Start again/Stop, with a read-only administrator password check over HTTPS before moving the installed files aside. The next first setup offers fresh setup or another backup; this does not relabel records or change restore admission._
 
-_2026-11-16, SETUP-OTHER-ENVIRONMENT: a box left in this state by a refused first Live setup has no administrator yet, so the password check refuses and nothing moves; see [stamp-order plan](../superpowers/plans/2026-11-16-live-setup-stamp-order.md)._
+_2026-11-16, SETUP-OTHER-ENVIRONMENT: a box left in this state by a refused first Live setup has no administrator yet, so the password check refuses and nothing moves; see [stamp-order plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-live-setup-stamp-order.md)._
 
-_2026-11-16, LIVE-SETUP-STAMP-ORDER: the [stamp-order fix](../superpowers/plans/2026-11-16-live-setup-stamp-order.md) prevents that pre-activation window for new attempts. It does not repair an attempt already stranded._
+_2026-11-16, LIVE-SETUP-STAMP-ORDER: the [stamp-order fix](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-live-setup-stamp-order.md) prevents that pre-activation window for new attempts. It does not repair an attempt already stranded._
 
 _2026-11-11, A1089 (owner, 2026-11-11 10:14, "As recommended", choosing the option ending "the rest say plainly what happened and that it is a fault"): no other row of `OPERATOR_WORDS` or `GENERIC_WORDS` (then `OPERATOR_TEXT` and `GENERIC_TEXT`) in `apps/server/src/i18n/recovery-page.ts` sends the person to whoever installed the box; `deployment.environment_mismatch` now offers Start again instead (A1501, #2829). Each other row that named the installer now names the fault (in Waitron, its installation, or the box's disk) and keeps the restart, restore or reinstall step it already offered; the generic row now says to press Retry a normal boot; the two restore rows (`provisioning.database_ahead`, `provisioning.schema_mismatch`) instead say what reinstalling without a backup loses. The page's details heading is now "Details" / "Detalles". No action, route or button was added, and the owner's answer plans none beyond what each row names. Guards: the "sends nobody to someone else" cases in `apps/server/src/i18n/recovery-page.test.ts` and `apps/server/src/recovery-start-again.test.ts`. The lead paragraph records the earlier tree._
 

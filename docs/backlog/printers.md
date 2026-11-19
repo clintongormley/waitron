@@ -240,7 +240,7 @@ checked on the box).
 The 366-day synthetic venue held 452,520 jobs with 9,179,818,278 payload bytes before
 housekeeping, averaging 20,286 bytes per job. Its 422,874 document jobs held 9,179,670,048
 bytes (21,708 bytes each on average) and its 29,646 drawer jobs held 148,230 bytes (5 bytes
-each). The [A1544 bench](../superpowers/plans/2026-11-16-a1544-memory-measurement.md) built this
+each). The [A1544 bench](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-a1544-memory-measurement.md) built this
 venue at commit `30c1c1c564` with 250 bills a day and seed 1.
 
 ## Reprint kitchen tickets and other printouts laid out again for any printer
@@ -473,7 +473,7 @@ Hardware and inbox checks to complete in the owner session.
   remembers only the last eight expired Unpair IDs across all agents, until accepted or evicted.
   After eviction or a server restart, a late Unpair cannot switch the printer off. Jobs also remain
   waiting for a printer unpaired outside Waitron; delete it to end its waiting jobs.
-  [Plan](../superpowers/plans/2026-11-16-bluetooth-pairing-commands.md).
+  [Plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-bluetooth-pairing-commands.md).
 
 - **Print jobs keep their rows; finished or abandoned jobs release their bytes after one week**
   (owner, 2026-11-14 17:02, “a week is fine”; watcher cleared all printouts at 17:37 and the
@@ -648,6 +648,7 @@ Hardware and inbox checks to complete in the owner session.
   languages match by exact code, so a `ca-ES-valencia` content language does not offer `ca-ES`
   (`offeredReceiptLanguages`, `apps/server/src/venue-locale.ts`).
 - **Stored print data is not compressed (watcher, 2026-11-15 23:01, database growth work).** The one-off saving measured, 156,401,664 bytes, did not justify about 430 lines of code and making every later reader unpack it.
+- **Staff are not shown a message for a chosen invoice copy (email or office printer) that was never queued (watcher agreed, 2026-11-18 07:09; not the owner's).** Tracing found no venue event that leaves one unqueued: a removed contact, printer or invoice-printer listing each leaves a delivery row the till already shows. The plan's words: "The recommendation (DEFAULT 1) is not to build it. The tracing below found no event at a venue that leaves a chosen copy unqueued".
 
 ## Shared office-printer queues
 

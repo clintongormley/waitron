@@ -30,7 +30,7 @@ section 6 (courses) and "Left to the builder" before Task 1. A code map of the a
 `18fe6c2661`, is in the owner's checkout at `docs/handoffs/2026-11-17-set-menus-code-map.md`
 (gitignored); line numbers below are from `ed2ac2ea00`.
 
-**Pull-request boundaries:** see the [Lane D scope check](2026-11-18-a1515-set-menu-dashboard-scope.md).
+**Pull-request boundaries:** see the [Lane D scope check](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-18-a1515-set-menu-dashboard-scope.md).
 
 **Order:** after A1515-REMOVE (lane D), which deletes `products.set_lunch` and the `setLunch` fields
 this plan's files sit beside. Both rebuild the core baseline: on a rebase conflict in
@@ -68,7 +68,7 @@ reader then found four more points, applied the same day: the Madrid baseline te
 round the original decision 11 (Task 5c), and three tasks too large for one implementer
 (Tasks 3b, 4c, 5b). Later on 18 November, the owner replaced the original VAT rule with separate
 rates for eating in and taking away and allowed dishes at any rate. See decision 11 and the
-[VAT terms foundation](2026-11-18-a1515-set-menu-vat-terms.md).
+[VAT terms foundation](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-18-a1515-set-menu-vat-terms.md).
 
 ## Decisions this plan makes (the builder's, for the plan review and the owner)
 
@@ -102,7 +102,7 @@ second amendment are marked **my call (plan writer)**:
    course (a variant's own, else its parent's), as they stood when the full menu was published. A
    dish placed in a set menu counts as that set menu's course for it, whichever folder it was
    tapped in; piece 3's calculation reads it from each set menu's listed dish
-   (`SetMenuOfferDish.countsAsCourseId`, [piece 3 follow-up](2026-11-18-a1515-set-menu-fit-counts-as.md)).
+   (`SetMenuOfferDish.countsAsCourseId`, [piece 3 follow-up](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-18-a1515-set-menu-fit-counts-as.md)).
    A product moved to another course on the dashboard still counts as its old course on the tills
    until a full menu holding the set menu is published again. The folder the dish was tapped in
    decides only when it is sent: its served `courseId` is that set menu's own course for the dish
@@ -272,7 +272,7 @@ second amendment are marked **my call (plan writer)**:
 ### Task 1: Schema — the set-menu kind, its lines and its left-out variants
 
 The initial schema below is extended by the
-[VAT terms foundation](2026-11-18-a1515-set-menu-vat-terms.md), which adds the takeaway override.
+[VAT terms foundation](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-18-a1515-set-menu-vat-terms.md), which adds the takeaway override.
 
 **Files:**
 - Modify: `packages/db/src/schema/menus.ts` (the `menus` table, `:33-66`)

@@ -1337,7 +1337,7 @@ the full copy, where it used to download up to a day. Measured once on the bench
 minutes at 20 Mbit/s, against 15.8 for the full copy plus one day, and 98 minutes at 5 Mbit/s. The
 figures, the method, where the run differed from its plan, what it does not show and the review's
 run are in
-[the plan](../superpowers/plans/2026-11-18-weekly-full-copy.md#step-1-results-run-2026-11-18-0151-to-1120-cet).
+[the plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-18-weekly-full-copy.md#step-1-results-run-2026-11-18-0151-to-1120-cet).
 Lane M's report names another cost: a damaged change file blocks restoring past it for up to a
 week, not a day, and the scheduled backup is the fallback.
 
@@ -1377,7 +1377,7 @@ The first sign-in/account slice uses a shared `steadyNow` for process-local elap
 meaning: `handover-emergency-api.ts` uses them with failure timestamps stored in `node.db` across
 restarts. Do not convert those persisted values to process-relative time.
 `first-setup-owner.ts` keeps its existing single steady-clock injection for node-key reissue
-throttling and its five-minute grants. [Plan and changed checks](../superpowers/plans/2026-11-16-signin-steady-clock.md).
+throttling and its five-minute grants. [Plan and changed checks](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-signin-steady-clock.md).
 
 
 - **Only the bucket copy's Test and Save on the Backups screen delete their test file the way the

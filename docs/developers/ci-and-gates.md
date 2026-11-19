@@ -727,7 +727,7 @@ These are passing observations at the stated load, not a reproduced failure or a
 The watcher cleared this Mac-only method on 16 November at 17:02, including deletion of each
 passing file's backlog work. All three passed, so that investigation is closed under that clearance;
 this does not establish a worst case or a guarantee at higher load. The plan is
-[Root guards under load](../superpowers/plans/2026-11-16-root-guards-under-load.md).
+[Root guards under load](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-root-guards-under-load.md).
 Commands, resolved configuration, logs, JSON results, coverage summary and process snapshots
 are retained in Lane I's `receipts/root-guards-under-load-20261116/`.
 
