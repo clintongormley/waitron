@@ -63,7 +63,6 @@ import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   OPERATOR,
-  counterOrder,
   inTx,
   order,
   partyRow,

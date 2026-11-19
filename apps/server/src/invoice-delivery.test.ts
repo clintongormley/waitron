@@ -2482,9 +2482,14 @@ describe("invoice mail pass", () => {
     expect(await suite.db.select().from(outgoingMail)).toHaveLength(1);
   });
 
-  it.each([true, false])(
-    "keeps an expired mail result as history only with its retained token (%s)",
-    async (sameToken) => {
+  it.each([
+    { sameToken: true, outcome: "sent", withRetry: true },
+    { sameToken: false, outcome: "sent", withRetry: true },
+    { sameToken: true, outcome: "failed", withRetry: true },
+    { sameToken: true, outcome: "failed", withRetry: false },
+  ] as const)(
+    "settles an expired mail result ($outcome, same token $sameToken, newer attempt $withRetry)",
+    async ({ sameToken, outcome, withRetry }) => {
       const { sale, delivery } = await queued();
       let answer!: (outcome: InvoiceDeliveryOutcome) => void;
       let started!: () => void;
@@ -2503,7 +2508,7 @@ describe("invoice mail pass", () => {
           return waiting;
         },
       });
-      let nextId!: string;
+      let nextBefore: Awaited<ReturnType<typeof rows>>[number] | undefined;
       try {
         await within(
           Promise.race([
@@ -2529,18 +2534,29 @@ describe("invoice mail pass", () => {
             .set({ claimToken: randomUUID() })
             .where(eq(outgoingMail.dedupeKey, `invoice:${delivery.id}`));
         }
-        const next = await withTransaction(suite.db, (tx) =>
-          reserveInvoiceDelivery(tx, sale.saleId, email()),
-        );
-        nextId = next.id;
+        if (withRetry) {
+          await withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, email()));
+          nextBefore = (await rows())[1]!;
+          expect(nextBefore).toMatchObject({ status: "queued", reported_at: null });
+        }
       } finally {
-        answer({ status: "sent" });
+        answer(
+          outcome === "sent"
+            ? { status: outcome }
+            : {
+                status: outcome,
+                failureCode: "transport_failed",
+              },
+        );
         await work;
       }
-      expect(await rows()).toMatchObject([
-        { status: "unknown", reported_outcome: sameToken ? "sent" : null },
-        { id: nextId, status: "queued", reported_at: null },
-      ]);
+      const [abandoned, ...newer] = await rows();
+      expect(abandoned).toMatchObject({
+        status: "unknown",
+        failure_code: "timeout",
+        reported_outcome: sameToken ? outcome : null,
+      });
+      expect(newer).toEqual(withRetry ? [nextBefore] : []);
       expect(await readMail(suite.db, `invoice:${delivery.id}`)).toMatchObject({
         status: "unknown",
         failureCode: "mail.claim_abandoned",
