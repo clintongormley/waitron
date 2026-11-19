@@ -20450,7 +20450,10 @@ export class TillApp extends LitElement {
     if (answer?.press === asked)
       this.#setMealEndAnswer(asked.billId, {
         ...answer,
-        said: { error: { code: "meal_end.already_issued" } },
+        // A bill another till has since settled must not be offered payment again.
+        said: {
+          error: owing(bill) ? { code: "meal_end.already_issued" } : "meal_end.ticket_found",
+        },
       });
   }
 

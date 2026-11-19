@@ -1094,6 +1094,27 @@ describe("till-app: a refusal after a send that got no answer", () => {
     expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
   });
 
+  it("does not offer payment when the read after a refused resend finds the bill settled by another till", async () => {
+    let paid = false;
+    const settled = billOf({
+      status: "settled",
+      receiptAvailable: true,
+      invoiceNumber: "F-0042",
+      outstanding: "0.00",
+    });
+    const { el } = await pressLeftUnanswered(() => Promise.reject(refusal("meal_end.no_printer")), {
+      getPartyBills: vi.fn(async () => [paid ? settled : billOf()]),
+    });
+    paid = true;
+
+    await printBill(el);
+
+    const said = banner(el)!.textContent!;
+    expect(said).toContain(t("meal_end.ticket_found"));
+    expect(said).not.toContain(codeMessage("meal_end.already_issued"));
+    expect(said).not.toContain(codeMessage("meal_end.no_printer"));
+  });
+
   it("keeps the warning when the read after a press with no answer finds the ticket", async () => {
     const deadlines = deadlinesByHand();
     const { overrides, issue } = ticketFoundLater();
