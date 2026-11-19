@@ -921,6 +921,39 @@ also qualifies the historical operation-description references in this section.
   held by its party. A party merge also moves paid bills and preserves their collection facts;
   abandoned bills stay behind.
 
+### 2026-11-19 counter save-and-pay benchmark
+
+PR 3 of [One way to pay](../superpowers/plans/2026-11-19-a1308-one-way-to-pay.md)
+measured fresh counter cash through the old sale request and the bill's payment request. On the
+bench server at `2.29.248.230`, both measurements used the same 30-day venue at 250 bills a
+day (seed 1) and 200 samples per case in each of three rounds. The `node:26-slim` image ran
+Node 26.13.1 and SQLite 3.54.1 without STAT4.
+
+Base `1eb7a415fbd7ff50fdb3643e0c92d7c61a2148ea` produced
+`/root/waitron-bench/a1308-2026-11-19-counter-save-pay-30d/before.json`. Candidate
+`070bc8e5a7f0c14c22aac8d4a8f98c77d26eef5c` produced
+`/root/waitron-bench/a1308-2026-11-19-counter-save-pay-30d/after.json`. Later review fixes
+handle closed orders and their receipts. The timed sale starts with a fresh order.
+
+| Case | Before round medians | After median | Verdict |
+| --- | ---: | ---: | --- |
+| `payment.partial` | 5.20–5.24 ms | 5.25 ms | same |
+| `payment.final` | 11.40–11.56 ms | 11.53 ms | same |
+| `sale.counter` | 11.84–11.93 ms | 15.10 ms | slower |
+| `floor.read` | 7.38–7.43 ms | 7.40 ms | same |
+| `floor.open` | 8.70–8.79 ms | 8.75 ms | same |
+| `kitchen.queue` | 6.71–6.77 ms | 6.80 ms | same |
+| `kitchen.screen` | 7.18–7.18 ms | 7.22 ms | same |
+| `kitchen.pass` | 29.26–29.43 ms | 29.09 ms | same |
+| `kitchen.pass-screen` | 43.34–43.56 ms | 43.20 ms | same |
+| `dashboard.open` | 51.53–51.86 ms | 51.40 ms | same |
+| `kitchen.pass-release` | 5.72–5.80 ms | 5.79 ms | same |
+| `print.problems` | 3.86–3.99 ms | 3.86 ms | same |
+| `filing.pass` | 12.73–12.82 ms | 12.71 ms | same |
+
+`sale.counter` rose by 3.26 ms between the round medians. PR 3 switched this case from
+`POST /api/sales` to `POST /api/working-orders/:id/payments`.
+
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
 Size M.
