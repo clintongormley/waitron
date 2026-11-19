@@ -1,6 +1,6 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OWED_RECEIPT_WAIT_MS, TillApp } from "./till-app.js";
+import { OWED_RECEIPT_WAIT_MS, SIGN_OUT_ANSWER_WAIT_MS, TillApp } from "./till-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import {
@@ -551,20 +551,24 @@ function samSigningInApi(overrides: Record<string, unknown>): TillApi {
       { personId: "p1", displayName: "Ana" },
       { personId: "p2", displayName: "Sam" },
     ]),
-    login: vi.fn().mockResolvedValue({ personId: "p2", permissions: [], locale: null }),
+    login: vi.fn((personId: string) =>
+      Promise.resolve({ personId, permissions: [], locale: null }),
+    ),
     ...overrides,
   });
 }
 
-async function keyInSam(el: TillApp): Promise<void> {
+async function keyIn(el: TillApp, personId: string, pin: string): Promise<void> {
   const signingIn = lock(el);
   await signingIn.updateComplete;
-  signingIn.shadowRoot!.querySelector<HTMLElement>('[data-person="p2"]')!.click();
+  signingIn.shadowRoot!.querySelector<HTMLElement>(`[data-person="${personId}"]`)!.click();
   await signingIn.updateComplete;
-  emit(signingIn.shadowRoot!.querySelector("till-numeric-pad")!, "wt-change", { value: "5555" });
+  emit(signingIn.shadowRoot!.querySelector("till-numeric-pad")!, "wt-change", { value: pin });
   await signingIn.updateComplete;
   signingIn.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
 }
+
+const keyInSam = (el: TillApp) => keyIn(el, "p2", "5555");
 
 async function mountForSignOut(api: TillApi): Promise<TillApp> {
   const { el } = await mountWidget<TillApp>("till-app", {
@@ -664,6 +668,28 @@ describe.each(Object.keys(signOutBy) as (keyof typeof signOutBy)[])(
       expect(api.logout).toHaveBeenCalledOnce();
     });
 
+    it("open, with Cancel pressed while the sign-in waits, sends only the next person's sign-in", async () => {
+      let answerReceipt!: () => void;
+      const api = samSigningInApi({
+        getTill: vi.fn().mockResolvedValue(idle),
+        printReceipt: vi.fn(() => new Promise<void>((resolve) => (answerReceipt = resolve))),
+      });
+      const el = await mountForSignOut(api);
+      await payAtTable(el);
+      await signOutBy[way](el);
+      await keyInSam(el);
+      await flush(el);
+      lock(el).shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+      answerReceipt();
+      await flush(el);
+      expect(api.logout).toHaveBeenCalledOnce();
+      expect(api.login).not.toHaveBeenCalled();
+
+      await keyIn(el, "p1", "1111");
+      await vi.waitFor(() => expect(signedInName(el)).toBe("Ana"));
+      expect(vi.mocked(api.login).mock.calls).toEqual([["p1", "1111"]]);
+    });
+
     it("open lets the next person sign in a few seconds after a sign-out the server does not answer", async () => {
       const api = samSigningInApi({
         getTill: vi.fn().mockResolvedValue(idle),
@@ -682,7 +708,7 @@ describe.each(Object.keys(signOutBy) as (keyof typeof signOutBy)[])(
         await vi.advanceTimersByTimeAsync(0);
         expect(api.logout).toHaveBeenCalledOnce();
         await keyInSam(el);
-        await vi.advanceTimersByTimeAsync(OWED_RECEIPT_WAIT_MS - 1);
+        await vi.advanceTimersByTimeAsync(SIGN_OUT_ANSWER_WAIT_MS - 1);
         expect(api.login).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(1);
         expect(api.login).toHaveBeenCalledExactlyOnceWith("p2", "5555");

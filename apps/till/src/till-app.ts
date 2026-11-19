@@ -596,9 +596,10 @@ const PENDING_REREAD_MS = 5_000;
 /** How long the full-invoice dialog waits for the delivery options before opening without them. */
 const INVOICE_OPTIONS_LIMIT_MS = 5_000;
 /** How long a sign-out waits for the request for the owed receipt before ending the server session,
- * which would refuse the request if it arrived first; and how long the next sign-in then waits for
- * the server's answer to that sign-out. */
+ * which would refuse the request if it arrived first. */
 export const OWED_RECEIPT_WAIT_MS = 3_000;
+/** How long a sign-in waits for the server's answer to the sign-out before it, once that is sent. */
+export const SIGN_OUT_ANSWER_WAIT_MS = 3_000;
 
 async function settledWithin(work: Promise<unknown>, ms: number): Promise<void> {
   const limit = limited(ms);
@@ -22329,7 +22330,7 @@ export class TillApp extends LitElement {
         if (stale()) return;
         // A failure is not reported: the device is already locked locally.
         answered = api.logout().catch(() => undefined);
-        await settledWithin(answered, OWED_RECEIPT_WAIT_MS);
+        await settledWithin(answered, SIGN_OUT_ANSWER_WAIT_MS);
       })();
       this.#serverSignOut = sent;
       await sent;
