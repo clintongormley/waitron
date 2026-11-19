@@ -169,10 +169,19 @@ export async function insertAttempting(
 /** Matches only a row still `attempting`; otherwise throws `payment.not_found`. */
 export async function captureAttempting(
   tx: Transaction,
-  params: Key & { settledAt: Date; externalRef: string; card?: CardDetails; amount?: Decimal },
+  params: Key & {
+    settledAt: Date;
+    externalRef: string;
+    card?: CardDetails;
+    amount?: Decimal;
+    /** When the provider says the card was taken; only a check made after the live answer was
+     * missed passes it. */
+    takenAt?: Date;
+  },
 ): Promise<PaymentRow> {
   return resolveAttempting(tx, params, "captured", {
     settledAt: params.settledAt.toISOString(),
+    takenAt: params.takenAt?.toISOString(),
     externalRef: params.externalRef,
     card: params.card,
     amount: params.amount,
@@ -188,7 +197,13 @@ async function resolveAttempting(
   tx: Transaction,
   params: Key,
   state: "captured" | "failed",
-  extra: { settledAt?: string; externalRef?: string; card?: CardDetails; amount?: Decimal },
+  extra: {
+    settledAt?: string;
+    takenAt?: string;
+    externalRef?: string;
+    card?: CardDetails;
+    amount?: Decimal;
+  },
 ): Promise<PaymentRow> {
   const [row] = await tx
     .update(payments)
@@ -197,6 +212,7 @@ async function resolveAttempting(
       amount: extra.amount === undefined ? undefined : decimalToCents(extra.amount),
       requestedAmount: sql`${payments.amount}`,
       settledAt: extra.settledAt ?? null,
+      providerTakenAt: extra.takenAt ?? null,
       externalRef: extra.externalRef ?? null,
       cardScheme: extra.card?.scheme ?? null,
       cardLast4: extra.card?.last4 ?? null,

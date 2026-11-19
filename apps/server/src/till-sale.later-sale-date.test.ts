@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withTransaction, workingOrders } from "@waitron/db";
-import { insertAttempting, payments } from "@waitron/payments";
+import { insertAttempting, insertCapturedPayment, payments } from "@waitron/payments";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { decimal, deviceOrigin, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { provisionBillVenue, statusOf, tabWith, type BillVenue } from "./testing/bill-venue.js";
@@ -141,4 +141,83 @@ describe("a card recovered on a later day files the day it was asked", () => {
     expect(ticket).not.toHaveProperty("saleDay");
     expect(record).toEqual({ operationDate: null, issueDate: "2026-03-15" });
   });
+
+  // Europe/Madrid (UTC+2 from 29 March): the reader asked at 23:58 on 31 March, the card taken at
+  // 00:01 on 1 April, and the box issuing at 09:00 on 1 April.
+  const ASKED_31 = "2026-03-31T21:58:00.000Z";
+  const TAKEN_1 = "2026-03-31T22:01:00.000Z";
+  const MORNING_1 = "2026-04-01T07:00:00.000Z";
+
+  function payAt(venue: BillVenue, id: string, at: string) {
+    return pay(
+      { ...venue, provider: venue.card, clock: clockAt(at), admission: testTradingAdmission() },
+      venue.cfg,
+      { id, lines: [] },
+      venue.operatorId,
+    );
+  }
+
+  it("files no sale day when a card answered live at 00:01 is filed at 09:00 after its filing failed", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const id = await tabWith(venue, "Croquettes");
+    const collect = venue.card.collect.bind(venue.card);
+    vi.spyOn(venue.card, "collect").mockImplementationOnce(async (params) => {
+      const result = await collect(params);
+      await liftPaymentGuard(venue.db, () =>
+        venue.db
+          .update(payments)
+          .set({ createdAt: ASKED_31, settledAt: TAKEN_1 })
+          .where(eq(payments.paymentRef, result.paymentRef)),
+      );
+      return result;
+    });
+    vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(new Error("filing failed"));
+
+    await expect(payAt(venue, id, TAKEN_1)).rejects.toThrow("filing failed");
+    expect(await statusOf(venue, id)).not.toBe("settled");
+    const retried = await payAt(venue, id, MORNING_1);
+
+    expect(retried.outcome).toBe("captured");
+    const { supplyDay, ticket, record } = await filedFor(venue, id);
+    expect(supplyDay).toBeNull();
+    expect(ticket).not.toHaveProperty("saleDay");
+    expect(record).toEqual({ operationDate: null, issueDate: "2026-04-01" });
+  });
+
+  it.each([
+    { takenAt: TAKEN_1, saleDay: null },
+    { takenAt: "2026-03-31T21:59:00.000Z", saleDay: "2026-03-31" },
+  ])(
+    "takes SumUp's time $takenAt for a card its check found at 09:00 (sale day $saleDay)",
+    async ({ takenAt, saleDay }) => {
+      const venue = await provisionBillVenue(suite.db);
+      const id = await tabWith(venue, "Croquettes");
+      const paymentRef = randomUUID();
+      await withTransaction(venue.db, (tx) =>
+        insertCapturedPayment(tx, {
+          origin: venue.cfg.origin,
+          nodeId: venue.cfg.nodeId,
+          workingOrderId: brandWorkingOrderId(id),
+          provider: venue.card.provider,
+          paymentRef,
+          amount: decimal("10.00"),
+          externalRef: `found-${paymentRef}`,
+          settledAt: new Date(MORNING_1),
+        }),
+      );
+      await liftPaymentGuard(venue.db, () =>
+        venue.db
+          .update(payments)
+          .set({ createdAt: ASKED_31, providerTakenAt: takenAt })
+          .where(eq(payments.paymentRef, paymentRef)),
+      );
+
+      expect((await payAt(venue, id, MORNING_1)).outcome).toBe("captured");
+
+      const { supplyDay, ticket, record } = await filedFor(venue, id);
+      expect(supplyDay).toBe(saleDay);
+      expect(ticket.saleDay).toBe(saleDay ?? undefined);
+      expect(record).toEqual({ operationDate: saleDay, issueDate: "2026-04-01" });
+    },
+  );
 });

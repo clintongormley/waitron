@@ -496,12 +496,16 @@ export class SumUpCloudProvider implements PaymentProvider {
             declined++;
             return false;
           }
+          // The live answer was missed, so `now` is when this check asked, not when the card was
+          // taken; without SumUp's own time, the row was written just before the reader was asked.
+          const sumupTime = t.timestamp === undefined ? NaN : Date.parse(t.timestamp);
           await captureAttempting(tx, {
             ...key,
             settledAt: outcome.settledAt,
             externalRef: outcome.transactionId,
             card: outcome.card,
             amount: outcome.amount,
+            takenAt: new Date(Number.isFinite(sumupTime) ? sumupTime : row.createdAt),
           });
           if (await this.saveRefunds(tx, key, outcome)) incidentsRaised++;
           return true;

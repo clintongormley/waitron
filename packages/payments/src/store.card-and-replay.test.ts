@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { eq } from "drizzle-orm";
 import { decimal, deviceOrigin } from "@waitron/shared";
+import { payments } from "./schema/payments.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import {
   associatePaymentWithSale,
@@ -175,5 +177,44 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
       }),
     );
     expect(row).toBeNull();
+  });
+});
+
+describe("the provider's time the card was taken", () => {
+  async function captured(paymentRef: string, takenAt?: Date) {
+    const taxpayer = await seedWorkingOrder(suite.db, freshNif());
+    await withTransaction(suite.db, async (tx) => {
+      await insertAttempting(tx, {
+        origin: deviceOrigin(taxpayer.deviceId),
+        workingOrderId: taxpayer.workingOrderId,
+        nodeId: taxpayer.nodeId,
+        provider: "sumup",
+        paymentRef,
+        amount: decimal("1.00"),
+      });
+      await captureAttempting(tx, {
+        provider: "sumup",
+        paymentRef,
+        settledAt: SETTLED,
+        externalRef: `txn-${paymentRef}`,
+        ...(takenAt === undefined ? {} : { takenAt }),
+      });
+    });
+    const [row] = await suite.db
+      .select({ takenAt: payments.providerTakenAt, settledAt: payments.settledAt })
+      .from(payments)
+      .where(eq(payments.paymentRef, paymentRef));
+    return row!;
+  }
+
+  it("stores the time a capture names, beside the box's settled time", async () => {
+    expect(await captured("taken-1", new Date("2026-03-31T22:01:00Z"))).toEqual({
+      takenAt: "2026-03-31T22:01:00.000Z",
+      settledAt: SETTLED.toISOString(),
+    });
+  });
+
+  it("leaves it empty when the capture names none", async () => {
+    expect((await captured("taken-2")).takenAt).toBeNull();
   });
 });

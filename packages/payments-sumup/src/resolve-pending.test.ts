@@ -387,6 +387,48 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(row.settledAt).not.toBeNull();
   });
 
+  it.each([
+    { timestamp: "2026-03-31T22:01:00Z", taken: "SumUp's time", want: "2026-03-31T22:01:00.000Z" },
+    { timestamp: undefined, taken: "the row's creation", want: "created" },
+    { timestamp: "not a time", taken: "the row's creation", want: "created" },
+  ])(
+    "stores $taken as the time the card was taken (timestamp $timestamp)",
+    async ({ timestamp, want }) => {
+      const { fake, provider } = await setup();
+      const paymentRef = `taken-${String(timestamp)}`;
+      await withTransaction(suite.db, async (tx) => {
+        const t = await seedWorkingOrder(suite.db, freshNif());
+        await insertAttempting(tx, {
+          origin: deviceOrigin(t.deviceId),
+          workingOrderId: t.workingOrderId,
+          nodeId: t.nodeId,
+          provider: "sumup",
+          paymentRef,
+          amount: decimal("7.00"),
+        });
+      });
+      fake.hold({
+        foreignTransactionId: paymentRef,
+        status: "SUCCESSFUL",
+        amount: decimal("7.00"),
+        ...(timestamp === undefined ? {} : { timestamp }),
+      });
+      expect((await provider.resolvePending(T0, await ownsEveryPayment(suite.db))).forwarded).toBe(
+        1,
+      );
+      const [row] = await suite.db
+        .select({
+          takenAt: payments.providerTakenAt,
+          createdAt: payments.createdAt,
+          settledAt: payments.settledAt,
+        })
+        .from(payments)
+        .where(eq(payments.paymentRef, paymentRef));
+      expect(row!.takenAt).toBe(want === "created" ? row!.createdAt : want);
+      expect(row!.settledAt).toBe(T0.toISOString());
+    },
+  );
+
   it("leaves an attempting row another box owns alone, and its own box captures it", async () => {
     const { t, provider, attempting, state } = await setup();
     await attempting("theirs", { status: "SUCCESSFUL" });

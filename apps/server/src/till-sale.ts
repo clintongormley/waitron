@@ -109,7 +109,7 @@ import { issuancePass } from "./issuance-pass.js";
 import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
 import { pinnedAt } from "./issue-moment.js";
-import { issueOrderMoment } from "./sale-day.js";
+import { cardTakenAt, issueOrderMoment } from "./sale-day.js";
 import { ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import {
@@ -1691,13 +1691,14 @@ async function finalizeRecovery(
         refuseUnsentUnavailable: false,
       });
       // Filed under the device that took the card, as the stuck resolve and a bill payment are.
-      // `createdAt` is the earliest moment this box recorded the card; `settled_at` can be when
-      // recovery noticed it.
       const [startedOn] = await tx
         .select({
           source: payments.source,
           deviceId: payments.deviceId,
+          providerTakenAt: payments.providerTakenAt,
+          resolutionOutcome: payments.resolutionOutcome,
           createdAt: payments.createdAt,
+          settledAt: payments.settledAt,
         })
         .from(payments)
         .where(eq(payments.id, captured.id));
@@ -1706,7 +1707,7 @@ async function finalizeRecovery(
         cfg,
         deps,
         await issuancePass(tx, req.id, order),
-        startedOn!.createdAt,
+        cardTakenAt(startedOn!) ?? undefined,
       );
       const capturedAmount = decimal(captured.amount);
 

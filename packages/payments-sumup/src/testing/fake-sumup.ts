@@ -45,6 +45,8 @@ interface Held extends CardFacts {
   foreignTransactionId: string;
   status: SumUpTransaction["status"];
   amount: Decimal;
+  /** SumUp's own time of the transaction, as its lookup answers it. */
+  timestamp?: string;
   refundEvents?: SumUpRefundEvent[];
   /** When set, the FIRST `findTransaction` that locates this checkout rewrites its status to this
    * value, then clears the field — models a checkout that resolves the moment the adapter first
@@ -164,6 +166,7 @@ export class FakeSumUp implements SumUpClient {
       foreignTransactionId: string;
       status: SumUpTransaction["status"];
       amount: Decimal;
+      timestamp?: string;
     } & CardFacts,
   ): string {
     const clientTransactionId = nextId("ctx");
@@ -190,6 +193,7 @@ export class FakeSumUp implements SumUpClient {
       foreignTransactionId: params.foreignTransactionId,
       status: this.next,
       amount: params.amount,
+      timestamp: this.eventClock().toISOString(),
       ...(this.nextCard ?? DEFAULT_CARD),
       ...(this.nextResolveOnFirstFind === undefined
         ? {}
@@ -223,6 +227,7 @@ export class FakeSumUp implements SumUpClient {
       id: h.id,
       status: h.status,
       amount: h.amount,
+      ...(h.timestamp === undefined ? {} : { timestamp: h.timestamp }),
       ...(h.card === undefined ? {} : { card: h.card }),
       ...(h.entryMode === undefined ? {} : { entryMode: h.entryMode }),
       ...(h.authCode === undefined ? {} : { authCode: h.authCode }),

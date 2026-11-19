@@ -317,4 +317,51 @@ describe("a bill payment completed on a later day files the day it was accepted"
     expect(ticket.saleDay).toBe("2026-03-31");
     expect(record).toEqual({ operationDate: "2026-03-31", issueDate: "2026-04-01" });
   });
+
+  // Europe/Madrid (UTC+2 from 29 March): the reader asked at 23:58 on 31 March, the card taken at
+  // 00:01 on 1 April, and the bill completed at 09:00 on 1 April.
+  const ASKED_31 = "2026-03-31T21:58:00.000Z";
+  const TAKEN_1 = "2026-03-31T22:01:00.000Z";
+  const MORNING_1 = "2026-04-01T07:00:00.000Z";
+
+  it("files no sale day when the loop completes a card answered live at 00:01, asked at 23:58", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const billId = await tabWith(venue, "Croquettes");
+    await capturedPending(venue, billId, 1000, {
+      bill: ASKED_31,
+      card: ASKED_31,
+      settled: TAKEN_1,
+    });
+
+    expect(await settleAt(venue, MORNING_1)).toMatchObject({ received: 1 });
+
+    expect(await statusOf(venue, billId)).toBe("settled");
+    const { supplyDay, ticket, record } = await filedFor(venue, billId);
+    expect(supplyDay).toBeNull();
+    expect(ticket).not.toHaveProperty("saleDay");
+    expect(record).toEqual({ operationDate: null, issueDate: "2026-04-01" });
+  });
+
+  it.each([
+    { takenAt: TAKEN_1, saleDay: null },
+    { takenAt: "2026-03-31T21:59:00.000Z", saleDay: "2026-03-31" },
+  ])(
+    "takes SumUp's time $takenAt for a card its check found at 09:00 (sale day $saleDay)",
+    async ({ takenAt, saleDay }) => {
+      const venue = await provisionBillVenue(suite.db);
+      const billId = await tabWith(venue, "Croquettes");
+      await capturedPending(venue, billId, 1000, {
+        bill: ASKED_31,
+        card: ASKED_31,
+        settled: MORNING_1,
+        takenAt,
+      });
+
+      expect(await settleAt(venue, MORNING_1)).toMatchObject({ received: 1 });
+
+      const { supplyDay, record } = await filedFor(venue, billId);
+      expect(supplyDay).toBe(saleDay);
+      expect(record).toEqual({ operationDate: saleDay, issueDate: "2026-04-01" });
+    },
+  );
 });

@@ -107,6 +107,14 @@ async function capturedPayment(externalRef: string): Promise<{ paymentRef: strin
   return { paymentRef };
 }
 
+async function takenAtOf(paymentRef: string) {
+  const [row] = await suite.db
+    .select({ takenAt: payments.providerTakenAt, resolutionOutcome: payments.resolutionOutcome })
+    .from(payments)
+    .where(eq(payments.paymentRef, paymentRef));
+  return row;
+}
+
 describe("StripeTerminalProvider.collect", () => {
   it("captures: attempting -> captured, settledAt set, external_ref = the PI id", async () => {
     const fake = new FakeStripe();
@@ -126,6 +134,15 @@ describe("StripeTerminalProvider.collect", () => {
     expect(stored?.requestedBy).toBe("22222222-2222-4222-8222-222222222222");
     expect(row?.state).toBe("captured");
     expect(row?.externalRef).toMatch(/^pi_/);
+  });
+
+  it("a live answer leaves the provider's time the card was taken empty", async () => {
+    const result = await providerFor(new FakeStripe()).collect(await collectParams());
+    expect(result.state).toBe("captured");
+    expect(await takenAtOf(result.paymentRef)).toEqual({
+      takenAt: null,
+      resolutionOutcome: null,
+    });
   });
 
   it("declines: attempting -> failed, settledAt null", async () => {
@@ -812,6 +829,17 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     expect(row?.state).toBe("captured");
     expect(row?.settledAt).toBe(NOW.toISOString());
     expect(row?.externalRef).toBe("pi_paid");
+  });
+
+  it("a card found later stores no provider time, as Stripe's lookup names none: its resolution marks it", async () => {
+    const fake = new FakeStripe();
+    fake.setIntent("pi_later", { status: "succeeded", amount: 1210, amountReceived: 1210 });
+    const { paymentRef } = await abandonedRow("pi_later");
+    await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT);
+    expect(await takenAtOf(paymentRef)).toEqual({
+      takenAt: null,
+      resolutionOutcome: "captured",
+    });
   });
 
   it("succeeded for a different amount: captured at the actual amount", async () => {

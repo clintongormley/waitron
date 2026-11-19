@@ -49,6 +49,7 @@ CREATE TABLE `payments` (
 	`requested_amount` integer,
 	`state` text NOT NULL,
 	`settled_at` text,
+	`provider_taken_at` text,
 	`reconcile_remediated_at` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
