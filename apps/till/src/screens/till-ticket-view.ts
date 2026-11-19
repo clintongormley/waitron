@@ -714,7 +714,6 @@ export class TillTicketView extends LitElement {
     );
   }
 
-  /** A late success does not complete the original, but the customer may have the document. */
   get #mayHaveArrived(): boolean {
     return (
       this.deliveries?.originalCompleted === false &&

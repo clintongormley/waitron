@@ -1,6 +1,6 @@
 # Plan: an invoice email confirmed late counts as delivered (LATE-EMAIL-COUNTS-DELIVERED)
 
-Status: draft, 2026-11-19, lane L. FISCAL: the owner lands it.
+Status: built, 2026-11-19, lane L. FISCAL: the owner lands it.
 
 ## The ask, and who decided it
 
@@ -49,8 +49,9 @@ So the change is only the historical case, and only for email.
    original (the plan read reproduced that end state).
 3a. A newer **receipt** original already queued as a print job keeps «original» bytes
    (`receiptCopy: false`, fixed at enqueue). If the printer is offline it can print after the
-   email was counted: a second original. Whether to end that job and queue a copy in the same
-   transaction is asked of the watcher (WATCHER-NEEDED, 2026-11-19); built only if chosen.
+   email was counted: a second original. Not built: the watcher chose to leave it (2026-11-19,
+   option B, not the owner's; `questions.md` "WATCHER 2026-11-19 06:33"), and the PR's first
+   lines say so, so the owner can ask for the job to be ended and a copy queued instead.
 4. A4 and receipt late reports keep today's rule (history only once superseded). The owner's
    answer is about email, and line 51 is about SMTP acceptance.
 5. Nothing filed with AEAT changes: no invoice record, chain, number or series is touched; only
@@ -60,8 +61,7 @@ Once a queued email or A4 attempt becomes a duplicate, the till no longer offers
 for it, and a request already on screen is refused as `invoice_delivery.active`. That follows the
 new rule; the PR says so.
 
-#3773's check-first wording and alert stay: they still apply to an A4 late success, and to an email
-whose late answer has not arrived.
+#3773's check-first wording and alert stay: they still apply to a late A4 or receipt success.
 
 ## Docs
 

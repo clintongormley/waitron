@@ -758,7 +758,6 @@ describe("readInvoiceDeliveries", () => {
       [first.id, "unknown", true],
     ]);
     expect(result!.history.every((entry) => entry.personId === "staff-one")).toBe(true);
-    // A late success on a superseded attempt is history only: the next one is still original.
     expect(result!.originalCompleted).toBe(false);
     expect(result!.actions.retryOriginal).toEqual({ medium: "a4" });
     expect(result!.actions.print).toMatchObject({ designation: "original" });

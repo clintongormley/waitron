@@ -1075,6 +1075,17 @@ the box adds by itself, and how the record reaches the tax office.
 
 ## Decisions and deliberate limits
 
+### A late-confirmed invoice email counts; a receipt already queued still prints as an original (watcher, 2026-11-19)
+
+The owner chose on 2026-11-18 that an invoice email the mail server accepts after Waitron stopped
+waiting counts as delivered, so later deliveries are «DUPLICADO» copies
+([plan](../superpowers/plans/2026-11-19-late-email-counts-delivered.md)). A newer email or A4
+original still waiting becomes a copy. A receipt original already queued as a print job does not:
+if staff printed the receipt while the email was uncertain and the receipt printer was offline, it
+prints later as a second original, not marked «DUPLICADO». The watcher left that case unbuilt under
+the owner's 9 November rule that an unlikely clash is dropped (lane L `questions.md`, "WATCHER
+2026-11-19 06:33"); the owner may instead ask for that job to be ended and a copy queued.
+
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 
 The recovery guide's **After a recovery** section (`apps/server/src/guide/en/backup-recovery.md`,
