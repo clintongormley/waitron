@@ -487,7 +487,7 @@ describe("the Staffing view's month", () => {
       const read = staffingMonth(month);
       read.seasons = [...read.seasons.slice(0, 1), { ...read.seasons[1]!, name }];
       const kitchen = read.days.find(({ date }) => date === "2026-12-03")!.areas[2]!;
-      kitchen.blocks[1]!.staffRoleName = "Evening shift sous chef";
+      kitchen.blocks[1]!.staffRoleName = "Night sous chef";
       return read;
     });
     const { el } = await mount({ api, width: "390px", canWrite: true });
@@ -507,7 +507,7 @@ describe("the Staffing view's month", () => {
     const visible = box.shadowRoot!.querySelectorAll("dd")[2]!.querySelector("[aria-hidden]")!;
     const tops = [
       "Head chef ×1\u00a016:00–\u206001:30",
-      "Evening shift sous chef ×3\u00a017:00–\u206023:00",
+      "Night sous chef ×3\u00a017:00–\u206023:00",
     ].map((block) => {
       const rects = textRects(visible, block);
       expect(rects, block).toHaveLength(1);
