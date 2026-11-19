@@ -25,7 +25,7 @@ import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { endMeal } from "./meal-end.js";
 import { closeOfDayConfig, issueBillAtClose, type CloseOfDayRule } from "./close-of-day.js";
-import { giveAway } from "./testing/cancel-line.js";
+import { seedGivenAwayLine } from "./testing/cancel-line.js";
 import { clockAt } from "./testing/deferred-close-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import {
@@ -458,7 +458,7 @@ describe("issueBillAtClose", () => {
 
   it("issues and settles a €0.00 bill", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
-    await giveAway(venue, party.tabId, 1);
+    await seedGivenAwayLine(venue, party.tabId, 1);
 
     expect(await close(party.tabId)).toMatchObject({ kind: "issued" });
 
