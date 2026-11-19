@@ -1,3 +1,4 @@
+import { cashPayment } from "./testing/bill-venue.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -18,7 +19,7 @@ import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+
 import {
   billWith,
   inTx,
@@ -74,11 +75,8 @@ async function requestedPizzas(release: "fire" | "hold" = "fire") {
 type Order = Awaited<ReturnType<typeof requestedPizzas>>;
 
 async function pay(order: Order) {
-  await payWorkingOrder(
-    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
-    venue.cfg,
-    { id: order.billId, tender: { method: "cash", amount: "36.00" }, lines: [] },
-  );
+  const paid = await cashPayment(venue, venue.cookie.staff, order.billId, "36.00");
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
 }
 
 async function askFor(

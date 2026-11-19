@@ -1,3 +1,4 @@
+import { cashPayment } from "./testing/bill-venue.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -41,7 +42,7 @@ import { billWith, provisionAdjustmentVenue } from "./testing/adjustment-venue.j
 import { readBillEditState } from "./bill-editing.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem } from "./line-cancel.js";
-import { fireDishesAtPayment, payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { fireDishesAtPayment } from "./till-sale.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -269,15 +270,8 @@ describe("A773 lifetime", () => {
     const order = await billWith(v, [{ name: "Pizza", quantity: "3", olives: 2 }], {
       shape: "grouped",
     });
-    await payWorkingOrder(
-      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
-      v.cfg,
-      {
-        id: order.billId,
-        tender: { method: "cash", amount: "36.00" },
-        lines: [],
-      },
-    );
+    const paid = await cashPayment(v, v.cookie.staff, order.billId, "36.00");
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     const rows = await inTx(v, (tx) =>
       tx
         .select()

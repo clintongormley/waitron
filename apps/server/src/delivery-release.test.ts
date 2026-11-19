@@ -15,13 +15,10 @@ import {
   billRow,
   inTx,
   OPERATOR,
+  pay,
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import {
-  collectOrderOrchestration as collectOrder,
-  payWorkingOrder,
-} from "./testing/whole-payment-fixture.js";
 import { createOpenOrder, handOverOrder } from "./working-order.js";
 
 const suite = useVenueDb({
@@ -41,15 +38,7 @@ async function settledDelivery(v: PartyVenue, tableId: string): Promise<string> 
       zoneId: v.counter.zoneId,
     }),
   );
-  await payWorkingOrder(
-    { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
-    v.cfg,
-    {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "12.00" },
-    },
-  );
+  await pay(v, id, "12.00");
   return id;
 }
 
@@ -185,11 +174,7 @@ describe("an order whose delivery table was let go", () => {
     expect(await inTx(v, (tx) => orderTableLabel(tx, id))).toBe("Terrace 7");
     expect((await inTx(v, (tx) => readReceiptOrder(tx, id))).orderLabel).toBe("Terrace 7");
 
-    await collectOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "12.00" },
-    });
+    await pay(v, id, "12.00");
 
     expect(await billRow(v, id)).toMatchObject({
       status: "settled",

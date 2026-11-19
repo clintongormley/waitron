@@ -58,12 +58,17 @@ function latest(db: Database): { at: Date; offsetMinutes: number } | undefined {
 }
 
 function cashSale(open: OpenVenue, app: Hono, id: string) {
-  return send(app, open.venue.cookie, "POST", "/api/sales", {
+  return send(app, open.venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered: "35.00",
     dining: "eat_in",
-    workingOrderId: id,
-    zoneId: open.counter.zoneId,
-    lines: [{ menuItemId: open.counter.offerFor(open.productId), quantity: "1" }],
-    tender: { method: "cash", amount: "35.00" },
+    basket: {
+      zoneId: open.counter.zoneId,
+      lines: [{ menuItemId: open.counter.offerFor(open.productId), quantity: "1" }],
+    },
   });
 }
 

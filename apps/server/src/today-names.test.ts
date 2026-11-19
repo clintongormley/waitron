@@ -22,7 +22,7 @@ import { finishTable, holderOf } from "./testing/party-close-fixture.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";
-import { handOverOrder } from "./working-order.js";
+import { createOpenOrder, handOverOrder } from "./working-order.js";
 import type { PassBoard } from "./pass-card.js";
 import { boardCards } from "./testing/pass-board-probe.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -53,7 +53,6 @@ import {
   withZoneRevision,
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -642,16 +641,12 @@ async function deliveredCounterOrder(zoneId: string, tableId: string): Promise<s
     });
   await setZone("counter", "prepay");
   const id = randomUUID();
-  await payWorkingOrder(
-    { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
-    v.cfg,
-    {
-      id,
-      lines: [{ menuItemId: v.item("Burger"), quantity: "1" }],
-      tender: { method: "cash", amount: "50.00" },
+  await inTx(v, (tx) =>
+    createOpenOrder(tx, v.cfg, id, [{ menuItemId: v.item("Burger"), quantity: "1" }], null, {
       deliveryTableId: tableId,
-    },
+    }),
   );
+  await pay(v, id, "50.00");
   await setZone(saved!.orderStart, saved!.paidWhen);
   expect(await sentCount(id)).toBe(1);
   return id;

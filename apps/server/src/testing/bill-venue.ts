@@ -10,7 +10,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { observedClosingBody } from "./party-close-fixture.js";
 import { observedWholePaymentBody } from "./whole-payment-fixture.js";
-import { observedPaymentBody } from "./bill-payment-fixture.js";
+import { getBillBalance, observedPaymentBody } from "./bill-payment-fixture.js";
 import { placeOrder } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { departments } from "@waitron/venue-service";
@@ -424,6 +424,26 @@ export async function send(
     : { body: text };
   const json = (parsed.error as Record<string, unknown> | undefined) ?? parsed;
   return { status: res.status, json };
+}
+
+export async function cashPayment(
+  venue: Pick<BillVenue, "db" | "app">,
+  cookie: string,
+  billId: string,
+  tendered: string,
+): Promise<Answer> {
+  const { outstanding } = await getBillBalance(venue, billId);
+  const path = `/api/working-orders/${billId}/payments`;
+  const body = await observedPaymentBody(venue.db, path, {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered,
+    applied: outstanding,
+    tip: "0.00",
+  });
+  return send(venue.app, cookie, "POST", path, body);
 }
 
 export function inTx<T>(venue: BillVenue, fn: (tx: Transaction) => Promise<T>): Promise<T> {

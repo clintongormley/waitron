@@ -40,8 +40,8 @@ import {
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
-import { send } from "./testing/bill-venue.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { cashPayment, send } from "./testing/bill-venue.js";
+
 import { advanceTicketItem } from "./working-order.js";
 
 let venue: AdjustmentVenue;
@@ -79,15 +79,8 @@ async function bill(lines: RoundLine[], release: "fire" | "hold" = "hold"): Prom
 }
 
 async function pay(b: Bill, amount: string) {
-  await payWorkingOrder(
-    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
-    venue.cfg,
-    {
-      id: b.billId,
-      tender: { method: "cash", amount },
-      lines: [],
-    },
-  );
+  const paid = await cashPayment(venue, venue.cookie.staff, b.billId, amount);
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
   const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, b.billId));
   const [tender] = await venue.db.select().from(tenders).where(eq(tenders.saleId, sale!.id));
   return { saleId: sale!.id, tenderId: tender!.id };

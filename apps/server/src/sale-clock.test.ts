@@ -60,13 +60,24 @@ function ledger() {
 }
 
 function cashSale(iso: string, workingOrderId: string) {
-  return send(venue.appAt(clockAt(iso)), venue.cookie, "POST", "/api/sales", {
-    dining: "eat_in",
-    workingOrderId,
-    lines: [{ menuItemId: counter.offerFor(productId), quantity: "1" }],
-    zoneId: counter.zoneId,
-    tender: { method: "cash", amount: "10.00" },
-  });
+  return send(
+    venue.appAt(clockAt(iso)),
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${workingOrderId}/payments`,
+    {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "10.00",
+      dining: "eat_in",
+      basket: {
+        zoneId: counter.zoneId,
+        lines: [{ menuItemId: counter.offerFor(productId), quantity: "1" }],
+      },
+    },
+  );
 }
 
 it("refuses a cash sale under a clock in 2001 by name, and records no sale, fiscal record, invoice number or order", async () => {

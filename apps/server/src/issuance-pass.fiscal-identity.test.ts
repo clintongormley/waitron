@@ -21,9 +21,10 @@ import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import type {} from "./till-config.js";
-import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-payment-fixture.js";
+import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
+import { ensureOperator } from "./testing/cancel-line.js";
 
 // The issuance pass adds to the `sale_lines` columns and changes nothing that was filed before
 // it. The same sale is filed in two fresh databases provisioned identically, once with the pass
@@ -42,6 +43,7 @@ const LOCALE = "es-ES";
 const NIF = "76900001F";
 const ISSUED_AT = new Date("2026-09-25T11:30:00.000Z");
 const WORKING_ORDER_ID = randomUUID();
+const OPERATOR = randomUUID();
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const bypassed = useVenueDb({ migrations, timeoutMs: 60_000 });
@@ -183,20 +185,30 @@ async function fileOneSale(db: Database) {
     deploymentEnvironment: "preproduction",
   });
 
-  await recordTillSale({ admission: testTradingAdmission(), db, backend, clock: fixedClock }, cfg, {
-    workingOrderId: WORKING_ORDER_ID,
-    zoneId: offers.zoneId,
-    lines: [
-      {
-        menuItemId: offers.offerFor(seeded.negroni),
-        quantity: "2",
-        extras: [
-          { listId: seeded.extrasListId, picks: [{ productId: seeded.hielo, quantity: 1 }] },
-        ],
-      },
-    ],
-    tender: { method: "cash", amount: "20.00" },
+  await withTransaction(db, (tx) => ensureOperator(tx, OPERATOR));
+  const sessionId = await openTillSession(db, {
+    deviceId: cfg.origin.deviceId,
+    personId: OPERATOR,
   });
+  await payFreshCounterInCash(
+    { admission: testTradingAdmission(), db, backend, clock: fixedClock },
+    cfg,
+    { personId: OPERATOR, sessionId },
+    WORKING_ORDER_ID,
+    {
+      zoneId: offers.zoneId,
+      lines: [
+        {
+          menuItemId: offers.offerFor(seeded.negroni),
+          quantity: "2",
+          extras: [
+            { listId: seeded.extrasListId, picks: [{ productId: seeded.hielo, quantity: 1 }] },
+          ],
+        },
+      ],
+    },
+    "20.00",
+  );
 
   const header = db.all<Record<string, unknown>>(
     sql.raw(`select ${SALE_COLUMNS.join(", ")} from sales`),

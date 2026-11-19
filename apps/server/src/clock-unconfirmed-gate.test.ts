@@ -1010,11 +1010,14 @@ const dashboardResolutions: Record<string, () => Promise<MoneyRoute>> = {
   },
   "a held payment's outcome": async () => {
     const id = randomUUID();
-    const paid = await as(venue.app, "POST", "/api/pay", {
+    const paid = await as(venue.app, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
       dining: "eat_in",
-      id,
-      lines: tarta(),
-      zoneId: counter.zoneId,
+      basket: { lines: tarta(), zoneId: counter.zoneId },
     });
     expect(paid.status).toBe(200);
     const [payment] = venue.db.all<{ id: string }>(
@@ -1298,12 +1301,17 @@ describe("money already moved while the start waits", () => {
         sql`select state, sale_id is not null as filed from payments where working_order_id = ${id}`,
       );
 
-    const charged = await as(app, "POST", "/api/pay", {
+    const path = `/api/working-orders/${id}/payments`;
+    const body = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
       dining: "eat_in",
-      id,
-      lines: tarta(),
-      zoneId: counter.zoneId,
-    });
+      basket: { lines: tarta(), zoneId: counter.zoneId },
+    };
+    const charged = await as(app, "POST", path, body);
 
     expect(charged.status).toBe(507);
     expect(charged.json).toEqual({
@@ -1314,15 +1322,10 @@ describe("money already moved while the start waits", () => {
     expect(moneyState()).toMatchObject({ collects: before.collects + 1, records: before.records });
 
     state.confirm("by_person", {});
-    const paid = await as(app, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-      zoneId: counter.zoneId,
-    });
+    const paid = await as(app, "POST", path, body);
 
     expect(paid.status).toBe(200);
-    expect(paid.json.outcome).toBe("captured");
+    expect(paid.json).toMatchObject({ payment: { state: "received" } });
     expect(payments()).toEqual([{ state: "captured", filed: 1 }]);
     expect(moneyState()).toMatchObject({
       collects: before.collects + 1,

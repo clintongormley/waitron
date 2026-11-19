@@ -671,15 +671,22 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const ham = products.find((p) => p.unit.hardwareUnit === "kg")!;
     const water = products.find((p) => p.unit.hardwareUnit === null)!;
 
-    const invalidQuantity = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: ham.menuItemId, quantity: "0.2001" }],
-        tender: { method: "cash", amount: "10.00" },
-      }),
-    });
+    function pay(lines: { menuItemId: string; quantity: string }[]) {
+      return app.request(`/api/working-orders/${randomUUID()}/payments`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          submissionId: randomUUID(),
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "10.00",
+          dining: "eat_in",
+          basket: { lines },
+        }),
+      });
+    }
+    const invalidQuantity = await pay([{ menuItemId: ham.menuItemId, quantity: "0.2001" }]);
     expect(invalidQuantity.status).toBe(400);
     expect(await invalidQuantity.json()).toMatchObject({
       error: { code: "quantity.invalid", params: { reason: "precision" } },
@@ -688,22 +695,15 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // 3. Ring a MIXED basket: 0.200 kg ham (4.98 gross @10%) + 2 × water (3.00 gross @21%) = 7.98,
     // tendered 10.00 → 2.02 change. Two rate groups, so the vatBreakdown must carry a per-rate base
     // for each (findings §14: the base imponible split per rate is mandatory once rates mix).
-    const saleRes = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [
-          { menuItemId: ham.menuItemId, quantity: "0.200" },
-          { menuItemId: water.menuItemId, quantity: "2" },
-        ],
-        tender: { method: "cash", amount: "10.00" },
-      }),
-    });
+    const lines = [
+      { menuItemId: ham.menuItemId, quantity: "0.200" },
+      { menuItemId: water.menuItemId, quantity: "2" },
+    ];
+    const saleRes = await pay(lines);
     expect(saleRes.status).toBe(200);
 
     // 4. Every legally-required ticket field (findings §14).
-    const ticket = await saleRes.json();
+    const { invoice: ticket } = await saleRes.json();
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // número + serie
     expect(ticket.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // fecha de expedición, ISO-8601…
     expect(Number.isNaN(Date.parse(ticket.issuedAt))).toBe(false); // …and a real instant
@@ -741,18 +741,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
 
     // 5. Ring a SECOND identical mixed sale so the chain has a predecessor to link to. Same cookie,
     // same app — invoice A/2.
-    const secondRes = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [
-          { menuItemId: ham.menuItemId, quantity: "0.200" },
-          { menuItemId: water.menuItemId, quantity: "2" },
-        ],
-        tender: { method: "cash", amount: "10.00" },
-      }),
-    });
+    const secondRes = await pay(lines);
     expect(secondRes.status).toBe(200);
 
     // 6. Two chained fiscal records: the first opens the chain (`primerRegistro`, no predecessor

@@ -153,21 +153,26 @@ describe("receipt issue facts independent of recipient and current venue zone", 
     const app = v.appAt(clock);
     const id = randomUUID();
     const body = {
-      workingOrderId: id,
-      zoneId: v.zoneId,
-      lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],
-      tender: { method: "cash", amount: "35.00" },
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "35.00",
       dining: "eat_in",
+      basket: {
+        zoneId: v.zoneId,
+        lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],
+      },
     };
     const pay = () =>
-      app.request("/api/sales", {
+      app.request(`/api/working-orders/${id}/payments`, {
         method: "POST",
         headers: { cookie: v.cookie, "content-type": "application/json" },
         body: JSON.stringify(body),
       });
     const first = await pay();
     expect(first.status).toBe(200);
-    const original = await first.json();
+    const { invoice: original } = await first.json();
     expect(original).toMatchObject({ issuedAt: AT, issuedOffsetMinutes: 120, invoiceType: "F2" });
     expect(new URL(original.qr).searchParams.get("fecha")).toBe("15-10-2026");
     const stored = await v.db.select().from(sales);
@@ -177,7 +182,7 @@ describe("receipt issue facts independent of recipient and current venue zone", 
       );
       const replay = await pay();
       expect(replay.status).toBe(200);
-      expect(await replay.json()).toEqual(original);
+      expect((await replay.json()).invoice).toEqual(original);
       const reprint = await app.request(`/api/sales/${id}/reprint`, {
         method: "POST",
         headers: { cookie: v.cookie },

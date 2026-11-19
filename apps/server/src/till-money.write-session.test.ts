@@ -63,34 +63,34 @@ beforeEach(async () => {
 });
 
 const lines = () => [{ menuItemId: offerId, quantity: "1" }];
-const cash = { method: "cash", amount: "12.00" };
 type Path = "counter sale" | "integrated pay" | "collection" | "refund";
 
 async function requestFor(path: Path, cardRefund = false) {
   const id = randomUUID();
-  if (path === "counter sale")
+  const paymentPath = `/api/working-orders/${id}/payments`;
+  const whole = { submissionId: randomUUID(), kind: "share", shareOf: 1 };
+  if (path === "counter sale" || path === "integrated pay")
     return {
       id,
-      path: "/api/sales",
+      path: paymentPath,
       body: {
+        ...whole,
+        ...(path === "counter sale"
+          ? { method: "cash", tendered: "12.00" }
+          : { method: "card", entry: "reader" }),
         dining: "eat_in",
-        workingOrderId: id,
-        zoneId: counter.zoneId,
-        lines: lines(),
-        tender: cash,
+        basket: { zoneId: counter.zoneId, lines: lines() },
       },
-    };
-  if (path === "integrated pay")
-    return {
-      id,
-      path: "/api/pay",
-      body: { dining: "eat_in", id, zoneId: counter.zoneId, lines: lines() },
     };
   if (path === "collection") {
     const deps = { db: suite.db, backend: venue.backend, clock: venue.clock };
     await parkOrder(deps, venue.cfg, { id, zoneId: counter.zoneId, lines: lines() });
     await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.adminId);
-    return { id, path: `/api/working-orders/${id}/collect`, body: { tender: cash } };
+    return {
+      id,
+      path: paymentPath,
+      body: { ...whole, method: "cash", tendered: "12.00", applied: "12.00", tip: "0.00" },
+    };
   }
   const billId = await tabWith(venue, "House salad");
   const paid = await send(venue.app, cookie, "POST", `/api/working-orders/${billId}/payments`, {
@@ -149,7 +149,7 @@ function effects(id: string) {
   };
 }
 
-async function pausedRequest(request: Awaited<ReturnType<typeof requestFor>>) {
+async function pausedRequest(request: { path: string; body: object }) {
   let reached!: () => void;
   let release!: () => void;
   const reading = new Promise<void>((resolve) => {
@@ -353,10 +353,23 @@ it.each(
     const original = effects(request.id);
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
-    const answer = send(venue.app, cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      ...(issued ? { id: request.id, lines: [] } : request.body),
-    });
+    const answer = send(
+      venue.app,
+      cookie,
+      "POST",
+      request.path,
+      issued
+        ? {
+            submissionId: randomUUID(),
+            kind: "share",
+            shareOf: 1,
+            method: "card",
+            entry: "reader",
+            applied: "12.00",
+            tip: "0.00",
+          }
+        : request.body,
+    );
     try {
       await vi.waitFor(() => expect(venue.card.collectCalls).toHaveLength(calls + 1));
       await revoke(change);
@@ -365,7 +378,7 @@ it.each(
     }
     expect(await answer).toMatchObject({
       status: 200,
-      json: { outcome: "captured" },
+      json: { payment: { state: "received" } },
     });
     const written = effects(request.id);
     expect(written.sales).toMatchObject([
@@ -472,7 +485,18 @@ it("recovers a pending reader-card refund after sign-out and deactivation withou
 it.each([null, "switched off", "signed out"] as const)(
   "checks a forced cash conflict replay after revocation: %s",
   async (change) => {
-    const request = await requestFor("counter sale");
+    const id = randomUUID();
+    const request = {
+      id,
+      path: "/api/sales",
+      body: {
+        dining: "eat_in",
+        workingOrderId: id,
+        zoneId: counter.zoneId,
+        lines: lines(),
+        tender: { method: "cash", amount: "12.00" },
+      },
+    };
     const first = await send(venue.app, cookie, "POST", request.path, request.body);
     expect(first.status).toBe(200);
     const written = effects(request.id);

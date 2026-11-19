@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import { enqueueReceiptCopy } from "./receipt-print.js";
-import { recordTillSale } from "./testing/whole-payment-fixture.js";
+import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
 import { readOrderKitchenNotes, setOrderKitchenNote } from "./order-kitchen-note.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { inTx, OPERATOR, order, revisionOf, seat, setupPartyVenue } from "./testing/party-venue.js";
@@ -32,17 +32,17 @@ describe("whole-order instructions and issued customer documents", () => {
       const v = await setupPartyVenue(suite.db);
       const fiscal = vi.spyOn(v.backend, "recordSale");
       const workingOrderId = randomUUID();
-      const ticket = await recordTillSale(
+      const ticket = await payFreshCounterInCash(
         { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
         v.cfg,
+        v.operator,
+        workingOrderId,
         {
-          workingOrderId,
           zoneId: v.counter.zoneId,
           lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
-          tender: { method: "cash", amount: "12.00" },
           kitchenNote: "KITCHEN-ONLY original instruction",
         },
-        v.operator,
+        "12.00",
       );
       expect(fiscal).toHaveBeenCalledTimes(1);
       expect(JSON.stringify(fiscal.mock.calls[0]![1])).not.toContain("KITCHEN-ONLY");

@@ -16,6 +16,7 @@ import { mountOrdersApi } from "../orders-api.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { parkOrder } from "../working-order.js";
 import {
+  cashPayment,
   inTx,
   provisionBillVenue,
   seatedWith,
@@ -24,7 +25,6 @@ import {
   type BillVenue,
 } from "./bill-venue.js";
 import { offerProducts } from "./zone-offers.js";
-import { getBillBalance } from "../bill-payments.js";
 import { issueOrderInvoice } from "./issue-order.js";
 import { fixturePinHash } from "./known-secret-hashes.js";
 
@@ -177,21 +177,8 @@ export async function departed(venue: OrderVenue, ...names: string[]) {
   return party;
 }
 
-export async function collect(
-  venue: OrderVenue,
-  billId: string,
-  tendered: string,
-): Promise<Answer> {
-  const { outstanding } = await getBillBalance(venue, billId);
-  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
-    submissionId: randomUUID(),
-    kind: "share",
-    shareOf: 1,
-    method: "cash",
-    tendered,
-    applied: outstanding,
-    tip: "0.00",
-  });
+export function collect(venue: OrderVenue, billId: string, tendered: string): Promise<Answer> {
+  return cashPayment(venue, venue.cookie, billId, tendered);
 }
 
 async function invoiceOf(venue: BillVenue, billId: string): Promise<string> {

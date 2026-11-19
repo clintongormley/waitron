@@ -1,3 +1,4 @@
+import { cashPayment } from "./testing/bill-venue.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
@@ -32,7 +33,7 @@ import { seatTable } from "./parties.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+
 import {
   billWith,
   inTx,
@@ -52,15 +53,8 @@ useVenueDb({
 });
 
 async function pay(billId: string, amount: string) {
-  await payWorkingOrder(
-    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
-    venue.cfg,
-    {
-      id: billId,
-      tender: { method: "cash", amount },
-      lines: [],
-    },
-  );
+  const paid = await cashPayment(venue, venue.cookie.staff, billId, amount);
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
 }
 
 async function partyRevision(partyId: string) {
