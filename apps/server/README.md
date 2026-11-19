@@ -325,8 +325,8 @@ with Google before using Google sign-in there.
 Before the first automatic certificate arrives, the staff entrance waits quietly. A broken TLS
 file or a staff port that will not bind is logged as `server.listen_failed` with `listener: staff`;
 it does not stop the local listener. A later certificate pass retries a failed staff port. The staff listener closes with the server.
-Setup, recovery, restricted starts and mirrors do not open it. Automatic tunnel connection,
-Settings on/off/status and qualification of certificate renewal on the public demo remain open
+Setup, recovery, restricted starts and mirrors do not open it. The companion waits for the staff
+socket before accepting connections. Public demo qualification of certificate renewal remains open
 in A951-S.
 
 ## Environment variables

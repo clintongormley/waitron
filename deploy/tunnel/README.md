@@ -6,9 +6,10 @@ Use **Remote access** under **System → Cloud services** to turn the connection
 
 The normal box Compose file starts the companion. It makes a WireGuard key and waits for the
 signed Cloud connection to write `peer.json` in the `tunnel_control` volume. The companion then
-opens the tunnel and forwards the gateway's connection to the staff socket. Turning remote
-access off removes `peer.json`. On its next poll the companion closes existing connections
-and removes its WireGuard interface. Turning access back on uses the same key and pairing.
+opens the tunnel. The forwarder waits for the staff socket, which the app opens after receiving
+its first valid certificate. Turning remote access off removes `peer.json`. On its next poll the
+companion closes existing connections and removes its WireGuard interface. Turning access back
+on uses the same key and pairing.
 
 The companion stays running while access is off. It keeps its private key in `tunnel_keys` and
 its network-admin permission in its own network namespace, including on production boxes.

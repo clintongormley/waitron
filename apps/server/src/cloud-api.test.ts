@@ -392,15 +392,17 @@ it("distinguishes a local tunnel refusal from a Cloud outage in the actual manag
   }
 });
 it.each([
-  ["cloud.tunnel_unavailable", 422],
-  ["cloud.tunnel_conflict", 409],
+  ["cloud.tunnel_unavailable", 422, "placement_conflict"],
+  ["cloud.tunnel_conflict", 409, "placement_conflict"],
+  ["cloud.tunnel_plan_required", 403, "remote_plan_required"],
+  ["cloud.tunnel_refused", 403, "permission_denied"],
 ] as const)(
   "returns the real tunnel refusal %s without changing the installation's control status",
-  async (code, status) => {
+  async (code, status, cloudError) => {
     const f = await installationFixture(undefined, {
       tunnel: async (_values, _saved, _req, res) => {
-        res.writeHead(409);
-        res.end(JSON.stringify({ error: "placement_conflict" }));
+        res.writeHead(status === 422 ? 409 : status);
+        res.end(JSON.stringify({ error: cloudError }));
       },
     });
     try {

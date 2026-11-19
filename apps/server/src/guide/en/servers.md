@@ -264,6 +264,10 @@ After a box becomes the main box, open **Backups** and check that each backup fo
 
 ## Turn remote staff access on or off {#remote-access}
 
+Pair your test box with Waitron Cloud and start the venue’s free trial in **Billing** to open your
+assigned staff address. If you paired before starting the trial, choose **Refresh status** in
+**Cloud services** to check the connection again.
+
 Turning remote access on asks for the [shared sign-in confirmation](staff.md#account-access).
 Turning it off needs no new sign-in confirmation.
 

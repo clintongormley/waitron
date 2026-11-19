@@ -95,13 +95,21 @@ for (const [locale, on, off, theme] of [
   });
 
 for (const locale of ["en", "es"] as const)
-  for (const code of ["cloud.tunnel_unavailable", "cloud.tunnel_conflict"] as const)
+  for (const code of [
+    "cloud.tunnel_unavailable",
+    "cloud.tunnel_conflict",
+    "cloud.tunnel_plan_required",
+    "cloud.tunnel_refused",
+  ] as const)
     it(`${locale} explains ${code} and keeps the stop confirmation available`, async () => {
       const previous = currentLocale();
       try {
         setLocale(locale);
         const message = codeMessage(code);
         expect(message).not.toContain("cloud.");
+        expect(message).not.toBe(codeMessage("unrecognised", locale));
+        if (code === "cloud.tunnel_plan_required" && locale === "en")
+          expect(message).toContain("free trial");
         expect(message).not.toBe(
           codeMessage(
             code === "cloud.tunnel_conflict" ? "cloud.tunnel_unavailable" : "cloud.tunnel_conflict",

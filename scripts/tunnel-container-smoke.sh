@@ -82,8 +82,6 @@ networks:
 YAML
 stack up -d --no-deps tunnel
 wait_for docker exec "$name-peer" test -s /control/public-key
-stack up -d --no-deps app
-wait_for docker exec "$name-peer" test -S /control/staff.sock
 peer_key=$(docker exec "$name-peer" cat /control/public-key)
 docker exec --user 10001:10001 "$name-peer" sh -c '
   set -e
@@ -117,11 +115,25 @@ docker exec "$name-peer" test ! -e /keys/wg.conf
 docker cp "$scratch/peer.json" "$name-peer:/control/peer.json" >/dev/null
 request() { docker exec "$name-gateway" sh -c 'printf staff-only | timeout 3 socat - TCP4:10.77.17.2:443,connect-timeout=2'; }
 connected() { [ "$(request)" = staff-only ]; }
-wait_for connected
-printf '%s\n' 'PASS gateway TCP stream reaches only staff upstream'
 gateway_handshake() {
   docker exec "$name-gateway" wg show wg-cloud latest-handshakes | awk '{print $2}'
 }
+has_handshake() { [ "$(gateway_handshake)" -gt 0 ]; }
+wait_for has_handshake
+before_socket=$(request 2>&1) || :
+case "$before_socket" in
+  *"Connection refused"*) ;;
+  *)
+    printf '%s\n' 'FAIL the staff forwarder accepted traffic before the app socket existed' "$before_socket" >&2
+    docker logs "$name-peer" >&2
+    exit 1
+    ;;
+esac
+printf '%s\n' 'PASS staff forwarding waits for the app socket'
+stack up -d --no-deps app
+wait_for docker exec "$name-peer" test -S /control/staff.sock
+wait_for connected
+printf '%s\n' 'PASS gateway TCP stream reaches only staff upstream'
 peer_ifindex=$(docker exec "$name-peer" cat /sys/class/net/wg-cloud/ifindex)
 handshake=$(gateway_handshake)
 replaced_at=$(date +%s)

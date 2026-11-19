@@ -39,8 +39,6 @@ configure() {
   iptables -P FORWARD DROP || return 1
   ip link set wg-cloud up || return 1
   ip route add "$gateway/32" dev wg-cloud || return 1
-  setsid socat "TCP4-LISTEN:443,bind=$address,reuseaddr,fork" "UNIX-CONNECT:$control/staff.sock" &
-  proxy=$!
 }
 trap 'stop; exit 0' TERM INT
 trap stop EXIT
@@ -86,6 +84,10 @@ while :; do
   reported=yes
   if [ -n "$proxy" ] && ! kill -0 "$proxy" 2>/dev/null; then exit 1; fi
   if [ -n "$active" ]; then
+    if [ -z "$proxy" ] && [ -S "$control/staff.sock" ]; then
+      setsid socat "TCP4-LISTEN:443,bind=$address,reuseaddr,fork" "UNIX-CONNECT:$control/staff.sock" &
+      proxy=$!
+    fi
     # A data packet starts WireGuard's missing-reply timer when a gateway loses its session.
     if [ "$probe_ticks" -eq 0 ]; then
       if ! printf x | timeout 1 socat -u - "UDP4-SENDTO:$gateway:9,bind=$address" 2>/dev/null &&

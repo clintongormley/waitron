@@ -33,23 +33,24 @@ The staff entrance carries dashboard requests and Cloud's `GET /public/availabil
 only. Joining a spare box does not use it: the mirror-bundle route names the main box's own
 address. A staff connection does not enable the parked cloud-standby work.
 
-For the A951-S trial, set `WAITRON_TUNNEL_CONTROL_DIR` to the tunnel container's shared control
-directory. The container persists its private key before publishing `public-key`; the app reads
-only that public file. On a connected test installation, the primary Cloud worker and **Refresh
+Box Compose sets `WAITRON_TUNNEL_CONTROL_DIR` to the tunnel container's shared control directory.
+The container saves its private key before publishing `public-key`. The app reads that public file. On a connected test installation, the primary Cloud worker and **Refresh
 status** submit it through the signed `tunnel-provision` action after a successful connection
 refresh. That refresh renews the lease when needed and otherwise reads configuration. The directory is
 optional, and an absent public-key file leaves provisioning alone.
 
-Cloud chooses the cell and port and must enable its one-box trial receiver separately. A 200 reply
-can still say `unconfigured`; an allocated peer says `provisioning`. Neither proves that the tunnel
-works. The configuration writer and runtime apply the returned placement separately.
+Cloud chooses the cell and port for an eligible test venue. A 200 reply can still say `unconfigured`.
+An allocated peer says `provisioning` while the box and Cloud bring the route up. The configuration
+writer and runtime apply the returned placement separately.
 
 A lost reply is retried with the same saved key and a fresh request identifier. A
 `placement_conflict` refusal is remembered in `cloud/connection.json` as `tunnelConflict: true`, so
 restarting does not keep submitting a key Cloud has refused. The caller neither replaces the
 container key nor rotates the Cloud placement. A later configuration that already matches the
 saved key needs no new submission, including while its service reports a failure. A tunnel refusal
-leaves the successful Cloud control read available to the other services.
+leaves the successful Cloud control read available to the other services. A `remote_plan_required`
+refusal tells you to start the venue’s free trial in Waitron Cloud Billing. After that, choose
+**Refresh status** to try again immediately.
 
 You can still choose **Stop Cloud access**. This revokes the current registration; it does not
 repair the conflicting placement or replace the container key. A bad public-key file is reported
@@ -258,9 +259,9 @@ use `cloud.emergency_state_failed`.
 
 ## A951-S tunnel configuration writer
 
-To use the optional tunnel container from PR #2533, set `WAITRON_TUNNEL_CONTROL_DIR` to its
-shared control mount. Compose passes `/var/lib/waitron/tunnel`. Without this setting the
-writer does nothing. Starting the container profile and publishing its image remain separate work.
+Box Compose starts the tunnel companion and sets its shared control mount to
+`/var/lib/waitron/tunnel`. On a standalone server, the writer runs when you set
+`WAITRON_TUNNEL_CONTROL_DIR`.
 
 The existing Cloud worker refreshes the installation once a minute. When Cloud supplies a
 `provisioning` or `ready` remote-access placement, the writer matches its venue, installation
@@ -325,9 +326,9 @@ pnpm --filter @waitron/server exec tsx scripts/cloud-certificate.ts install \
 
 For the A951-S entrance, connect a test installation and turn on remote access. The signed Cloud
 exchange supplies `remote_access.configuration.staffHostname`; you do not set the name locally.
-Set `WAITRON_STAFF_HOST` to the tunnel bind address and `WAITRON_STAFF_PORT` to its receiving port
-(8443 by default). Keep the LAN listener's TLS files, management origin and passkey hostname
-configured for the LAN.
+Box Compose sets `WAITRON_STAFF_SOCKET` to the socket shared with the companion. The forwarder
+waits for the socket before accepting staff connections. Keep the LAN listener's TLS files,
+management origin and passkey hostname configured for the LAN.
 
 The Cloud worker creates the staff key and requests its certificate for the current Cloud name.
 It opens the separate listener after the first valid chain arrives, or starts with the valid installed

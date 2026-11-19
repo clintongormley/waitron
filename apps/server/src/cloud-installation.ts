@@ -305,6 +305,11 @@ export function installationClient<T extends CloudInstallationCredentials>(
           c.tunnelConflict = true;
           throw new AppError("cloud.tunnel_conflict", {});
         }
+        if (response.status === 403 && object(value) && p.action === "tunnel-provision") {
+          if (value.error === "remote_plan_required")
+            throw new AppError("cloud.tunnel_plan_required", {});
+          if (value.error === "permission_denied") throw new AppError("cloud.tunnel_refused", {});
+        }
         if (response.status === 403 && object(value) && value.error === "revoked") {
           markRevoked(c);
           await save(state);
