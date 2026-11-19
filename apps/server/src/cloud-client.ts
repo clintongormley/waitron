@@ -361,7 +361,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       ...state.view,
       venueId: state.venueId,
       code: state.view?.state === "complete" ? "" : state.code,
-      openCloudUrl: `${options.origin}/connect#request=${state.requestId}`,
+      openCloudUrl: `${options.origin}/connect#request=${state.requestId}${(state.view?.state ?? "awaiting_cloud") === "awaiting_cloud" ? `&code=${state.code}` : ""}`,
       ...(state.view?.registration
         ? {
             installation,

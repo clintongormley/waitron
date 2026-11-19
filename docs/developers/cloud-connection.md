@@ -9,8 +9,9 @@ The Cloud services screen in System connects this installation to a Cloud
 organisation and legal business. You need a local manager with `system.manage` and
 a Cloud account with permission to register venues for that business.
 
-Choose **Connect to Cloud**, then **Open Cloud**. Enter the code shown locally and
-approve the business in Cloud. Return to Waitron, choose **Check connection**, check
+Choose **Connect to Cloud**, then **Open Cloud**. The link carries the code shown
+locally, and Cloud checks it after you sign in; enter the code by hand only if Cloud
+asks for it. Then approve the business in Cloud. Return to Waitron, choose **Check connection**, check
 the organisation and business, then choose **Connect this venue**. The server checks
 your local permission and its primary role again before signing the final request.
 
