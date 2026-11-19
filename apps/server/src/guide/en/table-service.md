@@ -455,7 +455,8 @@ menu and the order sit side by side.
 
 ## Set menus at a table {#set-menus}
 
-Set the number of each set menu on the bill, then tap its folder and choose the dishes.
+Set the number of each set menu on the bill. Open its folder from the grid or type its name
+in **Search** and tap the result. Then choose the dishes.
 The folder shows which dishes are included and which cost extra. If the guests are taking
 their food away, choose **Takeaway** on the bill before adding a set menu.
 

@@ -297,6 +297,28 @@ describe("set-menu folders", () => {
     expect(folder.shadowRoot!.textContent).toContain("€14.00");
   });
 
+  it.each([
+    { placement: "at the top level", members: [dailyMember] },
+    { placement: "in a section", members: [sectionWithSetMenu] },
+    { placement: "in two places", members: [dailyMember, sectionWithSetMenu] },
+  ])("finds a set menu placed $placement by its exact name", async ({ members }) => {
+    const { el } = await mount({
+      menu: lunch({ structure: { members } }),
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+    });
+    const nested = members[0]?.kind === "section";
+    if (nested) await tap(el, entry(el, "structure", "Lunch choices"));
+    expect(names(entries(el, nested ? "section" : "structure"))).toContain("Daily menu");
+
+    await search(el, "Daily menu");
+    expect(names(entries(el, "results"))).toEqual(["Daily menu"]);
+    const result = entry(el, "results", "Daily menu");
+    expect(result.dataset.kind).toBe("set_menu");
+    expect(result.querySelector(".price")!.textContent).toBe("€14.00");
+    await tap(el, result);
+    expect(root(el).querySelector("till-set-menu-folder")).toHaveProperty("copy", daily);
+  });
+
   it("keeps a bill's recorded folder after it disappears from the served menu", async () => {
     const { el } = await mount({
       setMenuCopies: [{ copy: daily, versionId: "lunch" }],
@@ -474,6 +496,8 @@ describe("set-menu folders", () => {
   it("hides set menus on a surface without set-menu ordering", async () => {
     const { el } = await mount({ menu });
     expect(names(entries(el, "structure"))).not.toContain("Lunch choices");
+    await search(el, "Daily menu");
+    expect(entries(el, "results")).toEqual([]);
   });
 });
 

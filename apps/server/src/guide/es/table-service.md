@@ -490,10 +490,10 @@ al otro.
 
 ## Cartas a precio fijo en una mesa {#set-menus}
 
-Indica cuántas cartas de cada tipo lleva la cuenta. Abre la carpeta de la carta a
-precio fijo y elige los platos. En la carpeta puedes ver qué platos están incluidos y
-cuáles tienen suplemento. Si la comida es para llevar, elige **Para llevar** en la
-cuenta antes de añadir una carta a precio fijo.
+Indica cuántas cartas de cada tipo lleva la cuenta. Abre su carpeta desde la cuadrícula
+o escribe su nombre en **Buscar** y pulsa el resultado. Después, elige los platos. En la
+carpeta puedes ver qué platos están incluidos y cuáles tienen suplemento. Si la comida es
+para llevar, elige **Para llevar** en la cuenta antes de añadir una carta a precio fijo.
 
 Abre el resumen en **Pedido** para ver dónde va cada plato y qué sitios quedan libres.
 Si un plato no tiene sitio, elige una de las opciones que aparecen o pulsa **Cancelar**
