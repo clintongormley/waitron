@@ -40,6 +40,7 @@ describe("GET /api/theme", () => {
 
   it("serves the theme in use: the lemon brand (#f2d300)", async () => {
     const { logo: _, ...theme } = LEMON;
+    void _;
     const [row] = await suite.db
       .insert(customThemes)
       .values({ name: "Lemon", nameKey: "lemon", inUse: 1, theme })
@@ -53,6 +54,7 @@ describe("GET /api/theme", () => {
 
   it("the answer passes the browser's check, with and without a theme in use", async () => {
     const { logo: _, ...theme } = LEMON;
+    void _;
     const without = await (await app().request("/api/theme")).json();
     expect(isVenueThemeAnswer(without)).toBe(true);
     await suite.db

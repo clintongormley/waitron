@@ -571,6 +571,7 @@ describe("GET /api/theme with a logo", () => {
 
   it("an image that is gone answers no logo, and a dark one that is gone answers no dark", async () => {
     const { logo: _, ...theme } = LEMON;
+    void _;
     const corruptTheme = async (name: string, light: string, dark?: string) => {
       await suite.db.execute(sql`delete from custom_themes`);
       await suite.db.execute(sql`pragma foreign_keys = off`);

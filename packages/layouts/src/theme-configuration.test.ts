@@ -17,6 +17,7 @@ const LEMON: ThemeChoices = {
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a", background: "tinted" };
 
 const { logo: _logo, ...noLogo } = LEMON;
+void _logo;
 
 type Row = Record<string, unknown>;
 

@@ -29,6 +29,7 @@ export async function putThemeInUse(
     if (filename !== undefined) await seedPhotoMetadata(db, { filename, names: {} });
   }
   const { logo: _, ...choices } = WAITRON_CHOICES;
+  void _;
   const theme = {
     ...choices,
     brandColor: "#1e5b3a",
