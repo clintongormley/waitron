@@ -194,6 +194,7 @@ describe("a signed upgrade offer", () => {
 
     expect(select(bytes).version).toBeNull();
     expect(select(bytes, { boxId: "box-b" }).version).toBe("1.10.0");
+    expect(select(bytes, { boxId: "box-f" }).version).toBeNull();
   });
 
   it.each(["none", "1.9.0", "1.8.0"])(
