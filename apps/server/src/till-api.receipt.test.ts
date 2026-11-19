@@ -2499,11 +2499,23 @@ describe("POST /api/sales/:id/receipt with ifOwed (the print when the window clo
     expect((await claim()).map((job) => job.printer_id)).toEqual([printerId]);
   });
 
-  it("leaves a switched-off printer alone for a plain print, as before", async () => {
+  it("answers 200 and queues nothing when the device has no receipt printer, where a plain print is refused", async () => {
+    const { saleId, post } = await owedSetup();
+    await configureReceipt({ printerId: null });
+    expect((await post({ ifOwed: true })).status).toBe(200);
+    expect(await originals(saleId)).toEqual([]);
+    const plain = await post();
+    expect(plain.status).toBe(409);
+    expect(await plain.json()).toMatchObject({ error: { code: "receipt.no_printer" } });
+  });
+
+  it("still refuses a plain print to a switched-off printer with receipt.no_printer", async () => {
     const printerId = await makePrinter();
     await withTransaction(suite.db, (tx) => updatePrinter(tx, printerId, { active: false }));
     const { saleId, post } = await owedSetup(printerId);
-    expect((await post()).status).toBe(200);
+    const res = await post();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "receipt.no_printer" } });
     expect(await originals(saleId)).toEqual([]);
   });
 
