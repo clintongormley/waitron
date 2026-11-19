@@ -378,8 +378,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El original aún no ha terminado de imprimirse. Comprueba su estado antes de confirmar la entrega",
   },
   "receipt.no_printer": {
-    en: "This device has no receipt printer. Choose one in Equipment, or print the copy from another device.",
-    es: "Este dispositivo no tiene impresora de tickets. Elige una en Equipo o imprime la copia desde otro dispositivo.",
+    en: "This device has no receipt printer switched on. Choose one in Equipment, or print the copy from another device.",
+    es: "Este dispositivo no tiene ninguna impresora de tickets activada. Elige una en Equipo o imprime la copia desde otro dispositivo.",
   },
   "fiscal.taxpayer_domicile_missing": {
     en: "The venue's legal address is missing. Ask a manager before issuing a full invoice",
@@ -398,8 +398,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se puede imprimir ese recibo original. Comprueba el estado de entrega de la factura o avisa a un responsable.",
   },
   "invoice_delivery.printer_invalid": {
-    en: "That invoice printer is unavailable. Choose another printer or ask a manager.",
-    es: "Esa impresora de facturas no está disponible. Elige otra o avisa a un responsable.",
+    en: "That invoice printer is unavailable. Choose another printer.",
+    es: "Esa impresora de facturas no está disponible. Elige otra.",
   },
   "invoice_delivery.not_found": {
     en: "That delivery is no longer on this invoice. Check its status again.",
@@ -410,8 +410,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Solo una factura completa se puede enviar así.",
   },
   "invoice_delivery.receipt_unavailable": {
-    en: "This device has no receipt printer to print the invoice on. Choose one in Equipment, then try again.",
-    es: "Este dispositivo no tiene impresora de tickets para imprimir la factura. Elige una en Equipo e inténtalo de nuevo.",
+    en: "This device has no receipt printer switched on to print the invoice on. Choose one in Equipment, then try again.",
+    es: "Este dispositivo no tiene ninguna impresora de tickets activada para imprimir la factura. Elige una en Equipo e inténtalo de nuevo.",
   },
   "print_job.sale_payload_expired": {
     en: "Saved print data is removed after a week. Reprint this receipt or invoice from Orders in the dashboard.",
