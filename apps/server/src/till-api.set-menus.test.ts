@@ -491,7 +491,17 @@ it("refuses Eat in on a counter bill with a set menu using the set-menu refusal"
 it("discards a parked counter order whose only line is a set-menu charge", async () => {
   const body = await counterTakeaway();
   const path = `/api/working-orders/${body.id}`;
-  expect((await request("POST", "/api/working-orders", body)).status).toBe(200);
+  const opened = await request("POST", "/api/working-orders", body);
+  expect(opened.status).toBe(200);
+  const { revision, setMenus } = await opened.json();
+  const saved = await request("PUT", path, {
+    dining: "takeaway",
+    revision,
+    expectedEdit: null,
+    lines: [],
+  });
+  expect(saved.status).toBe(200);
+  expect(await (await request("GET", path)).json()).toMatchObject({ setMenus, lines: [] });
   expect((await request("DELETE", path, { expectedEdit: null })).status).toBe(200);
   const [order] = await fixture.venue.db
     .select({ status: workingOrders.status })
@@ -522,4 +532,12 @@ it("keeps sending from the held-order edit on a seated bill that has started ser
     { role: "set_menu", sentAt: expect.any(String) },
     { role: null, sentAt: expect.any(String) },
   ]);
+});
+
+it("refuses a first set-menu count on Eat in and leaves no counter order behind", async () => {
+  const body = await counterTakeaway();
+  const refused = await request("POST", "/api/working-orders", { ...body, dining: "eat_in" });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+  expect((await request("GET", `/api/working-orders/${body.id}`)).status).toBe(404);
 });

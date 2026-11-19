@@ -158,8 +158,16 @@ it("saves the counter's first set-menu count and keeps a drafted dish until Park
   }));
   const zone = {
     ...offers,
+    defaultMenuId: "cat-default",
     context: { ...offers.context, dining: { policy: "till_choice", startsAs: "eat_in" } },
     setMenus: [{ ...daily, versionIds: ["v1"], orderable: true, newestOnSale: true }],
+    menus: offers.menus.map((menu) => ({
+      ...menu,
+      structure: {
+        ...menu.structure,
+        members: [{ kind: "set_menu" as const, menuId: daily.menuId, name: daily.name }],
+      },
+    })),
   };
   const updateWorkingOrder = vi.fn(async () => ({ revision: 8 }));
   const retrieveWorkingOrder = vi.fn(async (id: string) => ({
@@ -205,8 +213,11 @@ it("saves the counter's first set-menu count and keeps a drafted dish until Park
     },
     "1",
   );
+  const folder = page.elementLocator(counter).getByRole("button", { name: /Daily menu.*14.00/ });
+  await expect.element(folder).not.toBeInTheDocument();
   await userEvent.click(page.elementLocator(counter).getByText("Take away", { exact: true }));
   await vi.waitFor(() => expect(counter.store.dining).toBe("takeaway"));
+  await expect.element(folder).toBeVisible();
   const counts = counter.shadowRoot!.querySelector("till-set-menu-counts");
   expect(counts).not.toBeNull();
   await userEvent.click(
@@ -343,6 +354,9 @@ it("parks a set-menu-only takeaway and orders from its original folder after rep
   expect(folder.copy?.terms.price).toBe("14.00");
   await userEvent.click(page.elementLocator(folder).getByRole("button", { name: /Sirloin/ }));
   expect(total.shadowRoot!.textContent).toContain("€19.00");
+  await expect
+    .element(page.elementLocator(tender).getByRole("button", { name: "Pay", exact: true }))
+    .toBeDisabled();
   await park();
 
   await vi.waitFor(() => {

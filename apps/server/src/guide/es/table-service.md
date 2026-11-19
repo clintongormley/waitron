@@ -503,10 +503,11 @@ de la misma cuenta o cancelar una carta vacía.
 Para pasar una carta a otra cuenta, abre **Mover platos** y selecciona la carta. Sus
 platos se mueven con ella. Si eliges un solo plato, comprueba su precio en la otra
 cuenta antes de confirmar.
+
 En el **Mostrador**, elige **Para llevar**, indica cuántas cartas quieres y abre la
-carpeta para elegir los platos. Pulsa **Aparcar** para dejar el pedido pendiente
-incluso antes de añadir un plato. Cuando lo recuperes desde **Pedidos aparcados**,
-seguirás usando la misma carpeta y los mismos precios.
+carpeta para elegir los platos. Puedes **Aparcar** el pedido antes de añadir los
+platos. Para añadirlos después, busca la cuenta en **Pedidos aparcados** y pulsa
+**Recuperar**.
 
 ## Dar a una mesa un nombre corto {#short-names}
 

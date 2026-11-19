@@ -10569,7 +10569,7 @@ export class TillApp extends LitElement {
       if (answers.unanswered.length > unmatched && !sent) mustChooseAgain = true;
       lines.push({
         product,
-        ...(line.setMenuId === undefined ? {} : { setMenuId: line.setMenuId, noMerge: true }),
+        ...(line.setMenuId === undefined ? {} : { setMenuId: line.setMenuId }),
         quantity: displayQuantity(product, line.quantity),
         ...(line.workingOrderLineId === undefined
           ? {}

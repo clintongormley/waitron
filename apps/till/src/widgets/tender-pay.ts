@@ -961,13 +961,16 @@ export class TillTenderPay extends LitElement {
   #renderIdle() {
     const disabled = this.store.lineCount === 0 || this.busy;
     if (this.mode !== "prepay" && this.stage === "collect")
-      return this.#renderIdleCollect(disabled);
+      return this.#renderIdleCollect(disabled || this.hasSetMenus);
     return this.#renderIdlePay(disabled, this.mode !== "prepay");
   }
 
   #tenderVariant(action: "cash" | "card" | "pay"): "primary" | "secondary" {
     if (this.busy && this.sendingTender !== action) return "secondary";
-    return this.payQuiet || this.held || (!this.busy && this.store.lineCount === 0)
+    return this.payQuiet ||
+      this.held ||
+      this.hasSetMenus ||
+      (!this.busy && this.store.lineCount === 0)
       ? "secondary"
       : "primary";
   }
@@ -1127,7 +1130,7 @@ export class TillTenderPay extends LitElement {
       ${this.#opensPaymentWindow() ? nothing : html`${this.#renderCardExtras()} ${this.#renderGuests()}`}
       ${this.#renderFormMessage()}
       <div class="actions idle-actions">
-        ${this.#renderTenderButtons(disabled)}
+        ${this.#renderTenderButtons(disabled || this.hasSetMenus)}
         ${
           withPlace
             ? html`<wt-button
@@ -1141,7 +1144,7 @@ export class TillTenderPay extends LitElement {
               </wt-button>`
             : nothing
         }
-        ${this.#renderInvoiceButton(disabled)}
+        ${this.#renderInvoiceButton(disabled || this.hasSetMenus)}
         ${
           this.parks
             ? html`<span class="help-anchor"
