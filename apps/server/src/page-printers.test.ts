@@ -181,7 +181,7 @@ async function reserveA4(saleId: string, pagePrinterId: string) {
   );
   const due = new Date(NOW - 10_000);
   await dateA4Job(suite.db, delivery.printJobId!, due);
-  return { ...delivery, createdAt: due.toISOString(), nextAttemptAt: due.toISOString() };
+  return { ...delivery, createdAt: due.toISOString() };
 }
 
 describe("registering a page printer from discovery", () => {

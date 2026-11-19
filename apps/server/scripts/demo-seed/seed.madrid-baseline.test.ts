@@ -2715,6 +2715,17 @@ for (const locale of ["en", "es"] as const) {
         on_delete: "NO ACTION",
       });
       deliveriesTable.foreignKeys = deliveriesTable.foreignKeys.map((key, id) => ({ ...key, id }));
+      expected[phase] = madridWithDroppedColumns(expected[phase], {
+        invoice_deliveries: [
+          "attempts",
+          "next_attempt_at",
+          "claim_token_hash",
+          "claimed_by",
+          "claimed_agent_id",
+          "claimed_at",
+          "printer_hold",
+        ],
+      });
       const printJobsTable = expected[phase].tables.print_jobs!;
       const payload = printJobsTable.columns.find((column) => column.name === "payload");
       expect(payload?.notnull, `${phase}/print_jobs/payload was required`).toBe(1);

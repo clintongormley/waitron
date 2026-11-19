@@ -24,13 +24,12 @@ import { jobOrigin, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
-  claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
   reserveInvoiceDelivery,
   tokenHash,
   type InvoiceDeliveryClaim,
 } from "./invoice-delivery.js";
-import { resendInvoicePrintJob } from "./invoice-print.js";
+import { claimInvoiceReceipt, resendInvoicePrintJob } from "./invoice-print.js";
 import { registerPagePrinter } from "./page-printers.js";
 import {
   claimInvoicePagePrint,
@@ -207,7 +206,6 @@ it("reserves a payload-free job and stores the office printer claim on it", asyn
       pagePrinterId: office,
     }),
   ).finally(() => clock.mockRestore());
-  expect(delivery.nextAttemptAt).toBe(delivery.createdAt);
   const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.saleId, saleId));
   expect(job).toMatchObject({
     id: delivery.printJobId,
@@ -232,15 +230,7 @@ it("reserves a payload-free job and stores the office printer claim on it", asyn
     .select()
     .from(invoiceDeliveries)
     .where(eq(invoiceDeliveries.id, delivery.id));
-  expect(stored).toMatchObject({
-    status: "sending",
-    attempts: 0,
-    claimedAt: null,
-    claimedBy: null,
-    claimedAgentId: null,
-    claimTokenHash: null,
-    printerHold: null,
-  });
+  expect(stored).toMatchObject({ status: "sending" });
 });
 
 it("refuses an office job in receipt resend", async () => {
@@ -291,7 +281,6 @@ describe("claiming an A4 delivery", () => {
       status: "sending",
       attempts: 1,
       claimedBy: v.agentOne,
-      claimedAgentId: v.agentOne,
       claimedAt: at(5_000).toISOString(),
     });
     expect((await row(later)).status).toBe("queued");
@@ -443,36 +432,56 @@ describe("renewing an A4 claim", () => {
     expect(await row(id)).toMatchObject({ status: "failed", claimedAt: at(0).toISOString() });
   });
 
-  it("neither renews nor reports an email delivery's claim, nor an unknown delivery", async () => {
+  it("neither renews nor reports a receipt claim through the A4 worker", async () => {
     const v = await venue();
     const saleId = await fullInvoice(v.nodeId);
-    const emailed = await withTransaction(suite.db, (tx) =>
-      reserveInvoiceDelivery(tx, saleId, {
+    const held = await withTransaction(suite.db, async (tx) => {
+      const printer = await createPrinter(tx, {
+        name: "Receipt",
+        transport: "network_tcp",
+        host: "printer.test",
+      });
+      const { jobId } = await enqueuePrintJob(
+        tx,
+        printer.id,
+        new Uint8Array([27, 64]),
+        "document",
+        { saleId, receiptCopy: false },
+      );
+      await tx
+        .update(printJobs)
+        .set({ createdAt: at(0).toISOString() })
+        .where(eq(printJobs.id, jobId));
+      const delivery = await reserveInvoiceDelivery(tx, saleId, {
         requestKey: randomUUID(),
         personId: "staff-one",
-        medium: "email",
-        recipient: "customer@example.test",
-      }),
-    );
-    await suite.db
-      .update(invoiceDeliveries)
-      .set({ nextAttemptAt: at(0).toISOString() })
-      .where(eq(invoiceDeliveries.id, emailed.id));
-    const held = await withTransaction(suite.db, (tx) =>
-      claimInvoiceDelivery(tx, emailed.id, v.agentOne, at(0)),
-    );
-    const before = await row(emailed.id);
+        medium: "receipt",
+        printJobId: jobId,
+      });
+      await tx
+        .update(printJobs)
+        .set({ status: "printing", claimedBy: v.agentOne })
+        .where(eq(printJobs.id, jobId));
+      const claim = await claimInvoiceReceipt(tx, jobId, v.agentOne, at(0));
+      return {
+        deliveryId: delivery.id,
+        generation: delivery.generation,
+        holder: v.agentOne,
+        token: claim!.token,
+      };
+    });
+    const before = await row(held.deliveryId);
 
-    expect(await renew(held!, 10_000)).toBe("lost");
-    expect(await report(held!, { status: "sent" }, 10_000)).toEqual({
+    expect(await renew(held, 10_000)).toBe("lost");
+    expect(await report(held, { status: "sent" }, 10_000)).toEqual({
       updated: false,
       historical: false,
       repeated: false,
     });
-    expect(await row(emailed.id)).toEqual(before);
-    expect(
-      await report({ ...held!, deliveryId: randomUUID() }, { status: "sent" }, 10_000),
-    ).toEqual({ updated: false, historical: false, repeated: false });
+    expect(await row(held.deliveryId)).toEqual(before);
+    expect(await report({ ...held, deliveryId: randomUUID() }, { status: "sent" }, 10_000)).toEqual(
+      { updated: false, historical: false, repeated: false },
+    );
   });
 });
 
@@ -761,7 +770,7 @@ describe("reporting an A4 delivery", () => {
     expect(await claim(v.agentOne, 41_000)).toBeUndefined();
     const next = await claim(v.agentTwo, 41_000);
     expect(next?.claim).toMatchObject({ deliveryId: waiting, holder: v.agentTwo });
-    expect(await row(waiting)).toMatchObject({ claimedAgentId: v.agentTwo });
+    expect(await row(waiting)).toMatchObject({ claimedBy: v.agentTwo });
   });
 });
 

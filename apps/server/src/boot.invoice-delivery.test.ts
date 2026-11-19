@@ -250,7 +250,6 @@ describe("invoice delivery recovery at trading boot", () => {
       expect(await delivery(ctx.paper.id)).toMatchObject({
         status: "unknown",
         failureCode: "restart",
-        attempts: 1,
         reportedAt: null,
       });
       expect((await delivery(ctx.paper.id)).expiredAt).not.toBeNull();
@@ -330,7 +329,6 @@ describe("invoice delivery recovery at trading boot", () => {
         expect(await delivery(email.id)).toMatchObject({
           status: "unknown",
           failureCode: "timeout",
-          attempts: 1,
           designation: "original",
           recipient: "customer@example.test",
           personId: "staff-one",
@@ -524,10 +522,14 @@ describe("invoice mail at trading boot", () => {
       server = await startServer(ctx.env);
       await vi.waitFor(
         async () => {
-          expect(await delivery(email.id)).toMatchObject({ status: "sent", attempts: 1 });
+          expect(await delivery(email.id)).toMatchObject({ status: "sent" });
         },
         { timeout: 4_000 },
       );
+      expect(await readMail(suite.db, `invoice:${email.id}`)).toMatchObject({
+        status: "sent",
+        attempts: 1,
+      });
       expect(smtp.messages).toHaveLength(1);
     } finally {
       await server?.close();
@@ -578,7 +580,7 @@ describe("invoice mail at trading boot", () => {
       ctx.env.WAITRON_ONBOARDING_INTENT = "prepare";
       server = await startServer(ctx.env);
       await vi.waitFor(
-        async () => expect(await delivery(email.id)).toMatchObject({ status: "sent", attempts: 1 }),
+        async () => expect(await delivery(email.id)).toMatchObject({ status: "sent" }),
         { timeout: 5_000 },
       );
       expect(smtp.messages).toHaveLength(1);
@@ -621,9 +623,13 @@ describe("invoice mail at trading boot", () => {
       const email = await queuedEmail(ctx, smtp.smtp, true);
       server = await startServer(ctx.env);
       await vi.waitFor(
-        async () => expect(await delivery(email.id)).toMatchObject({ status: "sent", attempts: 1 }),
+        async () => expect(await delivery(email.id)).toMatchObject({ status: "sent" }),
         { timeout: 5_000 },
       );
+      expect(await readMail(suite.db, `invoice:${email.id}`)).toMatchObject({
+        status: "sent",
+        attempts: 1,
+      });
       expect(smtp.messages).toHaveLength(1);
       const words = INVOICE_EMAIL_NOTICE_WORDS.es;
       expect(textPart(smtp.messages[0]!).split("\n\n").slice(1)).toEqual([
@@ -665,12 +671,15 @@ describe("invoice mail at trading boot", () => {
           expect(await delivery(email.id)).toMatchObject({
             status: "sent",
             designation: "duplicate",
-            attempts: 1,
             reportedOutcome: "sent",
           }),
         { timeout: 5_000 },
       );
       expect(smtp.messages).toHaveLength(1);
+      expect(await readMail(suite.db, `invoice:${email.id}`)).toMatchObject({
+        status: "sent",
+        attempts: 1,
+      });
       expect(smtp.messages[0]).toContain("To: saved-customer@example.test");
       expect(smtp.messages[0]).toContain("From: Bar <boot-venue@example.test>");
       const text = await pdfText(smtp.messages[0]!);
@@ -685,7 +694,9 @@ describe("invoice mail at trading boot", () => {
       ]) {
         expect(text).toContain(saved);
       }
-      expect(await delivery(ctx.paper.id)).toMatchObject({ status: "sent", attempts: 1 });
+      expect(await delivery(ctx.paper.id)).toMatchObject({ status: "sent" });
+      const [paperJob] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.jobId));
+      expect(paperJob).toMatchObject({ status: "done", attempts: 0 });
     } finally {
       await server?.close();
       await smtp.close();
@@ -705,7 +716,7 @@ describe("invoice mail at trading boot", () => {
       const email = await queuedEmail(ctx, smtp.smtp);
       server = await startServer(ctx.env);
       await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 5_000 });
-      expect(await delivery(email.id)).toMatchObject({ status: "sending", attempts: 0 });
+      expect(await delivery(email.id)).toMatchObject({ status: "sending" });
       expect(await readMail(suite.db, `invoice:${email.id}`)).toMatchObject({
         status: "sending",
         attempts: 1,
@@ -778,7 +789,11 @@ describe("invoice mail at trading boot", () => {
         }),
       );
       await new Promise<void>((resolve) => setTimeout(resolve, 600));
-      expect(await delivery(later.id)).toMatchObject({ status: "queued", attempts: 0 });
+      expect(await delivery(later.id)).toMatchObject({ status: "queued" });
+      expect(await readMail(suite.db, `invoice:${later.id}`)).toMatchObject({
+        status: "pending",
+        attempts: 0,
+      });
       expect(smtp.messages).toHaveLength(1);
     } finally {
       smtp.accept();

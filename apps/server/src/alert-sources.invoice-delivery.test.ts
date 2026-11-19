@@ -20,6 +20,9 @@ import { createPrinter, enqueuePrintJob, MAX_DELIVERY_ATTEMPTS } from "@waitron/
 import { claimInvoiceReceipt } from "./invoice-print.js";
 import {
   claimInvoiceDelivery,
+  abandonInvoiceEmail,
+  settleInvoiceEmail,
+  startInvoiceEmail,
   expireInvoiceDeliveryClaims,
   INVOICE_DELIVERY_LEASE_MS,
   reportInvoiceDelivery,
@@ -120,12 +123,27 @@ async function attempt(
   );
   await suite.db
     .update(invoiceDeliveries)
-    .set({ nextAttemptAt: START.toISOString() })
+    .set({ createdAt: START.toISOString() })
     .where(eq(invoiceDeliveries.id, reserved.id));
   if (medium === "a4") await dateA4Job(suite.db, reserved.printJobId!, START);
-  if (status !== "queued") {
+  if (medium === "email" && status !== "queued") {
+    await withTransaction(suite.db, async (tx) => {
+      await startInvoiceEmail(tx, reserved.id);
+      if (status === "unknown") {
+        await abandonInvoiceEmail(tx, reserved.id, EXPIRED);
+      } else if (status !== "sending") {
+        await settleInvoiceEmail(
+          tx,
+          reserved,
+          5,
+          status === "sent" ? { status } : { status, failureCode: "transport_failed" },
+          REPORTED,
+        );
+      }
+    });
+  } else if (status !== "queued") {
     const held = await withTransaction(suite.db, async (tx) => {
-      const holder = medium === "email" ? "server-one" : v.agentId;
+      const holder = v.agentId;
       if (medium !== "receipt") {
         const claim = (await claimInvoiceDelivery(tx, reserved.id, holder, START))!;
         if (hold !== undefined) await renewInvoicePagePrint(tx, claim, hold, START);
@@ -134,7 +152,7 @@ async function attempt(
       const printJobId = reserved.printJobId!;
       await tx
         .update(printJobs)
-        .set({ status: "printing", claimedBy: holder })
+        .set({ status: "printing", claimedBy: holder, createdAt: START.toISOString() })
         .where(eq(printJobs.id, printJobId));
       const claim = await claimInvoiceReceipt(tx, printJobId, holder, START);
       return { ...claim!, holder, printJobId };
@@ -461,21 +479,17 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
         recipient: CUSTOMER.email,
       }),
     );
-    await suite.db
-      .update(invoiceDeliveries)
-      .set({ nextAttemptAt: START.toISOString() })
-      .where(eq(invoiceDeliveries.id, reserved.id));
-    const claim = (await withTransaction(suite.db, (tx) =>
-      claimInvoiceDelivery(tx, reserved.id, "server-one", START),
-    ))!;
-    await withTransaction(suite.db, (tx) => expireInvoiceDeliveryClaims(tx, EXPIRED));
-    return claim;
+    await withTransaction(suite.db, async (tx) => {
+      await startInvoiceEmail(tx, reserved.id);
+      await abandonInvoiceEmail(tx, reserved.id, EXPIRED);
+    });
+    return reserved;
   }
 
-  type Claim = Awaited<ReturnType<typeof lapsedEmail>>;
-
-  const reportLate = (claim: Claim, outcome: Parameters<typeof reportInvoiceDelivery>[2]) =>
-    withTransaction(suite.db, (tx) => reportInvoiceDelivery(tx, claim, outcome, LATE));
+  const reportLate = (
+    delivery: InvoiceDelivery,
+    outcome: Parameters<typeof settleInvoiceEmail>[3],
+  ) => withTransaction(suite.db, (tx) => settleInvoiceEmail(tx, delivery, 1, outcome, LATE));
 
   const sent = { status: "sent" } as const;
 

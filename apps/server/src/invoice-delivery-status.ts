@@ -1,6 +1,13 @@
 import "./errors.js";
 import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
-import { invoiceDeliveries, outgoingMail, printJobs, sales, type Transaction } from "@waitron/db";
+import {
+  invoiceDeliveries,
+  outgoingMail,
+  printJobs,
+  sales,
+  type A4HoldCode,
+  type Transaction,
+} from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import type { InvoiceDelivery } from "./invoice-delivery.js";
@@ -9,9 +16,10 @@ import { deliversAsFullInvoice } from "./invoice-selection.js";
 
 export const invoiceDeliveryAttemptColumns = {
   ...getTableColumns(invoiceDeliveries),
-  claimedAt: sql<string | null>`case when ${invoiceDeliveries.medium} = 'email'
+  mailDueAt: outgoingMail.nextAttemptAt,
+  queueClaimedAt: sql<string | null>`case when ${invoiceDeliveries.medium} = 'email'
     then ${outgoingMail.claimedAt} else ${printJobs.claimedAt} end`,
-  printerHold: printJobs.printerHold,
+  queuePrinterHold: printJobs.printerHold,
 };
 
 export const invoiceDeliveryMailJoin = and(
@@ -19,6 +27,12 @@ export const invoiceDeliveryMailJoin = and(
   eq(outgoingMail.kind, "invoice"),
   eq(outgoingMail.dedupeKey, sql`'invoice:' || ${invoiceDeliveries.id}`),
 );
+
+type InvoiceDeliveryAttemptRow = InvoiceDelivery & {
+  mailDueAt?: string | null;
+  queueClaimedAt?: string | null;
+  queuePrinterHold?: A4HoldCode | null;
+};
 
 export type InvoiceDeliveryMedium = InvoiceDelivery["medium"];
 
@@ -42,7 +56,7 @@ export interface InvoiceDeliveryAttempt {
    * What the office printer is holding an A4 for while it is sending, or last held it for before
    * an unknown ended it; null otherwise. A held A4 may still print by itself.
    */
-  printerHold: InvoiceDelivery["printerHold"];
+  printerHold: A4HoldCode | null;
   /**
    * The agent reported success but the attempt kept its status: a newer attempt had started, or
    * its receipt printer had been deleted.
@@ -268,7 +282,7 @@ function receiptPrinterWithdrawn(
 }
 
 function deliveryStatus(
-  rows: InvoiceDelivery[],
+  rows: InvoiceDeliveryAttemptRow[],
   jobs: OriginalJob[],
   receipt: OriginalReceiptPrint,
   receiptWithdrawn: boolean,
@@ -356,10 +370,10 @@ function deliveryStatus(
   };
 }
 
-export function rowAttempt(row: InvoiceDelivery): InvoiceDeliveryAttempt {
+export function rowAttempt(row: InvoiceDeliveryAttemptRow): InvoiceDeliveryAttempt {
   const at = {
-    queued: row.nextAttemptAt,
-    sending: row.claimedAt,
+    queued: row.medium === "email" ? (row.mailDueAt ?? row.createdAt) : row.createdAt,
+    sending: row.queueClaimedAt ?? null,
     sent: row.completedAt,
     failed: row.reportedAt,
     unknown: row.expiredAt ?? row.reportedAt,
@@ -375,7 +389,7 @@ export function rowAttempt(row: InvoiceDelivery): InvoiceDeliveryAttempt {
     personId: row.personId,
     printerHold:
       row.medium === "a4" && (row.status === "sending" || row.status === "unknown")
-        ? row.printerHold
+        ? (row.queuePrinterHold ?? null)
         : null,
     lateSuccess: row.reportedOutcome === "sent" && row.status !== "sent",
   };

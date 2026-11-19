@@ -173,30 +173,34 @@ export async function reserveInvoiceDelivery(
               printerId: input.pagePrinterId,
               printJobId: a4Job?.jobId,
               createdAt: a4CreatedAt,
-              nextAttemptAt: a4CreatedAt,
             }
-          : { printJobId: input.printJobId, printerChosen: input.printerChosen }),
+          : {
+              printJobId: input.printJobId,
+              printerChosen: input.printerChosen,
+              createdAt: receiptJob?.createdAt,
+            }),
     })
     .returning();
   if (delivery!.medium === "email") {
-    await queueInvoiceEmail(tx, delivery!, new Date(delivery!.createdAt), 1);
+    await queueInvoiceEmail(tx, delivery!.id, new Date(delivery!.createdAt), 1);
   }
   return delivery!;
 }
 
 function queueInvoiceEmail(
   tx: Transaction,
-  delivery: Pick<InvoiceDelivery, "id" | "nextAttemptAt">,
+  deliveryId: string,
   now: Date,
   attempt: number,
+  nextAttemptAt = now,
 ) {
   return enqueueMail(tx, {
     kind: "invoice",
-    dedupeKey: `invoice:${delivery.id}`,
-    subjectId: delivery.id,
+    dedupeKey: `invoice:${deliveryId}`,
+    subjectId: deliveryId,
     personId: null,
     notAfter: new Date(now.getTime() + MAIL_LIFETIME_MS.invoice),
-    nextAttemptAt: new Date(delivery.nextAttemptAt),
+    nextAttemptAt,
     now,
     params: { attempt },
   });
@@ -226,25 +230,10 @@ export const LONGEST_RETRY_WAIT_MS = Math.max(...RETRY_DELAYS_MS);
 /** The latest a queued delivery's next attempt can lie ahead of `now` without a backward step. */
 export const latestNextAttempt = (now: Date) => shifted(now, LONGEST_RETRY_WAIT_MS);
 
-/** A queued delivery is due at its next attempt, or at once when that lies further ahead than the
- * longest retry wait: it was set before the clock stepped back. */
-export function deliveryDue(now: Date): SQL {
+function claimLapsed(now: Date): SQL {
   return or(
-    lte(invoiceDeliveries.nextAttemptAt, now.toISOString()),
-    gt(invoiceDeliveries.nextAttemptAt, latestNextAttempt(now)),
-  )!;
-}
-
-/** A claim has lapsed once its lease has run out, or when it was taken further ahead than its lease:
- * before the clock stepped back. */
-export function claimLapsed(
-  now: Date,
-  claimedAt:
-    typeof invoiceDeliveries.claimedAt | typeof printJobs.claimedAt = invoiceDeliveries.claimedAt,
-): SQL {
-  return or(
-    lte(claimedAt, shifted(now, -INVOICE_DELIVERY_LEASE_MS)),
-    gt(claimedAt, shifted(now, INVOICE_DELIVERY_LEASE_MS)),
+    lte(printJobs.claimedAt, shifted(now, -INVOICE_DELIVERY_LEASE_MS)),
+    gt(printJobs.claimedAt, shifted(now, INVOICE_DELIVERY_LEASE_MS)),
   )!;
 }
 
@@ -252,15 +241,16 @@ export function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function dueA4Print(now: Date): SQL {
-  return and(
-    eq(printJobs.kind, "a4"),
-    eq(printJobs.status, "queued"),
-    or(
-      lte(printJobs.createdAt, now.toISOString()),
-      gt(printJobs.createdAt, latestNextAttempt(now)),
-    ),
+/** A job stamped further ahead than the longest retry wait predates a backward clock step. */
+export function invoicePrintDue(now: Date): SQL {
+  return or(
+    lte(printJobs.createdAt, now.toISOString()),
+    gt(printJobs.createdAt, latestNextAttempt(now)),
   )!;
+}
+
+export function dueA4Print(now: Date): SQL {
+  return and(eq(printJobs.kind, "a4"), eq(printJobs.status, "queued"), invoicePrintDue(now))!;
 }
 
 export async function endA4PrintJobs(
@@ -297,62 +287,36 @@ export async function claimInvoiceDelivery(
     .select()
     .from(invoiceDeliveries)
     .where(eq(invoiceDeliveries.id, deliveryId));
-  if (delivery === undefined || delivery.medium === "receipt") return undefined;
+  if (delivery?.medium !== "a4" || delivery.status !== "queued" || delivery.printJobId === null)
+    return undefined;
   const token = randomUUID();
-  if (delivery.medium === "a4") {
-    if (delivery.status !== "queued" || delivery.printJobId === null) return undefined;
-    const [job] = await tx
-      .update(printJobs)
-      .set({
-        status: "printing",
-        attempts: sql`${printJobs.attempts} + 1`,
-        claimTokenHash: tokenHash(token),
-        claimedBy: holder,
-        claimedAt: now.toISOString(),
-      })
-      .where(and(eq(printJobs.id, delivery.printJobId), dueA4Print(now)))
-      .returning({ id: printJobs.id });
-    if (job === undefined) return undefined;
-    await tx
-      .update(invoiceDeliveries)
-      .set({ status: "sending" })
-      .where(eq(invoiceDeliveries.id, deliveryId));
-    return { deliveryId, generation: delivery.generation, token, holder };
-  }
-  const [row] = await tx
-    .update(invoiceDeliveries)
+  const [job] = await tx
+    .update(printJobs)
     .set({
-      status: "sending",
-      attempts: sql`${invoiceDeliveries.attempts} + 1`,
+      status: "printing",
+      attempts: sql`${printJobs.attempts} + 1`,
       claimTokenHash: tokenHash(token),
       claimedBy: holder,
       claimedAt: now.toISOString(),
     })
-    .where(
-      and(
-        eq(invoiceDeliveries.id, deliveryId),
-        eq(invoiceDeliveries.status, "queued"),
-        deliveryDue(now),
-      ),
-    )
-    .returning({ generation: invoiceDeliveries.generation });
-  return row === undefined ? undefined : { deliveryId, generation: row.generation, token, holder };
+    .where(and(eq(printJobs.id, delivery.printJobId), dueA4Print(now)))
+    .returning({ id: printJobs.id });
+  if (job === undefined) return undefined;
+  await tx
+    .update(invoiceDeliveries)
+    .set({ status: "sending" })
+    .where(eq(invoiceDeliveries.id, deliveryId));
+  return { deliveryId, generation: delivery.generation, token, holder };
 }
 
 function expiringClaims(now: Date, restart = false) {
   return and(
     eq(invoiceDeliveries.status, "sending"),
+    ne(invoiceDeliveries.medium, "email"),
     restart
       ? undefined
-      : or(
-          and(eq(invoiceDeliveries.medium, "email"), claimLapsed(now)),
-          and(
-            ne(invoiceDeliveries.medium, "email"),
-            sql`exists (select 1 from ${printJobs}
-              where ${printJobs.id} = ${invoiceDeliveries.printJobId}
-                and ${claimLapsed(now, printJobs.claimedAt)})`,
-          ),
-        ),
+      : sql`exists (select 1 from ${printJobs}
+          where ${printJobs.id} = ${invoiceDeliveries.printJobId} and ${claimLapsed(now)})`,
   );
 }
 
@@ -369,7 +333,6 @@ export async function expireInvoiceDeliveryClaims(
   tx: Transaction,
   now = new Date(),
   restart = false,
-  printOnly = false,
 ): Promise<number> {
   const expired = await tx
     .update(invoiceDeliveries)
@@ -378,12 +341,7 @@ export async function expireInvoiceDeliveryClaims(
       expiredAt: now.toISOString(),
       failureCode: restart ? "restart" : "timeout",
     })
-    .where(
-      and(
-        expiringClaims(now, restart),
-        printOnly ? ne(invoiceDeliveries.medium, "email") : undefined,
-      ),
-    )
+    .where(expiringClaims(now, restart))
     .returning({ id: invoiceDeliveries.id, printJobId: invoiceDeliveries.printJobId });
   const jobIds = expired.flatMap((row) => (row.printJobId === null ? [] : [row.printJobId]));
   if (jobIds.length > 0) {
@@ -432,19 +390,13 @@ export async function expireInvoiceEmail(tx: Transaction, deliveryId: string, no
     );
 }
 
-export async function abandonInvoiceEmail(
-  tx: Transaction,
-  deliveryId: string,
-  attempt: number,
-  now: Date,
-) {
+export async function abandonInvoiceEmail(tx: Transaction, deliveryId: string, now: Date) {
   await tx
     .update(invoiceDeliveries)
     .set({
       status: "unknown",
       expiredAt: now.toISOString(),
       failureCode: "timeout",
-      attempts: attempt,
     })
     .where(
       and(
@@ -487,16 +439,7 @@ export async function reportInvoiceDelivery(
           sql`exists (select 1 from ${printJobs} where ${printJobs.id} = ${claim.printJobId}
             and ${printJobs.claimedBy} = ${claim.holder} and ${printJobs.claimTokenHash} = ${hash})`,
         )
-      : or(
-          a4DeliveryClaim(claim),
-          and(
-            eq(invoiceDeliveries.medium, "email"),
-            eq(invoiceDeliveries.id, claim.deliveryId),
-            eq(invoiceDeliveries.generation, claim.generation),
-            eq(invoiceDeliveries.claimTokenHash, hash),
-            eq(invoiceDeliveries.claimedBy, claim.holder),
-          ),
-        );
+      : a4DeliveryClaim(claim);
   const [delivery] = await tx
     .select()
     .from(invoiceDeliveries)
@@ -508,7 +451,7 @@ export async function reportInvoiceDelivery(
       ),
     );
   if (delivery === undefined) return { updated: false, historical: false };
-  return recordDeliveryReport(tx, delivery, outcome, now, { holder: claim.holder });
+  return recordDeliveryReport(tx, delivery, outcome, now, claim.holder);
 }
 
 async function recordDeliveryReport(
@@ -516,7 +459,7 @@ async function recordDeliveryReport(
   delivery: InvoiceDelivery,
   outcome: InvoiceDeliveryOutcome,
   now: Date,
-  options: { holder?: string; attempt?: number },
+  holder?: string,
 ) {
   const [newer] = await tx
     .select({ id: invoiceDeliveries.id })
@@ -556,7 +499,6 @@ async function recordDeliveryReport(
         ? {}
         : {
             status,
-            attempts: options.attempt,
             completedAt: status === "sent" ? now.toISOString() : null,
             failureCode:
               outcome.status === "sent"
@@ -567,7 +509,7 @@ async function recordDeliveryReport(
           }),
     })
     .where(eq(invoiceDeliveries.id, delivery.id));
-  if (!historical && delivery.printJobId !== null && options.holder !== undefined) {
+  if (!historical && delivery.printJobId !== null && holder !== undefined) {
     await tx
       .update(printJobs)
       .set(
@@ -575,27 +517,9 @@ async function recordDeliveryReport(
           ? { status: "done", deliveredAt: now.toISOString(), lastError: null }
           : { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: outcome.failureCode },
       )
-      .where(and(eq(printJobs.id, delivery.printJobId), eq(printJobs.claimedBy, options.holder)));
+      .where(and(eq(printJobs.id, delivery.printJobId), eq(printJobs.claimedBy, holder)));
   }
   return { updated: !historical, historical };
-}
-
-export async function reportInvoiceEmailDelivery(
-  tx: Transaction,
-  claim: InvoiceDeliveryClaim,
-  outcome: InvoiceDeliveryOutcome,
-  now = new Date(),
-): Promise<{ updated: boolean; historical: boolean }> {
-  const result = await reportInvoiceDelivery(tx, claim, outcome, now);
-  if (!result.updated || outcome.status !== "failed") return result;
-  const [delivery] = await tx
-    .select()
-    .from(invoiceDeliveries)
-    .where(eq(invoiceDeliveries.id, claim.deliveryId));
-  if (delivery!.medium === "email" && delivery!.status === "failed") {
-    await retryInvoiceEmail(tx, delivery!, delivery!.attempts, now);
-  }
-  return result;
 }
 
 export async function settleInvoiceEmail(
@@ -618,7 +542,7 @@ export async function settleInvoiceEmail(
       ),
     );
   if (!delivery) return;
-  const result = await recordDeliveryReport(tx, delivery, outcome, now, { attempt });
+  const result = await recordDeliveryReport(tx, delivery, outcome, now);
   if (result.updated && delivery.status === "sending" && outcome.status === "failed") {
     await retryInvoiceEmail(tx, delivery, attempt, now);
   }
@@ -640,12 +564,10 @@ async function retryInvoiceEmail(
       medium: "email",
       designation: delivery.designation,
       generation: delivery.generation + 1,
-      attempts: attempt,
       recipient: delivery.recipient,
       personId: delivery.personId,
       createdAt: now.toISOString(),
-      nextAttemptAt: shifted(now, delay),
     })
     .returning();
-  await queueInvoiceEmail(tx, retry!, now, attempt + 1);
+  await queueInvoiceEmail(tx, retry!.id, now, attempt + 1, new Date(now.getTime() + delay));
 }

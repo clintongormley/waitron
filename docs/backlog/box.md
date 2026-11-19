@@ -48,7 +48,7 @@ scope and preserve the rules shown here before proposing any conversion.
 
 | Source and function/site | Rule read in the current code |
 | --- | --- |
-| `apps/server/src/alert-sources.ts:534–545` (`undeliveredInvoice`) | A queued A4 delivery whose persisted next attempt exceeds the ten-minute retry bound is due immediately, with unknown due time reported as now; otherwise wait the ordinary unclaimed-alert interval. |
+| `apps/server/src/alert-sources.ts:545–551` (`undeliveredInvoice`) | A queued A4 delivery created more than ten minutes ahead of the clock is due immediately, with unknown due time reported as now; otherwise wait the ordinary unclaimed-alert interval. |
 | `apps/server/src/backup-schedule.ts:68–75` (`longestFireAheadMs`) | Bound an interval fire by its interval; a calendar fire by the longest allowed weekday gap plus 25 hours. Supplies the sweep's backward-step bound, not an elapsed-clock read itself. |
 | `apps/server/src/backup-status.ts:80–101` (`freshness`) | Judge the newest own archive no more than `staleAfterMs` ahead. If none qualifies, report stale; otherwise stale only when its age exceeds that threshold. Archive mtimes are storage evidence, not process timestamps. |
 | `apps/server/src/backup-sweep.ts` (`createBackupSchedule`) | Hold a computed fire fixed while sleeping. Recompute when now precedes computation and the fire exceeds `longestFireAheadMs`. On startup with Cloud enabled, use the saved Cloud capture to recover a future deadline within that same bound. |
@@ -56,7 +56,7 @@ scope and preserve the rules shown here before proposing any conversion.
 | `apps/server/src/cloud-archive-target.ts` (`pendingExpired`) | Cloud follows the shared backup schedule since jr10. After a failed publication, abandon a pending capture at age at least one day or more than one day ahead. |
 | `apps/server/src/content-suggestion-runner.ts:163–170` (`step`) | Close a stored job as expired at age at least 24 hours or more than 24 hours ahead; otherwise it can continue to occupy the active run. |
 | `apps/server/src/discovery-listing.ts:1–12` (`withinTtl`, `isListed`) | Keep a report only within its TTL on either side, endpoints included. TTL is 45 seconds during an open discovery window, otherwise 15 seconds. Input is explicitly epoch milliseconds. |
-| `apps/server/src/invoice-delivery.ts:181–207` (`latestNextAttempt`, `deliveryDue`, `claimLapsed`) | Persisted retries at/before now or more than ten minutes ahead are due. A claim at least 60 seconds old or more than 60 seconds ahead has lapsed. |
+| `apps/server/src/invoice-delivery.ts` (`invoicePrintDue`, `claimLapsed`) | A receipt or A4 job created at or before now, or more than ten minutes ahead, is due. Its claim has lapsed at 60 seconds old or more than 60 seconds ahead. |
 | `apps/server/src/join-requests.ts:33–58` (`lapsedAt`, `sweepLapsed`) | Delete pending requests strictly older than 15 minutes or strictly more than 15 minutes ahead; endpoints survive. These are persisted request dates. |
 | `apps/server/src/order-drafts.ts:1397–1426` (`takenOverFrom`) | Find latest takeover by append-only event `rowid`, not `created_at`; a backward clock must not reorder ownership history. Ordering, not a timer. |
 | `packages/fiscal-verifactu/src/certificate-record.ts:39–66` (`recordInstall`, `installsOf`) | Persist installation time as the greater of writer time and previous installation plus one millisecond. Keeps latest-install order across steps and node changes; not a wait. |

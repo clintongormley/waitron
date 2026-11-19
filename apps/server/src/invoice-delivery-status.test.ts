@@ -19,6 +19,7 @@ import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testi
 import {
   createPrinter,
   endDeletedPrinterJobs,
+  enqueueA4PrintJob,
   enqueuePrintJob,
   MAX_DELIVERY_ATTEMPTS,
   PRINTER_DELETED,
@@ -31,6 +32,9 @@ import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
   claimInvoiceDelivery,
+  abandonInvoiceEmail,
+  settleInvoiceEmail,
+  startInvoiceEmail,
   expireInvoiceDeliveryClaims,
   reportInvoiceDelivery,
   reserveInvoiceDelivery,
@@ -208,8 +212,14 @@ async function reserve(
   );
   await suite.db
     .update(invoiceDeliveries)
-    .set({ nextAttemptAt: START.toISOString() })
+    .set({ createdAt: START.toISOString() })
     .where(eq(invoiceDeliveries.id, delivery.id));
+  if (medium === "email") {
+    await suite.db
+      .update(outgoingMail)
+      .set({ nextAttemptAt: START.toISOString() })
+      .where(eq(outgoingMail.subjectId, delivery.id));
+  }
   if (medium === "a4") await dateA4Job(suite.db, delivery.printJobId!, START);
   return (
     await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, delivery.id))
@@ -217,12 +227,12 @@ async function reserve(
 }
 
 async function claim(v: Venue, delivery: InvoiceDelivery) {
-  const holder = delivery.medium === "email" ? "server-one" : v.agentId;
+  const holder = v.agentId;
   if (delivery.medium === "receipt") {
     const printJobId = delivery.printJobId!;
     await suite.db
       .update(printJobs)
-      .set({ status: "printing", claimedBy: holder })
+      .set({ status: "printing", claimedBy: holder, createdAt: START.toISOString() })
       .where(eq(printJobs.id, printJobId));
     const claim = await withTransaction(suite.db, (tx) =>
       claimInvoiceReceipt(tx, printJobId, holder, START),
@@ -255,22 +265,31 @@ async function attempt(
   pagePrinterId?: string,
 ): Promise<InvoiceDelivery> {
   const delivery = await reserve(saleId, medium, pagePrinterId);
-  if (medium === "email" && status === "sending") {
+  if (medium === "email" && status !== "queued") {
     await withTransaction(suite.db, async (tx) => {
-      await tx
-        .update(invoiceDeliveries)
-        .set({ status: "sending" })
-        .where(eq(invoiceDeliveries.id, delivery.id));
-      await tx
-        .update(outgoingMail)
-        .set({
-          status: "sending",
-          claimToken: randomUUID(),
-          claimedAt: START.toISOString(),
-          recipient: delivery.recipient,
-          attempts: 1,
-        })
-        .where(eq(outgoingMail.dedupeKey, `invoice:${delivery.id}`));
+      await startInvoiceEmail(tx, delivery.id);
+      if (status === "sending") {
+        await tx
+          .update(outgoingMail)
+          .set({
+            status: "sending",
+            claimToken: randomUUID(),
+            claimedAt: START.toISOString(),
+            recipient: delivery.recipient,
+            attempts: 1,
+          })
+          .where(eq(outgoingMail.subjectId, delivery.id));
+      } else if (status === "unknown") {
+        await abandonInvoiceEmail(tx, delivery.id, EXPIRED);
+      } else {
+        await settleInvoiceEmail(
+          tx,
+          delivery,
+          5,
+          status === "sent" ? { status } : { status, failureCode: "transport_failed" },
+          REPORTED,
+        );
+      }
     });
   } else if (status !== "queued") {
     const held = await claim(v, delivery);
@@ -385,6 +404,38 @@ describe("readInvoiceDeliveries", () => {
     });
   });
 
+  it("shows the queued email's next mail attempt", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    const delivery = await reserve(saleId, "email");
+    await suite.db
+      .update(outgoingMail)
+      .set({ nextAttemptAt: "2026-10-12T10:00:05.000Z" })
+      .where(eq(outgoingMail.subjectId, delivery.id));
+
+    expect((await read(saleId))?.current).toMatchObject({
+      id: delivery.id,
+      status: "queued",
+      at: "2026-10-12T10:00:05.000Z",
+    });
+  });
+
+  it("shows a queued A4's creation time", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    const delivery = await reserve(saleId, "a4", await pagePrinter());
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({ createdAt: "2026-10-12T09:59:55.000Z" })
+      .where(eq(invoiceDeliveries.id, delivery.id));
+
+    expect((await read(saleId))?.current).toMatchObject({
+      id: delivery.id,
+      status: "queued",
+      at: "2026-10-12T09:59:55.000Z",
+    });
+  });
+
   describe("what the printer holds an A4 for", () => {
     /** An A4 original whose agent renewed its claim reporting `paper_out`, then taken to `status`. */
     async function heldA4(v: Venue, saleId: string, status: Status, office: string) {
@@ -433,11 +484,15 @@ describe("readInvoiceDeliveries", () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
       const delivery = await attempt(v, saleId, medium, status);
-      // No writer stores a hold on these media; one forced in shows the reader ignores it.
-      await suite.db
-        .update(invoiceDeliveries)
-        .set({ printerHold: "paper_out" })
-        .where(eq(invoiceDeliveries.id, delivery.id));
+      const printerId = await pagePrinter();
+      await withTransaction(suite.db, async (tx) => {
+        const { jobId } = await enqueueA4PrintJob(tx, printerId, saleId, START.toISOString());
+        await tx.update(printJobs).set({ printerHold: "paper_out" }).where(eq(printJobs.id, jobId));
+        await tx
+          .update(invoiceDeliveries)
+          .set({ printJobId: jobId })
+          .where(eq(invoiceDeliveries.id, delivery.id));
+      });
 
       const result = await read(saleId);
 
@@ -755,7 +810,7 @@ describe("readInvoiceDeliveries", () => {
       await attempt(v, saleId, "receipt", "failed");
       const email = await attempt(v, saleId, "email", "queued");
       expect((await read(saleId))!.actions.receiptInstead).toEqual({ deliveryId: email.id });
-      await claim(v, email);
+      await withTransaction(suite.db, (tx) => startInvoiceEmail(tx, email.id));
 
       expect((await read(saleId))!.actions.receiptInstead).toBeNull();
     });

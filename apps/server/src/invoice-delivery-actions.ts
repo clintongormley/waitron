@@ -252,7 +252,7 @@ export async function switchToReceipt(
                   ),
                 ),
             )
-          : isNull(invoiceDeliveries.claimedAt),
+          : undefined,
       ),
     )
     .returning({ printJobId: invoiceDeliveries.printJobId });

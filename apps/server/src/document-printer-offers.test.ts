@@ -1,7 +1,7 @@
 import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { departments, withFoldedPersonChanges } from "@waitron/db";
 import { randomUUID } from "node:crypto";
-import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
+import { claimA4ForTest } from "./testing/a4-print-job.js";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -448,19 +448,7 @@ it("an ended management session cannot distinguish an existing sale from an abse
 
 it("review L1: offers expire a lapsed claim before deciding whether Print is available", async () => {
   const id = await fullSale();
-  const delivery = await withTransaction(suite.db, (tx) =>
-    reserveInvoiceDelivery(tx, id, {
-      medium: "email",
-      personId: venue.adminId,
-      requestKey: randomUUID(),
-      recipient: "customer@example.test",
-    }),
-  );
-  expect(
-    await withTransaction(suite.db, (tx) =>
-      claimInvoiceDelivery(tx, delivery.id, "server-one", frozen),
-    ),
-  ).toBeDefined();
+  await withTransaction(suite.db, (tx) => claimA4ForTest(tx, id, venue.adminId, frozen));
   expect((await offers(dashboard, "invoice", id)).actions.print).toBe(false);
   vi.setSystemTime(new Date(frozen.getTime() + 120_000));
   expect((await offers(dashboard, "invoice", id)).actions.print).toBe(true);

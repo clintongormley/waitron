@@ -51,7 +51,7 @@ it("routing upgrade preserves populated predecessor rows", async () => {
     sql`insert into print_jobs (id, printer_id, payload, created_at) values (${job}, ${printer}, x'0102', '2026-11-04T12:00:00.000Z')`,
   );
   await db.execute(
-    sql`insert into invoice_deliveries (id, sale_id, print_job_id, request_key, medium, designation, generation, person_id, created_at, next_attempt_at) values (${delivery}, ${sale}, ${job}, ${randomUUID()}, 'receipt', 'duplicate', 1, ${person}, '2026-11-04T12:00:00.000Z', '2026-11-04T12:00:00.000Z')`,
+    sql`insert into invoice_deliveries (id, sale_id, print_job_id, request_key, medium, designation, generation, person_id, created_at) values (${delivery}, ${sale}, ${job}, ${randomUUID()}, 'receipt', 'duplicate', 1, ${person}, '2026-11-04T12:00:00.000Z')`,
   );
   await db.execute(
     sql`insert into receipt_reprints (id, sale_id, print_job_id, person_id, requested_at) values (${copy}, ${sale}, ${job}, ${person}, '2026-11-04T12:00:00.000Z')`,

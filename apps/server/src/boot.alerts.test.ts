@@ -198,7 +198,7 @@ describe("the running server's undelivered invoice alert", () => {
           generation: 1,
           printerId: officeId,
           personId: "staff-one",
-          nextAttemptAt: due,
+          createdAt: due,
         }),
       });
       expect(queued.status).toBe(204);

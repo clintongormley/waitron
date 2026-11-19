@@ -30,7 +30,6 @@ import {
   outgoingMail,
   drawerOpens,
   invoiceSeries,
-  invoiceDeliveries,
   floorPlans,
   floorPlanTables,
   installChangeFeed,
@@ -131,7 +130,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { defaultLayout } from "./testing/floor-sets.js";
-import { reserveInvoiceDelivery, claimInvoiceDelivery } from "./invoice-delivery.js";
+import { claimA4ForTest } from "./testing/a4-print-job.js";
 import { parkOrder } from "./working-order.js";
 import { kitchenScreenDevice, profile as kitchenProfile } from "./testing/kitchen-screen-device.js";
 import sharp from "sharp";
@@ -1809,25 +1808,13 @@ describe("a start on a real full disk", () => {
                 )
               ).status,
             ).toBe(200);
-            const [sale] = await db.select({ id: sales.id }).from(sales);
-            saleId = sale!.id;
+            saleId = await orderlessInvoice(venue);
             path = `/api/sales/${orderId}/deliveries?medium=email`;
           }
-          await withTransaction(db, async (tx) => {
-            const delivery = await reserveInvoiceDelivery(tx, saleId, {
-              medium: "email",
-              requestKey: randomUUID(),
-              personId: venue.operatorId,
-              recipient: "guest@example.com",
-            });
-            deliveryId = delivery.id;
-            const at = new Date(Date.now() - 61_000);
-            await tx
-              .update(invoiceDeliveries)
-              .set({ nextAttemptAt: at.toISOString() })
-              .where(eq(invoiceDeliveries.id, delivery.id));
-            expect(await claimInvoiceDelivery(tx, delivery.id, "silent-worker", at)).toBeDefined();
-          });
+          const delivery = await withTransaction(db, (tx) =>
+            claimA4ForTest(tx, saleId, venue.operatorId, new Date(Date.now() - 61_000)),
+          );
+          deliveryId = delivery.id;
         }
         await installChangeFeed(db, CORE_CHANGE_SOURCES);
         const seen: unknown[] = [];
