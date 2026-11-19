@@ -3402,7 +3402,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const billId = requireTabParam(c.req.param("id")).toLowerCase();
-      const menuId = requireOtherBill(c.req.param("setMenuId"), "setMenuId");
+      const menuId = requireBodyUuid(c.req.param("setMenuId"), "setMenuId").toLowerCase();
       const body = asObject(await readRawJsonBody<unknown>(c));
       const expected = requireRevision(body.expectedPartyRevision, "expectedPartyRevision");
       const count = body.count;
@@ -3423,7 +3423,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const billId = requireTabParam(c.req.param("id")).toLowerCase();
-      const lineId = requireOtherBill(c.req.param("lineId"), "lineId");
+      const lineId = requireBodyUuid(c.req.param("lineId"), "lineId").toLowerCase();
       const body = asObject(await readRawJsonBody<unknown>(c));
       const expected = requireRevision(body.expectedPartyRevision, "expectedPartyRevision");
       const result = await changeSetMenus(

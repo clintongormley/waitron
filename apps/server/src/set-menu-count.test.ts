@@ -4,10 +4,11 @@ import { billSetMenuCopies, ticketItems, workingOrderLines, workingOrders } from
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal } from "@waitron/shared";
+import { readBillBalance } from "./bill-payments.js";
 import { removeSetMenuLines, setSetMenuCount } from "./set-menu-count.js";
 import { advanceTicketItem, storedOrderTotal } from "./working-order.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
-import { inTx, seatWithNoAllergies } from "./testing/party-venue.js";
+import { cashContribution, inTx, order, seatWithNoAllergies } from "./testing/party-venue.js";
 import { saveSetMenuDraft } from "./testing/set-menu-bill-fixture.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 
@@ -149,6 +150,28 @@ it("allows minus when the draft dish has a place on the remaining menu", async (
     setMenuReservedPlace: 0,
   });
   expect((await setCount(bill.tabId, 1)).setMenus).toEqual([first]);
+});
+
+it("keeps a previous part payment when an empty set menu is added and cancelled", async () => {
+  const { venue } = fixture;
+  const { tabId } = await emptyBill();
+  await order(venue, tabId, "Burger");
+  const firstPayment = await cashContribution(venue, tabId, "1.00");
+  const {
+    setMenus: [menu],
+  } = await setCount(tabId, 1);
+  await expect(cashContribution(venue, tabId, "1.00")).rejects.toMatchObject({
+    code: "set_menu.payment_not_ready",
+  });
+
+  await cancel(tabId, menu!.lineId);
+  expect(await inTx(venue, (tx) => readBillBalance(tx, tabId))).toMatchObject({
+    total: "12.00",
+    received: "1.00",
+    reserved: "0.00",
+    outstanding: "11.00",
+    payments: [{ id: firstPayment }],
+  });
 });
 
 it("refuses a count change while payment is in flight", async () => {

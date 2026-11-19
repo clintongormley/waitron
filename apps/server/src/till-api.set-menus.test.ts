@@ -14,7 +14,7 @@ import { inTx, seatWithNoAllergies } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { saveSetMenuDraft, seedBillSetMenu } from "./testing/set-menu-bill-fixture.js";
-import { setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
+import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
 let fixture: Awaited<ReturnType<typeof setupSetMenuReaders>>;
@@ -146,6 +146,50 @@ it.each(["PUT", "DELETE"] as const)(
   },
 );
 
+it("uses the named set menu and line when their ids are uppercase", async () => {
+  const { venue, copy } = fixture;
+  const { tabId, partyId } = await seated();
+  const lineId = await inTx(venue, (tx) => seedBillSetMenu(tx, tabId, copy, 1));
+  const expectedPartyRevision = await inTx(venue, (tx) => partyRevision(tx, partyId));
+  const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, tabId));
+
+  const raised = await request(
+    "PUT",
+    `/api/bills/${tabId}/set-menus/${copy.menuId.toUpperCase()}`,
+    {
+      count: 2,
+      expectedPartyRevision,
+      expectedEdit,
+    },
+  );
+  expect(raised.status).toBe(200);
+  const removed = await request(
+    "DELETE",
+    `/api/bills/${tabId}/set-menu-lines/${lineId.toUpperCase()}`,
+    {
+      expectedPartyRevision: expectedPartyRevision + 1,
+      expectedEdit,
+    },
+  );
+  expect(removed.status).toBe(200);
+  expect(await removed.json()).toMatchObject({ setMenus: { setMenus: [{ lineNo: 2 }] } });
+});
+
+it.each([
+  ["PUT", "set-menus", "setMenuId"],
+  ["DELETE", "set-menu-lines", "lineId"],
+])("answers with the malformed path field for %s", async (method, path, field) => {
+  const { tabId } = await seated();
+  const response = await request(method, `/api/bills/${tabId}/${path}/invalid-id`, {
+    count: 1,
+    expectedPartyRevision: 0,
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field } },
+  });
+});
+
 it.each([-1, 100, 1.5, "2", null])("refuses an invalid count %s", async (count) => {
   const { copy } = fixture;
   const { tabId } = await seated();
@@ -161,14 +205,13 @@ it.each([-1, 100, 1.5, "2", null])("refuses an invalid count %s", async (count) 
 
 it("returns each bill's recorded copy in full with one lookup, even after republishing", async () => {
   const { venue, copy } = fixture;
-  const { partyId, tabId } = await seated();
-  const { older, newer, newerBill } = await inTx(venue, async (tx) => {
-    const older = await seedBillSetMenu(tx, tabId, copy, 1);
+  const { partyId, billId, menuLineId: older, dishId } = await setMenuBill(fixture);
+  const { newer, newerBill } = await inTx(venue, async (tx) => {
     await updateMenuDetails(tx, copy.menuId, { setPrice: "15.00" });
     const versionId = await publishWorkingMenu(tx, copy.fullMenuId);
     const newerBill = await insertPartyBill(tx, venue.cfg, partyId);
     const newer = await seedBillSetMenu(tx, newerBill, { ...copy, versionId }, 1, 1500);
-    return { older, newer, newerBill };
+    return { newer, newerBill };
   });
 
   const serve = vi.spyOn(venueService, "serveRecordedSetMenus");
@@ -178,8 +221,11 @@ it("returns each bill's recorded copy in full with one lookup, even after republ
     const bills = await response.json();
     expect(bills).toMatchObject([
       {
-        workingOrderId: tabId,
-        setMenus: { setMenus: [{ lineId: older }] },
+        workingOrderId: billId,
+        setMenus: {
+          setMenus: [{ lineId: older }],
+          dishes: [{ lineId: dishId, setMenuLineId: older }],
+        },
         setMenuCopies: [
           {
             menuId: copy.menuId,
@@ -191,7 +237,7 @@ it("returns each bill's recorded copy in full with one lookup, even after republ
       },
       {
         workingOrderId: newerBill,
-        setMenus: { setMenus: [{ lineId: newer }] },
+        setMenus: { setMenus: [{ lineId: newer }], dishes: [] },
         setMenuCopies: [
           {
             menuId: copy.menuId,
