@@ -1049,6 +1049,9 @@ describe("the day box", () => {
       };
     };
     const kept = { left: true, right: true, top: true, bottom: true, clearOfTheDay: true };
+    // Placement follows the final size in a ResizeObserver before the browser paints.
+    const afterLayout = () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
 
     it("on a Sunday at the right edge of a wide window", async () => {
       await useViewport(1280, 800);
@@ -1070,7 +1073,8 @@ describe("the day box", () => {
       el.parentElement!.style.paddingTop = `${innerHeight - 40 - day.getBoundingClientRect().bottom}px`;
       const box = await openBox(el, "2026-12-30");
       expect(boxButtons(el)).toEqual(["Edit Winter's standard week", "Rota for this week"]);
-      await vi.waitFor(() => expect(placement(box, day)).toEqual(kept));
+      await afterLayout();
+      expect(placement(box, day)).toEqual(kept);
     });
 
     it("when a new read makes it bigger while it is open", async () => {
@@ -1089,7 +1093,8 @@ describe("the day box", () => {
       const day = dayButton(el, "2026-12-30")!;
       el.parentElement!.style.paddingTop = `${innerHeight - 40 - day.getBoundingClientRect().bottom}px`;
       const box = await openBox(el, "2026-12-30");
-      await vi.waitFor(() => expect(placement(box, day)).toEqual(kept));
+      await afterLayout();
+      expect(placement(box, day)).toEqual(kept);
       const before = box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect().height;
       special = true;
       liveData.invalidate([{ type: "staffing_blocks" }]);
@@ -1099,7 +1104,8 @@ describe("the day box", () => {
         box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect().height,
       ).toBeGreaterThan(before);
       expect(box.shown).toBe(true);
-      await vi.waitFor(() => expect(placement(box, day)).toEqual(kept));
+      await afterLayout();
+      expect(placement(box, day)).toEqual(kept);
     });
   });
 
