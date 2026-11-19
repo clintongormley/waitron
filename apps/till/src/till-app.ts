@@ -751,10 +751,7 @@ const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
 const MEAL_END_REFUSED_BEFORE_LOOKUP: ReadonlySet<string> = new Set([
   "handover.stepping_down",
   "till.origin_refused",
-  "node.read_only",
-  "server.waiting_for_clock",
   "storage.disk_full",
-  "management.request_invalid",
   "venue.time_zone_not_ready",
   "session.required",
   "session.not_open",

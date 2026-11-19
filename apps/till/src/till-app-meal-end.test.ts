@@ -569,21 +569,23 @@ describe("till-app: Print the bill", () => {
     );
   });
 
-  it.each(["management.request_invalid", "some.refusal_the_till_has_no_words_for"])(
-    "says %s printed nothing and issued no ticket, sending nobody elsewhere",
-    async (code) => {
-      const { el } = await openBill({
-        endMeal: vi.fn().mockRejectedValue({ code, status: 409 }),
-      });
+  it.each([
+    "node.read_only",
+    "server.waiting_for_clock",
+    "management.request_invalid",
+    "some.refusal_the_till_has_no_words_for",
+  ])("says %s printed nothing and issued no ticket, sending nobody elsewhere", async (code) => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({ code, status: 409 }),
+    });
 
-      await printBill(el);
+    await printBill(el);
 
-      const said = banner(el)!.textContent!;
-      expect(said).toContain(t("meal_end.refused"));
-      expect(said).not.toContain(t("place.refused"));
-      expect(said).not.toContain(t("table.error"));
-    },
-  );
+    const said = banner(el)!.textContent!;
+    expect(said).toContain(t("meal_end.refused"));
+    expect(said).not.toContain(t("place.refused"));
+    expect(said).not.toContain(t("table.error"));
+  });
 
   it.each([
     ["an error carrying no code", new Error("unexpected")],
@@ -677,10 +679,7 @@ describe("till-app: a refusal after a send that got no answer", () => {
   const beforeTheLookup = [
     "handover.stepping_down",
     "till.origin_refused",
-    "node.read_only",
-    "server.waiting_for_clock",
     "storage.disk_full",
-    "management.request_invalid",
     "venue.time_zone_not_ready",
     "session.required",
     "session.not_open",
@@ -690,6 +689,13 @@ describe("till-app: a refusal after a send that got no answer", () => {
     "device_profile.not_admitted",
     "authorization.not_permitted",
     "service_zone.not_allowed",
+  ];
+  /** Refusals with no words of their own, which the till cannot place before or after the lookup. */
+  const unplaced = [
+    "node.read_only",
+    "server.waiting_for_clock",
+    "management.request_invalid",
+    "some.unknown_refusal",
   ];
   const refusal = (code: string, more: Record<string, unknown> = {}) => ({
     code,
@@ -717,7 +723,7 @@ describe("till-app: a refusal after a send that got no answer", () => {
     return { ...opened, deadlines };
   }
 
-  it.each(beforeTheLookup)(
+  it.each([...beforeTheLookup, ...unplaced])(
     "does not treat %s as final when a resend of the same press meets it",
     async (code) => {
       const endMeal = vi
@@ -747,7 +753,7 @@ describe("till-app: a refusal after a send that got no answer", () => {
     await flush(el, 6);
   }
 
-  it.each([...beforeTheLookup, "some.unknown_refusal"])(
+  it.each([...beforeTheLookup, ...unplaced])(
     "does not treat %s as final on a later press, and keeps the press's id for the next one",
     async (code) => {
       const { el, endMeal } = await pressLeftUnanswered(refusal(code));
