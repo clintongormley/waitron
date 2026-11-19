@@ -34,10 +34,10 @@ takes an optional `reasonId`, `listAdjustmentEntries` filters on it, and the scr
 **Tech stack:** TypeScript, Drizzle on `node:sqlite`, Hono, Lit, Vitest (a `node` project and a
 real-Chromium `browser` project).
 
-**Spec:** `docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md` — §1 D7 and D10
+**Spec:** [2026-10-17-a758-adjustment-reasons-design.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md) — §1 D7 and D10
 (`:60`, `:63`), §3.6 "Reports" (`:361-411`; its "By kind" and "Each entry" bullets), §3.7 "Who gave
 each comp, per reason" (`:413-421`). Parent plan and the outline this plan replaces:
-`docs/superpowers/plans/2026-10-19-a758-reason-rules.md`, "# A758-3 — the report" (`:1069-1094`).
+[2026-10-19-a758-reason-rules.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a758-reason-rules.md), "# A758-3 — the report" (`:1069-1094`).
 Backlog: `docs/backlog.md` "A758" (`:2192-2222`, its "Left:" at `:2217-2219`) and `docs/backlog/till.md` "## A758" (`:1472`).
 
 Every `file:line` below was read on 2026-10-21 in this worktree at `main` `76adaee84` with
@@ -174,7 +174,7 @@ They pin `byAction` and people rows with `toMatchObject`
      this rule; owner point 4 repeats it.
    - **"Void, charged" is deferred by choice, not for want of data.** Design §3.6 "Each entry"
      (`spec:365-367`) gives it to the report, but the parent plan's outline puts it with the §3.8
-     slice ("Not here", `2026-10-19-a758-reason-rules.md:1093-1094`), and this plan keeps that
+     slice ("Not here", [`2026-10-19-a758-reason-rules.md:1093-1094`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a758-reason-rules.md)), and this plan keeps that
      scope. Until then a cancel that kept the charge reads "Void". The outline's reason ("Nothing
      stored says which cancels kept the charge", its Open point 5, `:1175-1178`) is too wide for
      the wording: A773-1 already writes a still-charge cancel with `beforeAmount` = `afterAmount` =

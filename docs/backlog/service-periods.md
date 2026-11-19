@@ -319,20 +319,20 @@ the season painter continues saving through the season-week route._
   now takes yellow.
 
 - **A new staff role's colour is chosen once, when its dialog opens
-  ([A753 plan](../superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 5; plan default,
+  ([A753 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 5; plan default,
   sent to the owner as an FYI).** It is the first colour, in `CALENDAR_COLOURS` order, that no other
   role uses, or the first (red) when every colour is used. If the roles list arrives after the
   dialog opened, the marks on the colours update but the chosen colour does not move. The other
   roles never include the one being edited, nor the one the dialog has just created and stays open
   on when only its people failed to save.
 
-- **The Staff roles list names every holder, whatever their status ([A753 plan](../superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 6; plan
+- **The Staff roles list names every holder, whatever their status ([A753 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 6; plan
   default, sent to the owner as an FYI).** The names come from the Staff roles list route, which
   `venue.view` opens, not from the people list, which needs `person.manage`. Every active person's
   name was already readable without signing in (`GET /management-api/staff-roster`); a pending or
   suspended holder's name is the one widening. The receipt is in #1828.
 
-- **The Staff roles list shows five holders' names, then "plus N more" ([A753 plan](../superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 7;
+- **The Staff roles list shows five holders' names, then "plus N more" ([A753 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 7;
   chosen on the screen, 2026-10-17, and sent to the owner as an FYI).** `HOLDER_NAMES_SHOWN`
   (`packages/staffing/src/dashboard/staff-roles-screen.ts`) stays 5, chosen on the demo venue: at
   1280 px wide, ten names (a role held by 12 people) overflowed the People cell and hid "plus 2
@@ -347,7 +347,7 @@ the season painter continues saving through the season-week route._
   cannot be read it lists the twelve month names, so the Month stays reachable. The station Times
   tab's year and Staffing's year are plain text, since neither has a Year view.
 
-- **The Week's address takes over `view/week` ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 1; plan default, sent to the owner as an FYI, 2026-10-17).** The Week is
+- **The Week's address takes over `view/week` ([A722 Part 1](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 1; plan default, sent to the owner as an FYI, 2026-10-17).** The Week is
   `/manage/opening-hours/view/week[/department/<id>|/station/<id>][/week/<yyyy-mm-dd>]`, matching the Year's and
   the Month's addresses. An old `view/week` bookmark now opens the Week instead of the season
   painter; the painter keeps its own `/view/season/…` addresses, and an address with no view that
@@ -355,42 +355,42 @@ the season painter continues saving through the season-week route._
   2026-11-17: the Week's current address starts `/opening-hours/view/week`; the `/manage` prefix above is retired.
 
 - **Every block in the Week shows its whole label on pointing or tapping, not only the clipped ones
-  ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 4; plan default, sent to the owner as an FYI, 2026-10-17).** Telling which labels are clipped would mean measuring text, and a
+  ([A722 Part 1](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 4; plan default, sent to the owner as an FYI, 2026-10-17).** Telling which labels are clipped would mean measuring text, and a
   label that fits, shown again in full, says nothing wrong. The tip sits above the block, and below
   it only when there is no room above it inside the area the Week scrolls in.
 
-- **The Week draws every day on one scale, the week's longest day ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 5; plan default, sent to the owner as an FYI, 2026-10-17).** Each
+- **The Week draws every day on one scale, the week's longest day ([A722 Part 1](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 5; plan default, sent to the owner as an FYI, 2026-10-17).** Each
   block sits on its own day from that day's changeover, so a shorter day's track ends early and the
   ruler and the blocks agree on a week holding a 25-hour day. Deliberate limit: a week whose days
   have different changeovers (a scheduled change of when the business day starts) labels the ruler
   from Monday's.
 
 - **On a phone the Week shows one day, below 560 px of its own width, the Month's breakpoint
-  ([A722 Part 2](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 11; plan default, sent to the owner as an FYI, 2026-10-17).**
+  ([A722 Part 2](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 11; plan default, sent to the owner as an FYI, 2026-10-17).**
   A `ResizeObserver` reads it, because the narrow Week draws different things and its ‹ › step a
   day. The phone's day title has no year link, following board 5; the Year is one press further,
   through the Month's year link.
 
-- **The Week's `week` pair holds the shown date, not a Monday ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 2; plan default, sent to the owner as an FYI, 2026-10-17).**
+- **The Week's `week` pair holds the shown date, not a Monday ([A722 Part 1](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 2; plan default, sent to the owner as an FYI, 2026-10-17).**
   At desktop width the Week shows the Monday-to-Sunday week holding it, on a phone that day alone,
   so ‹ › step a week or a day and resizing a window keeps the address. A missing, malformed or
   out-of-range date shows the week (or day) holding the venue's today, and the address is left as
   written, as a bad month is.
 
-- **Nothing is painted in the Week, and it has no long press ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 7; plan default, sent to the owner as an FYI, 2026-10-17).**
+- **Nothing is painted in the Week, and it has no long press ([A722 Part 1](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 7; plan default, sent to the owner as an FYI, 2026-10-17).**
   A day's name opens the day box, and making a special day is one press further, from there.
 
-- **"Open this week" is in the day box over the Year and the Month, for a viewer too, and not over the Week ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 8; plan default, sent to the owner as an FYI, 2026-10-17).**
+- **"Open this week" is in the day box over the Year and the Month, for a viewer too, and not over the Week ([A722 Part 1](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 8; plan default, sent to the owner as an FYI, 2026-10-17).**
   It changes nothing, so a viewer gets it. It is the box's last button.
 
-- **A prep station in the Calendar's Show draws one row per department that sends it dishes, named by the department even when only one does ([A722 Part 3](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 10; plan default, sent to the owner as an FYI, 2026-10-17).**
+- **A prep station in the Calendar's Show draws one row per department that sends it dishes, named by the department even when only one does ([A722 Part 3](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 10; plan default, sent to the owner as an FYI, 2026-10-17).**
   The Times tab names a lone row after the station, and keeps doing so. The day box still lists
   every department's opening hours: it is about the day, and a station is a way of looking at the
   dates. If the station list cannot be read, Show offers departments only, with no alert.
   **2026-10-17:** A725 retires the Times tab; Calendar's station view above remains the current
   surface. The earlier sentence about the lone Times row records the pre-retirement behavior.
 
-- **A read-only Calendar offers no prep stations in Show ([A722 Part 3](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 12; plan default, sent to the owner as an FYI, 2026-10-17).**
+- **A read-only Calendar offers no prep stations in Show ([A722 Part 3](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 12; plan default, sent to the owner as an FYI, 2026-10-17).**
   Stations go only to those who could already open the Times tab, which needs
   `venue.configure`. A read-only Calendar reads no station list and no station times, and
   ignores a `station` in its address. Whether a supervisor (`venue.view` without
@@ -476,7 +476,7 @@ the season painter continues saving through the season-week route._
   2026-10-18, A788: dated scheduling, Replace, Cancel and the pause on hours edits are retired. A new
   start takes effect at the next changeover, and opening hours stay editable while it waits; a write
   that clashes with the waiting start is refused `hours.clock_change_conflict`. See
-  [the design](../superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md).
+  [the design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md).
 
 
 - **Hierarchy Delete is permanent (A435 step 6, 2026-10-11).** One complete impact is rechecked

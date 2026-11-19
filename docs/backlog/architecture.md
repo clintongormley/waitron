@@ -1086,7 +1086,7 @@ Off; installed optional sets keep migrating while Off, absent disabled sets stay
 recovery continues. Unselected fiscal protection remains [open](#unselected-fiscal-modules-append-only-tables-are-neither-re-protected-nor-checked).
 The owner withdrew Google sign-in from A646 on 2026-11-11; it is A1507 in [later.md](later.md#a1507-google-sign-in-built-in-through-one-waitron-owned-google-setup).
 An export with an optional module Off loads on a new box with that module On and empty (owner, 2026-11-06 23:03, A1384).
-See the [design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and [remaining-switches plan](../superpowers/plans/2026-11-14-a646-remaining-module-switches.md).
+See the [design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-16-a646-modules-page-design.md) and [remaining-switches plan](../superpowers/plans/2026-11-14-a646-remaining-module-switches.md).
 
 
 **Three till refusals keep their statuses (A394-9, owner 2026-11-10: "Leave them, write it down (Rec.)").**

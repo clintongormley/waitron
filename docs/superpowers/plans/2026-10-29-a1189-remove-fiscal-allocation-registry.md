@@ -214,7 +214,7 @@ that is owner question 2, and this plan does not touch it.
    with it. Under this item's
    rules that is a STOP, so this plan leaves it exactly as it is — matching A679's earlier choice to
    "retain historical source only where required for unchanged tests"
-   (`docs/superpowers/plans/2026-10-16-a679-hour-code-implementation.md:353`). Task 2 adds a short
+   ([2026-10-16-a679-hour-code-implementation.md:353](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a679-hour-code-implementation.md)). Task 2 adds a short
    backlog entry for retiring it, together with the other historical formats (signed paper,
    emergency names), as its own owner-landed fiscal change. Do you want that entry, or should the
    historical reader stay indefinitely?
@@ -290,7 +290,7 @@ and the live behaviour around the old call sites keeps passing unedited.
 **Files:** `docs/developers/cloud-fiscal-allocation.md` (delete),
 `docs/developers/paper-custodian.md`, `docs/backlog.md`, `docs/backlog/fiscal.md`,
 `docs/backlog/self-service-refusals.md`,
-`docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md` (one line).
+[2026-10-12-cloud-fiscal-allocation-registry.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md) (one line).
 
 Prefer deleting to rewording (CLAUDE.md §1); every new sentence is a claim and needs its receipt.
 
@@ -322,7 +322,7 @@ Prefer deleting to rewording (CLAUDE.md §1); every new sentence is a claim and 
     `WAITRON_FISCAL_CLOUD_TRUST_FILE`, `_FINGERPRINT` and `_RECEIPT_DIRECTORY`. Removing
     them changes activation and several tests' assertions, so it is its own fiscal change for the
     owner to land. Left by A1189."
-- [ ] `docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md:298`: append to the
+- [ ] [2026-10-12-cloud-fiscal-allocation-registry.md:298](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md): append to the
   existing 2026-10-29 note: " Waitron's client and report journal were removed by A1189." Nothing
   else in that historical plan changes.
 - [ ] `docs/operations/planning-procedure-audit.md:22`: its last cell links the guide as the

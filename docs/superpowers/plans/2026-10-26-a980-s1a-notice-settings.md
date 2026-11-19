@@ -958,7 +958,7 @@ Files: `docs/backlog/data-protection.md`, `docs/superpowers/plans/2026-10-24-a98
      `apps/dashboard/src/screens/venue-privacy-panel.unsaved.test.ts`;".
    Then grep the whole tree, docs included, for `four cards` and `Business, Venue, Business day`,
    and fix or leave each hit on purpose. On 2026-10-26 the other hits were: the dated A755 plan
-   (`docs/superpowers/plans/2026-10-16-a755-venue-settings-cards.md`) and the dated A795 design
+   ([2026-10-16-a755-venue-settings-cards.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a755-venue-settings-cards.md)) and the dated A795 design
    (`docs/superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md:261`), historical
    records left as they are; `docs/superpowers/plans/2026-10-22-a757-8-service-steps-floor.md:1167`,
    whose "four cards" is about something else; this plan; and the two test lines Task 7 changes

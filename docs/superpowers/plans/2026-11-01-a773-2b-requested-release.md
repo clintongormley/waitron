@@ -10,7 +10,7 @@ is ready. The pass shows Held, To fire, In progress and Ready (and Overview, off
 the station's Held column shows "Waiting for the pass". The setting itself stays off and has no
 editor until PR C, so no venue changes behaviour during PR B.
 
-**Implements.** [Master plan](2026-10-19-a773-2-firing-and-pass.md) PR B: Tasks 4, 5, 6, 7a, 7b,
+**Implements.** [Master plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) PR B: Tasks 4, 5, 6, 7a, 7b,
 7, 8 and 9, under its "Dated authority amendment", "Global Constraints", "Review Focus",
 "Ownership" table, Contracts 1–13 and "Shared verification contract", all binding except where
 "Departures" below says otherwise and why. [Spec](../specs/2026-10-16-a773-courses-and-groups-design.md)

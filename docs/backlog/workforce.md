@@ -277,7 +277,7 @@ faded bands in their own colours, with their times at the top. Its paint row say
 {department}'s opening hours, by period”. A prep station's guides show when it gets orders from the
 period menus that route it dishes, from each period's start to its end. Sending departments keep
 separate, stable lanes, each band named by department and period. Staffing paint remains independent
-of those guides. The [Part 1 plan](../superpowers/plans/2026-10-16-a724-staffing-guide-bands.md)
+of those guides. The [Part 1 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a724-staffing-guide-bands.md)
 records the implementation and its verification checks.
 
 ### A585. Staff roles and rota planning
@@ -301,7 +301,7 @@ counts, the labour line and Publish) wraps whole onto a second line. The words a
 
 The [October design](../superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md) records the
 owner's clocking, correction and automatic-finish decisions. Parts 1–6 are built through their
-[plans](../superpowers/plans/2026-10-15-a10-6-record-export-plan.md).
+[plans](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a10-6-record-export-plan.md).
 
 At your first till sign-in of the day, Clock in and Cancel sit together. Cancel lets you work and
 the next sign-in asks again. Later clock actions and My hours live behind your name, folded into
@@ -337,11 +337,11 @@ visible. The Calendar's Rota marks shifts with pending requests and asks before 
 or changing its person or time. Deleting an offered shift cancels its requests; deleting a return
 shift removes that side of the offer. The shift editor states those separate effects. The
 `changeRotaWeek` operation uses `copyPublishedToDraft` to copy each shift with its job role and area. See
-[Task 7.2](../superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-72-changing-a-published-week).
+[Task 7.2](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-72-changing-a-published-week).
 
 ### A585. A rota version and its business-day overflow
 
-The earlier [part 6 plan](../superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-61-the-rota-read)
+The earlier [part 6 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-13-a585-staffing-and-rota.md#task-61-the-rota-read)
 read both a version's shifts and unattached shifts by local calendar date.
 **2026-11-17, A1308 pp7:** every shift now belongs to a rota week; a week reads its selected
 version's shifts and places each on its business day. Editing a shift keeps that week. A local

@@ -452,7 +452,7 @@ Read from the tree on 2026-10-21 (A947's research; every pointer is a file this 
 - **The fiscal side of a take-over is decided by A679 and W41s, not by this item.** W41s-4's
   decision A (owner, 2026-10-12) kept the standby dormant until take-over: "At promotion, require
   fresh administrator reauthentication, the old-machine-offline and no-parallel-recovery
-  confirmations" ([decision](../plans/2026-10-12-w41s4-standby-activation-decision.md), lines 39-41).
+  confirmations" ([decision](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-12-w41s4-standby-activation-decision.md), lines 39-41).
   The owner then replaced the paper register with **hour-coded series** (A679, approved 2026-10-16;
   [design](2026-10-16-a679-hour-coded-series-design.md)): "Standby admission | Keep it dormant
   without reserving a future hour. Promotion selects its hour when activation occurs", and "There
@@ -2135,7 +2135,7 @@ the code depends. _(2026-10-22: slice 4a added that test, `packages/fiscal-verif
 | The bundle carries the authority's public certificate only, no series under hour codes, and no data | `apps/server/src/mirror-bundle.ts` (`readFile(caCertPath(…))`, the `on-activation` refusal), `finish-adoption.ts` | read 2026-10-21 |
 | A box's signing key is a `tenant_credentials` row, one per database | `apps/server/src/node-identity.ts` (`membership.node_key`); the table's primary key is `purpose` | read by the fresh-context review, 2026-10-21 |
 | Credentials are sealed under a key from each box's own environment | `packages/credentials/src/keyring.ts` | read 2026-10-21 |
-| Dormant until take-over, with re-authentication and the offline confirmations | W41s-4 decision A, owner 2026-10-12 | `docs/superpowers/plans/2026-10-12-w41s4-standby-activation-decision.md:39-41` |
+| Dormant until take-over, with re-authentication and the offline confirmations | W41s-4 decision A, owner 2026-10-12 | [2026-10-12-w41s4-standby-activation-decision.md:39-41](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-12-w41s4-standby-activation-decision.md) |
 | No register; promotion selects its hour; strictly later; four symbols, never lengthened; one typed installation code for a recovery; 120-second clock check; promotion's preparation still open | A679, owner-approved 2026-10-16; PDF decisions of 2026-10-19 | `docs/superpowers/specs/2026-10-16-a679-hour-coded-series-design.md` lines 3, 31, 37-43, 64-66, 74, 120, 122, 131-134, 149, 215, 353-355, 399, re-read 2026-10-21 for the second revision |
 | Five symbols of minutes, always; the sheet without the code and no reprint, on condition of a test | owner, about 22:25 on 2026-10-21 | quoted from the campaign's questions file in the brief for this revision |
 | The hour code is exactly four symbols; a selected hour at or below the greatest spent hour refuses; the wait runs to the next hour | `packages/fiscal-verifactu/src/hour-identity.ts:3-6,17,31-33`; `hour-selection.ts:464-471,492-523,498` | read 2026-10-21 |

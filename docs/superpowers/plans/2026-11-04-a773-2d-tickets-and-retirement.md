@@ -26,7 +26,7 @@ waits for the pass (`requestStamps`, `apps/server/src/kitchen-release.ts:23-36`)
 words "Goes with kitchen food". *Pin*: a test of behaviour that is already right; every pin names
 the mutation that turns it red.
 
-**Implements.** The [master plan](2026-10-19-a773-2-firing-and-pass.md)'s Tasks 11 and 12 and its
+**Implements.** The [master plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)'s Tasks 11 and 12 and its
 PR D row ("Working PR boundaries"), under its Global Constraints, Review Focus 5 and Shared
 verification contract (S, G, LOOK); the [spec](../specs/2026-10-16-a773-courses-and-groups-design.md)
 §5 ("One group, several stations"), §6, §8, §9 ("`away_at` and the pass's Done marks go …
@@ -246,7 +246,7 @@ aside).
 
 15. **The words.** The spec's own text says the ticket and screen "say 'Goes with kitchen food'"
     (§5), an owner decision, so the English is approved. Its Spanish is not: the master's copy section
-    lists «Sale con la comida de cocina» as proposed (`2026-10-19-a773-2-firing-and-pass.md:59`), the
+    lists «Sale con la comida de cocina» as proposed ([`2026-10-19-a773-2-firing-and-pass.md:59`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)), the
     owner's 2026-11-02 copy sheet (B3's Question 1, `~/waitron-campaign-c/questions.md:1124-1160`)
     does not include it, and `grep -n 'Sale con\|Goes with kitchen' ~/waitron-campaign-c/questions.md`
     finds nothing. The heading adds no word: `GROUP`/`GRUPO` exists and course names are the venue's

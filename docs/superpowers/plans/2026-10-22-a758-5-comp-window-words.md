@@ -29,10 +29,10 @@ design §3.4 names for a free whole bill.
 **Tech stack:** TypeScript, Lit, Vitest (the till in real headless Chromium; the server suite on
 `node:sqlite`).
 
-**Spec:** `docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md` — D10 (`:63`), §3.2's
+**Spec:** [2026-10-17-a758-adjustment-reasons-design.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md) — D10 (`:63`), §3.2's
 "The till" paragraph (`:234-255`), §3.4 (`:323-349`), §9's "The till" line (`:1018-1020`), §9.1
 (`:1042-1072`). Parent plan and the outline this replaces:
-`docs/superpowers/plans/2026-10-19-a758-reason-rules.md`, "# A758-5" (`:1124-1145`). A773's design
+[2026-10-19-a758-reason-rules.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a758-reason-rules.md), "# A758-5" (`:1124-1145`). A773's design
 for the Comp window: `docs/superpowers/specs/2026-10-16-a773-courses-and-groups-design.md` §3.8
 (`:314-333`). Backlog: `docs/backlog.md` "A758" (`:2229-2268`), `docs/backlog/till.md` "## A758"
 (`:1403-1435`).
@@ -493,7 +493,7 @@ Tests read keys; nobody has seen the new buttons. Method as A758-4's Task 6
 **Files:** `docs/backlog.md` (A758 `:2229-2268`; the new entry after A923 at `:2271`),
 `docs/backlog/till.md` (`:1421-1431`).
 
-**Reading of the outline's "Last PR" line.** The outline (`2026-10-19-a758-reason-rules.md:1142-1143`)
+**Reading of the outline's "Last PR" line.** The outline ([`2026-10-19-a758-reason-rules.md:1142-1143`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a758-reason-rules.md))
 says to delete the A758 entry. A758-5 is the last of that plan's five pull requests, but the entry
 also holds two slices nobody has built — §3.8 and "collect it at the counter" (design §9,
 `:1031-1039`) — and "collect it at the counter" has no entry of its own: A908 is a different thing,

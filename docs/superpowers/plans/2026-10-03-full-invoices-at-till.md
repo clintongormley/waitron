@@ -1,13 +1,13 @@
 # A231 implementation plan: full invoices at the till
 
-> **2026-10-16, A737 Part 1:** [The page plan](2026-10-15-a737-find-bill-page.md) supersedes
+> **2026-10-16, A737 Part 1:** [The page plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a737-find-bill-page.md) supersedes
 > the till's modal search and header placement described below. Find a bill stays in More and
 > opens Bills/Transactions with server paging; collection receives a fresh selected bill.
 > Historical receipts open by sale ID. Use that plan for the current search and collection contract.
 
 
 > **2026-10-12, A493:** Live venue receipt defaults are retired. Decoration and the tax-agency description belong to each department. Earlier contracts below are historical.
-> See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
+> See [A493](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-12-a493-departments-zones-design.md).
 
 > **2026-10-12, A231q:** the consent step is gone from the product: tasks C1a and C1b of the [A231q
 > plan](2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows and

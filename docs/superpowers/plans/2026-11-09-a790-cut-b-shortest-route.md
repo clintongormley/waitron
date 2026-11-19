@@ -8,7 +8,7 @@
 
 **Staff finish:** You expand the printer row inside the invoice form, choose an eligible printer, then print there with its named button. The correct saved destination remains one tap. **Release:** land this usable slice once review and checks pass.
 
-**Approved, watcher 9 November 13:56, with G4 limited to larger Cut B.** Watcher 9 November 13:38 confirms owner C/M: folded inline row, selection saves Equipment, no overlay shortcut. Sources: [design C/M and Q1](../specs/2026-10-19-a790-document-and-printer-choice-design.md), [wider plan](2026-11-04-a790-venue-document-printer-routing.md), folded-plan-review.md in Lane F receipts. Source readings are runtime-unverified.
+**Approved, watcher 9 November 13:56, with G4 limited to larger Cut B.** Watcher 9 November 13:38 confirms owner C/M: folded inline row, selection saves Equipment, no overlay shortcut. Sources: [design C/M and Q1](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md), [wider plan](2026-11-04-a790-venue-document-printer-routing.md), folded-plan-review.md in Lane F receipts. Source readings are runtime-unverified.
 
 **First usable slice, ≤3 build hours:** 270 code + 450 tests + 50 docs = **770 changed lines**, no generated files, API, table or protocol. Stop for outside opinion at 1.5×. 
 

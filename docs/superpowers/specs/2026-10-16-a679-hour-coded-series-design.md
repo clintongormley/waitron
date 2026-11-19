@@ -10,7 +10,7 @@
 
 The owner accepted this design as written, including the epoch, clock threshold and disclosed limits.
 References below to proposals and recommendations record the design presented for that decision.
-Follow the [replacement implementation plan](../plans/2026-10-16-a679-hour-code-implementation.md)
+Follow the [replacement implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a679-hour-code-implementation.md)
 before building. Approval does not waive protected-code or fiscal-assertion restrictions; the later
 generated-PDF viewing check remains separate.
 
@@ -246,7 +246,7 @@ The installation nonrepetition requirement remains real. The proposed checks red
 
 ## Keep/change/drop inventory
 
-References: **W41** = `2026-10-04-fiscal-prevention-and-offline-recovery-design.md`; **A14** = `2026-10-14-a679-first-fiscal-setup-design.md`; **A15** = `2026-10-15-a679-two-route-redesign.md`; **C12** = `2026-10-12-cloud-fiscal-allocation-registry.md` plan; **R** = `2026-10-15-a679-first-setup-repair.md` plan.
+References: **W41** = `2026-10-04-fiscal-prevention-and-offline-recovery-design.md`; **A14** = [`2026-10-14-a679-first-fiscal-setup-design.md`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md); **A15** = [`2026-10-15-a679-two-route-redesign.md`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md); **C12** = [`2026-10-12-cloud-fiscal-allocation-registry.md`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md) plan; **R** = [`2026-10-15-a679-first-setup-repair.md`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a679-first-setup-repair.md) plan.
 
 Every changed owner decision below is dated **2026-10-16**. Designer recommendations remain proposals.
 
@@ -287,7 +287,7 @@ Every changed owner decision below is dated **2026-10-16**. Designer recommendat
 
 ## Implementation consequences after approval
 
-Replace **`docs/superpowers/plans/2026-10-15-a679-one-pdf-implementation.md` before building**. Its Tasks9–12 remain waiting; completed register-based tasks are reusable evidence and components, not qualification of this replacement. Reconcile the repair plan, original A679 plan, W41s allocation contracts, backlog and operator procedures with dated historical pointers.
+Replace **[2026-10-15-a679-one-pdf-implementation.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) before building**. Its Tasks9–12 remain waiting; completed register-based tasks are reusable evidence and components, not qualification of this replacement. Reconcile the repair plan, original A679 plan, W41s allocation contracts, backlog and operator procedures with dated historical pointers.
 
 The replacement plan must trace and revise:
 

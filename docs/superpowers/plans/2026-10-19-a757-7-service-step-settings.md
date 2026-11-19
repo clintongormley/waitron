@@ -498,7 +498,7 @@ Decided section's Q29, Q30 and Q31. Picture
     second rebases.
 
 12. **A756 PR 4** (reminder minutes per department) waits for A773-1 and will add its field to the
-    same Service tab (`docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md:622-633`, and
+    same Service tab ([2026-10-18-a756-kitchen-tab-split.md:622-633](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md), and
     slice 1's dated note after it). This slice adds no column to `departments`, so the two
     migrations do not collide beyond drizzle's numbering, which is fixed by regeneration (CLAUDE.md
     §3). Picture 10 draws the reminder between Needs clearing and Service steps; PR 4 inserts it

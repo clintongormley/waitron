@@ -1660,7 +1660,7 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   watcher 2026-11-16, not the owner).** After a refit the drawn table is no longer under the
   finger, and later moves do not close the gap. A766's first draft "kept the grabbed point under
   the finger; a model of it ran the table out to x 999 once the finger neared the edge".
-  [Plan](../superpowers/plans/2026-10-17-a766-till-floor-grows-on-drag.md)
+  [Plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a766-till-floor-grows-on-drag.md)
 
 - **One person check for every till request that needs a signed-in person (owner, 2026-11-07,
   A1380).** "The till's API client adds the tab's person to every request in one place, and the box
@@ -1937,7 +1937,7 @@ visible numbers alone do not imply a numbering defect.
 
 On a paid bill, Cancel item can cancel only the unserved remainder after earlier cancellations.
 Served food uses Refund a payment on the receipt, as
-[A758 section 3.3](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#33-cancel-item-by-where-the-dish-is-picture-03)
+[A758 section 3.3](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#33-cancel-item-by-where-the-dish-is-picture-03)
 specifies. The paid-serving cases in `line-cancel.test.ts` and `line-cancel-api.test.ts` check
 fully and partly served dishes, prior cancellations, unchanged rows after refusal and completed
 replay after serving. The unpaid served-food case retains its separate cancellation behavior.
@@ -2062,7 +2062,7 @@ operators and restarts. Lunch → Drinks stays on Drinks until the next occurren
 new day's Lunch with the same name. The department's timetable supplies the next default. An order
 or payment in progress keeps its context, with the grid/default change deferred until safe.
 The implementation choices and acceptance cases are in the
-[A740 plan](../superpowers/plans/2026-10-16-a740-zones-on-device.md).
+[A740 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a740-zones-on-device.md).
 
 2026-10-24 (A797 slice 4): a handheld has the same choice, under ☰ → Zones on this device (in ☰'s
 Settings group since slice 3). It narrows the handheld's Floor, which keeps every chosen zone,
@@ -2091,9 +2091,11 @@ plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), slice 4.
 
 ### A669. An allergy at the table
 
-Owner-approved [design](../superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
+Owner-approved [design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
 2026-10-15: allergy answers belong to a table's party, and a dish belongs to at most one guest.
-The [kitchen plan](../superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md) records the storage
+Only table orders ask about allergies; the counter has no allergy step, and seats are not stored
+as data (owner, 2026-10-14).
+The [kitchen plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-20-a669-4-kitchen-allergy.md) records the storage
 and presentation choices; the [kitchen guide](../../apps/server/src/guide/en/kitchen-service.md)
 explains the operator behavior.
 
@@ -2136,8 +2138,8 @@ configuration settings." Delete the designer before redesigning its default work
 Device Home Page and its Handheld/Till displays, receipt configuration and the floor-plan editor
 remain separate. Part 2 landed in [#1800](https://github.com/clintongormley/waitron/pull/1800) on 2026-10-16; part 1's redesign
 remains open.
-[Retirement design](../superpowers/specs/2026-10-16-a182-2-retire-canvases-design.md) and
-[plan](../superpowers/plans/2026-10-16-a182-2-retire-canvases.md).
+[Retirement design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-16-a182-2-retire-canvases-design.md) and
+[plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a182-2-retire-canvases.md).
 
 ### Joined-table seat suggestions (owner, 2026-10-16; A747)
 
@@ -2212,14 +2214,14 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   `From: García birthday` / `To: Counter 6, Table 9`; Bar back to its saved place inside a named
   group prints nothing, as the party keeps every table and the name; and an unnamed group of two
   ended the same way prints nothing
-  ([plan](../superpowers/plans/2026-10-14-a650-moved-slips-design.md)). 2026-11-04, A803 4c: Split a
+  ([plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-a650-moved-slips-design.md)). 2026-11-04, A803 4c: Split a
   table no longer tells bills that stay, by spec §3.7, except where a name on their paper has gone:
   a staying dish is told only when no name its paper printed is still one of its places (the owner's
   answer to the 4c plan's Question 3, choice B).
 - **The table screen shows no "(was N)" (A650 question A, owner 2026-10-14: the default kept).** A
   party's bills stay named "Ana · Bill 1" with no order number; "(was 28)" shows where numbers
   already show, such as the Pass screen, because a waiter answering a kitchen call looks there
-  ([plan](../superpowers/plans/2026-10-14-a650-moved-slips-design.md) §8).
+  ([plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-a650-moved-slips-design.md) §8).
 - **The "needs clearing" window names the one table it clears (A581 part 3, coordinator decision,
   2026-10-14).** A table renamed for today reads "Window needs clearing"; a table in a group, named
   or not, keeps "Table Counter 4 needs clearing", never the group's name, because Mark cleared
@@ -2434,7 +2436,7 @@ post-invoice Refund action belongs to Part 2. The approved page contract is:
 **2026-10-16 — Part 2 extension.** Completed refund rows open a separate payment acknowledgment
 with the original invoice reference, Reprint and access to the original invoice. Refund is offered
 from the original invoice while supported money remains. The durable attempt and recovery contract
-is in the [Part 2 plan](../superpowers/plans/2026-10-15-a737-post-invoice-refund.md).
+is in the [Part 2 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a737-post-invoice-refund.md).
 
 ### A pending card payment does not stop a bill moving (table actions plan P19)
 
@@ -2518,7 +2520,7 @@ product does not supply an arbitrary-price path. The cleanup below does not sett
 
 2026-10-20: the executable cleanup is described in the current
 [Counter contract](../developers/design-system.md#counter-basket-and-payment-space) and
-[implementation plan](../superpowers/plans/2026-10-19-a738-counter-cleanup.md). The original boards
+[implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a738-counter-cleanup.md). The original boards
 and dated requirements below remain as a design record. Later owner amendments preserve the
 optional name and order number on Park, replacing the generated timestamp name described below.
 The custom-item residual above and A739 remain open.
@@ -2731,7 +2733,7 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 
 ## A773. Courses, groups and the pass
 
-**A773-2**, firing and the pass: its [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
+**A773-2**, firing and the pass: its [reviewed implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
 was cut into PR B (B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
 B4 into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)),
 PR C ([task plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) and PR D

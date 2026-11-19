@@ -657,6 +657,9 @@ retain the earlier scope and the six follow-ups.
   for now, with the proposed $5 per venue per month cap and submit allowance of four jobs
   in flight, one per address. Paid subscriber service remains future work.
 
+- **Translate all is always shown (owner, 2026-10-14).** A box not connected to Waitron Cloud
+  still shows it, as an advertisement: it explains the service and links to connecting.
+
 - **Products list columns (A655, owner 2026-10-14, 2026-10-16 and 2026-10-20).** Availability stays
   as it is, and the table may stay wider than its box at desktop width. Made at is deleted with its
   filter: where dishes are made is shown on Prep stations → Routes, the red asterisk after a
@@ -670,8 +673,8 @@ retain the earlier scope and the six follow-ups.
   translation is optional, including the default. Units have a required staff name and abbreviation;
   neither is copied into translation maps. Report every missing enabled-language value. Default
   changes do not require complete text. Review all languages, Translate all and Use fix in the
-  same editor. [Design and decisions](../superpowers/specs/2026-10-17-a682-translations-design.md),
-  [implementation plan](../superpowers/plans/2026-10-17-a682-translations.md). Existing populated
+  same editor. [Design and decisions](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a682-translations-design.md),
+  [implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a682-translations.md). Existing populated
   venue folders require reset/reseed for the required unit staff columns; the owner approved
   declaring this reset, not executing one or squashing migrations under A760.
 
@@ -732,7 +735,7 @@ matching department receipt rasters in the same transaction, including retained 
 The grid uses square renditions bounded to 480 pixels; till tiles use 480×360, without enlarging
 tiny inputs. These are bounded in-memory cached responses generated from durable source bytes.
 Recipe URLs include source, framing and algorithm version. A removed recipe version returns 404;
-raw content-hash URLs keep their byte identity. The [implementation plan](../superpowers/plans/2026-10-17-a652-photo-framing.md)
+raw content-hash URLs keep their byte identity. The [implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a652-photo-framing.md)
 records the limits, collision policy, measured large-input byte reduction and tiny-seed counterexample.
 The old “about 4 MB per page” estimate was not a measurement. Current upload dedup preserves the
 matched photo's names/framing; an occupied retired-original alias is refused when no current source
@@ -799,7 +802,7 @@ the Descriptors fold at 390px in `docs/backlog.md`. Every change here is to an e
 so its draft scope and `*.unsaved.test.ts` must keep passing with sections closed.
 
 
-2026-10-15: implemented by the [A647 plan](../superpowers/plans/2026-10-15-a647-product-editor.md).
+2026-10-15: implemented by the [A647 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a647-product-editor.md).
 The numbered decision above records the approved design and describes the earlier editor where
 it says “today”. The owner supplied Spanish wording the same day: Venta; Pedir por separado;
 Cualquiera / Solo el personal / Nadie.

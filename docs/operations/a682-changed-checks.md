@@ -4,8 +4,8 @@ Existing venue folders require reset/reseed for the required unit staff fields. 
 or A760 squash was executed.
 
 You can review the deliberate existing-check changes below alongside the
-[approved design](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a)
-and [implementation plan](../superpowers/plans/2026-10-17-a682-translations.md). Each checkpoint
+[approved design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a)
+and [implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a682-translations.md). Each checkpoint
 retains its before/after evidence and qualifications. Its line numbers and completion status
 refer to that checkpoint; later entries and the final source supersede earlier intermediate
 contracts. The unit migration was regenerated as `catalogue/0035_unit_staff_identity`; earlier
@@ -1231,7 +1231,7 @@ Remaining: Task8 all-language suggestion query/DTO/HTTP paging and waiting-fix c
 
 ### A682 Task8 suggestion paging: Changed test checks (FYI, no answer needed)
 
-Authority: approved plan `docs/superpowers/plans/2026-10-17-a682-translations.md`, “Suggestions and draft ownership” and Task8: all-language suggestion queries, fresh current cell tokens, configuration-bound continuation and independent waitingFixes. Tasks7/10 consumer adaptation was brought forward to keep the existing dashboard reader consistent with this DTO. This remains one unpublished A682 branch; no partial PR or feature-ready claim.
+Authority: approved plan [2026-10-17-a682-translations.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a682-translations.md), “Suggestions and draft ownership” and Task8: all-language suggestion queries, fresh current cell tokens, configuration-bound continuation and independent waitingFixes. Tasks7/10 consumer adaptation was brought forward to keep the existing dashboard reader consistent with this DTO. This remains one unpublished A682 branch; no partial PR or feature-ready claim.
 
 - `apps/dashboard/src/api/client-routes.test.ts:252,253,262`: the two exact response checks and exact request list replace a single-language URL with no-query first read and an encoded after/configuration/fixesOnly query. Job start, method, body, response and discard checks remain.
 - `apps/dashboard/src/widgets/content-translations-dialog.drafts.test.ts:226,230,929,941,1096`: later-read and no-further-read checks now assert the query object and configuration, or inspect query.after. All field/draft/save/late-reply assertions remain. At746 and819, the French-opening request check now awaits a flag set by the newly installed reader after its actual read resolves, before holding its answer; matching an old no-argument call would weaken that ordering. At1106, the old wrong-language fixture is now a configuration disabling the viewed language; its no-fill and repeated-cursor checks remain.
@@ -1886,7 +1886,7 @@ exact CI39086656964/licence39086656924 completedSUCCESS. No own merge or new H12
 
 ### A682 Task10 editor integration: Changed test checks
 
-Authority: docs/superpowers/plans/2026-10-17-a682-translations.md Task10, lines499–512, plus the approved design closure. The chosen language initializes Missing in and Jump to; fields, paging and Save use the final multilingual contracts. Keep this inventory AND ALL older A682 inventories for the single eventual PR. This is an unpublished checkpoint, not task/feature completion.
+Authority: [2026-10-17-a682-translations.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a682-translations.md) Task10, lines499–512, plus the approved design closure. The chosen language initializes Missing in and Jump to; fields, paging and Save use the final multilingual contracts. Keep this inventory AND ALL older A682 inventories for the single eventual PR. This is an unpublished checkpoint, not task/feature completion.
 
 Existing checks retain draft/Keep/Discard/navigation/security/unload, saved-event ordering, exact typed text and tokens, run counts/states/refusals/progress/late-answer expectations and report-refresh failure behavior. Changed request checks preserve every earlier kind/id/expected/text and add language/field to the one batch. The suggestion query is now the explicit empty object. The data-table presence checks become bounded-window/native-field readiness checks. Four language-specific heading checks become the generic editor heading PLUS exact Missing in and Jump language checks. No money, permission, fiscal or root-guard expected value changes in this delta.
 
@@ -2008,7 +2008,7 @@ Rebase conflicts also combine staff fields with the landed measure switch in uni
 
 ### A682 Task12 changed test checks, FYI, no answer needed
 
-Authority: `docs/superpowers/plans/2026-10-17-a682-translations.md:527–543`, particularly the required staff fallback signatures, one default key for unit presentation, and the separate prepared full-name context. Owner decision2026-10-05 permits checks whose required behavior changes.
+Authority: [2026-10-17-a682-translations.md:527–543](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a682-translations.md), particularly the required staff fallback signatures, one default key for unit presentation, and the separate prepared full-name context. Owner decision2026-10-05 permits checks whose required behavior changes.
 
 - `apps/server/src/working-order.test.ts`: the fractional-unit retained-order assertion changes its context-name key from locale `es-ES` to content-language `es`; the synthetic Each retained-order assertion changes its full multilingual unit name to the one prepared default-language entry. Both retain all identity, price, precision, hardware, stored-name and live-rename assertions. This changes preparation of new test orders; no historical reader is changed.
 - `apps/server/src/modifier-selection.test.ts`: two direct edit calls now state default language `en`. The weighted added-extra assertion changes `{en:kg, es:kg}` to exactly `{en:kg}`. Quantity, physical quantity, portion, unit precision, full context, price and VAT checks remain.
@@ -3568,7 +3568,7 @@ Task 12 consumer integration still waits for G's reserved source/money functions
 ### A682 continuation: future snapshot preparation (unpublished)
 
 Base for this continuation: `500c01777ef004935ee13cb0f83a712246ddd18f`.
-Authority: approved `docs/superpowers/plans/2026-10-17-a682-translations.md`, Task 12, and the design's final dated closure.
+Authority: approved [2026-10-17-a682-translations.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a682-translations.md), Task 12, and the design's final dated closure.
 Keep this inventory AND every earlier A682 inventory for the single eventual PR's **Changed test checks** section.
 No final review, push, PR, finish or land was attempted.
 
@@ -3617,7 +3617,7 @@ Qualifications: the first install wrapper's session id was not retained; frozen 
 
 ### A682 changed test checks: legacy editor retirement
 
-Authority: approved design `docs/superpowers/specs/2026-10-17-a682-translations-design.md`, “Proposed behavior”, “One Save, one transaction”, “Translate all and Use fix”, and the dated unit-A/Spanish-A closure; implementation-plan Tasks 7, 9–11. This is an unpublished implementation checkpoint, not whole-feature completion.
+Authority: approved design [2026-10-17-a682-translations-design.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a682-translations-design.md), “Proposed behavior”, “One Save, one transaction”, “Translate all and Use fix”, and the dated unit-A/Spanish-A closure; implementation-plan Tasks 7, 9–11. This is an unpublished implementation checkpoint, not whole-feature completion.
 
 All 38 original model case groups survive in order as 40 runtime cases. A new overflow-discard regression makes 41. The real multilingual model is now under test; the old model is deleted. Representation changes include four-part cell identities, explicit null clears, per-language baselines, field unstaging and per-id suggestions. The existing second multilingual model suite remains unchanged.
 
@@ -3705,7 +3705,7 @@ Task 12 future presentation/snapshots and G source/money integration remain; E b
 
 Continuation from signed-off `274d508f67b6520d48441e4109545ca891ac7a26`. Whole A682, Tasks10/11 and earlier unfinished duties remain open. This is not a partial production PR or finish/land readiness.
 
-Authority: `docs/superpowers/plans/2026-10-17-a682-translations.md:213`–237 (bounded multilingual HTTP/client contracts, trimmed search, kind/id cursors and 100-cell retained reads), Task9 at487 (101st pending personal input/explicit capacity), Task10 at499 (window, filters, personal drafts, exact Save/late-answer behavior) and Task11 at514 (review/suggestions); approved spec closure at264 and the queue's 2026-10-05 changed-test decision. No fiscal, money, VAT, login, permission, drawer or root-guard expected value changes.
+Authority: [2026-10-17-a682-translations.md:213](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a682-translations.md)–237 (bounded multilingual HTTP/client contracts, trimmed search, kind/id cursors and 100-cell retained reads), Task9 at487 (101st pending personal input/explicit capacity), Task10 at499 (window, filters, personal drafts, exact Save/late-answer behavior) and Task11 at514 (review/suggestions); approved spec closure at264 and the queue's 2026-10-05 changed-test decision. No fiscal, money, VAT, login, permission, drawer or root-guard expected value changes.
 
 `test-map.json` records EVERY original standard `it` group with its exact old and current `file:line`, title and all matcher expressions. All37 original groups have a successor (43 runtime cases); the native-language redraw case expands to four theme/width cases, and one optional-two-language Save case is added, giving47 runtime cases. `assertion-audit.json` records every replaced/added/retained expression verbatim, including helper assertions. These are syntax inventories, not proof of fixture or behavior equivalence; use the matrix and actual runs together.
 

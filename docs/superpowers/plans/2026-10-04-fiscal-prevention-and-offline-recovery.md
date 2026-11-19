@@ -297,7 +297,7 @@ is absent; independently recorded attempts use separate fresh emergency identity
 
 The host audit found a standby lifecycle decision: reservation/adoption happen before the current
 primary stops, while the recovery approval requires isolation before activation. The concrete
-[decision inventory](2026-10-12-w41s4-standby-activation-decision.md) proposes dormant reservation
+[decision inventory](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-12-w41s4-standby-activation-decision.md) proposes dormant reservation
 followed by activation at promotion. No host path or SIF declaration has changed. Task 4 remains
 incomplete; the owner's earlier signer/assertion/list-entry approvals remain valid.
 
@@ -326,7 +326,7 @@ This internal operation is not connected to the host or exported from the public
 Authenticated host context, binding takeover consumption to this stored reservation, coupled
 text typing/counter retirement and all host consumers remain unfinished. The existing root
 append-only and fiscal schema-ownership exact lists each fail only on the new table name.
-The [list-change request](2026-10-12-w41s4-reservation-list-approval.md) specifies the two additions;
+The [list-change request](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-12-w41s4-reservation-list-approval.md) specifies the two additions;
 no existing assertion or guard has changed in this checkpoint.
 
 **2026-10-12 takeover-binding checkpoint:** the owner approved the two exact dormant-table
@@ -388,7 +388,7 @@ seats, numeric SIF/counter code, shipped SQL and promotion authentication are un
 
 The real recovery-key route probe accepts a valid node key with no operator ID, a staff ID and
 an unknown ID. The wrong-key control refuses. That route supplies no named administrator to
-the activation callback. The [operator decision](2026-10-12-w41s4-break-glass-operator-decision.md)
+the activation callback. The [operator decision](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-12-w41s4-break-glass-operator-decision.md)
 requires the owner's choice before adding that authority path. CLI/staged recovery inputs,
 bundle/adoption/promotion and final text SIF/counter/all-consumer/schema qualification remain
 coupled work. Do not publish this incomplete candidate; Task 4 remains open.
@@ -975,7 +975,7 @@ remaining consumers stay coupled; this checkpoint does not complete Task 4.
 
 **2026-10-14 hook-contract checkpoint:** the remaining-consumer audit found existing
 return-field and malformed-reservation-code assertions outside the earlier exact approval
-lists. The [supplemental request](2026-10-14-w41s4-hook-contract-assertion-approval.md)
+lists. The [supplemental request](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md)
 names each expression and the retained complete-series, rollback, permission and history
 checks. Six isolated controls reproduced the old/new interface differences and passed
 with the proposed comparisons; no production code or original assertion was changed.
@@ -1021,7 +1021,7 @@ migration allows that orphan to commit. These are sampled migration controls, no
 restored-box qualification or a final regenerated-on-main receipt.
 
 The existing venue-application suite passes 41 cases and retains two failing contracts outside
-the exact approved lists. The [setup-check request](2026-10-14-w41s4-setup-check-approval.md)
+the exact approved lists. The [setup-check request](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-w41s4-setup-check-approval.md)
 proposes a complete text-identity report matcher and preservation of the generic phantom-series
 regression with a non-owning test seed. Both proposed changes are qualified only in an independent
 installed candidate. No feature-tree change to those two checks is authorised by this checkpoint.
@@ -1041,7 +1041,7 @@ upgrade/Cloud qualification, both reviews, the hook and current-head CI still re
 
 
 **2026-10-14 developer and remaining host-check qualification:** the owner approved both A
-choices in [the remaining request](2026-10-14-w41s4-host-check-and-demo-decision.md).
+choices in [the remaining request](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-w41s4-host-check-and-demo-decision.md).
 The venue-details snapshots now include complete populated allocation rows and the reservation
 ledger. The new-taxpayer import checks its supplied B-S000001/FB-S000001/RB-S000001 series.
 The developer seed uses a runtime signing boundary constrained to preproduction and the built-in
@@ -1077,7 +1077,7 @@ trigger, monotonic and populated-upgrade suites passed 409 cases. The full fisca
 the owner-approved person-or-recovery-key-event union, without changing Cloud code.
 The new archive caller needed a missing await, qualified by a new observed RED then GREEN case.
 Main's original archive suite introduced two fiscal checks absent from the previous approval lists;
-[their concrete proposal](2026-10-14-w41s4-archive-check-approval.md) passed 36 cases and server types
+[their concrete proposal](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-w41s4-archive-check-approval.md) passed 36 cases and server types
 in an independently installed candidate, while the feature leaves those original checks unchanged.
 Owner approval of that exact port, both FULL reviews and the normal hook/current-head CI remain.
 Task 4 is still unpublished.

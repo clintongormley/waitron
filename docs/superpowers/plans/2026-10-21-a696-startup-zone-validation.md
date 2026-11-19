@@ -18,7 +18,7 @@ _2026-11-01, A1008: the one-sale operator command and its command-only tests are
 
 **Tech stack:** TypeScript, Node/Intl, Hono, Drizzle/node:sqlite, Lit/shared `wt-*` fields, Vitest with real Chromium for browser packages.
 
-**Spec:** [Approved startup design](../specs/2026-10-20-a696-startup-zone-validation-design.md), including the complete issuance/preservation inventory in the [original audit](../specs/2026-10-15-a696-invoice-time-zone-design.md). The guided mid-payment proposal is historical and is not an implementation contract.
+**Spec:** [Approved startup design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md), including the complete issuance/preservation inventory in the [original audit](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md). The guided mid-payment proposal is historical and is not an implementation contract.
 
 ## Authority and constraints
 

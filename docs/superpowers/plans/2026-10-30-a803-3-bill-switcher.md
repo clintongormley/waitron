@@ -2248,7 +2248,7 @@ run.
   Split a table, Join a table, Move guests, Finish table, not D4's Guests, Name the party,
   Allergies. Two existing checks pin the old order: `till-table-order-screen.allergy.test.ts:139`
   ("offers Allergies first in Actions", from A669's spec line "Actions gains Allergies, first in the
-  list", `docs/superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md:162`) and
+  list", [2026-10-14-a669-allergy-at-the-table-design.md:162](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md)) and
   `till-table-order-screen.test.ts:6148` ("offers Guests right after Name the party"). Neither the
   A803 spec (§3.5 lists no Allergies) nor an owner answer moves them, so they were kept and
   re-pointed only; the driver decides whether D4's order wins. (b) With no party, Whole table reads

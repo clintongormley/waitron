@@ -617,9 +617,9 @@ proposal no private venue is collected, redacted, uploaded or used. Silence appr
 
 ## The A760 boundary comes first
 
-The [approved A760 plan](../plans/2026-10-16-a760-migration-squash.md#owner-approval-16-october-2026)
+The [approved A760 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a760-migration-squash.md#owner-approval-16-october-2026)
 requires existing venues to enter the new migration history through approved destructive pre-live
-resets. Its [inventory](../plans/2026-10-16-a760-migration-squash-inventory.md) is a dated input to
+resets. Its [inventory](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a760-migration-squash-inventory.md) is a dated input to
 that job, not a database this design may upgrade across the boundary. Preserve both documents.
 
 The supported A799 baseline starts **after the approved squash/reset**. Call that history an

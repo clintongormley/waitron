@@ -374,7 +374,7 @@ under the task.
      separately remove the canonical-bytes comparison at `recovery-reader.ts:110-115`. Record which
      cases fail (expected: "extra secret", "duplicate JSON key", "noncanonical").
 3. Read the reasons the earlier one-PDF work gave for these rules, in
-   `docs/superpowers/plans/2026-10-15-a679-one-pdf-implementation.md:72` (exact attachment round
+   [2026-10-15-a679-one-pdf-implementation.md:72](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) (exact attachment round
    trip or refusal), `:132` (never copy the secret attachment or node keys into another carrier) and
    `:229-234` (missing, repeated, conflicting, corrupt and oversized attachments refuse; exactly one
    attachment), and check each against the pack: the pack is a new carrier that **does** hold the

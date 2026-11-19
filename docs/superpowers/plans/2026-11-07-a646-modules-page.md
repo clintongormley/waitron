@@ -10,7 +10,7 @@
 
 **Stack:** TypeScript, Hono, Drizzle/node:sqlite, sealed credentials, Lit/shared UI, Vitest/Chromium.
 
-**Spec:** [Agreed design](../specs/2026-10-16-a646-modules-page-design.md).
+**Spec:** [Agreed design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-16-a646-modules-page-design.md).
 
 ## Authority and limits
 

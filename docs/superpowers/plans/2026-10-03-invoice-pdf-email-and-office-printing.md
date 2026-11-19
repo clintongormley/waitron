@@ -14,7 +14,7 @@
 
 > **2026-10-12, A493:** consent validation uses the selected order or sale's department
 > contact, including the existing local default-department fallback, rather than the venue
-> receipt row. See [A493](../specs/2026-10-12-a493-departments-zones-design.md). The consent payload,
+> receipt row. See [A493](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-12-a493-departments-zones-design.md). The consent payload,
 > reservation and retry contracts remain; their separate rewrite is still open.
 
 > **2026-10-12, A231q:** the consent step is gone from the product: tasks C1a and C1b of the [A231q

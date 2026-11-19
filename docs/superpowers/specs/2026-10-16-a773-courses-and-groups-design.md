@@ -268,7 +268,7 @@ are in the line window (3.7). Neither kind is ever sent; both stay in the list.
 (2026-10-25, A789 slice 4: a dish whose period ended earlier the same business day is marked
 "{period} ended", and Send all or Fire first opens a window asking the waiter to check with the
 kitchen; it is sent once they choose Kitchen agreed, after a manager's PIN where the department
-asks for one. See the [A789 design](2026-10-18-a789-last-orders-design.md) §3.2.)
+asks for one. See the [A789 design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-18-a789-last-orders-design.md) §3.2.)
 
 **The "Check before sending" window goes.** Send all sends straight away. Its other jobs move:
 - the bill choice is replaced by section 4;

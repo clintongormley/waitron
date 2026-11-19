@@ -109,7 +109,7 @@ plan builds the settings document unless the watcher picks the alternative befor
 - Docs: the backlog entry "Audit attendance discovery invalidation…" (what pp9 left of it) and its
   `docs/backlog/workforce.md` section are deleted; a dated pointer is added under the A1343 note at
   the top of `docs/superpowers/specs/2026-11-02-rationalisation/tables-people.md` and in
-  `docs/superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md` ("<date>, A1308 pp12: the scan is
+  [2026-10-14-a10-3-end-of-day-plan.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-a10-3-end-of-day-plan.md) ("<date>, A1308 pp12: the scan is
   gone; recent days are re-checked after a restore, migration or format change; no evidence hash —
   see the pp12 plan").
 

@@ -1,15 +1,15 @@
 # A585 — Staffing needs and the rota: who the venue needs, when, and who fills it
 
-> 2026-10-17: A763 points 1–8 are built (see the [plan](../plans/2026-10-17-a763-rota-redesign.md));
+> 2026-10-17: A763 points 1–8 are built (see the [plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a763-rota-redesign.md));
 > point 9 waits for A724 Part 2.
 
 > 2026-10-16: A763 redesigns the Rota view. One Show menu replaces decision 9's By area | By
 > person switch and the area picker, and the people panel goes. See
-> [A763's plan](../plans/2026-10-17-a763-rota-redesign.md).
+> [A763's plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a763-rota-redesign.md).
 
 > 2026-10-16: A724 replaces the painters’ bare opening-hour guides with named period bands and
 > station sending-department lanes, and calls the season painter a standard week. See its
-> [Part 1 plan](../plans/2026-10-16-a724-staffing-guide-bands.md). The month’s day-box work stays open.
+> [Part 1 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a724-staffing-guide-bands.md). The month’s day-box work stays open.
 
 > 2026-10-16: A720 Part 5 removes the Staffing month’s season chips and legend; every day opens the
 > shared day box. See design-system.md, the Staffing view.
@@ -22,7 +22,7 @@ Date: 2026-10-13. Status: design agreed with the owner in chat; awaiting review 
 
 > 2026-10-15 implementation pointer: part 5 adds published-only own shifts, copying a published
 > week into a draft, module descriptions on both own schedules and the warnings read. The
-> [part 5 plan](../plans/2026-10-13-a585-staffing-and-rota.md#part-a585-5--workforce-what-staff-see-copying-a-week-describing-shifts-warnings)
+> [part 5 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-13-a585-staffing-and-rota.md#part-a585-5--workforce-what-staff-see-copying-a-week-describing-shifts-warnings)
 > records its interfaces. The Rota views and retirement in parts 6–8 remain open.
 
 > 2026-10-15 implementation pointer: part 6 adds the area rota, slot filling and picker, and the
@@ -34,7 +34,7 @@ Date: 2026-10-13. Status: design agreed with the owner in chat; awaiting review 
 > 2026-10-15 implementation pointer: part 7 adds the person view, labour warnings and candidate
 > previews, publication, changing a published week, and a protected shift editor with swap
 > confirmations. Part 8 still retires the old Rota screen and free-text role columns. See the
-> [part 7 plan](../plans/2026-10-13-a585-staffing-and-rota.md#part-a585-7--the-rota-by-person-warnings-publish-and-change-this-week).
+> [part 7 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-13-a585-staffing-and-rota.md#part-a585-7--the-rota-by-person-warnings-publish-and-change-this-week).
 
 ## Why
 

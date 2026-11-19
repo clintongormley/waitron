@@ -30,7 +30,7 @@ paid counter order with dishes still coming: Find a bill's Bills tab and the cou
 orders list it as "Paid, not handed over", its dishes stay on the pass and the stations, and they
 leave when the order is handed over.
 
-**Spec:** `docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md` — D17 (§1), §3.8
+**Spec:** [2026-10-17-a758-adjustment-reasons-design.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md) — D17 (§1), §3.8
 (all of it, item 4 especially, the "Who may" paragraph, and §3.8.1's "Out of scope"), §3.9 (the row
 "They'll collect it at the counter"), §9 (the bullet "They'll collect it at the counter is a slice of
 its own"), §10 items 5 and 6, §11. Picture 06 in `docs/backlog/mockups/a758-adjustment-reasons/`

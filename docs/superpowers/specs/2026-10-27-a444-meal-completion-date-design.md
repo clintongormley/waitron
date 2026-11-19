@@ -221,7 +221,7 @@ Times below are venue-local, `Europe/Madrid`, after the October DST change (+01:
 
 ## Integration and release
 
-Consume the published [A696 design](2026-10-20-a696-startup-zone-validation-design.md) /
+Consume the published [A696 design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md) /
 [plan](../plans/2026-10-21-a696-startup-zone-validation.md) clock contract and
 [A739 approved plan](../plans/2026-10-27-a739-approved-payment-flow.md) payment-context/recovery
 contract. Read-only parked A696 `c79b2c03d` still has opening-day core logic; it is not a released

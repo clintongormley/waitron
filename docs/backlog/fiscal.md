@@ -139,7 +139,7 @@ set `TZ` or mount a local-time file; a local `node:26.11.1-slim` process reporte
 That probe does not measure an operator's configured appliance.
 
 **A696 audit/design, 2026-10-15:** the
-[audit and design proposal](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md)
+[audit and design proposal](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md)
 traces every discovered issuing, replay, resend, import and seed path. Driver probes extend the
 process-zone observation to held orders, unpaid invoices, table payments, reader capture/recovery,
 public unpaid departure and cancellation credits, core F1/F3 and R5, and emergency series.
@@ -150,13 +150,13 @@ No product fix is built.
 **Decision update, 2026-10-15:** the owner chose the saved venue zone, including DST, for every
 new invoice date and record offset, ordinary receipt and till, independently of the process zone.
 Old records stay unchanged. See the [recorded decision](#decisions-and-deliberate-limits) and
-the [spec's dated answer](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone).
+the [spec's dated answer](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone).
 
 **Current direction, updated 2026-10-20:** the owner's 2026-10-15 ~22:25 answer supersedes the
 17:20 mid-payment repair proposal. Check the saved zone at startup and every application writer;
 admit no sale, payment or invoice while it is bad. Keep manager login and zone confirmation
 reachable with `venue.configure`, only for a missing/invalid zone. Valid-to-valid settings locks
-remain. The [startup redesign](../superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
+remain. The [startup redesign](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
 proposes repair-only authenticated serving followed by restart, and identifies A166's country-pack
 dependency. The dropped post-capture state, resume action
 and reporting consequence remain only in the historical guided proposal and decision below.
@@ -1302,7 +1302,7 @@ check against a second clock, and dropped the installation code from the sheet; 
   record offset, ordinary receipt and till use the saved venue zone, including DST, independently
   of the process zone. Old records, including their dates, offsets and hashes, stay unchanged.
   Receipt: `~/waitron-campaign-e/questions.md`, **WATCHER 2026-10-15 ~05:12**, “OWNER ANSWER
-  to A696 question 1”; [spec decision](../superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone).
+  to A696 question 1”; [spec decision](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone).
   That answer alone grants no repair permission or build approval; the later 17:20 scope
   decision is recorded below. A696 stays open and A444 stays separate. (2026-11-12: A444 is
   closed by the creation-date decision above.)
@@ -1311,7 +1311,7 @@ check against a second clock, and dropped the installation code from the sheet; 
   payment resumes without another charge, and new issuance uses the recovery instant and its
   venue offset. Keep the capture instant and settled replay facts; valid-to-valid settings locks
   stay in force. Receipt: `~/waitron-campaign-e/questions.md`, **WATCHER 17:20**, answer to
-  A696 question 2. The [exact design](../superpowers/specs/2026-10-15-a696-guided-zone-repair-design.md)
+  A696 question 2. The [exact design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a696-guided-zone-repair-design.md)
   awaits owner approval before planning or building; the scope answer does not approve its
   proposed permission or repair mechanism.
 - **A696, owner supersession 2026-10-15 ~22:25, recorded here 2026-10-20:** validate the saved
@@ -1322,7 +1322,7 @@ check against a second clock, and dropped the installation code from the sheet; 
   action and historical-reporting consequence. Keep mid-payment recovery only if a supported live
   invalidation path is evidenced. Receipt:
   `~/waitron-campaign-e/questions.md`, **OWNER 2026-10-15 ~22:25**.
-  The [startup redesign](../superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
+  The [startup redesign](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-20-a696-startup-zone-validation-design.md)
   passed requirements review.
 
 - **Reply matching (owner, 2026-10-06).** Line N of AEAT's reply is paired with record N of the envío, and is
@@ -1374,11 +1374,11 @@ approval bind `{kind:"recovery-key",nodeId,eventId}`; normal administrator actio
 attribution.
 
 **2026-10-14, approved hook-contract checks:** the owner approved exactly the seven groups in
-[the supplemental request](../superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md).
+[the supplemental request](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-w41s4-hook-contract-assertion-approval.md).
 
 **2026-10-14 setup-check approval:** both exact setup-check changes are approved and applied.
-[Exact proposals and retained checks](../superpowers/plans/2026-10-14-w41s4-setup-check-approval.md).
-[Host checks and demo decision](../superpowers/plans/2026-10-14-w41s4-host-check-and-demo-decision.md).
+[Exact proposals and retained checks](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-w41s4-setup-check-approval.md).
+[Host checks and demo decision](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-w41s4-host-check-and-demo-decision.md).
 
 ### W41s-4 recovery-key label, 2026-10-13
 

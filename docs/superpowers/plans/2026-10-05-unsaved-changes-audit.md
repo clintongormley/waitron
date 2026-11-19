@@ -6,7 +6,7 @@ interfaces describe this document's source snapshot. Menu Home Page, receipt con
 floor-plan editing remain separate.
 
 
-> **2026-10-16, A737 Part 1:** [The page plan](2026-10-15-a737-find-bill-page.md) supersedes
+> **2026-10-16, A737 Part 1:** [The page plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a737-find-bill-page.md) supersedes
 > the till's modal search and header placement described below. Find a bill stays in More and
 > opens Bills/Transactions with server paging; collection receives a fresh selected bill.
 > Historical receipts open by sale ID. Use that plan for the current search and collection contract.
@@ -17,7 +17,7 @@ floor-plan editing remain separate.
 > editor. References below describe the code when this document was written.
 
 > **2026-10-12, A493:** The old receipt-page scopes are retired. Protected department receipt dialogs and the independent Venue language card own their drafts. Earlier contracts below are historical.
-> See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
+> See [A493](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-12-a493-departments-zones-design.md).
 
 > **2026-10-11 supersession.** The later floor design retires the old floor checkpoint’s immediate zone Enable/Disable and placement actions. A435 step 6 uses shared-impact hierarchy Delete and invalidates deleted editor targets; individual-table draft rules remain. See the
 > [step 6 reconciliation](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.

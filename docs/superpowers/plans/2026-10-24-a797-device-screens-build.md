@@ -353,7 +353,7 @@ applied only in the till app; the floor read returns the profile's zones whateve
   `floorZoneIds` whenever a choice is held, on a till or a handheld. **Why:** today a handheld's
   Floor is handed every zone of the profile, counter zones included (`till-app.ts:17754-17756`), and
   A740 kept it so on purpose: "the screen's existing non-seating refusals and occupied-table recovery
-  remain available to the other form factors" (`docs/superpowers/plans/2026-10-16-a740-zones-on-device.md:24-25`).
+  remain available to the other form factors" ([2026-10-16-a740-zones-on-device.md:24-25](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a740-zones-on-device.md)).
   The demo shows why it matters: its Downstairs bar is a counter zone with tables B1–B3 (the seed
   sets its `orderStart` to `counter`, `apps/server/scripts/demo-seed/seed-floor.ts:88-109`; tables
   `floor.ts:184-186`), so a table-only Floor would take them off every handheld. A till can drop
@@ -7769,7 +7769,7 @@ apps/till/src` (ran), each line read:
 | `packages/ui/src/components/wt-switch.ts:113-122`, `:143-170` | the switch primitive: `label` drawn after the control, `accessible-name`, `disabled`, `description` read to assistive technology | the Show switch (D5, D10) |
 | `apps/dashboard/src/screens/device-profiles-screen.ts:1806-1823` | a profile's printers: a switch per printer, then Move up and Move down named "Move up <printer>", disabled at the ends | the precedent for the arrows' names and ends (D6) |
 | `apps/till/src/i18n/strings.ts` en `:679-681`, es `:2433-2435` `station.state.*`; en `:947`, `:1307`, `:1662` / es `:2690`, `:3043`, `:3394` "Done" «Hecho»; en `:799` / es `:2545` "Chosen on this device" | the column names; Done; the equipment note | read; reused words (D5) |
-| `docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md:101` | A773-2's Columns contract | read: "Order/show/hide belong to corner Columns settings with up/down, no drag; heading tap toggles collapse and retains heading/count; narrow tabs/list use the same order/visibility/collapse. Columns remain reachable even if every content column is hidden." (D3) |
+| [2026-10-19-a773-2-firing-and-pass.md:101](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) | A773-2's Columns contract | read: "Order/show/hide belong to corner Columns settings with up/down, no drag; heading tap toggles collapse and retains heading/count; narrow tabs/list use the same order/visibility/collapse. Columns remain reachable even if every content column is hidden." (D3) |
 
 ### Plan decisions for slice 9b
 
@@ -8380,7 +8380,7 @@ From `git grep -ln "kitchen-columns\|kitchen-cards" -- 'apps/*.ts'` outside test
 | `apps/till/src/screens/till-table-order-screen.ts:161`, `:1467-1503` | `DRAFT_SIDE_BY_SIDE_MIN_WIDTH`; a `ResizeObserver` measuring a width | the precedent for switching layout on a measured width (D8) |
 | `apps/till/src/widgets/test-helpers.ts:108` `DEFAULT_FRAME`, `:117-135` `pageAt`, `resetPage` | every till browser test starts at 414 × 896 | why the station suites take a wide frame (D11; Task 5) |
 | `apps/till/src/i18n/strings.ts` en `:658-666`, `:685-687`; es `:2418-2426`, `:2445-2447` | `station.to_make`, `station.late`, `station.columns*`, `station.state.*` | read; new `station.overview`, `station.overview_held` (D6) |
-| `docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md:96`, `:101`, `:305`, `:311` | `OverviewFact = Pick<PassCardItem,"lineId"\|"stationId"\|"name"\|"qty"\|"phase"\|"informational">` "feed A797's Overview aggregator; do not build a second station totals algorithm"; "narrow tabs/list use the same order/visibility/collapse" | read: the interface D1 serves, and D9's one departure |
+| [2026-10-19-a773-2-firing-and-pass.md:96](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md), `:101`, `:305`, `:311` | `OverviewFact = Pick<PassCardItem,"lineId"\|"stationId"\|"name"\|"qty"\|"phase"\|"informational">` "feed A797's Overview aggregator; do not build a second station totals algorithm"; "narrow tabs/list use the same order/visibility/collapse" | read: the interface D1 serves, and D9's one departure |
 
 ### Plan decisions for slice 9c
 

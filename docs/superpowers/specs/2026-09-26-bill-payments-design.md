@@ -12,7 +12,7 @@
 > **2026-10-17, A764:** The earlier Stripe no-op sweep and fail-on-reader-timeout account below is historical.
 > Uncertain reader outcomes now stay `attempting`; guarded automatic checks resolve inactive attempts,
 > record automatic actors without a person, and use the existing sale recovery. Confirmed automatic
-> noncharges release bill reservations. See the [A764 plan](../plans/2026-10-17-a764-stripe-unknown-outcome.md).
+> noncharges release bill reservations. See the [A764 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
@@ -809,7 +809,7 @@ A refund never runs on an invoiced bill through this path (§6, "after the invoi
 **Outside Task 14:** the reconciler's reversal, and any future post-invoice refund route, still go
 through `reverseViaStripe` as it is; a backlog item records that they should take this rule.
 
-**2026-10-16 — post-invoice extension.** [A737 Part 2](../plans/2026-10-15-a737-post-invoice-refund.md)
+**2026-10-16 — post-invoice extension.** [A737 Part 2](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a737-post-invoice-refund.md)
 adds a separate durable `tender_refunds` path for payment-only returns after an invoice. The
 reconciler reversal remains the open caller of the older reversal path.
 
@@ -1021,7 +1021,7 @@ its code.
 
 ### 9a. The cash-up counts money on the day it moves (owner, 2026-09-26: in Task 14)
 
-**2026-10-16 — A737 Part 2 extension.** The [post-invoice refund plan](../plans/2026-10-15-a737-post-invoice-refund.md#task-2-include-completed-money-returns-in-operational-reporting)
+**2026-10-16 — A737 Part 2 extension.** The [post-invoice refund plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a737-post-invoice-refund.md#task-2-include-completed-money-returns-in-operational-reporting)
 adds completed `tender_refunds` as a fourth cash-up source: subtract `applied_amount + tip_amount`
 and subtract `tip_amount` from the tip total, at `completed_at`, under the refund's recorded
 source/device and node. Provider refund evidence is not another cash-up source.

@@ -14,7 +14,7 @@
 
 **Tech stack:** TypeScript, Drizzle with the repository's column vocabulary, SQLite through `withTransaction`, Hono, Lit, existing `wt-*` fields/disclosure/footer, Vitest and real Chromium. Add no package or third-party dependency.
 
-**Spec:** Successor to the [approved original plan](2026-10-22-a790-document-printer-routing.md), retained untouched as history. [Complete layered A790 design](../specs/2026-10-19-a790-document-and-printer-choice-design.md), [current A739 owner flow](../specs/2026-10-22-a739-owner-payment-and-receipt-flow.md), and [A796 Revision 4](../specs/2026-10-19-a796-handheld-payments-design.md), especially §3 step 4 and §8 defaults 5, 12 and 18–22. Read all A790 layers with newest-layer precedence, then apply the dated authority below and approved A739 contract over conflicting history.
+**Spec:** Successor to the [approved original plan](2026-10-22-a790-document-printer-routing.md), retained untouched as history. [Complete layered A790 design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md), [current A739 owner flow](../specs/2026-10-22-a739-owner-payment-and-receipt-flow.md), and [A796 Revision 4](../specs/2026-10-19-a796-handheld-payments-design.md), especially §3 step 4 and §8 defaults 5, 12 and 18–22. Read all A790 layers with newest-layer precedence, then apply the dated authority below and approved A739 contract over conflicting history.
 
 ## Authority and execution gates
 

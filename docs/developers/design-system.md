@@ -2851,7 +2851,7 @@ whole name, because the row cannot read its option's label. Only a `wt-button` o
 heading's label — the label (or the sort button) and the badge are wrapped in a positioned box — not
 over the heading cell. A cell's top corner is at the table's scrolling box's edge, where the badge
 is cut off and the table gains a sideways scroll (measured 2026-10-18, M5 in
-`docs/superpowers/plans/2026-10-18-a582-2-dashboard-help.md`). On a sortable column the badge sits
+[2026-10-18-a582-2-dashboard-help.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-18-a582-2-dashboard-help.md)). On a sortable column the badge sits
 beside the sort button, not inside it, so a tap on it does not sort. Unless a filter on it is
 active, which names it as it always has, the heading is named by the column's `label` alone, so the
 help text does not join its name.
@@ -3421,7 +3421,7 @@ and nothing guards it across screens:
   and it takes no draft scope and has no `*.unsaved.test.ts`. The owner asked for "a Save rather than saving
   on a click outside" (owner, 2026-10-16), so a click outside throws the change away; taking no scope, so that leaving the painter does not
   ask about the editor, is Decision 8 of the
-  [A761 plan](../superpowers/plans/2026-10-17-a761-staffing-grid-paint-and-editor.md). Closing the
+  [A761 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a761-staffing-grid-paint-and-editor.md). Closing the
   tab, reloading or going Back with a changed editor open therefore also throws its change away
   without asking;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
@@ -5972,7 +5972,7 @@ is placed again by the rule it opened with, which keeps it 8px inside the window
 fits; a closed menu is not watched. The popup is `width: max-content` within
 `max-width: calc(100vw - 2 * var(--wt-space-2))`, because with an automatic width a fixed box
 narrows to the room left of where it is placed, so placing it resized it and the size watcher never
-settled. Measured 2026-10-18 (M3b in `docs/superpowers/plans/2026-10-18-a582-2-dashboard-help.md`)
+settled. Measured 2026-10-18 (M3b in [2026-10-18-a582-2-dashboard-help.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-18-a582-2-dashboard-help.md))
 at a 390px window: an automatic width stopped at a right edge of 390 instead of 382, with five
 "ResizeObserver loop completed with undelivered notifications" errors, and `max-content` settled at
 382 with none.

@@ -432,7 +432,7 @@ Size: about 50 production lines, 40 lines of words, 10 of guide prose; 220 test 
 ## Task 3 — the printed and on-screen copy of an R4, and every path that reads the customer
 
 A full invoice must show the customer's tax number, name and address (RD 1619/2012 art. 6.1.d and
-6.1.e, quoted in `docs/superpowers/plans/2026-10-15-a663-receipt-layout.md:209-212`) **(read)**, and
+6.1.e, quoted in [2026-10-15-a663-receipt-layout.md:209-212](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a663-receipt-layout.md)) **(read)**, and
 the R4 is filed as one (it carries `Destinatarios`). Today every corrective prints with
 `invoiceType: "R5"` (`apps/server/src/transaction-receipt.ts:158-168`), and the paper layout treats
 anything but "F1" as simplified (`receipt-document.ts:157`), so an R4 would print with no customer
@@ -595,7 +595,7 @@ commits and hands over.
 2. **Does the printed R4 show the day the sale really happened?** Art. 6.1.i requires the
    operation date on a full invoice «siempre que se trate de una fecha distinta a la de expedición
    de la factura», and 7.1.c says the same for a simplified one
-   (`2026-10-15-a663-receipt-layout.md:209`) **(read)**. The R4 is a full invoice and its real day
+   ([`2026-10-15-a663-receipt-layout.md:209`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a663-receipt-layout.md)) **(read)**. The R4 is a full invoice and its real day
    always differs from its issue day when it is filed (otherwise `FechaOperacion` is left out), so
    on its face the regulation asks for it on paper. But the owner decided on 2026-11-12 that no printed invoice carries a separate operation
    date (A444, `docs/backlog/fiscal.md:1099-1116`), and #3235's printed R5 replacement shows none

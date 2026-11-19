@@ -30,7 +30,7 @@ cash refund's "I have handed this money back" switch is gone; the Voids and comp
 each cancelled dish, whether its charge was kept, whether preparation had started, and what was
 refunded for it; and a device outside a finished table's zone cannot read that table's dishes.
 
-**Spec:** `docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md` — §1 (D12–D28),
+**Spec:** [2026-10-17-a758-adjustment-reasons-design.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md) — §1 (D12–D28),
 §3.2, §3.3, §3.6, §3.8 with §3.8.1 and §3.8.2, §3.9, §9 (the bullet "A758's slice for §3.8, after
 A773-1 lands" and §9.1's cash-switch list), §10, §11. Pictures 06–09 in
 `docs/backlog/mockups/a758-adjustment-reasons/`. Backlog: `docs/backlog.md` "A758" and the first

@@ -164,7 +164,7 @@ same `info`.
   invoice lines, rule, the item, rule, `TOTAL`, `Base imponible 10%`, `IVA 10%`, rule, payment. So
   three of the four rules exist. The fourth — between `TOTAL` and the tax lines — would change every
   real simplified receipt, whose "TOTAL straight after the items, then the rates" layout the owner
-  settled in A663 (`docs/superpowers/plans/2026-10-15-a663-receipt-layout.md:52`, `:1122-1129`).
+  settled in A663 ([2026-10-15-a663-receipt-layout.md:52](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a663-receipt-layout.md), `:1122-1129`).
   The sample must look like a real receipt, so it is not drawn here; Task 9 records it as a short
   open question in the backlog, and the PR description asks the owner.
   **2026-11-05:** the owner chose the line, on every simplified receipt and the sample; built in

@@ -783,7 +783,7 @@ are given.
     A790's design already follows this on `main` at `d63b2e448`: "The separate receipt memory
     updated only after an accepted print is withdrawn from the current proposal", and "A796 says
     **“ONE setting”** for the phone's Equipment receipt printer, with no separate receipt memory or
-    new storage" ([2026-10-19-a790-document-and-printer-choice-design.md](2026-10-19-a790-document-and-printer-choice-design.md)
+    new storage" ([2026-10-19-a790-document-and-printer-choice-design.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
     lines 7-8 and 13-14).
 13. **Tips: A793's seam only.**
 14. **Whether the sheet sits at the foot of the screen** (as drawn) or stays a centred dialog is left

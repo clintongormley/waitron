@@ -30,10 +30,10 @@ from Spain's four label sets.
 **Tech stack:** TypeScript, Drizzle on `node:sqlite`, Lit (the till's ticket view), Vitest (`node`
 projects; the till and the adjustments dashboard in real headless Chromium).
 
-**Spec:** `docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md` — D11 (`:64`), §3.4
+**Spec:** [2026-10-17-a758-adjustment-reasons-design.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md) — D11 (`:64`), §3.4
 "What the receipt prints" (`:333-343`), §8 "Does the receipt's wording reach a filed record?"
 (`:980-994`), §9.1 "Changed test checks" (`:1042-1079`). Parent plan and the outline this plan
-replaces: `docs/superpowers/plans/2026-10-19-a758-reason-rules.md`, "# A758-4" (`:1096-1122`), its
+replaces: [2026-10-19-a758-reason-rules.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a758-reason-rules.md), "# A758-4" (`:1096-1122`), its
 "Global constraints" (`:130-209`) and Open point 3 (`:1167-1169`). Backlog: `docs/backlog.md` "A758"
 (`:2194-2231`) and "A911" (`:2318-2320`), `docs/backlog/till.md` "## A758" (`:1472-1569`).
 

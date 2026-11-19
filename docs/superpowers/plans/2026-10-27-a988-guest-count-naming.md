@@ -499,7 +499,7 @@ item 7). The fixture must not be edited or regenerated. Choose one:
   three, naming the new file and what is hand-written in it.
 - [ ] `docs/backlog/printers.md` ~709 and `docs/backlog/till.md` ~172 name the TABLE
   `sale_receipt_guests` only — no change. `CLAUDE.md` §3's "the seat-a-table route's `guestCount`"
-  stays true — no change. Historical plans (`2026-10-15-a663-receipt-layout.md`,
+  stays true — no change. Historical plans ([`2026-10-15-a663-receipt-layout.md`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a663-receipt-layout.md),
   `2026-10-22-a758-7-collect-at-counter.md`) record what was true then — no change.
 - [ ] No guide text names a wire field (`apps/server/src/guide/` mentions guests only as people).
 - [ ] `docs/` is prettier-ignored, so `pnpm format:check` says nothing about it; `git diff --check`.

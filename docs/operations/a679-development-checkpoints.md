@@ -11,14 +11,14 @@
 This is a historical snapshot of the former A679 backlog detail, retained verbatim below.
 Its dated statuses and earlier designs describe those checkpoints, rather than the current
 candidate. Follow the [current backlog](../backlog/fiscal.md)
-for unfinished work, the [hour-code plan](../superpowers/plans/2026-10-16-a679-hour-code-implementation.md)
+for unfinished work, the [hour-code plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a679-hour-code-implementation.md)
 for the approved implementation, and the [check inventory](a679-changed-checks.md) for qualification.
 
 ## A venue without Cloud needs a usable paper-custodian route
 
 **Owner approval, 2026-10-16 at 14:50:** implement the
 [hour-coded series design](../superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
-through the [replacement plan](../superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
+through the [replacement plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
 Four UTC-hour characters replace paper/Cloud name allocation, leaving a recovery-key PDF.
 The earlier plan's Tasks 9–12 are superseded; completed components need qualification against the new policy.
 The owner views real generated EN/ES PDFs through Drive; the driver tests entry of
@@ -154,8 +154,8 @@ passes 20. This closes those two recorded boot failures; authenticated CLI compo
 previously measured provisioning coverage gap and the remaining hour-plan work stay open.
 
 **Owner update, 2026-10-15 at 22:15:** the current
-[design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) and
-[plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) retain the
+[design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md) and
+[plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) retain the
 21:30 removal of the paper custody signing key and group each typed field in fours.
 Register continuation takes 20 entered/23 displayed characters; a generated named
 node key takes 47/57; together, 67/80. Paper-to-Cloud import is no longer required
@@ -197,7 +197,7 @@ same-Blob Download/Print reuse belongs to revised Task 9; the host already binds
 to the same document and key stage. Tasks 6–12, final reviews and publication gates remain open.
 
 **Current direction, owner 2026-10-15 at 18:55:** the N proposal is withdrawn. The
-[two-route redesign](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) retains taxpayer-wide S/P paper
+[two-route redesign](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md) retains taxpayer-wide S/P paper
 history, the existing C Cloud contract and emergency E, with one setup-page PDF. Currentness is
 an owner declaration from the current record, never a fact proved by a stale PDF signature.
 Repair-v2 core and A731–A733 retain their approved authority. Product work was paused at that
@@ -232,7 +232,7 @@ existing PDF viewing approval and remaining A679 gates stay open. The server CI 
 Chromium for this suite.
 
 **Replacement plan, 2026-10-15:** the [one-PDF implementation
-plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) follows the completed redesign
+plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) follows the completed redesign
 checkpoint and preserves the existing product branch. New C-only documents need no fabricated paper
 master; preactivation key reissue stays in host staging until the node exists. Actual PDF recovery
 and the whole revised candidate still require implementation qualification.
@@ -297,7 +297,7 @@ custodian/computer with one PDF made by the setup page. You may download it, pri
 ordinary network, or both, and keep it in the restaurant’s office. Offline operation, paper/file
 separation, ink marking, handover drills and print-queue/OS-copy warnings are not requirements.
 The page must not upload the key anywhere on its own; your download or print is the intended delivery. The
-[short replacement design](../superpowers/specs/2026-10-15-a679-simple-pdf-design.md) needs owner
+[short replacement design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a679-simple-pdf-design.md) needs owner
 approval before any more product code or a replacement plan. Preserve reusable work from draft
 PR #1752; the earlier implementation and review results do not qualify this new design. The old
 44-step paper check and FOLLOW-UP are cancelled. The replacement check will open the built PDF
@@ -306,14 +306,14 @@ Earlier dated decisions below are historical and superseded where they contradic
 
 **Approval and plan update, 2026-10-15:** at about 06:35 the owner approved the complete
 A679 design: **“A — Approve, plan and build”**. This supersedes the historical unanswered
-approval/retention questions below. The [reviewed implementation plan](../superpowers/plans/2026-10-15-a679-first-fiscal-setup.md)
+approval/retention questions below. The [reviewed implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a679-first-fiscal-setup.md)
 keeps real candidate validation on the host before public request export, custody secrets in the
 offline tool, and readiness separate from production. It specifies durable claim discovery and
 resume, whole-operation exclusion and restart reconciliation before trading. The feature branch includes wizard integration and packaged tool delivery. Compiled browser
 checks exercise both launch paths and custody choices, saved-file reopen, synthetic paper recovery,
 wrong-passphrase/fingerprint refusals, resume and handover/dispute stops with synthetic outside
 responses. Both original whole-branch reviews are complete. At about 17:15 on 2026-10-15 the
-owner approved the core [repair addendum](../superpowers/plans/2026-10-15-a679-first-setup-repair.md):
+owner approved the core [repair addendum](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a679-first-setup-repair.md):
 password recovery from any browser, separately guarded marker repair and ownership rebind,
 retirement and isolated-workspace selection, current-register answers and publication-only completion.
 That redesign still needs implementation and qualification. The original review results do not
@@ -335,7 +335,7 @@ outside paper kit and import from an existing custodian are approved for Live. D
 Preparation need no kit or allocation import. B/A680 owns the automatic, clearly marked
 throwaway preproduction signer in the box, refused in production, with a deletion control;
 A679 adds no second signer. Only Demo is urgent before morning. The
-[Live proposal](../superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) and static
+[Live proposal](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md) and static
 EN/ES drawings cover the Live route. Finish W41s-6, then build A679 on A680 before W41s-7.
 Full-design/build approval, physical-code versus current local ownership, master retention and
 key format remain open. Live keeps real outside production custody. Its readiness check must
@@ -366,7 +366,7 @@ separately from the public master. Say plainly that whoever holds the paper can 
 earlier open-retention notes; it is not whole-design/build approval.
 
 **Current A679 custody proposal, 2026-10-15:** the
-[Live proposal](../superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md#custody-and-restoration-acceptance-requirements-proposed-2026-10-15)
+[Live proposal](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-14-a679-first-fiscal-setup-design.md#custody-and-restoration-acceptance-requirements-proposed-2026-10-15)
 now specifies proposed acceptance requirements for an offline tool with no remote resources,
 explicit encrypted-file save/reopen, and versioned secret paper with the same signing key and full
 public fingerprint. Before proceeding, restore from the ACTUAL printed representation in a separate

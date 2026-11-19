@@ -401,7 +401,7 @@ Remaining Stripe qualification and maintenance.
   (owner, 2026-10-17). It is never refunded automatically while the amounts disagree; its alert
   stays up and reminds daily until a person resolves it, and the sweep re-checks closed periods for
   orphans still unresolved. Built by A846, as the owner refined it in answering Q44 on 2026-10-18
-  (recorded in [the A846 plan](../superpowers/plans/2026-10-19-a846-held-card-payments.md)):
+  (recorded in [the A846 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a846-held-card-payments.md)):
   the reminder is an ordinary alert that can be marked handled and comes back the next morning
   while any held payment has no outcome, not one that cannot be dismissed; and a manager closes a
   held payment by recording an outcome in the Payments screen's held list.
@@ -422,7 +422,7 @@ Remaining Stripe qualification and maintenance.
   same collection ownership. The primary named in the held chart also recovers payments from boxes
   the chart fences or revokes, so plain promotion retains a manager fallback
   (`apps/server/src/payments-api.ts`). Today's venue has one node (CLAUDE.md §5).
-  [Implementation plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
+  [Implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,
   W102 part 0). The QR label and NFC text carry only the equipment kind and id. A general pick-up
@@ -455,7 +455,7 @@ Remaining Stripe qualification and maintenance.
   (so a cash collect after the card settled answers the card's receipt). After a reader timeout,
   cash waits while the provider reports the card pending: with SumUp, for as long as SumUp answers
   PENDING, and up to 15 minutes when SumUp has no record of the payment. Plan:
-  `docs/superpowers/plans/2026-10-12-a526-placed-order-one-payment.md`.
+  [2026-10-12-a526-placed-order-one-payment.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-12-a526-placed-order-one-payment.md).
 
 - **A reader still paired at a provider that can unpair it (SumUp) is deleted in Waitron only
   while that provider's account is not connected** (owner, 2026-10-10), after the confirmation says

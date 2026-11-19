@@ -8,7 +8,7 @@ floor-plan editing remain separate.
 
 Date: 2026-10-14. Status: approved by the owner, 2026-10-15, with four till answers given the same
 day after A738 (the counter screen) was designed: see _Owner answers on the till, 2026-10-15_.
-Companion spec: [A669 — an allergy at the table](2026-10-14-a669-allergy-at-the-table-design.md).
+Companion spec: [A669 — an allergy at the table](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md).
 
 ## Why
 

@@ -10,7 +10,7 @@ and the owner's review of the result is A893.
 
 **2026-10-19:** Q29–Q34 were all answered A by the owner on 2026-10-17, and the build depends only
 on A756's first pull request, #1852, which landed; slice 1 is built by
-`docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`.
+[2026-10-19-a757-1-clearing-per-department.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md).
 
 Pictures: `docs/backlog/mockups/a757-table-states/` (01–11; 03, 04, 07, 08, 09 and 11 also in dark,
 `-dark.png`). They are drawn in HTML with the till's own colour values, not screenshots of the
@@ -196,7 +196,7 @@ or is getting, a home the code understands:
 
 | Label | Its home |
 |---|---|
-| Allergy | A669, an allergy at the table: the till asks "Any allergies at this table?" at the first Send, and the floor gets its own allergy signal (`docs/backlog.md` A669, spec `2026-10-14-a669-allergy-at-the-table-design.md`) |
+| Allergy | A669, an allergy at the table: the till asks "Any allergies at this table?" at the first Send, and the floor gets its own allergy signal (`docs/backlog.md` A669, spec [`2026-10-14-a669-allergy-at-the-table-design.md`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md)) |
 | VIP, Birthday | the party's name, which the floor card already shows (`till-floor-screen.ts:2076`) |
 
 **Decided (Q15, owner 2026-10-17: A): retire venue-made statuses entirely** — the table, the column, the trigger,
@@ -204,7 +204,7 @@ the till's status section and floor chip, the dashboard screen, the demo seed's 
 configuration transfer's copy. Waitron is not live, so nothing is carried forward
 (CLAUDE.md §3, "No backwards-compatibility … until Waitron is in production").
 **2026-10-19:** built by slice 2
-(`docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`); the Tables tab is gone.
+([2026-10-19-a757-2-retire-venue-statuses.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md)); the Tables tab is gone.
 
 ## 3. The lifecycle after the answers
 
@@ -236,7 +236,7 @@ Service tab, A756, section "Table states"). A table's department is its zone's
 when a party spanning two departments leaves, each table follows its own. The build plan settles
 what a table whose zone has no department row reads (expected: off). Settled 2026-10-19 by the
 slice 1 plan: off — such a table drops out of the join from table to department
-(`docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`, Decision 3). Not live, so the venue value is
+([2026-10-19-a757-1-clearing-per-department.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md), Decision 3). Not live, so the venue value is
 dropped, not copied (A756's own note, `docs/backlog/kitchen.md:217-218`).
 
 ## 4. One order of precedence
@@ -284,7 +284,7 @@ cleared" without colour.
 today (`combinedStatus`, `apps/till/src/state/floor-map.ts:32-40`).
 
 **Allergy (A669)** is not in the list: its red "!" on the map (A669's spec,
-`docs/superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md:172`) is a fact about the
+[2026-10-14-a669-allergy-at-the-table-design.md:172](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md)) is a fact about the
 guests that stays shown whatever the table's state, and it does not colour a zone tab.
 
 **2026-10-20:** built by slice 4 (plan `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`)
@@ -350,7 +350,7 @@ Fire" and pulses slowly.
 `timingBand` count fired dishes only, so T7 in picture 03 shows "⏸ Held 2 · fire in 4 min" at 21:16,
 not "Forgotten". This settles Task 10's open point in `docs/backlog/till.md`, which this revision marks decided.
 
-**2026-10-20:** built by slice 3 (plan `docs/superpowers/plans/2026-10-20-a757-3-held-mark-countdown.md`):
+**2026-10-20:** built by slice 3 (plan [2026-10-20-a757-3-held-mark-countdown.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-20-a757-3-held-mark-countdown.md)):
 the floor read carries a `held` signal with the count; the list card and the unplaced token show the
 held chip, its countdown and the filled Time to fire chip; `timingBand` counts fired dishes only. The
 pulse is slice 4's, the map's cue slice 5's; requested dishes wait for A773-2.
@@ -426,7 +426,7 @@ own lines included (`itemCount`, `apps/server/src/working-order.ts:4414`). They 
 decimal places — counts as one item. Dishes saved in a bill's New order panel and not sent count as
 unsent. Requested will count as held, because the reader treats a kitchen item with no `fired_at` as
 held and A773-2's plan keeps Requested's `fired_at` null
-(`docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md:88`). Transfers rows show the counts
+([2026-10-19-a773-2-firing-and-pass.md:88](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)). Transfers rows show the counts
 without a total, and only while the tab is the viewer's department's and in its profile's zones or in no zone, or
 to the desk it is offered to (`withCounts`, `apps/server/src/department-transfer-api.ts:85`).
 Held orders (now Parked orders) dropped its per-station ready chip.
@@ -655,7 +655,7 @@ labels are clipped to an ellipsis at 390 and 1280 px (`docs/backlog.md:4048-4052
 **2026-10-19:** slice 1 removed `venue-service-tables`; the core `statuses` panel is the tab's only
 content.
 **2026-10-19:** built by slice 2
-(`docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md`); the Tables tab is gone.
+([2026-10-19-a757-2-retire-venue-statuses.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md)); the Tables tab is gone.
 
 ## 11. Build slices
 

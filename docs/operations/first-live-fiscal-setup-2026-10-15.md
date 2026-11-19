@@ -13,7 +13,7 @@ Browser checks exercised the compiled wizard, local host and saved offline tool 
 launch paths and custody choices, using synthetic certificate, email-delivery and authority
 responses. Actual-paper acceptance and the final review/publication gates remain outstanding.
 Do not regard an automated recovery check or a print preview as physical-paper acceptance. The
-[approved plan](../superpowers/plans/2026-10-15-a679-first-fiscal-setup.md#task-9-joint-qualification-actual-paper-and-whole-branch-gates)
+[approved plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a679-first-fiscal-setup.md#task-9-joint-qualification-actual-paper-and-whole-branch-gates)
 lists the remaining qualification gates.
 
 ## Keep the two computers separate
@@ -24,7 +24,7 @@ before continuing. The claimed attempt retains that choice and the selected expo
 that staged export later refuses activation; it does not silently import a different menu.
 
 **Repair work in progress, 2026-10-15:** the owner approved password recovery from any browser
-and the [core repair flow](../superpowers/plans/2026-10-15-a679-first-setup-repair.md). The original-tab
+and the [core repair flow](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a679-first-setup-repair.md). The original-tab
 and interruption limits in the next two paragraphs describe the earlier candidate. The new
 repair page and complete entry-path qualification are still outstanding. A731, A732 and A733
 remain required before go-live; no repair-page action described in that addendum is accepted

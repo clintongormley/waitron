@@ -1876,7 +1876,7 @@ Two existing checks deliberately follow the approved interruption design:
 
 - `apps/setup/src/setup-app-first-fiscal.test.ts:107` expects “Continue with your setup password”
   instead of “Resume”. The owner’s 2026-10-16 password-first wording is recorded in the
-  [replacement design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md#appendix-f-keepchangedrop-inventory).
+  [replacement design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md#appendix-f-keepchangedrop-inventory).
   The same case retains its no-claim, no-activation and secret-draft assertions.
 - In the same file, the owner-refusal fixture intercepts `/resolution/recover` instead of
   `/resume`. A new tab has no previous browser proof, so it takes password recovery. Every

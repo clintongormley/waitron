@@ -21,7 +21,7 @@ unchanged as history, including its older approval and release waits.
 
 **Tech stack:** TypeScript, Drizzle with the repository's column vocabulary, SQLite through `withTransaction`, Hono, Lit, existing `wt-*` fields/disclosure/footer, Vitest and real Chromium. Add no package or third-party dependency.
 
-**Spec:** [Complete layered A790 design](../specs/2026-10-19-a790-document-and-printer-choice-design.md), [current A739 owner flow](../specs/2026-10-22-a739-owner-payment-and-receipt-flow.md), and [A796 Revision 4](../specs/2026-10-19-a796-handheld-payments-design.md), especially §3 step 4 and §8 defaults 5, 12 and 18–22. Read all A790 layers, but apply the first addendum and M consolidation over historical alternatives.
+**Spec:** [Complete layered A790 design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md), [current A739 owner flow](../specs/2026-10-22-a739-owner-payment-and-receipt-flow.md), and [A796 Revision 4](../specs/2026-10-19-a796-handheld-payments-design.md), especially §3 step 4 and §8 defaults 5, 12 and 18–22. Read all A790 layers, but apply the first addendum and M consolidation over historical alternatives.
 
 ## Authority and execution gates
 

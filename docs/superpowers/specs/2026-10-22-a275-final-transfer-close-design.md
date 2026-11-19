@@ -31,7 +31,7 @@ balance, later money-received entry, partial receipts, reversals, receivables le
 unpaid-debt list. Show the amount separately in the day's close and provide a dashboard export
 under `report.export`. The accountant reconciles outside Waitron. Questions 2–5 are withdrawn.
 
-This supersedes the [2026-10-20 partial-receipts proposal](2026-10-20-a275-invoice-now-transfer-later-design.md).
+This supersedes the [2026-10-20 partial-receipts proposal](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md).
 Its research, source audits and 40 pictures remain historical. Its question 1's partial-versus-full
 receipt choice is also retired: neither later-receipt model is in this scope.
 

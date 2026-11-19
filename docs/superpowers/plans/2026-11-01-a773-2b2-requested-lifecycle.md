@@ -25,7 +25,7 @@ change cannot break it unnoticed; every pin here has a mutation that turns it re
 
 **Implements.** The [slice plan](2026-11-01-a773-2b-requested-release.md)'s "## B2 (outline)" and
 its "Left for B2 and B3 by B1's per-task reviews", under that plan's "Owner decisions this plan
-applies" and Decisions D1–D20, which bind here except where D41 changes D3; the [master plan](2026-10-19-a773-2-firing-and-pass.md)'s
+applies" and Decisions D1–D20, which bind here except where D41 changes D3; the [master plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)'s
 Task 8 and Task 9's floor, reminder and output-alert readers, Contracts 1–2, and its "Shared
 verification contract". Where this plan departs from either, "Departures" says so and why.
 
@@ -419,7 +419,7 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
   answer to B2.1 review Important 1; the driver's brief called it D40, a number this plan already
   uses). After B2.1 a waiter can serve a Requested dish, and nothing then gives it a fire time:
   the waiter's fire skips it and the pass's release excludes served work
-  (`2026-10-19-a773-2-firing-and-pass.md:94`). So `ordersWithUnfiredDish` refused the bill for
+  ([`2026-10-19-a773-2-firing-and-pass.md:94`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)). So `ordersWithUnfiredDish` refused the bill for
   ever, with a refusal that asks staff to cancel food the guests ate. The rule: a line with a
   kitchen item that is not released (`isReleased`), has a request time, and whose active
   quantity (`serviceQuantities`, `line-service-state.ts:20`, as `finish-party-service.ts:149`

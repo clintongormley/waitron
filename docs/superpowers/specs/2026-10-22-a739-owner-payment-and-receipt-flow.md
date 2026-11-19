@@ -93,9 +93,9 @@ These are owner instructions and source-reading evidence, **not runtime verifica
   `packages/db/src/schema/order-payment-contexts.ts:16`,
   `packages/db/src/schema/bill-payment-slip-copies.ts:6` identify reusable payment recovery,
   slip snapshot/admission and copy audit, whose old final-choice coupling must be replaced.
-- Scope contracts: [A790](2026-10-19-a790-document-and-printer-choice-design.md),
+- Scope contracts: [A790](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
   [A796](2026-10-19-a796-handheld-payments-design.md),
-  [A582](2026-10-18-a582-help-mode-design.md), and
+  [A582](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-18-a582-help-mode-design.md), and
   historical artwork README.
 
 **Everything below is preserved verbatim as historical material. Its open questions, native-control

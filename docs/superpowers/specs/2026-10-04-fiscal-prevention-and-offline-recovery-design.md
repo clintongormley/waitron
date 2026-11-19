@@ -3,12 +3,12 @@
 > **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](../plans/2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
 
 **Dated A679 update, 2026-10-15 at 21:30:** the owner removed custody signing from the new
-paper-register flow. The [current A679 revision](../specs/2026-10-15-a679-two-route-redesign.md#authoritative-revision-owner-decision-2026-10-15-at-2130)
+paper-register flow. The [current A679 revision](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md#authoritative-revision-owner-decision-2026-10-15-at-2130)
 records unsigned paper integrity, typed positions and the separately owned Cloud admission work.
 The signed protocol and implementation receipts below remain historical where superseded.
 Cloud C receipts keep their signatures; this note changes no deployed contract or protected writer.
 
-**A679 presentation update, 2026-10-15:** the owner’s [two-route redesign requirements](2026-10-15-a679-two-route-redesign.md) keep this design’s paper S/P, Cloud C, emergency E and outside-history/isolation conditions. They replace the separate custody tool, computer and ink/manual-entry ceremony with one PDF made by setup. The redesign is documentation, not a new product or recovery qualification; earlier decisions below retain their dated scope.
+**A679 presentation update, 2026-10-15:** the owner’s [two-route redesign requirements](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md) keep this design’s paper S/P, Cloud C, emergency E and outside-history/isolation conditions. They replace the separate custody tool, computer and ink/manual-entry ceremony with one PDF made by setup. The redesign is documentation, not a new product or recovery qualification; earlier decisions below retain their dated scope.
 
 Status: **design approved by the owner, 2026-10-04 ("lgtm").** The recommendations in §6 are
 accepted; detailed allocation formats and verification conditions still need resolution before

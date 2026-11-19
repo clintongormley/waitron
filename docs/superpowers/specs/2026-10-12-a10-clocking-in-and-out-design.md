@@ -14,19 +14,19 @@ Update 2026-10-14: parts 1 and 2 are built. The remaining implementation is trac
 when this spec was agreed.
 
 Update 2026-10-15: parts 1–4 have landed. The
-[part 5 implementation plan](../plans/2026-10-15-a10-5-hours-screens-plan.md) covers the hours screens,
+[part 5 implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a10-5-hours-screens-plan.md) covers the hours screens,
 including own corrections in My Schedule. Parts 5–6 remain unbuilt.
 
 Update 2026-10-15, part 5 implementation: the hours screens are built through the
-[part 5 plan](../plans/2026-10-15-a10-5-hours-screens-plan.md). Export surfaces remain in part 6;
+[part 5 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a10-5-hours-screens-plan.md). Export surfaces remain in part 6;
 [the workforce backlog](../../backlog/workforce.md) tracks the remaining work.
 
 Update 2026-10-15, part 6 planning: the reviewed
-[export implementation plan](../plans/2026-10-15-a10-6-record-export-plan.md) covers PDF/CSV,
+[export implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a10-6-record-export-plan.md) covers PDF/CSV,
 own and manager downloads, and the representatives’ version. Implementation remains open.
 
 Update 2026-10-15, part 6 implementation: own and manager Hours now offer PDF/CSV downloads,
-including the representatives' version, through the [part 6 plan](../plans/2026-10-15-a10-6-record-export-plan.md).
+including the representatives' version, through the [part 6 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a10-6-record-export-plan.md).
 All six parts are built. Inspector remote access, advisor policy checks and payroll export remain
 in [the workforce backlog](../../backlog/workforce.md).
 

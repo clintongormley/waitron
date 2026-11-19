@@ -3,7 +3,7 @@
 > **2026-10-17, A764:** The earlier Stripe no-op sweep and fail-on-reader-timeout account below is historical.
 > Uncertain reader outcomes now stay `attempting`; guarded automatic checks resolve inactive attempts,
 > record automatic actors without a person, and use the existing sale recovery. Confirmed automatic
-> noncharges release bill reservations. See the [A764 plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
+> noncharges release bill reservations. See the [A764 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 A card refusal and a reader that did not answer need different explanations. The counter's
 completed outcome panel offers Retry and Cancel. It cannot restart a spinner for a request that

@@ -36,7 +36,7 @@ responses. Actual-paper acceptance and the final publication gates remain open. 
 its dated development status is historical.
 
 **2026-10-16 A679 revision:** browser setup is being replaced by the
-[one-PDF design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md), with unsigned
+[one-PDF design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-15-a679-two-route-redesign.md), with unsigned
 owner-declared S/P history. The earlier downloadable-tool description above is historical.
 The signed command route below remains separate; the new wizard and owner acceptance are
 still incomplete.

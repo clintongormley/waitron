@@ -196,7 +196,7 @@ line's rate against `FechaOperacion` when present, else the issue date (`dist/va
 
 **The law on printing.** RD 1619/2012 art. 7.1.c (simplified) and 6.1.i (full): «La fecha en que se
 hayan efectuado las operaciones que se documentan […], siempre que se trate de una fecha distinta a
-la de expedición de la factura» (quoted in `docs/superpowers/plans/2026-10-15-a663-receipt-layout.md:209`).
+la de expedición de la factura» (quoted in [2026-10-15-a663-receipt-layout.md:209](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a663-receipt-layout.md)).
 
 ## 4. Schema, tests, guides
 

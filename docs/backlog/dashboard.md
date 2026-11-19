@@ -378,7 +378,7 @@ merchant and Reader ID handling.
 
 **Page search (owner, 2026-10-15, A727).** Search finds named tabs, windows and views inside
 readable pages, showing their name and containing page. Page matches precede inner results.
-The approved scope is preserved in the [implementation plan](../superpowers/plans/2026-10-15-a727-page-search.md#approved-scope).
+The approved scope is preserved in the [implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a727-page-search.md#approved-scope).
 Seasons and Periods are module-contributed pages under Venue operations, alongside Calendar;
 page search finds them directly. The Week is
 registered as `venue-service:week`, and the others register theirs when they exist.

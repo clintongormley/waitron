@@ -239,7 +239,7 @@ twin exists, in Spanish too.
 
 ### Why they are not under `docs/`
 
-The approved design (`docs/superpowers/specs/2026-10-18-a582-help-mode-design.md`, §4 and §8) put
+The approved design ([2026-10-18-a582-help-mode-design.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-18-a582-help-mode-design.md), §4 and §8) put
 the guides in docs/guide/. They live under `apps/server/src/` instead, because three pieces of
 machinery treat any path under `docs/` as documentation that nothing builds:
 
@@ -393,7 +393,7 @@ checks over the till's links and `apps/till/src` too, and is weaker than its nam
 
 On the dashboard a guide link opens a new tab. A till opens it in a sheet over the till instead,
 because a till runs full screen and has no tab bar to come back by (the design,
-`docs/superpowers/specs/2026-10-18-a582-help-mode-design.md`, §3.2). How:
+[2026-10-18-a582-help-mode-design.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-18-a582-help-mode-design.md), §3.2). How:
 
 - `wt-help-tooltip` dispatches `wt-guide-open` (`detail: { href }`, bubbling, composed and
   cancelable) when its link is clicked, stops the click there, and closes its box. If a listener

@@ -161,7 +161,7 @@ were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owne
   held; while held or waiting. It decides when a sent dish can be recalled.
 
 See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#7-settings--changes-to-a756).
-Built by A756 PRs 1–8 (plan `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md`);
+Built by A756 PRs 1–8 (plan [2026-10-18-a756-kitchen-tab-split.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md));
 "Waits for the pass" belongs to A773-2.
 
 ### Add station sets a station's name, colour, printers and late flags only (A756 PRs 6–8)
@@ -242,7 +242,7 @@ the change (plan PR 8 Decision 1).
   instruction above a counter order or a table party's dishes, alongside each dish's own note.
   It appears on kitchen paper and station/pass screens; later edits and removals use acknowledged
   kitchen notices. The shared order-heading region also belongs to A669's table allergy information.
-  Implementation choices and checks: [plan](../superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md).
+  Implementation choices and checks: [plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md).
 
 - **Routes has no Expand/Collapse control, and closing a category closes everything inside it
   (A726, owner 2026-10-15, replacing A656's one Expand/Collapse button).** A closed category shows
@@ -351,7 +351,7 @@ the change (plan PR 8 Decision 1).
 - **A prep station set not to print MOVED slips still shows the moved notice on its kitchen screen
   (A650 question C, owner 2026-10-14: the default kept).** The venue's Print MOVED slips switch and
   a station's own MOVED slips choice decide paper only. Plan:
-  [2026-10-14-a650-moved-slips-design.md](../superpowers/plans/2026-10-14-a650-moved-slips-design.md) §6.
+  [2026-10-14-a650-moved-slips-design.md](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-14-a650-moved-slips-design.md) §6.
   **2026-10-23 (A756 PR 6):** the venue switch is gone; the station's own choice decides paper alone.
 
 - **Each is decided by the unit's identity.** The till kept showing the Each unit after the

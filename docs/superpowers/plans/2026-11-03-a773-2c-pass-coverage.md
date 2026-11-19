@@ -17,7 +17,7 @@ resolved pass screen is available. *Covers*: a pass device's Fire would be allow
 of that station in that zone. *Gap*: a station-and-zone pair that should be covered and is not.
 *Pin*: a test of behaviour that is already right; every pin names the mutation that turns it red.
 
-**Implements.** The [master plan](2026-10-19-a773-2-firing-and-pass.md)'s Task 10 and its PR C row
+**Implements.** The [master plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)'s Task 10 and its PR C row
 ("Working PR boundaries"), under its Global Constraints, Review Focus and Shared verification
 contract; the [spec](../specs/2026-10-16-a773-courses-and-groups-design.md) §5 ("Safety net on the
 dashboard"), §7 change 1 ("The stations table shows 'Waits for the pass' as a column") and §13; the
@@ -208,7 +208,7 @@ second told to set the checklist aside).
     and station words; the B1 plan says PR C's station-editor words and the coverage sentence "are
     asked by those PRs" (`2026-11-01-a773-2b-requested-release.md:496-498`). The master's proposals
     ("Waits for the pass" / «Espera al pase»; "No pass covers {stations} in {zone}. Food may wait for
-    release.", `2026-10-19-a773-2-firing-and-pass.md:59`) were never approved. Approved words reused
+    release.", [`2026-10-19-a773-2-firing-and-pass.md:59`](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)) were never approved. Approved words reused
     here: «Marchar» (Fire), «pantalla de pase» (`strings.ts:1135`), "Runs the pass" / «Lleva el pase»
     (`apps/dashboard/src/i18n/strings.ts:2545`, `:6339`), "Devices" / «Dispositivos» (`prep.devices`,
     `strings.ts:319`, `:1229`), Yes/No (`venue.yes`/`venue.no`, `:436-437`, `:1350-1351`). The
