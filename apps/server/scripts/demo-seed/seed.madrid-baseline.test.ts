@@ -2765,6 +2765,21 @@ for (const locale of ["en", "es"] as const) {
         ...printJobsTable.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
       ];
 
+      for (const [name, columns] of [
+        ["bill_payments", ["attested_by", "requested_by"]],
+        ["department_transfer_requests", ["resolved_by", "sender_id"]],
+        ["line_service_cancellations", ["actor_id"]],
+        ["order_amendments", ["actor_id"]],
+        ["order_drafts", ["owner_id"]],
+        ["order_groups", ["submitted_by", "fired_by"]],
+      ] as const) {
+        const table = expected[phase].tables[name]!;
+        table.foreignKeys = [
+          ...columns.map(personKey),
+          ...table.foreignKeys.map((key) => ({ ...key, id: key.id + columns.length })),
+        ];
+      }
+
       if (phase !== "seeded") expected[phase] = madridWithPhotos(expected[phase]);
       phases[phase]!.media_blobs = Object.keys(expected[phase].tables.media_blobs!.rows).length;
       delete phases[phase]!.media_image_data;
