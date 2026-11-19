@@ -293,7 +293,7 @@ as a starter and goes to the kitchen with that course when ordered from the set 
 
 Under **What one set menu includes**, set how many dishes you offer from each course. For example,
 use one line for one starter and another for one main. Put two courses on the same line to let
-guests choose from either. Check the problems above the price before publishing.
+guests choose from either.
 
 Open the full menu that will offer the set menu. In **Structure**, open the actions for the
 menu or section where it belongs, choose **Set menu…** and pick it. Use **Preview** to see the

@@ -1176,16 +1176,20 @@ export class MenuStructureTable extends LitElement {
         "section",
         nothing,
         html`<span part="name-stack folder-stack">
-          <a
-            part="set-menu-link"
-            href=${`/menus/menu/${encodeURIComponent(menuId)}/view/set-menu`}
-            @click=${(event: MouseEvent) => {
-              if (leftToBrowser(event)) return;
-              event.preventDefault();
-              this.#send("wt-set-menu-open", { menuId });
-            }}
-            >${row.name}</a
-          >
+          ${
+            this.selecting
+              ? this.#nameSpan(row)
+              : html`<a
+                  part="set-menu-link"
+                  href=${`/menus/menu/${encodeURIComponent(menuId)}/view/set-menu`}
+                  @click=${(event: MouseEvent) => {
+                    if (leftToBrowser(event)) return;
+                    event.preventDefault();
+                    this.#send("wt-set-menu-open", { menuId });
+                  }}
+                  >${row.name}</a
+                >`
+          }
           ${price == null ? nothing : html`<span part="note">${formatMoney(price, currentLocale())}</span>`}
         </span>`,
       );
@@ -1397,6 +1401,7 @@ export class MenuStructureTable extends LitElement {
       this.#sectionNames,
       this.#setMenuById,
       this.placeableSetMenus,
+      this.selecting,
       this.nodes,
     ];
     if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
@@ -1508,7 +1513,7 @@ export class MenuStructureTable extends LitElement {
         .rowActivation=${(row: TableRow) => {
           if (row.kind === "root") return "none";
           if (row.node.ref.kind === "section") return "toggle";
-          return row.node.ref.kind === "set_menu" ? "click" : "none";
+          return row.node.ref.kind === "set_menu" && !this.selecting ? "click" : "none";
         }}
         .rowClick=${(row: TableRow) => {
           if (row.kind === "member" && row.node.ref.kind === "set_menu")

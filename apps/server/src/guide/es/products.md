@@ -305,8 +305,7 @@ para que cuente como entrante y salga con ese curso si la pides desde la carta a
 
 En **Qué incluye cada carta a precio fijo**, indica cuántos platos ofreces de cada curso. Por ejemplo,
 usa una línea para un entrante y otra para un principal. Pon dos cursos en la misma línea para
-que el cliente elija entre ambos. Revisa los problemas que aparecen encima del precio antes de
-publicar.
+que el cliente elija entre ambos.
 
 Abre la carta completa que ofrecerá la carta a precio fijo. En **Estructura**, abre las acciones
 de la carta o sección donde quieras incluirla, elige **Carta a precio fijo…** y selecciónala.

@@ -554,6 +554,24 @@ it("offers a set menu in another list even when the root already holds it", asyn
   expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("starters", placement.ref);
 });
 
+it("offers only unplaced set menus when the selected list already holds one", async () => {
+  const client = api();
+  const special = { ...daily, id: "special", name: "Special menu" };
+  client.listMenus.mockResolvedValue([menu, daily, special]);
+  const structure = withSectionAndPlacement(await client.getMenuStructure("lunch"));
+  structure.placeableSetMenus = [
+    { id: daily.id, name: daily.name },
+    { id: special.id, name: special.name },
+  ];
+  client.getMenuStructure.mockResolvedValue(structure);
+  await mount("/menus/menu/lunch/view/structure", client);
+  await page.getByRole("button", { name: "Actions: Lunch" }).click();
+  await page.getByRole("button", { name: "Set menu…", exact: true }).click();
+  await page.getByRole("combobox", { name: /Set menu/ }).click();
+  await expect.element(page.getByRole("option", { name: "Special menu" })).toBeVisible();
+  expect(page.getByRole("option", { name: "Daily menu" }).elements()).toHaveLength(0);
+});
+
 it("shows a placed set menu's price and opens its editor from the structure row", async () => {
   const client = api();
   const structure = await client.getMenuStructure("lunch");
@@ -572,9 +590,19 @@ it("shows a placed set menu's price and opens its editor from the structure row"
 it("moves a set-menu placement into a section without editing the set menu", async () => {
   const client = api();
   const structure = await client.getMenuStructure("lunch");
-  client.getMenuStructure.mockResolvedValue(withSectionAndPlacement(structure));
+  const before = withSectionAndPlacement(structure);
+  const section = before.nodes[1]!;
+  client.getMenuStructure.mockResolvedValue(before);
+  client.moveSectionMembersInto.mockImplementationOnce(async () => {
+    client.getMenuStructure.mockResolvedValue({
+      ...before,
+      root: { ...before.root, members: before.root.members.filter(({ id }) => id !== "placed") },
+      nodes: [{ ...section, children: [placement] }],
+    });
+  });
   await mount("/menus/menu/lunch/view/structure", client);
-  await page.getByRole("button", { name: "Actions: Daily menu" }).click();
+  const actions = page.getByRole("button", { name: "Actions: Daily menu" });
+  await actions.click();
   await page.getByRole("button", { name: "Move to section…" }).click();
   await page.getByRole("combobox", { name: /Destination/ }).click();
   await page.getByRole("option", { name: "Starters" }).click();
@@ -582,6 +610,20 @@ it("moves a set-menu placement into a section without editing the set menu", asy
   expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith("starters", [
     { listId: "root", memberId: "placed" },
   ]);
+  await vi.waitFor(() => expect(actions.element().matches(":focus")).toBe(true));
+});
+
+it("keeps the current selection when clicking a set menu in Select mode", async () => {
+  const client = api();
+  const structure = await client.getMenuStructure("lunch");
+  client.getMenuStructure.mockResolvedValue(withSectionAndPlacement(structure));
+  await mount("/menus/menu/lunch/view/structure", client);
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  const selected = page.getByRole("checkbox", { name: /Daily menu/ });
+  await selected.click();
+  await page.getByText("Daily menu", { exact: true }).click();
+  expect(location.pathname).toBe("/menus/menu/lunch/view/structure");
+  await expect.element(selected).toBeChecked();
 });
 
 it("removes the placement while leaving the set menu available to add", async () => {
@@ -599,7 +641,7 @@ it("removes the placement while leaving the set menu available to add", async ()
   expect(page.getByRole("link", { name: "Daily menu", exact: true }).elements()).toHaveLength(0);
 });
 
-it("keeps set menus out of Include menu while offering ordinary menus", async () => {
+it("uses the ordinary-menu choices for Include a menu", async () => {
   const client = api();
   const structure = await client.getMenuStructure("lunch");
   client.getMenuStructure.mockResolvedValue(withSectionAndPlacement(structure));
@@ -614,6 +656,7 @@ it("keeps set menus out of Include menu while offering ordinary menus", async ()
 it("shows the set menu guide from the editor in Help mode", async () => {
   onTestFinished(() => setHelpMode(false));
   await mount(dailyPath);
+  await expect.element(page.getByRole("textbox", { name: /^Price per set menu/ })).toBeVisible();
   const help = page.getByRole("button", { name: "Help with set menus" });
   expect(help.elements()).toHaveLength(0);
   setHelpMode(true);

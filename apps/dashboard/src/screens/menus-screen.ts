@@ -3104,13 +3104,13 @@ export class MenusScreen extends LitElement {
    * `saved` closes, only while the menu it was asked in is still open; once another menu has been
    * opened, a refusal is named with the menu it was for, and a saved change clears nothing and
    * moves no focus there. `refused` shows a refusal in its confirm and says whether that confirm
-   * was still open; when it was not, the refusal is named with the menu too. `reread` runs after a
-   * saved change is read back. */
+   * was still open; when it was not, the refusal is named with the menu too. `reread` can name a
+   * row to focus once the saved change is read back. */
   async #sendSelected(change: {
     send: () => Promise<unknown>;
     refused: (message: string) => boolean;
     saved: () => void;
-    reread?: () => void;
+    reread?: () => string | undefined;
   }): Promise<void> {
     const opened = this.#menuOpenings;
     const menu = this.#menuName();
@@ -3128,13 +3128,14 @@ export class MenusScreen extends LitElement {
       this.structureSelected = [];
     }
     await this.#refresh();
-    if (here()) change.reread?.();
+    const movedKey = here() ? change.reread?.() : undefined;
     this.busy = false;
     await this.updateComplete;
     if (!here()) return;
     if (this.structureSelecting)
       this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
-    else this.renderRoot.querySelector("dashboard-menu-structure-table")?.focusRowMenu("");
+    else
+      this.renderRoot.querySelector("dashboard-menu-structure-table")?.focusRowMenu(movedKey ?? "");
   }
 
   async #removeSelected(): Promise<void> {
@@ -3279,7 +3280,10 @@ export class MenusScreen extends LitElement {
       },
       reread: () => {
         const path = this.#moveDestinations([]).find(({ value }) => value === destination)?.path;
-        if (path) this.#edit(path);
+        if (!path) return undefined;
+        this.#edit(path);
+        const member = members[0];
+        return member && [...path, member.memberId].join("/");
       },
     });
   }
