@@ -611,7 +611,7 @@ describe("till-table-order-screen: Print the bill beside Finish table's refusal"
   });
 
   it("offers no Print the bill for a bill that needs paper where receipts may not print", async () => {
-    const el = await mountScreen({ finishRefused: true, canPrintReceipts: false });
+    const el = await mountScreen({ finishRefused: true, canPrintReceipt: false });
 
     const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
     expect(refusal.querySelector("[data-take-payment]")).not.toBeNull();

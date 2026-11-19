@@ -20152,9 +20152,11 @@ export class TillApp extends LitElement {
     const { workingOrderId, printAnyway, showFirst } = (
       event as CustomEvent<{ workingOrderId: string; printAnyway?: boolean; showFirst?: boolean }>
     ).detail;
-    const switching =
-      showFirst === true && this.#billPrinting() === null && this.activeTabId !== workingOrderId;
-    if (switching) {
+    if (
+      showFirst === true &&
+      this.#billPrinting() === null &&
+      this.activeTabId !== workingOrderId
+    ) {
       const { api, orderParty: pressed } = this;
       const session = this.#operatorSession;
       const visit = this.#orderVisit;
@@ -20189,12 +20191,12 @@ export class TillApp extends LitElement {
       !printBillOffered(bill, {
         dishes: this.tabLines.length,
         paymentUnanswered: this.#unansweredWholePayments.has(workingOrderId) || held !== null,
-        printsReceipts: this.#mayPrintReceipts(),
+        printsReceipts: this.#mayPrintReceipt,
         takesPayment: this.permissions.includes("payment.take"),
       })
     ) {
-      // The screen offered this press without knowing another bill's held payment.
-      if (switching && held !== null) this.errorKey = held;
+      // Finish table offers this press without knowing another bill's held payment.
+      if (held !== null) this.errorKey = held;
       return;
     }
     const listed =
@@ -20244,7 +20246,6 @@ export class TillApp extends LitElement {
     } else if (!confirmsTicket(outcome.answer, workingOrderId)) this.#onMealEndUnconfirmed(asked);
     else {
       this.#mealEndUnanswered.delete(workingOrderId);
-      this.#mealEndKept.delete(workingOrderId);
       if (live()) await this.#onMealEnded(asked);
     }
   }
@@ -20371,11 +20372,8 @@ export class TillApp extends LitElement {
     return printing?.session === this.#operatorSession ? printing.billId : null;
   }
 
-  /** The server lets a request from no device through, so only a device's profile can forbid it. */
-  #mayPrintReceipts(): boolean {
-    return this.deviceId === undefined || this.capabilities.includes("print-receipt");
-  }
-
+  /** `deviceId` is undefined only while the till has not read its identity; a session always joins
+   * a device, so the server still applies that device's profile. */
   /** Print the bill's answer, while the party it was sent for is on screen, and a not-served list
    * while that party has not moved past the revision the list describes. */
   #mealEndShown(): MealEndShown | null {
@@ -23123,7 +23121,7 @@ export class TillApp extends LitElement {
       .finishRefused=${this.finishRefused}
       .mealEnd=${this.#mealEndShown()}
       .canMarkServed=${this.capabilities.includes("hand-over-orders")}
-      .canPrintReceipts=${this.#mayPrintReceipts()}
+      .canPrintReceipt=${this.#mayPrintReceipt}
       .takesPayment=${this.permissions.includes("payment.take")}
       .nameRefusal=${this.nameRefusal}
       .billNameRefusal=${this.billNameRefusal}
@@ -23318,7 +23316,7 @@ export class TillApp extends LitElement {
           .finishRefused=${this.finishRefused}
           .mealEnd=${this.#mealEndShown()}
           .canMarkServed=${this.capabilities.includes("hand-over-orders")}
-          .canPrintReceipts=${this.#mayPrintReceipts()}
+          .canPrintReceipt=${this.#mayPrintReceipt}
           .takesPayment=${this.permissions.includes("payment.take")}
           .nameRefusal=${this.nameRefusal}
           .billNameRefusal=${this.billNameRefusal}

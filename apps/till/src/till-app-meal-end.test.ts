@@ -557,18 +557,21 @@ describe("till-app: Print the bill", () => {
     );
   });
 
-  it.each(["management.request_invalid", "some.refusal_the_till_has_no_words_for"])("says %s printed nothing and issued no ticket, sending nobody elsewhere", async (code) => {
-    const { el } = await openBill({
-      endMeal: vi.fn().mockRejectedValue({ code, status: 409 }),
-    });
+  it.each(["management.request_invalid", "some.refusal_the_till_has_no_words_for"])(
+    "says %s printed nothing and issued no ticket, sending nobody elsewhere",
+    async (code) => {
+      const { el } = await openBill({
+        endMeal: vi.fn().mockRejectedValue({ code, status: 409 }),
+      });
 
-    await printBill(el);
+      await printBill(el);
 
-    const said = banner(el)!.textContent!;
-    expect(said).toContain(t("meal_end.refused"));
-    expect(said).not.toContain(t("place.refused"));
-    expect(said).not.toContain(t("table.error"));
-  });
+      const said = banner(el)!.textContent!;
+      expect(said).toContain(t("meal_end.refused"));
+      expect(said).not.toContain(t("place.refused"));
+      expect(said).not.toContain(t("table.error"));
+    },
+  );
 
   it.each([
     ["an error carrying no code", new Error("unexpected")],
@@ -766,22 +769,23 @@ describe("till-app: a refusal after a send that got no answer", () => {
     expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
   });
 
-  it.each([
-    ["a failed response with no Waitron error", { code: "server.internal", status: 502 }],
-  ])("remembers %s as no answer", async (_case, first) => {
-    const endMeal = vi
-      .fn()
-      .mockRejectedValueOnce(first)
-      .mockRejectedValue(refusal("authorization.not_permitted"));
-    const { el } = await openBill({ endMeal });
-    await printBill(el);
-    expectWarned(el);
+  it.each([["a failed response with no Waitron error", { code: "server.internal", status: 502 }]])(
+    "remembers %s as no answer",
+    async (_case, first) => {
+      const endMeal = vi
+        .fn()
+        .mockRejectedValueOnce(first)
+        .mockRejectedValue(refusal("authorization.not_permitted"));
+      const { el } = await openBill({ endMeal });
+      await printBill(el);
+      expectWarned(el);
 
-    await printBill(el);
+      await printBill(el);
 
-    expect(endMeal).toHaveBeenCalledTimes(2);
-    expectWarned(el);
-  });
+      expect(endMeal).toHaveBeenCalledTimes(2);
+      expectWarned(el);
+    },
+  );
 
   it("remembers an empty answer as no answer", async () => {
     const endMeal = vi
@@ -855,7 +859,11 @@ describe("till-app: what counts as the server's answer to Print the bill", () =>
   const throughRealClient = (response: () => Response) => {
     const real = new TillApi("", vi.fn(async () => response()) as unknown as typeof fetch);
     return (partyId: unknown, request: unknown, options: unknown) =>
-      real.endMeal(partyId as string, request as EndMealRequest, options as { signal: AbortSignal });
+      real.endMeal(
+        partyId as string,
+        request as EndMealRequest,
+        options as { signal: AbortSignal },
+      );
   };
 
   it("does not say Bill issued when the real client gets an empty success", async () => {
@@ -1690,7 +1698,7 @@ describe("till-app: Print the bill on a device that may not print receipts", () 
     expect(endMeal).toHaveBeenCalledOnce();
   });
 
-  it("offers and prints a paper bill on a till with no device, which the server lets through", async () => {
+  it("offers and sends a paper bill while the till has not read its device identity, leaving the check to the server", async () => {
     const { el, endMeal } = await openBill(
       { getDeviceIdentity: vi.fn().mockRejectedValue(new Error("network")) },
       noReceipts,

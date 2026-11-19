@@ -390,7 +390,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
 
   it("offers no Print the bill for a bill that needs paper where receipts may not print", async () => {
     const el = await mountScreen();
-    el.canPrintReceipts = false;
+    el.canPrintReceipt = false;
     await el.updateComplete;
 
     expect(item(el, '[data-action="print-bill"]')).toBeNull();
@@ -405,7 +405,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       const el = await mountScreen({
         bills: [partyBill("wo-2", 2, "54.00", { invoiceType: "F1", invoiceDelivery })],
       });
-      el.canPrintReceipts = false;
+      el.canPrintReceipt = false;
       await el.updateComplete;
 
       expect(item(el, '[data-action="print-bill"]')).not.toBeNull();
@@ -479,7 +479,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     const el = await mountScreen({ bills: [bill] });
     expect(item(el, "[data-bill-receipt]")).not.toBeNull();
 
-    el.canPrintReceipts = false;
+    el.canPrintReceipt = false;
     await el.updateComplete;
 
     expect(item(el, "[data-bill-receipt]")).toBeNull();

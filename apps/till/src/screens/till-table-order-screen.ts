@@ -1429,7 +1429,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The signed-in person may take payment, which Print the bill needs; `false` hides it. */
   @property({ type: Boolean }) takesPayment = true;
   /** This device may print receipts; `false` hides what would need one. */
-  @property({ type: Boolean }) canPrintReceipts = true;
+  @property({ type: Boolean }) canPrintReceipt = true;
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
   /** Mounted inside a card host, which supplies the header. */
@@ -5326,7 +5326,7 @@ export class TillTableOrderScreen extends LitElement {
       dishes: onScreen ? this.lines.length : undefined,
       paymentUnanswered:
         onScreen && (this.paymentConfirmation !== undefined || this.billPaymentHeld),
-      printsReceipts: this.canPrintReceipts,
+      printsReceipts: this.canPrintReceipt,
       takesPayment: this.takesPayment,
     });
   }
@@ -6887,7 +6887,7 @@ export class TillTableOrderScreen extends LitElement {
           </wt-button>`
         : nothing,
       printBill,
-      this.canPrintReceipts &&
+      this.canPrintReceipt &&
       (bill.status === "settled" || bill.status === "placed") &&
       bill.receiptAvailable
         ? html`<wt-button data-bill-receipt @click=${() => this.#dispatch("reprint-bill", target)}>
