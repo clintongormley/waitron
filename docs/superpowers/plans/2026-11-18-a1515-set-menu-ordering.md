@@ -1238,8 +1238,6 @@ export function draftPlacements(
 - Create: `apps/till/src/widgets/set-menu-place-dialog.ts`
 - Modify: `apps/till/src/widgets/set-menu-folder.ts` (the tap), `apps/till/src/screens/till-table-order-screen.ts`
   (after the picker confirms), `apps/till/src/till-app.ts` (a send refused `set_menu.no_place`)
-- Modify for standalone takeaway: `apps/server/src/till-api.ts` (the per-bill set-menu read),
-  `apps/till/src/api/client.ts` (read reply), and the counter refresh in `apps/till/src/till-app.ts`.
 - Test: `apps/till/src/widgets/set-menu-place-dialog.{test,a11y.test}.ts`, `apps/till/src/till-app-set-menus.test.ts`
 
 **Interfaces:**
@@ -1260,17 +1258,13 @@ export function draftPlacements(
     ordinary `offers`: it opens that offer's picker afresh;
   - **Cancel**: nothing is added.
 - A send refused `set_menu.no_place` opens the same dialog for the dish it names.
-- Return full recorded copies in the per-bill set-menu read and use them when a standalone takeaway
-  orders or refreshes at the counter. The watcher cleared this for PR 12 in Lane F's questions.md,
-  19 November 2026 at 13:24.
 - [ ] **Step 1: Write the failing tests:** `"a sea bass with no place asks at once, and Add a
   Special adds one and drafts the sea bass on it"`; `"after Add, a sirloin drafted earlier stays
   on the Daily"` (Review Focus 1, on the till); `"the suggested move is offered with its price and
   saves the move"`; `"a wine whose glass has a place but whose bottle has none asks after the
   bottle is chosen"`; `"Order à la carte is offered only when the dish sells à la carte here"`;
   `"Cancel adds nothing"`; `"a send refused for no place opens the question"`; a11y for the dialog
-  in both themes. On a takeaway without a party, add a set menu, republish its full menu, reopen the
-  bill and verify it orders from the original copy.
+  in both themes.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/set-menu-place-dialog.test.ts src/widgets/set-menu-place-dialog.a11y.test.ts src/till-app-set-menus.test.ts`; they fail.
 - [ ] **Step 3: Implement.** **Step 4: Run them and `src/till-app-late-send.test.ts`.**
 - [ ] **Step 5: Commit** — "Set menus: ask when a dish has no place in the bill's set menus".
@@ -1340,3 +1334,10 @@ export function draftPlacements(
 - [ ] **Step 6: Update `docs/backlog/menu.md`'s A1515 entry** to say piece 2 has landed, that
   paying a set-menu bill waits for piece 4, and what is next, in the same commit.
 - [ ] **Step 7: Commit** — "Set menus: move set menus on the till, and the table-service guide".
+
+### PR 13: Order from set menus on a standalone takeaway bill
+
+The watcher moved the standalone counter flow and the recorded-copy read from PR 12 to PR 13
+on 19 November 2026 at 21:48 in Lane F's questions.md. This replaces the 13:24 note that put
+standalone takeaway in PR 12. The [standalone takeaway plan](2026-11-19-a1515-standalone-takeaway.md)
+records the next slice.

@@ -1,3 +1,4 @@
+import { needsModifierPicker } from "../state/order-line.js";
 import { refreshProductDeclarations } from "../state/menu-refresh.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "./product-info.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
@@ -24,12 +25,21 @@ import {
 import "./product-info.js";
 import { nutritionDietLabels } from "./nutrition-icons.js";
 import {
+  centsToDecimal,
+  copiesListing,
   foldCache,
+  placeInOrder,
+  setMenuCopyOf,
+  suggestMove,
+  type DishMove,
+  type DishPlace,
+  type DishToPlace,
   foldForSearch,
   formatMoney,
   searchFor,
   type NameSearch,
   HOME_GRID_COLUMNS,
+  HOME_DISPLAY_DEFAULTS,
   arrangeHome,
   indexDocument,
   openedSection,
@@ -37,6 +47,7 @@ import {
   shownMembers,
   tileFill,
   tilePaths,
+  type BillSetMenuState,
   type HomeIndex,
   type SectionStep,
 } from "@waitron/shared";
@@ -45,13 +56,22 @@ import "./modifier-picker.js";
 import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
-import type { WorkingOrderStore } from "../state/working-order.js";
+import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { countText, currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, fill, t } from "../i18n/t.js";
 import { descriptionFor } from "./dish-format.js";
 import { helpBadge } from "./help-badge.js";
 import { productName, unitName } from "./product-name.js";
-import { hasSomethingToSell, pickProduct } from "./product-pick.js";
+import { hasSomethingToSell, pickProduct, setMenuProduct } from "./product-pick.js";
+import {
+  draftMenuDishes,
+  draftPlacementId,
+  menusWithCopies,
+  type OrderingCopy,
+} from "../state/set-menus.js";
+import { codeMessage } from "../i18n/codes.js";
+import { trackDialog } from "./track-dialog.js";
+import { type PickSetMenuDishDetail } from "./set-menu-folder.js";
 
 registerIcons({
   "menu-section":
@@ -61,6 +81,21 @@ registerIcons({
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
 type MenuIndex = HomeIndex<TillProduct>;
+type SetMenuPlaceChoice = { label: string; run: () => Promise<string | undefined> };
+type SetMenuTarget = DishPlace | ReadonlySet<string>;
+type MenuPick = {
+  detail: PickSetMenuDishDetail;
+  confirmed?: ModifierConfirmDetail;
+  existing?: OrderLine;
+};
+const EMPTY_SET_MENUS: BillSetMenuState = { copies: [], dishes: [], setMenus: [], recorded: {} };
+function listsSetMenu(members: readonly DocumentMember[], id: string): boolean {
+  return members.some((member) =>
+    member.kind === "set_menu"
+      ? member.menuId === id
+      : member.kind === "section" && listsSetMenu(member.members, id),
+  );
+}
 
 type SearchResult =
   | { kind: "product"; product: TillProduct }
@@ -71,13 +106,21 @@ type SearchResult =
  * separately, which is ordered only as an extra on another dish, and a section left with nothing
  * to order. Staff only is shown: every till screen is staff's.
  */
-function indexMenu(menu: TillZoneMenu, products: TillProduct[]): MenuIndex {
+function indexMenu(
+  menu: TillZoneMenu,
+  products: TillProduct[],
+  copies: readonly OrderingCopy[] = [],
+): MenuIndex {
   const offers = new Map(
     products
       .filter((product) => product.ordering !== "not_sold_separately")
       .map((product) => [product.menuItemId, product]),
   );
-  return indexDocument(menu.structure.members, (id) => offers.get(id));
+  return indexDocument(
+    menu.structure.members,
+    (id) => offers.get(id),
+    (id) => copies.some(({ copy }) => copy.menuId === id),
+  );
 }
 
 function thumb(image: string): TemplateResult {
@@ -431,6 +474,21 @@ export class TillMenuBrowser extends LitElement {
   @state() private notFound = false;
 
   @state() private pickerProduct?: TillProduct;
+  #pickerSetMenu?: { pick: MenuPick; target?: SetMenuTarget };
+
+  @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = [];
+  @property({ attribute: false }) setMenuBill?: BillSetMenuState;
+  @property({ attribute: false }) setMenuCourses: Readonly<Record<string, string>> = {};
+  @property({ attribute: false }) addSetMenu?: (id: string) => Promise<string | undefined>;
+  @property({ attribute: false }) moveSetMenuDishes?: (
+    moves: readonly DishMove[],
+  ) => Promise<string | undefined>;
+  @property({ attribute: false }) setMenuDishNames: ReadonlyMap<string, string> = new Map();
+  @state() private placeRequest?: MenuPick;
+  #replaceAfterPick?: OrderLine;
+  @state() private setMenuError = "";
+  @state() private changingSetMenu = false;
+  @state() private setMenuFolder?: { id?: string; held: boolean };
 
   #indexed?: { menu: TillZoneMenu; products: TillProduct[]; index: MenuIndex };
 
@@ -458,7 +516,7 @@ export class TillMenuBrowser extends LitElement {
   #index(menu: TillZoneMenu): MenuIndex {
     const cached = this.#indexed;
     if (cached?.menu === menu && cached.products === this.products) return cached.index;
-    const index = indexMenu(menu, this.products);
+    const index = indexMenu(menu, this.products, this.setMenuCopies);
     this.#indexed = { menu, products: this.products, index };
     return index;
   }
@@ -468,7 +526,7 @@ export class TillMenuBrowser extends LitElement {
     if (products === undefined || products === this.products) return this.#index(menu);
     const cached = this.#unfilteredIndexed;
     if (cached?.menu === menu && cached.products === products) return cached.index;
-    const index = indexMenu(menu, products);
+    const index = indexMenu(menu, products, this.setMenuCopies);
     this.#unfilteredIndexed = { menu, products, index };
     return index;
   }
@@ -502,9 +560,16 @@ export class TillMenuBrowser extends LitElement {
   }
 
   /** The open section is judged before each render, so a menu that has lost it never draws it. */
-  override willUpdate(): void {
+  override willUpdate(changed: PropertyValues): void {
+    if (changed.has("setMenuCopies")) {
+      this.#indexed = undefined;
+      this.#unfilteredIndexed = undefined;
+      const id = this.setMenuFolder?.id;
+      if (id !== undefined && !this.setMenuCopies.some(({ copy }) => copy.menuId === id))
+        this.setMenuFolder = undefined;
+    }
     if (this.infoProduct) this.infoProduct = this.#currentInfoOffer(this.infoProduct);
-    if (this.pickerProduct)
+    if (this.pickerProduct && this.#pickerSetMenu === undefined)
       this.pickerProduct = refreshProductDeclarations(this.pickerProduct, [
         ...(this.unfilteredProducts ?? this.products),
         ...(this.unfilteredServedProducts ?? this.servedProducts),
@@ -556,6 +621,7 @@ export class TillMenuBrowser extends LitElement {
   #open(path: SectionStep[]): void {
     this.notFound = false;
     this.path = path;
+    this.setMenuFolder = undefined;
   }
 
   override updated(changed: PropertyValues): void {
@@ -574,22 +640,206 @@ export class TillMenuBrowser extends LitElement {
     if (trail.isConnected) trail.scrollIntoView({ block: "nearest" });
   }
 
-  #pick(product: TillProduct): void {
+  #pick(product: TillProduct, replacing?: OrderLine): void {
     this.notFound = false;
-    pickProduct(product, this.store, (picked) => {
-      this.pickerProduct = picked;
-    });
+    pickProduct(
+      product,
+      this.store,
+      (picked) => {
+        this.#replaceAfterPick = replacing;
+        this.pickerProduct = picked;
+      },
+      replacing,
+    );
   }
 
   #onSearch(event: CustomEvent<{ value: string }>): void {
     this.#pendingSection = undefined;
     this.query = event.detail.value;
+    this.setMenuFolder = undefined;
     this.notFound = false;
   }
 
+  #pickCandidates(pick: MenuPick): DishToPlace[] {
+    const product = pick.confirmed?.product ?? setMenuProduct(pick.detail);
+    const variants =
+      pick.confirmed === undefined && product.variants?.length
+        ? product.variants.filter(({ available }) => available).map(({ id }) => id)
+        : [product.variantId ?? null];
+    return variants.map((variantId) => ({
+      id: "picked-dish",
+      productId: product.productId ?? product.id,
+      variantId,
+      reserved: null,
+    }));
+  }
+
+  #pickSetMenu(pick: MenuPick, target?: SetMenuTarget): void {
+    const product = pick.confirmed?.product ?? setMenuProduct(pick.detail);
+    if (!hasSomethingToSell(product) || this.store.editsLocked) return;
+    const bill = this.setMenuBill ?? EMPTY_SET_MENUS;
+    const candidates = this.#pickCandidates(pick);
+    const draft = draftMenuDishes(this.store.lines.filter((line) => line !== pick.existing));
+    const reserved =
+      target === undefined || "place" in target
+        ? target
+        : candidates.flatMap(
+            (dish) =>
+              placeInOrder(
+                {
+                  ...bill,
+                  setMenus: bill.setMenus.filter(({ lineId }) => target.has(lineId)),
+                },
+                [dish],
+              ).placed,
+          )[0];
+    if (
+      reserved === undefined &&
+      (target !== undefined ||
+        !candidates.some(
+          (dish) => !placeInOrder(bill, [...draft, dish]).unplaced.includes(dish.id),
+        ))
+    ) {
+      this.setMenuError = "";
+      this.placeRequest = { ...pick };
+      return;
+    }
+    if (pick.confirmed === undefined && needsModifierPicker(product)) {
+      this.#pickerSetMenu = { pick, target };
+      this.pickerProduct = product;
+      return;
+    }
+    this.store.addProduct(
+      product,
+      "1",
+      {
+        ...pick.confirmed,
+        setMenu: { id: pick.detail.setMenuId, reserved },
+      },
+      pick.existing,
+    );
+  }
+
   #onModifierConfirm(detail: ModifierConfirmDetail): void {
-    this.store.addProduct(detail.product, "1", detail);
+    const setMenu = this.#pickerSetMenu;
+    this.#pickerSetMenu = undefined;
     this.pickerProduct = undefined;
+    if (setMenu !== undefined) {
+      this.#pickSetMenu({ ...setMenu.pick, confirmed: detail }, setMenu.target);
+      return;
+    }
+    const replacing = this.#replaceAfterPick;
+    this.#replaceAfterPick = undefined;
+    this.store.addProduct(detail.product, "1", detail, replacing);
+  }
+
+  openSetMenuPlace(line: OrderLine): boolean {
+    const row = this.setMenuCopies.find(({ copy }) => copy.menuId === line.setMenuId);
+    const offer = row?.copy.offers.find(({ id }) => id === line.product.menuItemId);
+    if (row === undefined || offer === undefined) return false;
+    this.setMenuError = "";
+    this.placeRequest = {
+      detail: { offer, setMenuId: row.copy.menuId, versionId: row.versionId },
+      confirmed: {
+        product: line.product,
+        extras: line.extras,
+        options: line.options,
+        optionSnapshots: line.optionSnapshots,
+        note: line.note,
+      },
+      existing: line,
+    };
+    return true;
+  }
+
+  #placeChoices(pick: MenuPick): SetMenuPlaceChoice[] {
+    const bill = this.setMenuBill ?? EMPTY_SET_MENUS;
+    const draft = this.store.lines.filter((line) => line !== pick.existing);
+    const dishes = draftMenuDishes(draft);
+    const placed = placeInOrder(bill, dishes).placed;
+    const candidates = this.#pickCandidates(pick);
+    const choices: SetMenuPlaceChoice[] = [];
+    const add = this.addSetMenu;
+    if (add !== undefined)
+      for (const { copy, versionId } of this.setMenuCopies) {
+        if (
+          !candidates.some(
+            ({ productId, variantId }) =>
+              copiesListing([setMenuCopyOf(copy, versionId)], productId, variantId).length > 0,
+          )
+        )
+          continue;
+        choices.push({
+          label: `${fill(t("set_menu.add"), { name: copy.name })} (${formatMoney(copy.terms.price, currentLocale())})`,
+          run: async () => {
+            const error = await add(copy.menuId);
+            if (error !== undefined || !this.isConnected) return error;
+            const now = this.setMenuBill ?? EMPTY_SET_MENUS;
+            const old = new Set(bill.setMenus.map(({ lineId }) => lineId));
+            const added = new Set(
+              now.setMenus.map(({ lineId }) => lineId).filter((id) => !old.has(id)),
+            );
+            const pinned = new Map<number, OrderLine>();
+            for (const { id, place, setMenuLineId } of placed) {
+              const line = draft.find((line, index) => draftPlacementId(line, index) === id)!;
+              const index = this.store.lines.indexOf(line);
+              if (index >= 0)
+                pinned.set(index, { ...line, setMenuReserved: { place, setMenuLineId } });
+            }
+            if (pinned.size > 0) this.store.adoptLines(pinned);
+            this.#pickSetMenu(pick, added);
+            return undefined;
+          },
+        });
+      }
+    const move = this.moveSetMenuDishes;
+    if (move !== undefined && candidates.length === 1) {
+      const drafted = placed.map((place) => ({
+        ...dishes.find(({ id }) => id === place.id)!,
+        ...place,
+      }));
+      const suggestion = suggestMove(bill, drafted, candidates[0]!);
+      if (suggestion !== null && suggestion.moves.length > 0) {
+        const names = new Map(
+          menusWithCopies(bill).map(({ menu, copy }) => [menu.lineId, copy.name]),
+        );
+        const moves = suggestion.moves.map(({ lineId, to, priceCents }) =>
+          fill(t("set_menu.move_named"), {
+            dish: this.setMenuDishNames.get(lineId) ?? lineId,
+            menu: names.get(to.setMenuLineId) ?? "",
+            price: formatMoney(centsToDecimal(priceCents), currentLocale()),
+          }),
+        );
+        choices.push({
+          label: fill(t("set_menu.move_for_dish"), {
+            moves: moves.join(" · "),
+            dish: pick.detail.offer.name,
+          }),
+          run: async () => {
+            const error = await move(suggestion.moves.map(({ lineId, to }) => ({ lineId, to })));
+            if (error === undefined && this.isConnected) this.#pickSetMenu(pick, suggestion.place);
+            return error;
+          },
+        });
+      }
+    }
+    const ordinary = (this.unfilteredServedProducts ?? this.servedProducts).find(
+      (product) =>
+        (product.productId ?? product.id) === pick.detail.offer.productId &&
+        product.ordering !== "not_sold_separately" &&
+        hasSomethingToSell(product),
+    );
+    if (ordinary !== undefined)
+      choices.push({
+        label: fill(t("set_menu.order_separately"), {
+          price: formatMoney(ordinary.unitPrice, currentLocale()),
+        }),
+        run: async () => {
+          this.#pick(ordinary, pick.existing);
+          return undefined;
+        },
+      });
+    return choices;
   }
 
   #sectionName(section: SectionNode): string {
@@ -784,12 +1034,16 @@ export class TillMenuBrowser extends LitElement {
    * unfiltered index holds, else nothing; `opens` is the path a section tile opens. A structural
    * section is drawn from itself, a section shortcut from the copy it opens. */
   #tile(
-    ref: DocumentTile | ReturnType<typeof shownMembers>[number],
+    ref: DocumentTile | DocumentMember,
     opens: SectionStep[],
     index: MenuIndex,
     mode: HomeTileMode,
   ): TemplateResult | typeof nothing {
     if (ref.kind === "empty") return nothing;
+    if (ref.kind === "set_menu") {
+      const row = this.setMenuCopies.find(({ copy }) => copy.menuId === ref.menuId);
+      return row === undefined ? nothing : this.#setMenuTile(row);
+    }
     if (ref.kind === "section") {
       const id = ref.sectionId;
       const own = "members" in ref ? ref : undefined;
@@ -807,7 +1061,7 @@ export class TillMenuBrowser extends LitElement {
   }
 
   #listTiles(
-    list: ReturnType<typeof shownMembers>,
+    list: readonly DocumentMember[],
     path: SectionStep[],
     index: MenuIndex,
     mode: HomeTileMode,
@@ -825,7 +1079,13 @@ export class TillMenuBrowser extends LitElement {
         display.tiles,
       ),
     );
-    const members = this.#listTiles(index.home, [], index, display.tiles);
+    const members = this.#listTiles(
+      shownMembers(menu.structure.members, this.setMenuCopies.length > 0),
+      [],
+      index,
+      display.tiles,
+    );
+    if (this.#heldMenuFolders().length > 0) members.push(this.#setMenuTile(undefined, true));
     const { blocks, divider } = arrangeHome(
       display.order,
       shortcuts.some((cell) => cell !== nothing),
@@ -875,9 +1135,89 @@ export class TillMenuBrowser extends LitElement {
         </ol>
       </nav>
       ${this.#grid(
-        this.#listTiles(shownMembers(current.members), this.path, index, display.tiles),
+        this.#listTiles(
+          shownMembers(current.members, this.setMenuCopies.length > 0),
+          this.path,
+          index,
+          display.tiles,
+        ),
         display,
       )}
+    </section>`;
+  }
+
+  #heldMenuFolders(): OrderingCopy[] {
+    const recorded = this.setMenuBill?.recorded;
+    if (recorded === undefined) return [];
+    const menus = [...this.menus, ...(this.menu === undefined ? [] : [this.menu])];
+    return this.setMenuCopies.filter(
+      ({ copy }) =>
+        Object.hasOwn(recorded, copy.menuId) &&
+        !menus.some((menu) => menu.orderable && listsSetMenu(menu.structure.members, copy.menuId)),
+    );
+  }
+
+  #setMenuTile(row: OrderingCopy | undefined, held = false): TemplateResult {
+    const copy = row?.copy;
+    return html`<wt-button
+      class="tile"
+      data-kind=${copy === undefined ? "section" : "set_menu"}
+      @click=${() => {
+        this.setMenuFolder = { id: copy?.menuId, held };
+      }}
+      ><span class="label">
+        <wt-icon name="menu-section"></wt-icon>
+        <span class="name">${copy?.name ?? t("set_menu.folders")}</span>
+        ${copy === undefined ? nothing : html`<span class="price">${formatMoney(copy.terms.price, currentLocale())}</span>`}
+      </span></wt-button
+    >`;
+  }
+
+  async #chooseSetMenu(run: () => Promise<string | undefined>, close = false): Promise<void> {
+    if (this.changingSetMenu || this.store.editsLocked) return;
+    const request = this.placeRequest;
+    this.changingSetMenu = true;
+    this.setMenuError = (await run().catch(() => codeMessage("server.internal"))) ?? "";
+    this.changingSetMenu = false;
+    if (close && this.setMenuError === "" && this.placeRequest === request)
+      this.placeRequest = undefined;
+  }
+
+  #closeSetMenuPlace(event: Event): void {
+    event.stopPropagation();
+    this.placeRequest = undefined;
+    this.setMenuError = "";
+  }
+
+  #setMenuView(row: OrderingCopy | undefined, display: HomeDisplay): TemplateResult {
+    return html`<section data-region="section">
+      <nav class="breadcrumb" aria-label=${t("menu.breadcrumb")}>
+        <wt-button
+          variant="ghost"
+          @click=${() => {
+            this.setMenuFolder =
+              row !== undefined && this.setMenuFolder?.held ? { held: true } : undefined;
+            this.setMenuError = "";
+          }}
+          >${t("action.back")}</wt-button
+        >
+      </nav>
+      ${
+        row === undefined
+          ? this.#grid(
+              this.#heldMenuFolders().map((held) => this.#setMenuTile(held, true)),
+              display,
+            )
+          : html`<till-set-menu-folder
+              .copy=${row.copy}
+              .versionId=${row.versionId}
+              .courseNames=${this.setMenuCourses}
+              .busy=${this.changingSetMenu || this.store.editsLocked}
+              @add-set-menu=${(event: CustomEvent<{ setMenuId: string }>) => this.addSetMenu && void this.#chooseSetMenu(() => this.addSetMenu!(event.detail.setMenuId))}
+              @pick-set-menu-dish=${(event: CustomEvent<PickSetMenuDishDetail>) => this.#pickSetMenu({ detail: event.detail })}
+            ></till-set-menu-folder>`
+      }
+      ${this.setMenuError === "" ? nothing : html`<p class="notice" role="alert">${this.setMenuError}</p>`}
     </section>`;
   }
 
@@ -923,31 +1263,80 @@ export class TillMenuBrowser extends LitElement {
 
   override render() {
     const menu = this.menu;
-    if (menu === undefined) return nothing;
-    const index = this.#index(menu);
-    const trail = this.#trailShown;
-    const display = this.#display(menu);
-    let view: TemplateResult;
-    if (this.query.trim() !== "") view = this.#results(menu, index, display);
-    else if (trail.length > 0) view = this.#sectionView(trail, index, display);
-    else view = this.#home(menu, index, display);
+    const folder = this.setMenuCopies.find(({ copy }) => copy.menuId === this.setMenuFolder?.id);
+    const display =
+      menu === undefined
+        ? HOME_DISPLAY_DEFAULTS[this.handheld ? "handheld" : "till"]
+        : this.#display(menu);
+    let view: TemplateResult | typeof nothing = nothing;
+    if (this.setMenuFolder !== undefined) view = this.#setMenuView(folder, display);
+    else if (menu !== undefined) {
+      const index = this.#index(menu);
+      const trail = this.#trailShown;
+      view =
+        this.query.trim() !== ""
+          ? this.#results(menu, index, display)
+          : trail.length > 0
+            ? this.#sectionView(trail, index, display)
+            : this.#home(menu, index, display);
+    } else if (this.#heldMenuFolders().length > 0) {
+      view = html`<section data-region="structure">
+        ${this.#grid([this.#setMenuTile(undefined, true)], display)}
+      </section>`;
+    }
+    if (view === nothing && this.placeRequest === undefined) return nothing;
     return html`
-      <div data-region="search">
-        <wt-input
-          type="search"
-          name="menu-search"
-          label=${t("menu.search")}
-          .value=${this.query}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
-          >${helpBadge("help.menu.dishes", t("menu.search"), {
-            guide: "products.nutrition-at-the-till",
-            slot: "help",
-          })}</wt-input
-        >
-        <slot name="filters"></slot>
-      </div>
+      ${
+        menu === undefined
+          ? nothing
+          : html`<div data-region="search">
+              <wt-input
+                type="search"
+                name="menu-search"
+                label=${t("menu.search")}
+                .value=${this.query}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
+                >${helpBadge("help.menu.dishes", t("menu.search"), {
+                  guide: "products.nutrition-at-the-till",
+                  slot: "help",
+                })}</wt-input
+              >
+              <slot name="filters"></slot>
+            </div>`
+      }
       ${this.notFound ? html`<p class="notice" role="alert">${t("menu.not_found")}</p>` : nothing}
       ${view}
+      ${
+        this.placeRequest === undefined
+          ? nothing
+          : html`<wt-dialog
+              ${trackDialog()}
+              data-set-menu-place
+              .open=${true}
+              .dismissible=${!this.changingSetMenu}
+              .heading=${fill(t("set_menu.no_place_heading"), { dish: this.placeRequest.detail.offer.name })}
+              @wt-close=${this.#closeSetMenuPlace}
+            >
+              ${this.setMenuError === "" ? nothing : html`<p role="alert">${this.setMenuError}</p>`}
+              <wt-button
+                slot="footer"
+                variant="secondary"
+                ?disabled=${this.changingSetMenu}
+                @click=${this.#closeSetMenuPlace}
+                >${t("action.cancel")}</wt-button
+              >
+              ${this.#placeChoices(this.placeRequest).map(
+                ({ label, run }) =>
+                  html`<wt-button
+                    slot="footer"
+                    variant="secondary"
+                    ?disabled=${this.changingSetMenu}
+                    @click=${() => void this.#chooseSetMenu(run, true)}
+                    >${label}</wt-button
+                  >`,
+              )}
+            </wt-dialog>`
+      }
       ${
         this.infoProduct
           ? html`<till-product-info
@@ -985,6 +1374,8 @@ export class TillMenuBrowser extends LitElement {
               @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) =>
                 this.#onModifierConfirm(event.detail)}
               @wt-modifier-cancel=${() => {
+                this.#pickerSetMenu = undefined;
+                this.#replaceAfterPick = undefined;
                 this.pickerProduct = undefined;
               }}
             ></till-modifier-picker>`

@@ -8,7 +8,6 @@ import { baseStyles, formatDecimalInput, Gestures } from "@waitron/ui";
 import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
 import {
   MONEY_SCALE,
-  centsToDecimal,
   decimal,
   formatMoney,
   sumDecimals,
@@ -20,7 +19,7 @@ import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { sentItemCount, sentPanel, type SentPanel, type SentSlice } from "../state/sent-panel.js";
 import { portionGroups, sentSlicePortionKey } from "../state/portion-groups.js";
-import { menusWithCopies } from "../state/set-menus.js";
+import { sentMenuDishes } from "../state/set-menus.js";
 import { setMenuTag, setMenuTagStyles } from "./set-menu-presentation.js";
 import { reminderDueAt } from "../state/release-reminder.js";
 import { trimQuantity } from "./dish-format.js";
@@ -315,20 +314,7 @@ export class TillSentOrders extends LitElement {
     super.disconnectedCallback();
   }
   protected override willUpdate(changed: ReadonlyMap<PropertyKey, unknown>): void {
-    if (changed.has("setMenus")) {
-      this.#setMenuDishes.clear();
-      if (this.setMenus !== null) {
-        const ids = new Map(
-          menusWithCopies(this.setMenus).map(({ menu, copy }) => [menu.lineId, copy.setMenuId]),
-        );
-        for (const dish of this.setMenus.dishes) {
-          this.#setMenuDishes.set(dish.lineId, {
-            setMenuId: ids.get(dish.setMenuLineId)!,
-            price: centsToDecimal(dish.priceCents),
-          });
-        }
-      }
-    }
+    if (changed.has("setMenus")) this.#setMenuDishes = sentMenuDishes(this.setMenus);
     const opening = JSON.stringify([this.scope, this.billId]);
     if (opening !== this.#opening) {
       this.#opening = opening;

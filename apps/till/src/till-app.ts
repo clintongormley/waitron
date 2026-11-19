@@ -468,7 +468,14 @@ import {
   repriceRebuilt,
   withUnavailable,
 } from "./state/menu-refresh.js";
-import { lookupSetMenuLine, orderingCopies, type SetMenuOfferLookup } from "./state/set-menus.js";
+import {
+  NO_ORDERING_COPIES,
+  lookupSetMenuLine,
+  orderingCopies,
+  type OrderingCopy,
+  type SetMenuChange,
+  type SetMenuOfferLookup,
+} from "./state/set-menus.js";
 import type { ShellAffordance } from "./widgets/till-shell.js";
 import type { BasketRefusal, OrderLine, SelectedExtra } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
@@ -692,6 +699,7 @@ type DraftFollowUp =
   | "mark-unsellable"
   | "recheck-dead-ends"
   | { landedOn: string }
+  | { setMenuNoPlace: string; draftLineId?: string }
   | { lateSend: LateSendAsked; answered?: AnsweredAllergy }
   | { approval: LateSendApprovalAsked; answered?: AnsweredAllergy }
   | undefined;
@@ -2165,6 +2173,10 @@ class ZoneOfferIndex {
 
   products(): TillProduct[] {
     return this.live.map((offer) => menuOfferToTillProduct(offer, this.versions.get(offer.menuId)));
+  }
+
+  ordering(bill: PartyBill): readonly OrderingCopy[] {
+    return orderingCopies(bill, this.setMenus, this.#sellingVersions);
   }
 
   setMenuLookup(bill?: PartyBill): SetMenuOfferLookup {
@@ -13905,6 +13917,93 @@ export class TillApp extends LitElement {
     return { sync, read: await sync.load(this.#draftReadBounds(splitRead)) };
   }
 
+  #tableSetMenuCopies(): readonly OrderingCopy[] {
+    const bill = this.partyBills.find(({ workingOrderId }) => workingOrderId === this.activeTabId);
+    return this.orderParty !== null && bill?.status === "open"
+      ? this.#tableOffers.ordering(bill)
+      : NO_ORDERING_COPIES;
+  }
+
+  #changeSetMenu = async (change: SetMenuChange): Promise<string | undefined> => {
+    const billId = this.activeTabId;
+    const partyId = this.orderParty?.id;
+    const sync = this.#draftSync;
+    const visit = this.#orderVisit;
+    const api = this.api;
+    if (
+      billId === undefined ||
+      partyId === undefined ||
+      sync === undefined ||
+      !this.#draftReady ||
+      sync.store.editsLocked ||
+      sync.store.sending
+    ) {
+      return t("table.reread_failed");
+    }
+
+    const current = () =>
+      !this.#hasLeftOrder(billId, visit) && this.api === api && this.#draftSync === sync;
+    const unlock = sync.store.lockEdits();
+    let message: string | undefined;
+    try {
+      await this.#ownBillsChange(async () => {
+        if (!(await this.#flushDraft()) || !current()) {
+          message = t("table.draft_save_failed");
+          return;
+        }
+        const revision = this.orderParty!.revision;
+        const edit = sync.expectedEdit;
+        const offers = this.#tableSetMenuCopies();
+        try {
+          const saved = await ("count" in change
+            ? api.setSetMenuCount(billId, change.menuId, change.count, revision, edit)
+            : "remove" in change
+              ? api.removeSetMenu(billId, change.remove, revision, edit)
+              : api.moveSetMenuDishes(billId, change.moves, revision, edit));
+          if (!current()) return;
+          if (this.orderParty!.revision <= saved.partyRevision) {
+            this.#notePartyRevision(partyId, saved.partyRevision);
+            const keys = new Set(saved.setMenus.copies.map(({ id }) => id));
+            this.partyBills = this.partyBills.map((row) =>
+              row.workingOrderId !== billId
+                ? row
+                : {
+                    ...row,
+                    setMenus: saved.setMenus,
+                    setMenuCopies: [
+                      ...new Map(
+                        [...(row.setMenuCopies ?? []), ...offers.map(({ copy }) => copy)]
+                          .filter(({ key }) => keys.has(key))
+                          .map((copy) => [copy.key, copy]),
+                      ).values(),
+                    ],
+                  },
+            );
+          }
+        } catch (error) {
+          if (!current()) return;
+          const params = error as ({ code?: string } & Parameters<typeof codeMessage>[2]) | null;
+          message = codeMessage(params?.code ?? "server.internal", undefined, params ?? undefined);
+          if (isPartyOutOfDate(error)) await this.#onPartyOutOfDate(error, current);
+          return;
+        }
+
+        const [, read] = await Promise.all([
+          this.#loadTabLines(),
+          this.#loadPartyBills(undefined, false, false, false, true),
+          this.#retakePartyFromFloor(),
+        ]);
+        if (current() && read.bills === null) this.errorKey = "table.reread_failed";
+      });
+    } finally {
+      unlock();
+    }
+    await this.updateComplete;
+    await this.renderRoot.querySelector<TillTableOrderScreen>("till-table-order-screen")
+      ?.updateComplete;
+    return message;
+  };
+
   #tableSetMenuLookup(billId = this.activeTabId): SetMenuOfferLookup {
     return this.#tableOffers.setMenuLookup(
       this.partyBills.find((bill) => bill.workingOrderId === billId),
@@ -14790,7 +14889,7 @@ export class TillApp extends LitElement {
       this.errorKey = "table.error";
       return;
     }
-    if (store.sending) return;
+    if (store.sending || store.editsLocked) return;
     if (
       this.#openLateSendFromMarks(
         sent,
@@ -14843,6 +14942,17 @@ export class TillApp extends LitElement {
       store.sending = false;
     }
     if (followUp === undefined) return;
+    if (typeof followUp === "object" && "setMenuNoPlace" in followUp) {
+      await this.#loadPartyBills(undefined, false, false, false, true);
+      if (!live() || this.#hasLeftOrder(tabId, visit)) return;
+      const id = followUp.draftLineId;
+      const line =
+        id === undefined ? undefined : sent.find(({ draftLineId }) => draftLineId === id);
+      const screen = this.renderRoot.querySelector<TillTableOrderScreen>("till-table-order-screen");
+      if (line === undefined || !(await screen?.openSetMenuPlace(line)))
+        this.errorKey = { code: "set_menu.no_place", dishName: followUp.setMenuNoPlace };
+      return;
+    }
     if (typeof followUp === "object" && "lateSend" in followUp) {
       const carried = followUp.answered;
       this.#openLateSend(
@@ -15219,6 +15329,12 @@ export class TillApp extends LitElement {
       submitted = written.value;
     } catch (error) {
       if (!live()) return;
+      const noPlace = error as { code?: string; dishName?: unknown; draftLineId?: unknown } | null;
+      if (noPlace?.code === "set_menu.no_place" && typeof noPlace.dishName === "string")
+        return {
+          setMenuNoPlace: noPlace.dishName,
+          draftLineId: typeof noPlace.draftLineId === "string" ? noPlace.draftLineId : undefined,
+        };
       const asked = lateSendAsked(error, sent);
       const kept = carried === undefined ? {} : { answered: carried };
       if (asked !== undefined) return { lateSend: asked, ...kept };
@@ -23301,6 +23417,8 @@ export class TillApp extends LitElement {
       .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
       .draftActionsAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "", true)}
       .productSelectable=${this.#tableProductSelectable}
+      .setMenuCopies=${this.#tableSetMenuCopies()}
+      .changeSetMenu=${this.#changeSetMenu}
       .loading=${this.tableOpening}
       embedded
       .lines=${this.tabLines}
@@ -23496,6 +23614,8 @@ export class TillApp extends LitElement {
           .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
           .draftActionsAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "", true)}
           .productSelectable=${this.#tableProductSelectable}
+          .setMenuCopies=${this.#tableSetMenuCopies()}
+          .changeSetMenu=${this.#changeSetMenu}
           .loading=${this.tableOpening}
           slot="drill"
           .lines=${this.tabLines}

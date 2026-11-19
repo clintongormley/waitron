@@ -36,6 +36,8 @@ export const helpEn = {
     "Tables with food ready to take out. Amber means the food has waited too long, and those tables come first. Tap one to open it; Open opens the first.",
   "help.menu.dishes":
     "Tap a dish to add it. Hold it down, or press Shift+F10 on it, to see its allergens and diet labels first. A search also lists matches on the other menus you can order from.",
+  "help.order.set_menus":
+    "Set the number of each fixed-price menu on the bill. Pick dishes from its folder and open the summary to see their places.",
   "help.order.send":
     "Fire sends the ticked lines that can go to the station, to be made now, as one group. Send all sends every line that can go: those under Fire now are made at once, and each Group reaches the station held until it is fired.",
   "help.more.profile":
@@ -103,6 +105,8 @@ export const helpEs: Record<HelpKey, string> = {
     "Mesas con comida lista para llevar. El ámbar indica que la comida ha esperado demasiado, y esas mesas van primero. Toca una para abrirla; Abrir abre la primera.",
   "help.menu.dishes":
     "Toca un plato para añadirlo. Mantenlo pulsado, o pulsa Mayús+F10 sobre él, para ver antes sus alérgenos y etiquetas de dieta. Una búsqueda también muestra coincidencias en las otras cartas de las que puedes pedir.",
+  "help.order.set_menus":
+    "Indica cuántas cartas a precio fijo lleva la cuenta. Elige los platos en su carpeta y abre el resumen para ver dónde van.",
   "help.order.send":
     "Marchar envía a la estación las líneas marcadas que pueden salir, para hacerlas ya, como un grupo. Enviar todo envía todas las líneas que pueden salir: las de Marchar ya se hacen enseguida, y cada Grupo llega a la estación en espera hasta que se marcha.",
   "help.more.profile":

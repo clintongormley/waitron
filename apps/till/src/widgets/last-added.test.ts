@@ -154,3 +154,13 @@ it("names the last-added dish's allergens in its detail button's accessible name
     .element(page.elementLocator(detail(el)))
     .toHaveAccessibleName(new RegExp(`Staff soup\\s*${gluten.replace(/[()]/g, "\\$&")}\\s*×1`));
 });
+
+it("keeps a set-menu dish at a single quantity in Last added", async () => {
+  const { el, store } = await mount();
+  store.addProduct({ ...dish, name: "Set-menu soup" }, "1", { setMenu: { id: "daily" } });
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-last-added-detail]")?.textContent).toContain(
+    "Set-menu soup",
+  );
+  expect(el.shadowRoot!.querySelector("[data-last-added-step]")).toBeNull();
+});

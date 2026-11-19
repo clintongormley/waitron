@@ -1,3 +1,14 @@
+import {
+  draftPlacementId,
+  draftPlacements,
+  menusWithCopies,
+  sentMenuDishes,
+  type OrderingCopy,
+  type SetMenuChange,
+} from "../state/set-menus.js";
+import type { TillMenuBrowser } from "../widgets/menu-browser.js";
+import "../widgets/set-menu-counts.js";
+import "../widgets/set-menu-summary.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/product-info.js";
 import type { PartyAllergyRead } from "@waitron/module";
 import { allergyGuestId, allergyMark, allergyMarkStyles } from "../widgets/party-allergy-mark.js";
@@ -63,6 +74,7 @@ import {
   subtractDecimal,
   sumDecimals,
   type BillSetMenuState,
+  type DishMove,
   type Decimal,
   type PlacedDish,
   type Dining,
@@ -1122,6 +1134,7 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      till-set-menu-counts.help-anchor,
       .draft-actions.help-anchor {
         position: relative;
         width: fit-content;
@@ -1828,13 +1841,101 @@ export class TillTableOrderScreen extends LitElement {
   /** The bill a quiet Pay was tapped on, while it still has unsent dishes. */
   @state() private payUnsentFor: { billId: string | undefined } | null = null;
 
+  @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = [];
+  @property({ attribute: false }) changeSetMenu?: (
+    change: SetMenuChange,
+  ) => Promise<string | undefined>;
+
+  get #setMenus(): BillSetMenuState | undefined {
+    return this.bills.find((bill) => bill.workingOrderId === this.orderId)?.setMenus;
+  }
+
+  #canSelect(product: TillProduct, setMenuId?: string): boolean {
+    if (!this.orderingAllowed) return false;
+    if (setMenuId !== undefined) {
+      const row = this.setMenuCopies.find(
+        ({ copy, versionId }) => copy.menuId === setMenuId && versionId === product.menuVersionId,
+      );
+      const offer = row?.copy.offers.find(({ id }) => id === product.menuItemId);
+      return (
+        offer?.available === true &&
+        (product.variantId === undefined ||
+          offer.variants.some(({ id, available }) => id === product.variantId && available))
+      );
+    }
+    return (
+      this.productSelectable?.(product) !== false &&
+      this.menus.some((menu) => menu.id === product.menuId && menu.orderable)
+    );
+  }
+
+  #setMenuPrices(draft: readonly OrderLine[]) {
+    const state = this.#setMenus;
+    if (state === undefined) return undefined;
+    const byLine = new Map(
+      draftPlacements(state, draft).placed.map(({ id, priceCents }) => [
+        id,
+        centsToDecimal(priceCents),
+      ]),
+    );
+    return (line: OrderLine) => byLine.get(draftPlacementId(line, draft.indexOf(line)));
+  }
+
+  get #menuCourseNames() {
+    return Object.fromEntries(this.courses.map(({ id, name }) => [id, name]));
+  }
+
+  get #menuDishNames() {
+    return new Map(this.lines.map((line) => [line.id, this.#nameForLine(line)]));
+  }
+
+  #setMenuControls(store: WorkingOrderStore) {
+    const bill = this.#setMenus ?? null;
+    const change = this.changeSetMenu;
+    if (this.party === null || (this.setMenuCopies.length === 0 && !bill?.setMenus.length))
+      return nothing;
+    const disabled =
+      !this.orderingAllowed ||
+      store.editsLocked ||
+      store.sending ||
+      this.busy ||
+      this.groupCommandBusy;
+    return html`<till-set-menu-counts
+        class="help-anchor"
+        .bill=${bill}
+        .draft=${store.lines}
+        .onSale=${this.setMenuCopies.map(({ copy }) => copy)}
+        .busy=${disabled}
+        .saveCount=${change === undefined ? undefined : (menuId: string, count: number) => change({ menuId, count })}
+        >${helpBadge("help.order.set_menus", t("set_menu.folders"), {
+          guide: "table-service.set-menus",
+          slot: "help",
+        })}</till-set-menu-counts
+      >
+      <till-set-menu-summary
+        .bill=${bill}
+        .draft=${store.lines}
+        .courseNames=${this.#menuCourseNames}
+        .dishNames=${this.#menuDishNames}
+        .busy=${disabled}
+        .removeMenu=${change === undefined ? undefined : (remove: string) => change({ remove })}
+        .moveDish=${change === undefined ? undefined : (move: DishMove) => change({ moves: [move] })}
+      ></till-set-menu-summary>`;
+  }
+
+  #addSetMenu = (menuId: string) => {
+    const bill = this.#setMenus;
+    const count =
+      bill === undefined
+        ? 0
+        : menusWithCopies(bill).filter(({ copy }) => copy.setMenuId === menuId).length;
+    return this.changeSetMenu?.({ menuId, count: count + 1 }) ?? Promise.resolve(undefined);
+  };
+
   get #draftStore(): WorkingOrderStore | null {
     const store = this.draftStore === undefined ? this.#ownDraft : this.draftStore;
     if (store !== null)
-      store.canSelectProduct = (product) =>
-        this.orderingAllowed &&
-        this.productSelectable?.(product) !== false &&
-        this.menus.some((menu) => menu.id === product.menuId && menu.orderable);
+      store.canSelectProduct = (product, setMenuId) => this.#canSelect(product, setMenuId);
     return store;
   }
 
@@ -2967,20 +3068,23 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #menuBrowser(store: WorkingOrderStore): TemplateResult {
-    store.canSelectProduct = (product) =>
-      this.orderingAllowed &&
-      this.productSelectable?.(product) !== false &&
-      this.menus.some((menu) => menu.id === product.menuId && menu.orderable);
     const menu = this.menuSelectionRequired
       ? this.menus.find((menu) => menu.id === this.selectedMenuId && menu.orderable)
       : shownMenu(this.menus, this.selectedMenuId);
-    if (this.menuSelectionRequired && menu === undefined) return html``;
+    if (this.menuSelectionRequired && menu === undefined && this.setMenuCopies.length === 0)
+      return html``;
     return html`<till-menu-browser
       .changeAvailability=${this.changeAvailability}
       .changeOptionAvailability=${this.changeOptionAvailability}
       class="round-control"
       ?inert=${store.sending || store.editsLocked || !this.orderingAllowed}
       .menu=${menu}
+      .setMenuBill=${this.#setMenus}
+      .setMenuCopies=${this.setMenuCopies}
+      .setMenuCourses=${this.#menuCourseNames}
+      .addSetMenu=${this.changeSetMenu === undefined ? undefined : this.#addSetMenu}
+      .moveSetMenuDishes=${this.changeSetMenu === undefined ? undefined : (moves: readonly DishMove[]) => this.changeSetMenu!({ moves })}
+      .setMenuDishNames=${this.#menuDishNames}
       .filters=${this.selectedFilters}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedFilters)}
       .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", EMPTY_MENU_FILTERS)}
@@ -3140,8 +3244,8 @@ export class TillTableOrderScreen extends LitElement {
         <div class="draft-head">
           <h2 class="draft-title" id="draft-title" tabindex="-1">${t("table.draft_title")}</h2>
         </div>
-        ${this.#roundControl(draft)} ${this.#otherDraftPanels(draft)} ${this.#retainedDraftPanel()}
-        ${this.#orderSummary(draft)}
+        ${this.#setMenuControls(draft)} ${this.#roundControl(draft)}
+        ${this.#otherDraftPanels(draft)} ${this.#retainedDraftPanel()} ${this.#orderSummary(draft)}
       </section>
     </div>`;
   }
@@ -3248,17 +3352,14 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #totals(draft: WorkingOrderStore | null): TemplateResult {
+    const lines =
+      this.otherDrafts.length === 0
+        ? (draft?.lines ?? [])
+        : this.otherDrafts.flatMap((other) => other.lines);
     return html`<div class="total-row" data-order-summary>
         <span class="label">${t("label.total")}</span>
         <span class="amount" data-order-total
-          >${this.#money(
-            panelTotal(
-              this.#savedTotal(),
-              this.otherDrafts.length === 0
-                ? (draft?.lines ?? [])
-                : this.otherDrafts.flatMap((other) => other.lines),
-            ),
-          )}</span
+          >${this.#money(panelTotal(this.#savedTotal(), lines, this.#setMenuPrices(lines)))}</span
         >
       </div>
       ${
@@ -3295,6 +3396,7 @@ export class TillTableOrderScreen extends LitElement {
       <till-sent-orders
         .allergy=${this.#allergy()?.snapshot ?? null}
         .lines=${this.lines}
+        .setMenus=${this.#dishSources().setMenus ?? null}
         .scope=${scope}
         .billId=${billId}
         .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
@@ -3428,12 +3530,12 @@ export class TillTableOrderScreen extends LitElement {
     members.sort((a, b) => a.row.lineNo - b.row.lineNo);
     if (members.length > 1) {
       const allergy = this.#allergy()?.snapshot ?? null;
+      const menus = sentMenuDishes(this.#dishSources().setMenus);
       const keys = members.map((member) =>
-        sentSlicePortionKey(
-          member,
-          this.lines,
+        sentSlicePortionKey(member, this.lines, [
           allergyGuestId(allergy, { kind: "working", id: member.row.lineId }),
-        ),
+          menus.get(member.row.lineId)?.setMenuId,
+        ]),
       );
       if (keys.some((key) => key === null || key !== keys[0])) return;
     }
@@ -4260,6 +4362,17 @@ export class TillTableOrderScreen extends LitElement {
     scroller.scrollTop += toggle.getBoundingClientRect().top - areaTop;
   }
 
+  async openSetMenuPlace(line: OrderLine): Promise<boolean> {
+    const orderId = this.orderId;
+    await this.#showMenu();
+    await this.updateComplete;
+    if (this.orderId !== orderId || !this.isConnected) return false;
+    return (
+      this.renderRoot.querySelector<TillMenuBrowser>("till-menu-browser")?.openSetMenuPlace(line) ??
+      false
+    );
+  }
+
   async #showMenu(): Promise<void> {
     if (this.view === "menu") return;
     const saved = this.#browsingScroll;
@@ -4293,6 +4406,7 @@ export class TillTableOrderScreen extends LitElement {
       return html`<div class="grid-region">
         ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
         <p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>
+        ${this.setMenuCopies.length === 0 ? nothing : keyed(this.orderId, this.#menuBrowser(draft))}
       </div>`;
     return html`<div class="grid-region">
       ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
@@ -4543,6 +4657,7 @@ export class TillTableOrderScreen extends LitElement {
                       .store=${store}
                       .revealAdded=${this.wide || this.view === "order"}
                       .lineIndexes=${section.indexes}
+                      .placedPrice=${this.#setMenuPrices(store.lines)}
                     >
                       ${section.indexes.map((index) => this.#draftLine(store, store.lines[index]!, index))}
                     </till-basket>
@@ -7051,7 +7166,7 @@ export class TillTableOrderScreen extends LitElement {
       lines: this.lines,
       balance: this.#balanceShown(),
       allergy: this.#allergy()?.snapshot ?? null,
-      setMenus: this.bills.find((bill) => bill.workingOrderId === this.orderId)?.setMenus,
+      setMenus: this.#setMenus,
     };
   }
 

@@ -453,6 +453,21 @@ with **Send all** above them while you have dishes to send. After you send every
 stays on the table until you tap **Floor**. On a screen 720 px wide or more, such as a tablet's, the
 menu and the order sit side by side.
 
+## Set menus at a table {#set-menus}
+
+Set the number of each set menu on the bill, then tap its folder and choose the dishes.
+The folder shows which dishes are included and which cost extra. If the guests are taking
+their food away, choose **Takeaway** on the bill before adding a set menu.
+
+Open the set-menu summary on **Order** to see where dishes go and which places are free.
+If a dish has no place, choose one of the options shown, or tap **Cancel** to keep the
+order as it was. From the summary you can move a dish to another set menu on the same
+bill or cancel an empty set menu.
+
+To move a set menu to another bill, open **Move dishes** and select the set menu. Its
+dishes move with it. If you choose a dish by itself, check its price on the other bill
+before confirming.
+
 ## Give a table a short name {#short-names}
 
 A phone or tablet shows a table's short name in the bar's table buttons and the Ready bar, where

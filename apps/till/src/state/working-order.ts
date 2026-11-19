@@ -66,6 +66,7 @@ export type NotOfferedExtra = Pick<
  * order carries back, so one renderer serves both.
  */
 export interface LineSelection {
+  setMenu?: { id: string; reserved?: OrderLine["setMenuReserved"] };
   extras?: SelectedExtra[];
   options?: OptionSelection[];
   optionSnapshots?: OptionSnapshot[];
@@ -167,6 +168,12 @@ function newLine(product: TillProduct, quantity: string, selection?: LineSelecti
   assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
   const line: OrderLine = { product, quantity };
   applySelection(line, selection);
+  if (selection?.setMenu !== undefined) {
+    line.setMenuId = selection.setMenu.id;
+    line.noMerge = true;
+    line.courseId = product.courseId ?? undefined;
+    if (selection.setMenu.reserved !== undefined) line.setMenuReserved = selection.setMenu.reserved;
+  }
   if (selection?.note !== undefined) {
     line.note = selection.note;
   }
@@ -301,14 +308,14 @@ export class WorkingOrderStore {
   #diningStart: ZoneDining | null = null;
   /** Whether staff chose this unsaved draft's way, which a till-choice department keeps. */
   #diningChosen = false;
-  canSelectProduct: ((product: TillProduct) => boolean) | undefined;
+  canSelectProduct: ((product: TillProduct, setMenuId?: string) => boolean) | undefined;
 
   constructor(price: typeof priceBasket = priceBasket) {
     this.#price = price;
   }
 
-  #refusesSelection(product: TillProduct): boolean {
-    if (this.canSelectProduct?.(product) !== false) return false;
+  #refusesSelection(product: TillProduct, setMenuId?: string): boolean {
+    if (this.canSelectProduct?.(product, setMenuId) !== false) return false;
     this.emit("refused", { code: "menu_period.not_running" } satisfies BasketRefusal);
     return true;
   }
@@ -543,11 +550,20 @@ export class WorkingOrderStore {
     this.#changedLines();
   }
 
-  addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
+  addProduct(
+    product: TillProduct,
+    quantity: string,
+    selection?: LineSelection,
+    replacing?: OrderLine,
+  ): void {
     if (this.#refusesEdits) return;
-    if (this.#refusesSelection(product)) return;
+    const index = replacing === undefined ? -1 : this.#lines.indexOf(replacing);
+    if (replacing !== undefined && index < 0) return;
+    if (this.#refusesSelection(product, selection?.setMenu?.id)) return;
     const line = newLine(product, quantity, selection);
-    if (this.#passesLimit(ZERO, lineGross(line))) return;
+    if (this.#passesLimit(replacing === undefined ? ZERO : lineGross(replacing), lineGross(line)))
+      return;
+    if (index >= 0) this.#lines.splice(index, 1);
     this.#lines.push(line);
     this.#lastAdded = line;
     this.#lastAddition++;
@@ -562,7 +578,7 @@ export class WorkingOrderStore {
    */
   addMerging(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#refusesEdits) return;
-    if (this.#refusesSelection(product)) return;
+    if (this.#refusesSelection(product, selection?.setMenu?.id)) return;
     const line = newLine(product, quantity, selection);
     const placement = this.placer?.(product.courseId ?? null);
     if (placement !== undefined) line.place = { ...placement.place };
@@ -597,7 +613,7 @@ export class WorkingOrderStore {
     const line = this.#lines[index];
     if (!line) return false;
     const product = withVariantOf(line, update.product);
-    if (product !== line.product && this.#refusesSelection(product)) return false;
+    if (product !== line.product && this.#refusesSelection(product, line.setMenuId)) return false;
     const candidate: OrderLine = { ...line, product };
     delete candidate.extras;
     delete candidate.notOfferedExtras;
@@ -636,7 +652,8 @@ export class WorkingOrderStore {
     });
     const product = withVariantOf(line, update.product);
     const change = compareDecimal(decimal(update.quantity), decimal(line.quantity));
-    if ((change > 0 || product !== line.product) && this.#refusesSelection(product)) return false;
+    if ((change > 0 || product !== line.product) && this.#refusesSelection(product, line.setMenuId))
+      return false;
     const candidate: OrderLine = { ...line, product, quantity: update.quantity };
     delete candidate.extras;
     delete candidate.notOfferedExtras;
