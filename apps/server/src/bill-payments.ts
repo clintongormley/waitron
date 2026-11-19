@@ -1119,10 +1119,7 @@ interface PayableBill {
   invoiced?: true;
 }
 
-async function requirePayableBill(
-  tx: Transaction,
-  workingOrderId: string,
-): Promise<PayableBill> {
+async function requirePayableBill(tx: Transaction, workingOrderId: string): Promise<PayableBill> {
   const [order] = await tx
     .select({
       status: workingOrders.status,
