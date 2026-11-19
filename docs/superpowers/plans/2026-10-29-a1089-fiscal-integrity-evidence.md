@@ -51,7 +51,7 @@ Inspected at `024e0459e07687256ff152c0f05ed23019cef7b5`; these are source readin
 | Browser              | Kit `src/{contract,request,live-connection}.ts`; dashboard `src/{main,dashboard-app,session-signals,api/client}.ts`; `widgets/alert-format.ts:29` extracts an event incident id.                                     |
 
 Create module `src/integrity-evidence-contract.ts` (safe wire/parser), `src/integrity-evidence.ts` (saved projection), `src/integrity-evidence-association.ts` (bounded current association), `src/incident-evidence.ts` (combined module dispatch), and dashboard `src/dashboard/integrity-{client,inspection,strings}.ts`.
-Shared generic/server/auth/action files below are dependencies to implement or qualify once, not duplicate implementations. Read the full [reply plan](2026-10-29-a1089-fiscal-reply-evidence.md), [environment plan](2026-10-29-a1089-fiscal-environment-evidence.md) and [certificate plan](2026-10-29-a1089-aeat-certificate-diagnosis.md).
+Shared generic/server/auth/action files below are dependencies to implement or qualify once, not duplicate implementations. Read the full [reply plan](2026-10-29-a1089-fiscal-reply-evidence.md), [environment plan](2026-10-29-a1089-fiscal-environment-evidence.md) and [certificate plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1089-aeat-certificate-diagnosis.md).
 
 ## Proposed shared and integrity contracts
 

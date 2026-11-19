@@ -1,6 +1,6 @@
 # A275 transfer-close command execution plan
 
-**Goal:** Issue/reuse one invoice and finally close its whole eligible bill as **To be paid by transfer**, behind an unexposed command. Follow the [approved design](../specs/2026-10-22-a275-final-transfer-close-design.md), [historical Task 2](2026-10-22-a275-final-transfer-close.md#task-2-close-one-bill-atomically-with-strict-replay), corrected [readiness](2026-11-09-a275-transfer-readiness.md) and [schema](2026-11-09-a275-transfer-closure-facts.md) plans. Read-only source pin: `439101b4b7`; no A275 runtime verification.
+**Goal:** Issue/reuse one invoice and finally close its whole eligible bill as **To be paid by transfer**, behind an unexposed command. Follow the [approved design](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [historical Task 2](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a275-final-transfer-close.md#task-2-close-one-bill-atomically-with-strict-replay), corrected [readiness](2026-11-09-a275-transfer-readiness.md) and [schema](2026-11-09-a275-transfer-closure-facts.md) plans. Read-only source pin: `439101b4b7`; no A275 runtime verification.
 
 2026-11-10: the digest column is now `fingerprint`, the request id `submissionId`, and `actorId`
 references `persons` ([Task 3 plan](2026-11-10-a275-transfer-close-route.md)).

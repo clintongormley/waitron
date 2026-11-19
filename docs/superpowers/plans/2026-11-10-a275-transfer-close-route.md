@@ -7,9 +7,9 @@ invoice and closes the whole bill as **to be paid by transfer**, but nothing can
 ## Authority
 
 - Design approved by the owner 2026-10-22 15:55 ("A275 looks fine";
-  [design](../specs/2026-10-22-a275-final-transfer-close-design.md)); H2 build scope "Yes" 2026-10-22
+  [design](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-22-a275-final-transfer-close-design.md)); H2 build scope "Yes" 2026-10-22
   ~17:20 (lane L `queue.md`, A275). Task 3 is the
-  [master plan's Task 3](2026-10-22-a275-final-transfer-close.md#task-3-enforce-access-and-finish-the-party-only-when-ready);
+  [master plan's Task 3](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a275-final-transfer-close.md#task-3-enforce-access-and-finish-the-party-only-when-ready);
   this file cuts it to today's code.
 - **Owner 2026-11-09 21:39** (watcher relay, lane L `questions.md`): Task 3 also makes (a) column
   `intent` → `fingerprint`; (b) the request id is `submissionId`, as the till uses, not

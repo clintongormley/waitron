@@ -806,7 +806,7 @@ lists the refusal's `workingOrderLineIds` (`storedLinesAsked`, `apps/till/src/st
 (`till-late-send-dialog`; plan D34–D38). Saving an unsent table draft does not check the window:
 the till gates additions and increases, and the server checks the window when the order is sent. A
 period save changes no time and takes no clock revision. Picking and sending remain separate from the department's actual open
-state. The [A789 plan](../superpowers/plans/2026-10-21-a789-last-orders.md) records the decisions
+state. The [A789 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-21-a789-last-orders.md) records the decisions
 (it retired A432's period end offset); `apps/server/src/till-api.service-periods.test.ts`
 exercises the request boundary.
 Pricing reads static period membership, without resolving ranges, dates or the clock. If the venue
@@ -2138,7 +2138,7 @@ travel as top-level fields
 setup from an export on a production box was refused at the claim, because the setup app, which
 dropped only the location's `id`, copied its `fireControl` and `menuId` into it (probes 2 to 4
 of the
-[S1a2 plan](../superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md#what-was-run-while-writing-this-plan));
+[S1a2 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md#what-was-run-while-writing-this-plan));
 the tests that set up a production box from an export
 (`apps/server/src/first-fiscal-setup.e2e.test.ts`'s owned Live setup rows, and
 `apps/server/src/first-fiscal-hour-import.e2e.test.ts`'s `production` rows through
@@ -2977,7 +2977,7 @@ Since A798-B slice 3 (#1950), one save refused for a full disk, or a start with 
 till app and the kitchen screens send, except a short open list (below), until the venue folder
 has 16 MiB free again. The owner chose this on 2026-10-21, following the design's §4.6 item 5:
 every sale, order, kitchen send and clock-in is refused, even one whose own save would still fit. The decisions behind it are numbered in the
-[slice 3 plan](../superpowers/plans/2026-10-21-a798-3-refuse-before-reader.md#decisions-this-plan-makes-that-the-spec-does-not).
+[slice 3 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-21-a798-3-refuse-before-reader.md#decisions-this-plan-makes-that-the-spec-does-not).
 
 **How the box knows.**
 
@@ -3134,7 +3134,7 @@ the till's staff notices, and answers with a change waiting too), and — when t
 writes nothing and no change waits — `GET /api/till`, the other device-checked reads and every
 non-passive session-checked read. Each had failed on a write it makes for itself, not on the work
 it was asked for. The measurements are the slice plan's M2, M6 and M10
-([plan](../superpowers/plans/2026-10-22-a798-6-device-strip.md#measured-for-this-plan)), taken on
+([plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a798-6-device-strip.md#measured-for-this-plan)), taken on
 a small real filesystem; the cases that now pin them are in
 `apps/server/src/start-full-disk.e2e.test.ts`.
 
@@ -3277,7 +3277,7 @@ pending rows, overdue stamps, permissions, a populated bill, a paid receipt and 
 image; they do not qualify every GET route.
 
 **The dashboard's full-disk reads (A798-B slice 7).** Measured for the slice
-([plan](../superpowers/plans/2026-10-22-a798-7-box-status-page.md#measured-for-this-plan)), on the
+([plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a798-7-box-status-page.md#measured-for-this-plan)), on the
 small real filesystem: the existing `GET /api/box/status` answered `507 storage.disk_full` on a
 full disk when the read was not passive (the session's last-seen write) and, with one row waiting
 in `change_log`, when it was passive too (the drain at the end of `withTransaction`) (M1); and a
@@ -4016,7 +4016,7 @@ spare only gives it room to.
 **Which walks see it.** None of the walks the design names, since A1131bc slice 4 deleted the
 originals walk: Start again's deletion list and its leftovers survey read named entries
 only, as do the setup inspection's fingerprints. The design
-(`docs/superpowers/specs/2026-10-28-a1127-full-disk-spare-file-design.md`, "Which walks see it") has
+([2026-10-28-a1127-full-disk-spare-file-design.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-28-a1127-full-disk-spare-file-design.md), "Which walks see it") has
 the line references and says which were read rather than run.
 
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
@@ -4827,7 +4827,7 @@ suspend. `boot.clock-correction.test.ts` checks that boot hands the watch the bo
 
 ### The box sets its own clock
 
-Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
+Built by A798-B slice 9b ([plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
 The app's container cannot set the clock, so a small root program on the box's own system, outside
 the container — the **host service** — sets it, or switches its time synchronisation back on, when the server asks. The box sets its clock
 inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time or an administrator's own device, while a start waits for its time to be
@@ -5643,7 +5643,7 @@ interface does not provide a reset or erase operation.
 
 ## A backup run makes room for itself, or is refused before it copies
 
-A1167 slice 1 (plan `docs/superpowers/plans/2026-10-28-a1167-1-room-before-backup.md`). The code
+A1167 slice 1 (plan [2026-10-28-a1167-1-room-before-backup.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-28-a1167-1-room-before-backup.md)). The code
 is `makeRoom` and `foldersOnDisk` in `apps/server/src/backup-room.ts`, called from `runOnce`
 (`apps/server/src/backup-sweep.ts`) and `lowSpaceBackupDeletion` (`apps/server/src/low-space-backups.ts`);
 the cases are `backup-room.test.ts`, the backup-sweep suites, `low-space-backups.test.ts`,
@@ -5707,7 +5707,7 @@ as on the disk, the same room step runs again with the encrypted file's real siz
 destination.
 
 **The free-space watch** (A1167 slice 2, plan
-`docs/superpowers/plans/2026-10-29-a1167-2-watch-deletes-backups.md`). Each reading of the watch
+[2026-10-29-a1167-2-watch-deletes-backups.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1167-2-watch-deletes-backups.md)). Each reading of the watch
 first runs `lowSpaceBackupDeletion` (`apps/server/src/low-space-backups.ts`), before the spare's
 write-back and the reading itself. Under `SPACE_LOW_BYTES` (2 GiB) free on the venue folder's disk,
 while the backup duty runs (`runningLocalBackends`: `BackupSupervisor.current().enabled`, so not
@@ -5841,7 +5841,7 @@ without naming the file. A file naming only `RECORDS_DIR` or plain `records` is 
 
 ## The backup room note
 
-A1167's start slice (plan `docs/superpowers/plans/2026-10-29-a1167-start-deletes-backups.md`). On a
+A1167's start slice (plan [2026-10-29-a1167-start-deletes-backups.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1167-start-deletes-backups.md)). On a
 full disk the start may not be able to open `venue.db` to read when the installation began (the plan's
 measurement), so the running server leaves that fact in `<state>/backup-room-note.json`
 (`BACKUP_ROOM_NOTE_FILE`, `@waitron/provisioning`) for the start to use.

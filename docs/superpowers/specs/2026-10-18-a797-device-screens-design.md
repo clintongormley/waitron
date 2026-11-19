@@ -13,7 +13,7 @@ which another Q51 answer changes in one place); 10–11 once A803's slice 3 land
 builds, and 12b after it. Slices 6–7 waited on Q51 (c) until 2026-10-24.
 New words wait for (f) and (g) before landing, not before building. The first version (2026-10-18) is kept where it records what was true: §2 is unchanged.
 **Q51 answered 2026-10-24: all recommended; (c)'s Ready warning time in each prep station's editor;
-build plan `docs/superpowers/plans/2026-10-24-a797-device-screens-build.md`.** Nothing waits for
+build plan [2026-10-24-a797-device-screens-build.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a797-device-screens-build.md).** Nothing waits for
 Q51 any more (§10).
 Backlog entries: `docs/backlog.md` "Design the fixed screens for each kind of device" (two entries) and
 [its detail](../../backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01).
@@ -568,7 +568,7 @@ Each point is (read); the plan confirms it before relying on it.
   table with none rather than refusing the save; but a table the save adds or renames that is left
   with none is refused `table.label_taken` when another zone's table already holds its name as a
   short name, or as its full name having none; see the
-  [build plan](../plans/2026-10-24-a797-device-screens-build.md)'s slice 1, D4. An import that
+  [build plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a797-device-screens-build.md)'s slice 1, D4. An import that
   carries no short name leaves its tables with none, and a file never carries `short_name_key`,
   which the import sets; see the build plan's slice 1, D10.)
 - **Whose unsent dishes** (slice 3). The floor read gives each party's unsent New orders with the

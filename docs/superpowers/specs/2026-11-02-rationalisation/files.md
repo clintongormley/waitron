@@ -110,7 +110,7 @@ A1131bc already removes the folder that recovery ran from: since its slice 3 the
 Recover from backup deletes the failed setup and hands over to the fresh-box restore, which writes
 straight into the usual folders, and its slice 4, still to come, deletes the old recovery's routes,
 its `resume`, its journal and the folder switch
-(`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md` §7 and "Slices"). So
+([2026-10-28-a1131bc-restore-replaces-setup-design.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md) §7 and "Slices"). So
 `flows/setup/` has no `backup-recovery/` folder, nothing is ever promoted out of a nested folder, and
 the box never sells from one. A fresh-box restore that stops is `flows/restore/`'s business: stopped
 before Restore was pressed, the person starts it again; stopped after the request was saved, the next

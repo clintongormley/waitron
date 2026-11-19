@@ -10,11 +10,11 @@ issues or reuses the invoice and settles the sale with one tender row whose meth
 ## Authority
 
 - Design approved by the owner 2026-10-22 15:55 ("A275 looks fine";
-  [design §4](../specs/2026-10-22-a275-final-transfer-close-design.md#4-close-history-and-accountant-export):
+  [design §4](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-22-a275-final-transfer-close-design.md#4-close-history-and-accountant-export):
   label the bill, Orders detail, Find bill, receipt preview/thermal/A4/PDF and copies **To be paid by
   transfer / A pagar por transferencia**; never Paid by card, a debt or bank-confirmed status). H2
   build scope "Yes" 2026-10-22 ~17:20 (lane L `queue.md`, A275). This file cuts the
-  [master plan's Task 4](2026-10-22-a275-final-transfer-close.md#task-4-label-every-consumer-and-preserve-remediesdelivery)
+  [master plan's Task 4](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a275-final-transfer-close.md#task-4-label-every-consumer-and-preserve-remediesdelivery)
   to main at `f7657fbefe` and to the lane's rules (owner 2026-11-08/09: shortest safe path, real
   events only, test a dependency once, tests at most about twice the code).
 - Nothing in the fiscal core changes: no hash, chain, numbering, builder, `registros_facturacion`

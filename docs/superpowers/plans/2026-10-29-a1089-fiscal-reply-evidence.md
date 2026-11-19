@@ -140,7 +140,7 @@ a match.
 ## Task 0: Coordinate the execution boundary
 
 **Files:** Read only the current runner reservations, both sibling plans and the source map. The author edits only this document.
-**Interfaces:** Read the complete [environment plan](2026-10-29-a1089-fiscal-environment-evidence.md) and [certificate plan](2026-10-29-a1089-aeat-certificate-diagnosis.md); use Task 3's single auth owner and the environment plan's optional
+**Interfaces:** Read the complete [environment plan](2026-10-29-a1089-fiscal-environment-evidence.md) and [certificate plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1089-aeat-certificate-diagnosis.md); use Task 3's single auth owner and the environment plan's optional
 incident-action contract.
 
 - [ ] Driver obtains the required **fresh** plan review. Under the 08:07 owner decision, proceed to the approved read-only build after review and actual shared-file coordination; do not ask the superseded A/B or build-approval question

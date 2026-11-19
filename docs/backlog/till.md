@@ -1717,7 +1717,7 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   then. A dish cancelled with its charge kept stays on the bill, so what was taken off it still
   counts (a reading, A803 slice 1; the bill's own comp limit reads every line of the bill too,
   `readRows` in `apps/server/src/adjustments-apply.ts`). Plan:
-  [A803 slice 1](../superpowers/plans/2026-10-27-a803-1-portions.md), D36 and D37.
+  [A803 slice 1](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a803-1-portions.md), D36 and D37.
 
 - **Every comp or discount line prints what that step took (owner, 2026-10-28; A803 slice 1,
   closes A911).** The owner's rule 4: "each receipt line prints the percentage that step actually
@@ -1733,7 +1733,7 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   at its rate was filed at zero (A961), and the per-dish fallback used when the records no longer
   add up to the bill. The filed sale is unchanged. A reason without Free refuses 100% too (the rule's first
   half, `adjustment.free_not_allowed`). Plan:
-  [A803 slice 1](../superpowers/plans/2026-10-27-a803-1-portions.md), Tasks 25a-7a and 25a-7b.
+  [A803 slice 1](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a803-1-portions.md), Tasks 25a-7a and 25a-7b.
 
 - **A bill keeps its number while it stays with its seated party (owner, 2026-10-19; A803 slice
   2).** Each new seating starts at Bill 1. A number is never given twice on one seated party, so a
@@ -2081,7 +2081,7 @@ and sends in a zone outside the profile (`service_zone.not_allowed`; the draft r
 `apps/server/src/till-api.profile-zones.test.ts`). The line, and the zones dialog's refusal of a
 save at that table, say "This device can no longer serve this table's zone. Leave the table to hide
 it.", and leaving the table applies the narrowing (found by review). [Build
-plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), slice 4.
+plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a797-device-screens-build.md), slice 4.
 
 
 - **Party allergy answers on a join (owner, 2026-10-16; A669).** Keep Allergies whenever either

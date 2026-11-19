@@ -41,7 +41,7 @@ format is unchanged), but a box set up before it must be reset."
 `git log -S module-evidence -- packages/provisioning/src/first-setup-start-again-deletion.ts` prints
 nothing: Start again never named the folder. The A1131bc design records why it is absent:
 "first setup does not write it, so beside a failed setup it exists only on a box restored earlier
-and not reset since" (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md:252-254`),
+and not reset since" ([2026-10-28-a1131bc-restore-replaces-setup-design.md:252-254](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md)),
 and its amendment line (`:8`) calls the check moot; A1042 (`e2a9571385`) deletes the preparation
 file on purpose. That record makes the absence an accident of where the file was written, not a
 decision to keep it. The reason this plan keeps `retained` anyway is safety: the restored history

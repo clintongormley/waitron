@@ -1092,7 +1092,7 @@ to the chain code. Where a check could never be confirmed, it does not stop sell
 > staff member signed in on it confirms it, during a stop found at start-up; an administrator's own
 > device may set it at any time; two agreeing devices no longer set it by themselves. A clock problem
 > found while the box is running alerts the administrators. Slice 9b's plan, revision 4,
-> [plan](../plans/2026-10-24-a798-9b-box-sets-its-clock.md) (decisions 6 and 14–17), carries it out
+> [plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md) (decisions 6 and 14–17), carries it out
 > and says what stays: slice 9's lift on two devices that agree with the box is unchanged in 9b
 > except while a stop found at start-up lasts, when a person confirms instead, or AEAT's time
 > agreeing with the box still lifts it (its revision 5).
@@ -1218,7 +1218,7 @@ the owner's task until it is marked handled: "go through these with your tax adv
 rewritten; `registros_facturacion` is append-only.
 
 _2026-10-25: A1088 keeps each list after its alert is handled, adds a note and a file for the
-adviser: [plan](../plans/2026-10-25-a1088-misdated-sales-download.md)._
+adviser: [plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-25-a1088-misdated-sales-download.md)._
 
 #### g. The time service is watched
 
@@ -1245,7 +1245,7 @@ cases where an administrator alone cannot, and what the box does in each:
    a host without systemd): a start or change check is a bell alert, not a stop, because nothing
    could correct a wrong clock; `clock.sync_off` says to re-run the install.
    > **Pointer (2026-10-31):** slice 9b's plan (decision 13,
-   > [plan](../plans/2026-10-24-a798-9b-box-sets-its-clock.md#decisions-the-build-follows)) drops
+   > [plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md#decisions-the-build-follows)) drops
    > "re-run the install" from `clock.sync_off`'s words, since the box's operator has no terminal,
    > and says instead that the box's own time service may still put the clock right by itself if
    > the box can reach the internet. The install line moves to `deploy/README.md`.
@@ -1739,7 +1739,7 @@ dated earlier than the one before it is a question for the asesor either way.
 
 For the runner to file; none is acted on here.
 
-**2026-10-21:** A942 implements the outage header in [its implementation plan](../plans/2026-10-21-a942-aeat-outage-flag.md). Item 1 and §2's local-only flag observation describe the earlier code; the original observations remain below.
+**2026-10-21:** A942 implements the outage header in [its implementation plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-21-a942-aeat-outage-flag.md). Item 1 and §2's local-only flag observation describe the earlier code; the original observations remain below.
 
 **2026-10-21:** A798-B slice 3 (#1950) closes item 4: both card paths now refuse `clock.unusable { clockAt, offsetMinutes }` before the reader, and every sale path refuses it at its issue reading. §2.5's `fiscal.record_invalid` answer and till sentence, and §8's slice 3 wording, describe the earlier code.
 

@@ -1488,7 +1488,7 @@ The owner's four answers: no reserved
   "our backup policy needs to delete old backups automatically when we're running out of disk space,
   plus alert the administrator, plus refuse to do a backup if there still isn't enough space, and
   alert the manager." Design:
-  [2026-10-28-a1167-backups-make-room-design.md](../superpowers/specs/2026-10-28-a1167-backups-make-room-design.md),
+  [2026-10-28-a1167-backups-make-room-design.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-28-a1167-backups-make-room-design.md),
   its four questions answered in `~/waitron-campaign/questions.md` ("OWNER ANSWERS — A1167"). On
   2026-10-29 the owner chose that the deletion words give the days the deleted backups were taken
   (the oldest and newest when they differ), and that both backup emails' subjects start with the
@@ -1918,7 +1918,7 @@ Design revision 7 (2026-10-24); every owner question answered except one the sli
   [plan](../superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md),
   [design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md).
 
-Two slices from those answers are open, each its own pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)), built and parked for the owner as #2331; and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](../superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Asesor questions; of these, question 8 of the
+Two slices from those answers are open, each its own pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)), built and parked for the owner as #2331; and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](../superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Asesor questions; of these, question 8 of the
   [19 November sheet](../compliance/2026-11-19-adviser-meeting.md) covers the dating ones; the owner's answers
   (owner, 2026-11-18; the adviser is still to confirm the details): only a sale AEAT refused as dated in the future is corrected, since the owner kept A1420 D8 (a wrong date AEAT accepts is not corrected) on 2026-11-18, as A1407 in the backlog describes;
   a wrong time on the right day is not corrected, "yes probably, tbc". Q61 was not on that sheet:

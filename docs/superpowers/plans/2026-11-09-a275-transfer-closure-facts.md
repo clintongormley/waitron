@@ -1,6 +1,6 @@
 # A275 Task 1: closure facts execution plan
 
-**Goal:** Retain one immutable closure intent/result; transfer closure remains unusable after this slice. Basis: [approved design](../specs/2026-10-22-a275-final-transfer-close-design.md), [Task1/Gate0/Task2](2026-10-22-a275-final-transfer-close.md#task-1-retain-one-closure-intent-and-final-result). Read-only source pin: current main `2f57520831d7cec873ec0ea725d2ebe22b430dcf`; branch differs only in Task0 documentation. No runtime verification.
+**Goal:** Retain one immutable closure intent/result; transfer closure remains unusable after this slice. Basis: [approved design](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [Task1/Gate0/Task2](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a275-final-transfer-close.md#task-1-retain-one-closure-intent-and-final-result). Read-only source pin: current main `2f57520831d7cec873ec0ea725d2ebe22b430dcf`; branch differs only in Task0 documentation. No runtime verification.
 
 2026-11-10: the digest column is now `fingerprint`, the request id `submissionId`, and `actorId`
 references `persons` ([Task 3 plan](2026-11-10-a275-transfer-close-route.md)).

@@ -820,7 +820,7 @@ deleted in English and Spanish), `apps/till/test/clock-app.ts`; `apps/dashboard/
   node; clock entries and pay-period closures store no location, and neither hash includes one.
   See `docs/superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md`." Keep the "Chain
   scope" row's pointer to §5.
-- `docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md`: the branch's three pointers
+- [2026-10-24-a798-9b-box-sets-its-clock.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md): the branch's three pointers
   stand; check each still reads true.
 - `docs/developers/conventions-data.md`, the clock-step paragraph the branch edited: say each
   node's chain holds every one of a person's entries on that node, which carry no location; cut

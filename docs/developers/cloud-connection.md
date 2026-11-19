@@ -976,7 +976,7 @@ publication hash identifies the review material; it is not an acceptance digest.
 
 ### Routing proposal for Lane G review
 
-The [routing v1 proposal](../superpowers/specs/2026-10-23-a951-routing-v1-proposal.md)
+The [routing v1 proposal](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-23-a951-routing-v1-proposal.md)
 returns the G6/T4 empty manifest, raw-request refusal vectors and local verified
 forwarding-context boundary. Lane E and Lane G must agree its exact artifact and
 consumer revisions before shared parser code. Its examples and limits are proposed
@@ -989,7 +989,7 @@ this routing proposal settles neither. No customer product or service is enabled
 
 ### Appliance proposal for Lane G review
 
-The [appliance v1 proposal](../superpowers/specs/2026-10-23-a951-appliance-v1-proposal.md)
+The [appliance v1 proposal](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-23-a951-appliance-v1-proposal.md)
 returns G1/T1's authenticated messages, trust, counter and recovery boundary.
 Its concrete formats and limits are proposed engineering choices. Lane E and
 Lane G must record acceptance, the exact artifact digest, both full consumer

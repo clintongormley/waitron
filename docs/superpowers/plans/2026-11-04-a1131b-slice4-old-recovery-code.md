@@ -28,7 +28,7 @@ assertNoLegacyFirstSetupWorkspace -- apps packages ':!*.test.ts'`) by the start
 added in the LAST server task (B7), after every reader of the folder is gone, so each earlier task's
 commit stays green.
 
-**Design:** [`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`](../specs/2026-10-28-a1131bc-restore-replaces-setup-design.md),
+**Design:** [2026-10-28-a1131bc-restore-replaces-setup-design.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md),
 "## Slices" item 4, §7, §8, §9e, §10 and "Decision recorded, not asked". Approved by the owner
 2026-10-29.
 

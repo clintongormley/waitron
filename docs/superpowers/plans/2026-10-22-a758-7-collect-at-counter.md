@@ -35,7 +35,7 @@ leave when the order is handed over.
 "They'll collect it at the counter"), §9 (the bullet "They'll collect it at the counter is a slice of
 its own"), §10 items 5 and 6, §11. Picture 06 in `docs/backlog/mockups/a758-adjustment-reasons/`
 (`06-finish-table-asks.png`, also `-dark`). Backlog: `docs/backlog.md` "A758", whose "Left:" is this
-slice. The previous slice's plan, `docs/superpowers/plans/2026-10-22-a758-6-unserved-on-paid-table.md`,
+slice. The previous slice's plan, [2026-10-22-a758-6-unserved-on-paid-table.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a758-6-unserved-on-paid-table.md),
 built the dialog this slice adds to.
 
 Every `file:line` below was read on 2026-10-22 in this worktree, on `main` `9f4632719` (A758-6,

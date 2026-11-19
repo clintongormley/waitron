@@ -74,8 +74,8 @@ alta is still refused one.)_
    `REBUILT_COLUMN_ORDER` at :179; the frozen `madrid-before-move` fixtures stay unchanged.
 6. **Docs, in this PR:** a dated line under S4 in `docs/compliance/asesor-questions.md`, English (:341) and
    Spanish (:452) copies (the owner chose the creation date pending the adviser's answer), and dated
-   pointers under the A231 note (:85, :89) and the 2026-10-27 research update (:13–23); Status lines on `docs/superpowers/specs/2026-10-27-a444-meal-completion-date-design.md`
-   and `docs/superpowers/plans/2026-10-27-a444-meal-completion-date.md` pointing to the decision
+   pointers under the A231 note (:85, :89) and the 2026-10-27 research update (:13–23); Status lines on [2026-10-27-a444-meal-completion-date-design.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-27-a444-meal-completion-date-design.md)
+   and [2026-10-27-a444-meal-completion-date.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a444-meal-completion-date.md) pointing to the decision
    (the 2026-11-12 revised plan is on the `docs/a444-revised-plan` branch); delete A444's entry from
    `docs/backlog.md` and its detail in `docs/backlog/fiscal.md`, drop "A444" wherever the backlog still names it as open
    (`docs/backlog.md:281`; `docs/backlog/fiscal.md:122, 159, 270 ("the operation day is the owner's

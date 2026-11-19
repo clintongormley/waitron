@@ -10,7 +10,7 @@
 
 **Tech stack:** TypeScript, Lit pages tested in real Chromium (`--project browser` in `packages/fiscal-verifactu`; `apps/setup` runs its tests in the browser), Vitest node tests, `node:sqlite` venue databases through `useVenueDb`.
 
-**Spec:** the backlog entries, `docs/backlog/setup.md`: "Bundle A1385" (`:692-711`), "A Waitron Cloud recovery whose download takes more than 30 seconds…" (`:488-503`), "A1223" (`:505-510`), "A1224" (`:512-517`), "A1226" (`:519-533`). Background: `docs/superpowers/plans/2026-10-29-a1207-minute-not-in-database.md` (M-b1 to M-b9). Revised after a fresh-context review (findings C1, I1-I6, M2-M9; "Review findings not taken" at the end).
+**Spec:** the backlog entries, `docs/backlog/setup.md`: "Bundle A1385" (`:692-711`), "A Waitron Cloud recovery whose download takes more than 30 seconds…" (`:488-503`), "A1223" (`:505-510`), "A1224" (`:512-517`), "A1226" (`:519-533`). Background: [2026-10-29-a1207-minute-not-in-database.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1207-minute-not-in-database.md) (M-b1 to M-b9). Revised after a fresh-context review (findings C1, I1-I6, M2-M9; "Review findings not taken" at the end).
 
 **Base:** main `59be31e3b7`. Worktree `/Users/clintongormley/workspace/worktrees/waitron-fix-a1385-series-name-leftovers`, branch `fix/a1385-series-name-leftovers`. Line numbers are on that commit; match by name when a line has moved.
 

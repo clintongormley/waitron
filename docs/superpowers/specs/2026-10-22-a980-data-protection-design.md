@@ -232,7 +232,7 @@ email's part before the `@` and its domain name keep their first and last charac
 so
 `marta.soler@example.test` logs as `m***r@e***e.test` (the S10 plan's decision 14)._
 
-_2026-10-26: S6 ([its plan](../plans/2026-10-26-a980-s6-guide-templates.md), Task 0). Row d3's
+_2026-10-26: S6 ([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s6-guide-templates.md), Task 0). Row d3's
 "none stored" is too broad: a clock check's confirmation keeps the LAN address of each device that
 took part, in `clock_confirmations.proof` (`packages/fiscal-verifactu/src/clock-checks.ts`,
 `storedWitnesses`). No sign-in or session records an address; that confirmation is the one place
@@ -351,7 +351,7 @@ one email twice.
 
 _2026-10-27: S1b2 sends the help guide's wording in the invoice email body, the Tax Agency part only
 for an invoice with a tax record, in Spanish unless the invoice is in English
-([the S1b plan](../plans/2026-10-27-a980-s1b-privacy-link-readers.md), Part 2)._
+([the S1b plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md), Part 2)._
 
 **Booking guests** (bookings are taken by staff, `packages/bookings/src/schema/bookings.ts:50-52`,
 and the box sends guests nothing, so the first layer is spoken):
@@ -593,7 +593,7 @@ database in the bucket (`packages/stream/src/kit.ts:8-13`), and a leaked **confi
 holds every staff member's contact details and pay rate (§2.4 r4), so each asks the manager to
 change the passphrase or bucket keys and to weigh notification.
 
-_2026-10-26: S6 ([its plan](../plans/2026-10-26-a980-s6-guide-templates.md), Task 0) corrects two
+_2026-10-26: S6 ([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s6-guide-templates.md), Task 0) corrects two
 points above. No screen shows who was signed in, on which device, from when to when: **Devices**
 shows each device's **Last seen**, and a person's sign-ins per device are only in `sign-in.json`
 inside their data copy. And the Devices row actions are **Disable** and **Delete**, not "Revoke":
@@ -693,7 +693,7 @@ Missing-clock emails (`apps/server/src/attendance-email.ts:30-39`) touch the rig
    (`apps/server/src/trading-config.ts:33-41`). So neither the box's `.env` nor setup can set it,
    and invitations go out without it (`apps/server/src/account-email.ts:132`). Fixed by S1.
    _2026-10-26: S1a stores the setting; S1a2 carries it in the configuration export; S1b makes the readers use it
-   ([the S1a plan](../plans/2026-10-26-a980-s1a-notice-settings.md)); S1b built 2026-10-27, the
+   ([the S1a plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)); S1b built 2026-10-27, the
    invoice email follows in S1b2._
 3. **Records with no end.** Ended sessions are never deleted; a passkey challenge that is not used
    "lapse[s] by its TTL" and stays (`packages/identity/src/passkey.ts:70-79`); incidents are never
@@ -725,7 +725,7 @@ _2026-10-26: S6's templates, record of processing and breach checklist are the g
 
 _2026-10-26: the build plan now splits S1 in three (S1a, S1a2, S1b); S1a2 carries the setting in
 the configuration export, and the card is read under `venue.view`
-([the S1a plan](../plans/2026-10-26-a980-s1a-notice-settings.md), owner answers B and C)._
+([the S1a plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s1a-notice-settings.md), owner answers B and C)._
 _2026-10-27: four, with S1b2 split from S1b._
 
 | Slice | What | Migration | Fiscal | Permission | Tests | Gate |

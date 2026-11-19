@@ -4524,8 +4524,8 @@ landed.
    folder nor Cloud's pairing value changes).
 2. **`WAITRON_TILL_LOCATION_ID`**: nothing for Waitron to do. #2198 (`b1b0f10952`) removed it;
    `git grep -n WAITRON_TILL_LOCATION_ID 0160250f67` prints only two historical plans
-   (`docs/superpowers/plans/2026-10-27-a1154-node-registration.md:28`,
-   `2026-10-29-a1167-start-deletes-backups.md:114`). Cloud's two older pins (`fbadd15785`,
+   ([2026-10-27-a1154-node-registration.md:28](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a1154-node-registration.md),
+   [`2026-10-29-a1167-start-deletes-backups.md:114`](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1167-start-deletes-backups.md)). Cloud's two older pins (`fbadd15785`,
    `ec91a9e34d`) predate #2198, so they break on their next move whether or not A1301 has landed.
 3. **`TradingConfig.locationId`**, left over from #2198: "Notes for S18" above.
 

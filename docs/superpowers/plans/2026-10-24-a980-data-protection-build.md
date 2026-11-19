@@ -5,16 +5,16 @@ actor-coverage premise below. Automatic departure cancellations can name an acto
 adjustment; the remaining export belongs to the existing privacy bundle.
 
 **Status: plan, 2026-10-24. Nothing was built when this was written.** 2026-10-24: S4 is built
-([its plan](2026-10-24-a980-s4-deactivation-wipe.md)); `suspendPerson` and `reactivatePerson` were
+([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a980-s4-deactivation-wipe.md)); `suspendPerson` and `reactivatePerson` were
 deleted, so S11 has only the two routes that already exist to set its date. 2026-10-24: S2a1 is
-built ([its plan](2026-10-24-a980-s2a1-own-download.md)): the server route for a person's own
+built ([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a980-s2a1-own-download.md)): the server route for a person's own
 download, with no dashboard button yet; it declares `fflate` in `@waitron/server` for the ZIP.
-2026-10-25: S2a2 is built ([its plan](2026-10-25-a980-s2a2-own-download-ui.md)): the README inside
+2026-10-25: S2a2 is built ([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-25-a980-s2a2-own-download-ui.md)): the README inside
 the ZIP, the Profile page's button and the Users guide section. The README is in the person's own
 language, not the venue's as design §4.2 says (S2a2 decision 1); S2c and S3 choose the language for
 a download made for someone else. The README shows the privacy-notice address, so S1b also moves the
 README to the stored setting. 2026-10-25: S2b is built
-([its plan](2026-10-25-a980-s2b-own-download-workforce.md)): the own download also holds the
+([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-25-a980-s2b-own-download-workforce.md)): the own download also holds the
 employment, rota, absences, attendance and staff-role files and the working-time record, in
 the README's language. The module files are JSON, not the design's `rota.csv` and
 `absences.csv` (S2b decision 2); the person's own absences, swaps and attendance answers name
@@ -35,7 +35,7 @@ part), read in the snapshot turn through two new indexes, adjustments migration 
 (`0009_personal_data_person_indexes`), with no table rebuilt. Core's
 `line_service_cancellations.actor_id` is not read: every value of it is also an adjustment's
 requester (S2d decision 3). 2026-10-26: S3 is built
-([its plan](2026-10-26-a980-s3-invoice-customer-download.md)): an admin finds an invoice customer
+([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s3-invoice-customer-download.md)): an admin finds an invoice customer
 by tax number on **Orders**, ignoring an ES prefix, letter case, spaces, dots and hyphens, and
 downloads a ZIP of their full invoices as PDF copies, with an `invoices.json` giving the name, tax
 number and address on each, every attempt to email each one (to which address, when, and whether
@@ -49,14 +49,14 @@ same day, by the owner's answer, the mask became partial: each word, each tax nu
 email's part before the `@` and its domain name keep their first and last character around `***` (the S10 plan's decision 14).
 S10 does
 not touch `packages/identity/src/staff.ts`, which the build order below expected it might. 2026-10-26: S6 is built
-([its plan](2026-10-26-a980-s6-guide-templates.md)): a help-guide page, **Data protection**, in
+([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s6-guide-templates.md)): a help-guide page, **Data protection**, in
 English and Spanish (`apps/server/src/guide/<language>/data-protection.md`), with privacy-notice
 templates for staff, invoice customers, booking guests and the venue's web page, a record of
 processing the venue fills in, and a breach section listing the Article 33 questions, what the
 dashboard can and cannot show afterwards, and the steps for common losses. It gives no verdict on
 whether to notify. The Users guide links to it; when S6 landed no dashboard screen did (S1a's
 Privacy card now does, below). 2026-10-26:
-S1a is built ([its plan](2026-10-26-a980-s1a-notice-settings.md)): core migration 0192 adds
+S1a is built ([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)): core migration 0192 adds
 `tenants.privacy_notice_url` and `tenants.privacy_email`, two empty-by-default text columns, with
 no table rebuilt; the **Privacy** card on **Venue settings → Venue details** shows them under
 `venue.view` and saves them under `venue.configure`, and while help is on, a "?" beside the web
@@ -66,15 +66,15 @@ the downloads still take the link from `WAITRON_PRIVACY_NOTICE_URL` until S1b. T
 `packages/provisioning/src/privacy-contact.ts`, is added to `scripts/write-path-tables.json`,
 the list of the only files allowed to write `tenants`. The owner then decided that a
 configuration export carries the two values (decision B of the S1a plan, answered 2026-10-26);
-S1a did not. 2026-10-26: S1a2 is built ([its plan](2026-10-26-a980-s1a2-export-privacy-contact.md)):
+S1a did not. 2026-10-26: S1a2 is built ([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md)):
 the export moves to format 9 and carries both values as the required top-level `privacyContact`
 key, the import writes them onto the new box's taxpayer row with Same tax ID and New tax ID alike,
 and the setup app now sends the first-setup claim only the location fields it accepts, so a
 production box can be set up from an export again. 2026-10-27: S1b is built
-([its plan](2026-10-27-a980-s1b-privacy-link-readers.md), Part 1): the staff emails, the sign-in
+([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md), Part 1): the staff emails, the sign-in
 page, Account settings and both downloads read the privacy page saved on the Privacy card, and the
 `WAITRON_PRIVACY_NOTICE_URL` environment setting is gone; the invoice email's notice moved to S1b2.
-2026-10-27: S1b2 is built ([its plan](2026-10-27-a980-s1b-privacy-link-readers.md), Part 2): the
+2026-10-27: S1b2 is built ([its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md), Part 2): the
 email that sends a full invoice carries the invoice customers' privacy notice in its text, with the
 venue's legal name and the privacy email and page saved on the Privacy card, the Tax Agency part only
 for an invoice with a tax record, and in Spanish unless the invoice is in English; no migration.
@@ -117,9 +117,9 @@ owner's answers.
 | **S6** | English and Spanish help-guide pages: the privacy-notice templates, a record of processing, and a breach checklist. | **No.** Markdown under `apps/server/src/guide/en/` and `es/` plus the guide's page list (`apps/server/src/guide-catalogue.ts`). | LIGHT | nothing | Yes |
 | **S10** | Find out whether any logged error carries a person's name or email (an email-server refusal; the `person.email_taken` and `person.display_name_taken` parameters, `staff.ts:53-66`), and mask it if so. | **No.** Logs are files, not tables. | FULL (personal data on the recovery page, which needs no sign-in) | nothing | Yes |
 | **S1a** | A dashboard setting for the address of the venue's privacy-notice page and its privacy email, stored in the database and saved under `venue.configure`, with its guide text. | **Yes.** Nothing holds a non-secret venue setting of this kind: `tenants` holds country, tax id, legal name and domicile (`packages/db/src/schema/tenants.ts:43-52`); `tenant_receipts` holds the receipt's own text (`packages/db/src/schema/tenant-receipts.ts:18-26`); `tenant_credentials` holds sealed secrets (`packages/credentials/src/schema/tenant-credentials.ts:11-40`); `service_settings` belongs to the venue-service module (`packages/venue-service/src/schema/settings.ts:10-28`). Proposed: two empty-by-default columns on `tenants`, which adds columns without rebuilding the table. A migration-free option exists, two new keys in the receipt's JSON column `tenant_receipts.receipt`, and is rejected: that document is the printed receipt's trim, saved whole by the receipt editor under `layout.configure` (`packages/layouts/src/receipt-store.ts:165-188`) and refusing keys it does not know (`packages/layouts/src/validate.ts:40`), while the venue's identity as controller already lives as columns on `tenants`. | FULL (migration) | lane B's parked pull requests closed, while lane B builds it | **No**, while lane B builds it |
-| **S1a2** | The configuration export carries `privacy_notice_url` and `privacy_email`, its import refuses exactly what the Privacy card's save refuses, and the setup path applies them on the new box (`packages/provisioning/src/configuration-transfer.ts`, `venue-plan.ts`, `venue-apply.ts`, `first-setup-state.ts`, `apps/server/src/setup-api.ts`). Added 2026-10-26 by the owner's answer B to the S1a plan. 2026-10-26: built ([plan](2026-10-26-a980-s1a2-export-privacy-contact.md)); no migration (confirmed); `setup-api.ts`, `venue-plan.ts`, `venue-apply.ts` and `first-setup-state.ts` did not change (decision 3). | **No** migration is expected: the two columns already exist (`packages/db/src/schema/tenants.ts:47-48`) and the bundle changes, not a table; S1a2's own plan is to confirm it. | FULL (cross-package contract: the bundle between `@waitron/provisioning` and the server) | S1a | No, after S1a |
-| **S1b** | Every place that shows the link reads the stored setting (invitation and reset emails, login, profile, the personal-data download's README, and now the invoice email), and the `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. 2026-10-26: S1b also updates the guide's `data-protection` page, its `staff-notice` and `full-notice` sections, to name the setting once it exists. 2026-10-27: built ([plan](2026-10-27-a980-s1b-privacy-link-readers.md), Part 1); no migration; FULL review (decision 13). The invoice email moved to S1b2. | **No.** | LIGHT; 2026-10-27: FULL (the S1b plan's decision 13: concurrency, and a route that needs no sign-in now reads the taxpayer row) | S1a2 | No, after S1a2 |
-| **S1b2** | The invoice email carries the invoice customers' privacy notice with the saved email and page. 2026-10-27: built ([plan](2026-10-27-a980-s1b-privacy-link-readers.md), Part 2). | **No.** | FULL | S1b, and the owner's ruling on landing invoice-email changes | No, after S1b |
+| **S1a2** | The configuration export carries `privacy_notice_url` and `privacy_email`, its import refuses exactly what the Privacy card's save refuses, and the setup path applies them on the new box (`packages/provisioning/src/configuration-transfer.ts`, `venue-plan.ts`, `venue-apply.ts`, `first-setup-state.ts`, `apps/server/src/setup-api.ts`). Added 2026-10-26 by the owner's answer B to the S1a plan. 2026-10-26: built ([plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md)); no migration (confirmed); `setup-api.ts`, `venue-plan.ts`, `venue-apply.ts` and `first-setup-state.ts` did not change (decision 3). | **No** migration is expected: the two columns already exist (`packages/db/src/schema/tenants.ts:47-48`) and the bundle changes, not a table; S1a2's own plan is to confirm it. | FULL (cross-package contract: the bundle between `@waitron/provisioning` and the server) | S1a | No, after S1a |
+| **S1b** | Every place that shows the link reads the stored setting (invitation and reset emails, login, profile, the personal-data download's README, and now the invoice email), and the `WAITRON_PRIVACY_NOTICE_URL` environment setting goes. 2026-10-26: S1b also updates the guide's `data-protection` page, its `staff-notice` and `full-notice` sections, to name the setting once it exists. 2026-10-27: built ([plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md), Part 1); no migration; FULL review (decision 13). The invoice email moved to S1b2. | **No.** | LIGHT; 2026-10-27: FULL (the S1b plan's decision 13: concurrency, and a route that needs no sign-in now reads the taxpayer row) | S1a2 | No, after S1a2 |
+| **S1b2** | The invoice email carries the invoice customers' privacy notice with the saved email and page. 2026-10-27: built ([plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md), Part 2). | **No.** | FULL | S1b, and the owner's ruling on landing invoice-email changes | No, after S1b |
 | **S9** | On request, erase a booking guest's details as the design's §4.3(c) says. | **No.** Append-only triggers are installed at start from `appendOnly()` declarations, not written in migration SQL. Every S9 table is declared with `classify()` (`packages/bookings/src/classification.ts:10`; `packages/venue-service/src/classification.ts:41-45`), and no trigger SQL in the tree, `packages/db/drizzle` included, names `bookings`, `party_allergy`, `ticket_item_allergies` or `kitchen_notices` (the 46 tracked `.sql` files holding `create trigger` and every non-test source file holding it, searched for those names, 2026-10-24; control: 8 of those `.sql` files name `sales`). The required booking name takes a fixed "(erased)" text. | FULL (personal data, health) | the privacy specialist (G3) | **No** |
 | **S11** | Store the date a person is deactivated, and clear a former employee's email a year later, keeping the name. | **Yes.** `persons` has no deactivation date (`packages/identity/src/schema/persons.ts:31-67`). | FULL (migration, personal data) | the labour and privacy specialists (G2, G3), and lane B's parked pull requests closed while lane B builds it | **No** |
 
@@ -187,7 +187,7 @@ person's download; a staff member gets only their own.
 
 **S3.** The export holds the invoice PDFs through the existing route, the name, NIF and address on
 each, the addresses each was emailed to and when, and one line saying each was sent to the Tax
-Agency. 2026-10-26: superseded by [the S3 plan](2026-10-26-a980-s3-invoice-customer-download.md)
+Agency. 2026-10-26: superseded by [the S3 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s3-invoice-customer-download.md)
 (decisions 9 and 11): the PDFs come from the Orders PDF's reader and renderer, not its route,
 `invoices.json` lists every attempt to email each invoice, and the Tax Agency line is written only
 when the box keeps a tax record of an invoice.
@@ -207,7 +207,7 @@ has no dashboard entry point of its own).
 **S1b.** The invoice email is composed in `apps/server/src/invoice-email.ts`. Today the link is
 read from the environment (`apps/server/src/config.ts:503-511`, `:548`) and passed in at
 `apps/server/src/boot.ts:1925` and `:2069`. 2026-10-26, corrected by the
-[S1a plan](2026-10-26-a980-s1a-notice-settings.md)'s reader list, which S1b inherits: the link is
+[S1a plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)'s reader list, which S1b inherits: the link is
 passed at `boot.ts:2019`, `:2144` and `:2184`; S3 added a reader this note did not list, the
 invoice customer's download (`apps/server/src/invoice-customer-data-api.ts:29`, `:125`); and
 `invoice-email.ts` holds no privacy text, so S1b adds the invoice notice there rather than moving a
@@ -215,7 +215,7 @@ link. The sign-in page and the profile page both read the link from one route th
 sign-in, `GET /management-api/google/config` (`apps/server/src/management-api.ts:788-790`), so S1b
 reads `tenants` there.
 
-_2026-10-27: the invoice notice moved to S1b2 ([the S1b plan](2026-10-27-a980-s1b-privacy-link-readers.md), Part 2)._
+_2026-10-27: the invoice notice moved to S1b2 ([the S1b plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md), Part 2)._
 
 ## Build order
 

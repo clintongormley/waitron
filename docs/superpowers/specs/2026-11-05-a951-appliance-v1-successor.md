@@ -18,7 +18,7 @@ The following full-file digests identify immutable publications. The driver veri
 
 | Ref | Immutable publication | Complete publication SHA-256 |
 | --- | --- | --- |
-| A | [Appliance](2026-10-23-a951-appliance-v1-proposal.md), `waitron-a951-appliance-v1` / `proposal-2026-10-23.1` | `f97dbc1864e37911ecb9d16dd87b436d729fd43bbef220633c3b09cae7c93fb0` |
+| A | [Appliance](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-23-a951-appliance-v1-proposal.md), `waitron-a951-appliance-v1` / `proposal-2026-10-23.1` | `f97dbc1864e37911ecb9d16dd87b436d729fd43bbef220633c3b09cae7c93fb0` |
 | H | [Helper](2026-10-23-a951-local-helper-v1-proposal.md), `waitron-a951-helper-v1` / `proposal-2026-10-23.1` | `da433f66a7dcb835e99eeb4a7e5c6f01f2bc9c69db369c44a5131247a4ab008f` |
 | X | [Host custody](2026-11-02-a951-host-custody-amendment.md), `waitron-a951-host-custody-v1` / `proposal-2026-11-02.1` | `50001abafc7c3edea270821e0a8570f8c722969d62132070a46d9cd3729956d2` |
 | Y | [Debian successor](2026-11-05-a951-debian13-host-profile.md), `waitron-a951-host-custody-v1` / `proposal-2026-11-05.1` | `616725294c22f06abc86d340b7206609c528b39f3ef93e38c0c0486c551dde90` |

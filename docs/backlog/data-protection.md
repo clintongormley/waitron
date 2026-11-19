@@ -263,12 +263,12 @@ by the answers):
   the person who used it and the person who approved it). The free-text note stays out (S2d
   decision 8). Relayed by the watcher, `questions.md:4377` in lane B's campaign folder.
 - **A980 S3, 2026-10-26:** the invoice customer's search and download refuse on a mirror
-  (403 `node.read_only`), unlike S2c's admin download of a person (the [S3 plan](../superpowers/plans/2026-10-26-a980-s3-invoice-customer-download.md)'s
+  (403 `node.read_only`), unlike S2c's admin download of a person (the [S3 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s3-invoice-customer-download.md)'s
   decision 14). The owner then decided that a mirror is to serve no dashboard at all, so this
   refusal is the permanent answer, not a wait for A1111, which is withdrawn. Relayed by the
   watcher, `questions.md:4400` in lane B's campaign folder.
 - **A980 S1a, 2026-10-26:** the owner kept five of the
-  [S1a plan](../superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)'s six defaults (its
+  [S1a plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s1a-notice-settings.md)'s six defaults (its
   "Open decisions for the owner"; decision B was overridden, and S1a2 built it: the A980 S1a2
   entry below).
   Relayed by the watcher, the "OWNER ANSWER — A980 S1a plan defaults A–F" section of lane B's
@@ -288,7 +288,7 @@ by the answers):
     password, a space inside it, or an invisible character is refused; `http://` stays accepted.
 - **A980 S1a2, 2026-10-26:** the configuration export carries the privacy notice page and the
   privacy email, built with the four defaults of the
-  [S1a2 plan](../superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md)'s "Open
+  [S1a2 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md)'s "Open
   decisions for the owner", each open for the owner to reverse:
   - **A. Carried with New tax ID too.** A new owner setting up from Bar Ejemplo's export with
     **New tax ID** sees Bar Ejemplo's address and email on the Privacy card until someone changes
@@ -303,7 +303,7 @@ by the answers):
     Alternative: a line on the review screen saying they will be copied.
 - **A980 S1b, 2026-10-27:** the staff emails, the sign-in page, Account settings and both
   downloads read the privacy page saved on the Privacy card, built with the two Part 1 defaults of
-  the [S1b plan](../superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md)'s "Open
+  the [S1b plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md)'s "Open
   decisions for the owner", each open for the owner to reverse:
   - **A. Only the Privacy card shows the privacy email until S1b2.** Bar Ejemplo saves
     `privacidad@barejemplo.es`; Ana's invitation, the sign-in page, Account settings and Jordi's
@@ -316,7 +316,7 @@ by the answers):
 - **A980 S1b2, 2026-10-27:** the email that sends a full invoice carries the invoice customers'
   privacy notice, with the venue's legal name and the privacy email and page saved on the Privacy
   card, built with the four Part 2 defaults of the
-  [S1b plan](../superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md)'s "Open decisions
+  [S1b plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md)'s "Open decisions
   for the owner", each open for the owner to reverse:
   - **C. The Tax Agency clause appears only for an invoice with a tax record.** Bar Ejemplo runs
     Veri\*Factu, so its invoice emails say "incluida la remisión a la Agencia Tributaria de un

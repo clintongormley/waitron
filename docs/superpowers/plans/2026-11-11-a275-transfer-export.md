@@ -39,12 +39,12 @@ customer (`packages/core/src/record-correction.ts:207` → `correction-eligibili
 
 ## Authority
 
-- [Design §4](../specs/2026-10-22-a275-final-transfer-close-design.md#4-close-history-and-accountant-export),
+- [Design §4](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-22-a275-final-transfer-close-design.md#4-close-history-and-accountant-export),
   approved by the owner 2026-10-22 ("A275 looks fine"): an export gated by `report.export`, filtered
   by the day the bill closed, one row per invoice with its identity, the customer where present and
   its amounts as issued, safe against spreadsheet formulas, naming any later fiscal remedy so the
   original is neither erased nor netted. No bank-received date, debt or reconciliation column. This
-  cuts the [master plan's Task 6](2026-10-22-a275-final-transfer-close.md#task-6-accountant-export-with-stable-facts-and-remedy-links)
+  cuts the [master plan's Task 6](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a275-final-transfer-close.md#task-6-accountant-export-with-stable-facts-and-remedy-links)
   to current `main` and the lane rules. Owner's minimal scope 2026-10-21 and order "Tasks 4–6":
   lane L `queue.md`, A275 block and line 6.
 - No schema change, no migration. The only write is the download's activity-log entry under owner

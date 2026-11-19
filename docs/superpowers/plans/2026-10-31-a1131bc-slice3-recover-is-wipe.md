@@ -116,12 +116,12 @@ nothing adds a migration.
 **Tech Stack:** TypeScript, Lit, Vitest 4 (real headless Chromium for `apps/setup`; node for
 `apps/server`).
 
-**Spec:** `docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`. This plan
+**Spec:** [2026-10-28-a1131bc-restore-replaces-setup-design.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md). This plan
 covers "Slices" item 3, §1 step 3, §9b, §9c as seen from Recover, the §1a sentence "Recover from
 backup is no longer offered beside … any other row marked refused", and "Open, not measured":
 "Carrying 'go to Join or recover' across the restart". The dated note at the spec's top retires
 §9b's help line. Slice 2's plan
-(`docs/superpowers/plans/2026-10-29-a1131bc-slice2-one-wipe-no-password.md`) is the template and
+([2026-10-29-a1131bc-slice2-one-wipe-no-password.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1131bc-slice2-one-wipe-no-password.md)) is the template and
 built the wipe this plan calls.
 
 **Worktree / branch:** `/Users/clintongormley/workspace/worktrees/waitron-feat-a1131bc-3-recover-is-wipe`,

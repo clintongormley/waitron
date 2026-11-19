@@ -53,7 +53,7 @@ and the screen remain unbuilt. Persistent repair remains open. The earlier
 proposal and planning-only statements below describe their publication state._
 
 _2026-10-29: the owner approved option A for planning only at 01:58. The
-[implementation plan](../plans/2026-10-29-a1089-aeat-certificate-diagnosis.md)
+[implementation plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1089-aeat-certificate-diagnosis.md)
 keeps persistent repair open; its build needs separate approval. The proposal and its
 measurements below remain the historical record._
 

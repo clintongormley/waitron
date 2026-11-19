@@ -23,11 +23,11 @@ transfer** €220.00; cash expected in the drawer €10.00.
 ## Authority
 
 - Design approved by the owner 2026-10-22 ("A275 looks fine";
-  [design §4](../specs/2026-10-22-a275-final-transfer-close-design.md#4-close-history-and-accountant-export):
+  [design §4](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-22-a275-final-transfer-close-design.md#4-close-history-and-accountant-export):
   show the transfer line apart from Cash and Card, include it once in **Bills closed**, never in cash
   expectation, cash difference or card totals; reuse the frozen close's own line; no rewrite of past
   closes, no change to the close's hash). This cuts the
-  [master plan's Task 5](2026-10-22-a275-final-transfer-close.md#task-5-closure-day-totals-frozen-close-and-analytics)
+  [master plan's Task 5](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a275-final-transfer-close.md#task-5-closure-day-totals-frozen-close-and-analytics)
   to current `main` and to the lane rules (owner 2026-11-08/09: smallest safe path, real events only,
   test a dependency once, tests about twice the code). Order "Tasks 4–6": owner's lane walk
   2026-11-10 22:05 (lane L `questions.md`).

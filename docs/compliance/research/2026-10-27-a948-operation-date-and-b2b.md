@@ -9,8 +9,8 @@
 > **no staff date choice or confirmation**. The later answer defines meal end as **when the bill
 > closes**: earliest qualifying whole/final balance payment acceptance, first completed-meal F1
 > issuance commit, accepted settling edit or accepted unpaid departure. Bill requested never
-> captures, even when fully served. Follow the [implementation design](../../superpowers/specs/2026-10-27-a444-meal-completion-date-design.md)
-> and [plan](../../superpowers/plans/2026-10-27-a444-meal-completion-date.md) for the accepted instant/day
+> captures, even when fully served. Follow the [implementation design](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-27-a444-meal-completion-date-design.md)
+> and [plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a444-meal-completion-date.md) for the accepted instant/day
 > retained through recovery and the exact H2 scope now granted. Build waits only for released
 > A696/A739 integration and the actual fiscal-branch slot; this docs revision authorizes no build
 > or fiscal landing. The owner lands the eventual fiscal PR. This supersedes the capture/confirmation

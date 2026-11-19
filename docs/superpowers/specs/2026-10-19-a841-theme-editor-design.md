@@ -1489,7 +1489,7 @@ handhelds and the sign-in screen alone.
 (2026-10-28, slice 14: built. The counter keeps one loaded logo box in the page and hides it without
 room, rather than stepping and re-creating it as the handheld does, because a new box is 0 px wide
 until its image loads and the counter's counts change through service; plan
-`docs/superpowers/plans/2026-10-28-a841-14-till-bar-logo.md`, R1. While it shows, the strip's
+[2026-10-28-a841-14-till-bar-logo.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-28-a841-14-till-bar-logo.md), R1. While it shows, the strip's
 controls shift right by the logo's width and the bar's gap; none changes size, scrolls or moves into
 a menu for it, which is how the plan reads "moves" (R8).)
 

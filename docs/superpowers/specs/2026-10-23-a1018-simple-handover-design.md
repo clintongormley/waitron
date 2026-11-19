@@ -134,7 +134,7 @@ in both cases, through the approved module gates. It never continues M1's writer
 new sales. After takeover M2 alone handles AEAT communication, including filing M1's unchanged
 originals already copied or recovered later, in their original generating fiscal identities.
 
-This replaces the [rejected proposal](2026-10-22-a1018-cloud-stop-proof-design.md), rather than
+This replaces the [rejected proposal](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-22-a1018-cloud-stop-proof-design.md), rather than
 qualifying its external proof mechanism. The old Waitron `db7cddeb2` / Cloud `6700d6f` direction
 agreement, published through Cloud #300, is historical and **no longer current agreement**.
 

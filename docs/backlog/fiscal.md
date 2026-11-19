@@ -121,7 +121,7 @@ plan's Mutation section lists them). Decide whether it joins the mutation-tested
 
 **1 November landing update:** A696 landed in [#2369](https://github.com/clintongormley/waitron/pull/2369).
 New invoice dates and record offsets use the writing node's saved venue zone; the
-[coverage ledger](../superpowers/plans/2026-10-21-a696-startup-zone-validation.md#task-20-coverage-ledger)
+[coverage ledger](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-21-a696-startup-zone-validation.md#task-20-coverage-ledger)
 records the qualification. The 15 October observations below describe the earlier process-zone
 behavior.
 

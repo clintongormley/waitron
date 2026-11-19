@@ -106,7 +106,7 @@ whatever a caller hands it, so it does not take this reader's word.
 
 ## Part B — admission (the regime decides)
 
-As the old plan's [Task 4](2026-10-22-a802-partial-paid-invoice-correction.md#task-4-let-the-regime-decide-admission-without-teaching-core-its-tables),
+As the old plan's [Task 4](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md#task-4-let-the-regime-decide-admission-without-teaching-core-its-tables),
 the approved interface:
 
 - `packages/fiscal/src/backend.ts`: optional

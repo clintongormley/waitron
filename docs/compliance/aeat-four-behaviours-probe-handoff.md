@@ -2,7 +2,7 @@
 
 **Policy update, 2026-10-22 (A1003):** the owner subsequently chose refusal of a locally detected
 fingerprint mismatch before writing the immutable record. See the
-[implementation plan](../superpowers/plans/2026-10-22-a1003-fingerprint-refusal.md). The instructions
+[implementation plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a1003-fingerprint-refusal.md). The instructions
 and predictions below are the historical A985 probe handoff; do not reopen its settled policy
 question or redispatch the completed experiment.
 

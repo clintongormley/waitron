@@ -1,8 +1,8 @@
 # A1127 slices 2–4: on a full disk, start fully from the spare file, then offer to delete old backups
 
-**2026-10-28, owner answers:** Q1 A as corrected (`questions.md`, "CORRECTION to the A1127 Q1 answer"); Q2 A, Q3 A, Q4 A (keep «Tell a manager» as a stated exception; no slice 4), Q5 A; the 08:25 wording answer replaces §5's proposed sentences (built in slice 2); A1167 Q3 A drops §3's dialog and Box status button, and A1167 Q4 A replaces the full-disk page's button with the box deleting old backups by itself ([A1167's design](2026-10-28-a1167-backups-make-room-design.md)); slice 2's plan narrows §2: the running box writes the spare back only while the marker exists (its decision 9). Slice 2 measured that the bucket stream does not use the spare's room on an idle box (`conventions-data.md`, "The box's spare file").
+**2026-10-28, owner answers:** Q1 A as corrected (`questions.md`, "CORRECTION to the A1127 Q1 answer"); Q2 A, Q3 A, Q4 A (keep «Tell a manager» as a stated exception; no slice 4), Q5 A; the 08:25 wording answer replaces §5's proposed sentences (built in slice 2); A1167 Q3 A drops §3's dialog and Box status button, and A1167 Q4 A replaces the full-disk page's button with the box deleting old backups by itself ([A1167's design](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-28-a1167-backups-make-room-design.md)); slice 2's plan narrows §2: the running box writes the spare back only while the marker exists (its decision 9). Slice 2 measured that the bucket stream does not use the spare's room on an idle box (`conventions-data.md`, "The box's spare file").
 
-**2026-10-29:** slice 3 is built by [its plan](../plans/2026-10-29-a1127-3-full-disk-bar.md) as the bar only (A1167 Q3 A): no deletion dialog and no **Delete old backups…** button on Box status.
+**2026-10-29:** slice 3 is built by [its plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1127-3-full-disk-bar.md) as the bar only (A1167 Q3 A): no deletion dialog and no **Delete old backups…** button on Box status.
 
 The owner's answer to A1127 Q1, 2026-10-28 ~03:10 CET (`~/waitron-campaign/questions.md`, "OWNER
 ANSWER … A1127 Q1"):
@@ -22,7 +22,7 @@ written back (§2, §3). This design is docs only; nothing is built until the ow
 Slice 1 (#2175, main 0523d5e42) built the spare file: `<state>/spare-space`, 8 MiB of random bytes,
 deleted only to free a backup recovery's copy, written back by a start with 24 MiB free
 ([conventions-data.md, "The box's spare file"](../../developers/conventions-data.md#the-boxs-spare-file);
-[its design](2026-10-28-a1127-full-disk-spare-file-design.md)). It reverses A798's "no reserve" (A798
+[its design](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-28-a1127-full-disk-spare-file-design.md)). It reverses A798's "no reserve" (A798
 design §4.6 item 5, owner answer 2026-10-19), by the owner's own later choice (2026-10-26 and
 2026-10-28).
 

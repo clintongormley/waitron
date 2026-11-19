@@ -8,7 +8,7 @@
 2026-10-21: issue the correction before a connected-card refund, require both permissions and
 explicit refund links, and apply the proposed source-history gates. The original proposal below
 is retained as dated history; its three owner questions are answered. The
-[build plan](../plans/2026-10-22-a802-partial-paid-invoice-correction.md) carries the implementation
+[build plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md) carries the implementation
 and qualification steps. Its protected-writer approval remains separate from design approval.
 
 **PROPOSED, 2026-10-20. Full owner approval is required before a plan or build.**

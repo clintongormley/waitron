@@ -60,9 +60,9 @@ CLEARED with three changes"), and the owner's two answers. These win over the te
 ## Authority
 
 - Design approved by the owner 2026-10-22 15:55, "A275 looks fine"
-  ([design §2–3](../specs/2026-10-22-a275-final-transfer-close-design.md#2-the-final-action)); H2 build
+  ([design §2–3](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-22-a275-final-transfer-close-design.md#2-the-final-action)); H2 build
   scope "Yes" 2026-10-22 (lane L `queue.md`). This cuts the
-  [master plan's Task 7](2026-10-22-a275-final-transfer-close.md#task-7-accepted-pay-integration-guides-and-visual-acceptance)
+  [master plan's Task 7](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a275-final-transfer-close.md#task-7-accepted-pay-integration-guides-and-visual-acceptance)
   to today's code.
 - Owner 2026-10-21 ~02:40 (lane E `archive/questions-to-2026-10-23.md:6491–6493`). The owner asked "Do
   we need this at all? Wouldn't this reconciliation be done by the accountant outside of waitron",

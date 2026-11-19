@@ -314,6 +314,13 @@ Remaining Stripe qualification and maintenance.
 
 ## Decisions and deliberate limits
 
+- **Closing a bill as a deferred payment is final in Waitron** (owner, 2026-10-21 02:40, A275;
+  the words "Deferred payment" / «Pago aplazado», owner, 2026-11-11). The invoice is issued at the
+  meal and the table freed; there is no awaiting-payment balance, later money-received entry,
+  part payment, reversal, receivables ledger or unpaid-debt list. The amount shows separately in
+  the day's close and in the accountant's export, and the accountant reconciles the bank outside
+  Waitron.
+
 - **Silent-provider qualification, 2026-11-16:** two real Chromium Payments tabs over loopback
   HTTP/1.1 retained two live streams and two silent-provider reads; an unrelated authenticated
   read answered in 1.4 ms. A six-socket saturation control blocked that read until a socket was

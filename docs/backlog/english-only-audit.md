@@ -31,7 +31,7 @@ _2026-10-28, A965: the owner answered the sample-name question. Both names now f
 
 _2026-10-27, A965: receipt resources now include English without adding it to Spain’s receipt choices. Card slips use the saved sale language; payment/refund/sample wording lives in Spain’s pack. Samples carry an explicit receipt language, captured at request for deferred office printing. The two internal sample names retain A754’s values while the owner question is unanswered. The findings below describe the earlier tree._
 
-_2026-10-27, A963: Spain's country pack now owns the invoice-recipient address rule and country names. New recipient addresses keep the country code separately; printed country names follow the receipt language. The address-suffix findings below record the earlier tree. See the [implementation plan](../superpowers/plans/2026-10-27-a963-invoice-address-country.md)._
+_2026-10-27, A963: Spain's country pack now owns the invoice-recipient address rule and country names. New recipient addresses keep the country code separately; printed country names follow the receipt language. The address-suffix findings below record the earlier tree. See the [implementation plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a963-invoice-address-country.md)._
 
 _2026-10-27, A918 slice 4: setup names the units and the first menu from `packages/menu/src/starter-content.ts`, and A918 is finished; the queue line below that names it records the earlier backlog._
 
@@ -382,9 +382,9 @@ inventory have moved to `packages/country-es/src/demo/` and
 `packages/country-es/demo-media/casa-delgado-es/`. Shared database writers remain
 in the server. Plain-name translation is the next cut; the historical rows above
 have not been rewritten. See the
-[A972 plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md).
+[A972 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a972-demo-country-region.md).
 
 2026-10-27 A972 cut 2: demo staff and kitchen names now have English and Spanish values,
 including option labels, extras, reporting categories, stations and menu periods.
 English setup writes Set lunch; customer wording and the historical capture remain unchanged.
-The three regional datasets remain open in the [A972 plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md).
+The three regional datasets remain open in the [A972 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a972-demo-country-region.md).

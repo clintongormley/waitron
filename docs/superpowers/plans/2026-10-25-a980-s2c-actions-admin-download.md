@@ -10,10 +10,10 @@ download, its two worked examples and "`actions.csv` lists sale numbers and amou
 person's data"), §2.1 row s12 ("Who did what"), §5.3 row S2 (its tests), §8 owner answer O5
 ("staff should be able to download their own data, otherwise admins … If so, provide an admin
 permission"). Overview: [the build plan](2026-10-24-a980-data-protection-build.md), row S2c and
-"Notes for each slice → S2c". It builds on [S2a1](2026-10-24-a980-s2a1-own-download.md) (the seat,
+"Notes for each slice → S2c". It builds on [S2a1](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a980-s2a1-own-download.md) (the seat,
 the gatherer, `sendPersonalData` and its `authorize` step; its decisions 5 and 7 say what S2c
-adds), [S2a2](2026-10-25-a980-s2a2-own-download-ui.md) (the README, the Profile button, the guide
-section) and [S2b](2026-10-25-a980-s2b-own-download-workforce.md) (the work files, server parts,
+adds), [S2a2](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-25-a980-s2a2-own-download-ui.md) (the README, the Profile button, the guide
+section) and [S2b](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-25-a980-s2b-own-download-workforce.md) (the work files, server parts,
 the README's language on the subject). Branch `feat/a980-s2c-actions-admin-download`, from `main`
 at `c87b4a0e0`. **No migration** (decision 4: the actions part reads in short write-lock turns of
 its own, and Task 3 measures every turn with a stop rule). **FULL review**: a new
@@ -425,7 +425,7 @@ Left for later, on purpose (each becomes a backlog point in Task 12):
 
    `withPersonalDataErrors` (`personal-data-export-api.ts:35-43`) gains
    `"authorization.not_permitted": 403`, as S2a1 decision 5 foresaw
-   (`docs/superpowers/plans/2026-10-24-a980-s2a1-own-download.md:141-146`), and
+   ([2026-10-24-a980-s2a1-own-download.md:141-146](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a980-s2a1-own-download.md)), and
    `"person.not_found": 404`, which that decision did not name; the own route throws neither (its
    `authorize` calls only `resolveManagementSession`, `personal-data-export-api.ts:116`), and both
    entries are shared because the map is one. Without the entries both codes would answer the

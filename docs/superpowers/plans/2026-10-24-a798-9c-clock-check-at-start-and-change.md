@@ -13,7 +13,7 @@ _2026-11-01, A1008: the one-sale operator command and its command-only tests are
 >
 > **Changed 2026-10-31 by the owner's answer to slice 9b's question** (`~/waitron-campaign-b/questions.md`,
 > "OWNER ANSWER 2026-10-31 ~07:00" and "~07:05"; folded into 9b's plan as its revision 4,
-> [plan](2026-10-24-a798-9b-box-sets-its-clock.md), decisions 14–17). "If we can't check the time on
+> [plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md), decisions 14–17). "If we can't check the time on
 > the internet, then use a till to choose the likely time, but ask for confirmation from a human
 > before continuing with startup"; any staff member signed in on site may confirm; a clock problem
 > found while the box is running "gets an alert to an admin". For this slice that means: the

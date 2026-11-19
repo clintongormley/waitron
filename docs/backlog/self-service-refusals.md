@@ -790,8 +790,8 @@ whether the box holds a usable recovery key, by fingerprint only. **Read again**
 again and does not turn backups on; **Stop** closes the panel; a refusal for lack of permission
 offers an administrator sign-in. The panel writes nothing and repairs nothing. Failures are kept in
 memory, so a restart empties the list (design decision 1):
-[design](../superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md),
-[plan](../superpowers/plans/2026-10-29-a1089-backup-settings-evidence.md).
+[design](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md),
+[plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1089-backup-settings-evidence.md).
 
 ### backup-stream
 

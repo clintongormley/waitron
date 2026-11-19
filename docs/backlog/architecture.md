@@ -1149,12 +1149,12 @@ names now follow the seed's English/Spanish language, keeping regional translati
 customer maps. A1458's later setup slices add the explicit working-language choice; until then
 the existing resolver supplies it. This replaces A972's demo-only regional-name override;
 the A918 starter-content policy below stays separate. The
-[design update](../superpowers/specs/2026-10-27-a972-demo-data-per-country-and-region-design.md)
+[design update](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/specs/2026-10-27-a972-demo-data-per-country-and-region-design.md)
 records the four answers. Spain owns its demo records and pictures behind secondary
 exports; ordinary browser entries stay separate. Madrid keeps its frozen database
 comparison. Catalonia and the Balearic Islands share Can Delgado; Valencia uses
 Casa Delgado de l'Horta and Galicia uses A Casa Delgado. No further country demos
-are included in these five cuts. The [implementation plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md)
+are included in these five cuts. The [implementation plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a972-demo-country-region.md)
 records the delivered scope; live seeded-screen qualification remains separate.
 
 **A963 recipient addresses (owner, 2026-10-20; extended 2026-10-28).**
@@ -1167,8 +1167,8 @@ document with its actual type and issuing country. Postal country never selects 
 Only a Spanish NIF is normalized and checked against Spain's rules; foreign document values
 retain their spelling within the filing schema's limits. The owner authorized extending the
 recipient builder; the completed invoice PR remains the owner's to land.
-[Original implementation plan](../superpowers/plans/2026-10-27-a963-invoice-address-country.md) and
-[foreign-recipient rework](../superpowers/plans/2026-10-28-a963-foreign-recipient-rework.md).
+[Original implementation plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a963-invoice-address-country.md) and
+[foreign-recipient rework](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-28-a963-foreign-recipient-rework.md).
 
 **A918 starter content in the venue's languages (owner, 2026-10-19, 2026-10-20 and 2026-10-27).**
 The owner: "These default starter names in the general module should be in English only, and
@@ -1183,7 +1183,7 @@ languages the file carries; a field holding one name gets the staff language. A 
 shows only in the unit editor, the translation gap report and where a unit's name is blank; the
 units list and product screens show each person's own language. The rule's home is
 [conventions-data.md](../developers/conventions-data.md#general-code-is-english-only); the
-reasoning is in `docs/superpowers/plans/2026-10-27-a918-starter-content-translations.md`.
+reasoning is in [2026-10-27-a918-starter-content-translations.md](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a918-starter-content-translations.md).
 
 **A646 module controls and Google access (owner, 2026-10-17).** The revised design is agreed:
 Enabled-default menu, Add a module selects Disabled, row-menu Configure/Disable, a Configure

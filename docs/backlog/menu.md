@@ -579,6 +579,13 @@ retain the earlier scope and the six follow-ups.
 
 ## Decisions and deliberate limits
 
+- **"Patch live menu" is an emergency tool and stays plain** (owner, 2026-10-27, A1151). It
+  corrects only the live version of one menu and puts the patch live at once: no scheduling, no
+  correcting a version still waiting for its date (that is fixed the normal way: change the
+  products, cancel it and queue it again), and nothing flows back into the products, queued
+  versions or other menus. Open orders keep their price and VAT. Unit is not patchable, and
+  allergens and diet labels are always read from the live product.
+
 - **WT-TABLE-NARROW, 2026-11-17:** Products' root count uses BODY as its positioning ancestor,
   but long-name probes at 390/600/700 px in English and Spanish kept the page within its viewport.
   At 390 px its right-edge x coordinate was 195 px in English and 250 px in Spanish. The watcher

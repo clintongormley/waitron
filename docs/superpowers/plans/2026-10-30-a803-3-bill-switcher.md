@@ -162,7 +162,7 @@ thrown away), and `pnpm --filter @waitron/server exec vitest run src/party-main-
 
 10. **A797 slices 10 and 11 wait on this slice.** Slice 10 builds the handheld's fixed foot "(A803
     builds its contents and quiet Pay)"; slice 11 puts "✎ Bill 2 unsent" on the closed switcher and
-    "✎ Unsent" in its list (`docs/superpowers/plans/2026-10-24-a797-device-screens-build.md:253-264`).
+    "✎ Unsent" in its list ([2026-10-24-a797-device-screens-build.md:253-264](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a797-device-screens-build.md)).
     This slice leaves the switcher's row content in one function so slice 11 has one place to add
     its marks (D3).
 

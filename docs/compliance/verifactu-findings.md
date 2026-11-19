@@ -1378,7 +1378,7 @@ these observations to production. The results do not call for an inline A942 cha
 ## 19. Cancellation replay, zero total and wrong fingerprint (added 2026-10-22, A985)
 
 **Policy update, 2026-10-22 (A1003):** the owner chose refusal before the immutable record is
-written. The [implementation plan](../superpowers/plans/2026-10-22-a1003-fingerprint-refusal.md)
+written. The [implementation plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-22-a1003-fingerprint-refusal.md)
 covers the local new-record check, transaction rollback and a separate refusal alert. The
 observations below describe the earlier TEST-service experiment; they do not describe the new
 local refusal policy. Stored-predecessor checks keep their separate report-and-continue policy.
