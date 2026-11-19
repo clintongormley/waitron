@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedPhotoMetadata, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import type { BuiltInRoleKey } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
@@ -257,7 +257,11 @@ describe("custom theme store against a real migrated database", () => {
     );
     expect(saved).toEqual({ id: a.id, name: "A", choices: ROUND, updatedAt: expect.any(String) });
     const bAfter = (await rawRow(b.id)) as { theme: string; updated_at: string };
-    expect(JSON.parse(bAfter.theme)).toEqual(DARK_GREEN);
+    expect(JSON.parse(bAfter.theme)).toEqual({
+      ...noLogo,
+      brandColor: DARK_GREEN.brandColor,
+      background: DARK_GREEN.background,
+    });
     expect(bAfter.updated_at).toBe("2000-01-01T00:00:00.000Z");
     expect(bAfter).toEqual(bBefore);
     const aBefore = await rawRow(a.id);
@@ -271,7 +275,7 @@ describe("custom theme store against a real migrated database", () => {
     const { manager } = await setup();
     const a = await create(manager, "A", { ...LEMON, brandColor: "#F2D300" });
     const stored = (await rawRow(a.id)) as { theme: string; updated_at: string };
-    expect(JSON.parse(stored.theme)).toEqual(LEMON);
+    expect(JSON.parse(stored.theme)).toEqual(noLogo);
     await suite.db.execute(
       sql`update custom_themes set updated_at = '2000-01-01T00:00:00.000Z' where id = ${a.id}`,
     );
@@ -492,10 +496,18 @@ const { logo: _, ...noLogo } = LEMON;
 void _;
 
 async function storedTheme(id: string): Promise<unknown> {
-  const rows = await suite.db.execute<{ theme: string }>(
-    sql`select theme from custom_themes where id = ${id}`,
-  );
-  return JSON.parse(rows.rows[0]!.theme);
+  const row = suite.db.get<{
+    theme: string;
+    logo_light_image: string | null;
+    logo_dark_image: string | null;
+  }>(sql`select theme, logo_light_image, logo_dark_image from custom_themes where id = ${id}`)!;
+  const document = JSON.parse(row.theme) as Record<string, unknown>;
+  expect(document).not.toHaveProperty("logo");
+  const { logo_light_image: light, logo_dark_image: dark } = row;
+  return {
+    ...document,
+    logo: light === null ? null : { light, ...(dark === null ? {} : { dark }) },
+  };
 }
 
 function createWithDots(
@@ -505,9 +517,10 @@ function createWithDots(
   printedLogo?: ReceiptLogoRasters,
   inUse?: boolean,
 ) {
-  return inTx((tx) =>
-    createCustomTheme(tx, { managementSessionId: manager, name, theme, inUse, printedLogo }),
-  );
+  return inTx(async (tx) => {
+    await seedPhotoMetadata(tx, { filename: L, names: {} });
+    return createCustomTheme(tx, { managementSessionId: manager, name, theme, inUse, printedLogo });
+  });
 }
 
 function saveWithDots(
@@ -525,11 +538,18 @@ function prepare(manager: string, id: string | null, theme: unknown, name?: stri
   return inTx((tx) => prepareThemeSave(tx, { managementSessionId: manager, id, name, theme }));
 }
 
-async function insertRaw(text: string, inUse: 0 | 1 = 0): Promise<string> {
+async function insertRaw(
+  text: string,
+  inUse: 0 | 1 = 0,
+  logo?: NonNullable<ThemeChoices["logo"]>,
+): Promise<string> {
   const id = randomUUID();
+  for (const filename of [logo?.light, logo?.dark]) {
+    if (filename !== undefined) await seedPhotoMetadata(suite.db, { filename, names: {} });
+  }
   await suite.db.execute(
-    sql`insert into custom_themes (id, name, name_key, in_use, theme, updated_at)
-        values (${id}, ${`Old ${id}`}, ${`old ${id}`}, ${inUse === 1 ? 1 : null}, ${text},
+    sql`insert into custom_themes (id, name, name_key, in_use, theme, logo_light_image, logo_dark_image, updated_at)
+        values (${id}, ${`Old ${id}`}, ${`old ${id}`}, ${inUse === 1 ? 1 : null}, ${text}, ${logo?.light ?? null}, ${logo?.dark ?? null},
                 '2026-10-01T00:00:00.000Z')`,
   );
   return id;
@@ -614,7 +634,7 @@ describe("a theme logo's printed dots", () => {
 
   it("a stored document without a text size reads as 100", async () => {
     await setup();
-    const { textScale: _, ...noTextScale } = LEMON;
+    const { textScale: _, ...noTextScale } = noLogo;
     void _;
     const id = await insertRaw(JSON.stringify(noTextScale), 1);
     const choices = { ...LEMON, textScale: 100 };
@@ -626,7 +646,7 @@ describe("a theme logo's printed dots", () => {
 
   it("a stored document without text reads as nothing set by hand", async () => {
     await setup();
-    const { text: _, ...noText } = LEMON;
+    const { text: _, ...noText } = noLogo;
     void _;
     const id = await insertRaw(JSON.stringify(noText), 1);
     expect((await inTx(listCustomThemes)).themes[0]!.choices).toEqual({ ...LEMON, text: {} });
@@ -686,8 +706,7 @@ describe("prepareThemeSave", () => {
     const a = await createWithDots(manager, "A", { ...LEMON, logo: { light: L } }, PRINTABLE);
     await suite.db.execute(
       sql`update custom_themes set theme = ${JSON.stringify({
-        ...LEMON,
-        logo: { light: L },
+        ...noLogo,
         printedLogo: dots,
       })} where id = ${a.id}`,
     );
@@ -794,25 +813,26 @@ describe("the theme in use's printed logo", () => {
     "58mm": { widthDots: 8, heightDots: 1, data: "8A==" },
     "80mm": { widthDots: 16, heightDots: 1, data: "8A8=" },
   };
-  const WITH_LOGO = { ...LEMON, logo: { light: L, dark: D }, printedLogo: DOTS };
+  const logo = { light: L, dark: D };
+  const WITH_LOGO = { ...noLogo, printedLogo: DOTS };
 
   function read(paper: "58mm" | "80mm") {
     return inTx((tx) => readPrintedThemeLogo(tx, paper));
   }
 
   it("answers null with no theme in use", async () => {
-    await insertRaw(JSON.stringify(WITH_LOGO));
+    await insertRaw(JSON.stringify(WITH_LOGO), 0, logo);
     expect(await read("58mm")).toBeNull();
     expect(await read("80mm")).toBeNull();
   });
 
   it("answers null when the theme in use has no logo", async () => {
-    await insertRaw(JSON.stringify(LEMON), 1);
+    await insertRaw(JSON.stringify(noLogo), 1);
     expect(await read("58mm")).toBeNull();
   });
 
   it("answers the light name and each paper's own dots", async () => {
-    await insertRaw(JSON.stringify(WITH_LOGO), 1);
+    await insertRaw(JSON.stringify(WITH_LOGO), 1, logo);
     expect(await read("58mm")).toEqual({
       name: L,
       picture: { widthDots: 8, heightDots: 1, bits: new Uint8Array([0xf0]) },
@@ -825,7 +845,7 @@ describe("the theme in use's printed logo", () => {
 
   it("answers no picture without parsing stored dots too large for the paper", async () => {
     const printedLogo = { ...DOTS, "80mm": { ...DOTS["80mm"], data: "A".repeat(200_000) } };
-    await insertRaw(JSON.stringify({ ...WITH_LOGO, printedLogo }), 1);
+    await insertRaw(JSON.stringify({ ...WITH_LOGO, printedLogo }), 1, logo);
     const parse = vi.spyOn(JSON, "parse");
     try {
       expect(await read("80mm")).toEqual({ name: L, picture: null });
@@ -838,7 +858,7 @@ describe("the theme in use's printed logo", () => {
 
   it("answers the name and no picture for a paper whose dots cannot print", async () => {
     const printedLogo = { ...DOTS, "80mm": { ...DOTS["80mm"], data: "x" } };
-    await insertRaw(JSON.stringify({ ...WITH_LOGO, printedLogo }), 1);
+    await insertRaw(JSON.stringify({ ...WITH_LOGO, printedLogo }), 1, logo);
     expect(await read("80mm")).toEqual({ name: L, picture: null });
     expect(await read("58mm")).toEqual({
       name: L,
@@ -846,12 +866,12 @@ describe("the theme in use's printed logo", () => {
     });
   });
 
-  it.each([
-    "{broken",
-    JSON.stringify({ ...LEMON, logo: { light: L }, textScale: 112, printedLogo: DOTS }),
-  ])("answers null for a theme this release cannot read: %s", async (text) => {
-    await insertRaw(text, 1);
-    expect(await read("58mm")).toBeNull();
-    expect(await read("80mm")).toBeNull();
-  });
+  it.each(["{broken", JSON.stringify({ ...WITH_LOGO, textScale: 112 })])(
+    "answers null for a theme this release cannot read: %s",
+    async (text) => {
+      await insertRaw(text, 1, logo);
+      expect(await read("58mm")).toBeNull();
+      expect(await read("80mm")).toBeNull();
+    },
+  );
 });

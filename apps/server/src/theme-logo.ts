@@ -62,7 +62,7 @@ export async function printedLogoFor(snapshot: LogoSnapshot): Promise<ReceiptLog
   return drawLogoRasters(await renderRendition(bytes, "display", framing));
 }
 
-/** Runs in the write transaction, after the store's write, so a refusal rolls that write back. */
+/** Runs in the write transaction so a missing or changed photo refuses the theme save. */
 export async function recheckThemeLogo(
   tx: Transaction,
   logo: ThemeLogo,

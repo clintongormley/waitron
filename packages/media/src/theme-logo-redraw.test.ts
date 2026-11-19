@@ -28,9 +28,15 @@ async function upload(tx: Transaction, image: typeof photoA, name: string) {
   return (await uploadImage(tx, { image, names: { en: name } }, { fallbackLanguage: "en" })).image;
 }
 
-async function addTheme(tx: Transaction, id: string, document: string) {
+async function addTheme(
+  tx: Transaction,
+  id: string,
+  document: string,
+  light: string | null = null,
+  dark: string | null = null,
+) {
   await tx.execute(
-    sql`insert into custom_themes (id, name, name_key, theme, updated_at) values (${id}, ${id}, ${id.toLowerCase()}, ${document}, ${storedAt})`,
+    sql`insert into custom_themes (id, name, name_key, theme, updated_at, logo_light_image, logo_dark_image) values (${id}, ${id}, ${id.toLowerCase()}, ${document}, ${storedAt}, ${light}, ${dark})`,
   );
 }
 
@@ -44,11 +50,11 @@ async function stored(tx: Transaction, id: string) {
 async function threeThemes(tx: Transaction) {
   const a = await upload(tx, photoA, "Logo");
   const b = await upload(tx, photoB, "Other");
-  const day = JSON.stringify({ mode: "warm", logo: { light: a.filename }, printedLogo: R1 });
-  const dusk = JSON.stringify({ logo: { light: b.filename, dark: a.filename }, printedLogo: R1 });
-  await addTheme(tx, "Day", day);
-  await addTheme(tx, "Dusk", dusk);
-  await addTheme(tx, "Broken", "{broken");
+  const day = JSON.stringify({ mode: "warm", printedLogo: R1 });
+  const dusk = JSON.stringify({ printedLogo: R1 });
+  await addTheme(tx, "Day", day, a.filename);
+  await addTheme(tx, "Dusk", dusk, b.filename, a.filename);
+  await addTheme(tx, "Broken", "{broken", a.filename);
   return { a, day, dusk };
 }
 
@@ -138,7 +144,7 @@ it("refuses a pixel change bringing only the narrow picture while a theme's ligh
   });
 });
 
-it("saves a pixel change without dots when only a dark logo is the image", async () => {
+it("needs no dots for a dark logo or an unreadable theme", async () => {
   await withTransaction(suite.db, async (tx) => {
     const { a, dusk } = await threeThemes(tx);
     await tx.execute(sql`delete from custom_themes where id = 'Day'`);

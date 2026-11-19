@@ -16,14 +16,19 @@ const LEMON: ThemeChoices = {
 
 const DARK_GREEN: ThemeChoices = { ...LEMON, brandColor: "#1e5b3a", background: "tinted" };
 
+const { logo: _logo, ...noLogo } = LEMON;
+void _logo;
+
 type Row = Record<string, unknown>;
 
-const row = (name: string, choices: ThemeChoices, inUse: 1 | null): Row => ({
+const row = (name: string, { logo, ...choices }: ThemeChoices, inUse: 1 | null): Row => ({
   id: `id-${name}`,
   name,
   name_key: name.toLowerCase(),
   in_use: inUse,
   theme: JSON.stringify(choices),
+  logo_light_image: logo?.light ?? null,
+  logo_dark_image: logo?.dark ?? null,
   updated_at: "2026-10-21T10:00:00.000Z",
 });
 
@@ -91,7 +96,7 @@ describe("validateThemeConfiguration", () => {
     ["a theme that is a JSON array", "[]"],
     ["a theme that is JSON null", "null"],
     ["a theme document this release refuses", '{"tokens":{}}'],
-    ["a theme whose brand colour is not hex", JSON.stringify({ ...LEMON, brandColor: "yellow" })],
+    ["a theme whose brand colour is not hex", JSON.stringify({ ...noLogo, brandColor: "yellow" })],
   ])("refuses %s as custom_themes.theme", (_label, theme) => {
     expect(refusal([{ ...row("Lemon", LEMON, null), theme }])).toMatchObject({
       code: "setup.request_invalid",
@@ -100,7 +105,7 @@ describe("validateThemeConfiguration", () => {
   });
 
   it("refuses a copy whose theme has textScale 112", () => {
-    const theme = JSON.stringify({ ...LEMON, textScale: 112 });
+    const theme = JSON.stringify({ ...noLogo, textScale: 112 });
     expect(refusal([{ ...row("Lemon", LEMON, null), theme }])).toMatchObject({
       code: "setup.request_invalid",
       params: { field: "custom_themes.theme" },
@@ -108,14 +113,14 @@ describe("validateThemeConfiguration", () => {
   });
 
   it("imports a copy whose themes have no text size", () => {
-    const { textScale: _, ...noTextScale } = LEMON;
+    const { textScale: _, ...noTextScale } = noLogo;
     void _;
     const theme = JSON.stringify(noTextScale);
     expect(refusal([{ ...row("Lemon", LEMON, 1), theme }])).toBeUndefined();
   });
 
   it("refuses a copy whose theme has a 41 px size", () => {
-    const theme = JSON.stringify({ ...LEMON, text: { size: { lg: 41 } } });
+    const theme = JSON.stringify({ ...noLogo, text: { size: { lg: 41 } } });
     expect(refusal([{ ...row("Lemon", LEMON, null), theme }])).toMatchObject({
       code: "setup.request_invalid",
       params: { field: "custom_themes.theme" },
@@ -123,7 +128,7 @@ describe("validateThemeConfiguration", () => {
   });
 
   it("imports a copy whose themes have no text", () => {
-    const { text: _, ...noText } = LEMON;
+    const { text: _, ...noText } = noLogo;
     void _;
     const theme = JSON.stringify(noText);
     expect(refusal([{ ...row("Lemon", LEMON, 1), theme }])).toBeUndefined();
@@ -157,10 +162,11 @@ describe("validateThemeConfiguration", () => {
     const L = `${"a".repeat(64)}.webp`;
     const D = `${"c".repeat(64)}.webp`;
     const images = [{ filename: L }, { filename: D }];
-    const { logo: _, ...noLogo } = LEMON;
-    void _;
-    const themed = (document: unknown): Row => ({
-      ...row("Lemon", LEMON, null),
+    const themed = ({
+      logo,
+      ...document
+    }: typeof noLogo & { logo?: ThemeChoices["logo"]; printedLogo?: unknown }): Row => ({
+      ...row("Lemon", { ...document, logo: logo ?? null }, null),
       theme: JSON.stringify(document),
     });
     const WITH_LOGO = { ...LEMON, logo: { light: L, dark: D }, printedLogo: PRINTABLE };
@@ -184,7 +190,7 @@ describe("validateThemeConfiguration", () => {
       expect(refusal([themed(noLogo)])).toBeUndefined();
     });
 
-    it.each<[string, unknown, Row[]]>([
+    it.each<[string, Parameters<typeof themed>[0], Row[]]>([
       ["a light picture not carried", WITH_LOGO, [{ filename: D }]],
       ["a dark picture not carried", WITH_LOGO, [{ filename: L }]],
       ["a logo with no printed dots", { ...LEMON, logo: { light: L } }, images],
@@ -203,8 +209,8 @@ describe("validateThemeConfiguration", () => {
         images,
       ],
       [
-        "a logo key given again with a NUL after it",
-        { ...WITH_LOGO, "logo\u0000": { light: D } },
+        "a brand colour key with a NUL after it",
+        { ...WITH_LOGO, ["brandColor\u0000" as string]: "#ffffff" },
         images,
       ],
     ])("refuses %s as custom_themes.theme", (_label, document, carried) => {
@@ -214,40 +220,53 @@ describe("validateThemeConfiguration", () => {
       });
     });
 
-    // JSON.parse keeps a repeated key's last value and SQLite's json_extract its first.
-    const lightOnly = JSON.stringify({ ...LEMON, logo: { light: L }, printedLogo: PRINTABLE });
-    const escapedLogo = `"\\u006cogo"`;
+    it.each([
+      ["a logo still in the document", { theme: JSON.stringify(LEMON) }],
+      ["a dark logo without a light one", { logo_dark_image: D }],
+    ])("refuses %s as custom_themes.theme", (_label, patch) => {
+      expect(refusal([{ ...themed(noLogo), ...patch }], images)).toMatchObject({
+        code: "setup.request_invalid",
+        params: { field: "custom_themes.theme" },
+      });
+    });
+
+    const validTheme = themed(WITH_LOGO);
+    const lightOnly = validTheme.theme as string;
+    const escapedBrand = '"\\u0062randColor"';
     it.each<[string, string]>([
-      ["a logo key given twice", lightOnly.replace('"logo":{', '"logo":null,"logo":{')],
-      ["a light key given twice", lightOnly.replace('"light":"a', `"light":"${D}","light":"a`)],
+      [
+        "a brand colour given twice",
+        lightOnly.replace('"brandColor":', '"brandColor":null,"brandColor":'),
+      ],
+      ["a hand-set light key given twice", lightOnly.replace('"light":', '"light":null,"light":')],
       ["a key given twice deep in the dots", lightOnly.replace('"58mm":', '"58mm":null,"58mm":')],
       [
-        "a logo key given twice, once escaped",
-        lightOnly.replace('"logo":{', `"logo":null,${escapedLogo}:{`),
+        "a brand colour given twice, once escaped",
+        lightOnly.replace('"brandColor":', `"brandColor":null,${escapedBrand}:`),
       ],
       [
-        "a logo key given twice, once holding an escaped quote",
-        lightOnly.replace('"logo":{', '"logo":"a\\"b\\\\","logo":{'),
+        "a brand colour given twice, once holding an escaped quote",
+        lightOnly.replace('"brandColor":', `"brandColor":${JSON.stringify('a"b\\')},"brandColor":`),
       ],
       [
-        "a logo key given twice in spaced-out text",
-        lightOnly.replace('"logo":{', '"logo" \n:\tnull, "logo"\r\n : {'),
+        "a brand colour given twice in spaced-out text",
+        lightOnly.replace('"brandColor":', '"brandColor" \n:\tnull, "brandColor"\r\n : '),
       ],
     ])("refuses %s as custom_themes.theme", (_label, theme) => {
       expect(JSON.parse(theme)).toEqual(JSON.parse(lightOnly));
-      expect(refusal([{ ...row("Lemon", LEMON, null), theme }], images)).toMatchObject({
+      expect(refusal([{ ...validTheme, theme }], images)).toMatchObject({
         code: "setup.request_invalid",
         params: { field: "custom_themes.theme" },
       });
     });
 
     it("accepts one key name used once in each of several objects", () => {
-      const theme = JSON.stringify(WITH_LOGO);
-      expect(theme.match(/"light":/g)).toHaveLength(2);
-      expect(theme.match(/"dark":/g)).toHaveLength(2);
-      expect(refusal([{ ...row("Lemon", LEMON, null), theme }], images)).toBeUndefined();
-      const spaced = JSON.stringify(WITH_LOGO, null, "\t");
-      expect(refusal([{ ...row("Lemon", LEMON, null), theme: spaced }], images)).toBeUndefined();
+      const theme = validTheme.theme as string;
+      expect(theme.match(/"widthDots":/g)).toHaveLength(2);
+      expect(theme.match(/"heightDots":/g)).toHaveLength(2);
+      expect(refusal([validTheme], images)).toBeUndefined();
+      const spaced = JSON.stringify(JSON.parse(theme), null, "\t");
+      expect(refusal([{ ...validTheme, theme: spaced }], images)).toBeUndefined();
     });
   });
 });

@@ -53,10 +53,21 @@ beforeEach(() => {
   forgetVenueTheme();
 });
 
-async function storeTheme(name: string, theme: ThemeChoices, inUse: boolean): Promise<string> {
+async function storeTheme(
+  name: string,
+  { logo, ...theme }: ThemeChoices,
+  inUse: boolean,
+): Promise<string> {
   const [row] = await suite.db
     .insert(customThemes)
-    .values({ name, nameKey: name.toLowerCase(), inUse: inUse ? 1 : null, theme })
+    .values({
+      name,
+      nameKey: name.toLowerCase(),
+      inUse: inUse ? 1 : null,
+      theme,
+      logoLightImage: logo?.light,
+      logoDarkImage: logo?.dark,
+    })
     .returning({ id: customThemes.id });
   return row!.id;
 }
@@ -255,7 +266,7 @@ describe("the till's setup revision", () => {
     const before = await sendAsTill(till, "GET", "/api/till");
     await suite.db
       .update(customThemes)
-      .set({ theme: { ...LEMON, brandColor: "#1e5b3a" } })
+      .set({ theme: { ...LEMON, logo: undefined, brandColor: "#1e5b3a" } })
       .where(eq(customThemes.id, lemonId));
     const after = await sendAsTill(till, "GET", "/api/till");
     expect(after.body.themeHash).toBe(await hashInUse());
@@ -268,11 +279,14 @@ describe("the till's setup revision", () => {
     const till = await setupTill();
     const lemonId = await storeTheme("Lemon", LEMON, true);
     const before = await startRevision(till);
-    await suite.db.update(customThemes).set({ theme: LEMON }).where(eq(customThemes.id, lemonId));
+    await suite.db
+      .update(customThemes)
+      .set({ theme: { ...LEMON, logo: undefined } })
+      .where(eq(customThemes.id, lemonId));
     expect(await startRevision(till)).toBe(before);
     await suite.db
       .update(customThemes)
-      .set({ theme: { ...LEMON, textScale: 130 } })
+      .set({ theme: { ...LEMON, logo: undefined, textScale: 130 } })
       .where(eq(customThemes.id, lemonId));
     const after = await sendAsTill(till, "GET", "/api/till");
     expect(after.body.themeHash).toBe(await hashInUse());
@@ -283,11 +297,14 @@ describe("the till's setup revision", () => {
     const till = await setupTill();
     const lemonId = await storeTheme("Lemon", LEMON, true);
     const before = await startRevision(till);
-    await suite.db.update(customThemes).set({ theme: LEMON }).where(eq(customThemes.id, lemonId));
+    await suite.db
+      .update(customThemes)
+      .set({ theme: { ...LEMON, logo: undefined } })
+      .where(eq(customThemes.id, lemonId));
     expect(await startRevision(till)).toBe(before);
     await suite.db
       .update(customThemes)
-      .set({ theme: { ...LEMON, text: { weight: { bold: 800 } } } })
+      .set({ theme: { ...LEMON, logo: undefined, text: { weight: { bold: 800 } } } })
       .where(eq(customThemes.id, lemonId));
     const after = await sendAsTill(till, "GET", "/api/till");
     expect(after.body.themeHash).toBe(await hashInUse());
@@ -301,7 +318,7 @@ describe("the till's setup revision", () => {
     const before = await startRevision(till);
     await suite.db
       .update(customThemes)
-      .set({ theme: { ...DARK_GREEN, corners: "square" } })
+      .set({ theme: { ...DARK_GREEN, logo: undefined, corners: "square" } })
       .where(eq(customThemes.id, greenId));
     expect(await startRevision(till)).toBe(before);
     expect(await menuStateRevision(till)).toBe(before);

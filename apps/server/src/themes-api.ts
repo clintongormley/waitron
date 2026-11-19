@@ -1,6 +1,12 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  FOREIGN_KEY_VIOLATION,
+  isRefusal,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import {
   createCustomTheme,
@@ -132,7 +138,10 @@ async function saveWithLogo<T>(
   // image's id and revision again.
   const printedLogo = await printedLogoFor(snapshot);
   return withTransaction(db, async (tx) => {
-    const stored = await write(tx, printedLogo);
+    const stored = await write(tx, printedLogo).catch(async (error: unknown) => {
+      if (isRefusal(error, FOREIGN_KEY_VIOLATION)) await recheckThemeLogo(tx, logo, snapshot);
+      throw error;
+    });
     await recheckThemeLogo(tx, logo, snapshot);
     return stored;
   });

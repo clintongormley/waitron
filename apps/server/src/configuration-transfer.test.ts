@@ -473,7 +473,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 53,
+  version: 54,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -3154,7 +3154,6 @@ describe("custom themes in a configuration copy", () => {
     brandFix: {},
     background: "neutral",
     corners: "standard",
-    logo: null,
     handSet: { light: {}, dark: {} },
     textScale: 100,
     text: {},
@@ -3183,7 +3182,8 @@ describe("custom themes in a configuration copy", () => {
         name: "Logo Bar",
         nameKey: "logo bar",
         inUse: null,
-        theme: { ...lemon, logo: { light: image.filename }, printedLogo },
+        theme: { ...lemon, printedLogo },
+        logoLightImage: image.filename,
       });
       if (logo === "redrawn") {
         const framing = { x: 2500, y: 7500, zoom: 300 };
@@ -3299,16 +3299,22 @@ describe("custom themes in a configuration copy", () => {
     const { transferred, versions } = await themedBundle("B13572483", "stored");
     await importInto("B97531883", transferred, versions);
     const [source] = await suite.db
-      .select({ theme: customThemes.theme })
+      .select({ theme: customThemes.theme, logoLightImage: customThemes.logoLightImage })
       .from(customThemes)
       .where(eq(customThemes.name, "Logo Bar"));
     const [imported] = await targetSuite.db
-      .select({ id: customThemes.id, theme: customThemes.theme })
+      .select({
+        id: customThemes.id,
+        theme: customThemes.theme,
+        logoLightImage: customThemes.logoLightImage,
+      })
       .from(customThemes)
       .where(eq(customThemes.name, "Logo Bar"));
     expect(imported!.theme).toEqual(source!.theme);
     expect(imported!.theme).toHaveProperty("printedLogo");
-    const filename = (source!.theme as { logo: { light: string } }).logo.light;
+    const filename = source!.logoLightImage!;
+    expect(imported!.logoLightImage).toBe(filename);
+    expect(imported!.theme).not.toHaveProperty("logo");
     const [image] = await targetSuite.db
       .select({ id: mediaImages.id })
       .from(mediaImages)
@@ -3319,9 +3325,7 @@ describe("custom themes in a configuration copy", () => {
 
   it("refuses a copy whose theme names an image it does not carry", async () => {
     const { transferred, versions } = await themedBundle("B13572484", "stored");
-    rewriteTheme(transferred, "Logo Bar", (theme) => {
-      theme.logo = { light: "f".repeat(64) + ".webp" };
-    });
+    themeRow(transferred, "Logo Bar").logo_light_image = `${"f".repeat(64)}.webp`;
     await expect(importInto("B97531884", transferred, versions)).rejects.toMatchObject({
       code: "setup.request_invalid",
       params: { field: "custom_themes.theme" },
@@ -3343,14 +3347,12 @@ describe("custom themes in a configuration copy", () => {
 
   it("imports a copied theme with no logo key", async () => {
     const { transferred, versions } = await themedBundle("B13572486");
-    rewriteTheme(transferred, "Lemon Bar", (theme) => {
-      delete theme.logo;
-    });
+    expect(themeRow(transferred, "Lemon Bar").logo_light_image).toBeNull();
     await importInto("B97531886", transferred, versions);
     const list = await withTransaction(targetSuite.db, (tx) => listCustomThemes(tx));
     const lemonBar = list.themes.find((theme) => theme.name === "Lemon Bar");
     expect(lemonBar?.choices?.logo).toBeNull();
-    expect(lemonBar?.choices).toEqual(lemon);
+    expect(lemonBar?.choices).toEqual({ ...lemon, logo: null });
   });
 
   it("imports a copied theme with no text size key", async () => {
@@ -3362,7 +3364,7 @@ describe("custom themes in a configuration copy", () => {
     const list = await withTransaction(targetSuite.db, (tx) => listCustomThemes(tx));
     const lemonBar = list.themes.find((theme) => theme.name === "Lemon Bar");
     expect(lemonBar?.choices?.textScale).toBe(100);
-    expect(lemonBar?.choices).toEqual(lemon);
+    expect(lemonBar?.choices).toEqual({ ...lemon, logo: null });
   });
 
   it("imports a copied theme with no text key", async () => {
@@ -3374,25 +3376,19 @@ describe("custom themes in a configuration copy", () => {
     const list = await withTransaction(targetSuite.db, (tx) => listCustomThemes(tx));
     const lemonBar = list.themes.find((theme) => theme.name === "Lemon Bar");
     expect(lemonBar?.choices?.text).toEqual({});
-    expect(lemonBar?.choices).toEqual(lemon);
+    expect(lemonBar?.choices).toEqual({ ...lemon, logo: null });
   });
 
-  // JSON.parse reads a repeated key's last value, SQLite's json_extract its first: stored, the
-  // venue would show the logo while the image library counted no use of it.
-  it.each<[string, (text: string, carried: string) => string, string, string]>([
+  it.each<[string, (text: string) => string, string, string]>([
     [
-      "a logo key given twice",
-      (text) => text.replace('"logo":{', '"logo":null,"logo":{'),
+      "a brand colour key given twice",
+      (text) => text.replace('"brandColor":', '"brandColor":null,"brandColor":'),
       "B13572487",
       "B97531887",
     ],
     [
-      "a light key given twice",
-      (text, carried) =>
-        text.replace(
-          `"light":"${carried}"`,
-          `"light":"${"f".repeat(64)}.webp","light":"${carried}"`,
-        ),
+      "a paper's printed dots given twice",
+      (text) => text.replace('"58mm":', '"58mm":null,"58mm":'),
       "B13572488",
       "B97531888",
     ],
@@ -3400,8 +3396,7 @@ describe("custom themes in a configuration copy", () => {
     const { transferred, versions } = await themedBundle(taxId, "stored");
     const row = themeRow(transferred, "Logo Bar");
     const text = row.theme as string;
-    const carried = (JSON.parse(text) as { logo: { light: string } }).logo.light;
-    row.theme = repeat(text, carried);
+    row.theme = repeat(text);
     expect(row.theme).not.toBe(text);
     expect(JSON.parse(row.theme as string)).toEqual(JSON.parse(text));
     await expect(importInto(targetTaxId, transferred, versions)).rejects.toMatchObject({
@@ -6011,7 +6006,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(53);
+  expect(exported.version).toBe(54);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

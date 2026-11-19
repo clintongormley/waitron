@@ -1,3 +1,4 @@
+import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -23,19 +24,21 @@ export async function putThemeInUse(
 ): Promise<string> {
   const id = randomUUID();
   const name = input.name ?? `Theme ${id}`;
+  const light = input.light ?? THEME_LOGO;
+  for (const filename of [light, input.dark]) {
+    if (filename !== undefined) await seedPhotoMetadata(db, { filename, names: {} });
+  }
+  const { logo: _, ...choices } = WAITRON_CHOICES;
+  void _;
   const theme = {
-    ...WAITRON_CHOICES,
+    ...choices,
     brandColor: "#1e5b3a",
-    logo: {
-      light: input.light ?? THEME_LOGO,
-      ...(input.dark === undefined ? {} : { dark: input.dark }),
-    },
     printedLogo: "printedLogo" in input ? input.printedLogo : THEME_DOTS,
   };
   await db.execute(sql`update custom_themes set in_use = null where in_use = 1`);
   await db.execute(
-    sql`insert into custom_themes (id, name, name_key, in_use, theme, updated_at)
-        values (${id}, ${name}, ${name.toLowerCase()}, 1, ${JSON.stringify(theme)},
+    sql`insert into custom_themes (id, name, name_key, in_use, theme, logo_light_image, logo_dark_image, updated_at)
+        values (${id}, ${name}, ${name.toLowerCase()}, 1, ${JSON.stringify(theme)}, ${light}, ${input.dark ?? null},
                 '2026-10-01T00:00:00.000Z')`,
   );
   return id;

@@ -34,8 +34,7 @@ function repeatsAKey(text: string): boolean {
   return false;
 }
 
-// JSON.parse keeps a repeated key's last value and SQLite's json_extract its first, so a theme
-// that repeats one would show one logo and count another as in use.
+// The JS reader and SQLite's raster reader must agree on which value a key names.
 function parsedTheme(text: unknown): unknown {
   if (typeof text !== "string") return refuse("theme");
   let parsed: unknown;
@@ -48,18 +47,21 @@ function parsedTheme(text: unknown): unknown {
   return parsed;
 }
 
-function checkTheme(value: unknown, carried: ReadonlySet<unknown>): void {
-  if (!isPlainObject(value)) refuse("theme");
+function checkTheme(row: Readonly<Record<string, unknown>>, carried: ReadonlySet<unknown>): void {
+  const value = parsedTheme(row.theme);
+  if (!isPlainObject(value) || "logo" in value) refuse("theme");
   const { printedLogo, ...document } = value;
-  const read = readThemeDocument(document);
+  const light = row.logo_light_image;
+  const dark = row.logo_dark_image;
+  if (light === null && dark !== null) refuse("theme");
+  const logo = light === null ? null : { light, ...(dark === null ? {} : { dark }) };
+  const read = readThemeDocument({ ...document, logo });
   if (!read.ok) refuse("theme");
-  const logo = read.choices.logo;
-  if (logo === null) {
+  if (read.choices.logo === null) {
     if (printedLogo !== undefined) refuse("theme");
     return;
   }
-  if (!carried.has(logo.light)) refuse("theme");
-  if (logo.dark !== undefined && !carried.has(logo.dark)) refuse("theme");
+  if (!carried.has(light) || (dark !== null && !carried.has(dark))) refuse("theme");
   if (!printableLogoRasters(printedLogo)) refuse("theme");
 }
 
@@ -68,7 +70,7 @@ function checkRow(row: Readonly<Record<string, unknown>>, carried: ReadonlySet<u
   if (name === null || !name.ok || name.name !== row.name) refuse("name");
   if (row.name_key !== name.key) refuse("name_key");
   if (row.in_use !== null && row.in_use !== 1) refuse("in_use");
-  checkTheme(parsedTheme(row.theme), carried);
+  checkTheme(row, carried);
 }
 
 export function validateThemeConfiguration(tables: Tables): void {

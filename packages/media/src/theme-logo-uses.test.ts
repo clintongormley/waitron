@@ -15,10 +15,20 @@ async function upload(tx: Transaction, image: typeof photoA, name: string) {
   return (await uploadImage(tx, { image, names: { en: name } }, { fallbackLanguage: "en" })).image;
 }
 
-async function addTheme(tx: Transaction, name: string, logo: unknown): Promise<string> {
+async function addTheme(
+  tx: Transaction,
+  name: string,
+  logo: { light: string; dark?: string },
+): Promise<string> {
   const [row] = await tx
     .insert(customThemes)
-    .values({ name, nameKey: name.toLowerCase(), theme: { logo } })
+    .values({
+      name,
+      nameKey: name.toLowerCase(),
+      theme: {},
+      logoLightImage: logo.light,
+      logoDarkImage: logo.dark,
+    })
     .returning();
   return row!.id;
 }
@@ -71,7 +81,7 @@ it("refuses to delete an image a theme names, and frees it when no theme does", 
         { kind: "theme_logo", id: zest, name: "Zest" },
       ],
     });
-    await tx.update(customThemes).set({ theme: { logo: null } });
+    await tx.update(customThemes).set({ logoLightImage: null, logoDarkImage: null });
     await tx.delete(customThemes).where(eq(customThemes.id, zest));
     expect(await deleteImage(tx, a.id, null)).toEqual({ deleted: true, uses: [] });
   });
