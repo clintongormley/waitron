@@ -18,10 +18,14 @@ the code does after the last payment of a printed bill (pinned by
 
 **Changed by PR B's review, 2026-11-19.** Where this differs from the text below, this paragraph is
 what was built. **Print the bill** is also hidden on a device whose profile may not print receipts
-when the bill needs paper, and while a part payment on the bill is held; **Receipt copy** is hidden
+when the bill needs paper, and while a part payment on the bill on screen is held (Finish table's
+button for another bill opens that bill and says why nothing was sent); **Receipt copy** is hidden
 on such a device. The not-served list gains **Cancel**. On a full invoice naming a customer, which
 the till cannot correct (`sale.correction_unsupported`), the list tells staff to take off any dish
-that may not come before printing; **Print anyway** is still offered there.
+that may not come before printing, **Print anyway** is still offered, and **Cancel and credit** is
+not; the remedies in §2.1, §2.6 and §6 Q5 do not apply to such an invoice. After a press with no
+confirmed answer, the same person's next press with the same Print anyway choice sends the same
+submission id again, so the server can answer with what it recorded.
 
 **Authority.** Owner decision D1, 16 November (`docs/compliance/2026-11-15-adviser-answers.md`,
 Part B1): "yes. The ticket is issued when the meal ends, even if the bill is paid much later"; the

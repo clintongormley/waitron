@@ -323,7 +323,8 @@ Puedes cerrar la ventana e iniciar una nueva devolución más tarde.
 
 Cuando a una cuenta pagada se le cobró de más, rectifica su factura: el cliente recibe la
 diferencia y Waitron presenta una factura rectificativa por ella. En un recibo anterior, elige
-**Rectificar factura**, junto a **Devolver un pago**.
+**Rectificar factura**, junto a **Devolver un pago**. La caja no puede rectificar una factura
+completa a nombre de un cliente.
 
 Si el cobro de más fue en platos concretos, márcalos en **Platos que se rectifican (opcional)**; si
 no, déjalos todos sin marcar. Escribe el **Dinero a devolver, IVA incluido** y revisa el IVA que se

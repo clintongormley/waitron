@@ -305,7 +305,7 @@ You can close the window and start a new refund later.
 
 When a paid bill charged too much, correct its invoice: the guest gets the difference back and
 Waitron files a corrective invoice for it. On a past receipt, choose **Correct invoice**, beside
-**Refund a payment**.
+**Refund a payment**. The till cannot correct a full invoice naming a customer.
 
 If the overcharge was on particular dishes, tick them under **Dishes to correct (optional)**;
 otherwise leave them all unticked. Enter the **Money back, VAT included**, and check the VAT shown
