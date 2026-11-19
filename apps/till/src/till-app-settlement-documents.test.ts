@@ -1,6 +1,6 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TillApp } from "./till-app.js";
+import { OWED_RECEIPT_WAIT_MS, TillApp } from "./till-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import {
@@ -555,7 +555,10 @@ describe.each(Object.keys(signOutBy) as (keyof typeof signOutBy)[])(
     const idle = { ...till, inactivityTimeoutSeconds: 300 };
 
     it("open asks once for the original if it is still owed, before ending the session", async () => {
-      const api = closingApi({ getTill: vi.fn().mockResolvedValue(idle) });
+      const api = closingApi({
+        getTill: vi.fn().mockResolvedValue(idle),
+        printReceipt: vi.fn().mockResolvedValue(undefined),
+      });
       const el = await mountForSignOut(api);
       await payAtTable(el);
       await signOutBy[way](el);
@@ -564,6 +567,47 @@ describe.each(Object.keys(signOutBy) as (keyof typeof signOutBy)[])(
       expect(vi.mocked(api.printReceipt).mock.invocationCallOrder[0]).toBeLessThan(
         vi.mocked(api.logout).mock.invocationCallOrder[0]!,
       );
+    });
+
+    it("open ends the session only once the request for the original has its answer", async () => {
+      let answer!: () => void;
+      const api = closingApi({
+        getTill: vi.fn().mockResolvedValue(idle),
+        printReceipt: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
+      });
+      const el = await mountForSignOut(api);
+      await payAtTable(el);
+      await signOutBy[way](el);
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(api.printReceipt).toHaveBeenCalledOnce();
+      expect(api.logout).not.toHaveBeenCalled();
+      answer();
+      await flush(el);
+      expect(api.logout).toHaveBeenCalledOnce();
+    });
+
+    it("open ends the session after a few seconds when the request for the original has no answer", async () => {
+      const api = closingApi({ getTill: vi.fn().mockResolvedValue(idle) });
+      const el = await mountForSignOut(api);
+      await payAtTable(el);
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      try {
+        if (way === "signing out") emit(shell(el), "logout");
+        else {
+          emit(el, "pointerdown");
+          await vi.advanceTimersByTimeAsync(300_000);
+        }
+        await vi.advanceTimersByTimeAsync(OWED_RECEIPT_WAIT_MS - 1);
+        expect(lock(el)).not.toBeNull();
+        expect(api.printReceipt).toHaveBeenCalledOnce();
+        expect(api.logout).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+      } finally {
+        vi.useRealTimers();
+      }
+      await flush(el);
+      expect(api.logout).toHaveBeenCalledOnce();
     });
 
     it("closed asks for nothing", async () => {

@@ -595,6 +595,9 @@ const DELIVERY_REREAD_MS = 5_000;
 const PENDING_REREAD_MS = 5_000;
 /** How long the full-invoice dialog waits for the delivery options before opening without them. */
 const INVOICE_OPTIONS_LIMIT_MS = 5_000;
+/** How long a sign-out waits for the request for the owed receipt before ending the server session,
+ * which would refuse the request if it arrived first. */
+export const OWED_RECEIPT_WAIT_MS = 3_000;
 
 registerIcons({
   ...NUTRITION_ICONS,
@@ -20439,10 +20442,11 @@ export class TillApp extends LitElement {
     await this.#refreshFloor();
   }
 
-  #askForOwedReceipt(): void {
+  /** Settles, never rejects, once the request has its answer. */
+  #askForOwedReceipt(): Promise<void> | undefined {
     const owed = this.ticketWorkingOrderId;
     if (this.settlementDocument === null || owed === undefined || !this.#mayPrintReceipt) return;
-    this.api.printReceipt(owed, { ifOwed: true }).catch((error: unknown) => {
+    return this.api.printReceipt(owed, { ifOwed: true }).catch((error: unknown) => {
       const code = (error as { code?: unknown } | null | undefined)?.code;
       diag.record(
         "warn",
@@ -22248,7 +22252,7 @@ export class TillApp extends LitElement {
 
   /** Keeps the basket: it belongs to the till. */
   async #onLogout(endServerSession = true): Promise<void> {
-    this.#askForOwedReceipt();
+    const owedReceipt = this.#askForOwedReceipt();
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.#tableToResume =
@@ -22302,6 +22306,11 @@ export class TillApp extends LitElement {
       );
       sync?.drop();
       for (const each of own) each.drop();
+    }
+    if (endServerSession && owedReceipt !== undefined) {
+      const limit = limited(OWED_RECEIPT_WAIT_MS);
+      await Promise.race([owedReceipt, pause(limit.signal)]);
+      limit.done();
     }
     if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
     if (endServerSession)
@@ -23484,7 +23493,7 @@ export class TillApp extends LitElement {
                 }}
                 @settlement-close=${() => {
                   const close = () => {
-                    this.#askForOwedReceipt();
+                    void this.#askForOwedReceipt();
                     if (this.settlementDocument?.surface === "table") void this.#onBackToTable();
                     else {
                       this.settlementDocument = null;
