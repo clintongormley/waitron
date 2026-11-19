@@ -7,10 +7,10 @@ with their writers, readers, live subscriptions, keys, indexes and append-only t
 These records stay in their own tables and outside the activity log's housekeeping.
 
 [#3779](https://github.com/clintongormley/waitron/pull/3779) already added
-`print_jobs.tender_refund_id` and the person key on `invoice_deliveries`. Keep the refund link
-because the print queue and the move action use the job's own refund id when deciding where
-it can print. The original job stores the id and each retry carries it forward. This keeps
-printer routing independent of Orders history. The
+`print_jobs.tender_refund_id` and the person key on `invoice_deliveries`. Retaining
+`receipt_reprints` leaves the earlier history lookup available. Keep the landed link so the
+print queue and move action can decide where a refund receipt can print from the job itself.
+The original job stores the id and each retry carries it forward. The
 [os13 plan](2026-11-08-a1308-os13-refunds.md) repoints the key to `refunds(id)`.
 
 The [os9 plan](2026-11-08-a1308-os9-sale-activity.md#expected-protection-list-difference) records

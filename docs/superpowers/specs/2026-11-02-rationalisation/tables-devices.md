@@ -373,6 +373,7 @@ Every print goes through this table, A4 included (owner, 2026-11-04).
 | created_at, claimed_at null, delivered_at null | text | |
 | resend_of | text | null, fk→print_jobs |
 | sale_id | text | null, fk→sales; not null on `a4` |
+| tender_refund_id | text | null, fk→tender_refunds (refunds after os13). Identifies refund receipts and their retries. |
 
 Removed: `location_id`. Since A1301 S10 (#2396) a new job's `location_id` is filled from
 `venueLocationId(tx)`, or from a `venueId` option a caller that queues several jobs reads once
