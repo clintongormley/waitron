@@ -1248,9 +1248,11 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   path retains a stopped copy, requires a successful disposable-copy sale and offers Restore/Keep.
   The release job can publish a signed file once its keys are configured. The retained
   installer checks it before downloading a numbered release. A checked numbered upgrade
-  refreshes the keys and verifier. Still open are prerelease publishing, staged offers, the test-box upgrade, automatic
-  windows, status/email and pairs. After the first venue come the Cloud release check,
-  password-checked go-back, proof-of-close and backup-stream handoff. Current-build synthetic Linux
+  refreshes the keys and verifier. The [offer publisher](operations/release.md#offer-a-release-to-a-group)
+  signs and reads back the staged offer. Still open are prerelease publishing, the first live offer,
+  the test-box upgrade, the scheduled offer check and window, status/email and pairs. After the
+  first venue come the Cloud release check, password-checked go-back, proof-of-close and
+  backup-stream handoff. Current-build synthetic Linux
   rehearsal does not qualify historical releases, a physical box or the whole shell `install` entry
   on an existing box (driver/bootstrap, non-recipe service/Docker drop-ins, host refresh and
   candidate download/build/pull). The [two-group plan](superpowers/plans/2026-11-09-a950-shorter-upgrades.md)

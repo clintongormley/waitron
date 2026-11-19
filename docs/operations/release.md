@@ -253,6 +253,51 @@ pulls the two images it names by digest. For the first upgrade on an existing de
 follow [the deploy guide](../../deploy/README.md#installing-a-release) to install release trust.
 A production box starts only on a numbered release.
 
+## Offer a release to a group
+
+Once a numbered release includes the publication workflow and has a signed
+`waitron-release.json`, use that tag to publish an upgrade offer. First create the
+dedicated `upgrade-offer` release once. Keep it out of the latest-release slot so
+operators still see the latest numbered release.
+
+```sh
+gh release create upgrade-offer --latest=false --title "Waitron upgrade offer" \
+  --notes "Holds the signed upgrade offer for Waitron boxes."
+```
+
+Pass one JSON value as the workflow input. In this example the first 10% of boxes
+for version 1.4.0 get that version and everyone else can move to 1.3.0.
+
+```sh
+gh workflow run publish-upgrade-offer.yml --ref v1.4.0 \
+  -f 'offer={"format":1,"entries":[{"condition":{"bucketBelow":10},"target":"1.4.0"}],"default":"1.3.0"}'
+```
+
+The first matching entry supplies the version. Use `installations` with a list of
+box IDs or `atLeast` with an installed version to name another group. Use `none`
+as a target to pause a group. For a paused percentage group, keep the version
+that defined its membership in the condition's `bucketVersion`. To pause
+everyone, dispatch `{"format":1,"entries":[],"default":"none"}`.
+
+The workflow checks the numbered tag's signed release file and checks that every
+target is published, signed, and stable. It writes only `waitron-offer.json` on
+the `upgrade-offer` release, then reads it back to compare the exact bytes. The
+workflow run number is the offer's serial. Wait for the run to finish and check
+the uploaded serial and targets before dispatching another change.
+
+```sh
+gh run watch <run-id> --exit-status
+gh release download upgrade-offer --pattern waitron-offer.json --output - |
+  node -p 'JSON.parse(Buffer.from(JSON.parse(require("node:fs").readFileSync(0)).payload, "base64url"))'
+```
+
+GitHub CLI removes the old asset before uploading its replacement. If upload
+fails, check whether the asset is still there before retrying. Cancel outstanding
+publication runs before an emergency pause. Once those runs have stopped, remove
+the asset and dispatch the empty offer with default `none`. Before retiring a
+signing key, publish the offer again with the key both releases trust so the next
+publisher can verify the file it is replacing. [GitHub CLI release upload](https://cli.github.com/manual/gh_release_upload)
+
 ## Read the draft before the blockers go
 
 To read the whole declaration as it stands, blockers and all, run the package command with
