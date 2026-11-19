@@ -203,7 +203,7 @@ side row's `NOT NULL`s become the all-or-none CHECK; the cascade from the line i
   **Failing (keep both, named apart):** any (c). Control: the probe must print at least one (a) on the
   demo seed, or it is not reading what it should.
 - [ ] **Step 2: M2, wider rows** (§8 M2). With slice 0's bench (`bench build`, `bench measure`,
-  `bench compare`, plan `2026-11-04-a1308-slice-0-bench.md` Tasks 5–6), add two timed cases for this
+  `bench compare`, plan [`2026-11-04-a1308-slice-0-bench.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a1308-slice-0-bench.md) Tasks 5–6), add two timed cases for this
   PR only, run on the base and the branch on the same machine: `GET /api/working-orders/:id`
   (`apps/server/src/till-api.ts:1990`) for a 40-line bill, and `enqueueKitchenTickets`
   (`apps/server/src/kitchen-print.ts:859`) for the same bill at one station, 200 samples × 3 rounds.

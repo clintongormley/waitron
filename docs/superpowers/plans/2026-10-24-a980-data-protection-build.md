@@ -1,6 +1,6 @@
 # A980: data protection, build overview
 
-**2026-11-08:** [A1403](2026-11-08-a1403-unpaid-kitchen-stop.md) supersedes the S2d
+**2026-11-08:** [A1403](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1403-unpaid-kitchen-stop.md) supersedes the S2d
 actor-coverage premise below. Automatic departure cancellations can name an actor without an
 adjustment; the remaining export belongs to the existing privacy bundle.
 

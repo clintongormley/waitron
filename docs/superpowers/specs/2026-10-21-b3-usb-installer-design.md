@@ -12,7 +12,7 @@
 
 > 2026-11-03: PR 2's plan (the preboot unlock gate, locked-mode redirect and Wi-Fi record reader) and its re-map against main: [2026-11-03-b3-2-preboot-logic.md](../plans/2026-11-03-b3-2-preboot-logic.md).
 
-> 2026-11-01: the owner authorised the build; PR 1's plan and its re-map against main: [2026-11-01-b3-1-encrypted-disk.md](../plans/2026-11-01-b3-1-encrypted-disk.md).
+> 2026-11-01: the owner authorised the build; PR 1's plan and its re-map against main: [2026-11-01-b3-1-encrypted-disk.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-b3-1-encrypted-disk.md).
 
 > **Later A950 authority, 29 October 2026:** the owner approved its [implementation plan](../plans/2026-10-29-a950-automatic-upgrades.md), option A. The earlier pending-plan note below is superseded. B3 host, hardware and trust prerequisites remain.
 

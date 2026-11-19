@@ -2,7 +2,7 @@
 >
 > **A1207, 30 October 2026:** a setup or restore whose minute is taken now waits with one countdown and checks again by itself, instead of the refusal with "carry on from" ([A1207 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1207-minute-not-in-database.md), Part 1b).
 >
-> **A1385, 7 November 2026:** an attempt whose own pick turns up taken is called a fault in Waitron ([A1385 plan](../plans/2026-11-06-a1385-series-name-leftovers.md)).
+> **A1385, 7 November 2026:** an attempt whose own pick turns up taken is called a fault in Waitron ([A1385 plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-06-a1385-series-name-leftovers.md)).
 
 > **A1466, 10 November 2026:** neither page has Make the series or Check again. After the details tick (setup), or the key, both statements and the "These details are correct." tick (restore), the person presses **Proceed** (the handover start takes the details tick alone); the page then compares the clocks and makes the invoice series by itself, through any wait. Items 4, 8 and 10 below describe the earlier behaviour ([A1466 plan](../plans/2026-11-09-a1466-series-made-by-themselves.md)).
 
@@ -10,7 +10,7 @@
 > owner answered yes to both of the slice's questions on 31 October: the box's role is saved a
 > moment after the switch's other saves (so §6.3 step 2's role flip is no longer in the same
 > transaction), and a spare checks the main box's certificate fingerprint before it receives the
-> venue's keys ([slice 3a plan](../plans/2026-10-31-a947-3a-node-db.md)).
+> venue's keys ([slice 3a plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-10-31-a947-3a-node-db.md)).
 
 > **A1018, 2 November 2026: what the simple handover changes here.** The
 > [A1018 design](2026-10-23-a1018-simple-handover-design.md) (owner-approved 24 October) and its
@@ -649,7 +649,7 @@ migration (slice 3a), classified `local`.
 > **Pointer, 2026-11-01 (slice 3a).** Built as five tables: `node_mode`, `node_mirror_link`,
 > `node_recovery_key`, `node_signing_key` and `node_primary_key`. The follower's position, the pair's
 > access key and the last time the spare heard from the main box are not among them.
-> [Slice 3a plan](../plans/2026-10-31-a947-3a-node-db.md).
+> [Slice 3a plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-10-31-a947-3a-node-db.md).
 
 ## 5. While both are up
 

@@ -614,7 +614,7 @@ finish, push, PR or landing follows.
 
 ### Native publication protocol proposal and D582 disposition: 5 November 2026
 
-E proposes the [private native protocol](../superpowers/specs/2026-11-05-a951-native-publication-protocol.md),
+E proposes the [private native protocol](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-05-a951-native-publication-protocol.md),
 `waitron-a951-native-publication-v1` / `proposal-2026-11-05.1`, complete-file
 SHA-256 `db920d5bd340d29c9cdaaf85dd42a0021ce1f401f8ff54740c6c9102a82f5018`, including final LF. It defines the E-owned
 publication/acknowledgement/status return for D cross-review before native
@@ -642,7 +642,7 @@ independent. No partial foundation publication follows this documentation change
 
 ### Complete appliance successor proposal: 5 November 2026
 
-E publishes the [complete appliance successor](../superpowers/specs/2026-11-05-a951-appliance-v1-successor.md),
+E publishes the [complete appliance successor](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-05-a951-appliance-v1-successor.md),
 `waitron-a951-appliance-v1` / `proposal-2026-11-05.1`, full-file SHA-256
 `5f88b065b2ac8a0c8d860dcaf195ec2abd5a8fe18d5e4c58a891c6702e71bc24`, including final LF. This is an unaccepted
 proposal for D582 cross-review, not an executable or runtime acceptance.
@@ -677,7 +677,7 @@ Production manifests remain empty and `.local` independent.
 
 ### Debian host-profile proposal: 5 November 2026
 
-E publishes the [Debian successor](../superpowers/specs/2026-11-05-a951-debian13-host-profile.md),
+E publishes the [Debian successor](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-05-a951-debian13-host-profile.md),
 `waitron-a951-host-custody-v1` / `proposal-2026-11-05.1`, full-file SHA-256
 `616725294c22f06abc86d340b7206609c528b39f3ef93e38c0c0486c551dde90`, including final LF. Matching G acceptance is absent.
 It incorporates the complete immutable predecessor and H by exact digest,

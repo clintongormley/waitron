@@ -25,7 +25,7 @@ Nothing here runs on a box, opens a disk, or draws a screen. The module is calle
 
 **Parent plan:** [six-slice plan](2026-10-26-b3-usb-installer.md), Task 1.3 (preboot unlock) and Task 8.4 (every disk-key sheet), the text-form part of each only. [PR 2's plan](2026-11-03-b3-2-preboot-logic.md) line 83 left this piece out: "Turning the 64 typed letters into 32 bytes … The decoder belongs beside the screen, and slice 8's sheet must print with the same alphabet; one shared encoder and decoder is that pull request's choice. The gate takes bytes only."
 
-**Build authority:** the owner's "Yes, build it", 2026-11-01, with the build cut one pull request at a time ([PR 1's plan](2026-11-01-b3-1-encrypted-disk.md), "Build authority").
+**Build authority:** the owner's "Yes, build it", 2026-11-01, with the build cut one pull request at a time ([PR 1's plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-b3-1-encrypted-disk.md), "Build authority").
 
 ## Global Constraints
 

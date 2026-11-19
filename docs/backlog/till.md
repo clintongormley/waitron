@@ -1673,7 +1673,7 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   D101).** In a venue with zones, the Prep stations coverage warning checks each waiting station
   against each active zone; a dish on an order with no service zone needs a pass screen on every
   zone, and the warning names it only once such a dish is waiting at the pass. Reasoned, not
-  measured ([plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md), D101).
+  measured ([plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-03-a773-2c-pass-coverage.md), D101).
 
 - **Request-device proof on till writes (A941, A1393,
   device enrolment design).** Authenticate the enrolled device and match it to the PIN session. Keep management order reprints and invoice delivery
@@ -1740,7 +1740,7 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   bill that merges away leaves a gap, and a bill that arrives from another table takes the party's
   next number. The next number comes from `parties.last_bill_number`
   (`packages/venue-service/src/bill-identities.ts`). Plan:
-  [A803 slice 2](../superpowers/plans/2026-10-30-a803-2-named-bills.md).
+  [A803 slice 2](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-10-30-a803-2-named-bills.md).
 
 - **A bill's name never prints on a kitchen ticket (owner, 2026-10-30; A803 slice 2, answer 1).**
 
@@ -2734,11 +2734,11 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 ## A773. Courses, groups and the pass
 
 **A773-2**, firing and the pass: its [reviewed implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-was cut into PR B (B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
+was cut into PR B (B1–B4 by a [slice plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-a773-2b-requested-release.md);
 B4 into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)),
-PR C ([task plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) and PR D
-([task plan](../superpowers/plans/2026-11-04-a773-2d-tickets-and-retirement.md)). B3
-([task plan](../superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
+PR C ([task plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) and PR D
+([task plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a773-2d-tickets-and-retirement.md)). B3
+([task plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
 reads (`GET /api/device/pass-board`, `GET /api/device/pass-monitor-board`) and its Fire
 (`POST /api/device/pass-screen/release`), which gives a card's waiting dishes to their stations
 once, and the HOLD paper corrections for dishes waiting for the pass. B4a put the pass, the pass

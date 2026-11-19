@@ -8,7 +8,7 @@
 **Lands: the owner** (rules §6):
 
 - the fiscal module's recovery-pack check stops comparing a venue value (the venue-id design's
-  question 6, answered by the owner on 2026-11-09; [design](../specs/2026-11-04-a1301-venue-id-design.md),
+  question 6, answered by the owner on 2026-11-09; [design](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-04-a1301-venue-id-design.md),
   "Who lands it": S18e is owner-landed by rule (c));
 - `nodes.location_id` goes, and its writers write the box's identity row (`insertReservedNodeTx`, the
   setup `create-node` step): A1301 made that slice (S25) owner-landed under its rule (c);

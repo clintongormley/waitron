@@ -18,7 +18,7 @@ The configuration used `url:` and `sse-customer-key: '${WAITRON_STREAM_ENCRYPTIO
 The key travelled through the child environment, without a temporary key file. This tests handoff,
 not confidentiality: Versity ignores these encryption keys, as the [A1324 experiment](../a1324/README.md)
 showed. Real Amazon wrong-key, keyless and recovery-pack restore qualification remains the final
-slice of the [plan](../../superpowers/plans/2026-11-08-a1404-bucket-encryption.md).
+slice of the [plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1404-bucket-encryption.md).
 
 | Source at Litestream commit `057d39564c75ebd67ba042410a7ffa05ad4c242d` | Source's words | What was tested |
 | --- | --- | --- |

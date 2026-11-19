@@ -479,10 +479,10 @@ WHERE clauses; four CHECKs and the category (cascade), product, zone and station
 ### 1.22 `bookings` (kept, own set)
 
 Loses `location_id` (A1301 S20, the design's slice table,
-`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md`, S20 row; no plan for S20–S28 exists
+[2026-11-01-a1301-remove-location-design.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md), S20 row; no plan for S20–S28 exists
 yet); `bookings_location_date_idx` becomes an index on `booking_date`. The A1301 plan records the
 same index change, and why the day list keeps its location condition until then: S9a measured the
-read falling back to a scan without it (`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:499-505`).
+read falling back to a scan without it ([2026-11-01-a1301-remove-location.md:499-505](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-a1301-remove-location.md)).
 `table_label` stays (written when the table is removed, `packages/bookings/src/table-removal.ts`).
 FKs to `dining_tables` and `working_orders`, the status/date index, party-size and status CHECKs kept;
 `created_by` gains a key to `persons` (README U11).

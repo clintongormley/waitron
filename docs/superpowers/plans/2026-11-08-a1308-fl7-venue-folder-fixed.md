@@ -35,7 +35,7 @@ Lines at `649b7576e0`.
 
 **Waits for A1379 part 2 to land.** This slice cannot start until A1379 pull request 2 (removing
 Continue) has landed. The owner answered that plan's three questions on 2026-11-09
-(`docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`, "The owner's answers") and lands
+([2026-11-06-a1379-setup-start-again.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md), "The owner's answers") and lands
 it. fl8a, fl8b, fl9 and fl10 all come after this slice, so the whole chain from here waits for that
 pull request to land (Needs; Stop points).
 

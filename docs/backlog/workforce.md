@@ -222,7 +222,7 @@ after a reversed shift can still be refused when the reversed shift's clock-in l
 
 Hours still pair by the recorded times. A shift whose clock-out sorts before its clock-in can be
 missing from hours until you correct the recorded time.
-This is the delivered scope for [A1268 §4](../superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md#4-part-2--readings-that-order-entries-by-time-after-a-backward-clock-step).
+This is the delivered scope for [A1268 §4](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md#4-part-2--readings-that-order-entries-by-time-after-a-backward-clock-step).
 
 ### First and latest staff activity per planned shift (owner, 2026-11-15)
 

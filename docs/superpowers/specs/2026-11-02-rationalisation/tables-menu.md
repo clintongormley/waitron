@@ -814,7 +814,7 @@ leaving out `docs/`; read, not run.
   `menu_periods` → `departments` and `floor_plan_sets`.
 - **Venue and box (A1301).** This design replaces A1301's `venue_catalogues` table and
   `venue_settings.default_catalogue_id` with `menus.is_default`
-  (`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md` §2.1 and its S23 row). A1301's
+  ([2026-11-01-a1301-remove-location-design.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md) §2.1 and its S23 row). A1301's
   spec and plan already say so (their amendments of 2026-11-04). That area must not add the id to its document. Both of today's homes are still on main
   (`packages/db/src/schema/tenants.ts:90`, `packages/db/src/schema/location-catalogues.ts`).
   - Configuration export format 10 (#2415) carries the default as a top-level bundle field, not a

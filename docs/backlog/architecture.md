@@ -809,7 +809,7 @@ also qualifies the historical operation-description references in this section.
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](../superpowers/specs/2026-11-02-rationalisation/README.md) is written. The owner has
   reviewed every file and answered every question (2026-11-04), and approved it the same day.
-  [Slice 0](../superpowers/plans/2026-11-04-a1308-slice-0-bench.md)'s protection list is built;
+  [Slice 0](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a1308-slice-0-bench.md)'s protection list is built;
   [the testing guide](../developers/testing-guide.md#the-protection-list) says how each slice uses
   it. Its bench is built too ([how to use it](../developers/testing-guide.md#the-bench)); it runs
   from time to time, not per slice (owner, 2026-11-10;
@@ -1072,7 +1072,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 - **Department receipt rasters stay cached** (watcher, 2026-11-15 16:45). On the designated test box, converting one wordmark inside a synthetic write transaction added 15.913 ms warm for decode/dither and 114.681 ms including rendition. The removal follow-up is retired. [Measurement and limits](../superpowers/plans/2026-11-08-a1308-vb5-department-receipts.md#receipt-logo-cache-after-the-box-timing-2026-11-15).
 
-**Venue identity (owner, 2026-11-02).** Cloud assigns its venue id; a box not connected to Cloud backs up where its owner chooses. A1308 slice 5 completes the removal of the old location object. The [venue-id design](../superpowers/specs/2026-11-04-a1301-venue-id-design.md) records the decision and its defaults.
+**Venue identity (owner, 2026-11-02).** Cloud assigns its venue id; a box not connected to Cloud backs up where its owner chooses. A1308 slice 5 completes the removal of the old location object. Cloud, not the box, makes the id because one Cloud account can hold several venues and "a box-made id cannot be guaranteed unique"; inside the box the venue has no id, like the taxpayer row. A box with no Cloud id that pairs becomes a new Cloud venue; it is not attached to an existing one, and carrying a venue on means restoring its data, which carries the id (lane B's default, 2026-11-04, built as written).
+
+**No locations (owner, 2026-11-01).** One venue per box; nothing new is built on a per-location idea: "Remove the location concept from the codebase entirely" and "Give this high priority so we don't build anything more on this concept."
 
 <a id="a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up"></a>
 

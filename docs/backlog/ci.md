@@ -537,7 +537,7 @@ historical wait cause remains unknown; these observations do not measure a
 
 
 - **A1440: retain v40 without a new capacity gate (watcher, 2026-11-08 22:14).**
-  The [routing comparison](../superpowers/plans/2026-11-08-a1440-capacity-routing.md) is an
+  The [routing comparison](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1440-capacity-routing.md) is an
   illustrative replay, not measured alternate outcomes. Its fit-only rules leave more modeled
   capacity idle; no snapshot-freshness limit was validated. Keep the deployed controller,
   advance A1454 and A1461, and report existing-record observations on 15 November. **2026-11-09:** the watcher
@@ -565,7 +565,7 @@ historical wait cause remains unknown; these observations do not measure a
 
   Known helper waits total 495.2 seconds, 4.91% of this probe's file-time, comprising 628 `startServer` settlements, 99 listener waits, 950 database-setup hooks, 20,451 migration calls and 1,701 watchdog-creation spans; the remaining 6,408.5 execution seconds still include test work, child startup, teardown and unmeasured paths, while bundle loading, child readiness, asynchronous watchdog bootstrap and instrumentation overhead remain unknown.
 
-  No compatible group sharing a server was demonstrated, so there is no numeric warm-server estimate: `apps/server/vitest.config.ts` retains Vitest's measured `isolate: true` default and the 27.0% nightly import share, or 30.9% in the probe, is not counted as saved; per-file timings, mock/fake-clock/seeding flags, thirteen source-reference-without-span flags, qualification logs and the executable controls are retained in `~/waitron-campaign-d/receipts/a1459-20261108/` alongside the [approved plan](../superpowers/plans/2026-11-08-a1459-process-startup-measurement.md).
+  No compatible group sharing a server was demonstrated, so there is no numeric warm-server estimate: `apps/server/vitest.config.ts` retains Vitest's measured `isolate: true` default and the 27.0% nightly import share, or 30.9% in the probe, is not counted as saved; per-file timings, mock/fake-clock/seeding flags, thirteen source-reference-without-span flags, qualification logs and the executable controls are retained in `~/waitron-campaign-d/receipts/a1459-20261108/` alongside the [approved plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1459-process-startup-measurement.md).
 
   | File | File seconds | Import | DB setup* | Migration* | Server boot* | Listen* | Watchdog* | Remaining execution | Past child / worker calls |
   | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -591,7 +591,7 @@ historical wait cause remains unknown; these observations do not measure a
   | `src/boot.hours.test.ts` | 10.0 | 3.6 | 0.1 | 0.2 | 3.3 | 0.0 | 0.00 | 2.7 | ? / 2 |
   | `src/boot.zone-admission.test.ts` | 10.4 | 2.7 | 0.0 | 0.1 | 3.4 | 0.0 | 0.00 | 4.1 | ? / 1 |
 
-- **A1446 closed without a production cache (watcher, 2026-11-08).** The baseline and cold-cache runs each passed 31,487 server tests across 24 shards. The experimental cache occupied 263,556,548 stored bytes. A deliberately wrong sender name failed six existing local tests; restoring it passed all 13. The hosted changed-source control and restored warm run did not complete before the 19:30 stop, so warm savings and hosted invalidation remain unverified. Disposable PR #2613 closed without merging. Keep the cache disabled; [the dated result](../superpowers/plans/2026-11-08-a1446-server-module-cache.md#experiment-disposition-8-november-2026) records the runs and measurement limits.
+- **A1446 closed without a production cache (watcher, 2026-11-08).** The baseline and cold-cache runs each passed 31,487 server tests across 24 shards. The experimental cache occupied 263,556,548 stored bytes. A deliberately wrong sender name failed six existing local tests; restoring it passed all 13. The hosted changed-source control and restored warm run did not complete before the 19:30 stop, so warm savings and hosted invalidation remain unverified. Disposable PR #2613 closed without merging. Keep the cache disabled; [the dated result](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1446-server-module-cache.md#experiment-disposition-8-november-2026) records the runs and measurement limits.
 
 - **A1452, owner 2026-11-08:** ordinary main pushes keep quick checks and skip package tests/shared mutation in `ci.yml`. PR selection and full nightly/manual/release testing remain. UI registry publication and deploy-selected image smoke keep their checks. BEHIND merges retain their existing rule; package-level failures caused only by combining branches wait for the next full run. Watcher approval and owner risk acceptance: Lane F, 17:48, confirming the owner’s 17:35 decision.
 
@@ -647,7 +647,7 @@ historical wait cause remains unknown; these observations do not measure a
 
   Receipts: `~/waitron-campaign-d/receipts/a1453-20261108/measurement-results.md`, with all 40
   per-PR rows, failure heads, fallback reasons, risk lines, map/store sizes and commands.
-  The [approved measurement plan](../superpowers/plans/2026-11-08-a1453-executed-test-measurement.md)
+  The [approved measurement plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1453-executed-test-measurement.md)
   records the scope; its prototype and temporary hosted workflow are not part of the product.
 
   **A1460 follow-up, 2026-11-08: exempt the fixed watchdog, retain child processes.**

@@ -26,7 +26,7 @@ the file layout slice (it rewrites `state-secrets.ts`)"
 Lines at `649b7576e0`; the cites the 2026-11-08 review touched were re-read at `9c66ef0356`.
 
 **Waits for fl1**, which waits for A1379 pull request 2 to land (its questions were answered by
-the owner on 2026-11-09, [`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md)).
+the owner on 2026-11-09, [`2026-11-06-a1379-setup-start-again.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md)).
 Nothing in this plan waits for an owner answer (Owner decisions).
 
 **Who lands:** the lane. `trading.env` (node id, environment, intent) gains a flush; what it holds

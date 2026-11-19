@@ -16,7 +16,7 @@ starting migrations instead of adding steps.
 that a module may have no migration set of its own, and builds the comparison tools. PR 2 moves the
 table definitions while every set stays as it is. PR 3, under the watcher's freeze, merges the sets
 and replaces the history. After each, the protection list from
-[slice 0](2026-11-04-a1308-slice-0-bench.md) must print `EQUAL` against the previous base.
+[slice 0](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a1308-slice-0-bench.md) must print `EQUAL` against the previous base.
 
 **Tech stack:** drizzle-kit 0.31, `node:sqlite`, pnpm workspaces, Vitest, GitHub CI.
 

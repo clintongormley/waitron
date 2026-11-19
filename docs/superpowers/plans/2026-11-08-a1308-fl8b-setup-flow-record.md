@@ -36,7 +36,7 @@ reads these files).
 
 **Blocked on A1379 part 2, through fl8a.** This slice needs fl8a, which needs fl7 and A1379 pull
 request 2; the owner answered part 2's three questions on 2026-11-09
-(`docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`), so it waits only to land.
+([2026-11-06-a1379-setup-start-again.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md)), so it waits only to land.
 
 **First line of the pull request:** "A box part way through a first setup when this lands must use
 Start again; other boxes keep working."

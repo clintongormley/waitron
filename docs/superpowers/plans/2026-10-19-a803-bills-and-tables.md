@@ -313,7 +313,7 @@ Proposed POST `/api/bills/:id/move-dishes` mirrors it. Replace split-table body 
 `{partyId:string;billIds:string[];zoneRevisions?:Record<string,number>}`. Preserve the current optional `movingRooms` map, present when rooms moved; client/app/floor must share one
 declared type.
 
-_(2026-11-04: slice 4b built this as `copyHeldGroups`, with a different signature; see `2026-11-04-a803-4b-waiting-course-copies.md`.)_
+_(2026-11-04: slice 4b built this as `copyHeldGroups`, with a different signature; see [`2026-11-04-a803-4b-waiting-course-copies.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a803-4b-waiting-course-copies.md).)_
 
 **Course contract:** `copyWaitingCourses(tx:Transaction,fromPartyId:string,toPartyId:string,portionIds:readonly string[]):Promise<Map<string,string>>` maps each source waiting
 instance to a new destination instance, retaining course identity/name, waiting state and ordering, never a fired timestamp. Rebind only moved portions and their draft
@@ -423,7 +423,7 @@ exact paths/signatures against the new Requested/pass design before writing code
   pass in both themes before closing §3.2/§3.3/§6's multi-bill-fire requirements.
 
 **A773-2 PR D handoff (2026-11-04).** PR D still prints one ticket per bill, per station (plan
-`2026-11-04-a773-2d-tickets-and-retirement.md`, D124). The seams a cross-bill ticket changes:
+[`2026-11-04-a773-2d-tickets-and-retirement.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a773-2d-tickets-and-retirement.md), D124). The seams a cross-bill ticket changes:
 
 - the per-bill loops in `releaseGroup` (`apps/server/src/order-groups.ts`, its `byOrder` loop) and in
   `releasePassItems` (`apps/server/src/pass-release.ts`, its `byOrder` loop), and the same shape in

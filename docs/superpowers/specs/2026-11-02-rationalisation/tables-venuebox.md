@@ -16,7 +16,7 @@ at `e0da0ad18a`. Nothing was run except `git grep`/`sed`/`perl` text searches ov
 stand-in timing in §8.2; every behavioural statement below is "traced by reading" unless it says
 otherwise.
 
-**Where A1301 stands.** A1301's design (`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md`)
+**Where A1301 stands.** A1301's design ([2026-11-01-a1301-remove-location-design.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md))
 moves the venue's settings to a new one-row `venue_settings` table, plus `business_day_settings`,
 `day_cutover_changes` and `venue_catalogues`, in its slice S23 (design §2.1 and its slice table,
 before their amendment of 2026-11-04). This design replaces that (owner, 2026-11-04). The venue's settings become the `settings.venue`
@@ -26,7 +26,7 @@ and `settings.business_day` documents, the default menu becomes a flag on `menus
 replacing a CHECK. Nothing built changes: S23 has not started (`git grep -n -E
 'table\("(venue_settings|venue_catalogues|business_day_settings|day_cutover_changes)"' -- packages`
 prints nothing), and S20–S28 are still open with no plan (`docs/backlog.md:6561`,
-`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:129-130`).
+[2026-11-01-a1301-remove-location.md:129-130](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-a1301-remove-location.md)).
 
 Reference venue: one restaurant, 250 bills a day × 4 lines, 360 trading days a year, one box, 1–3
 departments, about 6 floor zones.
@@ -427,7 +427,7 @@ exists"; the primary key on `module` makes a second one impossible.
 
 **The venue's id.** Inside the box the venue needs no id, like the taxpayer row. Waitron Cloud assigns
 one when a box connects, and it belongs to the Cloud account (owner, 2026-11-02;
-`docs/superpowers/specs/2026-11-04-a1301-venue-id-design.md`, whose details still await the owner's
+[2026-11-04-a1301-venue-id-design.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-04-a1301-venue-id-design.md), whose details still await the owner's
 approval). That design proposes a one-row `cloud_venue` table and says it folds into this document
 under A1308, so here it is the field `cloudVenueId`; null means not connected. It is a plain value, not
 a key to another row, so R4 does not forbid it. A restore carries it because it is in `venue.db`.
@@ -740,7 +740,7 @@ triggers.
 - **Central `settings` definition:** the per-row change type (§2.4); the document-upgrade rule for
   backup verification; a transfer path for documents; per-module triggers on `settings`.
 - **A1301:** S23 changes (see "Where A1301 stands"). The venue-id design names this file's old line
-  numbers for its `cloud_venue` fold (`2026-11-04-a1301-venue-id-design.md`, "A1308"); §2.1 now holds that text.
+  numbers for its `cloud_venue` fold ([`2026-11-04-a1301-venue-id-design.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-04-a1301-venue-id-design.md), "A1308"); §2.1 now holds that text.
 - **A947 slice 3b:** its plan adds a `node_pair_link` table to `node.db` in PR 3b-5
   (`docs/superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md:54-56`). It is not in this design's
   count, and `box` does not absorb it, since nothing here has read it beyond that line.

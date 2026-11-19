@@ -33,7 +33,7 @@ A1415's restart check (`restartUncommittedPlacement`, `:450-486`, used at `:606-
 land**"). A phase moved at the wrong moment re-runs or skips that activation, with its series name.
 
 **Waits for fl1**, which waits for A1379 pull request 2 to land (its questions were answered by
-the owner on 2026-11-09, [`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md)).
+the owner on 2026-11-09, [`2026-11-06-a1379-setup-start-again.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md)).
 
 **First line of the pull request:** "A restore staged before this change and not yet run is
 forgotten; stage it again (pre-live, CLAUDE.md §3 last data rule)."

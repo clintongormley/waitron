@@ -11,7 +11,7 @@ inventory: Debian 13.7, kernel 6.12, x86_64, systemd, AppArmor, Docker 29.9.3,
 WireGuard and nftables installed. This is relayed watcher inventory, not a
 measurement or qualification performed by the Debian-profile documentation task.
 
-The [Debian successor](../superpowers/specs/2026-11-05-a951-debian13-host-profile.md)
+The [Debian successor](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-05-a951-debian13-host-profile.md)
 is E's proposal only. Matching G acceptance, populated exact pins and the inherited
 host matrix remain open. The older Docker-date and wait-for-reinstall statements
 below are superseded; all historical bodies and measurement limits remain intact.

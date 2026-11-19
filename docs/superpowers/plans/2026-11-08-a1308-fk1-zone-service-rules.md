@@ -272,7 +272,7 @@ Nothing for any other table. A changed `when` on another table's update trigger 
 
 - No plan in `docs/superpowers/plans/` dated after 2026-11-01 changes these two tables (searched
   2026-11-08 with `grep -l -E "zone_service_policies|zone_sale_policies"` over the plans folder:
-  only `2026-11-01-a1301-remove-location.md`, slice 5's source, names them).
+  only [`2026-11-01-a1301-remove-location.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-a1301-remove-location.md), slice 5's source, names them).
 - A1403 (unpaid kitchen stop, lane H) and A1378 (kitchen paper) change no table; they rebase.
 
 ## Assertions that change, by design

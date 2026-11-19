@@ -8,7 +8,7 @@
 
 **Lands: the owner** (rules §6), **together with the Cloud lane's pull request**. The venue-id design
 makes S18e owner-landed by rule (c): it changes the bucket restore path, which goes on to start a new
-chain under a new installation name (CLAUDE.md §5) ([design](../specs/2026-11-04-a1301-venue-id-design.md),
+chain under a new installation name (CLAUDE.md §5) ([design](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-04-a1301-venue-id-design.md),
 "Who lands it, and in what order": "S18e (Waitron) and the Cloud change land together"; "Before
 go-live there is no compatibility period").
 

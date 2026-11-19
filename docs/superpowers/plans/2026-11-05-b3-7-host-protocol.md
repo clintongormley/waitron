@@ -36,7 +36,7 @@ A third, narrower check of that fold found two important and eight minor points,
 
 **Parent plan:** [six-slice plan](2026-10-26-b3-usb-installer.md), Slice 3 Task 3.1: its **Interfaces** paragraph (line 170 on main), **The clock requests slice 9b shipped** (lines 172–192), the first red step's protocol cases (line 205) and the shared contract ledger's `HostReply`, `VerifiedHostActor` row (line 82). This branch's first commit adds a pointer line at the top of that plan and two pointer notes inside it, so its later line numbers move by up to 6.
 
-**Build authority:** the owner's "Yes, build it", 2026-11-01, with the build cut one pull request at a time ([PR 1's plan](2026-11-01-b3-1-encrypted-disk.md), "Build authority").
+**Build authority:** the owner's "Yes, build it", 2026-11-01, with the build cut one pull request at a time ([PR 1's plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-b3-1-encrypted-disk.md), "Build authority").
 
 ## Global Constraints
 

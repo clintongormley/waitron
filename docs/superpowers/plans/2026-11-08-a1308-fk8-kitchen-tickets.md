@@ -385,7 +385,7 @@ signature; for `kind === "moved"` it reads `ticket_items.id` for the items' line
     one MOVED slip prints for the Burger whose ticket names 940. (At the base this prints none, as
     the review found.)
   - `a dish whose only paper names the leaving table gets its slip` — the A803 slice-4c plan's D6
-    reproduction (`docs/superpowers/plans/2026-11-04-a803-4c-split-table-picker.md:596-599`): a
+    reproduction ([2026-11-04-a803-4c-split-table-picker.md:596-599](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a803-4c-split-table-picker.md)): a
     Burger's only ticket says Mesa 431; a second Burger, told `Mesa 431, 432`, moves onto its bill;
     431 leaves: one MOVED slip prints for the first Burger. (At the base: no notice and no slip.)
   - `a different second dish behaves as before` — the same with a Flan as the second dish: the slip

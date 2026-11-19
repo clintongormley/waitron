@@ -105,7 +105,7 @@ again until practice providers are switched on under Payments → Settings."
 | Stripe's return addresses | stay sealed where they are today (owner, 2026-11-09: "Leave this for when we test Stripe"; env4) |
 | The duplicate display language in route deps (`deps.venueLocale` beside `cfg.locale`), which 4b assigned to "when `TillAppSettings` goes" | not here: folding it edits about 137 test files (`git grep -l venueLocale -- 'apps/server/src/*.test.ts'`), past the cap. Open question for the watcher: its own pull request, or the venue-and-box area's next one |
 | Recording who changed the switches in `activity_log` | not in A1308 (README §5 U11) |
-| Google sign-in moving to `settings.identity` | A646 slices 5 and 8 (`docs/superpowers/plans/2026-11-07-a646-modules-page.md:15,57,75`) |
+| Google sign-in moving to `settings.identity` | A646 slices 5 and 8 ([2026-11-07-a646-modules-page.md:15,57,75](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-07-a646-modules-page.md)) |
 
 ## Interfaces
 

@@ -354,7 +354,7 @@ unconfirmed (watcher, 2026-11-16 12:48, Lane J questions).
 The [dated design amendment](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md)
 and [implementation plan](../superpowers/plans/2026-10-22-a987-prepare-venue-email.md) govern the
 build; the original design's unanswered questions and earlier permission descriptions are historical.
-The [account-delivery amendment](../superpowers/plans/2026-11-08-a987-account-delivery-details.md)
+The [account-delivery amendment](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a987-account-delivery-details.md)
 covers the account result messages and recovery actions.
 
 Prepare requires a usable route before setup completes outside development. Live asks again;
@@ -601,7 +601,7 @@ the setup area and venue details under its history limits, separate from the clo
 (§10, retaining A798's dated pointer). §17's remaining follow-ups stay open, including Debian 14,
 large release assets and the A940/A947/A798 coordination.
 
-**Built so far (2026-11-01).** [PR 1](../superpowers/plans/2026-11-01-b3-1-encrypted-disk.md)
+**Built so far (2026-11-01).** [PR 1](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-b3-1-encrypted-disk.md)
 (#2370) adds three host libraries under `scripts/box/`, none called yet:
 
 - `disk-state.mjs`: `classifyDisk`, the installer's decision about which disk it may erase, from a

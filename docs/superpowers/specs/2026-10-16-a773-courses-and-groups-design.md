@@ -474,7 +474,7 @@ reads today.)
 station's own setting. A station that does not wait for the pass starts at once. Its ticket and
 screen say "Goes with kitchen food" when the same group has lines at a station that waits for the
 pass (pictures 7, 8). (2026-11-04: the owner withdrew these words; the cue names the stations, see
-[PR D plan, Revision 5](../plans/2026-11-04-a773-2d-tickets-and-retirement.md#revision-5-2026-11-04-the-owner-withdraws-goes-with-kitchen-food).)
+[PR D plan, Revision 5](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a773-2d-tickets-and-retirement.md#revision-5-2026-11-04-the-owner-withdraws-goes-with-kitchen-food).)
 **A group reads ready only when every station's part of it is ready.**
 Letting a station wait automatically for another station's part is left for later (section 11).
 

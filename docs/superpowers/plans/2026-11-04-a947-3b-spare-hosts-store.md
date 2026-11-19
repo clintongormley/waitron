@@ -49,16 +49,16 @@ older references below to updating it in 3c describe the earlier split.
 > The bind guard and `WAITRON_MIRROR_ALLOW_EXPOSED` remain: the A1113 execution review reached
 > legacy promotion over plain HTTP and handover sign-ins without a password limit. A947 still
 > owns how a spare listens on the network and the authenticated switch screen. See the
-> [narrowed A1113 plan](2026-11-08-a1113-spare-screen.md).
+> [narrowed A1113 plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1113-spare-screen.md).
 
 > **2026-11-14, A1321:** Servers can now remove a spare that finished joining, after two
 > declarations. D7/D17/G.3/5.6/5.9/5.10/6.10's “cannot be removed in this version” statements are
-> superseded; see [the A1321 plan](2026-11-08-a1321-retire-spare.md). The text below is unchanged.
+> superseded; see [the A1321 plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1321-retire-spare.md). The text below is unchanged.
 
-> **2026-11-08 13:34 update:** The owner approved A1321’s reduced design for planning. Its [one-page plan](2026-11-08-a1321-retire-spare.md) awaits watcher approval and 3b-6 before build. The earlier status and implementation text below remain historical.
+> **2026-11-08 13:34 update:** The owner approved A1321’s reduced design for planning. Its [one-page plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1321-retire-spare.md) awaits watcher approval and 3b-6 before build. The earlier status and implementation text below remain historical.
 
 > **2026-11-08: A1321 design pending OWNER approval.**
-> [Retire a dead or reset spare](../specs/2026-11-08-a1321-retire-spare-design.md) already tracks
+> [Retire a dead or reset spare](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-08-a1321-retire-spare-design.md) already tracks
 > D17/Task 6.10's proposed backlog filing; do not create a duplicate. Its build waits for 3b-6
 > and full-design approval. Its build must date updates to D7/D17, G.3, Task 6.10 and the
 > joined-spare refusals in Tasks 5.6/5.9/5.10, with EN/ES wording where offered.
@@ -677,7 +677,7 @@ the A1018 plan, not run.
   See the [A947 backlog](../../backlog/replication-cloud.md#a947-go-live-on-two-local-boxes).
   `assertMirrorBindSafe` and `WAITRON_MIRROR_ALLOW_EXPOSED` are retired. **2026-11-10 (Fable
   review), why the guard can go although A1113 kept it:** the watcher's A1113 ruling (2026-11-08,
-  [narrowed A1113 plan](2026-11-08-a1113-spare-screen.md)) kept it for two reasons. Legacy promotion
+  [narrowed A1113 plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1113-spare-screen.md)) kept it for two reasons. Legacy promotion
   over the network: Task 4.6 limits it to the box itself. The two handover sign-in routes, which
   have no limit on password guesses (`grep -n throttle handover-preparation.ts
   handover-activation.ts` prints nothing): each refuses a request that is not HTTPS from this
@@ -1200,7 +1200,7 @@ the A1018 plan, not run.
     1's dated text) sell nothing.
   - **What it does not lift.** A counted spare that is switched off, whose server is stopped, **or
     that is reset before it finishes joining** (it then answers nothing, from setup mode) still
-    makes the main box wait: D17's limit, unchanged; A1321 (`docs/superpowers/plans/2026-11-08-a1321-retire-spare.md`)
+    makes the main box wait: D17's limit, unchanged; A1321 ([2026-11-08-a1321-retire-spare.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1321-retire-spare.md))
     is the planned way to retire such a spare. A spare's answer after its first full start comes
     from the copy, which holds the main box's own chart, and is read as today.
   - **Not changed:** the check's other rules, A1018's handover code, and the latch start's routes
@@ -2638,7 +2638,7 @@ box" / «Seguir como equipo principal» (`servers.md` `{#carry-on}`, English and
 else that exists today clears or rejoins this box: this page offers only Retry; the setup app's
 staged reset runs only in setup mode, after a join that stopped (`setup-api.ts:1156`, fact 19);
 the main box's Remove refuses a standby that finished joining (fact 26). A1321's planned retirement
-of a joined spare on the main box (`docs/superpowers/plans/2026-11-08-a1321-retire-spare.md`)
+of a joined spare on the main box ([2026-11-08-a1321-retire-spare.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1321-retire-spare.md))
 waits for 3b-6, and its build already lists these words for an update (its §3). No removal is
 built here: that needs the owner.
 - Title EN: "This box has lost its record of which box it is". ES: "Este equipo ha perdido el

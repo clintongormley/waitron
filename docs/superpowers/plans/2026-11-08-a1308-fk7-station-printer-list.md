@@ -160,9 +160,9 @@ Under all six venue headers unless "change-feed only".
 ## In-flight work folded in
 
 - A790 Cut A (#2455, venue document printer routing) lands before the devices area and does not name
-  `station_printers` (its plan, `2026-11-04-a790-venue-document-printer-routing.md`, searched
+  `station_printers` (its plan, [`2026-11-04-a790-venue-document-printer-routing.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md), searched
   2026-11-08); if it lands first, rebase.
-- A405 (printer details, `2026-11-05-a405-printer-details.md`) names printers, not station mappings;
+- A405 (printer details, [`2026-11-05-a405-printer-details.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-05-a405-printer-details.md)) names printers, not station mappings;
   rebase if it lands first.
 
 ## Assertions that change, by design

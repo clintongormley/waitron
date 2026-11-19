@@ -29,7 +29,7 @@ fiscal hour history; the seat hooks are in `packages/fiscal-verifactu`. The PR h
 
 **Waits for A1379 part 2 to land.** This slice needs A1379 pull request 2 (the seat hooks it
 deletes lose their last caller there, and fl8a needs it too). The owner answered part 2's three
-questions on 2026-11-09 (`docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`), so it
+questions on 2026-11-09 ([2026-11-06-a1379-setup-start-again.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md)), so it
 waits only to land.
 
 **First line of the pull request:** "Every venue is reset: a box's kept series names and restored

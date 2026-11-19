@@ -574,7 +574,7 @@ A803 §3.1 and §3.9 (the line is the dish's identity), timed around lane C. The
 
 1. **Slice 0 — the bench and the protection inventory.** The year-of-trading dataset, the timing
    harness, and a script that lists every protection in the schema, run before and after each
-   slice. [Plan](../../plans/2026-11-04-a1308-slice-0-bench.md).
+   slice. [Plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a1308-slice-0-bench.md).
 2. **A760's squash, into U1's eight sets** (owner, 2026-11-02). No table changes shape; its
    identical-schema check proves it. Moving catalogue's, venue-service's, media's, adjustments',
    credentials', identity's and handover's table definitions into `@waitron/db` comes with it, since
@@ -610,7 +610,7 @@ A803 §3.1 and §3.9 (the line is the dish's identity), timed around lane C. The
 | First-setup backup recovery | Replaced by A1131bc slice 4, which deletes that recovery folder, so nothing needs moving |
 | Venue folder | Fixed inside the state folder on a box |
 | Print agent | Waits on a held request, if the measurement shows a real saving |
-| The venue's stable id | Waitron Cloud assigns it ([design](../2026-11-04-a1301-venue-id-design.md)) |
+| The venue's stable id | Waitron Cloud assigns it ([design](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-04-a1301-venue-id-design.md)) |
 
 | Tables and people ids (U1) | Eight migration sets; identity and credentials can no longer be switched off |
 | A role a shift has used | Retired: it leaves every list and everyone holding it, and past shifts keep its name |

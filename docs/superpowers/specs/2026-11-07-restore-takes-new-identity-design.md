@@ -108,7 +108,7 @@ Each reader that today filters by "this box" is judged on its own, into one of t
    covers (my call).
    **2026-11-08, as planned for part 1:** the recorded daily close is left alone for A1325 to
    replace, and the daily-close report reads the list like every other report (plan decision 5,
-   `docs/superpowers/plans/2026-11-07-a1425-takeover-inherited-work.md`).
+   [2026-11-07-a1425-takeover-inherited-work.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-07-a1425-takeover-inherited-work.md)).
 3. **This box only, on purpose**: its own invoice chain and series, its own signing key, its own
    mode and mirror link. A new record always goes on this box's chain.
 
@@ -127,7 +127,7 @@ the plan. A reader that genuinely needs a fourth answer comes back to the owner.
   relinquished (§1).
   **2026-11-08, as built for part 1:** a box in that list may have taken back, so the check reads the
   held membership chart instead and refuses a box the chart does not name `serving-primary` (plan
-  decision 4, `docs/superpowers/plans/2026-11-07-a1425-takeover-inherited-work.md`).
+  decision 4, [2026-11-07-a1425-takeover-inherited-work.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-07-a1425-takeover-inherited-work.md)).
 - **Old records are still sent and reconciled.** Sending is already venue-wide (`drain.ts:151, 474`),
   and records waiting under the old identity are filed under it, as the handover test already shows.
   Reconciliation reads the list (§2, kind 2).

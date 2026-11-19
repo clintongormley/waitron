@@ -49,7 +49,7 @@ files.
 
 **Waits for A1379 part 2 to land.** This slice needs fl7, which needs A1379 pull request 2
 (removing Continue), and also needs part 2 itself (Needs). The owner answered part 2's three
-questions on 2026-11-09 (`docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`), so it
+questions on 2026-11-09 ([2026-11-06-a1379-setup-start-again.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md)), so it
 waits only to land. fl8b and fl10 need this slice, so they wait too.
 
 **First line of the pull request:** "A box part way through a first setup when this lands must use

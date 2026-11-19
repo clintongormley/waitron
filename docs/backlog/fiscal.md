@@ -1220,7 +1220,7 @@ removes Task 7's outside sole-seller grant, fence acknowledgement, outside switc
 24-hour automatic limit. Those are not prerequisites for this administrator procedure.
 The permitted writer rotates the affected node's identity and series and resets its chain head;
 record contents, hash and number-allocation logic, `registerSif`, `restoreFiscal` and protected
-assertions remain outside the change. See the [implementation plan](../superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md).
+assertions remain outside the change. See the [implementation plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md).
 
 - **27 October 2026, A1157:** Keep the normalized text and source files alongside the library's
   watched fingerprints, updated by `--refresh`; keep date stamps in the comparison (owner: “we

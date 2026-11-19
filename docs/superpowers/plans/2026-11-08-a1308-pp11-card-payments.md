@@ -168,7 +168,7 @@ Any other line is a stop.
 ## Needs
 
 - pp10; pa3 (`payments.requested_by`); slice 0's second pull request (`bench build`, `bench measure`,
-  `bench compare`, `2026-11-04-a1308-slice-0-bench.md` Tasks 5 and 6).
+  `bench compare`, [`2026-11-04-a1308-slice-0-bench.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a1308-slice-0-bench.md) Tasks 5 and 6).
 
 ---
 

@@ -18,9 +18,9 @@ Nothing here runs on a box, opens a disk, listens on a socket, or joins a networ
 
 **Spec:** [B3 design](../specs/2026-10-21-b3-usb-installer-design.md) §7.3 (first start), §7.5 ("Preboot requirements, before root opens", "Approved reachability", the recovery-leaf paragraphs, "Approved normal Wi-Fi copy", "Proposed minimal-copy update contract", "Retained wrong-attempt proposal").
 
-**Parent plan:** [six-slice plan](2026-10-26-b3-usb-installer.md), Slice 1, Task 1.3, the parts an unprivileged machine can test. PR 1's plan named this pull request's scope in its "Out" section: [PR 1](2026-11-01-b3-1-encrypted-disk.md), "PR 2: the preboot pure logic (parent Task 1.3)".
+**Parent plan:** [six-slice plan](2026-10-26-b3-usb-installer.md), Slice 1, Task 1.3, the parts an unprivileged machine can test. PR 1's plan named this pull request's scope in its "Out" section: [PR 1](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-b3-1-encrypted-disk.md), "PR 2: the preboot pure logic (parent Task 1.3)".
 
-**Build authority:** the owner's "Yes, build it", 2026-11-01, relayed by the lead session for PR 1, with the build cut one pull request at a time ([PR 1's plan](2026-11-01-b3-1-encrypted-disk.md), "Build authority").
+**Build authority:** the owner's "Yes, build it", 2026-11-01, relayed by the lead session for PR 1, with the build cut one pull request at a time ([PR 1's plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-b3-1-encrypted-disk.md), "Build authority").
 
 **Review folded 2026-11-03.** A fresh-context plan review found six important and eleven minor points; the coordinator ruled on each, and all are folded in:
 

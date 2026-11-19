@@ -3158,7 +3158,7 @@ being asked about the justification and evidence, not to validate an allocation 
 > emergencia? ¿Hay alguna comunicación adicional a la AEAT por la incidencia, aparte de lo ya
 > preguntado en Q7 sobre el fin de una cadena?
 
-**Owner scope update, 2026-11-01:** [W41s-7 now requires an administrator switch](../superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md) after stopping issuance on the clashing active identity. Automatic conflict switching is excluded permanently. The question and earlier treatment below retain their historical wording; this product decision supplies no legal answer and sends no enquiry.
+**Owner scope update, 2026-11-01:** [W41s-7 now requires an administrator switch](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md) after stopping issuance on the clashing active identity. Automatic conflict switching is excluded permanently. The question and earlier treatment below retain their historical wording; this product decision supplies no legal answer and sends no enquiry.
 
 **Treatment pending answers:** retain the available evidence and the administrator's declaration
 without claiming that they satisfy every legal obligation. The owner approved conditional
@@ -4036,7 +4036,7 @@ This records a question; no enquiry has been sent.
 
 **2026-11-09, Amazon acceptance:** the trial passed key rotation, a production recovery PDF and a fresh-target restore with row and sealed-secret checks. Owned-resource cleanup left no bucket or uploads. [Receipt](../receipts/a1404/README.md#amazon-rotation-and-production-pdf-9-november-2026).
 
-**2026-11-09, A1404 encryption slice:** the implementation now sends Litestream a customer encryption key derived from the backup key. The storage provider still receives the database and that key; this is encryption at the provider, not encryption before upload. The original question below records the earlier design. The final Amazon recovery-pack qualification remains open under [A1404](../superpowers/plans/2026-11-08-a1404-bucket-encryption.md).
+**2026-11-09, A1404 encryption slice:** the implementation now sends Litestream a customer encryption key derived from the backup key. The storage provider still receives the database and that key; this is encryption at the provider, not encryption before upload. The original question below records the earlier design. The final Amazon recovery-pack qualification remains open under [A1404](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1404-bucket-encryption.md).
 
 For the privacy specialist. The box copies its whole database, with customer and staff data, to storage
 the restaurant chooses, and does not encrypt it first: it relies on the provider's encryption, which

@@ -346,7 +346,7 @@ merchant and Reader ID handling.
   theme-list read after a save commits but before its reply can be replaced by that reply if the
   follow-up reads fail, including Appearance's bounded retries. The save returns the stored
   department model and refreshes the theme list; neither answer has a comparable server revision.
-  No revision storage is included. See the [approved save-snapshot plan](../superpowers/plans/2026-11-07-a1400-save-snapshots.md).
+  No revision storage is included. See the [approved save-snapshot plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-07-a1400-save-snapshots.md).
 
 - **Cancel discards without asking (A657, owner, 2026-10-14).** An explicit Cancel, including
   page Cancel, restores and leaves its drafts. Escape, an existing backdrop action, the close
@@ -616,7 +616,7 @@ usable active human anchor. The 2026-10-22 ~12:05 protection answer originally a
 the new names answer supersedes that allowance only.
 
 **2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
-and [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
+and [reviewed plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
 **2026-11-14:** the [roles redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md) supersedes that build split; its access roles grant permissions, while job roles grant none.
 
 ## What C38 left as it was (a generated display name is the first given name and first surname, #827, owner decision 2026-09-28).

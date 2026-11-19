@@ -156,7 +156,7 @@ schema edit plus the rebuild command; there are no table rebuilds, trigger dance
   `print_jobs` (5e's table, not this one). A790 Cut A (#2455) adds six tables, none with a
   `location_id` (read at its head `f1f184de51`: `git show pr/2455:packages/db/src/schema/<file>.ts`
   for the four schema files), and its plan forbids adding one
-  (`docs/superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md:17`); the sweep needs
+  ([2026-11-04-a790-venue-document-printer-routing.md:17](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md)); the sweep needs
   nothing from it either way.
 - The builder re-runs that check at its base. A schema change to one of this slice's eighteen tables
   that is open when the slice starts is a stop (rules §5.5).

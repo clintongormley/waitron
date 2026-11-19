@@ -1749,7 +1749,7 @@ For the runner to file; none is acted on here.
 
 **2026-11-13:** #3079 makes an `unreachable` reader status raise `reader.status_unavailable` and count toward the card-reader area's `alert.source_unavailable`, so the 2026-10-23 note's "comes only from a throw or the deadline" describes the earlier code. The battery check is now registered only when the payments module is on.
 
-**2026-11-08:** [D1](../plans/2026-11-08-d1-drawer-job-outcomes.md) adds a 30-second queued-drawer expiry and a 60-second unknown-claim outcome, checked before handing out jobs. Item 3 below records the earlier behaviour; a payload already handed to an agent cannot be recalled.
+**2026-11-08:** [D1](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-d1-drawer-job-outcomes.md) adds a 30-second queued-drawer expiry and a 60-second unknown-claim outcome, checked before handing out jobs. Item 3 below records the earlier behaviour; a payload already handed to an agent cannot be recalled.
 
 1. **`Incidencia="S"` is never sent to AEAT.** The house reading of art. 16.4 lists it among the
    duties during an outage (`verifactu-findings.md:359`); the drain raises only a local `incidencia`

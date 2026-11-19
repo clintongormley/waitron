@@ -1,6 +1,6 @@
 # Fiscal prevention and offline recovery (W41s) Implementation Plan
 
-> **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
+> **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
 
 > **For agentic workers:** use `superpowers:executing-plans` for the queued task. Work inline,
 > following the lane's runbook and the repository's current review rules. Use checkbox steps to
@@ -539,7 +539,7 @@ that a full-disk rollback did not occur.
 
 ## Task 7: conditional automatic conflict recovery
 
-**2026-11-01 execution remap:** follow the [current-contract plan](2026-11-01-w41s-7-conflict-recovery.md)
+**2026-11-01 execution remap:** follow the [current-contract plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md)
 for this task's current interfaces, minute naming and implementation gates. The original task below
 remains the acceptance outline; this pointer claims no implementation or runtime qualification.
 

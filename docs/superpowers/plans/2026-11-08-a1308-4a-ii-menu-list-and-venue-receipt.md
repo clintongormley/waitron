@@ -571,9 +571,9 @@ Any other line is a stop (rules §5.2).
 
 ## Other plans that name these (docs only; not edited here)
 
-- **A1301 plan** ([plan](2026-11-01-a1301-remove-location.md)): `:45`, `:1089`, `:2173-2176`, `:2194`,
+- **A1301 plan** ([plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-a1301-remove-location.md)): `:45`, `:1089`, `:2173-2176`, `:2194`,
   `:2214-2216`, `:2231`, `:2247-2272`, `:2299`, `:2320-2325`, `:3967`, `:4035`, `:4560`.
-- **A1301 design** ([design](../specs/2026-11-01-a1301-remove-location-design.md)): `:35-37`, `:137`,
+- **A1301 design** ([design](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md)): `:35-37`, `:137`,
   `:429`, `:585`.
 - What they name: `location_catalogues`, the venue-catalogue routes, or the deleted functions. Most
   describe landed slices (S2, S5, S19).

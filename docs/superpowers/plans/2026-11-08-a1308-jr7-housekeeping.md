@@ -128,7 +128,7 @@ jr1–jr3; pp2, pp3 (the people slice's `sign_in_challenges` and `dashboard_sess
 ### Task 1: Measure 10 — the batch size against sales
 
 - [ ] **Step 1:** On the bench's year-of-trading copy (slice 0's built year; plan
-  `2026-11-04-a1308-slice-0-bench.md` Task 5), in a throwaway worktree with Task 2's code, **first
+  [`2026-11-04-a1308-slice-0-bench.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a1308-slice-0-bench.md) Task 5), in a throwaway worktree with Task 2's code, **first
   seed what the job deletes**, because a year of trading alone gives most steps nothing: 20,000
   expired sign-in challenges, 5,000 idle and ended dashboard sessions (persons seeded first), and
   2,000 photo-data rows no photo names (each a 200 KB blob). Then run a

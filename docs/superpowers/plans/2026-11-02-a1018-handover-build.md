@@ -39,7 +39,7 @@ Chromium), the `bench/sqlite-failover` rig.
 **Spec:** [A1018 design](../specs/2026-10-23-a1018-simple-handover-design.md), owner-approved
 2026-10-24 as published at `2c13c7f55d` (both Harbour Kitchen handovers, §§8–9, and the retained
 defaults in §§3, 5 and 7). Read beside it: [A947 design](../specs/2026-10-21-a947-two-box-failover-design.md)
-§§6.3, 6.4, 6.5, 7, 7.1, 7.2, 11, and the [A947 slice 3a plan](2026-10-31-a947-3a-node-db.md) (what
+§§6.3, 6.4, 6.5, 7, 7.1, 7.2, 11, and the [A947 slice 3a plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-10-31-a947-3a-node-db.md) (what
 `node.db` holds). Build authority: the owner, 2026-11-01, "Yes, build it" (campaign queue, A1018).
 Revised after a fresh-context review on 2026-11-02; what changed is in the last section.
 

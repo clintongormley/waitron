@@ -32,7 +32,7 @@ nothing was run or timed. Row counts are for the reference venue (one restaurant
 × 4 lines, 360 days a year) and come from the area inventory unless I say otherwise.
 
 The `location_id` columns and the keys that lead with them stay until A1301's schema slices
-(`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:441-480`), so each "drop `location_id`"
+([2026-11-01-a1301-remove-location.md:441-480](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-a1301-remove-location.md)), so each "drop `location_id`"
 below is work those slices do anyway; this design only says what replaces each location-led key.
 
 **Result: 32 current tables → 26 target tables.** No `location_id` anywhere (R10).
@@ -322,7 +322,7 @@ product, because nothing closes a pay period (`docs/backlog/workforce.md:222-229
 input to the entry hash (`packages/workforce/src/chain-hash.ts:91`), so the hash format does not
 change. Every append-only trigger, CHECK, unique index and foreign key stays (§5). `node_id → nodes`
 stays (one chain per node, A1268,
-`docs/superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md:61-63`).
+[2026-11-01-a1268-clock-ins-per-venue-design.md:61-63](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md)).
 
 The chain head is read from this table: `select id, entry_hash, recorded_at, sequence_no from
 time_entries where node_id = ? order by sequence_no desc limit 1`, served by

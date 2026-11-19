@@ -23,7 +23,7 @@ Nothing calls it: no route, no screen, no boot wiring. The clock requests' clien
 
 **Previous pull request:** [PR 7's plan](2026-11-05-b3-7-host-protocol.md) (#2474), especially D1 (the clock requests stay on slice 9b's shell handler), D8 (a join or forget answers once started), D13 (`network.read`'s shape), D14 (refusals) and D16 (how the client reads `unknown_request` and a shell-only box's `request_invalid`).
 
-**Build authority:** the owner's "Yes, build it", 2026-11-01, with the build cut one pull request at a time ([PR 1's plan](2026-11-01-b3-1-encrypted-disk.md), "Build authority").
+**Build authority:** the owner's "Yes, build it", 2026-11-01, with the build cut one pull request at a time ([PR 1's plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-b3-1-encrypted-disk.md), "Build authority").
 
 ## Global Constraints
 

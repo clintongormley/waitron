@@ -646,7 +646,7 @@ longer has `listIngredients`, `createIngredient`, `updateIngredient`, `getProduc
 
 ## Other plans that name these (docs only; not edited here)
 
-- **A1002.** [plan](2026-11-08-a1002-custom-roles.md) `:22`, `:51`, `:77`, `:100`;
+- **A1002.** [plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1002-custom-roles.md) `:22`, `:51`, `:77`, `:100`;
   [design](../specs/2026-10-22-a1002-custom-roles-design.md) `:99`, `:151`, `:538`, `:721`.
   - Both say to keep `recipe.manage` at its Manager default "until its area retires the route". This
     slice is that retirement. Neither slice blocks the other.
@@ -654,7 +654,7 @@ longer has `listIngredients`, `createIngredient`, `updateIngredient`, `getProduc
     renamed catalogue and test.
   - If this slice lands first, cut 1's scan (`:77`) finds no `recipe.manage`.
   - If cut 2 (stored role permissions) lands first, stop point 1 applies.
-- **A1301.** [plan](2026-11-01-a1301-remove-location.md) `:3136-3137`, `:4150`, `:4218`, `:4269` name
+- **A1301.** [plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-a1301-remove-location.md) `:3136-3137`, `:4150`, `:4218`, `:4269` name
   `packages/recipes`. These are its landed fixture slices.
 - **A760.** [plan](2026-11-04-a760-squash-into-eight-sets.md) `:516` names the retired `recipes-demo.ts`.
 - **Design cites that moved.**

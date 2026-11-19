@@ -159,7 +159,7 @@ Branch B, under all six venue headers (the triggers are in core's starting migra
 ## Assumptions
 
 - The bench's commands and cases are as slice 0's plan, Task 5-6
-  (`docs/superpowers/plans/2026-11-04-a1308-slice-0-bench.md:244-330`): `bench build --out <dir>
+  ([2026-11-04-a1308-slice-0-bench.md:244-330](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a1308-slice-0-bench.md)): `bench build --out <dir>
   [--days 360] [--bills-per-day 250] [--seed 1]`, `bench measure --venue <dir> --out <file>`, `bench
   compare --before <file> --after <file>`, and cases `kitchen.queue`, `kitchen.screen`,
   `kitchen.pass`, `kitchen.pass-screen`, `dashboard.open` (which includes the overdue report). If the

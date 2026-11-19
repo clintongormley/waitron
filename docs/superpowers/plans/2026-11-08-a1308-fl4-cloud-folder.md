@@ -20,7 +20,7 @@ grouped in `cloud/`"), §2 row `state/cloud/`, §3 rows 25-29. Slice rules:
 [`2026-11-08-a1308-slice-rules.md`](2026-11-08-a1308-slice-rules.md). Lines at `649b7576e0`.
 
 **Waits for fl1**, which waits for A1379 pull request 2 to land (its questions were answered by
-the owner on 2026-11-09, [`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md)).
+the owner on 2026-11-09, [`2026-11-06-a1379-setup-start-again.md`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md)).
 Q1 below was answered by the owner on 2026-11-09 (Owner decisions).
 
 **Who lands:** the lane. Cloud recovery and replacement run only outside production

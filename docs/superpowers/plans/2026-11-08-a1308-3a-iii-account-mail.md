@@ -277,4 +277,4 @@ and sent by the box's mail sender within seconds; each link or code is made when
 
 No entry is finished alone (`git grep -n -i "outgoing_mail\|mail sender" docs/backlog docs/backlog.md`
 finds only dependents). A1002's plan's "Unbuilt seams" note
-(`2026-11-08-a1002-custom-roles.md:41`) is A1002's to update.
+([`2026-11-08-a1002-custom-roles.md:41`](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1002-custom-roles.md)) is A1002's to update.

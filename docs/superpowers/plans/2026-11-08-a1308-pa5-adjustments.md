@@ -35,7 +35,7 @@ cannot be restored or imported."
 - Rules §1–§9 apply. Rebuild with `pnpm --filter @waitron/server migration-baseline rebuild --set core`.
 - `adjustment_reasons` is not touched: its role lists become role ids in A1002's second cut, which
   also clears them when a role is deleted or retired and carries them through the configuration
-  import ([A1002 plan](2026-11-08-a1002-custom-roles.md) Task 1, "place explicit role-ID JSON on
+  import ([A1002 plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1002-custom-roles.md) Task 1, "place explicit role-ID JSON on
   device/reason/bill-limit owners"; [A1002 design](../specs/2026-10-22-a1002-custom-roles-design.md)
   §4, §6). `settings.adjustments` is slice 1b-ii's.
 - `adjustment_refunds` is not touched: its `tender_refund_id` → `refund_id` is the orders area's

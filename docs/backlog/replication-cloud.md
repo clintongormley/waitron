@@ -706,7 +706,7 @@ the failed check without naming the module. This is watcher clearance, not an ow
 **A1321 retiring a spare, 2026-11-14:** Servers' Remove takes a spare that finished joining once
 an administrator declares it switched off and no other recovery in progress; the declarations are
 not stored. A removed spare that is offline is not told (the
-[design's return boundary](../superpowers/specs/2026-11-08-a1321-retire-spare-design.md)); it is
+[design's return boundary](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-08-a1321-retire-spare-design.md)); it is
 reused only by resetting it and adding it as a new spare.
 
 **A1018 local scope, 14 November 2026:** The watcher dropped Slice 13's archive/wipe/self-wipe
@@ -865,7 +865,7 @@ gates to A951-S.
 
 The owner approved the second revision on 2026-10-22 at about 02:40; the amendment adds his
 03:12 direction. Slice 4a landed as [#1990](https://github.com/clintongormley/waitron/pull/1990) on
-2026-10-24. Slice 3a ([plan](../superpowers/plans/2026-10-31-a947-3a-node-db.md)) landed as
+2026-10-24. Slice 3a ([plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-10-31-a947-3a-node-db.md)) landed as
 [#2371](https://github.com/clintongormley/waitron/pull/2371) on 2026-11-01: what a box remembers
 about itself is in its own `node.db`. The owner answered yes to both its questions on 2026-10-31:
 the box's role is saved a moment after the switch's fiscal save, and a spare checks the main box's

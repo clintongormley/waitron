@@ -541,7 +541,7 @@ watcher pre-build scope read. The approved same-default permission renames may f
 working cut after watcher scope, without shared-service waits; the complete roles transition is
 the dependent second cut. Keep `recipe.manage` at its current Manager default until its area
 retires the route, and exclude the existing synthetic mirror Admin from the human anchor without
-waiting for A1113. No role names change. The [amended plan](../plans/2026-11-08-a1002-custom-roles.md)
+waiting for A1113. No role names change. The [amended plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1002-custom-roles.md)
 records the cuts; the earlier dependency paragraph remains a historical reading.
 
 ### Current-source receipts for this correction, 2026-11-08

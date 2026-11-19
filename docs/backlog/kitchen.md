@@ -132,6 +132,10 @@ bug). Decide whether "started first" should hold across the whole save
 
 ## Decisions and deliberate limits
 
+### Kitchen paper and screens name stations, never what a station makes (owner, 2026-11-04)
+
+The cue under a course heading reads "Goes with {station names}", not "Goes with kitchen food": "Waitron doesn't know that the other prep station is a kitchen and that the product is food. The wording needs to be more generic."
+
 ### A moved dish keeps its kitchen status (owner, 2026-09-01)
 
 A sent dish moved to another bill or table (Merge bills, Move dishes, Split table) keeps its status

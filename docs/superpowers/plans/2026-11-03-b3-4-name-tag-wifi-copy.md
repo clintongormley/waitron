@@ -26,7 +26,7 @@ Nothing here runs on a box, reads or writes a disk header, writes a file, or joi
 
 **Parent plan:** [six-slice plan](2026-10-26-b3-usb-installer.md): Slice 3 Task 3.1's red step 1 sentence "Name tag write changes only tag bytes, never disk-classification markers; huge accented name fits the custom record format without truncating markers" (line 199), the `tag.write` host verb (line 164), and the "Proposed boot-copy contract" (lines 189–197) and red step 2 (line 200), the pure parts only.
 
-**Build authority:** the owner's "Yes, build it", 2026-11-01, relayed by the lead session for PR 1, with the build cut one pull request at a time ([PR 1's plan](2026-11-01-b3-1-encrypted-disk.md), "Build authority").
+**Build authority:** the owner's "Yes, build it", 2026-11-01, relayed by the lead session for PR 1, with the build cut one pull request at a time ([PR 1's plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-b3-1-encrypted-disk.md), "Build authority").
 
 ## Global Constraints
 

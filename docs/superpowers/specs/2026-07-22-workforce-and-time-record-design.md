@@ -282,7 +282,7 @@ step. The distributed picture appears only in the multi-till + separate-server t
 
 > **2026-11-01 — working time is per venue (A1268).** One chain per node; clock entries and
 > pay-period closures store no location, and neither hash includes one. See
-> `docs/superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md`.
+> [2026-11-01-a1268-clock-ins-per-venue-design.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/specs/2026-11-01-a1268-clock-ins-per-venue-design.md).
 
 **Escalation (deferred — trigger: the published RD demands capture-window cryptographic
 tamper-evidence):** add lightweight **per-device local chaining** so the offline buffer is itself
