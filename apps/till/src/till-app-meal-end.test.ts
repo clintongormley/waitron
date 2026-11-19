@@ -1169,7 +1169,11 @@ describe("till-app: a print's answer arriving after staff moved on", () => {
 
   it("carries a kept answer to no later visit", async () => {
     const answer = heldAnswer<EndedMeal>();
-    const { el } = await pressThenSwitchToBillTwo({ endMeal: () => answer.promise });
+    const { el } = await openBill({ endMeal: () => answer.promise, getPartyBills: twoBills() });
+    await showBill(el, "wo-9");
+    emit(tableOrder(el), "end-meal", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    await showBill(el, "wo-4");
     answer.reject({ code: "meal_end.no_printer", status: 409 });
     await flush(el, 6);
 
@@ -1177,8 +1181,8 @@ describe("till-app: a print's answer arriving after staff moved on", () => {
     await flush(el);
     emit(floor(el), "open-table", { tableId: "t4", seated: true });
     await flush(el, 6);
+    expect(tableOrder(el).orderId).toBe("wo-4");
     await showBill(el, "wo-9");
-    await showBill(el, "wo-4");
 
     expect(banner(el)).toBeNull();
   });
