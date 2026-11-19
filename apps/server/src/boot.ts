@@ -224,23 +224,15 @@ import {
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { createTtlCache } from "./ttl-cache.js";
-import {
-  createHealthState,
-  healthApp,
-  logDegradedDuties,
-  recordPass,
-  type HealthState,
-} from "./health.js";
+import { createHealthState, healthApp, type HealthState } from "./health.js";
 import { abandonMailClaims, mailSendJob } from "./mail-sender.js";
 import { securityChangeMail } from "./security-change-mail.js";
 import { emailChangedMail } from "./email-changed-mail.js";
 import { roleMembershipMail } from "./role-membership-mail.js";
 import { accountActionMail } from "./account-mail.js";
-import { runLoop } from "./loop.js";
-import { createLoopWaker } from "./loop-wake.js";
 import { reconcilePassFor, reconcilerAsDuty, reconciliationMoneyGates } from "./reconcile-duty.js";
-import { runPass, type PassReport } from "./pass.js";
-import { singletonPass } from "./singleton-pass.js";
+import { drainJob, reconcileJob } from "./fiscal-jobs.js";
+import type { PassReport } from "./pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { TradingAdmission } from "./trading-admission.js";
@@ -399,7 +391,7 @@ import {
 import { certificateReminderJob } from "./certificate-reminder-worker.js";
 import { createCertificateReminderSender } from "./certificate-reminder-email.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
-import { startFiscalReconciliation } from "./fiscal-reconciliation.js";
+import { fiscalReconciliationJob } from "./fiscal-reconciliation.js";
 import { releaseStalePaymentAttempts } from "./till-sale.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
@@ -784,7 +776,7 @@ const BILL_PENDING_RECHECK_MS = 60_000;
  * report; while a payment or refund stays pending it brings the report's next due time forward to
  * {@link BILL_PENDING_RECHECK_MS} from now, never later than the report's own. Settling files
  * invoices and fails payments this process is not driving, so it runs only while `getRole` answers
- * `primary`, read per pass as `singletonPass` reads it.
+ * `primary`, read for each pass.
  */
 export function withPendingBillPayments(
   inner: (now: Date) => Promise<PassReport>,
@@ -3370,7 +3362,7 @@ async function bootServer(
   );
   mountUnitsApi(app, { db, venueLocale }, log);
   mountPurchasingApi(app, { db }, log);
-  const drainWaker = createLoopWaker({ minTickMs: timings.minTickMs });
+  const wakeFiscalDrain = () => jobRunner.wake("fiscal.drain");
   // Every ENABLED module's routes, so a module toggled off mounts nothing. `core.seatTable` closes
   // over the full `tradingContext` here, so `nodeId` never enters a module's cfg.
   const nodePreparation = createNodeOperationPreparation({
@@ -3419,7 +3411,7 @@ async function bootServer(
     fiscalDrain: {
       filing: filesRecords,
       awaitingCertificate: () => awaitingFiscalCert.current,
-      wake: drainWaker.wake,
+      wake: wakeFiscalDrain,
     },
   };
   mountReturnRecordsApi(
@@ -3431,7 +3423,7 @@ async function bootServer(
       nodeId: tradingContext.nodeId,
       modules: enabledAtStart,
       requireWritable: () => routeCtx.recordGeneration!.requireWritable(),
-      wake: drainWaker.wake,
+      wake: wakeFiscalDrain,
       now,
     },
     log,
@@ -4505,14 +4497,10 @@ async function bootServer(
     }),
   );
 
-  const controller = new AbortController();
-  // `config.environment` is the value `assertDeploymentMatches` pinned against the database at boot.
-  //
-  // The restart reset runs only on a node that files: the pass below calls this drain behind both
-  // `singletonPass` and the submission policy.
+  // A filing primary resets abandoned claims once before its first drain.
   const fiscalDrain = resetBeforeFirstDrain({
     reset: (at) => enabledFiscal.resetInFlight({ db }, at),
-    drain: (at) =>
+    drain: (at, signal) =>
       enabledFiscal.drain(
         {
           db,
@@ -4521,7 +4509,7 @@ async function bootServer(
           skipRetryMs: timings.skipRetryMs,
           log,
           observeAuthorityTime: authorityClock.observe,
-          signal: controller.signal,
+          signal,
         },
         at,
       ),
@@ -4538,64 +4526,56 @@ async function bootServer(
     skipRetryMs: timings.skipRetryMs,
     log,
   });
-  const fiscalReconciliation =
-    reconciliationPass === undefined
-      ? undefined
-      : startFiscalReconciliation({
-          pass: reconciliationPass,
-          enabled: () => holders.singletonRole.current === "primary" && fiscalDrainEnabled(config),
-          now,
-          maxWaitMs: Math.min(timings.maxTickMs, 60_000),
-          retryMs: timings.skipRetryMs,
-          log,
-        });
-  undoOnFailure.push(async () => fiscalReconciliation?.stop());
+  if (reconciliationPass) {
+    jobRunner.add(
+      fiscalReconciliationJob({
+        pass: reconciliationPass,
+        enabled: () => readSingletonRole() === "primary" && fiscalDrainEnabled(config),
+        maxWaitMs: Math.min(timings.maxTickMs, 60_000),
+        retryMs: timings.skipRetryMs,
+        log,
+      }),
+    );
+  }
 
-  const loop = runLoop({
-    // Read the same live role as /health so a promotion starts and judges these duties.
-    pass: singletonPass(readSingletonRole, (at) =>
-      runPass(
-        {
-          drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
-          reconcile: reconcilePassFor({
-            paymentsInstalled: migrationModules.some((module) => module.name === "payments"),
-            duties: auditDuties,
-            credentialProvisioned: (purpose) => credentialProvisioned(db, purpose),
-            runDue: (at2, duties) =>
-              runDue(
-                {
-                  db,
-                  duties,
-                  horizonDays: timings.scheduler.horizonDays,
-                  maxPeriodsPerTick: timings.scheduler.maxPeriodsPerTick,
-                  maxAttempts: timings.scheduler.maxAttempts,
-                  backoffBaseMs: timings.scheduler.backoffBaseMs,
-                  staleAfterMs: timings.scheduler.staleAfterMs,
-                  skipRetryMs: timings.skipRetryMs,
-                },
-                at2,
-              ),
-          }),
-          awaitingCert: awaitingFiscalCert,
-          monotonicMs: () => performance.now(),
-          log,
-          signal: controller.signal,
-        },
-        at,
-      ),
-    ),
-    now,
-    sleep: drainWaker.sleep,
-    signal: controller.signal,
-    minTickMs: timings.minTickMs,
-    maxTickMs: timings.maxTickMs,
+  const dutyDeps = {
+    getRole: readSingletonRole,
+    health,
+    timings,
+    monotonicMs: () => performance.now(),
     log,
-    onPass: (report, at) => logDegradedDuties(log, recordPass(health, report, at)),
-  });
-  undoOnFailure.push(async () => {
-    controller.abort();
-    await loop;
-  });
+  };
+  jobRunner.add(
+    drainJob({
+      ...dutyDeps,
+      drain: (at, signal) => runFiscalDrain(config, fiscalDrain, at, signal),
+      awaitingCert: awaitingFiscalCert,
+    }),
+  );
+  jobRunner.add(
+    reconcileJob({
+      ...dutyDeps,
+      reconcile: reconcilePassFor({
+        paymentsInstalled: migrationModules.some((module) => module.name === "payments"),
+        duties: auditDuties,
+        credentialProvisioned: (purpose) => credentialProvisioned(db, purpose),
+        runDue: (at, duties) =>
+          runDue(
+            {
+              db,
+              duties,
+              horizonDays: timings.scheduler.horizonDays,
+              maxPeriodsPerTick: timings.scheduler.maxPeriodsPerTick,
+              maxAttempts: timings.scheduler.maxAttempts,
+              backoffBaseMs: timings.scheduler.backoffBaseMs,
+              staleAfterMs: timings.scheduler.staleAfterMs,
+              skipRetryMs: timings.skipRetryMs,
+            },
+            at,
+          ),
+      }),
+    }),
+  );
 
   // Read once: rows naming this box as destination appear only in a promotion, which restarts it.
   const takenOverFrom = await readTakenOverFrom(db, tradingContext.nodeId);
@@ -4739,17 +4719,14 @@ async function bootServer(
   undoOnFailure.splice(undoOnFailure.indexOf(stopJobRunner), 1);
   undoOnFailure.push(stopJobRunner);
   const duties = backgroundDuties({
-    controller,
     pendingCardController,
     tenderRefundController,
     pendingCardLoop,
     tenderRefundLoop,
     certificateDiagnosis,
-    fiscalReconciliation,
     unsubscribeFromChanges,
     jobRunner,
     liveEvents,
-    loop,
     handoverDestinationDuty,
     chartPost,
     spareStore,

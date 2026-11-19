@@ -1,10 +1,9 @@
 import { rm, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { stampDeployment } from "@waitron/db";
 import { setSingletonRole } from "@waitron/node-db";
-import { startFiscalReconciliation } from "./fiscal-reconciliation.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu/src/slot.js";
@@ -28,19 +27,6 @@ vi.mock("./pending-card-recovery.js", async (original) => ({
     (await original<typeof import("./pending-card-recovery.js")>()).runPendingCardLoop,
   ),
 }));
-vi.mock("./fiscal-reconciliation.js", async (original) => {
-  const actual = await original<typeof import("./fiscal-reconciliation.js")>();
-  return {
-    ...actual,
-    startFiscalReconciliation: vi.fn((deps) => {
-      const duty = actual.startFiscalReconciliation(deps);
-      return { stop: vi.fn(() => duty.stop()) };
-    }),
-  };
-});
-beforeEach(() => {
-  vi.mocked(startFiscalReconciliation).mockClear();
-});
 const { startServer, httpPort } = ephemeralServerFixture();
 afterAll(async () => {
   await rm(TRADING_STATE_DIR, { recursive: true, force: true });
@@ -60,16 +46,17 @@ describe("boot's fiscal reconciliation duty", () => {
     const migrations = await mkdtemp(join(tmpdir(), "waitron-fiscal-reconciliation-migrations-"));
     const held = gate();
     const called: Date[] = [];
+    let lookupSignal: AbortSignal | undefined;
     const create = vi
       .spyOn(FISCAL_SLOT, "createReconciliation")
-      .mockImplementation(() => async (at) => {
+      .mockImplementation(() => async (at, signal) => {
+        lookupSignal = signal;
         called.push(at);
         await held.promise;
         return { nextDueAt: new Date(at.getTime() + 86_400_000) };
       });
     const drain = vi.spyOn(FISCAL_SLOT, "drain").mockResolvedValue(emptyDrainResult());
     let server: Awaited<ReturnType<typeof startServer>> | undefined;
-    let cleanupDuty: ReturnType<typeof startFiscalReconciliation> | undefined;
     try {
       await seedSharedVenue(venue.store.venue);
       await copyMigrationsRoot(migrations);
@@ -82,12 +69,16 @@ describe("boot's fiscal reconciliation duty", () => {
         WAITRON_HTTP_PORT: String(await freePort()),
       });
       await vi.waitFor(() => expect(called).toHaveLength(1));
-      cleanupDuty = vi.mocked(startFiscalReconciliation).mock.results.at(-1)!.value;
       await vi.waitFor(() => expect(server!.health.lastPassAt).not.toBeNull());
       const response = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ acceptingSales: true });
       expect(drain).toHaveBeenCalled();
+      expect(server.health.readJobs?.()).toMatchObject({
+        "fiscal.drain": { kind: "job" },
+        "payments.reconcile": { kind: "job" },
+        "fiscal.reconciliation": { kind: "job", state: "running" },
+      });
       expect(create.mock.calls[0]![0]).toMatchObject({
         nodeId: KEY_ENV.WAITRON_NODE_ID,
         environment: "preproduction",
@@ -96,7 +87,7 @@ describe("boot's fiscal reconciliation duty", () => {
       const close = server.close().then(() => {
         stopped = true;
       });
-      await vi.waitFor(() => expect(cleanupDuty!.stop).toHaveBeenCalled());
+      await vi.waitFor(() => expect(lookupSignal?.aborted).toBe(true));
       expect(stopped).toBe(false);
       held.resolve();
       await close;
@@ -104,7 +95,6 @@ describe("boot's fiscal reconciliation duty", () => {
       expect(called).toHaveLength(1);
     } finally {
       held.resolve();
-      await cleanupDuty?.stop();
       await server?.close();
       create.mockRestore();
       drain.mockRestore();
@@ -167,10 +157,12 @@ describe("boot's fiscal reconciliation duty", () => {
     const held = gate();
     const started = gate();
     const called: Date[] = [];
+    let lookupSignal: AbortSignal | undefined;
     const failure = new Error("later boot step failed");
     const create = vi
       .spyOn(FISCAL_SLOT, "createReconciliation")
-      .mockImplementation(() => async (at) => {
+      .mockImplementation(() => async (at, signal) => {
+        lookupSignal = signal;
         called.push(at);
         started.resolve();
         await held.promise;
@@ -180,7 +172,6 @@ describe("boot's fiscal reconciliation duty", () => {
       throw failure;
     });
     let pending: Promise<unknown> | undefined;
-    let cleanupDuty: ReturnType<typeof startFiscalReconciliation> | undefined;
     try {
       await seedSharedVenue(venue.store.venue);
       await copyMigrationsRoot(migrations);
@@ -209,8 +200,7 @@ describe("boot's fiscal reconciliation duty", () => {
         });
       await Promise.race([started.promise, pending]);
       expect(called).toHaveLength(1);
-      cleanupDuty = vi.mocked(startFiscalReconciliation).mock.results.at(-1)!.value;
-      await vi.waitFor(() => expect(cleanupDuty!.stop).toHaveBeenCalled());
+      await vi.waitFor(() => expect(lookupSignal?.aborted).toBe(true));
       expect(settled).toBe(false);
       held.resolve();
       expect(await pending).toBe(failure);
@@ -218,7 +208,6 @@ describe("boot's fiscal reconciliation duty", () => {
       expect(called).toHaveLength(1);
     } finally {
       held.resolve();
-      await cleanupDuty?.stop();
       await pending;
       create.mockRestore();
       await venue.store.close();

@@ -28,17 +28,14 @@ interface Stopper {
 
 /** What `bootServer` has started by the time it returns; a duty a box did not start is undefined. */
 export interface BackgroundDutyHandles {
-  controller: Aborter;
   pendingCardController: Aborter;
   tenderRefundController: Aborter;
   pendingCardLoop: unknown;
   tenderRefundLoop: unknown;
   certificateDiagnosis: Stopper | undefined;
-  fiscalReconciliation?: Stopper;
   unsubscribeFromChanges: () => unknown;
   jobRunner: Pick<JobRunner, "signalStepdown" | "stopJobs" | "stopServices">;
   liveEvents: { close(): unknown };
-  loop: unknown;
   handoverDestinationDuty: Stopper | undefined;
   chartPost: Stopper;
   spareStore: Stopper | undefined;
@@ -92,15 +89,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       close: h.unsubscribeFromChanges,
       reason: "only stops hearing local changes",
     },
-    ...(h.fiscalReconciliation === undefined
-      ? []
-      : [
-          {
-            name: "fiscalReconciliation",
-            close: () => h.fiscalReconciliation!.stop(),
-            atStepdown: true as const,
-          },
-        ]),
     ...(h.spareJoin === undefined
       ? []
       : [{ name: "spareJoin", close: () => h.spareJoin!.stop(), atStepdown: true as const }]),
@@ -121,11 +109,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       name: "liveEvents",
       close: () => h.liveEvents.close(),
       reason: "only tells open screens of changes",
-    },
-    {
-      name: "loop",
-      close: () => h.loop,
-      reason: SIGNALLED_LOOP_WAIT,
     },
     {
       name: "handoverDestinationDuty",
@@ -152,7 +135,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
   ];
   return {
     aborts: [
-      { name: "controller", abort: () => h.controller.abort() },
       { name: "pendingCardController", abort: () => h.pendingCardController.abort() },
       { name: "tenderRefundController", abort: () => h.tenderRefundController.abort() },
       { name: "jobRunner", abort: () => h.jobRunner.signalStepdown() },

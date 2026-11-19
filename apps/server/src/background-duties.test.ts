@@ -6,7 +6,7 @@ import {
 } from "./background-duties.js";
 import { createJobRunner } from "./job-runner.js";
 
-const ABORTS = ["controller", "pendingCardController", "tenderRefundController", "jobRunner"];
+const ABORTS = ["pendingCardController", "tenderRefundController", "jobRunner"];
 
 const CLOSERS = [
   "jobRunner",
@@ -16,7 +16,6 @@ const CLOSERS = [
   "unsubscribeFromChanges",
   "spareSettings",
   "liveEvents",
-  "loop",
   "handoverDestinationDuty",
   "chartPost",
   "spareStore",
@@ -38,7 +37,6 @@ function recordingHandles(
     }) as unknown as Promise<void>;
   const stopper = (name: string) => ({ stop: () => void calls.push(`stop ${name}`) });
   return {
-    controller: aborter("controller"),
     pendingCardController: aborter("pendingCardController"),
     tenderRefundController: aborter("tenderRefundController"),
     pendingCardLoop: awaited("pendingCardLoop"),
@@ -56,7 +54,6 @@ function recordingHandles(
     },
     spareSettings: stopper("spareSettings"),
     liveEvents: { close: () => void calls.push("close liveEvents") },
-    loop: awaited("loop"),
     handoverDestinationDuty: stopper("handoverDestinationDuty"),
     chartPost: stopper("chartPost"),
     spareStore: stopper("spareStore"),
@@ -110,7 +107,6 @@ describe("background duties", () => {
       "call unsubscribeFromChanges",
       "stop spareSettings",
       "close liveEvents",
-      "await loop",
       "stop handoverDestinationDuty",
       "stop chartPost",
       "stop spareStore",
@@ -230,7 +226,7 @@ describe("background duties", () => {
           throw new Error("refund abort failed");
         },
       },
-      loop: running,
+      pendingCardLoop: running,
       spareSettings: { stop: () => Promise.reject(new Error("box email failed")) },
     });
 
@@ -304,19 +300,28 @@ describe("fiscal reconciliation shutdown", () => {
     const pending = new Promise<void>((resolve) => {
       finish = resolve;
     });
-    let calls = 0;
-    const handles = Object.assign(recordingHandles([]), {
-      fiscalReconciliation: {
-        stop: () => {
-          calls += 1;
-          return pending;
-        },
+    const runner = createJobRunner({
+      log: vi.fn(),
+      now: () => new Date(),
+      subscribe: () => () => {},
+    });
+    let signal: AbortSignal | undefined;
+    runner.add({
+      name: "fiscal.reconciliation",
+      applies: () => true,
+      minSleepMs: 1,
+      maxSleepMs: 60_000,
+      backoff: { firstMs: 60_000, maxMs: 60_000 },
+      pass: async (ctx) => {
+        signal = ctx.signal;
+        await pending;
+        return { nextDueAt: null };
       },
     });
-    const duties = backgroundDuties(handles);
-    const closer = duties.closers.find((item) => item.name === "fiscalReconciliation");
-    expect(closer?.atStepdown).toBe(true);
-    expect(closer?.close()).toBe(pending);
+    const duties = backgroundDuties(recordingHandles([], { jobRunner: runner }));
+    expect(signal?.aborted).toBe(false);
+    duties.aborts.find((item) => item.name === "jobRunner")!.abort();
+    expect(signal?.aborted).toBe(true);
     let closed = false;
     const closing = stopBackgroundDuties(duties).then(() => {
       closed = true;
@@ -324,7 +329,6 @@ describe("fiscal reconciliation shutdown", () => {
     try {
       await Promise.resolve();
       expect(closed).toBe(false);
-      expect(calls).toBe(1);
     } finally {
       finish();
       await closing;
