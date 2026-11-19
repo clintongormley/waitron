@@ -1,6 +1,9 @@
 # Plan: a bill still open when the business day ends is issued then (ADVISER-CLOSE-OF-DAY-TICKET)
 
-Status: written 2026-11-19, lane L; revised the same day after one fresh-context read. Not built.
+Status: written 2026-11-19, lane L; revised the same day after one fresh-context read. **Approved
+for building:** the owner, 2026-11-19 ~17:00–17:04 (watcher window, relayed in lane L `questions.md`,
+WATCHER 2026-11-19 17:05): D1 "Calendar day it ended (Recommended)"; D2 "New: close of business day
+(Recommended)"; D3–D6 "Accept all four (Recommended)"; build order puts this item first.
 FISCAL: the owner lands it. Read at main `cb1aeeb7b2`. **RAN** = a command was run and its output
 read; other citations were read at that commit. Unmarked reasoning is inference. "Business day" is
 the screens' name for what the adviser sheet calls the trading day.
