@@ -1,16 +1,27 @@
-import { and, count, eq, inArray, isNotNull, max } from "drizzle-orm";
+import { and, count, eq, exists, inArray, isNotNull, max, sql } from "drizzle-orm";
+import { withIssuanceTransaction } from "@waitron/core";
 import {
   invoiceSeries,
   parties,
+  readVenueClock,
   workingOrderLines,
+  withTransaction,
   workingOrders,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { decimalToCents, isAppError, jobOrigin } from "@waitron/shared";
-import { stillOwedOnIssuedBill } from "./bill-payments.js";
+import { codeOf } from "@waitron/server-kit";
+import {
+  businessDayAt,
+  businessDayBounds,
+  decimalToCents,
+  isAppError,
+  jobOrigin,
+} from "@waitron/shared";
+import { clockUnconfirmedRefusal, stillOwedOnIssuedBill } from "./bill-payments.js";
 import { pinnedAt } from "./issue-moment.js";
+import type { JobDefinition } from "./job-runner.js";
 import type { Logger } from "./logger.js";
 import { bumpPartyRevision } from "./parties.js";
 import { readIssuedSales } from "./sale-due.js";
@@ -136,13 +147,195 @@ async function readDueBill(
     .groupBy(workingOrders.id);
   if (bill === undefined || bill.lines === 0 || bill.nodeId !== cfg.nodeId) return undefined;
   if ((await readIssuedSales(tx, [billId])).has(billId)) return undefined;
-  const openedAt = rule.openedAt?.(billId)?.getTime() ?? Date.parse(bill.openedAt);
+  const retiredAt = await latestRetirement(tx, cfg.nodeId);
+  if (!openedInDueSpan(billId, bill.openedAt, retiredAt, rule)) return undefined;
+  return { status: bill.status, partyId: bill.partyId!, openedBy: bill.openedBy };
+}
+
+async function latestRetirement(tx: Transaction, nodeId: string): Promise<number | undefined> {
   const [series] = await tx
     .select({ retiredAt: max(invoiceSeries.retiredAt) })
     .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.nodeId, cfg.nodeId), isNotNull(invoiceSeries.retiredAt)));
-  const retiredAt = series?.retiredAt == null ? undefined : new Date(series.retiredAt);
-  if (retiredAt !== undefined && openedAt <= retiredAt.getTime()) return undefined;
-  if (openedAt >= rule.dayStartedAt.getTime()) return undefined;
-  return { status: bill.status, partyId: bill.partyId!, openedBy: bill.openedBy };
+    .where(and(eq(invoiceSeries.nodeId, nodeId), isNotNull(invoiceSeries.retiredAt)));
+  return series?.retiredAt == null ? undefined : new Date(series.retiredAt).getTime();
+}
+
+/** After this node's latest series retirement (D6) and before the day began, counting the bill's
+ * opening time as `rule` says. */
+function openedInDueSpan(
+  billId: string,
+  storedOpenedAt: string,
+  retiredAt: number | undefined,
+  rule: CloseOfDayRule,
+): boolean {
+  const openedAt = rule.openedAt?.(billId)?.getTime() ?? Date.parse(storedOpenedAt);
+  if (retiredAt !== undefined && openedAt <= retiredAt) return false;
+  return openedAt < rule.dayStartedAt.getTime();
+}
+
+/** Bills opened while the clock gate held: rows above `after`, up to `upTo`, count as opened at
+ * `releasedAt`, the trusted clock's reading when the gate let go. */
+export interface ClockWindow {
+  after: number;
+  upTo: number;
+  releasedAt: Date;
+}
+
+export function openedAtInWindows(
+  windows: readonly ClockWindow[],
+  rowId: number,
+): Date | undefined {
+  return windows.find((window) => rowId > window.after && rowId <= window.upTo)?.releasedAt;
+}
+
+/** The highest `working_orders` row id: rows are never deleted, so a later bill has a higher one. */
+export function highestBillRow(db: Database): number {
+  const [row] = db.all<{ top: number | null }>(sql`select max(rowid) as top from working_orders`);
+  return row?.top ?? 0;
+}
+
+/** Table bills that look due under `rule`; `issueBillAtClose` checks each again in its own
+ * transaction. */
+async function dueBills(
+  tx: Transaction,
+  nodeId: string,
+  rule: (rows: ReadonlyMap<string, number>) => CloseOfDayRule,
+): Promise<{ ids: string[]; rule: CloseOfDayRule }> {
+  const rows = await tx
+    .select({
+      id: workingOrders.id,
+      rowId: sql<number>`${workingOrders}.rowid`,
+      openedAt: workingOrders.openedAt,
+    })
+    .from(workingOrders)
+    .innerJoin(parties, eq(parties.id, workingOrders.partyId))
+    .where(
+      and(
+        eq(workingOrders.nodeId, nodeId),
+        inArray(workingOrders.status, ["open", "placed"]),
+        exists(
+          tx
+            .select({ id: workingOrderLines.id })
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, workingOrders.id)),
+        ),
+      ),
+    )
+    .orderBy(sql`${workingOrders}.rowid`);
+  const passRule = rule(new Map(rows.map((row) => [row.id, row.rowId])));
+  const issuedSales = await readIssuedSales(
+    tx,
+    rows.map((row) => row.id),
+  );
+  const retiredAt = await latestRetirement(tx, nodeId);
+  const ids = rows
+    .filter(
+      (row) =>
+        !issuedSales.has(row.id) && openedInDueSpan(row.id, row.openedAt, retiredAt, passRule),
+    )
+    .map((row) => row.id);
+  return { ids, rule: passRule };
+}
+
+export interface CloseOfDayJobDeps extends CloseOfDayDeps {
+  cfg: TradingContext;
+  log: Logger;
+  selling: { mode: () => string; role: () => string; fenced: () => boolean };
+  clockUnconfirmed: () => boolean;
+  /** The highest bill row when the start began waiting for its time: the first window opens here. */
+  startMark: number;
+}
+
+const LOOK_MS = 60_000;
+
+/**
+ * Each minute, issues through `issueBillAtClose` the table bills still open after the business day
+ * they were opened in ended. The bill query runs on the first look, once a day's end has passed
+ * since the last, when the clock gate lets go, and after a look that left work for later.
+ */
+export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
+  const cfg = closeOfDayConfig(deps.cfg);
+  const windows: ClockWindow[] = [];
+  let mark = deps.startMark;
+  // The start's wait for its time is the first window.
+  let held = true;
+  let queryAgain = true;
+  let queriedDayStart = 0;
+
+  async function issueDue(dayStartedAt: Date): Promise<void> {
+    const due = await withTransaction(deps.db, (tx) =>
+      dueBills(tx, cfg.nodeId, (rows) => ({
+        dayStartedAt,
+        openedAt: (billId) => {
+          const row = rows.get(billId);
+          return row === undefined ? undefined : openedAtInWindows(windows, row);
+        },
+      })),
+    );
+    const failed: string[] = [];
+    for (const billId of due.ids) {
+      if (deps.clockUnconfirmed()) return endUntilRelease();
+      try {
+        const outcome = await withIssuanceTransaction(
+          deps.db,
+          (tx) => issueBillAtClose(tx, deps, cfg, billId, due.rule),
+          deps.log,
+        );
+        if (outcome.kind === "money_moving") queryAgain = true;
+      } catch (error) {
+        if (clockUnconfirmedRefusal(error)) return endUntilRelease();
+        if (codeOf(error) === "venue.time_zone_not_ready") return void (queryAgain = true);
+        deps.log("warn", "close_of_day.issue_failed", {
+          workingOrderId: billId,
+          errorCode: codeOf(error),
+        });
+        failed.push(billId);
+      }
+    }
+    if (failed.length > 0) {
+      queryAgain = true;
+      throw new Error(`close_of_day.issue_failed: ${failed.join(", ")}`);
+    }
+  }
+
+  function endUntilRelease(): void {
+    held = true;
+    queryAgain = true;
+  }
+
+  return {
+    name: "bills.close_of_day",
+    applies: () =>
+      deps.selling.mode() === "primary" &&
+      deps.selling.role() === "primary" &&
+      !deps.selling.fenced(),
+    wakeOn: ["day_cutover_changes", "settings.business_day"],
+    // The pass reads the trusted clock; the runner sleeps on the wall clock.
+    minSleepMs: 500,
+    maxSleepMs: LOOK_MS,
+    backoff: { firstMs: 5_000, maxMs: 300_000 },
+    async pass() {
+      if (deps.clockUnconfirmed()) {
+        held = true;
+        return { nextDueAt: null };
+      }
+      const top = highestBillRow(deps.db);
+      const reading = deps.clock.now().instant;
+      if (held) {
+        if (top > mark) windows.push({ after: mark, upTo: top, releasedAt: reading });
+        held = false;
+        queryAgain = true;
+      }
+      mark = top;
+      const venueClock = await withTransaction(deps.db, (tx) => readVenueClock(tx));
+      const dayStartedAt = new Date(
+        businessDayBounds(venueClock, businessDayAt(venueClock, reading)).startAt,
+      );
+      if (!queryAgain && dayStartedAt.getTime() <= queriedDayStart) return { nextDueAt: null };
+      queryAgain = false;
+      queriedDayStart = dayStartedAt.getTime();
+      await issueDue(dayStartedAt);
+      return { nextDueAt: null };
+    },
+  };
 }

@@ -5,6 +5,7 @@ describe("job catalogue", () => {
   it("every entry stops at stepdown or says why it keeps running", () => {
     expect(JOB_NAMES.filter((name) => "stop" in JOB_CATALOGUE[name].stepdown).sort()).toEqual([
       "attendance.end_of_day",
+      "bills.close_of_day",
       "box.alert_mail",
       "card.follow_up",
       "clock.watch",

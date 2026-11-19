@@ -428,6 +428,7 @@ import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } fr
 import { createJobRunner } from "./job-runner.js";
 import { menuActivationJob } from "./menu-activation.js";
 import { owedReceiptJob } from "./owed-receipts.js";
+import { closeOfDayJob, highestBillRow } from "./close-of-day.js";
 import { housekeepingJob } from "./housekeeping.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
@@ -4466,6 +4467,8 @@ async function bootServer(
     await staffListener?.close();
   });
 
+  // Read before any till can open a bill: bills above it were opened while the start waited.
+  const closeOfDayStartMark = highestBillRow(db);
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
   undoOnFailure.push(() => closeListener(server));
@@ -4502,6 +4505,23 @@ async function bootServer(
       db,
       isPrimary: () => holders.singletonRole.current === "primary",
       log,
+    }),
+  );
+  jobRunner.add(
+    closeOfDayJob({
+      admission: tradingAdmission,
+      db,
+      backend: nodeBackend,
+      clock: tillClock,
+      cfg: tradingContext,
+      log,
+      selling: {
+        mode: () => holders.mode.current,
+        role: () => holders.singletonRole.current,
+        fenced: () => fenced,
+      },
+      clockUnconfirmed: startClockHolds,
+      startMark: closeOfDayStartMark,
     }),
   );
 
