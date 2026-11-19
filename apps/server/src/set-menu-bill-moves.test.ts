@@ -86,6 +86,12 @@ it("moves a menu and its dishes together, with their original places, prices and
   await move(source, source.menuLineId, source.dishId);
   expect(await lines(source.billId)).toEqual(before.filter(({ id }) => id === stayingId));
   expect(await lines(source.target)).toEqual(before.filter(({ id }) => id !== stayingId));
+  expect(new Set(await copies(source.billId))).toEqual(
+    new Set([
+      { menuId: copy.menuId, versionId: copy.versionId },
+      { menuId: special.menuId, versionId: special.versionId },
+    ]),
+  );
   expect(await copies(source.target)).toEqual([{ menuId: copy.menuId, versionId: copy.versionId }]);
 });
 
