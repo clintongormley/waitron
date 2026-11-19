@@ -7990,7 +7990,7 @@ export const es: Record<StringKey, string> = {
   "menus.menu_kind": "Carta",
   "menus.set_menu_kind": "Carta a precio fijo",
   "menus.set_menu_terms": "Nombre, precio e IVA",
-  "menus.set_menu_price": "Precio de la carta a precio fijo",
+  "menus.set_menu_price": "Importe por carta a precio fijo",
   "menus.set_menu_eat_in_vat": "IVA para comer aquí",
   "menus.set_menu_load_error": "No se ha podido cargar la carta a precio fijo.",
   "menus.set_menu_published_by":

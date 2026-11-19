@@ -28,6 +28,7 @@ export class SetMenuEditor extends LitElement {
   @property() menuId = "";
   @state() private details: SetMenuDetails | null = null;
   @state() private failed = false;
+  @state() private retrying = false;
   // A fresh read of inclusion lines must not reset a separate edit to the terms.
   #terms: SetMenuDetails | null = null;
   #read = 0;
@@ -111,7 +112,14 @@ export class SetMenuEditor extends LitElement {
 
   #renderFailure() {
     return html`<p role="alert">${t("menus.set_menu_load_error")}</p>
-      <wt-button variant="secondary" @click=${() => void this.#load()}
+      <wt-button
+        variant="secondary"
+        .loading=${this.retrying}
+        @click=${async () => {
+          this.retrying = true;
+          await this.#load();
+          this.retrying = false;
+        }}
         >${t("menus.retry")}</wt-button
       >`;
   }

@@ -1,4 +1,9 @@
-import { currentContentLanguages, NavigationGuard, setContentLanguages } from "@waitron/ui";
+import {
+  currentContentLanguages,
+  NavigationGuard,
+  setContentLanguages,
+  type NavigationLeave,
+} from "@waitron/ui";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { DashboardApi, MenuPreview, MenuSummary, SetMenuDetails } from "../api/client.js";
@@ -357,10 +362,15 @@ it("adds fields for a content language that becomes available while a draft is o
     screen
       .shadowRoot!.querySelector("dashboard-set-menu-editor")
       ?.shadowRoot?.querySelector("dashboard-set-menu-terms-form")?.shadowRoot;
-  await vi.waitFor(() => expect(fields()?.querySelector('[name="names-en"]')).toBeTruthy());
-  expect(fields()?.querySelector('[name="names-es"]')).toBeNull();
+  await vi.waitFor(() => {
+    expect(fields()?.querySelector('[name="names-en"]')).toBeTruthy();
+    expect(fields()?.querySelector('[name="names-es"]')).toBeNull();
+  });
+  const price = page.getByRole("textbox", { name: "Price per set menu" });
+  await price.fill("15.00");
   setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
   await vi.waitFor(() => expect(fields()?.querySelector('[name="names-es"]')).toBeTruthy());
+  await expect.element(price).toHaveValue("15.00");
 });
 
 it("shows a read failure after saving lines without showing the previous problems as current", async () => {
@@ -370,11 +380,26 @@ it("shows a read failure after saving lines without showing the previous problem
   client.saveSetMenuLines.mockResolvedValue({ lines: [{ ...starterLine, count: 2 }] });
   client.readSetMenu.mockRejectedValue(new Error("Connection lost"));
   root.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!.click();
-  await expect
-    .element(page.getByRole("alert").filter({ hasText: "The set menu could not be loaded." }))
-    .toBeVisible();
+  const failure = page.getByRole("alert").filter({ hasText: "The set menu could not be loaded." });
+  await expect.element(failure).toBeVisible();
   expect(page.getByRole("link", { name: "Edit Wine" }).elements()).toHaveLength(0);
   expect(count.value).toBe("2");
+
+  let answer!: (value: SetMenuDetails) => void;
+  client.readSetMenu.mockReturnValue(
+    new Promise<SetMenuDetails>((resolve) => {
+      answer = resolve;
+    }),
+  );
+  const retry = page.getByRole("button", { name: "Try again" });
+  try {
+    await retry.click();
+    await vi.waitFor(() => expect(retry.element().getAttribute("aria-busy")).toBe("true"));
+    expect(page.getByRole("link", { name: "Edit Wine" }).elements()).toHaveLength(0);
+  } finally {
+    answer({ ...draftWithLines, lines: [{ ...starterLine, count: 2 }], problems: [] });
+  }
+  await expect.element(failure).not.toBeInTheDocument();
 });
 
 it("recovers the ordinary Prices tab after the menus list is retried", async () => {
@@ -387,21 +412,31 @@ it("recovers the ordinary Prices tab after the menus list is retried", async () 
   await vi.waitFor(() => {
     expect(retry()).toBeNull();
     expect(screen.shadowRoot!.querySelector("wt-tabs")?.value).toBe("prices");
-    expect(client.getMenuPrices).toHaveBeenCalledWith("lunch");
+    expect(screen.shadowRoot!.querySelector("dashboard-menu-prices-table")?.loading).toBe(false);
+    expect(client.listMenus).toHaveBeenCalledTimes(2);
   });
 });
 
-it("keeps the editor and its unsaved price when Back is refused", async () => {
+it("keeps the unsaved price when Back is refused and returns to the list when allowed", async () => {
   const screen = await mount(dailyPath);
   const price = page.getByRole("textbox", { name: "Price per set menu" });
   await price.fill("15.00");
-  const request = vi.fn().mockResolvedValue("kept");
+  const request = vi
+    .fn<NavigationLeave["request"]>(async (proceed) => {
+      await proceed();
+      return "proceeded";
+    })
+    .mockResolvedValueOnce("kept");
   const guard = new NavigationGuard(window, { isDirty: () => true, request });
   onTestFinished(() => guard.dispose());
-  await userEvent.click(
-    page.elementLocator(screen.shadowRoot!.querySelector('[data-test="back"]')!),
-  );
+  const back = page.elementLocator(screen.shadowRoot!.querySelector('[data-test="back"]')!);
+  await userEvent.click(back);
   expect(request).toHaveBeenCalledOnce();
   expect(new URL(guard.href).pathname).toBe(dailyPath);
   await expect.element(price).toHaveValue("15.00");
+  await userEvent.click(back);
+  await vi.waitFor(() => {
+    expect(new URL(guard.href).pathname).toBe("/menus");
+    expect(screen.shadowRoot!.querySelector("dashboard-set-menu-editor")).toBeNull();
+  });
 });
