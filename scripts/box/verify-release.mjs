@@ -1,25 +1,19 @@
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { verifyReleaseList } from "./release-list.mjs";
+import { compareReleaseVersions, isNumberedVersion, verifyReleaseList } from "./release-list.mjs";
 
 const MAX_BYTES = 16 * 1024;
-const TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
-function releaseNumbers(tag) {
-  const match = typeof tag === "string" && tag.length <= 51 && TAG.exec(tag);
-  if (!match) throw new Error("Expected a numbered release tag");
-  return match.slice(1).map(BigInt);
+function versionFromTag(tag) {
+  const version = typeof tag === "string" && tag.startsWith("v") ? tag.slice(1) : null;
+  if (!isNumberedVersion(version)) throw new Error("Expected a numbered release tag");
+  return version;
 }
 
 function requireCurrentOrNewer(candidate, installed) {
-  const requested = releaseNumbers(candidate);
-  const current = releaseNumbers(installed);
-  for (const [index, part] of requested.entries()) {
-    if (part < current[index])
-      throw new Error(`${candidate} is older than installed release ${installed}`);
-    if (part > current[index]) return;
-  }
+  if (compareReleaseVersions(versionFromTag(candidate), versionFromTag(installed)) < 0)
+    throw new Error(`${candidate} is older than installed release ${installed}`);
 }
 
 async function readRelease(input) {
@@ -47,11 +41,10 @@ export async function main(args, input, directory = import.meta.dirname, logger 
       requireCurrentOrNewer(args[1], args[2]);
     } else {
       const tag = args[0];
-      releaseNumbers(tag);
+      const version = versionFromTag(tag);
       const bytes = await readRelease(input);
       const release = verifyReleaseList(bytes, readKeys(directory));
-      if (`v${release.version}` !== tag)
-        throw new Error(`The signed version does not match ${tag}`);
+      if (release.version !== version) throw new Error(`The signed version does not match ${tag}`);
       logger.log(`${release.sourceSha} ${release.images.app} ${release.images.printAgent}`);
     }
     return 0;

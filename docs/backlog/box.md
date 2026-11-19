@@ -163,6 +163,11 @@ Three parts:
 
 **14 November update:** the manual path includes an online migration trial before stopping a running app. A failed trial aborts before downtime; a pass still requires the stopped checks and mandatory sale. An already-stopped app uses those final checks directly. The manual command now connects the stopped-tree controller, readiness/copy-sale checks and retained host runtime to the installed oneshot boot gate and recovery before Docker, with Docker retaining ordinary restart policies; its host-console choices are Restore and Keep. Later work still includes automatic windows, status/email, signed release activation and pairs. The current-build synthetic Linux rehearsal is separate from historical releases and physical-box qualification. The whole shell `install` entry on an existing box remains runtime-unqualified: driver fetch/bootstrap, unit and Docker drop-in installation on non-recipe boxes, host refresh and candidate download/build/pull; see [checked manual upgrades](../../deploy/README.md#checked-manual-upgrades).
 
+**19 November update:** the box's release-list code can verify a signed offer, choose the first
+matching group's newer version or use the default, and refuse a replay after a later offer or
+pause. The [staged-offer plan](../superpowers/plans/2026-11-19-a950-staged-offers.md) still calls for
+publishing the file and connecting it to the box's scheduled upgrade check.
+
 **Historical design summary, 2026-10-29; retained receipts, superseded delivery requirements.**
 The [approved design](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the
 owner's 28 October answer: rollback closes automatically only after a successful restart of
