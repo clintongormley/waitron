@@ -201,19 +201,34 @@ async function dueBills(tx: Transaction, nodeId: string, rule: CloseOfDayRule): 
     .map((row) => row.id);
 }
 
+const UNTRUSTED = (nodeId: string) =>
+  and(
+    eq(workingOrders.nodeId, nodeId),
+    isNull(workingOrders.trustedOpenedAt),
+    inArray(workingOrders.status, ["open", "placed"]),
+  );
+
+/** Whether a bill above row `afterRow` still needs a trusted opening time, and the highest row,
+ * read in one statement and without the write lock. */
+function untrustedAbove(db: Database, nodeId: string, afterRow: number) {
+  const [row] = db.all<{ top: number | null; pending: number }>(sql`
+    select
+      (select max(rowid) from working_orders) as top,
+      exists (
+        select 1 from ${workingOrders}
+        where rowid > ${afterRow} and ${UNTRUSTED(nodeId)}
+      ) as pending
+  `);
+  return { top: row?.top ?? 0, pending: row?.pending === 1 };
+}
+
 /** Gives this node's open bills that were opened while the time was unconfirmed `releasedAt`, the
  * trusted clock's reading once it was confirmed, as their trusted opening time. */
 async function stampReleasedBills(tx: Transaction, nodeId: string, releasedAt: Date) {
   await tx
     .update(workingOrders)
     .set({ trustedOpenedAt: releasedAt.toISOString() })
-    .where(
-      and(
-        eq(workingOrders.nodeId, nodeId),
-        isNull(workingOrders.trustedOpenedAt),
-        inArray(workingOrders.status, ["open", "placed"]),
-      ),
-    );
+    .where(UNTRUSTED(nodeId));
 }
 
 export interface CloseOfDayJobDeps extends CloseOfDayDeps {
@@ -238,6 +253,9 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
   // release stamp.
   let held = true;
   let holdsSeen: number | undefined;
+  // Rows up to here held no bill needing a stamp when last read. A bill whose transaction read the
+  // gate holding but committed after that read has a higher row, as writes take turns.
+  let scannedUpTo = 0;
   let queryAgain = true;
   let queriedDayStart = 0;
 
@@ -337,15 +355,21 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
       if (holds !== holdsSeen) held = true;
       holdsSeen = holds;
       const reading = deps.clock.now().instant;
-      if (held) {
+      const scan = untrustedAbove(deps.db, cfg.nodeId, scannedUpTo);
+      if (scan.pending) {
         // Checked again under the write lock: a hold begun since the count was read may have
         // opened bills after `reading`, so the stamp waits for that hold's release.
-        const stamped = await withTransaction(deps.db, async (tx) => {
-          if (deps.clockUnconfirmed() || deps.clockHoldsBegun() !== holds) return false;
-          await stampReleasedBills(tx, cfg.nodeId, reading);
-          return true;
+        const stop = await withTransaction(deps.db, async (tx) => {
+          const before = stopBeforeBill(holds, signal);
+          if (before === undefined) await stampReleasedBills(tx, cfg.nodeId, reading);
+          return before;
         });
-        if (!stamped) return { nextDueAt: null };
+        if (stop === "hold") held = true;
+        if (stop !== undefined) return { nextDueAt: null };
+        queryAgain = true;
+      }
+      scannedUpTo = scan.top;
+      if (held) {
         held = false;
         queryAgain = true;
       }

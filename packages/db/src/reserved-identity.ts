@@ -5,6 +5,7 @@ import type { Database, Transaction } from "./client.js";
 import "./errors.js";
 import { now } from "./schema/columns.js";
 import { nodes } from "./schema/nodes.js";
+import { workingOrders } from "./schema/orders.js";
 import { invoiceSeries } from "./schema/series.js";
 import { withTransaction } from "./tenancy.js";
 
@@ -118,13 +119,28 @@ export function readStandardSeriesId(db: Database, nodeId: string): Promise<stri
  * Retire every LIVE series of a node, stamping `retired_at`, and return how many were retired.
  * **Nothing in the database refuses this update.** A restore calls it, before opening the node's
  * replacement series.
+ *
+ * The node's open bills with no trusted opening time are given the retirement's, so the
+ * close of the business day, which leaves bills opened before a retirement for staff, never
+ * counts them as opened after it.
  */
 export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promise<number> {
+  const retiredAt = now();
   const rows = await tx
     .update(invoiceSeries)
-    .set({ retiredAt: now() })
+    .set({ retiredAt })
     .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)))
     .returning({ id: invoiceSeries.id });
+  await tx
+    .update(workingOrders)
+    .set({ trustedOpenedAt: retiredAt.toISOString() })
+    .where(
+      and(
+        eq(workingOrders.nodeId, nodeId),
+        isNull(workingOrders.trustedOpenedAt),
+        inArray(workingOrders.status, ["open", "placed"]),
+      ),
+    );
   return rows.length;
 }
 

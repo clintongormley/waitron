@@ -66,7 +66,8 @@ vi.mock("./start-clock-check.js", async (original) => {
   const actual = await original<typeof import("./start-clock-check.js")>();
   return {
     ...actual,
-    startClockState: () => (built.start = actual.startClockState()),
+    startClockState: (...args: Parameters<typeof actual.startClockState>) =>
+      (built.start = actual.startClockState(...args)),
   };
 });
 vi.mock("./clock-correction.js", async (original) => {
@@ -275,6 +276,30 @@ describe("the start clock gate as boot wires it", () => {
     });
 
     expect(seen).toEqual({ same: true, waiting: true, confirmed: false });
+  });
+
+  it("gives a bill opened while the start waited its trusted opening time as soon as the time is confirmed", async () => {
+    const billId = randomUUID();
+    venue.db.run(sql`
+      insert into working_orders (id, source, node_id, order_number, status, opened_at, dining)
+      values (${billId}, 'dashboard', ${venue.cfg.nodeId},
+        (select coalesce(max(order_number), 0) + 1 from working_orders), 'open',
+        ${new Date().toISOString()}, 'eat_in')
+    `);
+    const trusted = () =>
+      venue.db.all<{ at: string | null }>(
+        sql`select trusted_opened_at as at from working_orders where id = ${billId}`,
+      )[0]!.at;
+
+    const seen = await serving(unsynchronisedHost().host, async () => {
+      const waiting = trusted();
+      built.start!.confirm("by_devices", {});
+      // The job's own next look is a minute away.
+      await vi.waitFor(() => expect(trusted()).not.toBeNull(), { timeout: 10_000 });
+      return { waiting, confirmed: trusted() };
+    });
+
+    expect(seen).toEqual({ waiting: null, confirmed: expect.any(String) });
   });
 
   it("hands the box-health routes the start check it builds", async () => {

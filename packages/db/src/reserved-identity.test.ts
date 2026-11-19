@@ -14,9 +14,10 @@ import {
   insertNodeSeriesTx,
   withTransaction,
 } from "./index.js";
+import { workingOrders } from "./schema/orders.js";
 import { invoiceSeries } from "./schema/series.js";
 import { captureError } from "./testing/errors.js";
-import { seedNode, seedVenue } from "./testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 const ENDORSEMENT: Endorsement = {
@@ -263,6 +264,52 @@ describe("reserved-identity accessors", () => {
     expect(rows.filter((r) => r.nodeId === other).every((r) => r.retiredAt === null)).toBe(true);
     // Idempotent on the already-retired: nothing left to retire.
     expect(await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, node))).toBe(0);
+  });
+
+  it("retireNodeSeriesTx gives the node's open and placed bills with no trusted opening time the retirement's, and no other bill", async () => {
+    const node = await seedNode(suite.db);
+    const other = await seedNode(suite.db);
+    await withTransaction(suite.db, (tx) =>
+      insertReservedSeriesTx(tx, [{ nodeId: node, code: "FA", purpose: "standard" }]),
+    );
+    const kept = "2026-09-20T10:00:00.000Z";
+    const bills = {
+      open: await seedWorkingOrder(suite.db, { nodeId: node }),
+      placed: await seedWorkingOrder(suite.db, { nodeId: node, status: "placed" }),
+      trusted: await seedWorkingOrder(suite.db, { nodeId: node, trustedOpenedAt: kept }),
+      settled: await seedWorkingOrder(suite.db, {
+        nodeId: node,
+        status: "settled",
+        settledAt: kept,
+      }),
+      otherNode: await seedWorkingOrder(suite.db, { nodeId: other }),
+    };
+
+    await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, node));
+
+    const [series] = await suite.db
+      .select({ retiredAt: invoiceSeries.retiredAt })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.nodeId, node));
+    const retiredAt = series!.retiredAt!.toISOString();
+    const trusted = Object.fromEntries(
+      await Promise.all(
+        Object.entries(bills).map(async ([name, bill]) => {
+          const [row] = await suite.db
+            .select({ at: workingOrders.trustedOpenedAt })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, bill.id));
+          return [name, row!.at];
+        }),
+      ),
+    );
+    expect(trusted).toEqual({
+      open: retiredAt,
+      placed: retiredAt,
+      trusted: kept,
+      settled: null,
+      otherNode: null,
+    });
   });
 
   it("insertNodeSeriesTx refuses duplicate codes within a batch with a domain error", async () => {

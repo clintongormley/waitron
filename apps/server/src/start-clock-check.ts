@@ -50,7 +50,8 @@ export interface StartClockState {
   noteHost(answers: boolean): void;
 }
 
-export function startClockState(): StartClockState {
+/** `onConfirmed` runs each time a wait ends by a confirmation. */
+export function startClockState(onConfirmed: () => void = () => {}): StartClockState {
   let status: StartClockStatus = "waiting";
   let cause: StartClockCause | null = "start";
   let mark: ChainHeads | null = null;
@@ -61,10 +62,12 @@ export function startClockState(): StartClockState {
 
   const confirm = (by: StartClockConfirmation, heads: ChainHeads) => {
     if (status === "by_internet") return;
+    const ended = status === "waiting";
     status = by;
     cause = null;
     refusedOn = null;
     mark = { ...heads };
+    if (ended) onConfirmed();
   };
 
   return {

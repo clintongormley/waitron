@@ -958,6 +958,31 @@ describe("working_orders_enforce_transition's exception for a placed order's tru
     },
   );
 
+  it.each(["settled", "abandoned"])(
+    "refuses a placed order becoming %s with its trusted opening time changed, and accepts it kept",
+    (status) => {
+      const id = `wo-trust-finish-${status}`;
+      placedCounterOrder(id);
+      connection.exec(
+        `update working_orders set trusted_opened_at = '${STAMP}' where id = '${id}'`,
+      );
+      const settledAt = status === "settled" ? `, settled_at = '${STAMP}'` : "";
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set status = '${status}'${settledAt}, ` +
+            `trusted_opened_at = '2026-09-22T11:00:00.000Z' where id = '${id}'`,
+        ),
+      ).toBe(TRANSITION_REFUSAL);
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set status = '${status}'${settledAt} where id = '${id}'`,
+        ),
+      ).toBeUndefined();
+    },
+  );
+
   it("refuses moving or clearing a placed order's trusted opening time once it has one", () => {
     placedCounterOrder("wo-trust-kept");
     connection.exec(

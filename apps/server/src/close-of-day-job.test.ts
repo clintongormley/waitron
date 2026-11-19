@@ -1,10 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
   dayCutoverChanges,
+  insertNodeSeriesTx,
   installChangeFeed,
   readVenueClock,
+  retireNodeSeriesTx,
   taxpayer,
   withTransaction,
 } from "@waitron/db";
@@ -170,6 +173,13 @@ async function billOpenedAt(openedAt: number) {
     where id = ${party.tabId}
   `);
   return party.tabId;
+}
+
+function openings(billId: string) {
+  return venue.db.all<{ openedAt: string; trustedOpenedAt: string | null }>(sql`
+    select opened_at as openedAt, trusted_opened_at as trustedOpenedAt
+    from working_orders where id = ${billId}
+  `)[0];
 }
 
 function salesOf(billId: string) {
@@ -609,13 +619,6 @@ describe("a bill opened while the box's time is unconfirmed", () => {
     seatHolds = false;
   });
 
-  function openings(billId: string) {
-    return venue.db.all<{ openedAt: string; trustedOpenedAt: string | null }>(sql`
-      select opened_at as openedAt, trusted_opened_at as trustedOpenedAt
-      from working_orders where id = ${billId}
-    `)[0];
-  }
-
   it("is stored with no trusted opening time, and one opened once the time is confirmed with its opening time", async () => {
     hold();
     const unconfirmed = (await seatedWith({ ...venue, app: seatingApp }, "Red wine bottle")).tabId;
@@ -691,5 +694,97 @@ describe("a bill opened while the box's time is unconfirmed", () => {
     at = day(36).endAt + 60_000;
     await look(restarted);
     expect(issued(bill)).toBe(true);
+  });
+
+  it.each([
+    { what: "the runner's signal stops the pass", stops: (s: SellingSwitch) => s.stop.abort() },
+    { what: "the box becomes a mirror", stops: (s: SellingSwitch) => (s.mode = "mirror") },
+  ])("gives no bill a trusted opening time when $what just before the stamp", async ({ stops }) => {
+    hold();
+    const bill = await billOpenedAt(day(38).startAt + 10 * HOUR);
+    seatHolds = false;
+    const state = sellingSwitch();
+    const definition = job({ selling: state.selling });
+    beforeNextTransaction.run = async () => {
+      stops(state);
+    };
+    at = day(39).startAt + HOUR;
+    await definition.pass({ now: new Date(at), signal: state.stop.signal });
+    expect(beforeNextTransaction.run).toBeUndefined();
+    expect(openings(bill)!.trustedOpenedAt).toBeNull();
+
+    await look(job());
+    expect(openings(bill)!.trustedOpenedAt).toBe(new Date(at).toISOString());
+  });
+
+  it("takes only the candidate query's write turn on a first look with no bill to stamp", async () => {
+    at = day(40).startAt + HOUR;
+    // Issues whatever earlier cases left due, so the look below has nothing to issue either.
+    await look(job());
+    const definition = job();
+    const writeLock = vi.spyOn(venue.db, "withWriteLock");
+    try {
+      await look(definition);
+      expect(writeLock).toHaveBeenCalledTimes(1);
+    } finally {
+      writeLock.mockRestore();
+    }
+  });
+
+  it("woken at the confirmation 30 s before the day's end, issues the bill at the first look after a restart 30 s after it", async () => {
+    // An earlier case moves the venue's day start, so the end is read as it stands now.
+    const clock = await inTx(venue, (tx) => readVenueClock(tx));
+    const endAt = Date.parse(businessDayBounds(clock, addDays(today, 43)).endAt);
+    at = endAt - 2 * HOUR;
+    hold();
+    const runner = createJobRunner({ now: () => new Date(at), log: () => {} });
+    const bill = await billOpenedAt(endAt - 14 * HOUR);
+    try {
+      runner.add(job());
+      await vi.waitFor(() => expect(runner.views()["bills.close_of_day"]?.state).toBeDefined());
+      at = endAt - 30_000;
+      seatHolds = false;
+      // What boot does when the start's time is confirmed.
+      runner.wake("bills.close_of_day");
+      await vi.waitFor(() =>
+        expect(openings(bill)!.trustedOpenedAt).toBe(new Date(at).toISOString()),
+      );
+    } finally {
+      await runner.stopJobs();
+    }
+
+    at = endAt + 30_000;
+    await look(job());
+    expect(issued(bill)).toBe(true);
+  });
+
+  // Last in the file: it retires the venue's series, which leaves every bill opened before it alone.
+  it("leaves a bill restored from before its node's series retirement for staff, whether or not its time was confirmed", async () => {
+    hold();
+    const unconfirmed = await billOpenedAt(day(41).startAt + HOUR);
+    seatHolds = false;
+    const confirmed = await billOpenedAt(day(41).startAt + 2 * HOUR);
+    const retiredAt = new Date(day(42).startAt + HOUR);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(retiredAt);
+    try {
+      await inTx(venue, async (tx) => {
+        await retireNodeSeriesTx(tx, venue.cfg.nodeId);
+        await insertNodeSeriesTx(tx, venue.cfg.nodeId, [
+          { code: `RESTORED-${randomUUID().slice(0, 8)}`, purpose: "standard" },
+          { code: `RESTORED-FULL-${randomUUID().slice(0, 8)}`, purpose: "full" },
+        ]);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    at = retiredAt.getTime() + HOUR;
+    const restored = job();
+    await look(restored);
+    at = day(42).endAt + 60_000;
+    await look(restored);
+    expect([fiscalRecordCount(venue, unconfirmed), fiscalRecordCount(venue, confirmed)]).toEqual([
+      0, 0,
+    ]);
   });
 });

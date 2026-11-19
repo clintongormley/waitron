@@ -2529,7 +2529,10 @@ async function bootServer(
   const declarationsSeat = enabledFiscal.declarations;
   if (declarationsSeat !== undefined)
     keptDeclarations = keptDeclarationsReader(db, declarationsSeat);
-  const startClock = startClockState();
+  // Bound once the job runner is built below. The close-of-day job stamps bills opened while the
+  // start waited, so a stop soon after the confirmation does not lose its moment.
+  let wakeOnClockConfirmed = () => {};
+  const startClock = startClockState(() => wakeOnClockConfirmed());
   // Bound once the clock correction is built below; until then no set can be with the host.
   let clockSetting = () => false;
   const startClockHolds = startClockGateHolds(startClock, filesRecords, () => clockSetting());
@@ -2750,6 +2753,7 @@ async function bootServer(
   }
   tradingAdmission.admit();
   const jobRunner = createJobRunner({ now, log });
+  wakeOnClockConfirmed = () => jobRunner.wake("bills.close_of_day");
   const stopJobRunner = async () => {
     await jobRunner.stopJobs();
     await jobRunner.stopServices();

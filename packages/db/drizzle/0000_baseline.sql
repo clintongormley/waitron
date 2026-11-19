@@ -3540,6 +3540,7 @@ BEGIN
   WHERE NOT (
     old.status = 'open'
     OR (old.status = 'placed' AND new.status IN ('settled', 'abandoned')
+        AND new.trusted_opened_at IS old.trusted_opened_at
         AND new.invoice_type IS old.invoice_type
         AND new.recipient_tax_id IS old.recipient_tax_id
         AND new.recipient_legal_name IS old.recipient_legal_name
