@@ -8,13 +8,15 @@ import { createPinThrottle } from "@waitron/identity";
 import { insertCapturedPayment } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { decimal } from "@waitron/shared";
+import { fingerprint } from "./parties.js";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { closeBillDeferredTx } from "./deferred-close.js";
 import { recordUnpaidDeparture } from "./unpaid-departure.js";
-import { completeBillPayment, issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid, retryShapeOf } from "./bill-payments.js";
+import { settleFromProviderRow } from "./bill-payments-loop.js";
 import { readBillEditState } from "./bill-editing.js";
 import { priceStoredOrderForIssuance, readOrderRevision } from "./working-order.js";
-import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import { takeBillPayment, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   cashContribution,
   billRow,
@@ -29,11 +31,6 @@ import {
 } from "./testing/party-venue.js";
 import { seedBillSetMenu, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import {
-  collectOrderOrchestration,
-  payWorkingOrder,
-  payWorkingOrderIntegratedOrchestration,
-} from "./till-sale.js";
 import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 
@@ -85,22 +82,31 @@ it.each(["items", "contribution"] as const)("refuses a new %s payment", async (k
   expect(await paymentsOf(venue, id)).toEqual([]);
 });
 
+function wholePayment() {
+  return {
+    submissionId: crypto.randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    applied: "26.00",
+    tip: "0.00",
+  } as const;
+}
+
 it.each(["cash", "card"] as const)(
   "refuses a whole %s payment before it issues a sale",
   async (method) => {
     const id = await bill();
-    const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, id));
     await expect(
-      payWorkingOrder(
+      takeBillPayment(
         deps(),
         venue.cfg,
+        id,
         {
-          id,
-          expectedEdit,
-          lines: [],
-          tender: { method, amount: "26.00" },
+          ...wholePayment(),
+          method,
+          ...(method === "cash" ? { tendered: "26.00" } : { entry: "manual" }),
         },
-        venue.operator.personId,
+        venue.operator,
       ),
     ).rejects.toMatchObject({ code: "set_menu.payment_not_ready" });
     expect(
@@ -139,13 +145,13 @@ it.each(["open", "placed"] as const)(
     const id = await bill();
     if (status === "placed") await placeByHand(venue, id);
     const provider = new FakePaymentProvider(venue.db);
-    const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, id));
     await expect(
-      payWorkingOrderIntegratedOrchestration(
+      takeReaderBillPayment(
         { ...deps(), provider },
         venue.cfg,
-        { id, expectedEdit, lines: [] },
-        venue.operator.personId,
+        id,
+        { ...wholePayment(), method: "card", entry: "reader" },
+        venue.operator,
       ),
     ).rejects.toMatchObject({ code: "set_menu.payment_not_ready" });
     expect(provider.collectCalls).toHaveLength(0);
@@ -155,47 +161,15 @@ it.each(["open", "placed"] as const)(
 it("refuses collecting an already placed order", async () => {
   const id = await bill();
   await placeByHand(venue, id);
-  const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, id));
   await expect(
-    collectOrderOrchestration(
+    takeBillPayment(
       deps(),
       venue.cfg,
-      {
-        id,
-        expectedEdit,
-        lines: [],
-        tender: { method: "cash", amount: "26.00" },
-      },
-      venue.operator.personId,
+      id,
+      { ...wholePayment(), method: "cash", tendered: "26.00" },
+      venue.operator,
     ),
   ).rejects.toMatchObject({ code: "set_menu.payment_not_ready" });
-});
-
-it("records a capture the reader already made without asking it to collect again", async () => {
-  const id = await bill();
-  const provider = new FakePaymentProvider(venue.db);
-  await inTx(venue, (tx) =>
-    insertCapturedPayment(tx, {
-      origin: venue.cfg.origin,
-      nodeId: venue.cfg.nodeId,
-      provider: "fake",
-      workingOrderId: id,
-      paymentRef: crypto.randomUUID(),
-      amount: decimal("26.00"),
-      settledAt: venue.clock.now().instant,
-    }),
-  );
-  const outcome = await payWorkingOrderIntegratedOrchestration(
-    { ...deps(), provider },
-    venue.cfg,
-    { id, expectedEdit: null, lines: [] },
-    venue.operator.personId,
-  );
-  expect(outcome).toMatchObject({ outcome: "captured", ticket: { total: "26.00" } });
-  expect(provider.collectCalls).toHaveLength(0);
-  expect(
-    await venue.db.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
-  ).toHaveLength(1);
 });
 
 it("refuses recording an unpaid departure on a new set-menu bill", async () => {
@@ -331,17 +305,25 @@ it("keeps the cancellation when the remaining set-menu bill matches cash already
   ).toEqual([]);
 });
 
-it("records a captured bill payment that covers the whole set-menu bill", async () => {
+it("recovers a captured bill payment that covers the set-menu bill without charging again", async () => {
   const id = await bill();
+  const provider = new FakePaymentProvider(venue.db);
+  const request = {
+    ...wholePayment(),
+    expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
+    method: "card",
+    entry: "reader",
+  } as const;
   const receivedAt = venue.clock.now().instant;
   const paymentId = await inTx(venue, async (tx) => {
     const [{ id: paymentId }] = await tx
       .insert(billPayments)
       .values({
         workingOrderId: id,
-        submissionId: crypto.randomUUID(),
-        fingerprint: "pending-card-payment",
-        kind: "contribution",
+        submissionId: request.submissionId,
+        fingerprint: fingerprint(retryShapeOf(request)),
+        kind: "share",
+        shareOf: 1,
         method: "card",
         applied: 2600,
         state: "pending",
@@ -362,9 +344,27 @@ it("records a captured bill payment that covers the whole set-menu bill", async 
     });
     return paymentId;
   });
-  const result = await inTx(venue, (tx) =>
-    completeBillPayment(tx, deps(), venue.cfg, paymentId, receivedAt),
+  const result = await takeReaderBillPayment(
+    {
+      ...deps(),
+      provider,
+      settleCapturedReplay: async (tx, id, now, guestCount) => {
+        const settled = await settleFromProviderRow(
+          tx,
+          { ...deps(), cfg: venue.cfg },
+          id,
+          now,
+          guestCount,
+        );
+        return settled.settled === "received" ? settled.invoice : null;
+      },
+    },
+    venue.cfg,
+    id,
+    request,
+    venue.operator,
   );
+  expect(provider.collectCalls).toHaveLength(0);
   expect(result).toMatchObject({
     payment: { id: paymentId, state: "received" },
     invoice: { total: "26.00" },

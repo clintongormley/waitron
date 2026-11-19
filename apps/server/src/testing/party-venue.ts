@@ -33,7 +33,7 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import type { VenueResult } from "@waitron/provisioning";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { splitBill } from "./bill-action-fixture.js";
-import { takeBillPayment } from "./bill-payment-fixture.js";
+import { getBillBalance, takeBillPayment } from "./bill-payment-fixture.js";
 import { deploymentEnvironment } from "../config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 
@@ -43,7 +43,6 @@ import { joinTables } from "./table-action-fixture.js";
 import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
 import { systemClock } from "../till-backend.js";
-import { payWorkingOrder } from "./whole-payment-fixture.js";
 import { listTablesWithState, parkOrder } from "../working-order.js";
 import { publishWorkingMenu } from "./publish-menu.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
@@ -351,16 +350,25 @@ export async function pay(
   amount: string,
   ...guestCount: [] | [number | null]
 ): Promise<void> {
-  await payWorkingOrder(
-    { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+  const deps = { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock };
+  const balance = await getBillBalance(deps, billId);
+  const result = await takeBillPayment(
+    deps,
     v.cfg,
+    billId,
     {
-      id: billId,
-      lines: [],
-      tender: { method: "cash", amount },
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: amount,
+      applied: balance.outstanding,
+      tip: "0.00",
       ...(guestCount.length === 0 ? {} : { guestCount: guestCount[0] }),
     },
+    v.operator,
   );
+  if (result.invoice === undefined) throw new Error(`pay: bill ${billId} has no invoice`);
 }
 
 /**
