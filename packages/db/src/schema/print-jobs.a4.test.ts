@@ -67,12 +67,12 @@ it("requires an office print to name a sale", async () => {
 });
 
 it("only accepts a recognised printer hold on an office print", async () => {
-  for (const write of [
-    () => insert("document", Uint8Array.of(1), null, "paper_out"),
-    () => insert("a4", null, saleId, "invented"),
-  ]) {
-    expect(engineErrorMessage(await captureError(write))).toBe(
-      "CHECK constraint failed: print_jobs_printer_hold_ck",
-    );
-  }
+  const wrongKind = await captureError(() =>
+    insert("document", Uint8Array.of(1), null, "paper_out"),
+  );
+  expect(engineErrorMessage(wrongKind)).toBe("CHECK constraint failed: print_jobs_a4_hold_ck");
+  const unknownHold = await captureError(() => insert("a4", null, saleId, "invented"));
+  expect(engineErrorMessage(unknownHold)).toBe(
+    "CHECK constraint failed: print_jobs_printer_hold_ck",
+  );
 });

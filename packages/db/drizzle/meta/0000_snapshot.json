@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "daa837b9-d9b5-41bd-b5f8-0ae6a30cb6ba",
+  "id": "959941d6-7c89-4e8b-937c-338ea89efdd8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5901,7 +5901,11 @@
         },
         "print_jobs_printer_hold_ck": {
           "name": "print_jobs_printer_hold_ck",
-          "value": "\"print_jobs\".\"printer_hold\" is null or (\"print_jobs\".\"kind\" = 'a4' and \"print_jobs\".\"printer_hold\" in ('paper_jam', 'cover_open', 'paper_out', 'tray_missing', 'ink_or_toner_out', 'output_full', 'paused', 'stopped'))"
+          "value": "\"print_jobs\".\"printer_hold\" in ('paper_jam', 'cover_open', 'paper_out', 'tray_missing', 'ink_or_toner_out', 'output_full', 'paused', 'stopped')"
+        },
+        "print_jobs_a4_hold_ck": {
+          "name": "print_jobs_a4_hold_ck",
+          "value": "\"print_jobs\".\"printer_hold\" is null or \"print_jobs\".\"kind\" = 'a4'"
         },
         "print_jobs_handover_pair_ck": {
           "name": "print_jobs_handover_pair_ck",

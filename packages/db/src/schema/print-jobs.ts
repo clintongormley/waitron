@@ -94,10 +94,8 @@ export const printJobs = table(
     check("print_jobs_status_ck", enumCheck(t.status)),
     check("print_jobs_payload_ck", sql`(${t.kind} = 'a4') = (${t.payload} is null)`),
     check("print_jobs_a4_sale_ck", sql`${t.kind} <> 'a4' or ${t.saleId} is not null`),
-    check(
-      "print_jobs_printer_hold_ck",
-      sql`${t.printerHold} is null or (${t.kind} = 'a4' and ${enumCheck(t.printerHold)})`,
-    ),
+    check("print_jobs_printer_hold_ck", enumCheck(t.printerHold)),
+    check("print_jobs_a4_hold_ck", sql`${t.printerHold} is null or ${t.kind} = 'a4'`),
     check(
       "print_jobs_handover_pair_ck",
       sql`(${t.handedOverBy} is null) = (${t.handedOverAt} is null)`,

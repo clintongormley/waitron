@@ -911,7 +911,8 @@ CREATE TABLE `print_jobs` (
 	CONSTRAINT "print_jobs_status_ck" CHECK("print_jobs"."status" in ('queued', 'printing', 'done', 'failed')),
 	CONSTRAINT "print_jobs_payload_ck" CHECK(("print_jobs"."kind" = 'a4') = ("print_jobs"."payload" is null)),
 	CONSTRAINT "print_jobs_a4_sale_ck" CHECK("print_jobs"."kind" <> 'a4' or "print_jobs"."sale_id" is not null),
-	CONSTRAINT "print_jobs_printer_hold_ck" CHECK("print_jobs"."printer_hold" is null or ("print_jobs"."kind" = 'a4' and "print_jobs"."printer_hold" in ('paper_jam', 'cover_open', 'paper_out', 'tray_missing', 'ink_or_toner_out', 'output_full', 'paused', 'stopped'))),
+	CONSTRAINT "print_jobs_printer_hold_ck" CHECK("print_jobs"."printer_hold" in ('paper_jam', 'cover_open', 'paper_out', 'tray_missing', 'ink_or_toner_out', 'output_full', 'paused', 'stopped')),
+	CONSTRAINT "print_jobs_a4_hold_ck" CHECK("print_jobs"."printer_hold" is null or "print_jobs"."kind" = 'a4'),
 	CONSTRAINT "print_jobs_handover_pair_ck" CHECK(("print_jobs"."handed_over_by" is null) = ("print_jobs"."handed_over_at" is null))
 );
 --> statement-breakpoint
