@@ -65,3 +65,5 @@ export type {
 } from "./backend.js";
 // The fake backend is deliberately not re-exported: it is a test double.
 export type { FiscalOutboxSeat, FiscalOutboxState } from "./contribution.js";
+
+export const FISCAL_SUBMISSION_QUEUED = "fiscal_submission_queued";

@@ -5,6 +5,7 @@ import { incidents, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { observeSubmissionChanges } from "../test/submission-changes.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";
 import {
@@ -100,7 +101,9 @@ async function snapshot() {
 
 it("appends a correction and resolution together, preserving original delivery facts and invoice bytes", async () => {
   const before = await snapshot();
+  const changes = await observeSubmissionChanges(suite.db);
   const result = await apply();
+  expect(changes).toEqual(["fiscal_submission_queued"]);
   const after = await snapshot();
   expect(after.records).toHaveLength(2);
   expect(after.records[0]).toEqual(before.records[0]);

@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { StatementSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { observeSubmissionChanges } from "../test/submission-changes.js";
 import { recordSale } from "@waitron/core";
 import {
   captureError,
@@ -293,6 +294,21 @@ describe("the source and device on each record", () => {
   });
 });
 
+it("notifies the drain when a sale queues a record, but not when the sale rolls back", async () => {
+  const changes = await observeSubmissionChanges(suite.db);
+  await expect(
+    withTransaction(suite.db, async (tx) => {
+      await recordSale(tx, backend, saleInput({ nodeId, seriesId }));
+      expect(changes).toEqual([]);
+      throw new Error("deliberate rollback");
+    }),
+  ).rejects.toThrow("deliberate rollback");
+  expect(changes).toEqual([]);
+
+  await sell();
+  expect(changes).toEqual(["sales", "fiscal_submission_queued"]);
+});
+
 describe("recordVoid", () => {
   it("throws fiscal.sale_not_recorded for a sale with no prior alta", async () => {
     await expect(
@@ -309,11 +325,13 @@ describe("recordVoid", () => {
 
   it("appends an anulación referencing the original alta's own identity", async () => {
     const { saleId } = await sell();
+    const changes = await observeSubmissionChanges(suite.db);
     const ref = await withTransaction(suite.db, (tx) =>
       backend.recordVoid(tx, saleId, "staff error", nodeId),
     );
     expect(ref.backend).toBe("verifactu");
     expect(ref.state).toBe("pending");
+    expect(changes).toEqual(["fiscal_submission_queued"]);
 
     const rows = await suite.db.select().from(registrosFacturacion);
     const alta = rows.find((row) => row.tipoRegistro === "alta");
@@ -1358,6 +1376,7 @@ describe("the membership chart on each record", () => {
 
   it("reads the chart once to record a correction", async () => {
     const { saleId: correctsSaleId } = await sell();
+    const changes = await observeSubmissionChanges(suite.db);
     const reads = await chartReads(() =>
       withTransaction(suite.db, async (tx) => {
         const [series] = await tx
@@ -1408,10 +1427,12 @@ describe("the membership chart on each record", () => {
       }),
     );
     expect(reads).toBe(1);
+    expect(changes).toEqual(["sales", "fiscal_submission_queued"]);
   });
 
   it("reads the chart once to record a full invoice for tickets", async () => {
     const { saleId: ticket } = await sell();
+    const changes = await observeSubmissionChanges(suite.db);
     const reads = await chartReads(() =>
       withTransaction(suite.db, async (tx) => {
         const issuedAt = steadyClock.now().instant;
@@ -1457,6 +1478,7 @@ describe("the membership chart on each record", () => {
       }),
     );
     expect(reads).toBe(1);
+    expect(changes).toEqual(["sales", "fiscal_submission_queued"]);
   });
 });
 

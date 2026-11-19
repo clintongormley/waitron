@@ -48,6 +48,7 @@ import { assertNoActiveConflict } from "./conflict-evidence.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
+import { queueSubmission } from "./queue-submission.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { verifyChain } from "./verify.js";
@@ -288,7 +289,7 @@ export class VerifactuBackend implements FiscalBackend {
     );
 
     // Every column's default: `pendiente`, nothing sent.
-    await tx.insert(envios).values({ registroId: appended.id });
+    await queueSubmission(tx, { registroId: appended.id });
 
     return {
       backend: this.id,
@@ -482,7 +483,7 @@ export class VerifactuBackend implements FiscalBackend {
       { sif, chart },
     );
 
-    await tx.insert(envios).values({ registroId: appended.id });
+    await queueSubmission(tx, { registroId: appended.id });
 
     return {
       backend: this.id,
@@ -614,7 +615,7 @@ export class VerifactuBackend implements FiscalBackend {
       { sif, chart },
     );
 
-    await tx.insert(envios).values({ registroId: appended.id });
+    await queueSubmission(tx, { registroId: appended.id });
 
     return {
       backend: this.id,
@@ -742,7 +743,7 @@ export class VerifactuBackend implements FiscalBackend {
       { sif, chart },
     );
 
-    await tx.insert(envios).values({ registroId: appended.id });
+    await queueSubmission(tx, { registroId: appended.id });
 
     return {
       backend: this.id,
