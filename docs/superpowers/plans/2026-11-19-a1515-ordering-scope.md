@@ -25,8 +25,9 @@ their existing pieces.
 | 10 · 14–15 | Build the folder, count and summary widgets with the shared stepper. Add basket and sent-line tags and total logic. | Widget checks cover prices, draft places and accessibility. PR 12 takes the menu-browser and screen wiring and their browser tests. | 440 / 480 |
 | 11 · 17 | Connect set-menu bill moves in the till's move screen. Reuse the target bill read and placement preview. | Browser checks cover moving a menu with its dishes, a loose dish's price on the target and a refused move. | 250 / 310 |
 | 12 · 16a | Mount folders and counts (14–15). Wire `product-pick.ts`, `canSelectProduct`, screen totals and the no-place dialog. Land the help tooltip and `GUIDE_LINKS` with both guides, and update the backlog. | Run the browser wiring tests and the live checks from Tasks 14, 15b and 17. Check the folder, totals before and after Send, the no-place choices, moves, payment refusal and takeaway on a party bill. | 500 / 530 |
+| 13 · standalone takeaway | Reuse Counter's park and held-order paths, the bill's recorded copies, and PR 12's controls. See the [standalone takeaway plan](2026-11-19-a1515-standalone-takeaway.md). | Start with a set menu alone or with unsaved dishes. Reopen after republishing, save a dish from the original copy and keep it out of the kitchen until Place. Eat-in Counter still refuses set menus. | 460 / 480 |
 
-Estimated total is 4,240 lines of code and 5,660 of tests. PR 2 also regenerates the baseline at
+Estimated total is 4,700 lines of code and 6,140 of tests. PR 2 also regenerates the baseline at
 350–500 changed lines (for comparison, #3763 changed 355 generated lines). Run each
 PR's focused tests and required CI. PR 12 first shows the ordering controls. From PR 12 on, each PR states that set-menu bills
 cannot be paid until piece 4 (Lane L's A1515-SET-MENU-BILL) lands.

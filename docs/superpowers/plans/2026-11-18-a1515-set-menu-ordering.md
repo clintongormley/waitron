@@ -1339,4 +1339,5 @@ export function draftPlacements(
 
 The watcher moved the standalone counter flow and the recorded-copy read from PR 12 to PR 13
 on 19 November 2026 at 21:48 in Lane F's questions.md. This replaces the 13:24 note that put
-standalone takeaway in PR 12. The next slice needs its own reviewed plan before implementation.
+standalone takeaway in PR 12. The [standalone takeaway plan](2026-11-19-a1515-standalone-takeaway.md)
+records the next slice.
