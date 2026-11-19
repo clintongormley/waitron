@@ -19,13 +19,13 @@ export interface SetMenuOfferLookup {
   ): { offer: ZoneMenuOffer; copy: SetMenuCopy; fromRecordedCopy: boolean } | undefined;
 }
 
-/** Use the zone menus the caller already loaded to validate the basket's versions. */
+/** Validate a basket against the bill and zone versions. Edits supply version ids from stored rows. */
 export async function setMenuOfferLookup(
   tx: Transaction,
   workingOrderId: string | null,
   lines: readonly SetMenuLineOffer[],
   zoneMenus: readonly Pick<ZoneMenu, "id" | "versionId">[],
-  stale: "refuse" | "hide" = "refuse",
+  stale: "refuse" | "hide" | "stored" = "refuse",
 ): Promise<SetMenuOfferLookup> {
   const requests = new Map<string, { menuId: string; versionId: string; allowStale: boolean }>();
   for (const { setMenuId, menuVersionId, allowStale } of lines) {
@@ -40,7 +40,7 @@ export async function setMenuOfferLookup(
   }
   if (requests.size === 0) return { offerFor: () => undefined };
   const recorded =
-    workingOrderId === null
+    workingOrderId === null || stale === "stored"
       ? new Map<string, string>()
       : await readBillSetMenuVersions(tx, workingOrderId);
   const documents = await readRecordedDocuments(
@@ -60,7 +60,7 @@ export async function setMenuOfferLookup(
     }
     const liveVersionId = live.get(fullMenuId) ?? null;
     const expected = recorded.get(menuId) ?? liveVersionId;
-    if (versionId !== expected) {
+    if (stale !== "stored" && versionId !== expected) {
       if (allowStale) requests.delete(key);
       else changed.set(fullMenuId, liveVersionId);
     }
@@ -88,7 +88,7 @@ export async function setMenuOfferLookup(
         key,
         {
           copy: setMenuCopyOf(snapshot, versionId),
-          fromRecordedCopy: recorded.get(menuId) === versionId,
+          fromRecordedCopy: stale === "stored" || recorded.get(menuId) === versionId,
           offers: new Map(
             snapshot.offers.map((offer) => [
               offer.id,

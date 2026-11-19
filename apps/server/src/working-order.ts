@@ -143,7 +143,11 @@ import {
   type SetMenuDraftLine,
   type SetMenuPlacement,
 } from "./set-menu-bill.js";
-import { assertSetMenuPortion, setMenuOfferLookup } from "./set-menu-offers.js";
+import {
+  assertSetMenuPortion,
+  setMenuOfferLookup,
+  type SetMenuOfferLookup,
+} from "./set-menu-offers.js";
 import type { LineContextInput } from "@waitron/module";
 import "./errors.js";
 import { rerouteHeldAtRelease, stillMovable } from "./station-move.js";
@@ -609,6 +613,8 @@ const STORED_RISE = Symbol("storedRise");
 // Answers an edit has already settled: symbols, so no JSON body can set them.
 const FROZEN_OPTIONS = Symbol("frozenOptions");
 const FROZEN_EXTRAS = Symbol("frozenExtras");
+const STORED_SET_MENU_OFFER = Symbol("storedSetMenuOffer");
+type StoredSetMenuOffer = NonNullable<ReturnType<SetMenuOfferLookup["offerFor"]>>;
 
 /**
  * Return insertable snapshots and their gross lines together, so a caller filing
@@ -630,6 +636,7 @@ export async function priceOrderLines(
     extras?: ExtraSelection[];
     options?: OptionSelection[];
     [SET_MENU_DRAFT_LINE]?: SetMenuDraftLine;
+    [STORED_SET_MENU_OFFER]?: StoredSetMenuOffer;
     [FROZEN_OPTIONS]?: OptionSnapshot[];
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
@@ -696,6 +703,7 @@ export async function priceOrderLines(
   if (setMenuLines.length > 0) await refuseUnlessSetMenuBill(tx, workingOrderId);
   const setMenus = await setMenuOfferLookup(tx, workingOrderId, setMenuLines, offers.menus);
   const selectedSetMenu = (line: (typeof requestedLines)[number]) => {
+    if (line[STORED_SET_MENU_OFFER] !== undefined) return line[STORED_SET_MENU_OFFER];
     const draft = line[SET_MENU_DRAFT_LINE];
     return draft === undefined
       ? undefined
@@ -727,7 +735,8 @@ export async function priceOrderLines(
       const selected = selectedSetMenu(line);
       if (selected?.fromRecordedCopy === true) continue;
       const offer =
-        line[SET_MENU_DRAFT_LINE] === undefined ? offerById.get(line.menuItemId) : selected?.offer;
+        selected?.offer ??
+        (line[SET_MENU_DRAFT_LINE] === undefined ? offerById.get(line.menuItemId) : undefined);
       const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
       if (
         periodName === undefined ||
@@ -763,7 +772,8 @@ export async function priceOrderLines(
     }
     const setMenu = line[SET_MENU_DRAFT_LINE];
     const selected = selectedSetMenu(line);
-    const offer = setMenu === undefined ? offerById.get(line.menuItemId) : selected?.offer;
+    const isSetMenu = setMenu !== undefined || line[STORED_SET_MENU_OFFER] !== undefined;
+    const offer = isSetMenu ? selected?.offer : offerById.get(line.menuItemId);
     if (offer === undefined) {
       throw new AppError("service_zone.offer_not_allowed", {
         zoneId: zoneId!,
@@ -807,13 +817,13 @@ export async function priceOrderLines(
       throw new AppError("product.unavailable", { productId: offer.productId });
     }
     if (
-      setMenu === undefined &&
+      !isSetMenu &&
       offer.ordering === "not_sold_separately" &&
       line[ADDED_EXTRAS_ONLY] !== true
     ) {
       throw new AppError("product.not_sold_separately", { productId: offer.productId });
     }
-    if (setMenu !== undefined) assertSetMenuPortion(offer, line.variantId ?? null);
+    if (isSetMenu) assertSetMenuPortion(offer, line.variantId ?? null);
     const setMenuOffer =
       selected === undefined ? undefined : { offer, versionId: selected.copy.versionId };
     return { ...line, offer, setMenuOffer };
@@ -1354,7 +1364,7 @@ export async function hasStoredLines(tx: Transaction, workingOrderId: string): P
 
 /** An order's {@link storedOrderTotal} before an edit, for {@link refuseOrderOverSimplifiedLimit};
  * null, and nothing read, where the regime sets no limit. */
-async function totalBeforeEdit(
+export async function totalBeforeEdit(
   tx: Transaction,
   cfg: TradingContext,
   workingOrderId: string,
@@ -5602,6 +5612,9 @@ interface EditableLine {
   lineNo: number;
   parentLineId: string | null;
   productId: string | null;
+  setMenuRole: (typeof workingOrderLines.$inferSelect)["setMenuRole"];
+  setMenuId: string | null;
+  menuVersionId: string | null;
   /** Set on a variant line: the variant's parent, the dish whose lists the line answered. */
   parentProductId: string | null;
   quantity: Decimal;
@@ -5838,6 +5851,9 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
       productId: workingOrderLines.productId,
+      setMenuRole: workingOrderLines.setMenuRole,
+      setMenuId: workingOrderLines.setMenuId,
+      menuVersionId: workingOrderLines.menuVersionId,
       parentProductId: products.parentId,
       quantity: workingOrderLines.quantity,
       cancelledQuantity: lineServiceCancellations.quantity,
@@ -5880,6 +5896,9 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
     parentLineId: row.parentLineId,
     productId: row.productId,
     parentProductId: row.parentProductId,
+    setMenuRole: row.setMenuRole,
+    setMenuId: row.setMenuId,
+    menuVersionId: row.menuVersionId,
     quantity: thousandthsToDecimal(row.quantity),
     cancelledQuantity: row.cancelledQuantity ?? 0,
     priceQuantity: thousandthsToDecimal(row.priceQuantity),
@@ -5920,7 +5939,7 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
     ]),
   );
   const parents = lines
-    .filter((line) => line.parentLineId === null)
+    .filter((line) => line.parentLineId === null && line.setMenuRole !== "set_menu")
     .map((line) => ({
       ...line,
       menuItemId: menuItemByLine.get(line.id),
@@ -6106,17 +6125,42 @@ async function applyLineEdits(
       ])
     : undefined;
   const offerById = new Map(snapshot?.offers.map((offer) => [offer.id, offer]));
+  const recordedKeys = plan.edits.flatMap(({ parent }) =>
+    parent.setMenuId === null
+      ? []
+      : [
+          {
+            setMenuId: parent.setMenuId,
+            menuVersionId: parent.menuVersionId,
+            menuItemId: menuItemOf(parent),
+          },
+        ],
+  );
+  const recorded = await setMenuOfferLookup(tx, null, recordedKeys, [], "stored");
+  const recordedOffer = (line: EditableParent) =>
+    line.setMenuId === null
+      ? undefined
+      : recorded.offerFor({
+          setMenuId: line.setMenuId,
+          menuVersionId: line.menuVersionId,
+          menuItemId: menuItemOf(line),
+        });
+  const offerOf = (line: EditableParent) =>
+    line.setMenuId === null ? offerById.get(menuItemOf(line)) : recordedOffer(line)?.offer;
+
   // A stored line whose dish the live version no longer offers has no published lists left: its
   // options answer, which carries no price, is checked against the dish's own lists instead.
   const withdrawnDishes = needsModifiers
     ? plan.edits.flatMap(({ parent }) =>
-        offerById.has(menuItemOf(parent)) ? [] : [parent.parentProductId ?? parent.productId!],
+        parent.setMenuId !== null || offerOf(parent) !== undefined
+          ? []
+          : [parent.parentProductId ?? parent.productId!],
       )
     : [];
   const ownOptions = await productOptionLists(tx, withdrawnDishes);
   const modifiersByOffer = new Map<ZoneMenuOffer, OfferModifiers>();
   const modifiersOf = (line: EditableParent): OfferModifiers => {
-    const offer = offerById.get(menuItemOf(line));
+    const offer = offerOf(line);
     if (offer === undefined) {
       const dishId = (line.parentProductId ?? line.productId!).toLowerCase();
       return { ...NO_MODIFIERS, options: ownOptions.get(dishId) ?? [] };
@@ -6128,9 +6172,8 @@ async function applyLineEdits(
     }
     return modifiers;
   };
-  /** The unit the live offer sells the line's dish or variant in; none where it no longer sells it. */
-  const liveUnitOf = (line: EditableParent) => {
-    const offer = offerById.get(menuItemOf(line));
+  const offerUnitOf = (line: EditableParent) => {
+    const offer = offerOf(line);
     if (line.parentProductId === null) return offer?.unit;
     return offer?.variants.find((variant) => variant.id === line.productId)?.unit;
   };
@@ -6188,9 +6231,11 @@ async function applyLineEdits(
   );
 
   for (const { parent, intent } of plan.edits) {
-    assertQuantityPrecision(intent.quantity, parent.unitPrecision ?? MAX_UNIT_PRECISION, {
-      positive: true,
-    });
+    assertQuantityPrecision(
+      intent.quantity,
+      parent.setMenuId === null ? (parent.unitPrecision ?? MAX_UNIT_PRECISION) : 0,
+      { positive: true },
+    );
     const requested = decimal(intent.quantity);
     const rise = compareDecimal(requested, parent.quantity);
     if (
@@ -6229,7 +6274,7 @@ async function applyLineEdits(
             removed: [],
           }
         : editLineExtras(
-            extrasListsFor(modifiers.extras, liveUnitOf(parent)),
+            extrasListsFor(modifiers.extras, offerUnitOf(parent)),
             modifiers.extraProducts,
             intent.extras.set,
             {
@@ -6259,8 +6304,9 @@ async function applyLineEdits(
     const fired = kitchenHas(parent, changed || rise > 0, !changed && rise > 0);
     if (refusedDrop) refuseSent(parent, fired);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
-    // Widening an adjusted line would sell the added units at its adjusted price (ruling R12).
-    const addedApart = action === "free" && rise > 0 && parent.adjusted;
+    // Added set-menu units each need their own place. Adjusted prices apply only to existing units.
+    const addedApart =
+      action === "free" && rise > 0 && (parent.adjusted || parent.setMenuId !== null);
     const portion = portionOf.get(parent.id);
     // A whole portion rises by copies of itself, so the filed row is what raising it in place gave.
     const copies =
@@ -6281,7 +6327,9 @@ async function applyLineEdits(
     const inheritMakeAt =
       intent.makeAt === undefined ||
       (intent.makeAt === null && parent.ticket?.stationChosenAt != null);
+    const storedOffer = recordedOffer(parent);
     const asOffered = (quantity: string): RequestedLine => ({
+      [STORED_SET_MENU_OFFER]: storedOffer,
       [RETAINED_COURSE]: true,
       [STORED_RISE]: true,
       courseId: parent.courseId,
@@ -6333,6 +6381,7 @@ async function applyLineEdits(
         [FROZEN_OPTIONS]: [],
         [FROZEN_EXTRAS]: extras.added,
         [ADDED_EXTRAS_ONLY]: true,
+        [STORED_SET_MENU_OFFER]: storedOffer,
         ...([parent, ...parent.children].some(
           (part) => part.sentAt !== null || part.ticket !== null,
         )
@@ -6519,6 +6568,7 @@ async function applyLineEdits(
   let nextLineNo = order.maxLineNo;
   const inserted: WorkingOrderLineInsert[] = [];
   const insertedContexts: typeof priced.lineContexts = [];
+  const setMenuPlacements: SetMenuPlacement[] = [];
   const fireNow: Parameters<typeof fireLines>[3] = [];
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   const keepStations = new Map<string, string>();
@@ -6714,7 +6764,11 @@ async function applyLineEdits(
     if (as.kind !== "line") return;
     let group: { rows: WorkingOrderLineInsert[]; contexts: typeof priced.contexts } = priced;
     if (as.expand === true) {
-      const out = expandPortionRows(priced.rows, priced.contexts, priced.portionable, 0);
+      const portionable =
+        as.origin?.setMenuId == null
+          ? priced.portionable
+          : priced.rows.map((row) => row.parentLineId === null);
+      const out = expandPortionRows(priced.rows, priced.contexts, portionable, 0);
       group = { rows: out.rows, contexts: out.lineContexts };
     }
     const groupId = as.joins === undefined ? (newGroups.get(as.kitchen) ?? null) : as.joins.groupId;
@@ -6729,6 +6783,19 @@ async function applyLineEdits(
       });
     }
     for (const [rowIndex, row] of group.rows.entries()) {
+      const origin = as.origin;
+      if (row.parentLineId === null && origin?.setMenuId != null) {
+        setMenuPlacements.push({
+          workingOrderLineId: row.id!,
+          draft: {
+            position: setMenuPlacements.length,
+            setMenuId: origin.setMenuId,
+            reserved: null,
+          },
+          productId: origin.parentProductId ?? origin.productId!,
+          variantId: origin.parentProductId === null ? null : origin.productId,
+        });
+      }
       if (as.joins?.groupId === null) {
         const source =
           row.parentLineId === null
@@ -6787,11 +6854,13 @@ async function applyLineEdits(
       insertedContexts,
       priced.offers,
     );
-    await insertInChunks(
+    const placed = await placeSetMenuRows(
       tx,
-      workingOrderLines,
+      orderId,
       inserted.map((row) => ({ ...row, ...contextByLine.get(row.id!) })),
+      setMenuPlacements,
     );
+    await insertInChunks(tx, workingOrderLines, placed);
     await carryLineReductions(tx, copiedContexts);
     await copyAllergyWorkingTicks(tx, copiedDishes);
   }
@@ -7112,7 +7181,7 @@ export async function setWorkingOrderLabel(
  * Save an edited copy of an OPEN order, from any node of the venue, by the rules
  * {@link applyLineEdits} states. A line of the basket naming a stored line by id, through the same
  * offer and variant, edits it; a line naming a different offer or variant replaces it with a new
- * item priced now; a line naming none is new; a stored line the basket leaves out is removed. A
+ * item priced now; a line naming none is new; a dish line the basket leaves out is removed. A
  * dish that is served, started or fired, or was sent with no kitchen record, is refused rather than
  * replaced, left out or lowered. An absent label clears it: the whole request is the new state. A
  * save given `issue` may issue the bill's invoice, so it must name who saves.

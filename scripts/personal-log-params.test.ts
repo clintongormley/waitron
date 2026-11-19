@@ -131,6 +131,7 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["service_zone.not_found.name", "the name of a category or product in an import"],
   ["service_zone.not_found.zoneName", "the name of a zone"],
   ["set_menu.no_place.dishName", "the priced dish's product name"],
+  ["set_menu.place_taken.dishName", "the stored dish's product name"],
   ["special_day.date_taken.name", "the name of a special day"],
   ["role.name_taken.name", "the name of an access role"],
   ["staff_role.name_taken.name", "the name of a staff role"],
