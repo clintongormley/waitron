@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   invoiceDeliveries,
   invoiceSeries,
+  parties,
+  printers,
   printJobs,
   readVenueClock,
   sales,
@@ -17,8 +19,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { businessDayAt, businessDayBounds } from "@waitron/shared";
+import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
+import { endMeal } from "./meal-end.js";
 import { closeOfDayConfig, issueBillAtClose, type CloseOfDayRule } from "./close-of-day.js";
 import { giveAway } from "./testing/cancel-line.js";
 import { clockAt } from "./testing/deferred-close-fixture.js";
@@ -38,6 +41,18 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
+
+const inFlightCheck = vi.hoisted(() => ({ refusal: undefined as Error | undefined }));
+vi.mock("./till-sale.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./till-sale.js")>();
+  return {
+    ...original,
+    refuseBillPaymentInFlight: (...args: Parameters<typeof original.refuseBillPaymentInFlight>) =>
+      inFlightCheck.refusal === undefined
+        ? original.refuseBillPaymentInFlight(...args)
+        : Promise.reject(inFlightCheck.refusal),
+  };
+});
 
 let venue: BillVenue;
 let counterZone: string;
@@ -80,6 +95,42 @@ function deps() {
 function close(billId: string, at: CloseOfDayRule = rule) {
   return withTransaction(venue.db, (tx) =>
     issueBillAtClose(tx, deps(), closeOfDayConfig(venue.cfg), billId, at),
+  );
+}
+
+async function partyStateOf(partyId: string) {
+  const [row] = await inTx(venue, (tx) =>
+    tx.select({ state: parties.state }).from(parties).where(eq(parties.id, partyId)),
+  );
+  return row!.state;
+}
+
+/** Print the bill through its own function, as a till does. */
+async function printTheBill(party: Pick<Party, "partyId" | "tabId">) {
+  const { billId, editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
+    readBillEditState(tx, party.tabId),
+  );
+  return inTx(venue, (tx) =>
+    endMeal(
+      tx,
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      party.partyId,
+      {
+        billId: party.tabId,
+        expectedPartyRevision: revisionOf(party.partyId),
+        expectedEdits: [{ billId, editorVersion, draftId, draftRevision }],
+        submissionId: randomUUID(),
+        printAnyway: true,
+      },
+      venue.operatorId,
+      null,
+    ),
   );
 }
 
@@ -249,6 +300,7 @@ describe("issueBillAtClose", () => {
     expect(recordSources(party.tabId)).toEqual([{ source: "trading_day_close", deviceId: null }]);
     expect(await statusOf(venue, party.tabId)).toBe("placed");
     expect(revisionOf(party.partyId)).toBeGreaterThan(revision);
+    expect(await partyStateOf(party.partyId)).toBe("open");
     expect(countOf(printJobs)).toBe(jobs);
     expect(countOf(ticketItems)).toBe(kitchen);
   });
@@ -335,6 +387,31 @@ describe("issueBillAtClose", () => {
     expect(await jobsOf(sale!.id)).toEqual([{ kind: "a4", page: "invoice" }]);
   });
 
+  it("still issues a full invoice staged for an A4 printer switched off since, printing no receipt", async () => {
+    const pagePrinterId = randomUUID();
+    await inTx(venue, (tx) =>
+      insertA4Printer(tx, { id: pagePrinterId, name: "Office", host: pagePrinterId }),
+    );
+    const party = await seatedWith(venue, "Red wine bottle");
+    await chooseFullInvoice(party.tabId);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ invoiceDelivery: { medium: "a4", pagePrinterId, personId: venue.operatorId } })
+        .where(eq(workingOrders.id, party.tabId)),
+    );
+    await inTx(venue, (tx) =>
+      tx.update(printers).set({ active: false }).where(eq(printers.id, pagePrinterId)),
+    );
+
+    const outcome = await close(party.tabId);
+
+    const [sale] = await salesOf(party.tabId);
+    expect(outcome).toEqual({ kind: "issued", saleId: sale!.id });
+    expect(sale).toMatchObject({ counterpartyTaxId: "B12345674", source: "trading_day_close" });
+    expect(await jobsOf(sale!.id)).toEqual([]);
+  });
+
   it("issues and settles a €0.00 bill", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     await giveAway(venue, party.tabId, 1);
@@ -362,18 +439,34 @@ describe("issueBillAtClose", () => {
     expect(owedOn(party.tabId)).toBe("25.00");
   });
 
+  it("lets any other refusal from the payment-in-flight check through", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    inFlightCheck.refusal = new AppError("bill.nothing_outstanding", {
+      workingOrderId: party.tabId,
+    });
+    try {
+      await leftAlone(party, () =>
+        expect(close(party.tabId)).rejects.toMatchObject({ code: "bill.nothing_outstanding" }),
+      );
+    } finally {
+      inFlightCheck.refusal = undefined;
+    }
+  });
+
   describe("leaves alone, writing nothing", () => {
     it("a bill already printed", async () => {
       const party = await seatedWith(venue, "Red wine bottle");
-      await close(party.tabId);
+      const printed = await printTheBill(party);
       const records = fiscalRecordCount(venue);
+      const jobs = countOf(printJobs);
       const revision = revisionOf(party.partyId);
 
       expect(await close(party.tabId)).toEqual({ kind: "not_due" });
 
-      expect(await salesOf(party.tabId)).toHaveLength(1);
+      expect(await salesOf(party.tabId)).toMatchObject([{ id: printed.saleId, source: "device" }]);
       expect(fiscalRecordCount(venue)).toBe(records);
       expect(revisionOf(party.partyId)).toBe(revision);
+      expect(countOf(printJobs)).toBe(jobs);
     });
 
     it("a Counter order not handed over", async () => {
@@ -480,6 +573,27 @@ describe("issueBillAtClose", () => {
         );
       }
     });
+  });
+
+  it("issues a bill stored as opened before the latest series retirement but counted as opened after it", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    const retiredAt = new Date(Date.now() + 1000);
+    const [retired] = await inTx(venue, (tx) =>
+      tx
+        .insert(invoiceSeries)
+        .values({ nodeId: venue.cfg.nodeId, code: `OLD-${randomUUID().slice(0, 8)}`, retiredAt })
+        .returning({ id: invoiceSeries.id }),
+    );
+    const counted: CloseOfDayRule = {
+      ...rule,
+      openedAt: (billId) =>
+        billId === party.tabId ? new Date(retiredAt.getTime() + 1000) : undefined,
+    };
+    try {
+      expect(await close(party.tabId, counted)).toMatchObject({ kind: "issued" });
+    } finally {
+      await inTx(venue, (tx) => tx.delete(invoiceSeries).where(eq(invoiceSeries.id, retired!.id)));
+    }
   });
 
   it("called twice, issues one sale and one record", async () => {

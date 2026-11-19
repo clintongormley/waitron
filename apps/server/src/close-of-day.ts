@@ -32,6 +32,11 @@ export interface CloseOfDayRule {
   openedAt?: (billId: string) => Date | undefined;
 }
 
+const MONEY_MOVING: ReadonlySet<string> = new Set([
+  "bill.refund_in_progress",
+  "order.payment_in_flight",
+]);
+
 export type CloseOfDayOutcome =
   | { kind: "issued"; saleId: string }
   | { kind: "not_due" }
@@ -71,7 +76,7 @@ export async function issueBillAtClose(
   try {
     await refuseBillPaymentInFlight(deps.db, tx, billId, bill.status);
   } catch (error) {
-    if (isAppError(error)) return { kind: "money_moving" };
+    if (isAppError(error) && MONEY_MOVING.has(error.code)) return { kind: "money_moving" };
     throw error;
   }
   // A walkout refuses such a bill until staff cancel the dish (D4); once issued it would not.
@@ -89,6 +94,8 @@ export async function issueBillAtClose(
   const owed = await stillOwedOnIssuedBill(tx, billId, total);
   if (decimalToCents(total) !== 0 && decimalToCents(owed) <= 0)
     return { kind: "left_open", reason: "owes_nothing" };
+  // Unlike Print the bill, a staged delivery that cannot be reserved does not stop the close:
+  // nobody is there to hand it to.
   const { saleId } = await issueUnpaidInvoice(
     tx,
     deps.backend,
@@ -129,14 +136,13 @@ async function readDueBill(
     .groupBy(workingOrders.id);
   if (bill === undefined || bill.lines === 0 || bill.nodeId !== cfg.nodeId) return undefined;
   if ((await readIssuedSales(tx, [billId])).has(billId)) return undefined;
-  const stored = Date.parse(bill.openedAt);
+  const openedAt = rule.openedAt?.(billId)?.getTime() ?? Date.parse(bill.openedAt);
   const [series] = await tx
     .select({ retiredAt: max(invoiceSeries.retiredAt) })
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.nodeId, cfg.nodeId), isNotNull(invoiceSeries.retiredAt)));
   const retiredAt = series?.retiredAt == null ? undefined : new Date(series.retiredAt);
-  if (retiredAt !== undefined && stored <= retiredAt.getTime()) return undefined;
-  const openedAt = rule.openedAt?.(billId)?.getTime() ?? stored;
+  if (retiredAt !== undefined && openedAt <= retiredAt.getTime()) return undefined;
   if (openedAt >= rule.dayStartedAt.getTime()) return undefined;
   return { status: bill.status, partyId: bill.partyId!, openedBy: bill.openedBy };
 }
