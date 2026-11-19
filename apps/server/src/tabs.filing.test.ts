@@ -1,3 +1,4 @@
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
@@ -32,14 +33,22 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
 import { createOpenOrder, listStationQueue } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
-import { getBillBalance, takeBillPayment } from "./testing/bill-payment-fixture.js";
+import {
+  counterFixtureOperator,
+  deviceRequestCfg,
+  openTillSession,
+} from "./testing/session-device.js";
+import {
+  getBillBalance,
+  payFreshCounterInCash,
+  paySavedBillInCash,
+  takeBillPayment,
+} from "./testing/bill-payment-fixture.js";
 import type { TradingContext } from "./trading-context.js";
 
 /**
@@ -224,8 +233,8 @@ async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)", () => {
-  it("openTab + addTabRound → payWorkingOrder settles it, files one sale + fiscal record, table reads free", async () => {
+describe("bill payment closes the tab", () => {
+  it("settles a tab with a round, files one sale and one fiscal record, and frees the table", async () => {
     const { cfg, coffee, water, tables } = await setupVenue();
     const tableId = await seedTable(cfg, "Pay-1", suite.db, tables.zoneId);
     const deps = { db: suite.db, backend, clock };
@@ -242,12 +251,14 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
       ]);
     });
 
-    // Paying by id files the stored lines; `lines` is ignored.
-    const res = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    // Paying by id files the stored lines.
+    const res = await paySavedBillInCash(
+      { ...deps, admission: testTradingAdmission() },
+      cfg,
+      await counterFixtureOperator(deps.db, cfg.origin.deviceId),
+      tabId,
+      "5.00",
+    );
     expect(res.total).toBe("3.50");
     expect(res.invoiceNumber).toBe("A/1");
     expect(await orderState(tabId)).toEqual({ status: "settled", settledAtSet: true });
@@ -344,12 +355,17 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     const { cfg: cfgA, coffee: coffeeA, counter: counterA } = await setupVenue();
     const nifA = await nifOf();
     const walkUpId = randomUUID();
-    await payWorkingOrder({ ...depsA, admission: testTradingAdmission() }, cfgA, {
-      id: walkUpId,
-      zoneId: counterA.zoneId,
-      lines: [{ menuItemId: counterA.offerFor(coffeeA.id), quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await payFreshCounterInCash(
+      { ...depsA, admission: testTradingAdmission() },
+      cfgA,
+      await counterFixtureOperator(depsA.db, cfgA.origin.deviceId),
+      walkUpId,
+      {
+        zoneId: counterA.zoneId,
+        lines: [{ menuItemId: counterA.offerFor(coffeeA.id), quantity: "1" }],
+      },
+      "5.00",
+    );
 
     const { cfg: cfgB, coffee: coffeeB, tables: tablesB } = await secondVenueSharingNif(nifA);
     const tableId = await seedTable(cfgB, "H2-tab", suiteB.db, tablesB.zoneId);
@@ -359,11 +375,13 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
         lines: [{ menuItemId: tablesB.offerFor(coffeeB.id), quantity: "1" }],
       });
     });
-    await payWorkingOrder({ ...depsB, admission: testTradingAdmission() }, cfgB, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await paySavedBillInCash(
+      { ...depsB, admission: testTradingAdmission() },
+      cfgB,
+      await counterFixtureOperator(depsB.db, cfgB.origin.deviceId),
+      tabId,
+      "5.00",
+    );
 
     // Without this, a tab that stopped belonging to the party seated at its table would make the
     // equality below vacuous.
@@ -568,20 +586,24 @@ describe("a sent line is payable after archival; an archived unsent one is not",
     const { billId: checkId } = await withTransaction(suite.db, (tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]),
     );
-    const check = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: checkId,
-      lines: [],
-      tender: { method: "cash", amount: "12.00" },
-    });
+    const check = await paySavedBillInCash(
+      { ...deps, admission: testTradingAdmission() },
+      cfg,
+      await counterFixtureOperator(deps.db, cfg.origin.deviceId),
+      checkId,
+      "12.00",
+    );
     expect(check.total).toBe("12.00");
 
     // The tab still holds the unsent Burger, which blocks it and files nothing.
     await expect(
-      payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-        id: tabId,
-        lines: [],
-        tender: { method: "cash", amount: "50.00" },
-      }),
+      paySavedBillInCash(
+        { ...deps, admission: testTradingAdmission() },
+        cfg,
+        await counterFixtureOperator(deps.db, cfg.origin.deviceId),
+        tabId,
+        "50.00",
+      ),
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: burgerId } });
     expect(await saleCount(tabId)).toBe(0);
 
@@ -609,11 +631,13 @@ describe("a sent line is payable after archival; an archived unsent one is not",
 
     // Removing the held Burger lets the tab pay its fired Burger and the bottle.
     await withTransaction(suite.db, (tx) => cancelLine(tx, cfg, tabId, 4));
-    const tab = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "15.00" },
-    });
+    const tab = await paySavedBillInCash(
+      { ...deps, admission: testTradingAdmission() },
+      cfg,
+      await counterFixtureOperator(deps.db, cfg.origin.deviceId),
+      tabId,
+      "15.00",
+    );
     expect(tab.total).toBe("15.00");
     expect(await orderState(tabId)).toEqual({ status: "settled", settledAtSet: true });
   });

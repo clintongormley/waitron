@@ -1,3 +1,5 @@
+import { openTillSession } from "./testing/session-device.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 // Pinned before anything loads: a clock not replaced here would stamp the host's offset.
 process.env.TZ = "Europe/Madrid";
@@ -23,7 +25,6 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import {
   billWith,
   inTx,
@@ -177,7 +178,7 @@ async function fileFullComps(db: Database) {
     at(2);
     await adjust(venue, billId, 3, { action: "discount_amount", amount: "1.25" });
     at(0);
-    const ticket = await payWorkingOrder(
+    const ticket = await paySavedBillInCash(
       {
         admission: testTradingAdmission(),
         db: venue.db,
@@ -185,8 +186,15 @@ async function fileFullComps(db: Database) {
         clock: venue.clock,
       },
       venue.cfg,
-      { id: billId, tender: { method: "cash", amount: "2.00" }, lines: [] },
-      venue.staffId,
+      {
+        personId: venue.staffId,
+        sessionId: await openTillSession(venue.db, {
+          deviceId: venue.cfg.origin.deviceId,
+          personId: venue.staffId,
+        }),
+      },
+      billId,
+      "2.00",
     );
     const printed = printedLines(
       formatReceipt({

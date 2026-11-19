@@ -7,12 +7,9 @@ import { departments, withTransaction } from "@waitron/db";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountReportApi } from "./report-api.js";
-import { testTradingAdmission } from "./testing/trading-admission.js";
+import { randomUUID } from "node:crypto";
 import { deferredCloseVenue, type DeferredCloseKit } from "./testing/deferred-close-fixture.js";
-import {
-  payWorkingOrder,
-  payWorkingOrderIntegratedOrchestration,
-} from "./testing/whole-payment-fixture.js";
+import { cashPayment, send } from "./testing/bill-venue.js";
 import "./errors.js";
 
 // Its own database: the case closes bills in today's business day, which the overview reads.
@@ -49,23 +46,29 @@ function dayBefore(day: string): string {
 
 describe("reports, a bill closed as a deferred payment", () => {
   it("counts it once among the bills closed, apart from the money received", async () => {
-    const deps = { db: t.venue.db, backend: t.venue.backend, clock: t.venue.clock };
     const deferredBill = await t.counterOrder("placed");
     await t.close(await t.requestFor(deferredBill, "18.00", null));
     const cash = await t.counterOrder("open");
-    await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, t.venue.cfg, {
-      id: cash,
-      tender: { method: "cash", amount: "18.00" },
-      lines: [],
-    });
-    // The manual card tender takes no tip; the reader path does, with tips on.
+    const cashPaid = await cashPayment(t.venue, t.venue.cookie, cash, "18.00");
+    expect(cashPaid.status, JSON.stringify(cashPaid.json)).toBe(200);
     const card = await t.counterOrder("open");
-    const paid = await payWorkingOrderIntegratedOrchestration(
-      { ...deps, admission: testTradingAdmission(), provider: t.venue.card },
-      { ...t.venue.cfg, tipsEnabled: true },
-      { id: card, lines: [], tip: "2.00" },
+    const paid = await send(
+      t.venue.app,
+      t.venue.cookie,
+      "POST",
+      `/api/working-orders/${card}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "18.00",
+        method: "card",
+        entry: "reader",
+        applied: "18.00",
+        tip: "2.00",
+        addedTip: "2.00",
+      },
     );
-    expect(paid).toMatchObject({ outcome: "captured" });
+    expect(paid).toMatchObject({ status: 200, json: { outcome: "received" } });
 
     const summary = {
       billsClosed: { count: 3, total: "54.00" },
@@ -110,16 +113,8 @@ describe("reports, a bill closed as a deferred payment", () => {
   });
   it("uses saved department figures for a frozen day after its department is renamed", async () => {
     const order = await t.counterOrder("open");
-    await payWorkingOrder(
-      {
-        db: t.venue.db,
-        backend: t.venue.backend,
-        clock: t.venue.clock,
-        admission: testTradingAdmission(),
-      },
-      t.venue.cfg,
-      { id: order, tender: { method: "cash", amount: "18.00" }, lines: [] },
-    );
+    const paid = await cashPayment(t.venue, t.venue.cookie, order, "18.00");
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     const overview = await get("/management-api/reports/overview");
     const path = `/management-api/reports/daily-close?businessDay=${overview.businessDay}`;
     const before = await get(path);

@@ -25,7 +25,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { createTable } from "./testing/live-table.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
@@ -34,7 +34,7 @@ import { ensureOperator } from "./testing/cancel-line.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { createOpenOrder } from "./working-order.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 import type { TradingContext } from "./trading-context.js";
 
 /**
@@ -241,18 +241,22 @@ describe("H2 — after a partial transfer, each tab files its OWN single fiscal 
       });
     });
 
-    // A now holds café×3; B holds café×4 + café×1. `lines: []` files from the stored locked lines.
+    // A now holds café×3; B holds café×4 + café×1. Payment files from the locked lines.
     const deps = { db: suite.db, backend, clock };
-    const paidA = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: tabA,
-      lines: [],
-      tender: { method: "cash", amount: "20.00" },
-    });
-    const paidB = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: tabB,
-      lines: [],
-      tender: { method: "cash", amount: "20.00" },
-    });
+    const paidA = await paySavedBillInCash(
+      { ...deps, admission: testTradingAdmission() },
+      cfg,
+      await counterFixtureOperator(suite.db, cfg.origin.deviceId),
+      tabA,
+      "20.00",
+    );
+    const paidB = await paySavedBillInCash(
+      { ...deps, admission: testTradingAdmission() },
+      cfg,
+      await counterFixtureOperator(suite.db, cfg.origin.deviceId),
+      tabB,
+      "20.00",
+    );
 
     // Each tab files EXACTLY one sale + one chained fiscal record — no café double-files (every café lives on
     // exactly one tab after the split), the H2 invariant the transfer must preserve.

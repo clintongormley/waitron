@@ -3,6 +3,7 @@ import { withTransaction, type Database } from "@waitron/db";
 import { isUuid } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
 import {
+  getBillBalance,
   previewBillPayment as preview,
   takeBillPayment as take,
   takeReaderBillPayment as reader,
@@ -127,5 +128,32 @@ export async function payFreshCounterInCash(
     basket,
   );
   if (result.invoice === undefined) throw new Error(`pay: bill ${id} has no invoice`);
+  return result.invoice;
+}
+
+export async function paySavedBillInCash(
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  operator: Parameters<typeof take>[4],
+  id: string,
+  tendered: string,
+) {
+  const { outstanding } = await getBillBalance(deps, id);
+  const result = await takeBillPayment(
+    deps,
+    cfg,
+    id,
+    {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered,
+      applied: outstanding,
+      tip: "0.00",
+    },
+    operator,
+  );
+  if (result.invoice == null) throw new Error(`pay: bill ${id} has no invoice`);
   return result.invoice;
 }

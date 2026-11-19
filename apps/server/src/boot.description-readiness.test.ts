@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -70,16 +71,26 @@ it("a trading boot without a fiscal description field accepts a department's emp
       WAITRON_NODE_ID: venue.cfg.nodeId,
       WAITRON_ONBOARDING_INTENT: "demo",
     });
-    const reply = await fetch(`http://127.0.0.1:${httpPort()}/api/sales`, {
-      method: "POST",
-      headers: { cookie: venue.cookie, "content-type": "application/json" },
-      body: JSON.stringify({
-        dining: "eat_in",
-        zoneId: venue.zoneId,
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-        tender: { method: "cash", amount: "3.00" },
-      }),
-    });
+    const billId = randomUUID();
+    const reply = await fetch(
+      `http://127.0.0.1:${httpPort()}/api/working-orders/${billId}/payments`,
+      {
+        method: "POST",
+        headers: { cookie: venue.cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          dining: "eat_in",
+          submissionId: billId,
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "3.00",
+          basket: {
+            zoneId: venue.zoneId,
+            lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+          },
+        }),
+      },
+    );
     expect(await reply.json()).not.toHaveProperty("error");
     expect(reply.status).toBe(200);
     expect(suite.db.all(sql`select fiscal_backend, total from sales`)).toEqual([

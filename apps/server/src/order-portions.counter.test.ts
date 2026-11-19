@@ -21,6 +21,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { takeBillPayment } from "./bill-payments.js";
+import { payFreshCounterInCash, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { carryLineReductions } from "./order-portions.js";
 import { inTx, provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
@@ -28,11 +29,7 @@ import { openTillSession } from "./testing/session-device.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import {
-  payWorkingOrder,
-  payWorkingOrderIntegratedOrchestration,
-  type IntegratedPayDeps,
-} from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration, type IntegratedPayDeps } from "./till-sale.js";
 import {
   createOpenOrder,
   parkOrder,
@@ -164,13 +161,24 @@ function saleOf(orderId: string) {
   );
 }
 
+async function operator() {
+  const personId = venue.operatorId;
+  const sessionId = await openTillSession(venue.db, {
+    deviceId: venue.cfg.origin.deviceId,
+    personId,
+  });
+  return { personId, sessionId };
+}
+
 async function walkUp(lines: TabRoundLine[], amount: string): Promise<string> {
   const id = randomUUID();
-  await payWorkingOrder(
+  await payFreshCounterInCash(
     { ...venue, admission: testTradingAdmission() },
     venue.cfg,
-    { id, expectedEdit: null, lines, zoneId: counter.zoneId, tender: { method: "cash", amount } },
-    venue.operatorId,
+    await operator(),
+    id,
+    { lines, zoneId: counter.zoneId },
+    amount,
   );
   return id;
 }
@@ -185,16 +193,12 @@ async function park(lines: TabRoundLine[]): Promise<{ id: string; orderNumber: n
 }
 
 async function payParked(id: string, amount: string): Promise<void> {
-  await payWorkingOrder(
+  await paySavedBillInCash(
     { ...venue, admission: testTradingAdmission() },
     venue.cfg,
-    {
-      id,
-      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
-      lines: [],
-      tender: { method: "cash", amount },
-    },
-    venue.operatorId,
+    await operator(),
+    id,
+    amount,
   );
 }
 
@@ -397,17 +401,13 @@ describe("A1208 counter orders are written as portions", () => {
     const id = randomUUID();
 
     await expect(
-      payWorkingOrder(
+      payFreshCounterInCash(
         { ...venue, admission: testTradingAdmission() },
         venue.cfg,
-        {
-          id,
-          expectedEdit: null,
-          lines: croquettes("100"),
-          zoneId: counter.zoneId,
-          tender: { method: "cash", amount: "333.00" },
-        },
-        venue.operatorId,
+        await operator(),
+        id,
+        { lines: croquettes("100"), zoneId: counter.zoneId },
+        "333.00",
       ),
     ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
 

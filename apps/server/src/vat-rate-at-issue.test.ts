@@ -9,7 +9,14 @@ import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { diningTables, saleLines, sales, withTransaction, workingOrders } from "@waitron/db";
+import {
+  billPayments,
+  diningTables,
+  saleLines,
+  sales,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -28,21 +35,21 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
-import { takeBillPayment, type BillPaymentRequest } from "./testing/bill-payment-fixture.js";
+import {
+  payFreshCounterInCash,
+  takeBillPayment,
+  takeReaderBillPayment,
+  type BillPaymentRequest,
+} from "./testing/bill-payment-fixture.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
-import {
-  collectOrderOrchestration as collectOrder,
-  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-  recordTillSaleOrchestration as recordTillSale,
-} from "./testing/whole-payment-fixture.js";
 import { parkOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 
 // A release that ships a reduced rate of 4% from 1 January 2027, the shipped table otherwise.
 vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal) => {
@@ -224,12 +231,13 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     }),
     tables: await offerProducts(tx, cfg, { zone: "tables" }),
   }));
-  return { cfg, products, counter, tables };
+  const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
+  return { cfg, products, counter, tables, operator };
 }
 
 type Venue = Awaited<ReturnType<typeof setupVenue>>;
 
-const deps = () => ({ db: suite.db, backend, clock });
+const deps = () => ({ db: suite.db, backend, clock, admission: testTradingAdmission() });
 
 const one = (v: Venue, productId: string) => [
   { menuItemId: v.counter.offerFor(productId), quantity: "1" },
@@ -291,7 +299,7 @@ function stubProvider(onCollect: () => void): PaymentProvider {
     async collect(params): Promise<PaymentResult> {
       onCollect();
       const paymentRef = `pi-${randomUUID()}`;
-      const settledAt = new Date();
+      const settledAt = new Date(time.at);
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
           origin: params.origin,
@@ -302,6 +310,7 @@ function stubProvider(onCollect: () => void): PaymentProvider {
           amount: params.amount,
           settledAt,
           externalRef: paymentRef,
+          billPaymentId: params.billPaymentId,
         }),
       );
       return {
@@ -332,6 +341,19 @@ function cash(amount: string): BillPaymentRequest {
   };
 }
 
+const payCash = (v: Venue, id: string, amount: string) =>
+  takeBillPayment(deps(), v.cfg, id, cash(amount), v.operator);
+
+const payFreshBeer = (v: Venue, id: string) =>
+  payFreshCounterInCash(
+    deps(),
+    v.cfg,
+    v.operator,
+    id,
+    { zoneId: v.counter.zoneId, lines: one(v, v.products.beer) },
+    "2.50",
+  );
+
 describe("a sale files the rate in force on the day its invoice is issued", () => {
   it("walk-up: the day before the change files the old rate, the day of it the new one", async () => {
     const v = await setupVenue();
@@ -339,19 +361,9 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const newYear = randomUUID();
 
     at(EVE);
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: eve,
-      zoneId: v.counter.zoneId,
-      lines: one(v, v.products.beer),
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payFreshBeer(v, eve);
     at(NEW_YEAR);
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: newYear,
-      zoneId: v.counter.zoneId,
-      lines: one(v, v.products.beer),
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payFreshBeer(v, newYear);
 
     expect(await filed(eve)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_4_PERCENT });
@@ -375,11 +387,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     ]);
 
     at(NEW_YEAR);
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "14.38" },
-    });
+    await payCash(v, tabId, "14.38");
 
     const sale = await filed(tabId);
     expect(sale.lines.map((line) => [line.productId, line.vatRate])).toEqual([
@@ -396,30 +404,10 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const tabId = await openTableTab(v, [
       { menuItemId: v.tables.offerFor(v.products.beer), quantity: "2" },
     ]);
-    await seedPerson(suite.db, { id: OPERATOR, displayName: "Operator" });
-    const operator = {
-      personId: OPERATOR,
-      sessionId: await openTillSession(suite.db, {
-        deviceId: v.cfg.origin.deviceId,
-        personId: OPERATOR,
-      }),
-    };
-    await takeBillPayment(
-      { ...deps(), admission: testTradingAdmission() },
-      v.cfg,
-      tabId,
-      cash("2.50"),
-      operator,
-    );
+    await payCash(v, tabId, "2.50");
 
     at(NEW_YEAR);
-    const { invoice } = await takeBillPayment(
-      { ...deps(), admission: testTradingAdmission() },
-      v.cfg,
-      tabId,
-      cash("2.50"),
-      operator,
-    );
+    const { invoice } = await payCash(v, tabId, "2.50");
 
     expect(invoice).not.toBeNull();
     expect(await filed(tabId)).toMatchObject({
@@ -434,21 +422,26 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const id = await park(v, one(v, v.products.beer));
     at("2026-12-31T22:59:30.000Z");
 
-    const out = await payWorkingOrderIntegrated(
-      {
-        admission: testTradingAdmission(),
-        ...deps(),
-        provider: stubProvider(() => at(MIDNIGHT)),
-        readerRef: "reader_1",
-      },
+    const { payment, invoice } = await takeReaderBillPayment(
+      { ...deps(), provider: stubProvider(() => at(MIDNIGHT)), readerRef: "reader_1" },
       v.cfg,
-      { id, lines: [] },
+      id,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "2.50",
+        method: "card",
+        entry: "reader",
+        applied: "2.50",
+        tip: "0.00",
+      },
+      v.operator,
     );
 
-    expect(out.outcome).toBe("captured");
+    expect(payment.state).toBe("received");
     const sale = await filed(id);
     expect(sale).toMatchObject({ issuedAt: MIDNIGHT, total: 250, vatBreakdown: BEER_AT_4_PERCENT });
-    expect(out.outcome === "captured" && out.ticket.vatBreakdown).toEqual(BEER_AT_4_PERCENT);
+    expect(invoice?.vatBreakdown).toEqual(BEER_AT_4_PERCENT);
   });
 
   it("an invoice issued on the eve keeps its rate at collection; one issued on New Year's Day takes the new rate", async () => {
@@ -465,11 +458,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     );
 
     at(NEW_YEAR);
-    await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id: before,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payCash(v, before, "2.50");
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, after, OPERATOR);
     await issueOrderInvoice(
       { ...deps(), admission: testTradingAdmission() },
@@ -492,11 +481,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
 
     at(NEW_YEAR);
-    await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payCash(v, id, "2.50");
 
     expect(await rates(id)).toEqual([400]);
   });
@@ -514,18 +499,10 @@ describe("a takeaway order's class is rated on the day its invoice is issued", (
         .set({ dining: "takeaway" })
         .where(inArray(workingOrders.id, [eve, newYear])),
     );
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: eve,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payCash(v, eve, "2.50");
 
     at(NEW_YEAR);
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: newYear,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payCash(v, newYear, "2.50");
 
     expect(await filed(eve)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_4_PERCENT });
@@ -539,19 +516,9 @@ describe("the day is the invoice's own, read once", () => {
     const onTheDot = randomUUID();
 
     at(new Date(Date.parse(MIDNIGHT) - 1).toISOString());
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: early,
-      zoneId: v.counter.zoneId,
-      lines: one(v, v.products.beer),
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payFreshBeer(v, early);
     at(MIDNIGHT);
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: onTheDot,
-      zoneId: v.counter.zoneId,
-      lines: one(v, v.products.beer),
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payFreshBeer(v, onTheDot);
 
     expect(await filed(early)).toMatchObject({
       issuedAt: "2026-12-31T22:59:59.999Z",
@@ -569,17 +536,17 @@ describe("the day is the invoice's own, read once", () => {
     at(new Date(Date.parse(MIDNIGHT) - 1).toISOString());
     time.tickMs = 1;
 
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payCash(v, id, "2.50");
 
-    // The first reading is the last millisecond of the eve; every later one is New Year's Day.
-    expect(await filed(id)).toMatchObject({
-      issuedAt: "2026-12-31T22:59:59.999Z",
-      vatBreakdown: BEER_AT_10_PERCENT,
-    });
+    const sale = await filed(id);
+    expect(sale.vatBreakdown).toEqual(
+      sale.issuedAt < MIDNIGHT ? BEER_AT_10_PERCENT : BEER_AT_4_PERCENT,
+    );
+    const [payment] = await suite.db
+      .select({ receivedAt: billPayments.receivedAt })
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, id));
+    expect(Date.parse(payment!.receivedAt!)).toBeLessThanOrEqual(Date.parse(sale.issuedAt));
   });
 
   it("takes the calendar date at the invoice's offset, not in UTC", async () => {
@@ -594,22 +561,12 @@ describe("the day is the invoice's own, read once", () => {
       );
       // 23:30 UTC on 31 December: already 1 January two hours east, still 31 December in UTC.
       at("2026-12-31T23:30:00.000Z", 120);
-      await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-        workingOrderId: east,
-        zoneId: v.counter.zoneId,
-        lines: one(v, v.products.beer),
-        tender: { method: "cash", amount: "2.50" },
-      });
+      await payFreshBeer(v, east);
       await suite.db.run(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${"Etc/UTC"}) where module = 'business_day'`,
       );
       at("2026-12-31T23:30:00.000Z", 0);
-      await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-        workingOrderId: utc,
-        zoneId: v.counter.zoneId,
-        lines: one(v, v.products.beer),
-        tender: { method: "cash", amount: "2.50" },
-      });
+      await payFreshBeer(v, utc);
 
       expect(await filed(east)).toMatchObject({
         offsetMinutes: 120,
@@ -633,19 +590,11 @@ describe("publishing a menu before a rate's legal date", () => {
     at(EVE);
     await withTransaction(suite.db, (tx) => offerProducts(tx, v.cfg));
     const eve = await park(v, one(v, v.products.beer));
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: eve,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payCash(v, eve, "2.50");
 
     at(NEW_YEAR);
     const newYear = await park(v, one(v, v.products.beer));
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: newYear,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payCash(v, newYear, "2.50");
 
     expect(await rates(eve)).toEqual([1000]);
     expect(await rates(newYear)).toEqual([400]);

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -96,16 +97,26 @@ it("a trading boot never names a module with no set of its own as waiting to be 
     expect(reconcileLine.softDisabled).toEqual(["fiscal-verifactu"]);
     // fiscal-none's set has no migrations, so it reads as unmigrated: the line does name modules.
     expect(reconcileLine.toMigrate).toEqual(["fiscal-none"]);
-    const reply = await fetch(`http://127.0.0.1:${httpPort()}/api/sales`, {
-      method: "POST",
-      headers: { cookie: venue.cookie, "content-type": "application/json" },
-      body: JSON.stringify({
-        dining: "eat_in",
-        zoneId: venue.zoneId,
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-        tender: { method: "cash", amount: "3.00" },
-      }),
-    });
+    const billId = randomUUID();
+    const reply = await fetch(
+      `http://127.0.0.1:${httpPort()}/api/working-orders/${billId}/payments`,
+      {
+        method: "POST",
+        headers: { cookie: venue.cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          dining: "eat_in",
+          submissionId: billId,
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "3.00",
+          basket: {
+            zoneId: venue.zoneId,
+            lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+          },
+        }),
+      },
+    );
     expect(reply.status).toBe(200);
     // Its tables are migrated with core's set, so its table-removal seat is in force.
     expect(removals.handed.at(-1)).toContain(removals.setless);

@@ -73,7 +73,6 @@ import {
 } from "./testing/cancel-line.js";
 import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { moveSettledBillToCounter } from "./move-bill.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { moveLinesToGroup } from "./testing/group-composition-fixture.js";
@@ -87,6 +86,7 @@ import {
   commandFor,
   inTx,
   orderForParty,
+  pay,
   revisionOf,
   seatWithNoAllergies as seat,
   setupPartyVenue,
@@ -2914,11 +2914,7 @@ describe("A803 waiting copy: kitchen paper", () => {
 
     it("A1368: moving a paid bill to the counter lists the waiting tarta and marks its release FIRE", async () => {
       const t = await waitingTable();
-      await payWorkingOrder(
-        { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
-        v.cfg,
-        { id: t.bill2, tender: { method: "cash", amount: "27.00" }, lines: [] },
-      );
+      await pay(v, t.bill2, "27.00");
       const mark = (await printed(t.grill.printer)).length;
       const noticesBefore = new Set((await movedNotices([t.bill2])).map((notice) => notice.id));
 

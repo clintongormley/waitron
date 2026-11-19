@@ -26,7 +26,6 @@ import { ALL_MODULES } from "./modules.js";
 import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
 
 import { createTable } from "./testing/live-table.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
@@ -34,8 +33,12 @@ import { joinTables, moveGuests } from "./testing/table-action-fixture.js";
 import { mergeBills, moveDishes } from "./testing/bill-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
-import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import {
+  counterFixtureOperator,
+  deviceRequestCfg,
+  openTillSession,
+} from "./testing/session-device.js";
+import { paySavedBillInCash, takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { setOrderInvoiceChoice } from "./working-order.js";
 import { readBillEditState } from "./bill-editing.js";
 
@@ -275,14 +278,12 @@ describe("joinTables → one bill", () => {
     expect(await partyAtTable(t2)).toBe(join.partyId); // the join put t2 in the one tab's party
 
     // Pay the one tab (a retrieved open order files from its stored locked lines).
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id: tabId,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await counterFixtureOperator(suite.db, cfg.origin.deviceId),
+      tabId,
+      "5.00",
     );
 
     expect(await saleCount(tabId)).toBe(1); // exactly one bill for both tables
@@ -315,14 +316,12 @@ describe("parties combined, bills merged → one fiscal record (H2)", () => {
     expect(await saleCount(fromTab)).toBe(0);
 
     // Pay the merged intoTab → exactly one sale + one chained fiscal record for the combined bill.
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id: intoTab,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await counterFixtureOperator(suite.db, cfg.origin.deviceId),
+      intoTab,
+      "5.00",
     );
     expect(await saleCount(intoTab)).toBe(1);
     expect(await fiscalRecordCount(intoTab)).toBe(1);
@@ -576,14 +575,12 @@ describe("tables joined across parties, bills merged → one bill covering both 
     expect(await partyAtTable(tFrom)).toBe(join.partyId);
     expect(await partyAtTable(tInto)).toBe(join.partyId);
 
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id: intoTab,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await counterFixtureOperator(suite.db, cfg.origin.deviceId),
+      intoTab,
+      "5.00",
     );
     expect(await saleCount(intoTab)).toBe(1); // one bill for both tables
     expect(await saleCount(fromTab)).toBe(0); // the abandoned source files nothing
