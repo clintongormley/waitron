@@ -96,6 +96,7 @@ function harness(
     /** Runs while the host sets the clock. */
     duringSet?: () => void | Promise<void>;
     onCorrectedThrows?: boolean;
+    onSetEnded?: () => void;
     /** Steady time the host takes to set. */
     setTakesMs?: number;
     /** The start's clock check, and the chain heads the seat reads for it. */
@@ -204,6 +205,7 @@ function harness(
       calls.push("onCorrected");
       corrected.push(incident);
     },
+    ...(options.onSetEnded === undefined ? {} : { onSetEnded: options.onSetEnded }),
     nodeId: "node-1",
     log,
     ...(options.start === undefined
@@ -464,6 +466,33 @@ describe("the step not yet written, for the backups' hold", () => {
     unwritten = null;
     expect(await latest()).toEqual(recorded);
     expect(order).toEqual(["unwritten", "unwritten", "recorded"]);
+  });
+});
+
+describe("the end of a set that was with the host", () => {
+  it("is told once per set, after its hold, whether the host set, refused or threw, or the clocks could not be read after", async () => {
+    const seen: unknown[] = [];
+    const cases = [
+      { host: "sets" },
+      { host: "refuses" },
+      { host: "throws" },
+      { bootThrowsAfterSet: true },
+    ] as const;
+    for (const options of cases) {
+      const h: Harness = harness({
+        ...options,
+        onSetEnded: () => void seen.push(h.correction.unwrittenStep()),
+      });
+      await h.correction.set(byAdmin(h)).catch(() => {});
+    }
+    expect(seen).toEqual([null, null, null, null]);
+  });
+
+  it("is not told of a set refused before the host was asked", async () => {
+    const ended = vi.fn();
+    const h = harness({ status: { ...UNSYNCHRONISED, synchronised: true }, onSetEnded: ended });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "synchronised" });
+    expect(ended).not.toHaveBeenCalled();
   });
 });
 

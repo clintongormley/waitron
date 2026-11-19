@@ -12,6 +12,7 @@ import {
   readStandardSeriesId,
   retireNodeSeriesTx,
   insertNodeSeriesTx,
+  trustBillsAtLatestRetirementTx,
   withTransaction,
 } from "./index.js";
 import { workingOrders } from "./schema/orders.js";
@@ -266,12 +267,27 @@ describe("reserved-identity accessors", () => {
     expect(await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, node))).toBe(0);
   });
 
-  it("retireNodeSeriesTx gives the node's open and placed bills with no trusted opening time the retirement's, and no other bill", async () => {
+  it("trustBillsAtLatestRetirementTx gives the node's open and placed bills with no trusted opening time its latest retirement, and no other bill", async () => {
     const node = await seedNode(suite.db);
     const other = await seedNode(suite.db);
+    const unretired = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
-      insertReservedSeriesTx(tx, [{ nodeId: node, code: "FA", purpose: "standard" }]),
+      insertReservedSeriesTx(tx, [
+        { nodeId: node, code: "FA", purpose: "standard" },
+        { nodeId: node, code: "RE", purpose: "rectificative" },
+        { nodeId: unretired, code: "FA", purpose: "standard" },
+      ]),
     );
+    const latest = "2026-10-02T09:00:00.123Z";
+    const earlier = "2026-10-01T09:00:00.000Z";
+    for (const [code, at] of [
+      ["FA", latest],
+      ["RE", earlier],
+    ] as const)
+      await suite.db
+        .update(invoiceSeries)
+        .set({ retiredAt: new Date(at) })
+        .where(and(eq(invoiceSeries.nodeId, node), eq(invoiceSeries.code, code)));
     const kept = "2026-09-20T10:00:00.000Z";
     const bills = {
       open: await seedWorkingOrder(suite.db, { nodeId: node }),
@@ -283,15 +299,14 @@ describe("reserved-identity accessors", () => {
         settledAt: kept,
       }),
       otherNode: await seedWorkingOrder(suite.db, { nodeId: other }),
+      unretiredNode: await seedWorkingOrder(suite.db, { nodeId: unretired }),
     };
 
-    await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, node));
+    await withTransaction(suite.db, async (tx) => {
+      await trustBillsAtLatestRetirementTx(tx, node);
+      await trustBillsAtLatestRetirementTx(tx, unretired);
+    });
 
-    const [series] = await suite.db
-      .select({ retiredAt: invoiceSeries.retiredAt })
-      .from(invoiceSeries)
-      .where(eq(invoiceSeries.nodeId, node));
-    const retiredAt = series!.retiredAt!.toISOString();
     const trusted = Object.fromEntries(
       await Promise.all(
         Object.entries(bills).map(async ([name, bill]) => {
@@ -304,11 +319,12 @@ describe("reserved-identity accessors", () => {
       ),
     );
     expect(trusted).toEqual({
-      open: retiredAt,
-      placed: retiredAt,
+      open: latest,
+      placed: latest,
       trusted: kept,
       settled: null,
       otherNode: null,
+      unretiredNode: null,
     });
   });
 

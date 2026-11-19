@@ -98,6 +98,8 @@ export function clockCorrection(deps: {
   transaction: <T>(fn: (tx: Transaction) => Promise<T>) => Promise<T>;
   /** The email duty's `remember`. */
   onCorrected?: (incident: EmailedIncident) => void;
+  /** Runs each time a set that was with the host ends, its hold over. */
+  onSetEnded?: () => void;
   nodeId: string;
   log: Logger;
   /** The start's clock check, which admits a set at reason `start` until it is confirmed by the
@@ -327,6 +329,7 @@ export function clockCorrection(deps: {
         : { set: false, reason: "unverified" };
     } finally {
       if (unwritten === "setting") unwritten = unwrittenBefore;
+      deps.onSetEnded?.();
     }
   }
 

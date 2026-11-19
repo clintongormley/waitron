@@ -4,19 +4,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
   dayCutoverChanges,
-  insertNodeSeriesTx,
   installChangeFeed,
   readVenueClock,
-  retireNodeSeriesTx,
   taxpayer,
   withTransaction,
 } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError, businessDayAt, businessDayBounds, type BusinessDayClock } from "@waitron/shared";
 import { closeOfDayJob } from "./close-of-day.js";
 import { createJobRunner } from "./job-runner.js";
+import { runRestoreHooks } from "./restore.js";
 import type { Logger } from "./logger.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { systemClock } from "./till-backend.js";
@@ -83,7 +83,7 @@ let jobSeesHold: () => boolean = () => seatHolds;
 let onLog: Logger = () => {};
 const logged: { event: string; fields: Record<string, unknown> | undefined }[] = [];
 
-useVenueDb({
+const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -759,7 +759,7 @@ describe("a bill opened while the box's time is unconfirmed", () => {
   });
 
   // Last in the file: it retires the venue's series, which leaves every bill opened before it alone.
-  it("leaves a bill restored from before its node's series retirement for staff, whether or not its time was confirmed", async () => {
+  it("leaves a bill from before a restore whose hook hands the host new series for staff, whether or not its time was confirmed", async () => {
     hold();
     const unconfirmed = await billOpenedAt(day(41).startAt + HOUR);
     seatHolds = false;
@@ -768,12 +768,25 @@ describe("a bill opened while the box's time is unconfirmed", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(retiredAt);
     try {
-      await inTx(venue, async (tx) => {
-        await retireNodeSeriesTx(tx, venue.cfg.nodeId);
-        await insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `RESTORED-${randomUUID().slice(0, 8)}`, purpose: "standard" },
-          { code: `RESTORED-FULL-${randomUUID().slice(0, 8)}`, purpose: "full" },
-        ]);
+      await runRestoreHooks({
+        db: venue.db,
+        nodeDb: suite.node,
+        node: { nodeId: venue.cfg.nodeId },
+        modules: [
+          {
+            ...fakeModule("test-regime"),
+            backup: {
+              restore: async () => ({
+                report: "replaced",
+                series: [
+                  { code: `RESTORED-${randomUUID().slice(0, 8)}`, purpose: "standard" },
+                  { code: `RESTORED-FULL-${randomUUID().slice(0, 8)}`, purpose: "full" },
+                ],
+              }),
+            },
+          },
+        ],
+        log: () => {},
       });
     } finally {
       vi.useRealTimers();

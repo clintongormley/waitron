@@ -2530,9 +2530,9 @@ async function bootServer(
   if (declarationsSeat !== undefined)
     keptDeclarations = keptDeclarationsReader(db, declarationsSeat);
   // Bound once the job runner is built below. The close-of-day job stamps bills opened while the
-  // start waited, so a stop soon after the confirmation does not lose its moment.
-  let wakeOnClockConfirmed = () => {};
-  const startClock = startClockState(() => wakeOnClockConfirmed());
+  // clock held, so a stop soon after the hold ends does not lose its moment.
+  let wakeOnClockReleased = () => {};
+  const startClock = startClockState(() => wakeOnClockReleased());
   // Bound once the clock correction is built below; until then no set can be with the host.
   let clockSetting = () => false;
   const startClockHolds = startClockGateHolds(startClock, filesRecords, () => clockSetting());
@@ -2753,7 +2753,7 @@ async function bootServer(
   }
   tradingAdmission.admit();
   const jobRunner = createJobRunner({ now, log });
-  wakeOnClockConfirmed = () => jobRunner.wake("bills.close_of_day");
+  wakeOnClockReleased = () => jobRunner.wake("bills.close_of_day");
   const stopJobRunner = async () => {
     await jobRunner.stopJobs();
     await jobRunner.stopServices();
@@ -2893,6 +2893,7 @@ async function bootServer(
     transaction: (fn) => withTransaction(db, fn),
     // Called only once a set has run, after the email duty below has started.
     onCorrected: (incident) => boxEmails.remember(incident),
+    onSetEnded: () => wakeOnClockReleased(),
     nodeId: tradingContext.nodeId,
     log,
     start: { state: startClock, heads: recordHeads },

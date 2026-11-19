@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, max } from "drizzle-orm";
 import type { Endorsement } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
@@ -119,21 +119,34 @@ export function readStandardSeriesId(db: Database, nodeId: string): Promise<stri
  * Retire every LIVE series of a node, stamping `retired_at`, and return how many were retired.
  * **Nothing in the database refuses this update.** A restore calls it, before opening the node's
  * replacement series.
- *
- * The node's open bills with no trusted opening time are given the retirement's, so the
- * close of the business day, which leaves bills opened before a retirement for staff, never
- * counts them as opened after it.
  */
 export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promise<number> {
-  const retiredAt = now();
   const rows = await tx
     .update(invoiceSeries)
-    .set({ retiredAt })
+    .set({ retiredAt: now() })
     .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)))
     .returning({ id: invoiceSeries.id });
+  return rows.length;
+}
+
+/**
+ * Gives the node's open and placed bills with no trusted opening time the node's latest series
+ * retirement as theirs, so the close of the business day, which leaves bills opened at or before
+ * that retirement for staff, never counts them as opened after it. A node with no retired series
+ * is left alone. A restore calls it once the node's series are settled, whichever side retired them.
+ */
+export async function trustBillsAtLatestRetirementTx(
+  tx: Transaction,
+  nodeId: string,
+): Promise<void> {
+  const [latest] = await tx
+    .select({ at: max(invoiceSeries.retiredAt) })
+    .from(invoiceSeries)
+    .where(eq(invoiceSeries.nodeId, nodeId));
+  if (latest?.at == null) return;
   await tx
     .update(workingOrders)
-    .set({ trustedOpenedAt: retiredAt.toISOString() })
+    .set({ trustedOpenedAt: new Date(latest.at).toISOString() })
     .where(
       and(
         eq(workingOrders.nodeId, nodeId),
@@ -141,7 +154,6 @@ export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promi
         inArray(workingOrders.status, ["open", "placed"]),
       ),
     );
-  return rows.length;
 }
 
 /**

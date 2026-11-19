@@ -302,6 +302,62 @@ describe("the start clock gate as boot wires it", () => {
     expect(seen).toEqual({ waiting: null, confirmed: expect.any(String) });
   });
 
+  it("gives a bill opened while a clock set was with the host its trusted opening time as soon as the set ends", async () => {
+    let reached!: () => void;
+    const asked = new Promise<void>((resolve) => (reached = resolve));
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    const host: BoxHostClient = {
+      clockStatus: async () => clockServiceAnswer(false),
+      setClock: async () => {
+        reached();
+        await answered;
+        return { available: false, reason: "refused", refusal: "set_failed" };
+      },
+    };
+    const openBill = () => {
+      const id = randomUUID();
+      venue.db.run(sql`
+        insert into working_orders (id, source, node_id, order_number, status, opened_at, dining)
+        values (${id}, 'dashboard', ${venue.cfg.nodeId},
+          (select coalesce(max(order_number), 0) + 1 from working_orders), 'open',
+          ${new Date().toISOString()}, 'eat_in')
+      `);
+      return id;
+    };
+    const trusted = (id: string) =>
+      venue.db.all<{ at: string | null }>(
+        sql`select trusted_opened_at as at from working_orders where id = ${id}`,
+      )[0]!.at;
+
+    const seen = await serving(host, async () => {
+      const correction = built.correction!;
+      // Once this bill is stamped, the pass the confirmation woke has run.
+      const waited = openBill();
+      built.start!.confirm("by_devices", {});
+      await vi.waitFor(() => expect(trusted(waited)).not.toBeNull(), { timeout: 10_000 });
+      const set = correction.set({
+        reason: "start",
+        source: "staff",
+        offsetMs: 2 * 24 * 3_600_000,
+        measuredAt: { wallMs: Date.now(), monoMs: performance.now() },
+        stepsSeen: correction.steps(),
+        witnesses: [],
+        requester: { source: "staff", person: null, device: null },
+      });
+      await asked;
+      const billId = openBill();
+      release();
+      expect(await set).toEqual({ set: false, reason: "refused" });
+      const held = trusted(billId);
+      // The job's own next look is a minute away.
+      await vi.waitFor(() => expect(trusted(billId)).not.toBeNull(), { timeout: 10_000 });
+      return { status: built.start!.status, held, ended: trusted(billId) };
+    });
+
+    expect(seen).toEqual({ status: "by_devices", held: null, ended: expect.any(String) });
+  });
+
   it("hands the box-health routes the start check it builds", async () => {
     boxHealth.start = undefined;
     await serving(unsynchronisedHost().host, async () => {});
