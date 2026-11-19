@@ -3321,6 +3321,11 @@ it.each(["recorded", "live"] as const)(
       tableStubs(dining, {
         listZoneOffers: vi.fn(async (zoneId: string) => (zoneId === "zone-dining" ? dining : V1)),
         getPartyBills: vi.fn().mockResolvedValue([bill]),
+        submitDraft: vi.fn().mockRejectedValue({
+          code: "product.unavailable",
+          status: 409,
+          productId: "Hake",
+        }),
         readLiveEvents: stream.read,
       }),
     );
@@ -3350,6 +3355,10 @@ it.each(["recorded", "live"] as const)(
       await poll(el);
     };
     if (recorded) {
+      pressSendAll(el);
+      await flush(el);
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+      expect(banner(el)?.textContent).toContain(codeMessage("product.unavailable"));
       let answerBills!: (bills: (typeof bill)[]) => void;
       api.getPartyBills.mockImplementationOnce(
         () =>
@@ -3369,6 +3378,14 @@ it.each(["recorded", "live"] as const)(
     await showAvailability(false);
     expect(roundStore(el).lines[0]?.blocked).toBe("unavailable");
 
+    if (recorded) {
+      api.menuState.mockImplementation(async (zoneId: string) =>
+        menuState("v1", zoneId === "zone-dining" ? { products: ["Lemonade"] } : NOTHING),
+      );
+      await poll(el);
+      expect(roundStore(el).lines[0]?.blocked).toBe("unavailable");
+    }
+
     await showAvailability(true);
     expect(roundStore(el).lines[0]?.blocked).toBeUndefined();
     expect(dialog(el)).toBeNull();
@@ -3387,6 +3404,10 @@ it("shows the named dish and available choices when Send cannot place it", async
   await sendLemonadeRound(el);
 
   expect(banner(el)?.textContent).toContain("There is no place for Sea bass");
-  expect(banner(el)?.textContent).toContain("order the dish à la carte");
+  expect(banner(el)?.textContent).toContain(
+    codeMessage("set_menu.no_place", "en-GB", {
+      dishName: "Sea bass",
+    }),
+  );
   expect(roundStore(el).lineCount).toBe(1);
 });
