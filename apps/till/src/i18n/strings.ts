@@ -1763,6 +1763,8 @@ export const en = {
     "Print the bill got no answer, so the bill may have been printed. Check this bill before trying again.",
   "meal_end.refused":
     "The bill was not printed and no ticket was issued. Nothing on the bill has changed.",
+  "meal_end.table_moved":
+    "This table changed while the bill was opening, so nothing was printed. Check the bill, then choose Print the bill again.",
   "meal_end.cannot_file":
     "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help.",
   "meal_end.unserved_full_invoice":
@@ -3899,6 +3901,8 @@ export const es: Record<StringKey, string> = {
     "Imprimir la cuenta no obtuvo respuesta, así que puede que se haya impreso. Revisa esta cuenta antes de volver a intentarlo.",
   "meal_end.refused":
     "La cuenta no se ha impreso y no se ha emitido ningún ticket. La cuenta no ha cambiado.",
+  "meal_end.table_moved":
+    "Esta mesa ha cambiado mientras se abría la cuenta, así que no se ha impreso nada. Revisa la cuenta y vuelve a elegir Imprimir la cuenta.",
   "meal_end.cannot_file":
     "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada.",
   "meal_end.unserved_full_invoice":

@@ -1967,8 +1967,7 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
 
     expect(endMeal).not.toHaveBeenCalled();
     expect(tableOrder(el).orderId).toBe("wo-9");
-    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
-    expect(banner(el)!.textContent).toContain(t("party.try_again"));
+    expect(banner(el)!.textContent).toContain(t("meal_end.table_moved"));
   });
 
   it("says nothing when the revision moves but staff have left the pressed bill for another", async () => {

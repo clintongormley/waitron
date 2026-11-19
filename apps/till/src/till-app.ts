@@ -20171,8 +20171,7 @@ export class TillApp extends LitElement {
       // Issuing a ticket cannot be undone: a table that moved on is not the one the press saw, and
       // the revision read now would pass the server's stale check.
       if (pressed?.revision !== this.orderParty?.revision) {
-        const onTarget = () => sameTable() && this.activeTabId === workingOrderId;
-        if (onTarget()) await this.#onPartyOutOfDate({ code: "party.out_of_date" }, onTarget);
+        if (this.activeTabId === workingOrderId) this.errorKey = "meal_end.table_moved";
         return;
       }
     }
