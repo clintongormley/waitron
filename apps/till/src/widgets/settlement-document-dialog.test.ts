@@ -504,9 +504,18 @@ for (const invoiceType of ["F2", "F1"] as const)
           ?.getAttribute("data-settlement-closing"),
       ).toBe(state);
       const delivery = el.shadowRoot!.querySelector("[data-test=original-delivery]");
-      expect(delivery).not.toBeNull();
-      expect(delivery!.textContent?.includes("The original has not been sent to a printer.")).toBe(
+      expect(
+        el.shadowRoot!.textContent?.includes("The original has not been sent to a printer."),
+      ).toBe(!promisesPrint);
+      expect(el.shadowRoot!.querySelector("[data-test=refresh-receipt]") !== null).toBe(
         !promisesPrint,
+      );
+      // A full invoice's box still says it is undelivered; a receipt's box would hold nothing.
+      expect(delivery !== null).toBe(!promisesPrint || invoiceType === "F1");
+      if (invoiceType === "F1")
+        expect(delivery!.textContent).toContain("Full invoice not delivered");
+      expect(el.shadowRoot!.querySelector("[data-test=email-invoice]") !== null).toBe(
+        state !== "not-allowed",
       );
     });
   }

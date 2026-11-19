@@ -966,6 +966,10 @@ export class TillTicketView extends LitElement {
         attempt.medium !== "receipt" &&
         (attempt.status === "queued" || attempt.status === "sending"));
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
+    // Before closing no print job exists, so there is no print status to state or check.
+    const closingPrints =
+      notQueued && !this.originalReceiptReadFailed && this.closingQueuesOriginal();
+    if (closingPrints && this.result.invoiceType !== "F1") return this.renderDelivery();
     return html`
       ${
         (this.result.invoiceType === "F1" && (!this.historical || this.historicalDelivery)) ||
@@ -989,11 +993,10 @@ export class TillTicketView extends LitElement {
                 // An A4 or email attempt says where the invoice is, and a window whose closing
                 // prints the original says what happens next; "not sent to a printer", or a receipt
                 // failure that no longer matters, would contradict either.
-                !this.originalReceiptReadFailed &&
-                ((notQueued &&
-                  ((attempt != null && attempt.medium !== "receipt") ||
-                    this.closingQueuesOriginal())) ||
-                  failedButSuperseded)
+                closingPrints ||
+                (!this.originalReceiptReadFailed &&
+                  ((notQueued && attempt != null && attempt.medium !== "receipt") ||
+                    failedButSuperseded))
                   ? nothing
                   : html`<p>
                       ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.printerWithdrawn ? "invoice.print_failed_withdrawn" : this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "failed" && this.#mayHaveArrived ? "invoice.print_failed_check" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
@@ -1013,13 +1016,17 @@ export class TillTicketView extends LitElement {
                     >`
                   : nothing
               }
-              <wt-button
-                variant="secondary"
-                data-test="refresh-receipt"
-                ?disabled=${receiptBusy}
-                @click=${() => this.dispatchEvent(new CustomEvent("refresh-receipt", { bubbles: true, composed: true }))}
-                >${t("invoice.check_print")}</wt-button
-              >
+              ${
+                closingPrints
+                  ? nothing
+                  : html`<wt-button
+                      variant="secondary"
+                      data-test="refresh-receipt"
+                      ?disabled=${receiptBusy}
+                      @click=${() => this.dispatchEvent(new CustomEvent("refresh-receipt", { bubbles: true, composed: true }))}
+                      >${t("invoice.check_print")}</wt-button
+                    >`
+              }
               ${includeRetry ? this.renderReceiptRetry(failedButSuperseded) : nothing}
             </section>`
           : nothing

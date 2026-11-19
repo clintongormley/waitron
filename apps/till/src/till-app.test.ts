@@ -6116,7 +6116,8 @@ describe("till-app", () => {
       emit(ticket(el)!, "print-invoice");
       await flush(el);
       expect(part(el, "print-receipt")!.hasAttribute("disabled")).toBe(true);
-      expect(part(el, "refresh-receipt")!.hasAttribute("disabled")).toBe(true);
+      // Closing would print the receipt, so the window offers no print status to check.
+      expect(part(el, "refresh-receipt")).toBeNull();
       emit(ticket(el)!, "print-receipt");
       await flush(el);
       expect(printReceipt).not.toHaveBeenCalled();

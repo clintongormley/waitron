@@ -361,6 +361,7 @@ describe("till-ticket-view", () => {
     expect(el.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent).toContain(
       "The original has not been sent to a printer.",
     );
+    expect(el.shadowRoot!.querySelector("[data-test=refresh-receipt]")).not.toBeNull();
   });
 
   it("emits original retry and status check events while preserving the filed result", async () => {
