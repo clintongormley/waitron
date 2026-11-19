@@ -1390,7 +1390,6 @@ async function saveCounterBasket(
   if (status !== undefined) {
     if (status !== "open") throw new AppError("working_order.not_open", { workingOrderId });
     await refusePaymentInFlight(tx, [workingOrderId]);
-    await refuseBillWithPayments(tx, workingOrderId);
     await refuseUnavailableFullInvoice(tx, workingOrderId);
     if (basket.revision !== undefined) {
       const attendance =
@@ -1531,6 +1530,31 @@ async function beginBillPayment(
   await requireReadyForPayment(tx, deps.db, workingOrderId, payable, operator, req);
   const held = payable.held ?? (await readPaymentMoney(tx, [workingOrderId]));
   const total = await billPaymentTotal(tx, workingOrderId);
+  if (basket !== undefined && held.some(({ row }) => HOLDING_STATES.includes(row.state))) {
+    if (
+      basket.revision !== undefined &&
+      compareDecimal(fundsOf(workingOrderId, total, held).received, total) === 0
+    ) {
+      const { invoice } = await issueWhenFullyPaid(
+        tx,
+        { ...deps, clock: pinnedAt(deps.clock, reading) },
+        cfg,
+        workingOrderId,
+        operator.personId,
+        { total, guestCount: req.guestCount },
+      );
+      if (invoice !== null) {
+        return {
+          settled: {
+            outcome: "settled",
+            balance: await readBillBalance(tx, workingOrderId, total),
+            invoice,
+          },
+        };
+      }
+    }
+    throw new AppError("bill.payments_received", { workingOrderId });
+  }
   if (basket !== undefined && compareDecimal(total, ZERO) === 0) {
     if (compareDecimal(decimal(req.addedTip ?? ZERO), ZERO) > 0 && req.entry !== "reader")
       throw new AppError("bill.tip_not_allowed", { workingOrderId, chargeable: ZERO });

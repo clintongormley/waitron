@@ -833,13 +833,18 @@ describe("sale-time device from the authenticated session", () => {
     );
     const cookie = `${SESSION_COOKIE}=${session.token}`;
 
-    const res = await app.request("/api/sales", {
+    const id = randomUUID();
+    const res = await app.request(`/api/working-orders/${id}/payments`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         dining: "eat_in",
-        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-        tender: { method: "cash", amount: "5.00" },
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "5.00",
+        basket: { lines: [{ menuItemId: each.menuItemId, quantity: "2" }] },
       }),
     });
     expect(res.status).toBe(403);
@@ -1578,13 +1583,18 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
 
-    const res = await app.request("/api/sales", {
+    const id = randomUUID();
+    const res = await app.request(`/api/working-orders/${id}/payments`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         dining: "eat_in",
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "card", amount: "1.50" },
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "manual",
+        basket: { lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
       }),
     });
 

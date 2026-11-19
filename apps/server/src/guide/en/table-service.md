@@ -29,6 +29,9 @@ for each payment. After a part payment, check **Still to pay** before taking the
 
 Add an item before paying or sending an order.
 
+If cash is refused while you pay an edited parked order, your edits stay in the basket.
+Correct the payment amount and try again, or park the order to save the edits without paying.
+
 ## Use another card machine {#outside-card}
 
 Take the card payment on the separate machine first. In **Pay**, choose **Other card machine**

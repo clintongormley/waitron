@@ -3965,7 +3965,7 @@ the short run of requests a screen sends when it opens:
 | --- | --- |
 | `payment.partial` | `POST /api/working-orders/:id/payments`, paying half a served bill in cash |
 | `payment.final` | the same route, paying the whole bill |
-| `sale.counter` | `POST /api/sales` |
+| `sale.counter` | `POST /api/working-orders/:id/payments` with a fresh basket and cash tender |
 | `floor.read` | `GET /api/tables/state`, with 15 tables seated |
 | `floor.open` | `GET /api/zones`, then `GET /api/tables/state` |
 | `kitchen.queue` | `GET /api/stations/:id/queue`, with 30 dishes open |

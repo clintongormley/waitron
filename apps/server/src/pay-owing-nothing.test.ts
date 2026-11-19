@@ -485,6 +485,53 @@ describe("other ways a bill owing nothing is paid", () => {
     },
   );
 
+  it("settles an edited counter basket already covered by a part payment without taking cash twice", async () => {
+    const id = randomUUID();
+    const menuItemId = counter.offerFor(productIdOf("Caña"));
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id,
+      zoneId: counter.zoneId,
+      lines: [{ menuItemId, quantity: "2" }],
+      operatorId: venue.operatorId,
+    });
+    const path = `/api/working-orders/${id}/payments`;
+    const taken = await send(venue.app, venue.cookie, "POST", path, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "3.00",
+      applied: "3.00",
+      tip: "0.00",
+      method: "cash",
+      tendered: "3.00",
+    });
+    expect(taken.status, JSON.stringify(taken.json)).toBe(200);
+    const held = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${id}`);
+    const [portion] = held.json.lines as { workingOrderLineId: string }[];
+    const drawerJobs = drawerJobCount();
+    const answer = await send(venue.app, venue.cookie, "POST", path, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "5.00",
+      dining: "eat_in",
+      basket: {
+        revision: held.json.revision,
+        lines: [{ workingOrderLineId: portion!.workingOrderLineId, menuItemId, quantity: "1" }],
+      },
+    });
+    expect(answer).toMatchObject({
+      status: 200,
+      json: {
+        outcome: "settled",
+        invoice: { total: "3.00" },
+        balance: { payments: [taken.json.payment] },
+      },
+    });
+    expect(fiscalRecordCount(venue, id)).toBe(1);
+    expect(drawerJobCount()).toBe(drawerJobs);
+  });
+
   it("sells a counter order of a free item on the reader without charging", async () => {
     const id = randomUUID();
     const readerCalls = venue.card.collectCalls.length;

@@ -1421,7 +1421,7 @@ describe("till-app", () => {
     await flush(el);
     expect(c.store.lines[0]!.makeAt).toBe("kitchen");
     c.store.addProduct(coffee, "1");
-    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    emit(c, "park-order", { label: c.store.label });
     await flush(el);
     expect(updateWorkingOrder).toHaveBeenCalledWith(
       "wo-1",
@@ -1435,10 +1435,10 @@ describe("till-app", () => {
   });
 
   it("rechecks a retrieved counter order when its chosen station is switched off during save", async () => {
-    const updateWorkingOrder = vi
+    const recordSale = vi
       .fn()
       .mockRejectedValueOnce({ code: "route.station_inactive" })
-      .mockResolvedValue({ revision: 4 });
+      .mockResolvedValue(saleResult);
     const askSaleDeadEnds = vi.fn().mockResolvedValue({
       sends: true,
       deadEnds: [
@@ -1453,15 +1453,14 @@ describe("till-app", () => {
       ],
       stations: [{ id: "kitchen", name: "Kitchen", open: true }],
     });
-    const recordSale = vi.fn().mockResolvedValue(saleResult);
-    const { el } = await mountApp({ updateWorkingOrder, askSaleDeadEnds, recordSale });
+    const { el } = await mountApp({ askSaleDeadEnds, recordSale });
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
     c.store.addProduct(coffee, "1");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
-    expect(recordSale).not.toHaveBeenCalled();
+    expect(recordSale).toHaveBeenCalledOnce();
     expect(askSaleDeadEnds).toHaveBeenCalledOnce();
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
     expect(dialog).not.toBeNull();
@@ -1471,8 +1470,8 @@ describe("till-app", () => {
     await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
     await flush(el);
-    expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
-    expect(recordSale).toHaveBeenCalledOnce();
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(recordSale).toHaveBeenCalledTimes(2);
   });
 
   it.each(["cash", "integrated card", "Place", "Hold"] as const)(
@@ -1489,8 +1488,17 @@ describe("till-app", () => {
         deadEnds: [],
         stations: [{ id: "kitchen", name: "Kitchen", open: true }],
       });
-      const recordSale = vi.fn().mockResolvedValue(saleResult);
-      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const check = (lines: { makeAt?: string | null }[]) => {
+        if (lines[0]?.makeAt === "retired") throw { code: "route.station_inactive" };
+      };
+      const recordSale = vi.fn(async (lines: { makeAt?: string | null }[]) => {
+        check(lines);
+        return saleResult;
+      });
+      const pay = vi.fn(async ({ lines }: { lines: { makeAt?: string | null }[] }) => {
+        check(lines);
+        return { outcome: "captured", ticket: saleResult };
+      });
       const placeOrder = vi.fn().mockResolvedValue(placedResult);
       const { el } = await mountApp({
         zonePolicy: { serviceMode: action === "Place" ? "ticket_then_pay" : "prepay" },
@@ -1552,25 +1560,29 @@ describe("till-app", () => {
       else emit(c, "place-order");
       await flush(el);
 
-      expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
-      expect(updateWorkingOrder.mock.calls[1]![1].lines.map((line) => line.makeAt)).toEqual([
-        null,
-        "kitchen",
-      ]);
+      const payment = action === "cash" || action === "integrated card";
+      expect(updateWorkingOrder).toHaveBeenCalledTimes(payment ? 0 : 2);
+      const sent =
+        action === "cash"
+          ? recordSale.mock.calls[1]?.[0]
+          : action === "integrated card"
+            ? pay.mock.calls[1]?.[0].lines
+            : updateWorkingOrder.mock.calls[1]?.[1].lines;
+      expect(sent?.map((line) => line.makeAt)).toEqual([null, "kitchen"]);
       expect(c.store.lines.map((line) => line.makeAt ?? null)).toEqual(
         action === "Hold" ? [] : [null, "kitchen"],
       );
-      if (action === "cash") expect(recordSale).toHaveBeenCalledOnce();
-      else if (action === "integrated card") expect(pay).toHaveBeenCalledOnce();
+      if (action === "cash") expect(recordSale).toHaveBeenCalledTimes(2);
+      else if (action === "integrated card") expect(pay).toHaveBeenCalledTimes(2);
       else if (action === "Place") expect(placeOrder).toHaveBeenCalledOnce();
     },
   );
 
   it("rechecks an integrated card's save refusal before calling pay", async () => {
-    const updateWorkingOrder = vi
+    const pay = vi
       .fn()
       .mockRejectedValueOnce({ code: "station.no_replacement" })
-      .mockResolvedValue({ revision: 4 });
+      .mockResolvedValue({ outcome: "captured", ticket: saleResult });
     const askSaleDeadEnds = vi.fn().mockResolvedValue({
       sends: true,
       deadEnds: [
@@ -1585,15 +1597,14 @@ describe("till-app", () => {
       ],
       stations: [{ id: "kitchen", name: "Kitchen", open: true }],
     });
-    const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
-    const { el } = await mountApp({ updateWorkingOrder, askSaleDeadEnds, pay });
+    const { el } = await mountApp({ askSaleDeadEnds, pay });
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
     c.store.addProduct(coffee, "1");
     emit(c, "collect-card", {});
     await flush(el);
-    expect(pay).not.toHaveBeenCalled();
+    expect(pay).toHaveBeenCalledOnce();
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
     expect(dialog).not.toBeNull();
     dialog
@@ -1602,8 +1613,8 @@ describe("till-app", () => {
     await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
     await flush(el);
-    expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
-    expect(pay).toHaveBeenCalledOnce();
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(pay).toHaveBeenCalledTimes(2);
   });
 
   it("rechecks a retrieved bill's Hold save refusal before clearing the basket", async () => {
@@ -5120,10 +5131,7 @@ describe("till-app", () => {
       await flush(el);
       emit(c, "confirm-payment", { method: "cash", amount: "10" });
       await flush(el);
-      expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith(
-        "wo-1",
-        expect.objectContaining({ revision: 4 }),
-      );
+      expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
       expect(currentApi.recordSale).toHaveBeenCalledWith(
         expect.anything(),
         { method: "cash", amount: "10" },
@@ -5135,6 +5143,8 @@ describe("till-app", () => {
         undefined,
         null,
         "eat_in",
+        undefined,
+        { revision: 4, label: undefined },
       );
     });
 
@@ -7068,11 +7078,7 @@ describe("till-app", () => {
     expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
   });
 
-  it("retrieve → edit → pay re-syncs the edited basket BEFORE paying, so the edit is not dropped (Finding 2)", async () => {
-    // The server's retrieved-order pay files from the STORED lock and IGNORES the sent basket, so an
-    // edit made after retrieve must be re-locked (`updateWorkingOrder`) BEFORE the pay or it is SILENTLY
-    // DROPPED from both the charge and the filed record. Retrieve wo-1 (café×2), add a second café, then
-    // pay: `updateWorkingOrder` must carry the EDITED composition and run BEFORE `recordSale`.
+  it("sends edits to a retrieved basket with its cash payment", async () => {
     const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
     const recordSale = vi.fn().mockResolvedValue(saleResult);
     const { el } = await mountApp({ updateWorkingOrder, recordSale });
@@ -7089,20 +7095,7 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    // The edited composition was re-locked: café×2 (retrieved) + café×1 (the edit), under the order's
-    // id, from the copy at the revision it was retrieved at.
-    expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
-      dining: "eat_in",
-      lines: [
-        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
-      ],
-      label: "Table 4",
-      revision: 3,
-      expectedEdit: null,
-    });
-    // recordSale files the SAME edited composition under the same id, and the sync ran FIRST — the
-    // server needs the lock updated before it files from it.
+    expect(updateWorkingOrder).not.toHaveBeenCalled();
     expect(recordSale).toHaveBeenCalledWith(
       [
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
@@ -7117,9 +7110,8 @@ describe("till-app", () => {
       undefined,
       null,
       "eat_in",
-    );
-    expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
-      recordSale.mock.invocationCallOrder[0]!,
+      undefined,
+      { revision: 3, label: "Table 4" },
     );
   });
 
@@ -7162,7 +7154,8 @@ describe("till-app", () => {
     emit(c, "collect-card", {});
     await flush(el);
 
-    expect(updateWorkingOrder.mock.calls.map(([, req]) => req.revision)).toEqual([3, 4]);
+    expect(updateWorkingOrder).not.toHaveBeenCalled();
+    expect(pay.mock.calls.map(([req]) => req.edit?.revision)).toEqual([3, 4]);
   });
 
   it("a save the server says changed nothing keeps the copy at the server's revision, so the retried pay is not refused as out of date", async () => {
@@ -7225,7 +7218,8 @@ describe("till-app", () => {
     emit(c, "collect-card", {});
     await flush(el);
 
-    expect(updateWorkingOrder.mock.calls.map(([, req]) => req.revision)).toEqual([3, 3]);
+    expect(updateWorkingOrder).not.toHaveBeenCalled();
+    expect(pay.mock.calls.map(([req]) => req.edit?.revision)).toEqual([3, undefined]);
     expect(c.store.revision).toBe(3);
   });
 
@@ -7251,7 +7245,7 @@ describe("till-app", () => {
       parentProductId: null,
       ...over,
     });
-    async function raisedAndDeclined(listed: TabLine) {
+    async function raisedAndSaved(listed: TabLine) {
       const updateWorkingOrder = vi
         .fn()
         .mockResolvedValueOnce({ revision: 4 })
@@ -7281,29 +7275,29 @@ describe("till-app", () => {
         updateWorkingOrder,
         retrieveWorkingOrder,
         getTabLines: vi.fn().mockResolvedValue({ revision: 3, lines: [listed] }),
-        pay: vi.fn().mockResolvedValue({ outcome: "declined" }),
+        placeOrder: vi.fn().mockRejectedValue({ code: "place.refused" }),
       });
       const c = await toCounter(el);
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
       c.store.setLineQuantity(0, "3");
-      emit(c, "collect-card", {});
+      emit(c, "place-order");
       await flush(el);
       return { el, c, updateWorkingOrder, retrieveWorkingOrder };
     }
 
     it("raises it in place and reads nothing back; the next save goes from the revision the save answered", async () => {
       const { el, c, updateWorkingOrder, retrieveWorkingOrder } =
-        await raisedAndDeclined(listedCoffee());
+        await raisedAndSaved(listedCoffee());
       expect(retrieveWorkingOrder).toHaveBeenCalledOnce();
       c.store.setLineExtras(0, { note: "Decaf" });
-      emit(c, "collect-card", {});
+      emit(c, "place-order");
       await flush(el);
       expect(updateWorkingOrder.mock.calls.map(([, req]) => req.revision)).toEqual([3, 4]);
     });
 
     it("reads the order back after raising it once a comp has repriced it, as the added cafés go on a line of their own", async () => {
-      const { retrieveWorkingOrder } = await raisedAndDeclined(
+      const { retrieveWorkingOrder } = await raisedAndSaved(
         listedCoffee({ unitPriceGross: "0.00", listUnitPriceGross: "1.50" }),
       );
       expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
@@ -7402,11 +7396,10 @@ describe("till-app", () => {
         revision: 4,
         lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "5.000" }],
       });
-    const updateWorkingOrder = vi
+    const recordSale = vi
       .fn()
       .mockRejectedValue({ code: "working_order.out_of_date", params: { revision: 4 } });
-    const recordSale = vi.fn().mockResolvedValue(saleResult);
-    const { el } = await mountApp({ retrieveWorkingOrder, updateWorkingOrder, recordSale });
+    const { el } = await mountApp({ retrieveWorkingOrder, recordSale });
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
@@ -7416,7 +7409,8 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    expect(recordSale).not.toHaveBeenCalled();
+    expect(recordSale).toHaveBeenCalledOnce();
+    expect(ticket(el)).toBeNull();
     expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
     // The basket is the order as the other till left it, at its new revision.
     expect(c.store.lines.map((line) => line.quantity)).toEqual(["5"]);
@@ -7492,7 +7486,7 @@ describe("till-app", () => {
     await flush(el);
 
     counter.store.setLineQuantity(0, "2");
-    emit(counter, "confirm-payment", { method: "cash", amount: "5" });
+    emit(counter, "park-order", { label: counter.store.label });
     await flush(el);
 
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-stable", {
@@ -7627,7 +7621,7 @@ describe("till-app", () => {
     // Re-sending the edit names the list the pick was matched to.
     counter.store.setLineQuantity(0, "3");
     await el.updateComplete;
-    emit(counter, "confirm-payment", { method: "cash", amount: "5" });
+    emit(counter, "park-order", { label: counter.store.label });
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-customised", {
       dining: "eat_in",
@@ -8145,7 +8139,7 @@ describe("till-app", () => {
     // active options list" (`apps/server/src/working-order.test.ts`).
     counter.store.setLineQuantity(0, "3");
     await el.updateComplete;
-    emit(counter, "confirm-payment", { method: "cash", amount: "10" });
+    emit(counter, "park-order", { label: counter.store.label });
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-answered", {
       dining: "eat_in",
@@ -8271,7 +8265,7 @@ describe("till-app", () => {
 
     counter.store.setLineQuantity(0, "3");
     await el.updateComplete;
-    emit(counter, "confirm-payment", { method: "cash", amount: "10" });
+    emit(counter, "park-order", { label: counter.store.label });
     await flush(el);
 
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith(
@@ -8325,8 +8319,8 @@ describe("till-app", () => {
       return order;
     };
 
-    /** The parked dish holds `frozenDoneness` and `frozenMilk`; staff pick "Poco hecho" and pay, and
-     * the refused payment leaves the basket showing what the save left. */
+    /** The parked dish holds `frozenDoneness` and `frozenMilk`; staff pick "Poco hecho" and try to place it, and
+     * the refused placement leaves the basket showing what the save left. */
     async function changeDoneness(offered: TillProduct["offeredModifiers"], stored: object[]) {
       const offering: TillProduct = { ...coffee, offeredModifiers: offered };
       const before = [frozenDoneness, frozenMilk];
@@ -8343,7 +8337,7 @@ describe("till-app", () => {
           .fn()
           .mockResolvedValueOnce({ lines: [listedWith(before)], revision: 0 })
           .mockResolvedValue({ lines: [listedWith(stored)], revision: 1 }),
-        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+        placeOrder: vi.fn().mockRejectedValue({ code: "place.refused" }),
       });
       const counter = await toCounter(el);
       emit(counter, "retrieve-order", { id: "wo-answered" });
@@ -8357,7 +8351,7 @@ describe("till-app", () => {
         },
       });
       await el.updateComplete;
-      emit(counter, "confirm-payment", { method: "cash", amount: "10" });
+      emit(counter, "place-order");
       await flush(el);
       return { counter, retrieveWorkingOrder };
     }
@@ -8397,7 +8391,7 @@ describe("till-app", () => {
 
     counter.store.addProduct({ ...coffee, offeredModifiers: [] }, "1");
     await el.updateComplete;
-    emit(counter, "confirm-payment", { method: "cash", amount: "10" });
+    emit(counter, "park-order", { label: counter.store.label });
     await flush(el);
 
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith(
@@ -8478,14 +8472,12 @@ describe("till-app", () => {
     expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
   });
 
-  it("retrieve → edit → pay: a not_open re-sync FALLS THROUGH to the settled replay, not sale.error (Findings 3 & 4)", async () => {
-    // A lost-response retry, or the LOSER of a two-till concurrent pay on the same parked order, finds
-    // the order ALREADY settled. The edit-gated re-sync then throws `working_order.not_open` — which must
-    // NOT surface. It means "already settled → let the pay path replay": `recordSale`'s settled branch
-    // returns the FILED ticket (no double-file, no error banner).
-    const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
-    const recordSale = vi.fn().mockResolvedValue(saleResult); // the server's settled-replay ticket
-    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+  it("a retry of the edited basket opens the recovered sale ticket", async () => {
+    const recordSale = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(saleResult);
+    const { el } = await mountApp({ recordSale });
     const c = await toCounter(el);
     const store = c.store;
 
@@ -8497,35 +8489,19 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    // The re-sync was attempted and rejected `not_open` — but the pay REPLAYED: ticket shown, no error.
-    expect(updateWorkingOrder).toHaveBeenCalled();
-    expect(recordSale).toHaveBeenCalledWith(
-      [
-        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
-        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
-      ],
-      { method: "cash", amount: "5" },
-      "wo-1",
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      null,
-      "eat_in",
-    );
+    expect(ticket(el)).toBeNull();
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(recordSale).toHaveBeenCalledTimes(2);
+    expect(recordSale.mock.calls[1]).toEqual(recordSale.mock.calls[0]);
     expect(ticket(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("retrieve → edit → pay: a NON-not_open re-sync failure surfaces as a non-fatal error (basket intact)", async () => {
-    // The other side of the swallow: only `working_order.not_open` falls through. Any OTHER re-sync
-    // rejection (a network error, some other domain code) is a real failure — it must surface as the
-    // generic sale.error, leave the basket intact, and NOT file (recordSale is never reached). Mutating
-    // the swallow to catch every code would let a genuine failure be silently paid past.
-    const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "server.internal" });
-    const recordSale = vi.fn().mockResolvedValue(saleResult);
-    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+  it("a refused payment of an edited basket leaves it intact and shows the error", async () => {
+    const recordSale = vi.fn().mockRejectedValue({ code: "server.internal" });
+    const { el } = await mountApp({ recordSale });
     const c = await toCounter(el);
     const store = c.store;
 
@@ -8537,7 +8513,8 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    expect(recordSale).not.toHaveBeenCalled(); // the failed sync short-circuits before filing
+    expect(recordSale).toHaveBeenCalledOnce();
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
     expect(ticket(el)).toBeNull();
     expect(counter(el)).not.toBeNull();
     expect(store.lines).toHaveLength(2); // basket intact — café×2 retrieved + café×1 edit
@@ -8568,14 +8545,9 @@ describe("till-app", () => {
     expect(banner.textContent).toContain(t("sale.unconfirmed"));
   });
 
-  it("confirm-payment: a PRELIMINARY-save network failure shows sale.error, not sale.unconfirmed", async () => {
-    // `sale.unconfirmed` means "the sale may have filed — check before retrying". A network failure of
-    // the PRE-PAY `#syncIfDirty` save is not that: no fiscal request was ever made, nothing filed, safe to
-    // retry — so it must be the plain `sale.error`. Retrieve + edit so `#syncIfDirty` actually calls the
-    // API, then reject that call at the network level; `recordSale` is never reached.
-    const updateWorkingOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    const recordSale = vi.fn().mockResolvedValue(saleResult);
-    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+  it("a lost confirm-payment response leaves an edited order unconfirmed", async () => {
+    const recordSale = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ recordSale });
     const c = await toCounter(el);
     const store = c.store;
 
@@ -8587,13 +8559,13 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    expect(recordSale).not.toHaveBeenCalled(); // the failed save short-circuits before any fiscal call
+    expect(recordSale).toHaveBeenCalledOnce();
     expect(ticket(el)).toBeNull();
     expect(counter(el)).not.toBeNull();
     expect(store.lines).toHaveLength(2);
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
-    expect(banner.textContent).toContain(t("sale.error"));
-    expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
+    expect(banner.textContent).toContain(t("sale.unconfirmed"));
+    expect(banner.textContent).not.toContain(t("sale.error"));
   });
 
   it("walk-up pay retry: a re-tapped confirm sends the SAME store id (idempotent replay, never two ids)", async () => {
@@ -12542,12 +12514,9 @@ describe("till-app", () => {
       expect(c.store.lines).toHaveLength(1);
     });
 
-    it("a PRELIMINARY-save network failure shows sale.error, not sale.unconfirmed (pay never reached)", async () => {
-      // The pre-pay `#syncIfDirty` save network-fails, so the integrated `pay` is never
-      // called — nothing filed, safe to retry — so this is `sale.error`, not `sale.unconfirmed`.
-      const updateWorkingOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
-      const { el } = await mountApp({ updateWorkingOrder, pay });
+    it("a lost collect-card response leaves an edited order unconfirmed", async () => {
+      const pay = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({ pay });
       const c = await toCounter(el);
       const store = c.store;
 
@@ -12559,10 +12528,10 @@ describe("till-app", () => {
       emit(c, "collect-card", {});
       await flush(el);
 
-      expect(pay).not.toHaveBeenCalled();
+      expect(pay).toHaveBeenCalledOnce();
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
-      expect(banner.textContent).toContain(t("sale.error"));
-      expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
+      expect(banner.textContent).toContain(t("sale.unconfirmed"));
+      expect(banner.textContent).not.toContain(t("sale.error"));
     });
 
     it("the integrated pay itself network-failing shows sale.unconfirmed (the fiscal request was reached)", async () => {
@@ -12658,20 +12627,15 @@ describe("till-app", () => {
         held: () => answer !== undefined,
       };
     }
-    const updateRefusedOnceForStation = () =>
-      vi
-        .fn()
-        .mockRejectedValueOnce({ code: "station.no_replacement" })
-        .mockResolvedValue({ revision: 4 });
-
     it("retries a whole-order payment only after the refused save's routing choice", async () => {
       const lookup = heldStationLookup();
-      const updateWorkingOrder = updateRefusedOnceForStation();
-      const pay = vi.fn().mockRejectedValue({ code: "server.internal", status: 500 });
+      const pay = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "station.no_replacement" })
+        .mockRejectedValue({ code: "server.internal", status: 500 });
       const { el } = await mountApp({
         getTill: withReaderTill(),
         askSaleDeadEnds: lookup.askSaleDeadEnds,
-        updateWorkingOrder,
         pay,
       });
       const c = await toCounter(el);
@@ -12684,16 +12648,16 @@ describe("till-app", () => {
       lookup.holdNext();
       await flush(el);
       await tenderPay(el).updateComplete;
-      expect(updateWorkingOrder).toHaveBeenCalledOnce();
+      expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
       expect(lookup.held()).toBe(true);
-      expect(pay).not.toHaveBeenCalled();
+      expect(pay).toHaveBeenCalledOnce();
 
       lookup.answer(deadEnd);
       await flush(el);
       const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
       expect(dialog).not.toBeNull();
       await tenderPay(el).updateComplete;
-      expect(pay).not.toHaveBeenCalled();
+      expect(pay).toHaveBeenCalledOnce();
 
       dialog
         .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
@@ -12702,7 +12666,7 @@ describe("till-app", () => {
       dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
       await flush(el);
       await tenderPay(el).updateComplete;
-      expect(pay).toHaveBeenCalledOnce();
+      expect(pay).toHaveBeenCalledTimes(2);
       expect(c.orderInFlight).toBe(false);
       expect(
         tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card"),
@@ -12729,10 +12693,11 @@ describe("till-app", () => {
       expect(tenderPay(el).shadowRoot!.querySelector(".pay-card")).toBeNull();
     });
 
-    it("puts the pay card back to its choices when the basket cannot be saved before the reader payment", async () => {
-      const updateWorkingOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
-      const { el } = await mountApp({ getTill: withReaderTill(), updateWorkingOrder, pay });
+    it("puts the pay card back to its choices when a basket edit is refused before the reader charges", async () => {
+      const pay = vi
+        .fn()
+        .mockRejectedValue({ code: "tab.portions_too_many", status: 400, limit: 99 });
+      const { el } = await mountApp({ getTill: withReaderTill(), pay });
       const c = await toCounter(el);
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
@@ -12743,8 +12708,8 @@ describe("till-app", () => {
       await flush(el);
       await tenderPay(el).updateComplete;
 
-      expect(updateWorkingOrder).toHaveBeenCalled();
-      expect(pay).not.toHaveBeenCalled();
+      expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+      expect(pay).toHaveBeenCalledOnce();
       expect(tenderPay(el).busy).toBe(false);
       expect(
         tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card"),
@@ -12764,11 +12729,7 @@ describe("till-app", () => {
       expect(counter(el)!.busy).toBe(false);
     });
 
-    it("retrieve → edit → collect-card re-syncs the edited basket BEFORE paying, so the edit is not dropped", async () => {
-      // As in #onConfirmPayment (its retrieve → edit → pay test above): the server's retrieved-order pay
-      // path files from the STORED lock and IGNORES req.lines for the integrated route too, so an edit
-      // made after retrieve must be re-locked (updateWorkingOrder) BEFORE the pay or it is silently
-      // dropped from both the charge and the filed record.
+    it("sends edits to a retrieved basket with its reader payment", async () => {
       const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ updateWorkingOrder, pay });
@@ -12783,16 +12744,7 @@ describe("till-app", () => {
       emit(c, "collect-card", {});
       await flush(el);
 
-      expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
-        dining: "eat_in",
-        lines: [
-          { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
-          { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
-        ],
-        label: "Table 4",
-        revision: 3,
-        expectedEdit: null,
-      });
+      expect(updateWorkingOrder).not.toHaveBeenCalled();
       expect(pay).toHaveBeenCalledWith({
         dining: "eat_in",
         expectedEdit: null,
@@ -12801,10 +12753,8 @@ describe("till-app", () => {
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
         ],
+        edit: { revision: 3, label: "Table 4" },
       });
-      expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
-        pay.mock.invocationCallOrder[0]!,
-      );
     });
 
     it("retrieve → collect-card (unedited): no re-sync, files the stored lock straight through", async () => {
@@ -24129,47 +24079,23 @@ describe("basket protection lifetimes", () => {
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     expect(unloadCancelled()).toBe(false);
   });
-  it("an accepted line save stays clean when the subsequent payment is refused", async () => {
-    const stored = (note?: string) => ({
-      zoneId: null,
-      kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
-      id: "wo-1",
-      orderNumber: 5,
-      label: "Table 4",
-      revision: note === undefined ? 3 : 4,
-      lines: [
-        {
-          menuItemId: "menu-item-cafe-0",
-          productId: "cafe",
-          quantity: "2.000",
-          ...(note === undefined ? {} : { note }),
-        },
-      ],
-    });
-    // The stored line carries no id, so the save reads the order back: it answers the saved note.
+  it("keeps an edited €3 basket unsaved on the till when €2 cash is refused", async () => {
     const { el } = await mountApp({
-      recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
-      retrieveWorkingOrder: vi
-        .fn()
-        .mockResolvedValueOnce(stored())
-        .mockResolvedValue(stored("No sugar")),
+      recordSale: vi.fn().mockRejectedValue({ code: "sale.tender_shortfall" }),
     });
     const c = await toCounter(el);
-    emit(c, "retrieve-order", { id: "wo-1" });
-    await expect.poll(() => c.store.id).toBe("wo-1");
-    c.store.setLineExtras(0, { note: "No sugar" });
+    c.store.addProduct(coffee, "1");
+    c.store.markPersisted();
+    c.store.setLineQuantity(0, "2");
     expect(unloadCancelled()).toBe(true);
-    emit(c, "confirm-payment", { method: "cash", amount: "3" });
+    emit(c, "confirm-payment", { method: "cash", amount: "2.00" });
     await expect.poll(() => currentApi.recordSale).toHaveBeenCalledOnce();
-    expect(currentApi.updateWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1", {
-      dining: "eat_in",
-      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2", makeAt: null, note: "No sugar" }],
-      label: "Table 4",
-      revision: 3,
-      expectedEdit: null,
-    });
-    expect(unloadCancelled()).toBe(false);
-    expect(c.store.lines[0]!.note).toBe("No sugar");
+    await flush(el);
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+    expect(ticket(el)).toBeNull();
+    expect(c.store.total).toBe("3.00");
+    expect(c.store.lines.map((line) => line.quantity)).toEqual(["2"]);
+    expect(unloadCancelled()).toBe(true);
   });
   it("compares modifier membership without offered order while retaining line positions", async () => {
     const { el } = await mountApp();
@@ -27296,25 +27222,20 @@ describe("retrieved table bills paid at Counter", () => {
     expect(recordSale.mock.calls[0]![8]).toBeNull();
   });
 
-  it("saves an edited retrieved table basket with its observation before paying it", async () => {
+  it("sends an edited retrieved table basket and its observation in the payment request", async () => {
     const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
     const recordSale = vi.fn().mockResolvedValue(saleResult);
     const { el, counter } = await retrievedTable({ updateWorkingOrder, recordSale });
     counter.store.setLineQuantity(0, "3");
     emit(counter, "confirm-payment", { method: "cash", amount: "4.50" });
     await flush(el);
-    expect(updateWorkingOrder).toHaveBeenCalledTimes(1);
-    expect(updateWorkingOrder.mock.calls[0]![0]).toBe("wo-1");
-    expect(updateWorkingOrder.mock.calls[0]![1]).toMatchObject({
-      expectedEdit,
-      revision: 3,
-      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "3" }],
-    });
+    expect(updateWorkingOrder).not.toHaveBeenCalled();
     expect(recordSale).toHaveBeenCalledTimes(1);
-    expect(recordSale.mock.calls[0]![8]).toEqual(expectedEdit);
-    expect(updateWorkingOrder.mock.invocationCallOrder[0]).toBeLessThan(
-      recordSale.mock.invocationCallOrder[0]!,
-    );
+    const [lines, , orderId, , , , , , observation, , , edit] = recordSale.mock.calls[0]!;
+    expect(orderId).toBe("wo-1");
+    expect(lines).toMatchObject([{ menuItemId: "menu-item-cafe-0", quantity: "3" }]);
+    expect(observation).toEqual(expectedEdit);
+    expect(edit).toEqual({ revision: 3, label: "Table 4" });
     expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
   });
 });
