@@ -884,10 +884,15 @@ describe("invoice-choice email context at trading boot", () => {
         loginWithPin(tx, { deviceId: device.deviceId, personId: person!.id, pin: "5555" }),
       );
       const cookie = await sessionCookieForTest(suite.db, session.token);
+      // As `createOpenOrder` stores a bill opened while the time is confirmed; one without the mark
+      // is stamped by the close-of-day job at boot.
+      const openedAt = new Date().toISOString();
       const order = await seedWorkingOrder(suite.db, {
         source: "dashboard",
         nodeId: ctx.node,
         orderNumber: 1,
+        openedAt,
+        trustedOpenedAt: openedAt,
       });
       const [department] = await suite.db
         .insert(departments)

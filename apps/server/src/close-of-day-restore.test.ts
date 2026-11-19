@@ -2,7 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { deployment, readVenueClock, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -13,7 +13,6 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
-import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { businessDayAt, businessDayBounds } from "@waitron/shared";
@@ -69,21 +68,13 @@ async function restoreThroughFiscalHook() {
     targetNodeId: nodeId,
   };
   const operatorId = { kind: "recovery-key" as const, nodeId, eventId: binding.eventId };
-  const { bases, nif, softwareId } = await inTx(venue, async (tx) => {
+  const { bases, nif } = await inTx(venue, async (tx) => {
     await tx
       .insert(deployment)
       .values({ id: 1, environment: "preproduction" })
       .onConflictDoNothing({ target: deployment.id });
     const [payer] = await tx.select({ taxId: taxpayer.taxId }).from(taxpayer);
-    const [sif] = await tx
-      .select({ softwareId: registroSif.idSistemaInformatico })
-      .from(registroSif)
-      .where(and(eq(registroSif.nodeId, nodeId), isNull(registroSif.revocadoEn)));
-    return {
-      bases: await fiscal.liveSeriesBases(tx, { nodeId }),
-      nif: payer!.taxId,
-      softwareId: sif!.softwareId,
-    };
+    return { bases: await fiscal.liveSeriesBases(tx, { nodeId }), nif: payer!.taxId };
   });
   const keys = generateKeyPairSync("ed25519");
   const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -93,7 +84,8 @@ async function restoreThroughFiscalHook() {
     version: 1 as const,
     allocationId: "close-of-day-paper-42",
     taxpayerNif: nif,
-    softwareId,
+    // The software id `provisionBillVenue`'s fixture registers; a different one refuses the restore.
+    softwareId: "W1",
     environment: "preproduction" as const,
     installationIdentity: "P000042",
     series: bases.map((base) => ({ code: `${base.code}-P000042`, purpose: base.purpose })),
