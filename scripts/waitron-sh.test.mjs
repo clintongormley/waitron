@@ -61,7 +61,7 @@ afterEach(() => {
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
 // no-op (except under WT_RECOVERY_UNIT=1, below) and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
 // which has no systemctl). `timedatectl` is stubbed so no case reaches a real one on a Linux machine,
-// and fails when WT_TIMEDATECTL_FAIL=1. `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
+// and fails when WT_TIMEDATECTL_FAIL=1; WT_LOCAL_RTC_FAIL=1 fails only `set-local-rtc`. `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
 // reason: `aa-enabled` answers "off" unless a case sets WT_AA_ENABLED, so an AppArmor host runs the
 // suite as a Mac does, and `install` and `apparmor_parser` never write /etc/apparmor.d or load a
 // profile into the running kernel. WT_AA_PARSE_FAIL makes `apparmor_parser` refuse the profile.
@@ -401,7 +401,9 @@ exit 0
 );
 stub(
   "timedatectl",
-  '[ "${WT_TIMEDATECTL_FAIL}" = "1" ] && { echo "Failed to set ntp: NTP not supported" >&2; exit 1; }; exit 0',
+  `[ "\${WT_TIMEDATECTL_FAIL}" = "1" ] && { echo "Failed to set ntp: NTP not supported" >&2; exit 1; }
+[ "$1" = "set-local-rtc" ] && [ "\${WT_LOCAL_RTC_FAIL}" = "1" ] && { echo "Failed to set local RTC: Access denied" >&2; exit 1; }
+exit 0`,
 );
 // `getent group <key>` prints the WT_GROUPS entry (space-separated `name:x:gid:` lines) whose name
 // or number is the key, and exits 2, getent's "not found", when none is.
@@ -508,6 +510,7 @@ function sandbox({
   imagePullFail = "",
   directorySuffix = "",
   timedatectlFail = false,
+  localRtcFail = false,
   oldImages = false,
   imageStore = "classic",
   rmiFail = false,
@@ -613,6 +616,7 @@ function sandbox({
       WT_IMAGE_MISSING: imageMissing,
       WT_IMAGE_PULL_FAIL: imagePullFail,
       WT_TIMEDATECTL_FAIL: timedatectlFail ? "1" : "0",
+      WT_LOCAL_RTC_FAIL: localRtcFail ? "1" : "0",
       WT_OLD_IMAGES: oldImages ? "1" : "0",
       WT_IMAGE_STORE: imageStore,
       WT_RMI_FAIL: rmiFail ? "1" : "0",
@@ -2517,6 +2521,27 @@ describe("waitron.sh install and the host's time synchronisation", () => {
     expect(r.status).toBe(0);
     expect(r.stderr).toContain("could not switch on the system's time synchronisation");
     expect(r.stderr).toContain("Unless another time service runs on this machine");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d\b/));
+  });
+
+  it("keeps the hardware clock in UTC, and says so", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    const log = calls(sb);
+    const asked = log.indexOf("timedatectl set-local-rtc 0");
+    expect(asked).toBeGreaterThanOrEqual(0);
+    expect(r.stdout).toContain("set the hardware clock to keep UTC");
+    const up = log.findIndex((c) => /^docker compose .*\bup -d\b/.test(c));
+    expect(up).toBeGreaterThan(asked);
+  });
+
+  it("carries on, and says what that means, when the hardware clock cannot be set to UTC", () => {
+    const sb = sandbox({ localRtcFail: true });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("asked the system to keep its clock in step with internet time");
+    expect(r.stderr).toContain("could not set the hardware clock to keep UTC");
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d\b/));
   });
 

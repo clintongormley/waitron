@@ -139,6 +139,14 @@ off for long. After a try that fails, the server waits a minute before trying ag
 long after each further failure in a row, up to an hour. A try that works, or a reading of
 synchronisation switched on, starts that wait again at a minute. `reset` does not touch it.
 
+Every `install` then runs `timedatectl set-local-rtc 0` as root, with the same limit, so the box's
+hardware clock keeps UTC and the system keeps it correct; a hardware clock kept in local time is
+never corrected, and after a power cut across a summer/winter change the box starts an hour out.
+On a box whose hardware clock kept local time, such as one that came with Windows, that install
+switches it to UTC and writes the system's time into it. It prints one line either way; where it
+fails, the line says to run that command as root, and `install` carries on. `reset` does not touch
+it.
+
 On a host with systemd, every `install` also installs the box's clock service, which lets Waitron
 set this machine's clock when a confirmed time shows it is wrong; the app's container cannot set it
 itself. `install` fetches three files from the same ref and writes them as root, owned

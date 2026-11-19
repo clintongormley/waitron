@@ -342,6 +342,13 @@ enable_time_sync() {
   else
     echo "waitron.sh: could not switch on the system's time synchronisation ('timedatectl set-ntp true' failed, or this system has no timedatectl). Unless another time service runs on this machine, nothing keeps its clock right, and every start of a box that files invoices takes no payment until the system reports its clock in step with internet time, two tills or handhelds that are switched on and connected agree with its clock, or someone confirms it — check the clock, and install and enable a time service such as systemd-timesyncd if there is none" >&2
   fi
+  # A hardware clock kept in local time is never corrected by the kernel, and is an hour out after
+  # a power cut across a summer/winter change.
+  if as_root ${limit:+"$limit" 60} timedatectl set-local-rtc 0 >/dev/null 2>&1; then
+    echo "waitron.sh: set the hardware clock to keep UTC, so the system keeps it correct (timedatectl set-local-rtc 0)"
+  else
+    echo "waitron.sh: could not set the hardware clock to keep UTC ('timedatectl set-local-rtc 0' failed, or this system has no timedatectl). If it keeps local time, nothing corrects it, and after a power cut the box may start with its clock wrong — run 'timedatectl set-local-rtc 0' as root" >&2
+  fi
 }
 
 # 2e. The box's clock service: a root handler the app asks, through /run/waitron-box/box.sock, to read
