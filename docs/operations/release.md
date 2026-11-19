@@ -60,6 +60,20 @@ The release job skips signing while both public keys and the secret are absent.
 A missing key or a secret that matches neither public key fails signing after the
 job has attached the declaration. The two public keys must be distinct.
 
+Before publishing the first signed release, wait for the app, print agent and tunnel
+digests to be included in its signed file. Seed test boxes with the matching installer
+and verifier through the published main image or the USB recipe.
+
+To rotate a key, keep the other trusted key in both sets. Sign the release carrying the
+updated keys with that shared key. A box must complete a checked upgrade to that release
+before it can accept a release signed only by the new key.
+
+If a verifier needs another file, add it to the download list in `deploy/waitron.sh`
+and the recipe list in `deploy/box/build.sh` one release before the verifier uses it.
+The box uses its retained installer to download trust files, so it learns the expanded
+list on that first upgrade. Keep the same keys in the release that introduces the file.
+Upgrade through that release on any box whose installer still has the earlier list.
+
 ## 1. Make the release worktree
 
 `prepare` runs only on a branch named `release/<version>` whose last commit is `main`'s latest,
