@@ -75,8 +75,9 @@ questions.md at 13:31. The watcher authorised revising the plan at 15:06.
   on main, with a published GitHub Release and signed release file. Use the existing
   `release` environment and signing secret once its `v*` tag rule is in place.
 - The operator creates `upgrade-offer` with `--latest=false`. Keep one concurrency group and the
-  workflow path fixed. Its run number is the serial. A missing asset permits publication.
-  A failed read, lower serial or conflicting retry refuses it. Replace only `waitron-offer.json`
+  workflow path fixed. Its run number is the serial. A missing asset permits a fresh dispatch
+  only (watcher, 19 November 16:34, after the old-rerun reproduction). A failed read, lower serial
+  or conflicting retry refuses publication. Replace only `waitron-offer.json`
   and verify the bytes read back. Confirm a pause’s serial and targets before dispatching
   another change. In an emergency cancel outstanding publication runs, remove the asset and
   publish an empty list with default `none`. Republish with the shared key before retiring

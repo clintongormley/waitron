@@ -26,7 +26,7 @@ function download(gh, tag, name) {
   return gh("release", "download", tag, "--pattern", name, "--output", "-");
 }
 
-export function publishUpgradeOffer({ ref, sha, serial, input, privateKey, keys }, gh) {
+export function publishUpgradeOffer({ ref, sha, serial, attempt, input, privateKey, keys }, gh) {
   const dispatchVersion = ref?.startsWith("refs/tags/v") ? ref.slice("refs/tags/v".length) : null;
   if (!isNumberedVersion(dispatchVersion)) throw new Error("Dispatch from a numbered release tag");
   if (!exactRecord(input, ["format", "entries", "default"]))
@@ -50,6 +50,7 @@ export function publishUpgradeOffer({ ref, sha, serial, input, privateKey, keys 
 
   const release = publishedRelease(gh, OFFER_TAG);
   const exists = release.assets.some(({ name }) => name === OFFER_ASSET);
+  if (!exists && attempt !== 1) throw new Error("Dispatch a new run to publish a missing offer");
   if (exists) {
     const previous = download(gh, OFFER_TAG, OFFER_ASSET);
     const accepted = verifyUpgradeOffer(previous, keys);
@@ -83,6 +84,7 @@ if (import.meta.main) {
         ref: process.env.GITHUB_REF,
         sha: process.env.GITHUB_SHA,
         serial: Number(process.env.GITHUB_RUN_NUMBER),
+        attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
         input: JSON.parse(process.env.OFFER_INPUT),
         privateKey,
         keys,

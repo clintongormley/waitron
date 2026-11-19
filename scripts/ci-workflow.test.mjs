@@ -8013,7 +8013,7 @@ describe("the release job", () => {
 });
 
 describe("publish-upgrade-offer.yml", () => {
-  it("restricts publication to manual numbered-tag dispatches in the release environment", () => {
+  it("declares manual dispatch and runs the publisher from tags in the release environment", () => {
     const workflow = readFileSync(join(workflowsDir, "publish-upgrade-offer.yml"), "utf8");
     expect(workflow).toMatch(/^on:\n  workflow_dispatch:\n    inputs:\n      offer:/m);
     expect(workflow).toContain("group: publish-upgrade-offer");

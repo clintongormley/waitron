@@ -1,6 +1,16 @@
+import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { basename } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, delimiter, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { selectUpgradeOffer, signReleaseList } from "../box/release-list.mjs";
 import { publishUpgradeOffer } from "./publish-upgrade-offer.mjs";
@@ -18,6 +28,24 @@ const sourceSha = "a".repeat(40);
 const groups = [{ condition: { installations: ["pilot-box"] }, target: "1.4.0" }];
 const offer = { format: 1, entries: groups, default: "1.3.0" };
 const pause = { format: 1, entries: [], default: "none" };
+
+function signedRelease(tag, metadata = {}) {
+  const signed = signReleaseList(
+    {
+      format: 1,
+      kind: "release",
+      version: metadata.signedVersion ?? tag.slice(1),
+      prerelease: metadata.signedPrerelease ?? false,
+      sourceSha: metadata.signedSha ?? sourceSha,
+      platform: "linux/amd64",
+      images: { app: `sha256:${"a".repeat(64)}`, printAgent: `sha256:${"b".repeat(64)}` },
+    },
+    privateKey,
+  );
+  return metadata.signedPadding
+    ? Buffer.concat([signed, Buffer.alloc(metadata.signedPadding, " ")])
+    : signed;
+}
 
 function github({ existing, releases = {}, badDownload, badReadback = false } = {}) {
   let published = existing;
@@ -47,21 +75,7 @@ function github({ existing, releases = {}, badDownload, badReadback = false } = 
           ? Buffer.concat([published, Buffer.from(" ")])
           : published;
       }
-      const signed = signReleaseList(
-        {
-          format: 1,
-          kind: "release",
-          version: metadata.signedVersion ?? tag.slice(1),
-          prerelease: metadata.signedPrerelease ?? false,
-          sourceSha: metadata.signedSha ?? sourceSha,
-          platform: "linux/amd64",
-          images: { app: `sha256:${"a".repeat(64)}`, printAgent: `sha256:${"b".repeat(64)}` },
-        },
-        privateKey,
-      );
-      return metadata.signedPadding
-        ? Buffer.concat([signed, Buffer.alloc(metadata.signedPadding, " ")])
-        : signed;
+      return signedRelease(tag, metadata);
     }
     expect([operation, tag, basename(flags[0])]).toEqual(["upload", offerTag, offerName]);
     expect(flags.slice(1)).toEqual(published ? ["--clobber"] : []);
@@ -78,6 +92,7 @@ function dispatch(repository, input = offer, overrides = {}) {
       ref: `refs/tags/${dispatchTag}`,
       sha: sourceSha,
       serial: 7,
+      attempt: 1,
       input,
       privateKey,
       keys,
@@ -88,6 +103,72 @@ function dispatch(repository, input = offer, overrides = {}) {
 }
 
 describe("publish a signed upgrade offer", () => {
+  it("publishes a fresh pause and refuses an old rerun after the pause is removed", () => {
+    const scratch = mkdtempSync(join(tmpdir(), "publish-offer-test-"));
+    try {
+      const keyDir = join(scratch, "deploy/box/release-keys");
+      mkdirSync(keyDir, { recursive: true });
+      writeFileSync(join(keyDir, "current.pem"), publicKey);
+      writeFileSync(join(keyDir, "spare.pem"), spare);
+      writeFileSync(join(scratch, "waitron-release.json"), signedRelease(dispatchTag));
+      writeFileSync(
+        join(scratch, "gh"),
+        `#!/usr/bin/env node
+const { copyFileSync, readFileSync } = require("node:fs");
+if (process.env.WAITRON_RELEASE_SIGNING_KEY || process.env.GH_TOKEN !== "stand-in-token") process.exit(2);
+const [resource, action, tag, ...flags] = process.argv.slice(2);
+if (resource !== "release") process.exit(3);
+if (action === "view") console.log(JSON.stringify({ tagName: tag, isDraft: false, assets: [], isPrerelease: false }));
+else if (action === "download") process.stdout.write(readFileSync(flags[1]));
+else if (action === "upload" && tag === "upgrade-offer") copyFileSync(flags[0], "waitron-offer.json");
+else process.exit(4);
+`,
+        { mode: 0o700 },
+      );
+      const env = {
+        PATH: scratch + delimiter + process.env.PATH,
+        GITHUB_REF: `refs/tags/${dispatchTag}`,
+        GITHUB_SHA: sourceSha,
+        GITHUB_RUN_NUMBER: "9",
+        GITHUB_RUN_ID: "800001",
+        GITHUB_RUN_ATTEMPT: "1",
+        OFFER_INPUT: JSON.stringify(pause),
+        GH_TOKEN: "stand-in-token",
+        WAITRON_RELEASE_SIGNING_KEY: privateKey,
+      };
+      const command = [join(import.meta.dirname, "publish-upgrade-offer.mjs")];
+      const run = (env) =>
+        spawnSync(process.execPath, command, {
+          cwd: scratch,
+          encoding: "utf8",
+          env,
+          timeout: 10_000,
+        });
+      const first = run(env);
+      expect(first.status, first.stderr).toBe(0);
+      const path = join(scratch, offerName);
+      const box = { boxId: "pilot-box", installedVersion: "1.2.0" };
+      expect(selectUpgradeOffer(readFileSync(path), keys, box)).toMatchObject({
+        serial: 9,
+        version: null,
+      });
+
+      unlinkSync(path);
+      const rerun = run({
+        ...env,
+        GITHUB_RUN_NUMBER: "3",
+        GITHUB_RUN_ATTEMPT: "2",
+        OFFER_INPUT: JSON.stringify({ ...pause, default: "1.4.0" }),
+      });
+      const offered = existsSync(path) ? selectUpgradeOffer(readFileSync(path), keys, box) : null;
+      expect(offered).toBeNull();
+      expect(rerun.status).toBe(1);
+      expect(rerun.stderr).toMatch(/dispatch a new run/i);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
   it("uploads the offer once and boxes can verify the group version and older default", () => {
     const repository = github();
     expect(dispatch(repository)).toBe(7);
@@ -144,6 +225,18 @@ describe("publish a signed upgrade offer", () => {
     expect(repository.uploads).toHaveLength(0);
   });
 
+  it("refuses to publish when the signing secret matches neither trusted key", () => {
+    const repository = github();
+    const otherKey = generateKeyPairSync("ed25519").privateKey.export({
+      type: "pkcs8",
+      format: "pem",
+    });
+    expect(() => dispatch(repository, pause, { privateKey: otherKey })).toThrow(
+      /invalid release signature/i,
+    );
+    expect(repository.uploads).toHaveLength(0);
+  });
+
   it("reads back the exact bytes even when the changed bytes still verify", () => {
     const repository = github({ badReadback: true });
     expect(() => dispatch(repository)).toThrow(/read back/i);
@@ -174,7 +267,7 @@ describe("publish a signed upgrade offer", () => {
     const repository = github({ existing: initial.uploads[0] });
 
     expect(dispatch(repository, pause, { serial: 8 })).toBe(8);
-    expect(dispatch(repository, pause, { serial: 8 })).toBe(8);
+    expect(dispatch(repository, pause, { serial: 8, attempt: 2 })).toBe(8);
     expect(() => dispatch(repository, offer, { serial: 8 })).toThrow(/serial/i);
     expect(() => dispatch(repository, offer, { serial: 7 })).toThrow(/serial/i);
     expect(repository.uploads).toHaveLength(1);

@@ -282,17 +282,20 @@ everyone, dispatch `{"format":1,"entries":[],"default":"none"}`.
 The workflow checks the numbered tag's signed release file and checks that every
 target is published, signed, and stable. It writes only `waitron-offer.json` on
 the `upgrade-offer` release, then reads it back to compare the exact bytes. The
-workflow run number is the offer's serial. Wait for the run to finish and check
-the uploaded serial and targets before dispatching another change.
+workflow run number is the offer's serial. Keep the workflow at
+`.github/workflows/publish-upgrade-offer.yml` so that its run numbers continue
+the sequence boxes already remember. Wait for the run to finish and check its
+uploaded serial, conditions and targets before dispatching another change.
+[GitHub Actions run numbers](https://docs.github.com/en/actions/reference/workflows-and-actions/variables#default-environment-variables)
 
 ```sh
 gh run watch <run-id> --exit-status
 gh release download upgrade-offer --pattern waitron-offer.json --output - |
-  node -p 'JSON.parse(Buffer.from(JSON.parse(require("node:fs").readFileSync(0)).payload, "base64url"))'
+  node -p 'JSON.stringify(JSON.parse(Buffer.from(JSON.parse(require("node:fs").readFileSync(0)).payload, "base64url")), null, 2)'
 ```
 
 GitHub CLI removes the old asset before uploading its replacement. If upload
-fails, check whether the asset is still there before retrying. Cancel outstanding
+fails and the asset is missing, dispatch a new run to get a new serial. Cancel outstanding
 publication runs before an emergency pause. Once those runs have stopped, remove
 the asset and dispatch the empty offer with default `none`. Before retiring a
 signing key, publish the offer again with the key both releases trust so the next
