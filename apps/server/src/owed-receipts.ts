@@ -3,12 +3,8 @@ import { invoiceDeliveries, printJobs, sales, unpaidDepartures } from "@waitron/
 import type { Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 
-/**
- * Whether the sale still owes the customer its original ticket: it is neither a corrective nor an
- * unpaid departure, no original receipt print (from any path) is done or still trying, and no
- * original email or A4 page is queued, being sent, sent or may have arrived. A print that gave up
- * and an email that failed both leave it owed.
- */
+// A print that gave up, and an email that failed, still owe the ticket; a delivery that may have
+// arrived (`unknown`), on any medium, does not.
 export async function owesOriginal(tx: Transaction, saleId: string): Promise<boolean> {
   const [sale] = await tx
     .select({ correctsSaleId: sales.correctsSaleId })
@@ -28,7 +24,6 @@ export async function owesOriginal(tx: Transaction, saleId: string): Promise<boo
       and(
         eq(printJobs.saleId, saleId),
         eq(printJobs.receiptCopy, false),
-        eq(printJobs.kind, "document"),
         or(
           inArray(printJobs.status, ["queued", "printing", "done"]),
           and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
@@ -44,7 +39,6 @@ export async function owesOriginal(tx: Transaction, saleId: string): Promise<boo
       and(
         eq(invoiceDeliveries.saleId, saleId),
         eq(invoiceDeliveries.designation, "original"),
-        inArray(invoiceDeliveries.medium, ["email", "a4"]),
         inArray(invoiceDeliveries.status, ["queued", "sending", "sent", "unknown"]),
       ),
     )

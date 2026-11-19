@@ -19,7 +19,14 @@ import {
   seedVenue,
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
-import { createPrinter, enqueuePrintJob, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
+import {
+  createPrinter,
+  enqueueA4PrintJob,
+  enqueuePrintJob,
+  MAX_DELIVERY_ATTEMPTS,
+} from "@waitron/printing";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { owesOriginal } from "./owed-receipts.js";
 
@@ -151,6 +158,43 @@ describe("owesOriginal", () => {
       printJobId: jobId,
       printerId,
       failureCode: "printer_refused",
+    });
+    expect(await owes(saleId)).toBe(true);
+  });
+
+  it.each([false, true])(
+    "owes nothing for a full invoice's tracked receipt that may have printed (restart: %s)",
+    async (restart) => {
+      const { saleId, printerId } = await issued();
+      const claimedAt = "2026-11-19T11:00:00.000Z";
+      const jobId = await receiptJob(saleId, printerId, {
+        status: "printing",
+        attempts: 1,
+        claimedAt,
+      });
+      await delivery(saleId, {
+        medium: "receipt",
+        status: "sending",
+        printJobId: jobId,
+        printerId,
+      });
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          expireInvoiceDeliveryClaims(tx, new Date("2026-11-19T12:00:00.000Z"), restart),
+        ),
+      ).toBe(1);
+      const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+      expect(job).toMatchObject({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
+      expect(await owes(saleId)).toBe(false);
+    },
+  );
+
+  it("does not take an A4 page's job for a receipt original", async () => {
+    const { saleId } = await issued();
+    await withTransaction(suite.db, async (tx) => {
+      const office = await insertA4Printer(tx);
+      const { jobId } = await enqueueA4PrintJob(tx, office, saleId, AT);
+      await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, jobId));
     });
     expect(await owes(saleId)).toBe(true);
   });

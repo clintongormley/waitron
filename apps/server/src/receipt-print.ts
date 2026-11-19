@@ -47,7 +47,7 @@ export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
 /** The printers table's own default setting. */
 export const DEFAULT_PRINTER: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
 
-/** One of a device's current printers, when active, and the settings it lays documents out for. */
+/** One of a device's current printers and the settings it lays documents out for. */
 export interface DevicePrinter extends EscSetting {
   id: string;
   hasCashDrawer: boolean;
@@ -134,7 +134,7 @@ export async function resolveInvoicePrinter(
   return { kind: printer.kind, id: printer.id, name: printer.name };
 }
 
-/** Each role's printer, by role, when the device resolves one and it is switched on. */
+/** Each role's printer, by role, when the device resolves one (see {@link printerLookup}). */
 async function readDevicePrinters(
   tx: Transaction,
   origin: Origin,
