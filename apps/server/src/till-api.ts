@@ -156,7 +156,8 @@ import { finishPartyService } from "./finish-party-service.js";
 import { parseFinishCancellations } from "./finish-party-input.js";
 import { mergeBills, moveDishes } from "./bill-actions.js";
 import { moveSetMenuDishes } from "./set-menu-moves.js";
-import { refuseUnlessSetMenuBill } from "./set-menu-bill.js";
+import { readBillSetMenus, refuseUnlessSetMenuBill } from "./set-menu-bill.js";
+import { removeSetMenuLines, setSetMenuCount } from "./set-menu-count.js";
 import type { BillCommand } from "./bill-actions.js";
 import { billNameZoneSubject, setBillName } from "./bill-identities.js";
 import { moveBill, moveWouldSend, previewBillMoveAllergy } from "./move-bill.js";
@@ -448,6 +449,9 @@ export async function resolveCardCollector(
 /** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
 export const STATUS: Record<string, ContentfulStatusCode> = {
   "settings.invalid": 500,
+  "set_menu.holds_dishes": 409,
+  "set_menu.needed_by_draft": 409,
+  "set_menu.not_selling": 409,
   "set_menu.no_place": 409,
   "set_menu.no_place_on_target": 409,
   "set_menu.place_taken": 409,
@@ -3351,6 +3355,85 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         return readPartyBills(tx, partyId, log);
       });
       return c.json(bills);
+    }),
+  );
+
+  app.get("/api/bills/:id/set-menus", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const billId = requireTabParam(c.req.param("id")).toLowerCase();
+      const result = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
+        await checkZones(tx, session, [{ orderId: billId }]);
+        const revision = await assertTabOpen(tx, billId);
+        const partyId = await partyOfOrder(tx, billId);
+        return {
+          setMenus: await readBillSetMenus(tx, billId),
+          partyRevision: partyId === null ? revision : await partyRevision(tx, partyId),
+        };
+      });
+      return c.json(result);
+    }),
+  );
+
+  function changeSetMenus(
+    session: Awaited<ReturnType<typeof requireSession>>,
+    billId: string,
+    expected: number,
+    expectedEdit: BillEditExpected | null,
+    change: (tx: Transaction) => Promise<Awaited<ReturnType<typeof readBillSetMenus>>>,
+  ) {
+    return withTransaction(deps.db, async (tx) => {
+      await requireEconomicWrite(tx, deps.cfg, deps.admission);
+      await checkZones(tx, session, [{ orderId: billId }]);
+      const revision = await assertTabOpen(tx, billId);
+      const partyId = await partyOfOrder(tx, billId);
+      await requireOrderBillEditor(tx, billId, { operatorId: session.personId, expectedEdit });
+      if (partyId === null && revision !== expected)
+        throw new AppError("working_order.out_of_date", { workingOrderId: billId, revision });
+      const next =
+        partyId === null ? revision + 1 : await checkAndBumpParty(tx, partyId, expected, "open");
+      return { setMenus: await change(tx), partyRevision: next };
+    });
+  }
+
+  app.put("/api/bills/:id/set-menus/:setMenuId", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const cfg = requestCfg(deps.cfg, session);
+      const billId = requireTabParam(c.req.param("id")).toLowerCase();
+      const menuId = requireBodyUuid(c.req.param("setMenuId"), "setMenuId").toLowerCase();
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const expected = requireRevision(body.expectedPartyRevision, "expectedPartyRevision");
+      const count = body.count;
+      if (typeof count !== "number" || !Number.isInteger(count) || count < 0 || count > 99)
+        throw new AppError("management.request_invalid", { field: "count" });
+      const result = await changeSetMenus(
+        session,
+        billId,
+        expected,
+        body.expectedEdit as BillEditExpected | null,
+        (tx) => setSetMenuCount(tx, cfg, billId, menuId, count, session.personId),
+      );
+      return c.json(result);
+    }),
+  );
+
+  app.delete("/api/bills/:id/set-menu-lines/:lineId", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const billId = requireTabParam(c.req.param("id")).toLowerCase();
+      const lineId = requireBodyUuid(c.req.param("lineId"), "lineId").toLowerCase();
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const expected = requireRevision(body.expectedPartyRevision, "expectedPartyRevision");
+      const result = await changeSetMenus(
+        session,
+        billId,
+        expected,
+        body.expectedEdit as BillEditExpected | null,
+        (tx) => removeSetMenuLines(tx, billId, [lineId]),
+      );
+      return c.json(result);
     }),
   );
 

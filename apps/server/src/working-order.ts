@@ -139,6 +139,7 @@ import {
   carryBillSetMenuCopies,
   placeSetMenuRows,
   refuseSetMenuMoney,
+  refuseDraftLosingSetMenuPlace,
   refuseUnlessSetMenuBill,
   SET_MENU_DRAFT_LINE,
   type SetMenuDraftLine,
@@ -4257,6 +4258,15 @@ export async function moveOrderLines(
   );
   if (movedMenus.length > 0 || looseDishes.length > 0) {
     await refuseUnlessSetMenuBill(tx, toTabId);
+  }
+  // A whole-bill merge carries the draft along with its menus.
+  if (lineNos !== undefined && movedMenus.length > 0) {
+    await refuseDraftLosingSetMenuPlace(
+      tx,
+      fromTabId,
+      movedMenuIds,
+      new Set(source.map(({ id }) => id)),
+    );
   }
   if (lineNos === undefined || movedMenus.length > 0) {
     await carryBillSetMenuCopies(

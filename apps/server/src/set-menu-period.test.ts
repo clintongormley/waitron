@@ -4,10 +4,23 @@ import { afterEach, expect, it, vi } from "vitest";
 import { products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin, persons } from "@waitron/identity";
-import { createMenu, updateMenuDetails } from "@waitron/menu";
+import {
+  addMember,
+  createMenu,
+  removeMember,
+  requireMenuRoot,
+  saveSetMenuDishCourse,
+  updateMenuDetails,
+} from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { replaceMenuWeek, resolveZoneContext, saveMenuPeriod } from "@waitron/venue-service";
+import {
+  replaceMenuWeek,
+  resolveZoneContext,
+  saveMenuPeriod,
+  updateMenuPeriod,
+} from "@waitron/venue-service";
 import { fireGroup } from "./order-groups.js";
+import { setSetMenuCount } from "./set-menu-count.js";
 import { mountTillApi } from "./till-api.js";
 import { send as tillRequest } from "./testing/bill-venue.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
@@ -34,6 +47,7 @@ let cookie: string;
 let confirmer: string;
 let daily: Awaited<ReturnType<typeof setMenuOnFullMenu>>;
 let evening: typeof daily;
+let lunchPeriodId: string;
 const serviceDate = new Date("2026-11-19T10:00:00+01:00");
 useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -73,6 +87,7 @@ useVenueDb({
         menuId: menu.fullMenuId,
         staffMenuIds: [],
       });
+      lunchPeriodId = lunchPeriod.id;
       const dinnerPeriod = await saveMenuPeriod(tx, departmentId, {
         name: "Dinner",
         menuId: dinner.id,
@@ -229,4 +244,95 @@ it.each([
     latePeriodName: null,
     lateConfirmedBy: null,
   });
+});
+
+function countDaily(billId: string, count: number) {
+  return inTx(venue, (tx) =>
+    setSetMenuCount(tx, venue.cfg, billId, daily.menuId, count, venue.operator.personId),
+  );
+}
+
+it("takes the current sale price on a new bill and keeps the recorded price on an existing one", async () => {
+  at("13:00");
+  const initialVersion = await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, daily.menuId, { setPrice: "14.00" });
+    return publishWorkingMenu(tx, daily.fullMenuId);
+  });
+  const old = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  const newBill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  expect((await countDaily(old.tabId, 1)).recorded).toEqual({ [daily.menuId]: initialVersion });
+  const nextVersion = await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, daily.menuId, { setPrice: "15.00" });
+    return publishWorkingMenu(tx, daily.fullMenuId);
+  });
+
+  expect(await countDaily(old.tabId, 2)).toMatchObject({
+    copies: [{ versionId: initialVersion, priceCents: 1400 }],
+    setMenus: [{ lineNo: 1 }, { lineNo: 2 }],
+  });
+  expect(await countDaily(newBill.tabId, 1)).toMatchObject({
+    recorded: { [daily.menuId]: nextVersion },
+    copies: [{ versionId: nextVersion, priceCents: 1500 }],
+  });
+});
+
+it("needs a copy on sale for a new bill and keeps selling the recorded copy after lunch", async () => {
+  at("13:00");
+  const versionId = await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, daily.menuId, { setPrice: "16.00" });
+    return publishWorkingMenu(tx, daily.fullMenuId);
+  });
+  const old = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  const newBill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  await countDaily(old.tabId, 1);
+  at("16:00");
+  await expect(countDaily(newBill.tabId, 1)).rejects.toMatchObject({
+    code: "set_menu.not_selling",
+    params: { setMenuName: "Daily menu" },
+  });
+  expect(await countDaily(old.tabId, 2)).toMatchObject({
+    copies: [{ versionId, priceCents: 1600 }],
+    setMenus: [{ lineNo: 1 }, { lineNo: 2 }],
+  });
+});
+
+it("takes the newest copy on sale and records a full menu that sells it now", async () => {
+  at("13:00");
+  const { root, memberId } = await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, daily.menuId, { setPrice: "14.00" });
+    await publishWorkingMenu(tx, daily.fullMenuId);
+    await saveSetMenuDishCourse(tx, evening.menuId, evening.menuItemId, evening.courseId);
+    const root = await requireMenuRoot(tx, evening.fullMenuId);
+    const member = await addMember(tx, root, { kind: "set_menu", menuId: daily.menuId });
+    await updateMenuPeriod(tx, lunchPeriodId, { staffMenuIds: [evening.fullMenuId] });
+    return { root, memberId: member.id };
+  });
+  try {
+    at("13:05");
+    const dinnerVersion = await inTx(venue, async (tx) => {
+      await updateMenuDetails(tx, daily.menuId, { setPrice: "15.00" });
+      return publishWorkingMenu(tx, evening.fullMenuId);
+    });
+    const first = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+    expect(await countDaily(first.tabId, 1)).toMatchObject({
+      recorded: { [daily.menuId]: dinnerVersion },
+      copies: [{ priceCents: 1500 }],
+    });
+
+    const lunchVersion = await inTx(venue, async (tx) => {
+      await updateMenuPeriod(tx, lunchPeriodId, { staffMenuIds: [] });
+      return publishWorkingMenu(tx, daily.fullMenuId);
+    });
+    const lunch = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+    expect((await countDaily(lunch.tabId, 1)).recorded).toEqual({ [daily.menuId]: lunchVersion });
+    at("16:00");
+    const dinner = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+    expect((await countDaily(dinner.tabId, 1)).recorded).toEqual({ [daily.menuId]: dinnerVersion });
+  } finally {
+    await inTx(venue, async (tx) => {
+      await removeMember(tx, root, memberId);
+      await publishWorkingMenu(tx, evening.fullMenuId);
+      await updateMenuPeriod(tx, lunchPeriodId, { staffMenuIds: [] });
+    });
+  }
 });

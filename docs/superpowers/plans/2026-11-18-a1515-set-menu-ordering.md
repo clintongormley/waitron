@@ -673,6 +673,9 @@ export function setMenuOfferLookup(
     menus of that type the bill holds (`setSetMenuCount`).
   - `DELETE /api/bills/:id/set-menu-lines/:lineId`: Cancel on one set menu (`removeSetMenuLines`).
   - `GET /api/bills/:id/set-menus`: the state, for the move screen (Task 17).
+- Both writes take the bill's `expectedEdit` on a party bill and check it through
+  `requireOrderBillEditor`. A standalone bill uses its own revision in `expectedPartyRevision`
+  (watcher, 19 November at 11:43).
 - Raising a count: when the bill has no recorded copy of that set menu, the zone's served copy of
   it with `newestOnSale: true` is taken (piece 1 decision 10); with none, `set_menu.not_selling`.
   The bill records `(menuId, versionId)`, the version chosen as "Builds on" says; the key need not

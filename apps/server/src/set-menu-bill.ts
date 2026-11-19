@@ -6,6 +6,7 @@ import {
   billPayments,
   billSetMenuCopies,
   lineServiceCancellations,
+  menuItems,
   orderDraftLines,
   orderDrafts,
   products,
@@ -23,7 +24,6 @@ import {
   type DishToPlace,
   type PlacementResult,
   type ServedSetMenuCopy,
-  type SetMenuCopy,
 } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
 import "./errors.js";
@@ -141,8 +141,23 @@ export async function readBillSetMenus(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<BillSetMenuState> {
+  return (await readBillsSetMenus(tx, [workingOrderId])).get(workingOrderId)!.setMenus;
+}
+
+interface BillSetMenusRead {
+  setMenus: BillSetMenuState;
+  setMenuCopies: ServedSetMenuCopy[];
+}
+
+export async function readBillsSetMenus(
+  tx: Transaction,
+  billIds: string[],
+): Promise<Map<string, BillSetMenusRead>> {
+  if (billIds.length === 0) return new Map();
+  const billValues = sql`(select value from json_each(${JSON.stringify(billIds)}))`;
   const lines = await tx
     .select({
+      billId: workingOrderLines.workingOrderId,
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       role: workingOrderLines.setMenuRole,
@@ -161,49 +176,94 @@ export async function readBillSetMenus(
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .where(
       and(
-        eq(workingOrderLines.workingOrderId, workingOrderId),
+        inArray(workingOrderLines.workingOrderId, billValues),
         isNotNull(workingOrderLines.setMenuRole),
       ),
     )
     .orderBy(workingOrderLines.lineNo);
-  const versions = await readBillSetMenuVersions(tx, workingOrderId);
-  const recorded = Object.fromEntries(versions);
-  const setMenuLines = lines.filter((line) => line.role === "set_menu");
-  const requests = new Map<string, { menuId: string; versionId: string }>();
-  for (const [menuId, versionId] of versions) {
-    requests.set(`${versionId}:${menuId}`, { menuId, versionId });
-  }
-  for (const { menuId, versionId } of setMenuLines) {
-    requests.set(`${versionId}:${menuId}`, { menuId: menuId!, versionId: versionId! });
-  }
-  if (requests.size === 0) return { copies: [], recorded, setMenus: [], dishes: [] };
-  const requested = [...requests];
-  const served = await serveRecordedSetMenus(
-    tx,
-    requested.map(([, request]) => request),
-  );
-  const copies = new Map<string, SetMenuCopy>();
-  const copyIds = new Map<string, string>();
-  for (const [index, [key, { versionId }]] of requested.entries()) {
-    const copy = served[index]!;
-    copyIds.set(key, copy.key);
-    if (!copies.has(copy.key)) copies.set(copy.key, setMenuCopyOf(copy, versionId));
-  }
-  const setMenus = setMenuLines.map(({ id, lineNo, menuId, versionId }) => ({
-    lineId: id,
-    lineNo,
-    copyId: copyIds.get(`${versionId}:${menuId}`)!,
-  }));
+  const versions = await tx
+    .select({
+      billId: billSetMenuCopies.workingOrderId,
+      menuId: billSetMenuCopies.setMenuId,
+      versionId: billSetMenuCopies.menuVersionId,
+    })
+    .from(billSetMenuCopies)
+    .where(inArray(billSetMenuCopies.workingOrderId, billValues));
 
+  const menuLines = lines.filter((line) => line.role === "set_menu");
+  const key = ({ menuId, versionId }: { menuId: string | null; versionId: string | null }) =>
+    `${versionId}:${menuId}`;
+  const requests = [
+    ...new Map(
+      [
+        ...versions,
+        ...menuLines.map(({ menuId, versionId }) => ({
+          menuId: menuId!,
+          versionId: versionId!,
+        })),
+      ].map((request) => [key(request), request]),
+    ).values(),
+  ];
+  const served = requests.length === 0 ? [] : await serveRecordedSetMenus(tx, requests);
+  const servedByVersion = new Map(requests.map((request, i) => [key(request), served[i]!]));
   const placed = lines.filter((line) => line.role === "dish" && line.setMenuLineId !== null);
-  if (placed.length === 0) return { copies: [...copies.values()], recorded, setMenus, dishes: [] };
+  const dishes = placed.length === 0 ? [] : await placedSetMenuDishes(tx, placed);
+  return new Map(
+    billIds.map((billId) => {
+      const billVersions = versions.filter((row) => row.billId === billId);
+      const billMenus = menuLines.filter((row) => row.billId === billId);
+      const copies = new Map<string, { copy: ServedSetMenuCopy; versionId: string }>();
+      for (const row of [...billVersions, ...billMenus]) {
+        const copy = servedByVersion.get(key(row))!;
+        if (!copies.has(copy.key)) copies.set(copy.key, { copy, versionId: row.versionId! });
+      }
+      return [
+        billId,
+        {
+          setMenus: {
+            copies: [...copies.values()].map(({ copy, versionId }) =>
+              setMenuCopyOf(copy, versionId),
+            ),
+            recorded: Object.fromEntries(
+              billVersions.map(({ menuId, versionId }) => [menuId, versionId]),
+            ),
+            setMenus: billMenus.map(({ id, lineNo, menuId, versionId }) => ({
+              lineId: id,
+              lineNo,
+              copyId: servedByVersion.get(key({ menuId, versionId }))!.key,
+            })),
+            dishes: dishes.filter((dish) => dish.billId === billId).map(({ dish }) => dish),
+          },
+          setMenuCopies: [...copies.values()].map(({ copy }) => copy),
+        },
+      ];
+    }),
+  );
+}
+
+async function placedSetMenuDishes(
+  tx: Transaction,
+  placed: {
+    billId: string;
+    id: string;
+    productId: string | null;
+    parentProductId: string | null;
+    setMenuLineId: string | null;
+    place: number | null;
+    priceCents: number;
+    countsAsCourseId: string | null;
+    cancellationLineId: string | null;
+  }[],
+) {
+  const billValues = sql`(select value from json_each(${JSON.stringify([...new Set(placed.map(({ billId }) => billId))])}))`;
   const payments = await tx
-    .select({ lineId: billPaymentLines.lineId })
+    .select({ billId: billPayments.workingOrderId, lineId: billPaymentLines.lineId })
     .from(billPaymentLines)
     .innerJoin(billPayments, eq(billPayments.id, billPaymentLines.billPaymentId))
-    .where(eq(billPayments.workingOrderId, workingOrderId));
+    .where(inArray(billPayments.workingOrderId, billValues));
   const actions = await tx
     .select({
+      billId: adjustments.workingOrderId,
       lineId: adjustments.lineId,
       action: adjustments.action,
       reducedLineId: adjustmentLines.lineId,
@@ -214,29 +274,32 @@ export async function readBillSetMenus(
       adjustmentLines,
       and(eq(adjustmentLines.adjustmentId, adjustments.id), gt(adjustmentLines.reduction, 0)),
     )
-    .where(eq(adjustments.workingOrderId, workingOrderId));
-  const fixed = new Set(payments.map(({ lineId }) => lineId));
+    .where(inArray(adjustments.workingOrderId, billValues));
+  const key = (billId: string, lineId: string) => `${billId}:${lineId}`;
+  const fixed = new Set(payments.map(({ billId, lineId }) => key(billId, lineId)));
   const cancelled = new Set<string>();
-  for (const { lineId, action, chargeKept, reducedLineId } of actions) {
+  for (const { billId, lineId, action, chargeKept, reducedLineId } of actions) {
     if (action === "cancel" && lineId !== null) {
-      if (chargeKept) fixed.add(lineId);
-      else cancelled.add(lineId);
+      if (chargeKept) fixed.add(key(billId, lineId));
+      else cancelled.add(key(billId, lineId));
     }
-    if (reducedLineId !== null) fixed.add(reducedLineId);
+    if (reducedLineId !== null) fixed.add(key(billId, reducedLineId));
   }
-  const dishes = placed
-    .filter(({ id }) => !cancelled.has(id))
+  return placed
+    .filter(({ billId, id }) => !cancelled.has(key(billId, id)))
     .map((line) => ({
-      lineId: line.id,
-      productId: line.parentProductId ?? line.productId!,
-      variantId: line.parentProductId === null ? null : line.productId,
-      setMenuLineId: line.setMenuLineId!,
-      place: line.place!,
-      priceCents: line.priceCents,
-      countsAsCourseId: line.countsAsCourseId!,
-      movable: line.cancellationLineId === null && !fixed.has(line.id),
+      billId: line.billId,
+      dish: {
+        lineId: line.id,
+        productId: line.parentProductId ?? line.productId!,
+        variantId: line.parentProductId === null ? null : line.productId,
+        setMenuLineId: line.setMenuLineId!,
+        place: line.place!,
+        priceCents: line.priceCents,
+        countsAsCourseId: line.countsAsCourseId!,
+        movable: line.cancellationLineId === null && !fixed.has(key(line.billId, line.id)),
+      },
     }));
-  return { copies: [...copies.values()], recorded, setMenus, dishes };
 }
 
 export function setMenuLineDescriptions(
@@ -305,6 +368,66 @@ export async function readSetMenuReservations(
       ? []
       : [{ setMenuLineId, place }],
   );
+}
+
+export async function refuseDraftLosingSetMenuPlace(
+  tx: Transaction,
+  billId: string,
+  removedMenus: ReadonlySet<string>,
+  leavingLines: ReadonlySet<string> = removedMenus,
+): Promise<void> {
+  const rows = await tx
+    .select({
+      id: orderDraftLines.id,
+      productId: menuItems.productId,
+      variantId: orderDraftLines.variantId,
+      name: products.name,
+      setMenuLineId: orderDraftLines.setMenuReservedLineId,
+      place: orderDraftLines.setMenuReservedPlace,
+    })
+    .from(orderDraftLines)
+    .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
+    .innerJoin(menuItems, eq(menuItems.id, orderDraftLines.menuItemId))
+    .innerJoin(
+      products,
+      eq(products.id, sql`coalesce(${orderDraftLines.variantId}, ${menuItems.productId})`),
+    )
+    .where(
+      and(
+        eq(orderDrafts.billId, billId),
+        eq(orderDrafts.state, "open"),
+        isNotNull(orderDraftLines.setMenuId),
+      ),
+    )
+    .orderBy(orderDrafts.createdAt, orderDrafts.id, orderDraftLines.position);
+  if (rows.length === 0) return;
+  const dishes = rows.map(({ id, productId, variantId, setMenuLineId, place }) => ({
+    id,
+    productId,
+    variantId,
+    reserved: setMenuLineId === null || place === null ? null : { setMenuLineId, place },
+  }));
+  const state = await readBillSetMenus(tx, billId);
+  const before = placeInOrder(state, dishes).placed;
+  const after = placeInOrder(
+    {
+      ...state,
+      setMenus: state.setMenus.filter(({ lineId }) => !removedMenus.has(lineId)),
+      dishes: state.dishes.filter(({ lineId }) => !leavingLines.has(lineId)),
+    },
+    dishes,
+  );
+  const unplaced = new Set(after.unplaced);
+  const lost = before.filter(({ id }) => unplaced.has(id));
+  if (lost.length === 0) return;
+
+  const menu = state.setMenus.find(({ lineId }) => removedMenus.has(lineId))!;
+  const copy = state.copies.find(({ id }) => id === menu.copyId)!;
+  const names = new Map(rows.map(({ id, name }) => [id, name]));
+  throw new AppError("set_menu.needed_by_draft", {
+    setMenuName: copy.name,
+    dishNames: [...new Set(lost.map(({ id }) => names.get(id)!))],
+  });
 }
 
 export async function placeSetMenuRows(

@@ -1,6 +1,13 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { billSetMenuCopies, kitchenCourses, ticketItems, workingOrderLines } from "@waitron/db";
+import {
+  billSetMenuCopies,
+  kitchenCourses,
+  orderDraftLines,
+  orderDrafts,
+  ticketItems,
+  workingOrderLines,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { saveSetMenuDishCourse, updateMenuDetails } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -11,9 +18,13 @@ import { advanceTicketItem, moveOrderLines, storedOrderTotal } from "./working-o
 import { mergeBills, moveDishes } from "./testing/bill-action-fixture.js";
 import { cancelReasonId, observedCancelItem } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { commandFor, counterOrder, inTx } from "./testing/party-venue.js";
+import { commandFor, counterOrder, inTx, seatWithNoAllergies } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { seedBillSetMenu, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
+import {
+  saveSetMenuDraft,
+  seedBillSetMenu,
+  setMenuOnFullMenu,
+} from "./testing/set-menu-bill-fixture.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 
 let fixture: Awaited<ReturnType<typeof setupSetMenuReaders>>;
@@ -42,7 +53,10 @@ async function bills() {
   return { ...source, target };
 }
 
-async function move(source: Awaited<ReturnType<typeof bills>>, ...lineIds: string[]) {
+async function move(
+  source: Pick<Awaited<ReturnType<typeof bills>>, "partyId" | "billId" | "target">,
+  ...lineIds: string[]
+) {
   const { venue } = fixture;
   const command = await commandFor(venue, source.partyId);
   return inTx(venue, (tx) =>
@@ -71,6 +85,63 @@ function copies(billId: string) {
     .from(billSetMenuCopies)
     .where(eq(billSetMenuCopies.workingOrderId, billId));
 }
+
+async function billsWithReservedDraft() {
+  const { venue, copy } = fixture;
+  const { partyId, tabId: billId } = await seatWithNoAllergies(
+    venue,
+    await venue.table(crypto.randomUUID()),
+  );
+  const [menuLineId, target] = await inTx(venue, async (tx) => {
+    const menuLineId = await seedBillSetMenu(tx, billId, copy, 1);
+    return [menuLineId, await insertPartyBill(tx, venue.cfg, partyId)];
+  });
+  const draft = await saveSetMenuDraft(
+    venue,
+    { partyId, tabId: billId },
+    {
+      menuItemId: copy.menuItemId,
+      menuVersionId: copy.versionId,
+      setMenuId: copy.menuId,
+      quantity: "1",
+      setMenuReservedLineId: menuLineId,
+      setMenuReservedPlace: 0,
+    },
+  );
+
+  return { partyId, billId, target, menuLineId, draft };
+}
+
+it("refuses to move the only menu with a place for a saved draft dish", async () => {
+  const { partyId, billId, target, menuLineId } = await billsWithReservedDraft();
+  await expect(move({ partyId, billId, target }, menuLineId)).rejects.toMatchObject({
+    code: "set_menu.needed_by_draft",
+    params: { setMenuName: "Daily menu", dishNames: ["Flan"] },
+  });
+  expect((await lines(billId)).map(({ id }) => id)).toEqual([menuLineId]);
+  expect(await lines(target)).toEqual([]);
+});
+
+it("moves the draft with its reserved menu when merging the whole bill", async () => {
+  const { venue } = fixture;
+  const { partyId, billId, target, menuLineId, draft } = await billsWithReservedDraft();
+  const command = await commandFor(venue, partyId);
+  await inTx(venue, (tx) => mergeBills(tx, venue.cfg, target, billId, command));
+
+  expect(await lines(billId)).toEqual([]);
+  expect((await lines(target)).map(({ id }) => id)).toEqual([menuLineId]);
+  expect(
+    await venue.db
+      .select({
+        billId: orderDrafts.billId,
+        menuLineId: orderDraftLines.setMenuReservedLineId,
+        place: orderDraftLines.setMenuReservedPlace,
+      })
+      .from(orderDraftLines)
+      .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
+      .where(eq(orderDraftLines.id, draft.lines[0]!.id)),
+  ).toEqual([{ billId: target, menuLineId, place: 0 }]);
+});
 
 it("moves a menu and its dishes together, with their original places, prices and recorded copy", async () => {
   const source = await bills();

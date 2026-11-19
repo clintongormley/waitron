@@ -1008,7 +1008,10 @@ and additional dishes each need their own place. Cancelling a dish without charg
 its place. The server can move a menu with its dishes between bills, keeping their prices. A
 dish moved on its own needs a place on the destination bill and takes that place's surcharge.
 Splitting a draft keeps the dish's menu offer and clears its place reservation on the old bill.
-The summary controls and the route for removing a set-menu heading are still being built.
+The till API can save counts, cancel an empty set menu, and return the bill's saved copies
+after a full menu is republished. It refuses to remove or move a set menu when a saved draft
+dish on its original bill would lose its only place. The till's ordering and summary controls
+are still being built.
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
 The dashboard can open an existing set-menu draft, edit its name, price, VAT rates and inclusion

@@ -27,7 +27,9 @@ import {
   jobOrigin,
   normalisePartyName,
   rawCentsToDecimal,
+  type BillSetMenuState,
   type Dining,
+  type ServedSetMenuCopy,
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
@@ -47,6 +49,7 @@ import { ensureToday } from "./floor-today-store.js";
 import { refuseTakenOff } from "./floor-today-table.js";
 import { readCreditNotes, readPartyTables } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
+import { readBillsSetMenus } from "./set-menu-bill.js";
 import "./errors.js";
 
 /** A staged delivery choice as a bill shows it: who staged it stays on the server. */
@@ -64,6 +67,8 @@ export function billInvoiceDelivery(choice: StagedInvoiceDelivery): BillInvoiceD
 /** One bill of a party, as the table screen lists it. */
 export interface PartyBill {
   workingOrderId: string;
+  setMenus: BillSetMenuState;
+  setMenuCopies: ServedSetMenuCopy[];
   revision: number;
   invoiceType: "F1" | "F2";
   invoiceDelivery?: BillInvoiceDelivery;
@@ -592,12 +597,17 @@ export async function readPartyBills(
     tx,
     bills.map((bill) => bill.workingOrderId),
   );
+  const setMenus = await readBillsSetMenus(
+    tx,
+    bills.map((bill) => bill.workingOrderId),
+  );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
     const choice = choiceByBill.get(bill.workingOrderId)!;
     const receiptLanguage = sale?.locale ?? choice.receiptLocale;
     return {
       workingOrderId: bill.workingOrderId,
+      ...setMenus.get(bill.workingOrderId)!,
       revision: choice.revision,
       invoiceType: choice.invoiceType,
       ...(choice.invoiceDelivery === null
@@ -666,6 +676,8 @@ export type FamilyBill = Omit<
   | "recipient"
   | "dining"
   | "diningChoice"
+  | "setMenus"
+  | "setMenuCopies"
 > & {
   lines: number;
 };
