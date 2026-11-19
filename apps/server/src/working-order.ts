@@ -776,9 +776,11 @@ export async function priceOrderLines(
       service !== null &&
       !service.orderableMenuIds.includes(offer.menuId)
     ) {
-      // The recorded copy permits this send, even if the dish is held for later firing.
-      const name = service.endedMenus.find(({ menuId }) => menuId === offer.menuId)?.periodName;
-      marks.set(index, { periodName: name ?? offer.menuName, confirmedBy: null });
+      // A held dish carries the mark so Fire recognises the already permitted send.
+      if (setMenu?.held === true) {
+        const name = service.endedMenus.find(({ menuId }) => menuId === offer.menuId)?.periodName;
+        marks.set(index, { periodName: name ?? offer.menuName, confirmedBy: null });
+      }
     } else if (periodName !== undefined) {
       if (!alsoSold.has(offeredKey(offer.productId, line.variantId ?? null))) {
         late.push({ index, menuItemId: offer.id, menuId: offer.menuId, periodName });

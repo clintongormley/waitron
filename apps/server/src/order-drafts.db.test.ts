@@ -4127,7 +4127,7 @@ describe("fresh drafts alongside existing bill families", () => {
       }),
     );
     const id = draft.lines[0]!.id;
-    expect(draft.lines[0]).toMatchObject(reservation);
+    expect((await draftsOf(partyId))[0]!.lines[0]).toMatchObject(reservation);
 
     const saved = await inTx((tx) =>
       saveDraft(tx, v.cfg, partyId, ALEX, {

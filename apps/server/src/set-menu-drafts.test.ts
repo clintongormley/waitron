@@ -135,7 +135,14 @@ it("keeps an unavailable stale draft dish when saving a new ordinary dish", asyn
     { id: draft.lines[0]!.id, menuVersionId: daily.versionId, unavailable: true },
     { menuItemId: venue.item("Water"), unavailable: false },
   ]);
-  await expect(save(await tableBill(), dessert())).rejects.toMatchObject({
-    code: "menu.version_changed",
-  });
+  await expect(
+    inTx(venue, (tx) =>
+      saveDraftForTest(tx, venue.cfg, bill.partyId, venue.operator.personId, {
+        billId: bill.tabId,
+        draftId: saved.id,
+        revision: saved.revision,
+        lines: [dessert(), saved.lines[0]!],
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "menu.version_changed" });
 });

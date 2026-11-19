@@ -226,5 +226,7 @@ it.each([
     menuId: daily.fullMenuId,
     menuVersionId: daily.versionId,
     unitPriceGross: 0,
+    latePeriodName: null,
+    lateConfirmedBy: null,
   });
 });

@@ -39,7 +39,6 @@ Register each refusal when a caller can throw it. PR 3 registers `set_menu.not_s
 Add `setMenuDishColumns` with the first placement writer in PR 5. The offer lookup takes the
 basket's line identities and the zone menu versions the caller already read.
 
-
 PR 5 review, 19 November 2026. A dish from an unrecorded copy takes the usual confirmation
 when its full-menu period has ended. Send still needs room on a set menu already on the bill.
 `setMenuDishColumns` takes the placement only. Add the landing copy when the billing task uses it.

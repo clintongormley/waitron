@@ -878,7 +878,9 @@ export async function submitDraft(
               release,
               joinGroupId,
               afterGroupId,
-              lines: freshGroups[index]!.map((line) => groupLine(line, positionOf.get(line.id)!)),
+              lines: freshGroups[index]!.map((line) =>
+                groupLine(line, positionOf.get(line.id)!, release === "hold"),
+              ),
             };
           }),
           joinGroupId,
@@ -1047,7 +1049,7 @@ function foldIfUuid(id: string): string {
 }
 
 /** A draft line as pricing takes a basket line, with each null field left out. */
-function groupLine(line: DraftLine, position: number): GroupLine {
+function groupLine(line: DraftLine, position: number, held: boolean): GroupLine {
   return {
     [RETAINED_COURSE]: true,
     ...(line.setMenuId === undefined
@@ -1056,6 +1058,7 @@ function groupLine(line: DraftLine, position: number): GroupLine {
           [SET_MENU_DRAFT_LINE]: {
             draftLineId: line.id,
             position,
+            held,
             setMenuId: line.setMenuId,
             reserved:
               line.setMenuReservedLineId == null || line.setMenuReservedPlace == null

@@ -204,6 +204,7 @@ export interface SetMenuDraftLine {
   draftLineId: string;
   position: number;
   setMenuId: string;
+  held: boolean;
   reserved: DishPlace | null;
 }
 
