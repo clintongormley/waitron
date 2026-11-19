@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { DishMove } from "@waitron/shared";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
+import { currentLocale, fill, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { bill, courses, seaBass } from "../../test/set-menu-widgets.js";
 
@@ -129,8 +130,12 @@ it("uses the Spanish fixed-price count and the included dish tag", async () => {
     setLocale("es-ES");
     const { el } = await mount();
     const root = el.shadowRoot!;
-    expect(root.querySelector("summary")?.textContent).toContain("3 cartas a precio fijo");
-    expect(root.querySelectorAll("article")[2]?.textContent).toContain("Sea bass incluido");
+    expect(root.querySelector("summary")?.textContent).toContain(
+      fill(es["set_menu.many"], { n: "3" }),
+    );
+    expect(root.querySelectorAll("article")[2]?.textContent).toContain(
+      `Sea bass ${es["set_menu.tag"]}`,
+    );
   } finally {
     setLocale(originalLocale);
   }
