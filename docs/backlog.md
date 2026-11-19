@@ -260,10 +260,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows — NOT SCHEDULED: it stays on the backlog for the foreseeable future (owner, 2026-11-17: "the printed pre-bill, leave it on the backlog for the foreseeable future").** A table's ticket is issued when staff print the bill instead (decision D1). The design stays A803 §3.9, kept as written. The owner's answer (owner, 2026-11-18, question 2 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): no pre-bill is needed, and a bill changed after it is issued takes a corrective or a cancellation; the adviser is still to confirm the details.
   [Detail](backlog/fiscal.md#a446-build-the-pre-bill-each-printed-pre-bill-is-stored-as-printed-and-linked-to-the-invoice-that-follows).
 
-- **A447. Money paid before a meal's ticket is an advance; an open bill is issued when the trading day ends.** Owner, 2026-11-18 (question 1 of the
+- **A447. Money paid before a meal's ticket is an advance.** Owner, 2026-11-18 (question 1 of the
   [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): every payment towards a meal before its ticket is issued, even one
   naming no dishes, gets its own invoice with VAT, and the final ticket deducts it; the adviser is still to confirm the details. Fiscal: the owner lands it.
-  [Detail](backlog/fiscal.md#a447-money-paid-before-a-meals-ticket-is-an-advance-an-open-bill-is-issued-when-the-trading-day-ends).
+  [Detail](backlog/fiscal.md#a447-money-paid-before-a-meals-ticket-is-an-advance).
 
 - **A448. Whether a customer's email address alone satisfies TRLGDCU art. 63.3 for an emailed full invoice.**
   [Detail](backlog/fiscal.md#decisions-and-deliberate-limits) _2026-10-12: the product no longer asks for consent at all — A231q's tasks C1a and C1b
@@ -294,7 +294,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A231/A948. Full invoices at the till** — table bill payments, per-bill unpaid departures and, since #2725, Counter bills paid through the shared Pay window issue F1; direct `POST /api/sales`, `POST /api/pay`, unissued collection, closing a counter bill by transfer and zero-total counter bills still refuse it.
   **Next action:** complete physical paper/QR qualification, the asesor's manual-remedy confirmation and current business-invoice delivery qualification as separate work. The owner removed these as switch prerequisites on 2026-10-27.
-  An unpaid departure or Print the bill that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A deferred-payment close (`closeBillDeferredTx`, `apps/server/src/deferred-close.ts`) now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
+  An unpaid departure, Print the bill or the close of the business day that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A deferred-payment close (`closeBillDeferredTx`, `apps/server/src/deferred-close.ts`) now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
   [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)
 
 - **Decide whether any screen shows an invoice email's address** (bundle of 1, size S, needs the owner). Holds A554. [Detail](backlog/fiscal.md#bundle-decide-whether-any-screen-shows-an-invoice-emails-address)

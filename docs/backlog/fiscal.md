@@ -54,7 +54,7 @@ marks a line sent (Q21).
 AEAT's FAQ calls a system without that link «susceptible de sanción»,
 and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as [S2](../compliance/asesor-questions.md#the-shortened-list-2026-10-09).
 
-## A447. Money paid before a meal's ticket is an advance; an open bill is issued when the trading day ends
+## A447. Money paid before a meal's ticket is an advance
 
 Asked as [S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) (LIVA 75.Dos, RD
 1619/2012 art. 2.1). The owner's answers of 18 November 2026 (owner, 2026-11-18, question 1 of the

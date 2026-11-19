@@ -5925,7 +5925,7 @@ export const es: Record<StringKey, string> = {
   "source.demo_seed": "Datos de demostración",
   "source.readiness_test": "Prueba de preparación",
   "source.operator_script": "Script del operador",
-  "source.business_day_close": "Cierre de la jornada",
+  "source.business_day_close": "Fin del día de trabajo",
   "source.backup": "Copias de seguridad",
   "alerts.no_handled": "No se ha resuelto nada en los últimos 30 días.",
   "alerts.no_access": "No tienes acceso a ningún aviso.",

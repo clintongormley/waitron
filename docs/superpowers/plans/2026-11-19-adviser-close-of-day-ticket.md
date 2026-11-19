@@ -22,7 +22,7 @@ first: printing the bill; taking the last payment; close of trading day", and "y
 never-printed bill being issued then, showing the amount still owed (`:95-96`).
 
 **What staff get.** A table left seated past the end of the business day, whose bill was never
-printed, fully paid or recorded as a walkout, gets its ticket a few seconds after the day ends, for
+printed, fully paid or recorded as a walkout, gets its ticket within a minute of the day's end, for
 everything on the bill, showing payments already taken and the amount still owed. Next shift the
 till shows the bill as printed, as after **Print the bill**: staff take payment with **Pay**, record
 a walkout, or print the ticket from **Find a bill**. (Corrected 2026-11-19 while building: on main no screen prints an issued, unpaid ticket; it reaches paper when the bill is paid and the payment window closes; a bill then recorded as a walkout gets no printed ticket. Put back to the owner as D3.) A box that was off at the day's end does this as
@@ -140,7 +140,7 @@ lines of tests. Medium; one pull request.
 
 **When.** A new job, `bills.close_of_day`, looks every minute (`maxSleepMs` 60 s, `minSleepMs` 500
 as `attendance.end_of_day` has, since the pass reads the trusted clock and the runner the wall
-clock). Most looks only check the clock gate in memory. It runs the due query on its first pass, when
+clock). Most looks only check the clock gate and read the day-start setting. It runs the due query on its first pass, when
 the day's end has passed since its last query, when the clock gate has just let go, and when a
 retry is pending. A **due bill**: on a party; `open` or `placed`; no sale; at least one line; opened
 by this node, after this node's latest series retirement (D6); and opened before today's business
