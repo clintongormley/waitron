@@ -4,6 +4,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import type { LocalDate } from "../hours-types.js";
 import type { AddDatesCalendar } from "./add-dates-calendar.js";
 import "./add-dates-calendar.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -106,9 +107,7 @@ describe("Add-dates calendar", () => {
     el.requestUpdate();
     await el.updateComplete;
     expect(text(testId(el, "month")).toLowerCase()).toBe("diciembre 2026");
-    expect(text(testId(el, "hint"))).toBe(
-      "Haz clic en una fecha para añadirla o quitarla. Arrastra, o haz clic con Mayús, para añadir varias.",
-    );
+    expect(text(testId(el, "hint"))).toBe(VENUE_SERVICE_STRINGS.es["special.pick_hint"]);
   });
 
   it("draws nothing until it has a month", async () => {
@@ -279,9 +278,7 @@ describe("Add-dates calendar", () => {
     setLocale("es");
     el.requestUpdate();
     await el.updateComplete;
-    expect(text(testId(el, "hint"))).toBe(
-      "Haz clic en una fecha para añadirla o quitarla. Arrastra, o haz clic con Mayús, para añadir varias.",
-    );
+    expect(text(testId(el, "hint"))).toBe(VENUE_SERVICE_STRINGS.es["special.pick_hint"]);
     expect(root(el).querySelector('[data-test="range"]')).toBeNull();
   });
 
@@ -352,7 +349,7 @@ describe("Add-dates calendar", () => {
 
   it.each([
     ["en", "Held by another special day", "Christmas holds this date."],
-    ["es", "Ocupada por otro día especial", "Christmas ya tiene esta fecha."],
+    ["es", VENUE_SERVICE_STRINGS.es["special.taken_legend"], "Christmas ya tiene esta fecha."],
   ] as const)(
     "explains the mark on a held date in a legend, and names the holder when it is picked (%s)",
     async (locale, legend, holds) => {
@@ -380,7 +377,7 @@ describe("Add-dates calendar", () => {
   });
 
   it("shows no legend in a month with no held date", async () => {
-    const el = await mount({ taken: new Map([["2027-01-06", "Reyes"]]) });
+    const el = await mount({ taken: new Map([["2027-01-06", "Epiphany"]]) });
     expect(root(el).querySelector('[data-test="legend"]')).toBeNull();
   });
 

@@ -4,6 +4,7 @@ import { applyTokens } from "@waitron/ui";
 import { casaMarina } from "./floor-plans-fixture.js";
 import type { FloorPlanSetDialog, FloorPlanSetSave } from "./floor-plan-set-dialog.js";
 import "./floor-plan-set-dialog.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -181,26 +182,26 @@ it("marks the department a refusal names, and says a gone set at the bottom", as
 it("speaks Spanish", async () => {
   setLocale("es");
   const { el } = await mount((el) => (el.mode = "add"));
-  expect(heading(el)).toBe("Añadir conjunto");
+  expect(heading(el)).toBe(VENUE_SERVICE_STRINGS.es["floor_plans.add_heading"]);
   await change(el, "departmentId", "restaurant");
-  expect(field(el, "fromSetId")!.label).toBe("A partir de");
-  expect(field(el, "name")!.label).toBe("Nombre");
+  expect(field(el, "fromSetId")!.label).toBe(VENUE_SERVICE_STRINGS.es["floor_plans.start_from"]);
+  expect(field(el, "name")!.label).toBe(VENUE_SERVICE_STRINGS.es["floor_plans.name"]);
   el.refusal = { code: "floor_plan_set.name_taken" };
   await el.updateComplete;
   expect(field(el, "name")!.error).toBe("Otro conjunto de este departamento ya tiene este nombre.");
   el.mode = "rename";
-  el.set = { id: "dinner", name: "Cena" };
+  el.set = { id: "dinner", name: "Dinner" };
   el.open = false;
   await el.updateComplete;
   el.open = true;
   await el.updateComplete;
-  expect(heading(el)).toBe("Renombrar Cena");
+  expect(heading(el)).toBe("Renombrar Dinner");
   el.mode = "copy";
   el.open = false;
   await el.updateComplete;
   el.open = true;
   await el.updateComplete;
-  expect(heading(el)).toBe("Copiar Cena");
+  expect(heading(el)).toBe("Copiar Dinner");
 });
 
 it("reopens Copy quietly after Add was refused by its own checks", async () => {

@@ -82,7 +82,7 @@ const packs = (limit: number) => (country: string) =>
 const holidayArea = (): Row => ({
   country: "ZZ",
   provinceCode: "30",
-  cityKey: "villa real",
+  cityKey: "kingsford",
   areaKey: "isle-a",
 });
 
@@ -142,9 +142,9 @@ describe("validateHolidayConfiguration", () => {
 });
 
 describe("the menu timetable rows of a bundle", () => {
-  const BARRA = "z-barra";
+  const BAR_ZONE = "z-barra";
   const MANANAS = "11111111-1111-4111-8111-111111111111";
-  const MADRUGADA = "22222222-2222-4222-8222-222222222222";
+  const LATE_NIGHT = "22222222-2222-4222-8222-222222222222";
   const DELI_PERIOD = "33333333-3333-4333-8333-333333333333";
   function menuTables(): Tables {
     return {
@@ -152,23 +152,23 @@ describe("the menu timetable rows of a bundle", () => {
         { id: RESTAURANT, is_default: 1 },
         { id: DELI, is_default: 0 },
       ],
-      floor_zones: [{ id: BARRA, active: 1, department_id: RESTAURANT }],
+      floor_zones: [{ id: BAR_ZONE, active: 1, department_id: RESTAURANT }],
 
       menus: [{ id: "m-desayunos" }, { id: "m-copas" }, { id: "m-cafe" }, { id: "m-deli" }],
       menu_periods: [
         {
           id: MANANAS,
           department_id: RESTAURANT,
-          name: "Mañanas",
+          name: "Mornings",
           colour: "blue",
           menu_id: "m-desayunos",
           staff_menu_ids: '["m-cafe"]',
           floor_plan_set_id: "s-dinner",
         },
         {
-          id: MADRUGADA,
+          id: LATE_NIGHT,
           department_id: RESTAURANT,
-          name: "Madrugada",
+          name: "Late night",
           colour: "red",
           menu_id: "m-copas",
           staff_menu_ids: "[]",
@@ -176,7 +176,7 @@ describe("the menu timetable rows of a bundle", () => {
         {
           id: DELI_PERIOD,
           department_id: DELI,
-          name: "Mañanas",
+          name: "Mornings",
           colour: "blue",
           menu_id: "m-deli",
           staff_menu_ids: "[]",
@@ -238,14 +238,14 @@ describe("the menu timetable rows of a bundle", () => {
     [
       "an untrimmed period name",
       (t: Tables) => {
-        t.menu_periods![0]!.name = "Mañanas ";
+        t.menu_periods![0]!.name = "Mornings ";
       },
       "menu_periods.name",
     ],
     [
       "a period name its department uses twice",
       (t: Tables) => {
-        t.menu_periods![1]!.name = "Mañanas";
+        t.menu_periods![1]!.name = "Mornings";
       },
       "menu_periods.name",
     ],
@@ -1400,7 +1400,7 @@ describe("special days in a configuration bundle", () => {
     ends_at: endsAt,
   });
 
-  /** Fiesta repeats from 15 August 2025: Bar 20:00–23:00 and Closed 12:00–16:00 in the
+  /** Festival repeats from 15 August 2025: Bar 20:00–23:00 and Closed 12:00–16:00 in the
    *  restaurant, the terrace open 12:00–14:00; 16 August is Closed all day. */
   function specialTables(): Tables {
     return {
@@ -1426,7 +1426,7 @@ describe("special days in a configuration bundle", () => {
           staff_menu_ids: "[]",
         },
       ],
-      special_days: [{ id: "fiesta", name: "Fiesta", repeats_yearly: 1 }],
+      special_days: [{ id: "fiesta", name: "Festival", repeats_yearly: 1 }],
       special_day_dates: [
         {
           id: "fiesta-15",
@@ -1490,7 +1490,7 @@ describe("special days in a configuration bundle", () => {
   it.each([
     ["special_days.name", "special_days", { name: "  " }],
     ["special_days.name", "special_days", { name: 3 }],
-    ["special_days.name", "special_days", { name: " Fiesta " }],
+    ["special_days.name", "special_days", { name: " Festival " }],
     ["special_days.repeats_yearly", "special_days", { repeats_yearly: 2 }],
     ["special_days.repeats_yearly", "special_days", { repeats_yearly: true }],
     ["special_days.repeats_yearly", "special_days", { repeats_yearly: null }],

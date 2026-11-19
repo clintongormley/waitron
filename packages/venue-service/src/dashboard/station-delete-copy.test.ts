@@ -13,7 +13,7 @@ it.each([
   ],
   [
     "es",
-    "Eliminar estación",
+    VENUE_SERVICE_STRINGS.es["prep.delete_heading"],
     VENUE_SERVICE_STRINGS.es["prep.delete_default"],
     "Cambia primero estas pantallas: Grill, Bar.",
     "3 platos siguen pendientes o en preparación.",
@@ -131,7 +131,7 @@ it.each([
     "Cambia primero las pantallas vinculadas.",
     "Cambia primero la pantalla vinculada.",
     "3 platos siguen pendientes o en preparación.",
-    "No se pudo guardar el cambio.",
+    VENUE_SERVICE_STRINGS.es["prep.save_error"],
   ],
 ] as const)(
   "explains delete action refusals and unexpected failures in %s",

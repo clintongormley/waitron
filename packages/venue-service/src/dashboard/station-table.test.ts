@@ -103,14 +103,14 @@ it("names its columns in Spanish, and says so when there are no stations", async
       (th.getAttribute("aria-label") ?? th.textContent)?.trim(),
     ),
   ).toEqual([
-    "Nombre",
+    VENUE_SERVICE_STRINGS.es["prep.name"],
     VENUE_SERVICE_STRINGS.es["prep.printed_on"],
-    "Se muestra en",
+    VENUE_SERVICE_STRINGS.es["prep.shown_on"],
     VENUE_SERVICE_STRINGS.es["prep.waits_for_pass"],
-    "Acciones",
+    VENUE_SERVICE_STRINGS.es["prep.actions"],
   ]);
   const empty = await mount([]);
-  expect(table(empty)?.textContent).toContain("Todavía no hay estaciones de preparación");
+  expect(table(empty)?.textContent).toContain(VENUE_SERVICE_STRINGS.es["prep.stations_empty"]);
 });
 it("omits deleted stations and their supplied status while preserving Default", async () => {
   const el = await mount([
@@ -202,11 +202,11 @@ it("names the read-out columns in Spanish", async () => {
   el.outputs = outputs;
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(headings(el)).toEqual([
-    "Nombre",
+    VENUE_SERVICE_STRINGS.es["prep.name"],
     VENUE_SERVICE_STRINGS.es["prep.printed_on"],
-    "Se muestra en",
+    VENUE_SERVICE_STRINGS.es["prep.shown_on"],
     VENUE_SERVICE_STRINGS.es["prep.waits_for_pass"],
-    "Acciones",
+    VENUE_SERVICE_STRINGS.es["prep.actions"],
   ]);
 });
 it.each([

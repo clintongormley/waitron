@@ -278,9 +278,11 @@ it("closes once saved, or stays open on an edit made while saving", async () => 
 
 it("reads in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
-  expect($(el, "wt-modal")!.getAttribute("heading")).toBe("Editar estación");
+  expect($(el, "wt-modal")!.getAttribute("heading")).toBe(
+    VENUE_SERVICE_STRINGS.es["prep.edit_station"],
+  );
   expect(printersField(el)!.label).toBe(VENUE_SERVICE_STRINGS.es["prep.printers"]);
-  expect(restSwitch(el).label).toBe("Mostrar también los platos del pedido de otras estaciones");
+  expect(restSwitch(el).label).toBe(VENUE_SERVICE_STRINGS.es["prep.shows_rest_of_order"]);
 });
 
 it("ignores a cancel and a save while busy", async () => {
@@ -503,14 +505,14 @@ it("puts a connection failure at the bottom only, marking no timing", async () =
 it("reads the timings in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
   expect(LATE_FLAGS.map((name) => timingField(el, name).label)).toEqual([
-    "Esperando",
-    "Con retraso",
-    "Olvidado",
+    VENUE_SERVICE_STRINGS.es["prep.health.warm"],
+    VENUE_SERVICE_STRINGS.es["prep.health.overdue"],
+    VENUE_SERVICE_STRINGS.es["prep.health.forgotten"],
   ]);
   await setTiming(el, "warmAfterMinutes", "0");
   await save(el);
   expect(timingField(el, "warmAfterMinutes").error).toBe(
-    "Usa minutos enteros con esperando < con retraso < olvidado.",
+    VENUE_SERVICE_STRINGS.es["prep.threshold_invalid"],
   );
   expect(timingField(el, "warmAfterMinutes").hint).toBe("");
 });
@@ -526,9 +528,9 @@ it("explains timings out of order in Spanish beside the field and at the bottom,
   expect(seen).toEqual([]);
   expect(timingField(el, "warmAfterMinutes").error).toBe("");
   expect(timingField(el, "overdueAfterMinutes").error).toBe(
-    "Usa minutos enteros con esperando < con retraso < olvidado.",
+    VENUE_SERVICE_STRINGS.es["prep.threshold_invalid"],
   );
-  expect(formMessage(el)).toBe("Corrige los campos marcados para continuar.");
+  expect(formMessage(el)).toBe(VENUE_SERVICE_STRINGS.es["prep.fix_fields"]);
   const button = $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
   expect(button.disabled).toBe(true);
   await expect
@@ -648,17 +650,15 @@ it("sends only a changed ticket grouping or held printing, and nothing for a cho
 
 it("reads the ticket grouping and held printing in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
-  expect(groupingField(el).label).toBe("Platos iguales en una comanda de estación");
+  expect(groupingField(el).label).toBe(VENUE_SERVICE_STRINGS.es["prep.ticket_grouping"]);
   expect(groupingField(el).options.map(({ label }) => label)).toEqual([
-    "Una línea: 3 x Hamburguesa",
-    "Una por plato: 1 x Hamburguesa, tres veces",
+    VENUE_SERVICE_STRINGS.es["prep.ticket_grouping.combined"],
+    VENUE_SERVICE_STRINGS.es["prep.ticket_grouping.separate"],
   ]);
-  expect(groupingField(el).hint).toBe(
-    "Se aplica a las comandas de estación nuevas y a las reimpresiones.",
-  );
-  expect(heldSwitch(el).label).toBe("Imprimir por adelantado los grupos en espera");
+  expect(groupingField(el).hint).toBe(VENUE_SERVICE_STRINGS.es["prep.ticket_grouping_hint"]);
+  expect(heldSwitch(el).label).toBe(VENUE_SERVICE_STRINGS.es["prep.print_held_work"]);
   expect($(el, "[data-test=held-work-hint]")!.textContent).toBe(
-    "Imprime un grupo en espera en el momento, marcado HOLD, y otra vez marcado FIRE al marcharlo.",
+    VENUE_SERVICE_STRINGS.es["prep.print_held_work_hint"],
   );
 });
 
@@ -769,10 +769,10 @@ it("ignores a bump mode the field does not offer", async () => {
 
 it("reads the bump mode in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
-  expect(bumpField(el).label).toBe("Marcado en la pantalla");
+  expect(bumpField(el).label).toBe(VENUE_SERVICE_STRINGS.es["prep.bump_mode"]);
   expect(bumpField(el).options.map(({ label }) => label)).toEqual([
-    "Un plato cada vez",
-    "Toda la comanda a la vez",
+    VENUE_SERVICE_STRINGS.es["prep.bump_mode.line"],
+    VENUE_SERVICE_STRINGS.es["prep.bump_mode.ticket"],
   ]);
 });
 
@@ -874,7 +874,7 @@ it("A1510: reads the when-closed choice in Spanish", async () => {
   await pickClosed(el, "bar");
   el.refusal = { code: "station.destination_invalid", params: { reason: "self" } };
   await el.updateComplete;
-  expect(field.error).toBe("Elige otra estación activa.");
+  expect(field.error).toBe(VENUE_SERVICE_STRINGS.es["prep.when_closed_invalid"]);
 });
 
 it("opens on the station's changes after sending, last before the buttons", async () => {
@@ -910,11 +910,11 @@ it("sends only a changed changes after sending, and nothing for a choice put bac
 
 it("reads changes after sending in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
-  expect(changesField(el).label).toBe("Cambios tras el envío");
+  expect(changesField(el).label).toBe(VENUE_SERVICE_STRINGS.es["prep.changes_after_sending"]);
   expect(changesField(el).options.map(({ label }) => label)).toEqual([
-    "No permitidos",
-    "Solo en espera",
-    "En espera o sin empezar",
+    VENUE_SERVICE_STRINGS.es["prep.changes_after_sending.never"],
+    VENUE_SERVICE_STRINGS.es["prep.changes_after_sending.held"],
+    VENUE_SERVICE_STRINGS.es["prep.changes_after_sending.held_or_waiting"],
   ]);
 });
 
@@ -939,8 +939,11 @@ it("enables Save on Don't print and sends it, and disables Save again on the sto
 
 it("reads Print a slip when sent dishes move table in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
-  expect(movedField(el).label).toBe("Imprimir un aviso al cambiar de mesa los platos enviados");
-  expect(movedField(el).options.map(({ label }) => label)).toEqual(["Imprimir", "No imprimir"]);
+  expect(movedField(el).label).toBe(VENUE_SERVICE_STRINGS.es["prep.moved_slips"]);
+  expect(movedField(el).options.map(({ label }) => label)).toEqual([
+    VENUE_SERVICE_STRINGS.es["prep.moved_slips_print"],
+    VENUE_SERVICE_STRINGS.es["prep.moved_slips_dont_print"],
+  ]);
 });
 
 it("A725 editor uses the station popup and saves the chosen colour", async () => {
@@ -1012,11 +1015,11 @@ it("A725 paints the station dot token and translates a retained chooser", async 
     "Azul, en uso por Bar",
   );
   expect($(el, ".timing-fields")!.closest("fieldset")!.querySelector("legend")!.textContent).toBe(
-    "Avisos de demora (minutos)",
+    VENUE_SERVICE_STRINGS.es["prep.late_flags"],
   );
-  expect(restSwitch(el).label).toBe("Mostrar también los platos del pedido de otras estaciones");
+  expect(restSwitch(el).label).toBe(VENUE_SERVICE_STRINGS.es["prep.shows_rest_of_order"]);
   expect($(el, "[data-test=rest-of-order-hint]")!.textContent).toBe(
-    "En las comandas y la pantalla de estación de esta estación",
+    VENUE_SERVICE_STRINGS.es["prep.shows_rest_of_order_hint"],
   );
 });
 
@@ -1110,11 +1113,13 @@ it.each(["management.request_invalid", "station.thresholds_invalid"] as const)(
 
 it("reads Ready warning in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
-  expect(timingField(el, "readyWarningAfterMinutes").label).toBe("Listo sin recoger");
+  expect(timingField(el, "readyWarningAfterMinutes").label).toBe(
+    VENUE_SERVICE_STRINGS.es["prep.health.ready_warning"],
+  );
   await setTiming(el, "readyWarningAfterMinutes", "0");
   await save(el);
   expect(timingField(el, "readyWarningAfterMinutes").error).toBe(
-    "Usa minutos enteros, al menos 1.",
+    VENUE_SERVICE_STRINGS.es["prep.ready_warning_invalid"],
   );
 });
 
@@ -1209,7 +1214,12 @@ it.each(["en", "es"] as const)("A725 phone labels remain fully readable in %s", 
     expect(fields.map((field) => field.label)).toEqual(
       locale === "en"
         ? ["Waiting", "Overdue", "Forgotten", "Ready warning"]
-        : ["Esperando", "Con retraso", "Olvidado", "Listo sin recoger"],
+        : [
+            VENUE_SERVICE_STRINGS.es["prep.health.warm"],
+            VENUE_SERVICE_STRINGS.es["prep.health.overdue"],
+            VENUE_SERVICE_STRINGS.es["prep.health.forgotten"],
+            VENUE_SERVICE_STRINGS.es["prep.health.ready_warning"],
+          ],
     );
     const group = $(el, "fieldset[data-test=moved-slips-group]");
     expect(group).not.toBeNull();

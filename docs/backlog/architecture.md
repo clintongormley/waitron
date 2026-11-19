@@ -301,9 +301,6 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   suite its legal name, Madrid street addresses and the drink
   "Mojito", the errors suite its guest surname "Soler", and the clearing suite the Spanish names its
   shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
-  The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
-  still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
-  Copas, "Deli para llevar") and uses "Sala" and "Terraza".
   The device-api suite (`apps/server/src/device-api.test.ts`) gives English names to what it
   creates; two of its comments still name the shared helper's default station "Cocina" and one its
   products (café, agua), names no check in it reads. The station-alert and party suites still
@@ -735,9 +732,6 @@ also qualifies the historical operation-description references in this section.
   suite its legal name, Madrid street addresses and the drink
   "Mojito", the errors suite its guest surname "Soler", and the clearing suite the Spanish names its
   shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
-  The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
-  still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
-  Copas, "Deli para llevar") and uses "Sala" and "Terraza".
   The server's adjustment venue gives English customer-facing and kitchen dish names and English
   category, printer, device, location and administrator names; its locale, street address,
   reasons' Spanish translations and setup's default station "Cocina" stay, and its legal name
@@ -805,6 +799,9 @@ also qualifies the historical operation-description references in this section.
   BillVenue's receipt printer, card readers and cash till use English display names.
   Local device-equipment and office-printer route fixtures use English printer and reader names;
   their shared BillVenue device names and venue/operation samples remain.
+  Venue-service's test files are off the list: ordinary samples are English, fixed Spanish screen
+  labels are read from its strings table, and the files that still need non-English text are held
+  at their counts in `KEEPS_NON_ENGLISH`, each with its reason; staffing is next.
 
 ## A1308. Rationalise the tables, background jobs, environment variables and files
 

@@ -12,6 +12,7 @@ import type { PeriodRow, PeriodsList } from "./periods-list.js";
 import { seasonTints } from "./season-tint.js";
 
 import "./periods-list.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -182,7 +183,9 @@ it("M3: department rows are group headings, bold on a shaded band across every c
   el.requestUpdate();
   await el.updateComplete;
   await grid.updateComplete;
-  expect(cell(grid, "department:kiosk", "period")!.textContent).toContain("Sin periodos");
+  expect(cell(grid, "department:kiosk", "period")!.textContent).toContain(
+    VENUE_SERVICE_STRINGS.es["period.no_periods"],
+  );
 });
 
 it("shows each period's colour, customer menu and staff-only menus, and no Floor plan column", async () => {
@@ -325,7 +328,9 @@ it.each(["en", "es"])("heading and + Add period share the top row (%s)", async (
   await loaded(el);
   const heading = el.shadowRoot!.querySelector("h1")!;
   expect(heading, "Periods has a page heading").not.toBeNull();
-  expect(heading.textContent!.trim()).toBe(locale === "en" ? "Periods" : "Periodos");
+  expect(heading.textContent!.trim()).toBe(
+    locale === "en" ? "Periods" : VENUE_SERVICE_STRINGS.es["period.title"],
+  );
   expect(el.shadowRoot!.querySelector("h2")).toBeNull();
   const h = heading.getBoundingClientRect();
   const add = el.shadowRoot!.querySelector("[data-test=add-period]")!.getBoundingClientRect();
@@ -523,26 +528,32 @@ it("explains a venue with no departments", async () => {
   expect(table(el)).toBeNull();
 });
 
-it("Spanish: Periodos, Carta de clientes, Pintado en, Sin pintar en ningún sitio", async () => {
+it("Spanish: the heading, the add button, the column headings and the not-painted note", async () => {
   setLocale("es");
   const el = await mount();
   const grid = await loaded(el);
-  expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Periodos");
+  expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe(
+    VENUE_SERVICE_STRINGS.es["period.title"],
+  );
   expect(el.shadowRoot!.querySelector("[data-test=add-period]")!.textContent!.trim()).toBe(
-    "+ Añadir periodo",
+    VENUE_SERVICE_STRINGS.es["period.add_button"],
   );
   const headers = [...grid.shadowRoot!.querySelectorAll("thead th")].map((th) =>
     th.textContent!.trim(),
   );
   expect(headers).toEqual(
     expect.arrayContaining([
-      expect.stringContaining("Periodo"),
-      expect.stringContaining("Carta de clientes"),
-      expect.stringContaining("Cartas solo para el personal"),
-      expect.stringContaining("Pintado en"),
+      expect.stringContaining(VENUE_SERVICE_STRINGS.es["period.column.period"]),
+      expect.stringContaining(VENUE_SERVICE_STRINGS.es["period.customer_menu"]),
+      expect.stringContaining(VENUE_SERVICE_STRINGS.es["opening.staff_menus"]),
+      expect.stringContaining(VENUE_SERVICE_STRINGS.es["period.painted_in"]),
     ]),
   );
-  expect(headers).not.toEqual(expect.arrayContaining([expect.stringContaining("Plano de sala")]));
+  expect(headers).not.toEqual(
+    expect.arrayContaining([
+      expect.stringContaining(VENUE_SERVICE_STRINGS.es["period.floor_plan"]),
+    ]),
+  );
   await expect.poll(() => grid.shadowRoot!.textContent).toContain("Sin pintar en ningún sitio");
   expect(
     cell(grid, "period:p1", "actions")!
@@ -568,10 +579,10 @@ it.each(
         { id: "deli", name: "Deli takeaway", active: true, includes: [] },
       ];
       data.seasons = [
-        { id: "spring", name: "Primavera", startsOn: "03-01", colour: "green" },
-        { id: "summer", name: "Verano", startsOn: "06-01", colour: "amber" },
-        { id: "autumn", name: "Otoño", startsOn: "09-01", colour: "orange" },
-        { id: "winter", name: "Invierno", startsOn: "12-01", colour: "blue" },
+        { id: "spring", name: "Spring", startsOn: "03-01", colour: "green" },
+        { id: "summer", name: "Summer", startsOn: "06-01", colour: "amber" },
+        { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" },
+        { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
       ];
       data.departments = [
         {
@@ -587,7 +598,7 @@ it.each(
         {
           periodId: "p1",
           seasons: data.seasons.map(({ id, name }) => ({ id, name })),
-          specialDays: [{ id: "sd1", name: "Nochevieja" }],
+          specialDays: [{ id: "sd1", name: "New Year's Eve" }],
         },
         { periodId: "p2", seasons: [], specialDays: [] },
       ];
@@ -682,7 +693,9 @@ it("a Floor plan column after Staff-only menus shows the set, or the default's n
   el.requestUpdate();
   await el.updateComplete;
   await grid.updateComplete;
-  expect(grid.columns.find((c) => c.key === "floorPlan")!.label).toBe("Plano de sala");
+  expect(grid.columns.find((c) => c.key === "floorPlan")!.label).toBe(
+    VENUE_SERVICE_STRINGS.es["period.floor_plan"],
+  );
   expect(cell(grid, "period:p2", "floorPlan")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
     "House",
   );

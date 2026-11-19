@@ -18,7 +18,7 @@ import type { SpecialDayPainter } from "./special-day-painter.js";
 import { frame, settle, summaryOf } from "../testing/special-day-painter-fixture.js";
 import { emptyPageAtTop, resizeViewport } from "../testing/window-settled.js";
 import { formatDate } from "./hours-view.js";
-import { t } from "./strings.js";
+import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 
 import "./opening-hours-screen.js";
 
@@ -2597,10 +2597,16 @@ describe("the Calendar's module views", () => {
     expect(location.pathname).toBe("/opening-hours/view/staffing");
   });
 
-  it("titles the Spanish page Calendario", async () => {
+  it("titles the Spanish page with the Calendar heading", async () => {
     setLocale("es");
     const el = await mountCalendar();
-    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Calendario");
-    expect(switchLabels(el)).toEqual(["Horario de apertura", "Personal", "Turnos"]);
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe(
+      VENUE_SERVICE_STRINGS.es["nav.calendar"],
+    );
+    expect(switchLabels(el)).toEqual([
+      VENUE_SERVICE_STRINGS.es["opening.title"],
+      "Personal",
+      "Turnos",
+    ]);
   });
 });

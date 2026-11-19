@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { DeleteDialogCopy } from "@waitron/ui";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 afterEach(() => setLocale("en"));
 import { serviceDeleteCopy, serviceDeleteError } from "./service-delete-copy.js";
 async function copy(kind: "zone" | "department") {
@@ -149,8 +150,8 @@ it.each([
   ],
   [
     "es",
-    "Eliminar zona",
-    "Eliminar departamento",
+    VENUE_SERVICE_STRINGS.es["venue.delete_zone_heading"],
+    VENUE_SERVICE_STRINGS.es["venue.delete_department_heading"],
     "Se borra la zona predeterminada de Mostrador; ninguna zona restante la sustituye.",
   ],
 ] as const)(
@@ -195,9 +196,9 @@ it.each([
   ],
   [
     "es",
-    "Se borra el departamento predeterminado.",
+    VENUE_SERVICE_STRINGS.es["venue.delete_default_empty"],
     "No se pudo eliminar. Vuelve a intentarlo.",
-    "Conserva al menos un departamento.",
+    VENUE_SERVICE_STRINGS.es["venue.delete_refusal_department_last_active"],
   ],
 ] as const)(
   "explains absent replacements and safe error fallbacks in %s",
@@ -219,7 +220,7 @@ it.each([
     expect(serviceDeleteError("zone", { code: "zone.order_in_progress", params: {} })).toBe(
       locale === "en"
         ? "An order is still open or placed in this zone."
-        : "Hay un pedido abierto o enviado en esta zona.",
+        : VENUE_SERVICE_STRINGS.es["venue.delete_refusal_zone_order_in_progress"],
     );
     expect(serviceDeleteError("zone", new Error("private diagnostic"))).toBe(fallback);
   },
@@ -376,61 +377,65 @@ it.each([
   [
     "table.booked",
     [
-      "Move or cancel this booking first: Ana.",
-      "Move or cancel these bookings first: Ana, Luis.",
+      "Move or cancel this booking first: Anna.",
+      "Move or cancel these bookings first: Anna, Lewis.",
       "Move or cancel the bookings on the tables being deleted first.",
     ],
     [
-      "Mueve o cancela primero esta reserva: Ana.",
-      "Mueve o cancela primero estas reservas: Ana, Luis.",
+      "Mueve o cancela primero esta reserva: Anna.",
+      "Mueve o cancela primero estas reservas: Anna, Lewis.",
       "Mueve o cancela primero las reservas de las mesas que se eliminan.",
     ],
   ],
   [
     "table.delivery_in_progress",
     [
-      "Complete delivery of this order first: Ana.",
-      "Complete delivery of these orders first: Ana, Luis.",
+      "Complete delivery of this order first: Anna.",
+      "Complete delivery of these orders first: Anna, Lewis.",
       "Complete delivery of the orders to the tables being deleted first.",
     ],
     [
-      "Completa primero la entrega de este pedido: Ana.",
-      "Completa primero la entrega de estos pedidos: Ana, Luis.",
+      "Completa primero la entrega de este pedido: Anna.",
+      "Completa primero la entrega de estos pedidos: Anna, Lewis.",
       "Completa primero la entrega de los pedidos a las mesas que se eliminan.",
     ],
   ],
   [
     "zone.profile_in_use",
     [
-      "This profile would have no allowed zones: Ana.",
-      "These profiles would have no allowed zones: Ana, Luis.",
+      "This profile would have no allowed zones: Anna.",
+      "These profiles would have no allowed zones: Anna, Lewis.",
       "A profile would have no allowed zones.",
     ],
     [
-      "Este perfil se quedaría sin zonas permitidas: Ana.",
-      "Estos perfiles se quedarían sin zonas permitidas: Ana, Luis.",
+      "Este perfil se quedaría sin zonas permitidas: Anna.",
+      "Estos perfiles se quedarían sin zonas permitidas: Anna, Lewis.",
       "Un perfil se quedaría sin zonas permitidas.",
     ],
   ],
   [
     "department.profile_in_use",
     [
-      "Move this profile to another department first: Ana.",
-      "Move these profiles to another department first: Ana, Luis.",
+      "Move this profile to another department first: Anna.",
+      "Move these profiles to another department first: Anna, Lewis.",
       "Move this department's profiles to another department first.",
     ],
     [
-      "Mueve primero este perfil a otro departamento: Ana.",
-      "Mueve primero estos perfiles a otro departamento: Ana, Luis.",
+      "Mueve primero este perfil a otro departamento: Anna.",
+      "Mueve primero estos perfiles a otro departamento: Anna, Lewis.",
       "Mueve primero a otro departamento los perfiles de este departamento.",
     ],
   ],
   [
     "zone.table_in_use",
-    ["Table 4 has open work: Ana.", "Table 4 has open work: Ana, Luis.", "Table 4 has open work."],
     [
-      "La mesa 4 tiene trabajo abierto: Ana.",
-      "La mesa 4 tiene trabajo abierto: Ana, Luis.",
+      "Table 4 has open work: Anna.",
+      "Table 4 has open work: Anna, Lewis.",
+      "Table 4 has open work.",
+    ],
+    [
+      "La mesa 4 tiene trabajo abierto: Anna.",
+      "La mesa 4 tiene trabajo abierto: Anna, Lewis.",
       "La mesa 4 tiene trabajo abierto.",
     ],
   ],
@@ -444,9 +449,11 @@ it.each([
       setLocale(locale);
       const c = serviceDeleteCopy("zone");
       const params = { tableName: "4" };
-      const ana = { id: "private", name: "Ana" };
-      expect(c.refusal({ code, params, targets: [ana] })).toBe(one);
-      expect(c.refusal({ code, params, targets: [ana, { id: "other", name: "Luis" }] })).toBe(many);
+      const anna = { id: "private", name: "Anna" };
+      expect(c.refusal({ code, params, targets: [anna] })).toBe(one);
+      expect(c.refusal({ code, params, targets: [anna, { id: "other", name: "Lewis" }] })).toBe(
+        many,
+      );
       expect(serviceDeleteError("zone", { code, params })).toBe(unnamed);
     }
   },

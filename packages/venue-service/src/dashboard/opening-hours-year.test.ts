@@ -9,6 +9,7 @@ import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js
 import type { OpeningHoursYearView } from "./opening-hours-year.js";
 import { SEASON_TINT_TOKENS } from "./season-tint.js";
 import "./opening-hours-year.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -958,13 +959,10 @@ describe("Opening hours year holiday area", () => {
               unsupported_country: "Holiday areas are unavailable for this country.",
             }
           : {
-              missing_city:
-                "La zona de festivos necesita la ciudad del local. Añádela en Datos del local.",
-              unresolved_province:
-                "La zona de festivos necesita una provincia reconocida. Corrígela en Datos del local.",
-              unresolved_address:
-                "La zona de festivos necesita la ciudad y una provincia reconocida. Indícalas en Datos del local.",
-              unsupported_country: "No hay zonas de festivos para este país.",
+              missing_city: VENUE_SERVICE_STRINGS.es["holidays.area_needs_city"],
+              unresolved_province: VENUE_SERVICE_STRINGS.es["holidays.area_needs_province"],
+              unresolved_address: VENUE_SERVICE_STRINGS.es["holidays.area_needs_address"],
+              unsupported_country: VENUE_SERVICE_STRINGS.es["holidays.area_unsupported"],
             };
       for (const [readiness, message] of Object.entries(explanations)) {
         const host = areaHost(async () => {
@@ -1001,17 +999,19 @@ describe("Opening hours year holiday area", () => {
           { code: "holiday.invalid", params: { field: "geography" } },
           locale === "en"
             ? "The holiday area needs the venue's city and a recognised province. Set them in Venue details."
-            : "La zona de festivos necesita la ciudad y una provincia reconocida. Indícalas en Datos del local.",
+            : VENUE_SERVICE_STRINGS.es["holidays.area_needs_address"],
         ],
         [
           { code: "holiday.invalid", params: { field: "areaKey" } },
           locale === "en"
             ? "Choose one of the areas offered."
-            : "Elige una de las zonas ofrecidas.",
+            : VENUE_SERVICE_STRINGS.es["holidays.area_refused"],
         ],
         [
           { code: "unrelated.failure" },
-          locale === "en" ? "The change could not be saved." : "No se pudo guardar el cambio.",
+          locale === "en"
+            ? "The change could not be saved."
+            : VENUE_SERVICE_STRINGS.es["hours.save_error"],
         ],
       ] as const;
       for (const [error, message] of cases) {

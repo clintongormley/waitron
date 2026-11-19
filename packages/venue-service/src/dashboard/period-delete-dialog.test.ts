@@ -8,6 +8,7 @@ import {
   clockChangeConflict,
   clockChangeConflictSentence,
 } from "../testing/clock-change-conflict.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -310,30 +311,31 @@ it("choosing another replacement clears a refusal that named Replace with", asyn
   expect(bottom(el)).toBe("");
 });
 
-it("Spanish: Eliminar Lunch y Sin categoría · Terraza", async () => {
+it("Spanish: the delete heading, the routing cell it names and the replacement picker", async () => {
   setLocale("es");
   const el = await mount(
     impactOf({
       seasons: 2,
-      routingUses: [{ rowKind: "no_category", rowLabel: null, zoneName: "Terraza" }],
+      routingUses: [{ rowKind: "no_category", rowLabel: null, zoneName: "Terrace" }],
     }),
   );
   expect(heading(el)).toBe("¿Eliminar Lunch?");
   expect(confirm(el).textContent!.trim()).toBe("Eliminar Lunch");
   const text = body(el);
   expect(text).toContain("Pintado en 2 temporadas.");
-  expect(text).toContain("Nombrado en 1 celda de asignación: Sin categoría · Terraza.");
-  expect(text).toContain("Se eliminan sus líneas de asignación.");
-  expect(picker(el)!.label).toBe("Sustituir por");
-  expect(picker(el)!.options[0]).toEqual({ value: "", label: "Ninguno" });
+  expect(text).toContain("Nombrado en 1 celda de asignación: Sin categoría · Terrace.");
+  expect(text).toContain(VENUE_SERVICE_STRINGS.es["period.delete_routing"]);
+  expect(picker(el)!.label).toBe(VENUE_SERVICE_STRINGS.es["period.replace_with"]);
+  expect(picker(el)!.options[0]).toEqual({
+    value: "",
+    label: VENUE_SERVICE_STRINGS.es["period.replace_none"],
+  });
   el.impact = impactOf();
   await el.updateComplete;
-  expect(body(el)).toBe("Sin pintar en ningún sitio. No cambia ningún horario.");
+  expect(body(el)).toBe(VENUE_SERVICE_STRINGS.es["period.delete_nothing"]);
   el.refusal = { code: "hours.clock_changed" };
   await el.updateComplete;
-  expect(bottom(el)).toBe(
-    "Ha cambiado el inicio del día. Revisa qué cambia al eliminarlo y vuelve a eliminarlo.",
-  );
+  expect(bottom(el)).toBe(VENUE_SERVICE_STRINGS.es["period.delete_clock_changed"]);
 });
 
 it("while loading Confirm is quiet (secondary) and disabled; a failed read shows Retry, which emits period-delete-retry", async () => {

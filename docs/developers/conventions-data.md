@@ -249,6 +249,11 @@ file's entry follows it, and the count stays. Never add a file to the list; clea
 it to `KEEPS_NON_ENGLISH` with its reason. Each keep carries the number of findings its file holds,
 and the suite fails when the file holds more or fewer.
 
+A screen test's Spanish expectation that is exactly one fixed entry of its package's strings table
+reads it from there; plurals, dates, list joining and filled placeholders stay literal, at least one
+literal check of fixed wording stays per screen where the test already pinned real wording, and a
+file still holding such checks moves to `KEEPS_NON_ENGLISH` (watcher, 2026-11-19 01:12, A976).
+
 **What the guard does not see.** `scripts/english-only.test.ts` is weaker than its name. It knows a
 fixed word list plus a set of accented letters, so a Spanish word with no accent and not on the list
 passes. A kept file is held to its number of findings, not to which lines they are on, so new text

@@ -284,7 +284,7 @@ describe("reading a venue's holidays", () => {
 
   it("does not count a special day as a local holiday, whatever its name", async () => {
     await venue();
-    await specialDay("2026-12-19", "Fiesta mayor", true);
+    await specialDay("2026-12-19", "Town festival", true);
     const read = await run((tx) => store.readHolidays(tx, "2026-12-01", "2027-11-30"));
     expect(read.coverage.map(({ local, sourceIds }) => ({ local, sourceIds }))).toEqual([
       { local: "none_entered", sourceIds: ["ZZ-ANNEX"] },
@@ -296,7 +296,7 @@ describe("reading a venue's holidays", () => {
 
   it("keeps a special day and retained geography out of holiday facts, coverage and sources", async () => {
     await venue();
-    await run((tx) => seedRetainedGeographyWithSpecialDay(tx, "2026-01-01", "Fiesta mayor"));
+    await run((tx) => seedRetainedGeographyWithSpecialDay(tx, "2026-01-01", "Town festival"));
     const read = await run((tx) => store.readHolidays(tx, "2026-01-01", "2026-01-01"));
     expect(read.facts).toEqual([
       {
@@ -635,7 +635,7 @@ describe("territorial areas", () => {
     expect(await stored()).toEqual({ holidayArea: null, entries: [], dates: [] });
   });
 
-  it("offers the Arán choice for a Spanish venue in Lleida and none in Sevilla", async () => {
+  it("offers the Aran choice for a Spanish venue in Lleida and none in Sevilla", async () => {
     await venue({ country: "ES", province: "Lérida", city: "Vielha" });
     const options = (await run((tx) => packageIndex.readHolidayAreaModel(tx))).areaOptions;
     expect(options.map(({ key }) => key)).toEqual(["aran", "lleida-except-aran"]);

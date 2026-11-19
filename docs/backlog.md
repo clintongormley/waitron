@@ -1743,6 +1743,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   BillVenue's receipt printer, card readers and cash till use English display names.
   Local device-equipment and office-printer route fixtures use English printer and reader names;
   their shared BillVenue device names and venue/operation samples remain.
+  Venue-service's test files are off the list: ordinary samples are English, fixed Spanish screen
+  labels are read from its strings table, and the files that still need non-English text are held
+  at their counts in `KEEPS_NON_ENGLISH`, each with its reason; staffing is next.
 
 - **Correct every sentence known to be false, then finish comment pruning** (bundle of 14, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning) The pruning sweep still has `bench/`, `scripts/release/github-release.sh`, `scripts/fake-bluez.py` and `scripts/write-path-tables.json` open.
 

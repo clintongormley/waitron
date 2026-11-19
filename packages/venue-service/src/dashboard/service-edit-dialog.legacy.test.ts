@@ -8,6 +8,7 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 import {
   cleanupZoneEditors,
@@ -211,13 +212,17 @@ it.each(
     save().click();
     await expect
       .poll(() => field.error)
-      .toBe(locale === "es" ? "Este campo es obligatorio." : "This field is required.");
+      .toBe(
+        locale === "es"
+          ? VENUE_SERVICE_STRINGS.es["venue.field_required"]
+          : "This field is required.",
+      );
     await field.updateComplete;
     expect(input.getAttribute("aria-invalid")).toBe("true");
     await expect.poll(() => field.shadowRoot!.activeElement).toBe(input);
     expect(departmentActions(owner).error).toBe(
       locale === "es"
-        ? "Corrige los campos marcados para continuar."
+        ? VENUE_SERVICE_STRINGS.es["venue.fix_fields"]
         : "Correct the highlighted fields to continue.",
     );
     expect(save().disabled).toBe(true);
@@ -318,7 +323,7 @@ it.each(
     expect(name.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
     expect(departmentActions(owner).error).toBe(
       locale === "es"
-        ? "Corrige los campos marcados para continuar."
+        ? VENUE_SERVICE_STRINGS.es["venue.fix_fields"]
         : "Correct the highlighted fields to continue.",
     );
     expect(save().disabled).toBe(false);
@@ -489,7 +494,9 @@ it("a missing zone retains its Spanish edited name and exact attempted request",
   }) as DashboardRequest);
   await editZoneName(el, "Jardín");
   zoneSave(el).click();
-  await expect.poll(() => departmentActions(el).error).toBe("No se pudo guardar el cambio.");
+  await expect
+    .poll(() => departmentActions(el).error)
+    .toBe(VENUE_SERVICE_STRINGS.es["venue.save_error"]);
   expect(writes).toEqual([
     [
       "/management-api/venue-service/zones/z1/settings",

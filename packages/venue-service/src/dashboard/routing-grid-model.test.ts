@@ -566,8 +566,8 @@ describe("visibleRoutingRows", () => {
 
 describe("visibleRoutingRows name order", () => {
   // Given in the server's binary order, as `snapshot` and `routingModel` send them.
-  const binary = ["Mesa 10", "Mesa 2", "Zumos", "bebidas", "Árboles"];
-  const labelOrder = ["Árboles", "bebidas", "Mesa 2", "Mesa 10", "Zumos"];
+  const binary = ["Table 10", "Table 2", "Zinfandel", "beverages", "Árboles"];
+  const labelOrder = ["Árboles", "beverages", "Table 2", "Table 10", "Zinfandel"];
 
   it("sorts root categories by label, not by binary order", () => {
     const venue = model(
@@ -635,14 +635,14 @@ describe("visibleRoutingRows name order", () => {
   it("keeps a child category under its parent, after it and before the parent's products", () => {
     const venue = model(
       [
-        folder("zumos", null, "Juices"),
-        folder("agua", null, "Ice water"),
-        folder("mesa", "zumos", "Table"),
+        folder("juices", null, "Juices"),
+        folder("water", null, "Ice water"),
+        folder("table", "juices", "Table"),
       ],
       [
-        item("p-b", "zumos", "Shake"),
-        item("p-a", "zumos", "Arándano"),
-        item("p-m", "mesa", "Mint"),
+        item("p-b", "juices", "Shake"),
+        item("p-a", "juices", "Cranberry"),
+        item("p-m", "table", "Mint"),
       ],
     );
     expect(outline(visibleRoutingRows(venue, expandAll(venue)))).toEqual([
@@ -651,7 +651,7 @@ describe("visibleRoutingRows name order", () => {
       "  C:Juices",
       "    C:Table <Juices>",
       "      P:Mint <Juices/Table>",
-      "    P:Arándano <Juices>",
+      "    P:Cranberry <Juices>",
       "    P:Shake <Juices>",
     ]);
   });
@@ -1398,7 +1398,7 @@ describe("matchRanges", () => {
   it("marks a finished last word only where it is whole", () => {
     expect(marked("Café con leche", "café ")).toEqual(["Café"]);
     expect(matchRanges("Decafeinado", "café ")).toEqual([]);
-    expect(marked("Rojo y rojos", "rojo ")).toEqual(["Rojo"]);
+    expect(marked("Red and reds", "red ")).toEqual(["Red"]);
   });
 
   it("marks every word but the last only where it is whole, so a part of a word marks nothing", () => {
@@ -1407,12 +1407,12 @@ describe("matchRanges", () => {
   });
 
   it("counts a digit as part of a word", () => {
-    expect(matchRanges("Mesa 12", "2 ")).toEqual([]);
-    expect(marked("Mesa 12", "2")).toEqual(["2"]);
+    expect(matchRanges("Table 12", "2 ")).toEqual([]);
+    expect(marked("Table 12", "2")).toEqual(["2"]);
   });
 
   it("marks every occurrence, merging ranges that overlap or touch", () => {
-    expect(marked("Rojo y rojo", "rojo ")).toEqual(["Rojo", "rojo"]);
+    expect(marked("Red and red", "red ")).toEqual(["Red", "red"]);
     expect(matchRanges("aaa", "aa")).toEqual([{ start: 0, end: 3 }]);
     expect(matchRanges("abab", "ab")).toEqual([{ start: 0, end: 4 }]);
   });
@@ -1431,10 +1431,10 @@ describe("matchRanges", () => {
       "Café con leche",
       "Decafeinado",
       "Café solo",
-      "Mesa 12",
+      "Table 12",
       "ΟΔΟΣ",
       "🍔 Burger",
-      "Rojo y rojo",
+      "Red and red",
     ];
     const queries = [
       "clan",
@@ -1448,7 +1448,7 @@ describe("matchRanges", () => {
       "12",
       "2 ",
       "οδοσ",
-      "rojo rojo",
+      "red red",
       "!!",
       "zzz",
     ];

@@ -477,10 +477,10 @@ it("reads in Spanish", async () => {
       "Al servir Mains",
     );
     expect(addButton(el)!.textContent!.trim()).toBe("Añadir paso");
-    el.courses = [{ id: "c-mains", name: "Principales" }];
+    el.courses = [{ id: "c-mains", name: "Main courses" }];
     await settle(el);
     expect(startBox(el, 2).shadowRoot!.querySelector(".value")!.textContent).toBe(
-      "Al servir Principales",
+      "Al servir Main courses",
     );
   } finally {
     setLocale("en");

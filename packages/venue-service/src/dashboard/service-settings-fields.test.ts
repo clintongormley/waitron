@@ -4,6 +4,7 @@ import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, mountInShadowRoot } from "@waitron/ui/src/test-helpers.js";
 import type { ServiceSettingsFields, ServiceSettingsValue } from "./service-settings-fields.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 import "./service-settings-fields.js";
 const department: ServiceSettingsValue = {
@@ -137,7 +138,11 @@ describe.each([
   ["en", ["Table service", "Paid before preparation", "Print"], "Same as department"],
   [
     "es",
-    ["Servicio de mesa", "Se paga antes de preparar", "Imprimir"],
+    [
+      VENUE_SERVICE_STRINGS.es["venue.table_service"],
+      VENUE_SERVICE_STRINGS.es["venue.paid_before_preparation"],
+      VENUE_SERVICE_STRINGS.es["venue.print"],
+    ],
     "Igual que el departamento",
   ],
 ] as const)("zone inheritance in %s", (locale, placeholders, clearLabel) => {
@@ -167,7 +172,11 @@ describe.each([
     const want =
       locale === "en"
         ? ["Counter service", "Paid at collection", "Don't print"]
-        : ["Servicio en mostrador", "Se paga al recoger", "No imprimir"];
+        : [
+            VENUE_SERVICE_STRINGS.es["venue.counter_service"],
+            VENUE_SERVICE_STRINGS.es["venue.paid_at_collection"],
+            VENUE_SERVICE_STRINGS.es["venue.dont_print"],
+          ];
     fields.forEach((field, index) =>
       expect(box(el, field).shadowRoot!.querySelector(".value.placeholder")!.textContent).toBe(
         want[index],
@@ -218,15 +227,17 @@ it.each(["en", "es"] as const)(
     setLocale(locale);
     const el = await mount();
     expect(box(el, "orderStart").label).toBe(
-      locale === "en" ? "How orders start" : "Cómo empiezan los pedidos",
+      locale === "en" ? "How orders start" : VENUE_SERVICE_STRINGS.es["venue.order_start"],
     );
     expect(box(el, "paidWhen").label).toBe(
-      locale === "en" ? "When counter service is used" : "Cuando se usa el servicio en mostrador",
+      locale === "en"
+        ? "When counter service is used"
+        : VENUE_SERVICE_STRINGS.es["venue.counter_paid_when"],
     );
     expect(box(el, "paidWhen").hint).toBe(
       locale === "en"
         ? "Also used by zones set to counter service"
-        : "También se usa en las zonas con servicio en mostrador",
+        : VENUE_SERVICE_STRINGS.es["venue.counter_paid_when_hint"],
     );
     await choose(el, "orderStart", "counter");
     expect(box(el, "paidWhen").hint).toBe("");
@@ -306,7 +317,9 @@ describe("how the department sells", () => {
       setLocale(locale);
       const el = await mountSelling();
       const dining = box(el, "dining");
-      expect(dining.label).toBe(locale === "en" ? "How it sells" : "Cómo se vende");
+      expect(dining.label).toBe(
+        locale === "en" ? "How it sells" : VENUE_SERVICE_STRINGS.es["venue.dining"],
+      );
       expect(dining.required).toBe(true);
       expect(dining.options).toEqual(
         locale === "en"
@@ -316,9 +329,9 @@ describe("how the department sells", () => {
               { value: "till_choice", label: "Chosen on the till" },
             ]
           : [
-              { value: "eat_in", label: "Para tomar aquí" },
-              { value: "takeaway", label: "Para llevar" },
-              { value: "till_choice", label: "Se elige en la caja" },
+              { value: "eat_in", label: VENUE_SERVICE_STRINGS.es["venue.dining_eat_in"] },
+              { value: "takeaway", label: VENUE_SERVICE_STRINGS.es["venue.dining_takeaway"] },
+              { value: "till_choice", label: VENUE_SERVICE_STRINGS.es["venue.dining_till_choice"] },
             ],
       );
       expect(el.shadowRoot!.querySelector('[name="diningStartsAs"]')).toBeNull();
@@ -327,7 +340,9 @@ describe("how the department sells", () => {
         dining: "till_choice",
       });
       const startsAs = box(el, "diningStartsAs");
-      expect(startsAs.label).toBe(locale === "en" ? "Starts as" : "Empieza como");
+      expect(startsAs.label).toBe(
+        locale === "en" ? "Starts as" : VENUE_SERVICE_STRINGS.es["venue.dining_starts_as"],
+      );
       expect(startsAs.options).toEqual(
         locale === "en"
           ? [
@@ -335,8 +350,8 @@ describe("how the department sells", () => {
               { value: "takeaway", label: "Taken away" },
             ]
           : [
-              { value: "eat_in", label: "Para tomar aquí" },
-              { value: "takeaway", label: "Para llevar" },
+              { value: "eat_in", label: VENUE_SERVICE_STRINGS.es["venue.dining_starts_eat_in"] },
+              { value: "takeaway", label: VENUE_SERVICE_STRINGS.es["venue.dining_takeaway"] },
             ],
       );
       await emitted(el, () => choose(el, "diningStartsAs", "takeaway"), {

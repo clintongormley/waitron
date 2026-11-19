@@ -6,6 +6,7 @@ import type {
   FloorPlanSetDeleteImpact,
 } from "./floor-plan-set-delete-dialog.js";
 import "./floor-plan-set-delete-dialog.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -185,14 +186,14 @@ it("closes on Cancel and stays while a delete is sent", async () => {
 
 it("speaks Spanish", async () => {
   setLocale("es");
-  const el = await mount(impactOf({ zonesShowing: [{ id: "inside", name: "Dentro" }] }));
+  const el = await mount(impactOf({ zonesShowing: [{ id: "inside", name: "Inside" }] }));
   expect(heading(el)).toBe("¿Eliminar Dinner?");
   expect(lines(el)).toEqual([
     "Usado por Dinner.",
-    "Las mesas se quedan: son comunes a todos los conjuntos.",
-    "En sala, Dentro mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
+    VENUE_SERVICE_STRINGS.es["floor_plans.delete_tables_stay"],
+    "En sala, Inside mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
   ]);
-  expect(picker(el)!.label).toBe("Sustituir por");
+  expect(picker(el)!.label).toBe(VENUE_SERVICE_STRINGS.es["period.replace_with"]);
   expect(picker(el)!.options[0]).toEqual({
     value: "",
     label: "House (predeterminado)",
@@ -201,27 +202,27 @@ it("speaks Spanish", async () => {
   expect(confirm(el).textContent!.trim()).toBe("Eliminar Dinner");
   el.refusal = { code: "floor_plan_set.invalid", params: { field: "replaceWith" } };
   await el.updateComplete;
-  expect(picker(el)!.error).toBe("Elige otro conjunto.");
+  expect(picker(el)!.error).toBe(VENUE_SERVICE_STRINGS.es["floor_plans.replace_invalid"]);
   el.refusal = { code: "floor_plan_set.is_default", params: {} };
   await el.updateComplete;
-  expect(bottom(el)).toBe("El conjunto predeterminado no se puede eliminar.");
+  expect(bottom(el)).toBe(VENUE_SERVICE_STRINGS.es["floor_plans.is_default"]);
   el.impact = impactOf({ periods: [] });
   await el.updateComplete;
-  expect(lines(el)[0]).toBe("Ningún periodo lo usa.");
+  expect(lines(el)[0]).toBe(VENUE_SERVICE_STRINGS.es["floor_plans.delete_unused"]);
   el.impact = impactOf({
     periods: [
-      { id: "a", name: "Cena" },
+      { id: "a", name: "Supper" },
       { id: "b", name: "Brunch" },
     ],
     zonesShowing: [
-      { id: "inside", name: "Dentro" },
-      { id: "terrace", name: "Terraza" },
+      { id: "inside", name: "Inside" },
+      { id: "terrace", name: "Terrace" },
     ],
   });
   await el.updateComplete;
   expect(lines(el)).toEqual([
-    "Usado por Cena y Brunch.",
-    "Las mesas se quedan: son comunes a todos los conjuntos.",
-    "En sala, Dentro y Terraza mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
+    "Usado por Supper y Brunch.",
+    VENUE_SERVICE_STRINGS.es["floor_plans.delete_tables_stay"],
+    "En sala, Inside y Terrace mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
   ]);
 });
