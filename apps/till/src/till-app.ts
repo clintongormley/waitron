@@ -8792,8 +8792,8 @@ export class TillApp extends LitElement {
             ...choiceToSave.invoice,
             expectedEdit: null,
           });
-          if (!current()) return;
           choiceToSave.saved = true;
+          if (!current()) return;
           this.#store.markSaved(saved.revision);
         }
         await this.#saveUnsavedReceiptLanguage(id);
@@ -21687,8 +21687,8 @@ export class TillApp extends LitElement {
           ...choiceToSave.invoice,
           expectedEdit: this.#counterExpectedEdit(id),
         });
-        if (this.#hasLeftCounterOrder(id, session)) return;
         choiceToSave.saved = true;
+        if (this.#hasLeftCounterOrder(id, session)) return;
         this.#store.markSaved(saved.revision);
       }
     } catch (error) {

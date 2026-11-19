@@ -19962,40 +19962,79 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     expect(tenderPay(el).stage).toBe("order");
   });
 
-  it("pays a reloaded bill above the simplified limit with its saved full invoice", async () => {
-    const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
-    const { el, c } = await counterWaiting({
-      getTill: vi.fn().mockResolvedValue({
-        ...till,
-        fullInvoices: true,
-        simplifiedInvoiceLimit: "2.00",
-      }),
-      listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
-      retrievePlacedOrder: vi.fn().mockResolvedValue({
-        ...placedRead("wo-sent"),
-        invoiceType: "F1",
+  it.each(["on another till", "while the till was on another order"])(
+    "pays a reloaded bill above the simplified limit with a full invoice saved %s",
+    async (saved) => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      let finishSave!: (value: { revision: number }) => void;
+      const setOrderInvoiceChoice = vi.fn(
+        () =>
+          new Promise<{ revision: number }>((resolve) => {
+            finishSave = resolve;
+          }),
+      );
+      const { el, c } = await counterWaiting({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        setOrderInvoiceChoice,
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          fullInvoices: true,
+          simplifiedInvoiceLimit: "2.00",
+        }),
+        listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
+        retrievePlacedOrder: vi.fn().mockResolvedValue({
+          ...placedRead("wo-sent"),
+          invoiceType: "F1",
+          dining: "eat_in",
+          diningChoice: "locked",
+          expectedEdit: null,
+        }),
+        pay,
+      });
+      if (saved === "while the till was on another order") {
+        c.store.loadFrom("wo-sent", [{ product: coffee, quantity: "2" }], undefined, 2);
+        await flush(el);
+        emit(c, "choose-invoice");
+        await flush(el);
+        emit(
+          el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+          "invoice-recipient-confirm",
+          {
+            invoiceType: "F1",
+            recipient: {
+              taxId: "12345678Z",
+              legalName: "Ana García",
+              address: "1 Main Street, 28013 Madrid, Madrid",
+              countryCode: "ES",
+            },
+          },
+        );
+        await flush(el);
+        emit(c, "place-order");
+        await flush(el);
+        expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
+        c.store.loadFrom("another-order", [{ product: coffee, quantity: "1" }]);
+        finishSave({ revision: 3 });
+        await flush(el);
+        expect(currentApi.placeOrder).not.toHaveBeenCalled();
+      }
+      pressPay(el, "wo-sent");
+      await flush(el);
+      expect(tenderPay(el).stage).toBe("collect");
+      expect(c.store.total).toBe("3.00");
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+      expect(pay).toHaveBeenCalledExactlyOnceWith({
+        id: "wo-sent",
+        lines: [],
         dining: "eat_in",
-        diningChoice: "locked",
         expectedEdit: null,
-      }),
-      pay,
-    });
-    pressPay(el, "wo-sent");
-    await flush(el);
-    expect(tenderPay(el).stage).toBe("collect");
-    expect(c.store.total).toBe("3.00");
-
-    emit(c, "collect-card", {});
-    await flush(el);
-
-    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
-    expect(pay).toHaveBeenCalledExactlyOnceWith({
-      id: "wo-sent",
-      lines: [],
-      dining: "eat_in",
-      expectedEdit: null,
-    });
-  });
+      });
+    },
+  );
 
   it("collects a sent order in its stored language, saving a new choice at once against the revision it was read at", async () => {
     const setOrderReceiptLanguage = vi.fn().mockResolvedValue({ revision: 3 });

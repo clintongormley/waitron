@@ -67,6 +67,17 @@ function postedBodies(fetchStub: ReturnType<typeof vi.fn>) {
   );
 }
 
+const wholeCashOfFive = {
+  kind: "share",
+  shareOf: 1,
+  method: "cash",
+  tendered: "5.00",
+  applied: "5.00",
+  tip: "0.00",
+  submissionId: expect.any(String),
+  expectedEdit: null,
+};
+
 describe("TillApi", () => {
   describe("checking the box's time", () => {
     it("asks for a challenge, saying when an administrator asks", async () => {
@@ -542,14 +553,18 @@ describe("TillApi", () => {
     const wanted = { method: "card", amount: "1.50", externalRef: "OP-TIP", addedTip: "0.30" };
     expect(bodies).toEqual([
       { lines: [], tender: wanted, workingOrderId: "wo-tip", expectedEdit: null, dining: "eat_in" },
-      expect.objectContaining({
+      {
+        kind: "share",
+        shareOf: 1,
         method: "card",
         entry: "manual",
         externalRef: "OP-TIP",
         addedTip: "0.30",
         applied: "1.50",
         tip: "0.30",
-      }),
+        submissionId: expect.any(String),
+        expectedEdit: null,
+      },
     ]);
   });
 
@@ -591,7 +606,7 @@ describe("TillApi", () => {
         dining: "eat_in",
       },
       { dining: "eat_in", expectedEdit: null, id: "wo2", lines, receiptLanguage: "es-ES" },
-      expect.objectContaining({ receiptLanguage: "es-ES" }),
+      { ...wholeCashOfFive, receiptLanguage: "es-ES" },
     ]);
   });
 
@@ -651,10 +666,7 @@ describe("TillApi", () => {
     it("with a collect", async () => {
       const fetchStub = wholeBillReplies("placed", "5.00");
       await new TillApi("", fetchStub).collectOrder("wo3", tender, undefined, guestCount, null);
-      const [body] = postedBodies(fetchStub);
-      expect(Object.hasOwn(body, "guestCount") ? { guestCount: body.guestCount } : {}).toEqual(
-        sent,
-      );
+      expect(postedBodies(fetchStub)).toStrictEqual([{ ...wholeCashOfFive, ...sent }]);
     });
 
     it("with a bill payment", async () => {
@@ -1391,6 +1403,8 @@ describe("TillApi", () => {
         },
       );
       const api = new TillApi("", fetchStub);
+      const person = { personId: "signed-in" };
+      api.namePersonFrom(() => person, vi.fn());
       const tender = { method: "card", amount: "1.50", externalRef: "operator-17" } as const;
 
       await expect(api.collectOrder("wo1", tender, "es-ES", null, null)).rejects.toThrow(TypeError);
@@ -1526,6 +1540,7 @@ describe("TillApi", () => {
     [{ outcome: "pending" }, { outcome: "timeout" }],
     [{ outcome: "timeout" }, { outcome: "timeout" }],
     [{ outcome: "failed" }, { outcome: "declined" }],
+    [{ outcome: "network_unavailable" }, { outcome: "network_unavailable" }],
     [
       { outcome: "declined", failureReason: "lost_card" },
       { outcome: "declined", failureReason: "lost_card" },
