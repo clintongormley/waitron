@@ -1247,6 +1247,7 @@ export interface BillBalance {
 
 export interface BillPaymentResult {
   slipPrintFailed?: true;
+  failureReason?: string;
   /** A reader card's own answer is `declined`, `timeout` (still pending) or `network_unavailable`
    * (failed, nothing charged); a resend answers the state it finds. */
   outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
@@ -2714,7 +2715,10 @@ export interface BoxClockConfirmed {
 
 export class TillApi {
   #madeHereListener?: (items: MadeHereItem[]) => void;
-  readonly #unansweredWholeBills = new Map<string, BillPaymentRequest>();
+  readonly #unansweredWholeBills = new Map<
+    string,
+    { person: SessionPerson | null; key: string; request: BillPaymentRequest }
+  >();
 
   onMadeHere(listener: (items: MadeHereItem[]) => void): void {
     this.#madeHereListener = listener;
@@ -3189,7 +3193,13 @@ export class TillApi {
           return { ...facts, ...print, outcome: "partial", balance: result.balance };
         if (result.outcome === "pending" || result.outcome === "timeout")
           return { ...facts, outcome: "timeout" };
-        return { ...facts, outcome: result.outcome === "failed" ? "declined" : result.outcome };
+        if (result.outcome === "network_unavailable")
+          return { ...facts, outcome: "network_unavailable" };
+        return {
+          ...facts,
+          outcome: "declined",
+          ...(result.failureReason === undefined ? {} : { failureReason: result.failureReason }),
+        };
       });
     }
     return this.#request<PayOutcome>("/api/pay", "POST", {
@@ -3639,12 +3649,28 @@ export class TillApi {
     tender: WholeBillTender,
     manualAmount?: string,
   ): Promise<WholeBillResult> {
-    const earlier = this.#unansweredWholeBills.get(id);
+    const person = this.#personSource?.() ?? null;
+    const key = JSON.stringify([
+      status,
+      tender.method,
+      tender.entry,
+      tender.tendered,
+      manualAmount,
+      tender.addedTip,
+      tender.externalRef,
+      tender.externalProvider,
+      tender.externalMachine,
+      tender.readerId,
+      tender.simulationOutcome,
+      tender.dining,
+      tender.receiptLanguage,
+    ]);
+    const pending = this.#unansweredWholeBills.get(id);
+    const earlier = pending?.person === person && pending.key === key ? pending.request : undefined;
     let request = earlier;
     if (request === undefined) {
-      const person = this.#personSource?.();
       const balance = await this.getBillBalance(id);
-      if (person !== this.#personSource?.()) throw { code: SESSION_PERSON_REFUSAL };
+      if (person !== (this.#personSource?.() ?? null)) throw { code: SESSION_PERSON_REFUSAL };
       if (balance.status === "settled")
         return { outcome: "settled", balance, invoice: await this.getFiledTicket(id) };
       if (balance.status !== status)
@@ -3669,6 +3695,7 @@ export class TillApi {
       };
     }
 
+    const sent = { person, key, request };
     try {
       const result = await this.#request<WholeBillResult>(
         `/api/working-orders/${id}/payments`,
@@ -3676,17 +3703,17 @@ export class TillApi {
         request,
       );
       if (result.outcome === "pending" || result.outcome === "timeout")
-        this.#unansweredWholeBills.set(id, request);
+        this.#unansweredWholeBills.set(id, sent);
       else this.#unansweredWholeBills.delete(id);
       return result;
     } catch (error) {
       if (error instanceof SyntaxError) {
-        this.#unansweredWholeBills.set(id, request);
+        this.#unansweredWholeBills.set(id, sent);
         throw new TypeError("The payment response could not be read", { cause: error });
       }
       const refusal = error as { code?: string; status?: number };
       if (isNetworkFailure(error) || (refusal.status ?? 0) >= 500)
-        this.#unansweredWholeBills.set(id, request);
+        this.#unansweredWholeBills.set(id, sent);
       else if (refusal.code !== "handover.stepping_down" || earlier === undefined)
         this.#unansweredWholeBills.delete(id);
       throw error;

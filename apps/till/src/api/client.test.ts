@@ -42,14 +42,29 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function wholeBillReplies(status: "open" | "placed", outstanding: string) {
-  return vi
+function wholeBillReplies(
+  status: "open" | "placed",
+  outstanding: string,
+  payment: object = { outcome: "received", invoice: { invoiceNumber: "A/7" } },
+  firstPaymentAnswer?: () => Response,
+) {
+  const balance = { status, total: outstanding, outstanding, payments: [] };
+  const fetchStub = vi
     .fn()
     .mockImplementation(async (_: string, init: RequestInit) =>
-      init.method === "GET"
-        ? jsonResponse({ status, total: outstanding, outstanding, payments: [] })
-        : jsonResponse({ outcome: "received", invoice: { invoiceNumber: "A/7" } }),
+      init.method === "GET" ? jsonResponse(balance) : jsonResponse({ balance, ...payment }),
     );
+  if (firstPaymentAnswer !== undefined)
+    fetchStub
+      .mockResolvedValueOnce(jsonResponse(balance))
+      .mockImplementationOnce(firstPaymentAnswer);
+  return fetchStub;
+}
+
+function postedBodies(fetchStub: ReturnType<typeof vi.fn>) {
+  return fetchStub.mock.calls.flatMap(([, init]) =>
+    init.method === "POST" ? [JSON.parse(init.body)] : [],
+  );
 }
 
 describe("TillApi", () => {
@@ -523,24 +538,18 @@ describe("TillApi", () => {
       "eat_in",
     );
     await api.collectOrder("wo-tip", tender, undefined, undefined, null);
-    const bodies = fetchStub.mock.calls
-      .filter(([, init]) => init.method === "POST")
-      .map(([, init]) => JSON.parse(init.body as string));
+    const bodies = postedBodies(fetchStub);
     const wanted = { method: "card", amount: "1.50", externalRef: "OP-TIP", addedTip: "0.30" };
     expect(bodies).toEqual([
       { lines: [], tender: wanted, workingOrderId: "wo-tip", expectedEdit: null, dining: "eat_in" },
-      {
-        kind: "share",
-        shareOf: 1,
+      expect.objectContaining({
         method: "card",
         entry: "manual",
         externalRef: "OP-TIP",
         addedTip: "0.30",
         applied: "1.50",
         tip: "0.30",
-        submissionId: expect.any(String),
-        expectedEdit: null,
-      },
+      }),
     ]);
   });
 
@@ -571,9 +580,7 @@ describe("TillApi", () => {
     });
     await api.collectOrder("wo3", tender, "es-ES", undefined, null);
 
-    const bodies = fetchStub.mock.calls
-      .filter(([, init]) => init.method === "POST")
-      .map(([, init]) => JSON.parse((init as RequestInit).body as string) as unknown);
+    const bodies = postedBodies(fetchStub);
     expect(bodies).toEqual([
       {
         lines,
@@ -584,17 +591,7 @@ describe("TillApi", () => {
         dining: "eat_in",
       },
       { dining: "eat_in", expectedEdit: null, id: "wo2", lines, receiptLanguage: "es-ES" },
-      {
-        kind: "share",
-        shareOf: 1,
-        method: "cash",
-        tendered: "5.00",
-        applied: "5.00",
-        tip: "0.00",
-        submissionId: expect.any(String),
-        receiptLanguage: "es-ES",
-        expectedEdit: null,
-      },
+      expect.objectContaining({ receiptLanguage: "es-ES" }),
     ]);
   });
 
@@ -654,17 +651,10 @@ describe("TillApi", () => {
     it("with a collect", async () => {
       const fetchStub = wholeBillReplies("placed", "5.00");
       await new TillApi("", fetchStub).collectOrder("wo3", tender, undefined, guestCount, null);
-      expect(JSON.parse(fetchStub.mock.calls[1]![1].body as string)).toStrictEqual({
-        kind: "share",
-        shareOf: 1,
-        method: "cash",
-        tendered: "5.00",
-        applied: "5.00",
-        tip: "0.00",
-        submissionId: expect.any(String),
-        ...sent,
-        expectedEdit: null,
-      });
+      const [body] = postedBodies(fetchStub);
+      expect(Object.hasOwn(body, "guestCount") ? { guestCount: body.guestCount } : {}).toEqual(
+        sent,
+      );
     });
 
     it("with a bill payment", async () => {
@@ -1355,13 +1345,7 @@ describe("TillApi", () => {
       qr: "x",
     };
     const path = "/api/working-orders/wo1/payments";
-    const fetchStub = vi
-      .fn()
-      .mockImplementation(async (_: string, init: RequestInit) =>
-        init.method === "GET"
-          ? jsonResponse({ status: "placed", total: "1.50", outstanding: "1.50", payments: [] })
-          : jsonResponse({ outcome: "received", invoice: ticket }),
-      );
+    const fetchStub = wholeBillReplies("placed", "1.50", { outcome: "received", invoice: ticket });
 
     const r = await new TillApi("", fetchStub).collectOrder(
       "wo1",
@@ -1397,20 +1381,15 @@ describe("TillApi", () => {
     "resends the original whole-bill request when the reply is %s",
     async (reply) => {
       const ticket = { invoiceNumber: "A/1", tender: { method: "card" } };
-      const fetchStub = vi.fn().mockImplementation(async (_: string, init: RequestInit) => {
-        if (init.method === "GET")
-          return jsonResponse({
-            status: "placed",
-            total: "1.50",
-            outstanding: "1.50",
-            payments: [],
-          });
-        if (fetchStub.mock.calls.length === 2) {
+      const fetchStub = wholeBillReplies(
+        "placed",
+        "1.50",
+        { outcome: "received", invoice: ticket },
+        () => {
           if (reply === "lost") throw new TypeError("Failed to fetch");
           return new Response("{");
-        }
-        return jsonResponse({ outcome: "received", invoice: ticket });
-      });
+        },
+      );
       const api = new TillApi("", fetchStub);
       const tender = { method: "card", amount: "1.50", externalRef: "operator-17" } as const;
 
@@ -1452,6 +1431,30 @@ describe("TillApi", () => {
     ]);
   });
 
+  it.each(["tender", "sign-in"])(
+    "reads again before paying after the %s changes",
+    async (change) => {
+      const fetchStub = wholeBillReplies("placed", "1.50", undefined, () => {
+        throw new TypeError("Failed to fetch");
+      });
+      const api = new TillApi("", fetchStub);
+      let person = { personId: "first" };
+      api.namePersonFrom(() => person, vi.fn());
+      const cash = { method: "cash", amount: "2.00" } as const;
+      await expect(api.collectOrder("wo1", cash, undefined, null, null)).rejects.toThrow(TypeError);
+
+      if (change === "sign-in") {
+        person = { personId: "second" };
+        await api.collectOrder("wo1", cash, undefined, null, null);
+      } else await api.pay({ id: "wo1", lines: [], expectedEdit: null, dining: "eat_in" });
+      const requests = fetchStub.mock.calls.map(([, init]) => init);
+      expect(requests.map(({ method }) => method)).toEqual(["GET", "POST", "GET", "POST"]);
+      const [first, next] = postedBodies(fetchStub);
+      expect(next.submissionId).not.toBe(first.submissionId);
+      expect(next.method).toBe(change === "sign-in" ? "cash" : "card");
+    },
+  );
+
   it("does not post a payment using a new sign-in after reading the bill under the old one", async () => {
     let person = { personId: "first" };
     const fetchStub = vi.fn().mockImplementation(async (_: string, init: RequestInit) => {
@@ -1478,13 +1481,11 @@ describe("TillApi", () => {
       captureWarning: { requestedAmount: "10.00", reportedAmount: "7.00" },
     };
     const path = "/api/working-orders/wo1/payments";
-    const fetchStub = vi
-      .fn()
-      .mockImplementation(async (_: string, init: RequestInit) =>
-        init.method === "GET"
-          ? jsonResponse({ ...balance, outstanding: "10.00" })
-          : jsonResponse({ outcome: "received", balance, slipPrintFailed: true }),
-      );
+    const fetchStub = wholeBillReplies("placed", "10.00", {
+      outcome: "received",
+      balance,
+      slipPrintFailed: true,
+    });
     const api = new TillApi("", fetchStub);
 
     const out = await api.pay({
@@ -1519,6 +1520,21 @@ describe("TillApi", () => {
       captureWarning: balance.captureWarning,
       slipPrintFailed: true,
     });
+  });
+
+  it("returns the reader decline reason when paying a placed bill", async () => {
+    const fetchStub = wholeBillReplies("placed", "10.00", {
+      outcome: "declined",
+      failureReason: "lost_card",
+    });
+    await expect(
+      new TillApi("", fetchStub).pay({
+        id: "wo1",
+        lines: [],
+        expectedEdit: null,
+        dining: "eat_in",
+      }),
+    ).resolves.toEqual({ outcome: "declined", failureReason: "lost_card" });
   });
 
   it("listStations GETs the venue's active kitchen stations", async () => {

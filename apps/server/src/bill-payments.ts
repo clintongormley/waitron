@@ -232,6 +232,7 @@ export interface BillBalance {
 }
 
 export interface BillPaymentResult {
+  failureReason?: string;
   slipPrintFailed?: true;
   /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending),
    * `network_unavailable` (failed, nothing charged). A retry whose own sign-in is open on an active
@@ -1931,6 +1932,9 @@ export async function takeReaderBillPayment(
       return {
         ...(await resultOf(tx, deps, cfg, failed, null)),
         outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",
+        ...(result.state === "failed" && result.failureReason !== undefined
+          ? { failureReason: result.failureReason }
+          : {}),
       };
     });
   } catch (error) {
