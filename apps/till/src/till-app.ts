@@ -7663,7 +7663,10 @@ export class TillApp extends LitElement {
       ) {
         recheck = true;
         inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
-      } else if (edit !== undefined && (await this.#reloadRefusedCounterPaymentEdit(id, error))) {
+      } else if (
+        edit !== undefined &&
+        (await this.#reloadRefusedCounterPaymentEdit(id, error, basketVisit))
+      ) {
         return;
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else if (unknown) this.errorKey = "sale.unconfirmed";
@@ -7894,7 +7897,10 @@ export class TillApp extends LitElement {
       ) {
         recheck = true;
         inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
-      } else if (edit !== undefined && (await this.#reloadRefusedCounterPaymentEdit(id, error))) {
+      } else if (
+        edit !== undefined &&
+        (await this.#reloadRefusedCounterPaymentEdit(id, error, basketVisit))
+      ) {
         return;
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
       else if (unknown) this.errorKey = "sale.unconfirmed";
@@ -8570,8 +8576,18 @@ export class TillApp extends LitElement {
     return true;
   }
 
-  async #reloadRefusedCounterPaymentEdit(id: string, error: unknown): Promise<boolean> {
+  async #reloadRefusedCounterPaymentEdit(
+    id: string,
+    error: unknown,
+    visit: number,
+  ): Promise<boolean> {
     const code = (error as { code?: string }).code;
+    if (code === "working_order.not_open") {
+      const session = this.#operatorSession;
+      const current = () =>
+        session === this.#operatorSession && visit === this.#store.loadGeneration;
+      return (await this.#recoverSettlingEdit(id, error, "counter", current)) || !current();
+    }
     const sentDish = code === undefined ? undefined : SENT_DISH_SAVE_REFUSALS.get(code);
     if (code !== "working_order.out_of_date" && sentDish === undefined) return false;
     await this.#reloadChangedOrder(id, sentDish);

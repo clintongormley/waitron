@@ -7405,6 +7405,7 @@ describe("A1208 a retrieved counter order's portions", () => {
         rejectSave({ code: "working_order.out_of_date" });
         await flush(el);
         expect(c.store.id).toBe("wo-2");
+        expect(c.store.revision).toBe(1);
         expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
           ["Tostada", "1"],
         ]);
@@ -7447,6 +7448,29 @@ describe("A1208 a retrieved counter order's portions", () => {
         expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
           ["Tostada", "1"],
         ]);
+      },
+    );
+
+    it.each(["cash", "reader"])(
+      "shows the filed receipt when a closed order refuses a %s payment edit",
+      async (method) => {
+        const closed = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+        const getBillBalance = vi.fn().mockResolvedValue({ status: "settled" });
+        const getFiledTicket = vi.fn().mockResolvedValue(saleResult);
+        const { el, c } = await retrieved({
+          recordSale: closed,
+          pay: closed,
+          getBillBalance,
+          getFiledTicket,
+        });
+        c.store.setLineQuantity(0, "4");
+        if (method === "cash") emit(c, "confirm-payment", { method: "cash", amount: "10" });
+        else emit(c, "collect-card", {});
+        await flush(el);
+
+        expect(closed).toHaveBeenCalledOnce();
+        expect(getFiledTicket).toHaveBeenCalledWith("wo-1");
+        expect(ticket(el)?.result).toEqual(saleResult);
       },
     );
 
