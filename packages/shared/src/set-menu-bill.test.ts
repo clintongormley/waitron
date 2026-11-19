@@ -150,3 +150,8 @@ describe("set-menu copies", () => {
     expect(shared.copiesListing(copies, "juice", "glass")).toEqual([]);
   });
 });
+
+it("does not offer a plain dish when none of its published variants can be served", () => {
+  const wine = { ...offer("wine", "starters"), variantCountsAs: { glass: "drinks" } };
+  expect(shared.setMenuOfferOf(daily([wine])).dishes).toEqual([]);
+});

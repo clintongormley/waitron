@@ -1,5 +1,5 @@
 import { stringToCents } from "./cents.js";
-import { isAppError } from "./errors.js";
+import { hasCode, isAppError } from "./errors.js";
 import type { ServedSetMenuCopy } from "./menu-document/menu-document-types.js";
 import {
   fitSetMenus,
@@ -278,7 +278,12 @@ export function suggestMove(
       previous: { offerBySetMenu, placeByDish },
     });
   } catch (error) {
-    if (isAppError(error) && error.code === "set_menu.fit_invalid_input") return null;
+    if (
+      isAppError(error) &&
+      hasCode(error, "set_menu.fit_invalid_input") &&
+      error.params.reason === "invalid_amount"
+    )
+      return null;
     throw error;
   }
   if (fit.kind !== "fitted") return null;
@@ -312,6 +317,7 @@ export function suggestMove(
 export function checkMoves(
   state: BillSetMenuState,
   moves: readonly DishMove[],
+  heldFor: readonly DishPlace[] = [],
 ):
   | { kind: "ok"; results: PlacementResult[] }
   | { kind: "place_taken"; lineId: string }
@@ -322,6 +328,7 @@ export function checkMoves(
   for (const dish of state.dishes) {
     if (!moving.has(dish.lineId)) occupy(occupied, dish);
   }
+  for (const hold of heldFor) occupy(occupied, hold);
   const results: PlacementResult[] = [];
   for (const { lineId, to } of moves) {
     const dish = dishes.get(lineId);

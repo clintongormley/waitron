@@ -177,3 +177,108 @@ it("refuses simultaneous moves that name the same dish twice", () => {
     ]),
   ).toEqual({ kind: "place_taken", lineId: "sirloin" });
 });
+
+it("leaves a sent dish in its place when two arrangements cost the same", () => {
+  const samePriceDaily = {
+    ...daily,
+    dishes: daily.dishes.map((listing) =>
+      listing.productId === "sirloin" ? { ...listing, surchargeCents: 0 } : listing,
+    ),
+  };
+  const state = bill(["daily", samePriceDaily], ["a-special", special], ["b-special", special]);
+  const sirloin = specialSirloin().dishes[0]!;
+  const filled = {
+    ...state,
+    dishes: [
+      { ...sirloin, lineId: "a-moving", setMenuLineId: "daily" },
+      { ...sirloin, lineId: "z-standing", setMenuLineId: "a-special" },
+    ],
+  };
+  expect(shared.suggestMove(filled, [], dish("hake"))).toEqual({
+    moves: [
+      {
+        lineId: "a-moving",
+        from: { setMenuLineId: "daily", place: 1 },
+        to: { setMenuLineId: "b-special", place: 1 },
+        priceCents: 0,
+        countsAsCourseId: "mains",
+      },
+    ],
+    place: {
+      id: "hake",
+      setMenuLineId: "daily",
+      place: 1,
+      priceCents: 0,
+      countsAsCourseId: "mains",
+    },
+  });
+});
+
+it("surfaces an invalid planned place supplied to the fit", () => {
+  const invalid = { ...dish("sea bass"), ...toDaily, priceCents: 0, countsAsCourseId: "mains" };
+  expect(() => shared.suggestMove(specialSirloin(), [invalid], dish("hake"))).toThrow(
+    expect.objectContaining({
+      code: "set_menu.fit_invalid_input",
+      params: { reason: "pinned_place_invalid", id: "sea bass" },
+    }),
+  );
+});
+
+it("refuses a move into a place held for a draft dish", () => {
+  expect(
+    shared.checkMoves(specialSirloin(), [{ lineId: "sirloin", to: toDaily }], [toDaily]),
+  ).toEqual({
+    kind: "place_taken",
+    lineId: "sirloin",
+  });
+});
+
+it.each([
+  { surchargeCents: 500, expectedMoves: 2 },
+  { surchargeCents: 0, expectedMoves: 1 },
+])(
+  "suggests $expectedMoves move(s) when Daily sirloin costs $surchargeCents cents",
+  ({ surchargeCents, expectedMoves }) => {
+    const pricedDaily = {
+      ...daily,
+      dishes: daily.dishes.map((listing) =>
+        listing.productId === "sirloin" ? { ...listing, surchargeCents } : listing,
+      ),
+    };
+    const state = bill(
+      ["daily-one", pricedDaily],
+      ["daily-two", pricedDaily],
+      ["special-one", special],
+      ["special-two", special],
+    );
+    const sirloin = specialSirloin().dishes[0]!;
+    const filled = {
+      ...state,
+      dishes: [
+        {
+          ...sirloin,
+          lineId: "sirloin-one",
+          setMenuLineId: "daily-one",
+          priceCents: surchargeCents,
+        },
+        {
+          ...sirloin,
+          lineId: "sirloin-two",
+          setMenuLineId: "daily-two",
+          priceCents: surchargeCents,
+        },
+      ],
+    };
+    const suggestion = shared.suggestMove(filled, [], dish("hake"));
+    expect(suggestion?.moves).toHaveLength(expectedMoves);
+    expect(suggestion?.moves.map(({ priceCents }) => priceCents)).toEqual(
+      expectedMoves === 2 ? [0, 0] : [0],
+    );
+    expect(suggestion?.place).toEqual({
+      id: "hake",
+      ...suggestion?.moves[0]?.from,
+      priceCents: 0,
+      countsAsCourseId: "mains",
+    });
+  },
+);

@@ -21,7 +21,8 @@ describe("placing set-menu dishes", () => {
   });
 
   it("uses narrower lines first, then menu order, for dishes in the order given", () => {
-    const state = bill(["z-first", special], ["a-second", special]);
+    const ordered = bill(["z-first", special], ["a-second", special]);
+    const state = { ...ordered, setMenus: [...ordered.setMenus].reverse() };
     const result = shared.placeInOrder(state, [
       dish("soup", "z"),
       dish("soup", "b"),
@@ -176,4 +177,19 @@ describe("placing set-menu dishes", () => {
     ]);
     expect(state.dishes).toEqual([]);
   });
+});
+
+it("uses every free place on a line that holds more than one dish", () => {
+  const threeStarters = {
+    ...daily,
+    lines: [{ count: 3, courseIds: ["starters"] }, ...daily.lines.slice(1)],
+  };
+  const state = bill(["daily", threeStarters]);
+  const soups = ["first", "second", "third"].map((id) => dish("soup", id));
+  const result = shared.placeInOrder(state, soups, [{ setMenuLineId: "daily", place: 0 }]);
+  expect(result.placed.map(({ id, place }) => [id, place])).toEqual([
+    ["first", 0],
+    ["second", 0],
+  ]);
+  expect(result.unplaced).toEqual(["third"]);
 });
