@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b11e9e51-05f4-4aef-bd5d-b8c510266829",
+  "id": "e5cd8bf3-2d02-4e3f-ac5a-74a123769df7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -834,6 +834,48 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "set_menu_role": {
+          "name": "set_menu_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_id": {
+          "name": "set_menu_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_version_id": {
+          "name": "set_menu_version_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_line_id": {
+          "name": "set_menu_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_place": {
+          "name": "set_menu_place",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_counts_as_course_id": {
+          "name": "set_menu_counts_as_course_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -864,6 +906,14 @@
             "course_id"
           ],
           "isUnique": false
+        },
+        "working_order_lines_set_menu_line_idx": {
+          "name": "working_order_lines_set_menu_line_idx",
+          "columns": [
+            "set_menu_line_id"
+          ],
+          "isUnique": false,
+          "where": "\"working_order_lines\".\"set_menu_line_id\" is not null"
         },
         "working_order_lines_cohort_ordinal_key": {
           "name": "working_order_lines_cohort_ordinal_key",
@@ -1012,6 +1062,45 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "working_order_lines_set_menu_fk": {
+          "name": "working_order_lines_set_menu_fk",
+          "tableFrom": "working_order_lines",
+          "tableTo": "menus",
+          "columnsFrom": [
+            "set_menu_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "working_order_lines_set_menu_version_fk": {
+          "name": "working_order_lines_set_menu_version_fk",
+          "tableFrom": "working_order_lines",
+          "tableTo": "menu_versions",
+          "columnsFrom": [
+            "set_menu_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "working_order_lines_set_menu_line_fk": {
+          "name": "working_order_lines_set_menu_line_fk",
+          "tableFrom": "working_order_lines",
+          "tableTo": "working_order_lines",
+          "columnsFrom": [
+            "set_menu_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1040,6 +1129,14 @@
         "working_order_lines_line_no_ck": {
           "name": "working_order_lines_line_no_ck",
           "value": "\"working_order_lines\".\"line_no\" >= 1"
+        },
+        "working_order_lines_set_menu_role_ck": {
+          "name": "working_order_lines_set_menu_role_ck",
+          "value": "\"working_order_lines\".\"set_menu_role\" in ('set_menu', 'dish')"
+        },
+        "working_order_lines_set_menu_ck": {
+          "name": "working_order_lines_set_menu_ck",
+          "value": "(\"working_order_lines\".\"set_menu_role\" is null\n          and \"working_order_lines\".\"set_menu_id\" is null and \"working_order_lines\".\"set_menu_version_id\" is null\n          and \"working_order_lines\".\"set_menu_line_id\" is null and \"working_order_lines\".\"set_menu_place\" is null\n          and \"working_order_lines\".\"set_menu_counts_as_course_id\" is null)\n        or (\"working_order_lines\".\"set_menu_role\" is 'set_menu'\n          and \"working_order_lines\".\"set_menu_id\" is not null and \"working_order_lines\".\"set_menu_version_id\" is not null\n          and \"working_order_lines\".\"product_id\" is null and \"working_order_lines\".\"menu_item_id\" is null and \"working_order_lines\".\"parent_line_id\" is null\n          and \"working_order_lines\".\"course_id\" is null and \"working_order_lines\".\"group_id\" is null and \"working_order_lines\".\"cohort_id\" is null\n          and \"working_order_lines\".\"set_menu_line_id\" is null and \"working_order_lines\".\"set_menu_place\" is null\n          and \"working_order_lines\".\"set_menu_counts_as_course_id\" is null)\n        or (\"working_order_lines\".\"set_menu_role\" is 'dish'\n          and \"working_order_lines\".\"set_menu_id\" is not null and \"working_order_lines\".\"menu_item_id\" is not null\n          and \"working_order_lines\".\"set_menu_place\" is not null and \"working_order_lines\".\"set_menu_counts_as_course_id\" is not null\n          and \"working_order_lines\".\"parent_line_id\" is null and \"working_order_lines\".\"set_menu_version_id\" is null)"
         },
         "working_order_lines_cohort_ck": {
           "name": "working_order_lines_cohort_ck",
@@ -1479,6 +1576,85 @@
           "value": "(\"working_orders\".\"status\" = 'settled') = (\"working_orders\".\"settled_at\" is not null)"
         }
       }
+    },
+    "bill_set_menu_copies": {
+      "name": "bill_set_menu_copies",
+      "columns": {
+        "working_order_id": {
+          "name": "working_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "set_menu_id": {
+          "name": "set_menu_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "menu_version_id": {
+          "name": "menu_version_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "bill_set_menu_copies_order_fk": {
+          "name": "bill_set_menu_copies_order_fk",
+          "tableFrom": "bill_set_menu_copies",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "working_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "bill_set_menu_copies_set_menu_fk": {
+          "name": "bill_set_menu_copies_set_menu_fk",
+          "tableFrom": "bill_set_menu_copies",
+          "tableTo": "menus",
+          "columnsFrom": [
+            "set_menu_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bill_set_menu_copies_menu_version_fk": {
+          "name": "bill_set_menu_copies_menu_version_fk",
+          "tableFrom": "bill_set_menu_copies",
+          "tableTo": "menu_versions",
+          "columnsFrom": [
+            "menu_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "bill_set_menu_copies_pk": {
+          "columns": [
+            "working_order_id",
+            "set_menu_id"
+          ],
+          "name": "bill_set_menu_copies_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
     "order_amendments": {
       "name": "order_amendments",
@@ -3793,6 +3969,27 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "set_menu_id": {
+          "name": "set_menu_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_reserved_line_id": {
+          "name": "set_menu_reserved_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_reserved_place": {
+          "name": "set_menu_reserved_place",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -3889,11 +4086,28 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "order_draft_lines_set_menu_fk": {
+          "name": "order_draft_lines_set_menu_fk",
+          "tableFrom": "order_draft_lines",
+          "tableTo": "menus",
+          "columnsFrom": [
+            "set_menu_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "order_draft_lines_set_menu_ck": {
+          "name": "order_draft_lines_set_menu_ck",
+          "value": "(\"order_draft_lines\".\"set_menu_reserved_line_id\" is null and \"order_draft_lines\".\"set_menu_reserved_place\" is null)\n        or (\"order_draft_lines\".\"set_menu_id\" is not null and \"order_draft_lines\".\"set_menu_reserved_line_id\" is not null\n          and \"order_draft_lines\".\"set_menu_reserved_place\" is not null)"
+        },
         "order_draft_lines_quantity_ck": {
           "name": "order_draft_lines_quantity_ck",
           "value": "\"order_draft_lines\".\"quantity\" > 0"

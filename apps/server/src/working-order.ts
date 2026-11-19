@@ -4717,6 +4717,12 @@ async function carveLines(
       creditedTo: workingOrderLines.creditedTo,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       context: {
+        setMenuRole: workingOrderLines.setMenuRole,
+        setMenuId: workingOrderLines.setMenuId,
+        setMenuVersionId: workingOrderLines.setMenuVersionId,
+        setMenuLineId: workingOrderLines.setMenuLineId,
+        setMenuPlace: workingOrderLines.setMenuPlace,
+        setMenuCountsAsCourseId: workingOrderLines.setMenuCountsAsCourseId,
         menuItemId: workingOrderLines.menuItemId,
         menuId: workingOrderLines.menuId,
         menuName: workingOrderLines.menuName,

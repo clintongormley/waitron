@@ -19,6 +19,7 @@ import { persons } from "./identity/persons.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { menuItems } from "./menu/menu.js";
+import { menus } from "./menus.js";
 import { orderGroups } from "./order-groups.js";
 import { workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
@@ -82,6 +83,10 @@ export const orderDraftLines = table(
     afterGroupId: id("after_group_id"),
     // `normaliseDraftLines` never adds this row to another, nor another to it.
     noMerge: flag("no_merge").notNull().default(false),
+    setMenuId: id("set_menu_id"),
+    // A reservation can outlive the line it names, so it has no foreign key.
+    setMenuReservedLineId: id("set_menu_reserved_line_id"),
+    setMenuReservedPlace: count("set_menu_reserved_place"),
   },
   (t) => [
     foreignKey({
@@ -114,6 +119,17 @@ export const orderDraftLines = table(
       foreignColumns: [orderGroups.id],
       name: "order_draft_lines_after_group_fk",
     }),
+    foreignKey({
+      columns: [t.setMenuId],
+      foreignColumns: [menus.id],
+      name: "order_draft_lines_set_menu_fk",
+    }),
+    check(
+      "order_draft_lines_set_menu_ck",
+      sql`(${t.setMenuReservedLineId} is null and ${t.setMenuReservedPlace} is null)
+        or (${t.setMenuId} is not null and ${t.setMenuReservedLineId} is not null
+          and ${t.setMenuReservedPlace} is not null)`,
+    ),
     index("order_draft_lines_draft_idx").on(t.draftId),
     index("order_draft_lines_course_idx").on(t.courseId),
     check("order_draft_lines_quantity_ck", sql`${t.quantity} > 0`),

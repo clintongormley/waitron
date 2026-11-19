@@ -408,6 +408,12 @@ BEGIN
       AND new.line_no IS old.line_no
       AND new.name IS old.name
       AND new.product_id IS old.product_id
+      AND new.set_menu_role IS old.set_menu_role
+      AND new.set_menu_id IS old.set_menu_id
+      AND new.set_menu_version_id IS old.set_menu_version_id
+      AND new.set_menu_line_id IS old.set_menu_line_id
+      AND new.set_menu_place IS old.set_menu_place
+      AND new.set_menu_counts_as_course_id IS old.set_menu_counts_as_course_id
       AND new.variant_name IS old.variant_name
       AND new.variant_descriptions IS old.variant_descriptions
       AND new.variant_kitchen_name IS old.variant_kitchen_name
@@ -474,6 +480,12 @@ BEGIN
       AND new.line_no IS old.line_no
       AND new.name IS old.name
       AND new.product_id IS old.product_id
+      AND new.set_menu_role IS old.set_menu_role
+      AND new.set_menu_id IS old.set_menu_id
+      AND new.set_menu_version_id IS old.set_menu_version_id
+      AND new.set_menu_line_id IS old.set_menu_line_id
+      AND new.set_menu_place IS old.set_menu_place
+      AND new.set_menu_counts_as_course_id IS old.set_menu_counts_as_course_id
       AND new.variant_name IS old.variant_name
       AND new.variant_descriptions IS old.variant_descriptions
       AND new.variant_kitchen_name IS old.variant_kitchen_name
@@ -555,6 +567,12 @@ BEGIN
       AND new.line_no IS old.line_no
       AND new.name IS old.name
       AND new.product_id IS old.product_id
+      AND new.set_menu_role IS old.set_menu_role
+      AND new.set_menu_id IS old.set_menu_id
+      AND new.set_menu_version_id IS old.set_menu_version_id
+      AND new.set_menu_line_id IS old.set_menu_line_id
+      AND new.set_menu_place IS old.set_menu_place
+      AND new.set_menu_counts_as_course_id IS old.set_menu_counts_as_course_id
       AND new.variant_name IS old.variant_name
       AND new.variant_descriptions IS old.variant_descriptions
       AND new.variant_kitchen_name IS old.variant_kitchen_name

@@ -320,6 +320,7 @@ const ADDED_TABLES = [
   "set_menu_line_courses",
   "set_menu_variant_exclusions",
   "set_menu_dish_courses",
+  "bill_set_menu_copies",
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
@@ -1229,12 +1230,19 @@ for (const locale of ["en", "es"] as const) {
         "cohort_id",
         "cohort_ordinal",
         "whole_portion",
+        "set_menu_role",
+        "set_menu_id",
+        "set_menu_version_id",
+        "set_menu_line_id",
+        "set_menu_place",
+        "set_menu_counts_as_course_id",
       ]) {
         const type = [
           "sold_in_each",
           "offer_unit_precision",
           "cohort_ordinal",
           "whole_portion",
+          "set_menu_place",
         ].includes(name)
           ? "INTEGER"
           : "TEXT";
@@ -1243,21 +1251,24 @@ for (const locale of ["en", "es"] as const) {
       }
       orderLines.foreignKeys = [
         ...[
+          ["set_menu_line_id", "working_order_lines", "SET NULL"],
+          ["set_menu_version_id", "menu_versions"],
+          ["set_menu_id", "menus"],
           ["credited_to", "persons"],
           ["late_confirmed_by", "persons"],
           ["menu_version_id", "menu_versions"],
           ["menu_item_id", "menu_items"],
-        ].map(([from, table], id) => ({
+        ].map(([from, table, onDelete], id) => ({
           id,
           seq: 0,
           table: table!,
           from: from!,
           to: "id",
           on_update: "NO ACTION",
-          on_delete: "NO ACTION",
+          on_delete: onDelete ?? "NO ACTION",
           match: "NONE",
         })),
-        ...orderLines.foreignKeys.map((key) => ({ ...key, id: key.id + 4 })),
+        ...orderLines.foreignKeys.map((key) => ({ ...key, id: key.id + 7 })),
       ];
       type Classed = { vatClass: string; takeawayVatClass?: string };
       for (const row of Object.values(expected[phase].tables.menu_versions!.rows)) {
@@ -1492,7 +1503,16 @@ for (const locale of ["en", "es"] as const) {
           table.foreignKeys.filter((key) => key.id === capturedId).map((key) => ({ ...key, id })),
         );
       }
-      const draftLineKeys = expected[phase].tables.order_draft_lines!.foreignKeys;
+      const draftLines = expected[phase].tables.order_draft_lines!;
+      for (const [name, type] of [
+        ["set_menu_id", "TEXT"],
+        ["set_menu_reserved_line_id", "TEXT"],
+        ["set_menu_reserved_place", "INTEGER"],
+      ] as const) {
+        draftLines.columns.push({ name, type, notnull: 0, dflt_value: null, pk: 0 });
+        for (const row of Object.values(draftLines.rows)) row[name] = null;
+      }
+      const draftLineKeys = draftLines.foreignKeys;
       draftLineKeys.splice(
         4,
         1,
@@ -1508,6 +1528,19 @@ for (const locale of ["en", "es"] as const) {
         },
         { ...draftLineKeys[4]!, id: 5 },
       );
+      draftLines.foreignKeys = [
+        {
+          id: 0,
+          seq: 0,
+          table: "menus",
+          from: "set_menu_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        },
+        ...draftLineKeys.map((key) => ({ ...key, id: key.id + 1 })),
+      ];
       const invoiceChoiceTable = expected[phase].tables.devices!;
       invoiceChoiceTable.columns = invoiceChoiceTable.columns.filter(
         ({ name }) => name !== "invoice_page_printer_id",

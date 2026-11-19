@@ -92,7 +92,11 @@ export interface FreshDraftLine {
   afterGroupId: string | null;
   unavailable: boolean;
 }
-export type DraftLine = FreshDraftLine;
+export type DraftLine = FreshDraftLine & {
+  setMenuId?: string;
+  setMenuReservedLineId?: string | null;
+  setMenuReservedPlace?: number | null;
+};
 
 export interface Draft {
   id: string;
@@ -384,14 +388,20 @@ export async function saveDraft(
     [draftId],
     draftId,
     normaliseDraftLines(
-      lines.map((line) => ({
-        ...line,
-        source: null,
-        id: line.id ?? newId(),
-        noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
-        unavailable: false,
-        measured: soldMeasured(offers.get(line.menuItemId)),
-      })),
+      lines.map((line) => {
+        const stored = line.id === undefined ? undefined : owned.get(line.id);
+        return {
+          ...line,
+          source: null,
+          id: line.id ?? newId(),
+          noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
+          unavailable: false,
+          measured: soldMeasured(offers.get(line.menuItemId)),
+          setMenuId: stored?.setMenuId,
+          setMenuReservedLineId: stored?.setMenuReservedLineId,
+          setMenuReservedPlace: stored?.setMenuReservedPlace,
+        };
+      }),
     ),
   );
   if (lines.length === 0) {
@@ -1264,9 +1274,16 @@ async function storedLines(
           slot: row.slot,
           joinGroupId: row.joinGroupId,
           afterGroupId: row.afterGroupId,
+          ...(row.setMenuId === null
+            ? {}
+            : {
+                setMenuId: row.setMenuId,
+                setMenuReservedLineId: row.setMenuReservedLineId,
+                setMenuReservedPlace: row.setMenuReservedPlace,
+              }),
           unavailable: false,
         },
-      }) satisfies { draftId: string; position: number; line: FreshDraftLine },
+      }) satisfies { draftId: string; position: number; line: DraftLine },
   );
   return fresh.sort((a, b) => a.position - b.position || a.line.id.localeCompare(b.line.id));
 }
@@ -1310,6 +1327,9 @@ async function replaceLines(
     slot: line.slot,
     joinGroupId: line.joinGroupId,
     afterGroupId: line.afterGroupId,
+    setMenuId: line.setMenuId,
+    setMenuReservedLineId: line.setMenuReservedLineId,
+    setMenuReservedPlace: line.setMenuReservedPlace,
   }));
   for (const chunk of statementChunks(orderDraftLines, rows)) {
     await tx
@@ -1333,6 +1353,9 @@ async function replaceLines(
           slot: sql`excluded.slot`,
           joinGroupId: sql`excluded.join_group_id`,
           afterGroupId: sql`excluded.after_group_id`,
+          setMenuId: sql`excluded.set_menu_id`,
+          setMenuReservedLineId: sql`excluded.set_menu_reserved_line_id`,
+          setMenuReservedPlace: sql`excluded.set_menu_reserved_place`,
         },
       });
   }
