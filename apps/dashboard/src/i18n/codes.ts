@@ -562,8 +562,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se ha encontrado esa carta",
   },
   "menu_item.not_found": {
-    en: "This dish is no longer on the menu. Refresh the menu before trying again.",
-    es: "Este plato ya no está en la carta. Actualiza la carta antes de volver a intentarlo.",
+    en: "This item is no longer on the menu. Check the current menu before saving.",
+    es: "Este artículo ya no está en la carta. Revisa la carta actual antes de guardar.",
   },
   "set_menu.not_found": {
     en: "That set menu could not be found. Reload the menu list and choose a set menu.",

@@ -1284,21 +1284,26 @@ it.each([
   expect(codeMessage("set_menu.invalid", locale, { field })).toContain(expected);
 });
 
-it.each(["en", "es"])(
-  "names the set menu and its problem count in a publication refusal in %s",
-  (locale) => {
+it.each([
+  ["en", "Correct the set-menu draft before publishing"],
+  ["es", "Corrige el borrador de la carta a precio fijo antes de publicar"],
+])(
+  "names the set menu, problem count and next action in a publication refusal in %s",
+  (locale, action) => {
     const message = codeMessage("set_menu.not_publishable", locale, {
       name: "Daily menu",
       count: 3,
     });
     expect(message).toContain("Daily menu");
     expect(message).toMatch(/3 problem/);
+    expect(message).toContain(action);
+    expect(message).not.toMatch(/page|página/);
   },
 );
 
 it.each([
-  ["en", "This dish is no longer on the menu."],
-  ["es", "Este plato ya no está en la carta."],
-])("explains a missing menu dish in %s", (locale, explanation) => {
+  ["en", "This item is no longer on the menu."],
+  ["es", "Este artículo ya no está en la carta."],
+])("explains a missing menu item in %s", (locale, explanation) => {
   expect(codeMessage("menu_item.not_found", locale)).toContain(explanation);
 });

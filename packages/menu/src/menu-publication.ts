@@ -210,7 +210,6 @@ function statusOf(hash: string, version: LiveVersion | undefined, clashes = 0): 
       };
 }
 
-/** Build the documents in one pass because the menu list reads again on each live change. */
 export async function menuStatus(
   tx: Transaction,
   menuIds?: readonly string[],

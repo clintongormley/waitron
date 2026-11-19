@@ -1383,7 +1383,8 @@ export interface ServedSetMenu extends ServedSetMenuCopy {
   where its changes go: "Changes reach the tills when you publish a menu that holds this set menu:
   Lunch, Dinner", each name linking to that menu's Preview, or "Place it in a menu to sell it" when
   no menu holds it (from `SetMenuDetails.heldBy`; **my call** on wording). The full menu's Preview
-  links a set-menu change to this editor. The publication refusal can then point to this page.
+  links a set-menu change to this editor. The publication refusal tells you that the editor lists
+  those problems.
 
 - [ ] **Step 1: Write the failing tests** in `menus-screen.set-menu.test.ts`:
   `"the list shows a set menu's kind and price"`;

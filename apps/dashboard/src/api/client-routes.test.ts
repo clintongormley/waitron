@@ -1,6 +1,6 @@
 import { createFreshSignInGate } from "./fresh-sign-in.js";
 import { cloudOwnerRecoveryRequest } from "../testing/cloud-owner-recovery-request.js";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import {
@@ -2384,6 +2384,9 @@ it("sends recovery discovery and both decisions as explicit POSTs with only thei
 });
 
 it("sends set-menu terms and editor commands on their management routes", async () => {
+  type Creation = NonNullable<Parameters<DashboardApi["createMenu"]>[1]>;
+  expectTypeOf<{ setPrice: string }>().not.toExtend<Creation>();
+
   const details = {
     id: "set",
     name: "Daily menu",
