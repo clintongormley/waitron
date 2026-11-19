@@ -777,10 +777,10 @@ On the Debian 13 test box (192.168.10.10), lane B, main 7cf65e7eea, on a restore
 | PR 1a (1): three reboots (R4) | Met: on each boot the server's first clock look came before the time service's first synchronisation, by 23.5, 23.4 and 23.3 s; internet confirmation followed about 37 s after the first look |
 | PR 1a (2): UDP 123 blocked, restart | Met: "(1 of 2 so far)" and a cash sale refused with the waiting words; the second device opening gave one `clock_start.confirmed` with source `devices`, and the next sale went through. The second device had not finished signing in, so this ran PR 1c's path |
 | PR 1a (2): clock 2 days ahead | Met except the requester: the devices did not confirm ("0 of 2 so far"); This device made one `clock.set` and the next sale was dated right. The requester read `admin`, not `staff`, because the till's only signed-in person was the administrator; a Staff user made for the run never appeared on the till's PIN screen (not traced) |
-| PR 1a (3): WAN unplugged, one real tablet | Not run: needs hands on the hardware |
+| PR 1a (3): WAN unplugged, one real tablet | Met on 2026-11-19 with the owner (below), except the resume time: 2 min 45 s, not about 75 s |
 | PR 1a (4): clock service stopped (D12) | Met: `clock_start.waiting` with `hostAnswers` false; Box status showed D12's sentence; two devices confirmed |
-| PR 1a (5): power off at the wall | Not run: needs hands on the hardware |
-| PR 1c: both devices at the PIN screen, nobody signed in | Met with the two browsers: "(1 of 2 so far)" on the PIN screen; the second device confirmed 27 s after its page loaded, with no tap. Not yet on two real tablets |
+| PR 1a (5): power off at the wall | Met on 2026-11-19 with the owner (below): waiting at power-on and a sale refused, never dated early |
+| PR 1c: both devices at the PIN screen, nobody signed in | Met with the two browsers: "(1 of 2 so far)" on the PIN screen; the second device confirmed 27 s after its page loaded, with no tap. Met again on 2026-11-19 with a real phone and a browser (below) |
 | PR 1b: UDP 123 blocked (in place of the WAN unplugged), no till on, clock 2 days ahead, a phone-sized browser | Met: "Check with this device's time" on Box status made one `clock.set` with requester `admin`; the next sale was dated right |
 | PR 2: AEAT's test service (`prewww1.aeat.es`) | Met: after "The date and time are right", three cash sales dated a day ahead were each refused `1112` ("El campo FechaExpedicionFactura es superior a la fecha actual."); one `clock_start.future_date_refused`; a fourth sale refused at the till; This device on the till set the clock back; a fifth sale filed `Correcto` while the three stay refused; no `fiscal.refusals_repeated` |
 | PRs 3-4: 443 and UDP 123 blocked after the series was named, then Restore backup | Replaced by the restore plan (`2026-11-13-a1420-restore-series-check.md`, PR 3b1): the database was placed 3.6 s after the press in the same boot, on the page's series choice, so there was no waiting page and no tries; `failures` 0 after five minutes. Unblocking UDP 123 only: internet confirmation 111 s later, with no AEAT time ask. The restore that must wait (after a reboot) is that plan's PR 4 (1) and PR 3b2, met there |
@@ -790,6 +790,23 @@ Seen on the way, none of them a failed expectation:
 - Each clock step signed the dashboard out ("Please log in to continue").
 - With test filing on and no certificate installed, `/health` answers 503 (`credentials.missing`).
 - The dashboard offers no way to remove an installed AEAT certificate, only Replace and Diagnose.
+
+### As run with the owner, 2026-11-19
+
+The three checks that need hands on the hardware, run by the owner (20:33–21:14 Spain time) on the test box on main eca67e9dcd: a Live pre-production venue with test filing on and no AEAT certificate, so nothing reached AEAT. Tablet A was the owner's phone; tablet B was Chrome on a Mac. The box has one cable for the internet and the local network, so "no internet" was an `nft` drop of every address outside the local ranges, on the box's own traffic and its containers', which leaves the tablets connected; across the power cut the same drop ran from a boot unit. Full times: lane B's ledger, "hands-on session".
+
+| Check | Result |
+| --- | --- |
+| PR 1a (3): no internet, phone 10 minutes ahead | Met: the till read "(0 of 2 so far)", which is right (a device 10 minutes off does not count; this plan's "1 of 2" was wrong); "Check the time" offered both times; The server let a cash sale through and the box's clock did not move. Resume with nothing tapped: internet back 20:45:16, time service synchronised 20:47:10, `clock_start.confirmed` source internet 20:48:01, **2 min 45 s** |
+| PR 1a (5): power off at the wall 10 minutes, internet blocked from boot | Met: the box came up with its clock right to 1 s, waiting; the phone read "(1 of 2 so far)" and a cash sale was refused (`clock.unconfirmed`). Internet back 21:04:13, synchronised 21:05:23, confirmed 21:05:52, **1 min 39 s** |
+| PR 1c: two real devices at the PIN screen | Met: "1 of 2" on the phone's PIN screen; the Mac opened about 21:12 and `clock_start.confirmed` source devices followed at 21:12:39 with no tap |
+
+What the owner saw that the checks did not ask about:
+- Owner: "we should probably block payment earlier with a bigger modal". Today a waiting box refuses a payment only after the amount is typed and Take payment pressed, in a small message.
+- The PIN screen's waiting line is small grey text; the owner first reported no line at all. The signed-in screens show it in red.
+- Resuming after the internet returns took longer than this plan's "about 75 s", in two parts. The time service backs off its retries while it cannot reach a server: it synchronised 1 min 54 s and 1 min 10 s after the internet returned. Waitron then confirmed 50 s and 29 s after the time service synchronised, because every reader takes the time service's answer through a cache kept for 60 seconds (`sharedClockServiceReading`, `apps/server/src/clock-service-reading.ts`), so the clock watch's 15-second look can read an answer up to a minute old.
+- The box keeps its hardware clock in local time (`timedatectl`: `LocalRTC=yes`; the box came with Windows), and nothing in `deploy/` sets it (grep for `local-rtc` and `hwclock`). In that mode the kernel does not copy the corrected time into the hardware clock, so the hardware clock drifts uncorrected, and after a power cut spanning a summer/winter change it starts an hour out. On the night it still matched the real time.
+- On a phone, the signed-in notice strip puts "Check the time" mid-sentence, splitting "time (0 of 2 so far)" around it; with the "+1" list opened, "Payments wait" appears twice and "+1" stays visible.
 
 ## Deliberately unchanged, and limits
 
