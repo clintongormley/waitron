@@ -323,7 +323,7 @@ const ROUTES: readonly Row[] = [
     {},
   ],
   ["POST", `/api/sales/${id}/receipt`, "print-receipt", forbidden("receipt"), {}],
-  ["POST", `/api/sales/${id}/payment-slip`, "print-receipt", forbidden("payment-slip"), {}],
+  ["POST", `/api/sales/${id}/payment-slip/${id}`, "print-receipt", forbidden("payment-slip"), {}],
   [
     "POST",
     `/api/working-orders/${id}/payments/${id}/slip-copy`,

@@ -482,6 +482,21 @@ async function ringSale(
   return workingOrderId;
 }
 
+async function expectSlipUnavailable(response: Response): Promise<void> {
+  expect(await response.json()).toMatchObject({
+    error: { code: "bill.payment_slip_unavailable" },
+  });
+}
+
+/** The Payment slip press for a sale's card payment. */
+async function slipPath(workingOrderId: string): Promise<string> {
+  const [payment] = await suite.db
+    .select({ id: payments.id })
+    .from(payments)
+    .where(eq(payments.workingOrderId, workingOrderId));
+  return `/api/sales/${workingOrderId}/payment-slip/${payment!.id}`;
+}
+
 beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
@@ -2337,7 +2352,7 @@ describe("original receipt and payment slip actions", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const id = await ringSale(app, cookie, each.menuItemId);
-    for (const action of ["receipt", "reprint", "payment-slip"]) {
+    for (const action of ["receipt", "reprint"]) {
       const res = await app.request(`/api/sales/${id}/${action}`, {
         method: "POST",
         headers: { cookie },
@@ -2370,7 +2385,7 @@ describe("original receipt and payment slip actions", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     for (const id of [randomUUID(), "bad-id"]) {
-      const res = await app.request(`/api/sales/${id}/payment-slip`, {
+      const res = await app.request(`/api/sales/${id}/payment-slip/${randomUUID()}`, {
         method: "POST",
         headers: { cookie },
       });
@@ -2418,8 +2433,9 @@ describe("payment slip persisted capture facts", () => {
           sql`update payments set provider = 'sumup', settled_at = ${settledAt}, card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
         ),
       );
+      const slip = await slipPath(id);
       const ask = () =>
-        app.request(`/api/sales/${id}/payment-slip`, {
+        app.request(slip, {
           method: "POST",
           headers: { cookie, "Accept-Language": configured },
         });
@@ -2447,7 +2463,7 @@ describe("payment slip persisted capture facts", () => {
                 line.slice(labels.paymentRemaining.length).trim() === "0,00 €",
             ),
         ).toBe(true);
-        expect(text).not.toContain(labels.duplicate);
+        expect(text).toContain(labels.duplicate);
         expect(text).toContain(saved === "ca-ES" ? "1.500,00 €" : "1500,00 €");
         expect(text).toContain("09:05");
         expect(text).not.toContain("Sep");
@@ -2473,7 +2489,7 @@ describe("payment slip persisted capture facts", () => {
           sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where working_order_id = ${id}`,
         ),
       );
-      const res = await app.request(`/api/sales/${id}/payment-slip`, {
+      const res = await app.request(await slipPath(id), {
         method: "POST",
         headers: { cookie },
       });
@@ -2503,7 +2519,7 @@ describe("payment slip persisted capture facts", () => {
         sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = null, card_auth_code = '354739' where working_order_id = ${id}`,
       ),
     );
-    const res = await app.request(`/api/sales/${id}/payment-slip`, {
+    const res = await app.request(await slipPath(id), {
       method: "POST",
       headers: { cookie },
     });
@@ -2533,28 +2549,28 @@ describe("payment slip persisted capture facts", () => {
           sql`update payments set provider = 'sumup', reader_id = (select id from card_readers where name = 'Counter' limit 1) where working_order_id = ${id}`,
         ),
       );
-      const response = await app.request(`/api/sales/${id}/payment-slip`, {
+      const response = await app.request(await slipPath(id), {
         method: "POST",
         headers: { cookie },
       });
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(automatic ? 409 : 200);
+      if (automatic) await expectSlipUnavailable(response);
       expect(await printJobsFor(cfg)).toHaveLength(automatic ? 0 : 1);
       expect(await fiscalRecordCount()).toBe(1);
       expect(await saleCount()).toBe(1);
     },
   );
 
-  it("does not print a manual card slip", async () => {
+  it("refuses to print a manual card slip", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const id = await ringSale(app, cookie, each.menuItemId, "card");
-    expect(
-      (await app.request(`/api/sales/${id}/payment-slip`, { method: "POST", headers: { cookie } }))
-        .status,
-    ).toBe(200);
+    const res = await app.request(await slipPath(id), { method: "POST", headers: { cookie } });
+    expect(res.status).toBe(409);
+    await expectSlipUnavailable(res);
     expect(await printJobsFor(cfg)).toEqual([]);
   });
   it("lays the payment slip out for the device printer's paper width and resolution", async () => {
@@ -2576,7 +2592,7 @@ describe("payment slip persisted capture facts", () => {
         sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
       ),
     );
-    const res = await app.request(`/api/sales/${id}/payment-slip`, {
+    const res = await app.request(await slipPath(id), {
       method: "POST",
       headers: { cookie },
     });
@@ -2598,7 +2614,7 @@ describe("payment slip persisted capture facts", () => {
 });
 
 describe("payment slip with nothing to print", () => {
-  it("prints nothing when the device has no payment slip printer", async () => {
+  it("refuses the press when the device has no payment slip printer", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt({ printerId: null });
     const app = new Hono();
@@ -2608,15 +2624,18 @@ describe("payment slip with nothing to print", () => {
     await liftPaymentGuard(suite.db, () =>
       suite.db.execute(sql`update payments set provider = 'sumup' where working_order_id = ${id}`),
     );
-    const res = await app.request(`/api/sales/${id}/payment-slip`, {
+    const res = await app.request(await slipPath(id), {
       method: "POST",
       headers: { cookie },
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "bill.payment_slip_no_printer" },
+    });
     expect(await printJobsFor(cfg)).toEqual([]);
   });
 
-  it("prints nothing for a capture that records no settlement instant", async () => {
+  it("refuses the press for a capture that records no settlement instant", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
@@ -2628,11 +2647,12 @@ describe("payment slip with nothing to print", () => {
         sql`update payments set provider = 'sumup', settled_at = null where working_order_id = ${id}`,
       ),
     );
-    const res = await app.request(`/api/sales/${id}/payment-slip`, {
+    const res = await app.request(await slipPath(id), {
       method: "POST",
       headers: { cookie },
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    await expectSlipUnavailable(res);
     expect(await printJobsFor(cfg)).toEqual([]);
   });
 });
@@ -3053,7 +3073,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     const onA = await signIn(a.cookie);
     const id = await cardSaleWithCapture(app, onA, each.menuItemId);
 
-    expect((await post(app, onA, `/api/sales/${id}/payment-slip`)).status).toBe(200);
+    expect((await post(app, onA, await slipPath(id))).status).toBe(200);
 
     expect((await jobs()).map((job) => job.printerId)).toEqual([s1]);
   });
@@ -3089,7 +3109,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       body: JSON.stringify({ role: "payment_slip", selection: { id: r1 }, via: "list" }),
     });
     expect(switched.status).toBe(200);
-    expect((await post(app, onA, `/api/sales/${id}/payment-slip`)).status).toBe(200);
+    expect((await post(app, onA, await slipPath(id))).status).toBe(200);
 
     expect((await jobs()).map((job) => job.printerId)).toEqual([r1]);
   });

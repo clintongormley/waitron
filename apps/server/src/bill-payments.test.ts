@@ -79,7 +79,7 @@ import {
 } from "./testing/bill-payment-fixture.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import { printSalePaymentSlip } from "./payment-slip-print.js";
+import { printSalePaymentSlip, readSalePaymentSlips } from "./payment-slip-print.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { createTable } from "./testing/live-table.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
@@ -3159,7 +3159,9 @@ describe("the invoice at full payment", () => {
 
       const selects = vi.spyOn(suite.db, "select");
       try {
-        await printSalePaymentSlip(suite.db, { ...venue.cfg, locale }, billId);
+        const cfg = { ...venue.cfg, locale };
+        for (const slip of await inTx((tx) => readSalePaymentSlips(tx, cfg, sale!.id, billId)))
+          await printSalePaymentSlip(suite.db, cfg, billId, slip.id);
         expect(
           selects.mock.calls.filter(
             ([fields]) =>
@@ -3428,7 +3430,11 @@ describe("the bill's payments, taken within one millisecond", () => {
     );
     const before = await inTx((tx) => tx.select({ id: printJobs.id }).from(printJobs));
 
-    await printSalePaymentSlip(suite.db, venue.cfg, billId);
+    const [sale] = await inTx((tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
+    );
+    for (const slip of await inTx((tx) => readSalePaymentSlips(tx, venue.cfg, sale!.id, billId)))
+      await printSalePaymentSlip(suite.db, venue.cfg, billId, slip.id);
 
     const jobs = await inTx((tx) =>
       tx

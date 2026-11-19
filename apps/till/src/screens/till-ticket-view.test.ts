@@ -459,14 +459,6 @@ describe("till-ticket-view", () => {
     expect(text(el)).toContain(uiText("tender.outside_other"));
   });
 
-  it.each(["unpaid", "deferred"] as const)(
-    "offers no card slip for an %s tender",
-    async (method) => {
-      const { el } = await mount({ tender: { method } });
-      expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
-    },
-  );
-
   it("emits a composed new-sale event when New sale is pressed", async () => {
     const { el } = await mount();
     let captured: Event | undefined;
@@ -538,48 +530,138 @@ describe("till-ticket-view", () => {
     });
   });
 
-  it("offers a separate payment slip action only for card tenders", async () => {
-    const { el: cash } = await mount();
-    expect(cash.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
+  const slipButtons = (el: TillTicketView) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=payment-slip]"),
+  ];
+  const slipLabels = (el: TillTicketView) =>
+    slipButtons(el).map((button) => button.textContent!.replace(/\s+/gu, " ").trim());
+  const firstCard = { id: "pay-1", charged: "4.40", last4: "1111" };
+  const secondCard = { id: "pay-2", charged: "5.00", last4: "2222" };
 
-    const { el: card } = await mount({
-      tender: { method: "card", charged: "9.40", tip: "0.00", reference: null },
-    });
-    let captured: Event | undefined;
-    card.addEventListener("payment-slip", (event) => (captured = event));
-    card.shadowRoot!.querySelector<HTMLElement>("[data-test=payment-slip]")!.click();
-    expect(captured).toBeInstanceOf(CustomEvent);
+  it("offers one Payment slip button for the sale's one card, naming that payment", async () => {
+    const { el: cash } = await mount();
+    expect(slipButtons(cash)).toEqual([]);
+
+    const { el: card } = await mount({ paymentSlips: [firstCard] });
+    const [button, ...others] = slipButtons(card);
+    expect(others).toEqual([]);
+    expect(button!.textContent!.trim()).toBe(uiText("action.payment_slip"));
+    let captured: CustomEvent | undefined;
+    card.addEventListener("payment-slip", (event) => (captured = event as CustomEvent));
+    button!.click();
+    expect(captured!.detail).toEqual({ capturedPaymentId: "pay-1" });
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
   });
 
-  it.each([null, "OP-400"])(
-    "offers the split-bill slip only for a reader reference=%s",
-    async (reference) => {
-      const { el } = await mount({
-        payments: [
-          {
-            method: "cash",
-            change: "0.00",
-            amount: "4.40",
-            tip: "0.00",
-            tendered: "4.40",
-            refunds: [],
-          },
-          { method: "card", amount: "5.00", tip: "0.00", reference, refunds: [] },
-        ],
-      });
-      expect(el.shadowRoot!.querySelector("[data-test=payment-slip]") !== null).toBe(
-        reference === null,
-      );
+  it.each(["unpaid", "deferred"] as const)(
+    "offers no card slip for an %s tender the server lists no payment for",
+    async (method) => {
+      for (const over of [{}, { paymentSlips: [] }]) {
+        const { el } = await mount({ tender: { method }, ...over });
+        expect(slipButtons(el)).toEqual([]);
+        expect(el.shadowRoot!.querySelector(".payment-slips")).toBeNull();
+      }
     },
   );
+
+  it("offers each card of a split sale separately, and a press names only that card", async () => {
+    const { el } = await mount({ paymentSlips: [firstCard, secondCard] });
+    const group = el.shadowRoot!.querySelector<HTMLElement>(".payment-slips")!;
+    expect(group.getAttribute("role")).toBe("group");
+    expect(group.textContent).toContain(uiText("action.payment_slip"));
+    const buttons = slipButtons(el);
+    expect(slipLabels(el)).toEqual(["Card · 1111 · €4.40", "Card · 2222 · €5.00"]);
+    const asked: unknown[] = [];
+    el.addEventListener("payment-slip", (event) => asked.push((event as CustomEvent).detail));
+    buttons[1]!.click();
+    expect(asked).toEqual([{ capturedPaymentId: "pay-2" }]);
+  });
+
+  it("names a card with no recorded digits by its amount", async () => {
+    const { el } = await mount({
+      paymentSlips: [
+        { id: "pay-1", charged: "5.00", last4: null },
+        { id: "pay-2", charged: "6.00", last4: null },
+      ],
+    });
+    expect(slipLabels(el)).toEqual(["Card · €5.00", "Card · €6.00"]);
+  });
+
+  it("numbers only the buttons that would otherwise read the same, keeping their order", async () => {
+    const { el } = await mount({
+      paymentSlips: [
+        { id: "pay-1", charged: "5.00", last4: null },
+        { id: "pay-2", charged: "5.00", last4: "1111" },
+        { id: "pay-3", charged: "6.00", last4: null },
+        { id: "pay-4", charged: "5.00", last4: null },
+        { id: "pay-5", charged: "5.00", last4: "1111" },
+      ],
+    });
+    expect(slipLabels(el)).toEqual([
+      "Card 1 · €5.00",
+      "Card 1 · 1111 · €5.00",
+      "Card · €6.00",
+      "Card 2 · €5.00",
+      "Card 2 · 1111 · €5.00",
+    ]);
+    const asked: unknown[] = [];
+    el.addEventListener("payment-slip", (event) => asked.push((event as CustomEvent).detail));
+    slipButtons(el)[3]!.click();
+    expect(asked).toEqual([{ capturedPaymentId: "pay-4" }]);
+  });
+
+  it("numbers identical buttons in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mount({
+      paymentSlips: [
+        { id: "pay-1", charged: "5.00", last4: null },
+        { id: "pay-2", charged: "5.00", last4: null },
+      ],
+    });
+    expect(slipLabels(el).map((label) => label.replace(/\s/gu, " "))).toEqual([
+      "Tarjeta 1 · 5,00 €",
+      "Tarjeta 2 · 5,00 €",
+    ]);
+  });
+
+  it.each([
+    ["cash", { method: "cash", amount: "3.00", tip: "0.00", reference: null, refunds: [] }],
+    [
+      "an outside machine's card",
+      {
+        method: "card",
+        amount: "3.00",
+        tip: "0.00",
+        reference: "OP-A",
+        externalProvider: "other",
+        externalMachine: "Bank counter",
+        refunds: [],
+      },
+    ],
+  ])("keeps every label when %s was paid first", async (_, earlier) => {
+    const { el } = await mount({
+      payments: [earlier] as TillSaleResult["payments"],
+      paymentSlips: [firstCard, secondCard],
+    });
+    expect(slipLabels(el)).toEqual(["Card · 1111 · €4.40", "Card · 2222 · €5.00"]);
+  });
+
+  it("offers no payment slip on a past receipt", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result: { ...result, paymentSlips: [firstCard, secondCard] },
+      historical: true,
+    });
+    expect(slipButtons(el)).toEqual([]);
+    expect(el.shadowRoot!.querySelector(".payment-slips")).toBeNull();
+  });
 
   it("hides receipt and payment-slip actions when this enrolled device cannot print them", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
       result: {
         ...result,
         tender: { method: "card", charged: "9.40", tip: "0.00", reference: null },
+        paymentSlips: [firstCard, secondCard],
       },
       originalReceiptAvailable: true,
       canPrintReceipt: false,
@@ -587,6 +669,7 @@ describe("till-ticket-view", () => {
     expect(el.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".payment-slips")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=open-drawer]")).not.toBeNull();
   });
 

@@ -6439,7 +6439,7 @@ describe("till-app", () => {
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
   });
 
-  it("a card completion can request its separate payment slip", async () => {
+  it("the payment-slip event prints the card payment it names", async () => {
     const filed: TillSaleResult = {
       ...saleResult,
       tender: { method: "card", charged: "3.50", tip: "0.50", reference: null },
@@ -6455,10 +6455,26 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "card", amount: "3.00" });
     await flush(el);
 
-    emit(ticket(el)!, "payment-slip");
+    emit(ticket(el)!, "payment-slip", { capturedPaymentId: "pay-1" });
     await flush(el);
-    expect(printPaymentSlip).toHaveBeenCalledWith(workingOrderId);
+    expect(printPaymentSlip).toHaveBeenCalledWith(workingOrderId, "pay-1");
     expect(ticket(el)).not.toBeNull();
+  });
+
+  it("the window after a card payment offers no payment slip button", async () => {
+    const filed: TillSaleResult = {
+      ...saleResult,
+      tender: { method: "card", charged: "3.00", tip: "0.00", reference: null },
+      paymentSlips: [{ id: "pay-1", charged: "3.00", last4: "1111" }],
+    };
+    const { el } = await mountApp({ recordSale: vi.fn().mockResolvedValue(filed) });
+    const c = await toCounter(el);
+    c.store.addProduct(coffee, "2");
+    emit(c, "confirm-payment", { method: "card", amount: "3.00" });
+    await flush(el);
+
+    expect(ticket(el)!.localName).toBe("till-settlement-document-dialog");
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
   });
 
   it("an enrolled device without print-receipt gets no receipt or payment-slip actions", async () => {
@@ -25594,6 +25610,39 @@ describe("A737 Find a bill page", () => {
     expect(counter.store.lines[0]!.quantity).toBe("1");
     expect(currentApi.markCollected).not.toHaveBeenCalled();
     expect(currentApi.collectOrder).not.toHaveBeenCalled();
+  });
+
+  it("a paid waiting order split across two cards prints only the card pressed", async () => {
+    const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
+    const { el, view } = await open({
+      getFindBill: vi.fn().mockResolvedValue(
+        billRow({
+          workingOrderId: "bill-paid",
+          orderStatus: "settled",
+          state: "paid-not-handed-over",
+          paid: "25.10",
+          stillOwed: "0.00",
+        }),
+      ),
+      getFiledTicket: vi.fn().mockResolvedValue({
+        ...saleResult,
+        paymentSlips: [
+          { id: "pay-1", charged: "10.00", last4: "1111" },
+          { id: "pay-2", charged: "15.10", last4: "2222" },
+        ],
+      }),
+      printPaymentSlip,
+    });
+    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "bill-paid" }) });
+    await vi.waitFor(() => expect(ticket(el)?.localName).toBe("till-ticket-view"));
+    await ticket(el)!.updateComplete;
+    const buttons = ticket(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
+      "[data-test=payment-slip]",
+    );
+    expect(buttons).toHaveLength(2);
+    buttons[1]!.click();
+    await flush(el);
+    expect(printPaymentSlip.mock.calls).toEqual([["bill-paid", "pay-2"]]);
   });
 
   it("Back during a table offer read prevents that table from opening afterwards", async () => {

@@ -162,6 +162,8 @@ Select **Print card slip** before taking the card if the payer wants one. It sta
 
 To print a card payment again before the bill is fully paid, reopen **Pay** and choose **Print a copy** beside the received payment under **Payments on this bill**. The copy shows what remained when that card was taken.
 
+For an order listed as **Paid, not handed over**, open it in **Find a bill** and press **Payment slip** if it is offered. It prints a copy marked as a duplicate. If several cards paid, choose that payer's card.
+
 If a card reader prints its own payment slip, open **Card payments** in the dashboard, edit that
 reader and turn on **Prints its own slip automatically**, then choose **Save**. Waitron then leaves
 that reader's payment slips to the reader. This setting describes the reader; it does not change

@@ -7,6 +7,7 @@ import { live } from "lit/directives/live.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { ChangeObserver, baseStyles, mediaAddress, subscribeMediaServer } from "@waitron/ui";
 import {
+  formatMoney,
   resolveSnapshotText,
   type ReceiptIndent,
   type ReceiptTableRow,
@@ -14,7 +15,7 @@ import {
 } from "@waitron/shared";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
 import "../widgets/invoice-email-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -25,6 +26,7 @@ import {
   type InvoiceDeliveryAttempt,
   type InvoiceDeliveryStatus,
   type OriginalReceiptPrint,
+  type PaymentSlipChoice,
   type RoleEquipment,
   type TillSaleResult,
 } from "../api/client.js";
@@ -312,6 +314,7 @@ export class TillTicketView extends LitElement {
          a full-width secondary button on the same 22rem column as the ticket + New sale. */
       .receipt-actions {
         display: flex;
+        flex-wrap: wrap;
         gap: var(--wt-space-3);
         max-width: var(--wt-till-ticket-column-width);
         margin: 0 auto var(--wt-space-3);
@@ -351,6 +354,18 @@ export class TillTicketView extends LitElement {
 
       .receipt-actions wt-button {
         flex: 1;
+      }
+
+      .payment-slips {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        max-width: var(--wt-till-ticket-column-width);
+        margin: 0 auto var(--wt-space-3);
+      }
+
+      .payment-slips-title {
+        font-weight: var(--wt-font-weight-bold);
       }
     `,
   ];
@@ -715,8 +730,43 @@ export class TillTicketView extends LitElement {
     this.dispatchEvent(new CustomEvent("print-receipt", { bubbles: true, composed: true }));
   }
 
-  #printPaymentSlip(): void {
-    this.dispatchEvent(new CustomEvent("payment-slip", { bubbles: true, composed: true }));
+  #printPaymentSlip(capturedPaymentId: string): void {
+    this.dispatchEvent(
+      new CustomEvent("payment-slip", {
+        detail: { capturedPaymentId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #renderPaymentSlipChoices(slips: readonly PaymentSlipChoice[]) {
+    if (slips.length < 2) return nothing;
+    const labelOf = (slip: PaymentSlipChoice, card: string) =>
+      [card, slip.last4, formatMoney(slip.charged, currentLocale())].filter(Boolean).join(" · ");
+    const plain = slips.map((slip) => labelOf(slip, t("tender.card")));
+    const repeats = new Map<string, number>();
+    for (const label of plain) repeats.set(label, (repeats.get(label) ?? 0) + 1);
+    const positions = new Map<string, number>();
+    const labels = slips.map((slip, index) => {
+      const label = plain[index]!;
+      if (repeats.get(label) === 1) return label;
+      const position = (positions.get(label) ?? 0) + 1;
+      positions.set(label, position);
+      return labelOf(slip, t("payment_slip.card_n").replace("{n}", String(position)));
+    });
+    return html`<div class="payment-slips" role="group" aria-labelledby="payment-slips-title">
+      <span id="payment-slips-title" class="payment-slips-title">${t("action.payment_slip")}</span>
+      ${slips.map(
+        (slip, index) =>
+          html`<wt-button
+            variant="secondary"
+            data-test="payment-slip"
+            @click=${() => this.#printPaymentSlip(slip.id)}
+            >${labels[index]}</wt-button
+          >`,
+      )}
+    </div>`;
   }
 
   /** A no-sale drawer kick; `till-app` owns the call. */
@@ -968,6 +1018,7 @@ export class TillTicketView extends LitElement {
 
   override render() {
     const r = this.result;
+    const paymentSlips = this.historical || !this.canPrintReceipt ? [] : (r.paymentSlips ?? []);
     const attempt = this.deliveries?.current;
     const notQueued = this.originalReceiptPrint?.status === "not_queued";
     const failedReceipt = this.originalReceiptPrint?.status === "failed";
@@ -1088,16 +1139,13 @@ export class TillTicketView extends LitElement {
             : nothing
         }
         ${
-          !this.historical &&
-          this.canPrintReceipt &&
-          (r.payments?.some((payment) => payment.method === "card" && payment.reference === null) ??
-            r.tender.method === "card")
+          paymentSlips.length === 1
             ? html`<wt-button
                 class="payment-slip"
                 variant="secondary"
                 size="lg"
                 data-test="payment-slip"
-                @click=${() => this.#printPaymentSlip()}
+                @click=${() => this.#printPaymentSlip(paymentSlips[0]!.id)}
               >
                 ${t("action.payment_slip")}
               </wt-button>`
@@ -1105,7 +1153,7 @@ export class TillTicketView extends LitElement {
         }
         ${this.renderDrawer()}
       </div>
-
+      ${this.#renderPaymentSlipChoices(paymentSlips)}
       ${
         this.historical
           ? html`<wt-button

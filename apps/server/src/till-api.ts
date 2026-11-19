@@ -211,7 +211,7 @@ import {
 import type { SubmitDraftInput } from "./order-drafts.js";
 import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
-import { printSalePaymentSlip } from "./payment-slip-print.js";
+import { printSalePaymentSlip, readSalePaymentSlips } from "./payment-slip-print.js";
 import { issueIfFullyPaid, readBillBalance } from "./bill-payments.js";
 import {
   asObject,
@@ -669,6 +669,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.other_party": 409,
   "bill.merge_invoice_choice_required": 409,
   "bill.payment_not_found": 404,
+  "bill.payment_slip_no_printer": 409,
+  "bill.payment_slip_unavailable": 409,
   "bill.refund_exceeds_payment": 422,
   "bill.refund_not_whole": 422,
   "bill.refund_unsupported": 422,
@@ -2477,9 +2479,11 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         if (sale === undefined)
           throw new AppError("working_order.not_found", { workingOrderId: id });
         const ticket = await readSettledTicket(deps.backend, tx, cfg, id);
-        return c.req.query("receiptPreview") === "1"
-          ? tillReceiptPreview(tx, sale.id, ticket, cfg.practiceMode === true)
-          : ticket;
+        if (c.req.query("receiptPreview") !== "1") return ticket;
+        return {
+          ...(await tillReceiptPreview(tx, sale.id, ticket, cfg.practiceMode === true)),
+          paymentSlips: await readSalePaymentSlips(tx, cfg, sale.id, id),
+        };
       });
       return c.json(ticket);
     }),
@@ -2731,29 +2735,38 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
 
   // Document actions use the working-order id and never enqueue drawer commands.
   // A filed but unpaid invoice renders without a payment block.
-  for (const action of ["receipt", "payment-slip"] as const) {
-    app.post(`/api/sales/:id/${action}`, (c) =>
-      run(c, log, async () => {
-        const session = await requireSession(deps, c);
-        const cfg = requestCfg(deps.cfg, session);
-        await assertDeviceCapability(deps, c, "print-receipt", action, session.device);
-        await assertRequestDevice(deps, c, session);
-        const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-        await gateZones(deps, session, [{ orderId: id }]);
-        if (action === "receipt")
-          await printSaleReceipt(
-            { db: deps.db, backend: deps.backend },
-            cfg,
-            id,
-            false,
-            undefined,
-            session.personId,
-          );
-        else await printSalePaymentSlip(deps.db, cfg, id);
-        return c.body(null, 200);
-      }),
-    );
-  }
+  app.post("/api/sales/:id/receipt", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      const cfg = requestCfg(deps.cfg, session);
+      await assertDeviceCapability(deps, c, "print-receipt", "receipt", session.device);
+      await assertRequestDevice(deps, c, session);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      await gateZones(deps, session, [{ orderId: id }]);
+      await printSaleReceipt(
+        { db: deps.db, backend: deps.backend },
+        cfg,
+        id,
+        false,
+        undefined,
+        session.personId,
+      );
+      return c.body(null, 200);
+    }),
+  );
+
+  app.post("/api/sales/:id/payment-slip/:paymentId", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      const cfg = requestCfg(deps.cfg, session);
+      await assertDeviceCapability(deps, c, "print-receipt", "payment-slip", session.device);
+      await assertRequestDevice(deps, c, session);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      await gateZones(deps, session, [{ orderId: id }]);
+      await printSalePaymentSlip(deps.db, cfg, id, c.req.param("paymentId"));
+      return c.body(null, 200);
+    }),
+  );
 
   app.post("/api/sales/:id/reprint", (c) =>
     run(c, log, async () => {

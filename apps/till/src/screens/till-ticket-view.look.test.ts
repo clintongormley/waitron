@@ -112,3 +112,44 @@ for (const language of ["en-GB", "es-ES"])
           await page.viewport(incoming.width, incoming.height);
         }
       });
+
+for (const language of ["en-GB", "es-ES"])
+  for (const slips of [1, 2])
+    it(`every action fits a phone width with ${slips} card slips in ${language}`, async () => {
+      const incoming = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(390, 1000);
+        setLocale(language);
+        const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+          result: {
+            receiptTrim: {},
+            venueAddress: [],
+            receiptSettings: { printAddress: false },
+            orderLabel: "Table 6",
+            orderNumber: 41,
+            invoiceNumber: "A/1",
+            issuedAt: "2026-08-05T12:34:56.000Z",
+            total: "30.00",
+            vatBreakdown: [],
+            lines: [],
+            tender: { method: "card", charged: "10.00", tip: "0.00", reference: null },
+            qr: "",
+            paymentSlips: [
+              { id: "pay-1", charged: "10.00", last4: "1111" },
+              { id: "pay-2", charged: "20.00", last4: "2222" },
+            ].slice(0, slips),
+          },
+          originalReceiptAvailable: false,
+        });
+        await el.updateComplete;
+        await document.fonts.ready;
+        const buttons = el.shadowRoot!.querySelectorAll<HTMLElement>("wt-button");
+        expect(buttons.length).toBeGreaterThan(slips);
+        for (const button of buttons) {
+          expect(button.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+          expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+        }
+      } finally {
+        await page.viewport(incoming.width, incoming.height);
+      }
+    });

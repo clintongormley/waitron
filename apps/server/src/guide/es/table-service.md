@@ -176,6 +176,8 @@ Activa **Imprimir justificante de tarjeta** antes de cobrar si el cliente lo qui
 
 Para imprimir un pago con tarjeta antes de completar la cuenta, vuelve a **Cobrar** y elige **Imprimir una copia** junto al pago recibido en **Pagos de esta cuenta**. La copia muestra lo que quedaba pendiente cuando se cobró esa tarjeta.
 
+En un pedido marcado **Pagado, sin entregar**, ábrelo en **Buscar cuenta** y pulsa **Justificante de pago** si aparece. Imprime una copia marcada como duplicado. Si pagaron varias tarjetas, elige la tarjeta de quien lo pide.
+
 Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el
 panel, edita ese lector y activa **Imprime su propio justificante automáticamente**. Después elige
 **Guardar**. Waitron deja los justificantes de ese lector en manos del propio lector. Este ajuste

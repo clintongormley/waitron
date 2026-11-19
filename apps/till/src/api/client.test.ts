@@ -1895,13 +1895,17 @@ describe("TillApi", () => {
   });
 
   it.each([
-    ["printReceipt", "/api/sales/wo1/receipt"],
-    ["printPaymentSlip", "/api/sales/wo1/payment-slip"],
-  ] as const)("%s POSTs an empty object to %s", async (method, path) => {
+    ["printReceipt", "/api/sales/wo1/receipt", (api: TillApi) => api.printReceipt("wo1")],
+    [
+      "printPaymentSlip",
+      "/api/sales/wo1/payment-slip/pay1",
+      (api: TillApi) => api.printPaymentSlip("wo1", "pay1"),
+    ],
+  ] as const)("%s POSTs an empty object to %s", async (_method, path, call) => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const api = new TillApi("", fetchStub);
 
-    await expect(api[method]("wo1")).resolves.toBeUndefined();
+    await expect(call(api)).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
       path,

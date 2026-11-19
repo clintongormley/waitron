@@ -911,8 +911,15 @@ declare module "@waitron/shared" {
      * dish on `workingOrderId`.
      */
     "bill.merge_invoice_choice_required": { workingOrderId: string; intoWorkingOrderId: string };
-    /** No bill payment with this id; `paymentId` is the id the caller sent. */
+    /**
+     * No payment was found for `paymentId`, the id the caller sent: a bill payment's id, or, on the
+     * Payment slip press, a captured card payment's.
+     */
     "bill.payment_not_found": { paymentId: string };
+    /** This device has no payment slip printer it can use for the copy `paymentId` asks for. */
+    "bill.payment_slip_no_printer": { paymentId: string };
+    /** The payment exists here, but no copy of a card slip is offered for it. */
+    "bill.payment_slip_unavailable": { paymentId: string };
     "bill.payment_not_stuck": { paymentId: string };
     /**
      * What became of a pending card bill payment is not confirmed, so nothing was recorded and the
