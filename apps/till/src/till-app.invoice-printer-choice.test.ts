@@ -309,7 +309,7 @@ it("accepts a saved preference while an existing delivery is busy without a fals
   expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(false);
 });
 
-it.each(["None", "logout"])(
+it.each(["Done", "logout"])(
   "a pending choice may save after %s without changing the new screen",
   async (leave) => {
     const saving = pending<DeviceEquipment>();

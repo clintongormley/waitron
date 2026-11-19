@@ -8577,7 +8577,7 @@ describe("till-app", () => {
     expect(recordSale.mock.calls[1]![2]).toBe(stableId);
   });
 
-  it("None clears the paid basket and returns to an empty counter", async () => {
+  it("Done clears the paid basket and returns to an empty counter", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store = c.store;
@@ -15310,7 +15310,7 @@ describe("till-app", () => {
       expect(ticket(el)!.result).toBe(saleResult);
     });
 
-    it("returns to the counter tab and clears the paid basket on None", async () => {
+    it("returns to the counter tab and clears the paid basket on Done", async () => {
       const el = await toShellCounter();
       const c = counter(el)!;
       c.store.addProduct(coffee, "2");
