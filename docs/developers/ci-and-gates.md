@@ -1363,15 +1363,23 @@ writeFileSync("packages/ui/mutation-costs.json", JSON.stringify(costs, null, 2) 
 The cost-table guards check each table's existence, positive weights and current mutation paths,
 not freshness or the weight formula.
 
-On 19 November the scheduled run 44462750256 cancelled ui slice 26 at its limit. The cause was
-mutants marked static by callbacks a test left behind: a frame or timer callback that runs after
-one test ends and before the next begins is recorded with no test current, so Stryker marks the
-code it reaches static, and a static mutant reruns every test in its slice. How many it catches
-changes from night to night: `src/tabbable.ts` had 0 static mutants in the hand-started run
-44039833658 of 17 November, 37 in the scheduled run 44241780388 and 0 in branch run 44477459025.
-`packages/ui/test/stryker-dry-run-settle.ts` holds each test open until its own next frame and
-task have run, during Stryker's coverage run only. Mutants in code that runs only when a module
-loads stay static.
+**ui, 19 November 2026.** Scheduled run [44462750256](https://github.com/clintongormley/waitron/actions/runs/44462750256)
+cancelled `mutation-ui` shard 26 at its 50-minute limit with 974 of its 985 mutants tested, and
+uploaded no report for it. Its log carries Stryker's warning that 86 static mutants (9% of the
+total) would take an estimated 90% of the time; the same shard, which held `src/tabbable.ts` each
+night, warned of 38 (71%) on 17 November and 84 (92%) on 18 November. Stryker marks a mutant static
+when its code runs while no test is current, and does not narrow a static mutant's run to the tests
+that reached it; a frame or timer callback a browser test leaves behind can run in that gap.
+`src/tabbable.ts` had 0 of its 61 mutants static in hand-started run
+[44039833658](https://github.com/clintongormley/waitron/actions/runs/44039833658) of 17 November
+and 37 in scheduled run [44241780388](https://github.com/clintongormley/waitron/actions/runs/44241780388)
+of 18 November. `packages/ui/test/stryker-dry-run-settle.ts` holds each test open until its own
+next frame and task have run, during Stryker's coverage run only: in a local probe of 40 tests that
+each leave such callbacks, 22 of `src/tabbable.ts`'s mutants were static without it and none with
+it. Mutants in code that runs only when a module loads stay static. The cost: a callback that runs
+by the test's next frame and task is now credited to the test that left it, so a mutant whose
+effect only a LATER test checks is no longer run against that later test (a two-test probe turned
+two killed mutants into survivors).
 
 **Why (A1309).** The nightly run 41392057587 (2026-11-02) failed: `mutation-db (10)` was cancelled
 by its 25-minute job limit at 390 of 391 mutants. Two things lay behind it.
