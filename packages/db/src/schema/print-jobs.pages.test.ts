@@ -59,11 +59,14 @@ it.each([
   ["invoice", null, "original", "a4"],
   ["receipt", null, "original", "a4"],
   ["receipt", "es", null, "a4"],
-] as const)("refuses inconsistent page details (%s, %s, %s, %s)", async (...details) => {
-  expect(engineErrorMessage(await captureError(() => insert(...details)))).toBe(
-    "CHECK constraint failed: print_jobs_page_ck",
-  );
-});
+] as const)(
+  "refuses inconsistent page details (%s, %s, %s, %s)",
+  async (document, language, designation, kind) => {
+    expect(
+      engineErrorMessage(await captureError(() => insert(document, language, designation, kind))),
+    ).toBe("CHECK constraint failed: print_jobs_page_ck");
+  },
+);
 
 it.each([
   ["invented", null, null, "print_jobs_page_document_ck"],

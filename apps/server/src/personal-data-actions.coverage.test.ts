@@ -48,7 +48,6 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
     "daily_closes.closed_by",
     "device_invoice_save_operations.person_id",
     "document_delivery_requests.person_id",
-    "document_page_jobs.person_id",
     "document_page_reprints.person_id",
     "incidents.acknowledged_by",
     "invoice_corrections.authorized_by",
@@ -87,7 +86,6 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
 
 const NOT_A_PERSON: Record<string, string> = {
   "print_jobs.claimed_by": "the claiming print agent's id",
-  "document_page_jobs.claimed_by": "the page-print transport claim holder, not its requester",
 };
 
 const COLUMNS: Record<string, { readonly in: string[]; readonly out: string[] }> = {

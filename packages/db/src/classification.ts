@@ -30,7 +30,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "local",
     "node_id and recovery_epoch scope every protocol access; admission validates referenced ids",
   ),
-  classify("document_page_jobs", "state", "recorded F2 Receipt page transport and claim history"),
 
   // ledger — copied to a standby AND drained back from a returned box.
   appendOnly("sales", "ledger", LEDGER),

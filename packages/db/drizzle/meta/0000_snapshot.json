@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6e8d61e2-67e2-461f-ad65-4b9fe526fea2",
+  "id": "b11e9e51-05f4-4aef-bd5d-b8c510266829",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -17890,250 +17890,6 @@
         }
       }
     },
-    "document_page_jobs": {
-      "name": "document_page_jobs",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sale_id": {
-          "name": "sale_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "printer_id": {
-          "name": "printer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "language": {
-          "name": "language",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "designation": {
-          "name": "designation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'queued'"
-        },
-        "generation": {
-          "name": "generation",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "claim_token_hash": {
-          "name": "claim_token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "claimed_by": {
-          "name": "claimed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "claimed_agent_id": {
-          "name": "claimed_agent_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "expired_at": {
-          "name": "expired_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "failure_code": {
-          "name": "failure_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "reported_outcome": {
-          "name": "reported_outcome",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "reported_at": {
-          "name": "reported_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "reported_failure_code": {
-          "name": "reported_failure_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "printer_hold": {
-          "name": "printer_hold",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "receipt_handover": {
-          "name": "receipt_handover",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "document_page_jobs_claim_idx": {
-          "name": "document_page_jobs_claim_idx",
-          "columns": [
-            "printer_id",
-            "status"
-          ],
-          "isUnique": false
-        },
-        "document_page_jobs_sale_idx": {
-          "name": "document_page_jobs_sale_idx",
-          "columns": [
-            "sale_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "document_page_jobs_sale_id_sales_id_fk": {
-          "name": "document_page_jobs_sale_id_sales_id_fk",
-          "tableFrom": "document_page_jobs",
-          "tableTo": "sales",
-          "columnsFrom": [
-            "sale_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "document_page_jobs_printer_id_printers_id_fk": {
-          "name": "document_page_jobs_printer_id_printers_id_fk",
-          "tableFrom": "document_page_jobs",
-          "tableTo": "printers",
-          "columnsFrom": [
-            "printer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "document_page_jobs_claimed_agent_id_print_agents_id_fk": {
-          "name": "document_page_jobs_claimed_agent_id_print_agents_id_fk",
-          "tableFrom": "document_page_jobs",
-          "tableTo": "print_agents",
-          "columnsFrom": [
-            "claimed_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "document_page_jobs_status_ck": {
-          "name": "document_page_jobs_status_ck",
-          "value": "\"document_page_jobs\".\"status\" in ('queued', 'sending', 'sent', 'failed', 'unknown')"
-        },
-        "document_page_jobs_designation_ck": {
-          "name": "document_page_jobs_designation_ck",
-          "value": "\"document_page_jobs\".\"designation\" in ('original', 'duplicate')"
-        },
-        "document_page_jobs_outcome_ck": {
-          "name": "document_page_jobs_outcome_ck",
-          "value": "\"document_page_jobs\".\"reported_outcome\" in ('sent', 'failed', 'unknown')"
-        },
-        "document_page_jobs_generation_ck": {
-          "name": "document_page_jobs_generation_ck",
-          "value": "\"document_page_jobs\".\"generation\" between 1 and 9007199254740991 and \"document_page_jobs\".\"generation\" = cast(\"document_page_jobs\".\"generation\" as integer)"
-        },
-        "document_page_jobs_attempts_ck": {
-          "name": "document_page_jobs_attempts_ck",
-          "value": "\"document_page_jobs\".\"attempts\" between 0 and 9007199254740991 and \"document_page_jobs\".\"attempts\" = cast(\"document_page_jobs\".\"attempts\" as integer)"
-        }
-      }
-    },
     "document_page_reprints": {
       "name": "document_page_reprints",
       "columns": {
@@ -18151,8 +17907,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "page_job_id": {
-          "name": "page_job_id",
+        "print_job_id": {
+          "name": "print_job_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -18177,7 +17933,7 @@
         "document_page_reprints_job_uq": {
           "name": "document_page_reprints_job_uq",
           "columns": [
-            "page_job_id"
+            "print_job_id"
           ],
           "isUnique": true
         },
@@ -18203,12 +17959,12 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "document_page_reprints_page_job_id_document_page_jobs_id_fk": {
-          "name": "document_page_reprints_page_job_id_document_page_jobs_id_fk",
+        "document_page_reprints_print_job_id_print_jobs_id_fk": {
+          "name": "document_page_reprints_print_job_id_print_jobs_id_fk",
           "tableFrom": "document_page_reprints",
-          "tableTo": "document_page_jobs",
+          "tableTo": "print_jobs",
           "columnsFrom": [
-            "page_job_id"
+            "print_job_id"
           ],
           "columnsTo": [
             "id"

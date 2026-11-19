@@ -166,10 +166,10 @@ describe("document routing schema", () => {
     const audit = randomUUID();
     const person = randomUUID();
     await suite.db.execute(
-      sql`insert into document_page_jobs (id, sale_id, printer_id, language, designation, person_id, created_at) values (${job}, ${sale!.id}, ${printerId}, 'es', 'duplicate', ${person}, ${now})`,
+      sql`insert into print_jobs (id, sale_id, printer_id, kind, page_document, page_language, page_designation, created_at) values (${job}, ${sale!.id}, ${printerId}, 'a4', 'receipt', 'es', 'duplicate', ${now})`,
     );
     await suite.db.execute(
-      sql`insert into document_page_reprints (id, sale_id, page_job_id, person_id, requested_at) values (${audit}, ${sale!.id}, ${job}, ${person}, ${now})`,
+      sql`insert into document_page_reprints (id, sale_id, print_job_id, person_id, requested_at) values (${audit}, ${sale!.id}, ${job}, ${person}, ${now})`,
     );
     for (const statement of [
       sql`update document_page_reprints set person_id = ${randomUUID()} where id = ${audit}`,
@@ -182,17 +182,17 @@ describe("document routing schema", () => {
     }
     const duplicate = await captureError(() =>
       suite.db.execute(
-        sql`insert into document_page_reprints (id, sale_id, page_job_id, person_id, requested_at) values (${randomUUID()}, ${sale!.id}, ${job}, ${person}, ${now})`,
+        sql`insert into document_page_reprints (id, sale_id, print_job_id, person_id, requested_at) values (${randomUUID()}, ${sale!.id}, ${job}, ${person}, ${now})`,
       ),
     );
     expect(UNIQUE_VIOLATION).toContain((duplicate as { errcode: number }).errcode);
     const deletion = await captureError(() =>
-      suite.db.execute(sql`delete from document_page_jobs where id = ${job}`),
+      suite.db.execute(sql`delete from print_jobs where id = ${job}`),
     );
     expect(engineErrorMessage(deletion)).toContain("FOREIGN KEY constraint failed");
     expect(
-      suite.db.all(sql`select id, sale_id, page_job_id, person_id from document_page_reprints`),
-    ).toEqual([{ id: audit, sale_id: sale!.id, page_job_id: job, person_id: person }]);
+      suite.db.all(sql`select id, sale_id, print_job_id, person_id from document_page_reprints`),
+    ).toEqual([{ id: audit, sale_id: sale!.id, print_job_id: job, person_id: person }]);
   });
 });
 

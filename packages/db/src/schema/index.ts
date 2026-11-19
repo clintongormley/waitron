@@ -65,7 +65,7 @@ export * from "./document-delivery-requests.js";
 
 export * from "./device-invoice-save-operations.js";
 
-export * from "./document-page-jobs.js";
+export * from "./document-page-reprints.js";
 
 export { settings } from "./settings.js";
 
