@@ -19,6 +19,14 @@ const cleanReconcile: TickResult = {
   nextDueAt: null,
 };
 
+function gate<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 function setup() {
   const health = createHealthState(START);
   return {
@@ -36,7 +44,7 @@ function setup() {
 it("runs a woken fiscal pass while an earlier payment check is still in progress", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(START);
-  const payment = Promise.withResolvers<TickResult>();
+  const payment = gate<TickResult>();
   let publish!: (change: ResourceChange) => void;
   const deps = setup();
   const runner = createJobRunner({
@@ -111,8 +119,8 @@ it("records a filing failure for health and rethrows for the runner's retry", as
 
 it("gives the drain the job's stepdown signal", async () => {
   const deps = setup();
-  const active = Promise.withResolvers<AbortSignal>();
-  const resume = Promise.withResolvers<void>();
+  const active = gate<AbortSignal>();
+  const resume = gate<void>();
   const runner = createJobRunner({ now: () => START, log: deps.log });
   onTestFinished(async () => {
     resume.resolve();
