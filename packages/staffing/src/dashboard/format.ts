@@ -31,14 +31,15 @@ export function weekTitleParts(monday: string, language?: string) {
 export function formatStaffingBlock(
   { headcount, startsAt, endsAt }: Pick<StaffingBlock, "headcount" | "startsAt" | "endsAt">,
   roleName: string | undefined,
-  { keepTogether = false }: { keepTogether?: boolean } = {},
+  { keepTimeTogether = false }: { keepTimeTogether?: boolean } = {},
 ) {
   const time = `${startsAt}–${endsAt}`;
-  const text = [roleName, `×${headcount}`, keepTogether ? `${startsAt}–\u2060${endsAt}` : time]
-    .filter(Boolean)
-    .join(" ");
+  const count = `×${headcount}`;
+  const countAndTime = keepTimeTogether
+    ? `${count}\u00a0${startsAt}–\u2060${endsAt}`
+    : `${count} ${time}`;
   return {
-    text: keepTogether ? text.replaceAll(" ", "\u00a0") : text,
+    text: [roleName, countAndTime].filter(Boolean).join(" "),
     spokenText: [roleName, peopleNeeded(headcount), time].filter(Boolean).join(", "),
   };
 }

@@ -96,6 +96,28 @@ async function pressBoxButton(el: StaffingMonthView, label: string) {
   await closed;
   await settled(el);
 }
+function visibleRowText(box: HTMLElementTagNameMap["calendar-day-box"]) {
+  return [...box.shadowRoot!.querySelectorAll('dd > [aria-hidden="true"]')].map((detail) =>
+    detail
+      .textContent!.replace(/\u2060/g, "")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+}
+
+function textRects(element: Element, text: string) {
+  const nodes = document.createNodeIterator(element, NodeFilter.SHOW_TEXT);
+  for (let node = nodes.nextNode(); node; node = nodes.nextNode()) {
+    const start = node.textContent!.indexOf(text);
+    if (start < 0) continue;
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + text.length);
+    return [...range.getClientRects()];
+  }
+  throw new Error(`Visible text missing: ${text}`);
+}
+
 async function useViewport(width: number, height: number) {
   const before = [innerWidth, innerHeight] as const;
   await page.viewport(width, height);
@@ -482,21 +504,31 @@ describe("the Staffing view's month", () => {
     for (const button of box.querySelectorAll<HTMLElement>("wt-button"))
       expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(placed.right);
 
-    const visible = box.shadowRoot!.querySelectorAll("dd")[2]!.querySelector("[aria-hidden]");
-    const text = [...(visible?.childNodes ?? [])].find((node) => node instanceof Text);
-    expect(text).toBeInstanceOf(Text);
-    const blocks = text!.textContent!.split(" · ").slice(1);
-    expect(blocks).toHaveLength(2);
-    const range = document.createRange();
-    const tops = blocks.map((block) => {
-      const start = text!.textContent!.indexOf(block);
-      range.setStart(text!, start);
-      range.setEnd(text!, start + block.length);
-      const rects = range.getClientRects();
+    const visible = box.shadowRoot!.querySelectorAll("dd")[2]!.querySelector("[aria-hidden]")!;
+    const tops = [
+      "Head chef ×1\u00a016:00–\u206001:30",
+      "Evening shift sous chef ×3\u00a017:00–\u206023:00",
+    ].map((block) => {
+      const rects = textRects(visible, block);
       expect(rects, block).toHaveLength(1);
       return rects[0]!.top;
     });
     expect(tops[1]).toBeGreaterThan(tops[0]!);
+  });
+
+  it("keeps the count and full time on one line when a long role name wraps", async () => {
+    await useViewport(390, 800);
+    const { api } = fakeApi(async (month) => {
+      const read = staffingMonth(month);
+      const kitchen = read.days.find(({ date }) => date === "2026-12-03")!.areas[2]!;
+      kitchen.blocks[1]!.staffRoleName = "Encargado de sala de fin de semana";
+      return read;
+    });
+    const { el } = await mount({ api, width: "390px" });
+    const box = await openBox(el, "2026-12-03");
+    const kitchen = box.shadowRoot!.querySelectorAll("dd")[2]!;
+    const visible = kitchen.querySelector('[aria-hidden="true"]')!;
+    expect(textRects(visible, "×3\u00a017:00–\u206023:00")).toHaveLength(1);
   });
 
   it("draws no bar for an area that needs nobody, beside its 0", async () => {
@@ -958,9 +990,7 @@ describe("the day box", () => {
     expect(box.line).toBe("Winter standard staffing");
     expect(box.name).toBe("");
     expect(box.rows.map(({ name }) => name)).toEqual(["Bar"]);
-    expect(box.rows[0]!.text.replace(/\u2060/g, "").replace(/\s/g, " ")).toBe(
-      "2 · Bartender ×2 16:00–01:30",
-    );
+    expect(visibleRowText(box)).toEqual(["2 · Bartender ×2 16:00–01:30"]);
     expect(box.rows[0]!.spokenText).toBe("2, Bartender, 2 people, 16:00–01:30");
     await openBox(el, "2026-12-24");
     expect(box.line).toBe("Special day — replaces Winter's standard staffing");
@@ -969,12 +999,11 @@ describe("the day box", () => {
     expect(box.message).toBe("Closed");
     const { el: every } = await mount();
     const all = await openBox(every, "2026-12-03");
-    expect(
-      all.rows.map(({ name, text }) => [name, text.replace(/\u2060/g, "").replace(/\s/g, " ")]),
-    ).toEqual([
-      ["Restaurant", "6 · Waiter ×6 12:00–23:00"],
-      ["Bar", "2 · Bartender ×2 16:00–01:30"],
-      ["Kitchen", "4 · Head chef ×1 16:00–01:30 · Sous chef ×3 17:00–23:00"],
+    expect(all.rows.map(({ name }) => name)).toEqual(["Restaurant", "Bar", "Kitchen"]);
+    expect(visibleRowText(all)).toEqual([
+      "6 · Waiter ×6 12:00–23:00",
+      "2 · Bartender ×2 16:00–01:30",
+      "4 · Head chef ×1 16:00–01:30 · Sous chef ×3 17:00–23:00",
     ]);
   });
 
@@ -986,7 +1015,7 @@ describe("the day box", () => {
     });
     const { el } = await mount({ api });
     const box = await openBox(el, "2026-12-01");
-    expect(box.rows.map(({ name, text }) => [name, text.split(" · ")[0]])).toEqual([
+    expect(box.rows.map(({ name, text }) => [name, text])).toEqual([
       ["Restaurant", "6"],
       ["Bar", "2, 1 unfilled"],
       ["Kitchen", "4"],

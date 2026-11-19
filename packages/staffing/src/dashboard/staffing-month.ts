@@ -529,11 +529,12 @@ export class StaffingMonthView extends LitElement {
               : `${needed}, ${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}`;
           if (blocks.length === 0) return { name, text: count };
           const formatted = blocks.map((block) =>
-            formatStaffingBlock(block, block.staffRoleName, { keepTogether: true }),
+            formatStaffingBlock(block, block.staffRoleName, { keepTimeTogether: true }),
           );
           return {
             name,
-            text: [count, ...formatted.map((block) => block.text)].join(" · "),
+            text: count,
+            additionalRanges: formatted.map((block) => block.text),
             spokenText: [count, ...formatted.map((block) => block.spokenText)].join(", "),
           };
         });

@@ -5543,7 +5543,8 @@ chips and no legend. Every day is a button that opens the shared day box (Day bo
 date, the special day's name, a line saying which season's standard staffing the day follows or
 that a special day replaces it ("Special day" when no season holds it), and each shown area's total,
 with ", N unfilled" when the week has a roster version. Each area's row also lists its roles,
-headcounts and times. The row wraps between blocks that fit the available width. Screen readers
+headcounts and times. The row wraps between blocks. If a block is too wide, its role name can
+wrap while the count and time stay together. Screen readers
 get the same wording as the staffing painter, for example “Head chef, 1 person, 16:00–01:30”. For a person who may write, the box offers "Edit <special day> staffing" on a
 special day and "Edit <season>'s standard week" on any other day a season holds; for a person who
 may only look, it offers "Show <special day> staffing" and "Show <season>'s standard week", both on

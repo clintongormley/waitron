@@ -11,6 +11,7 @@ export interface DayBoxRow {
   name: string;
   station?: boolean;
   text: string;
+  additionalRanges?: readonly string[];
   spokenText?: string;
   /** Starts a section when the box uses sectioned rows. */
   strong?: boolean;
@@ -272,6 +273,22 @@ export class CalendarDayBox extends LitElement {
     return sections;
   }
 
+  #rowText({ text, additionalRanges }: DayBoxRow) {
+    const ranges = additionalRanges
+      ? [text, ...additionalRanges]
+      : this.sectioned
+        ? text.split(" · ")
+        : undefined;
+    return (
+      ranges?.map(
+        (range, index) =>
+          html`${index ? " " : nothing}<span class="range"
+              >${range}${index < ranges.length - 1 ? "\u00a0·" : nothing}</span
+            >`,
+      ) ?? text
+    );
+  }
+
   #rows(rows: readonly DayBoxRow[]) {
     return html`<dl class=${this.sectioned ? "sectioned" : ""}>
       ${rows.map(
@@ -286,19 +303,10 @@ export class CalendarDayBox extends LitElement {
             class=${row.inheritedFrom !== undefined ? "inherited" : ""}
           >
             ${
-              this.sectioned
-                ? row.text
-                    .split(" · ")
-                    .map(
-                      (range, index, all) =>
-                        html`${index ? " " : nothing}<span class="range"
-                            >${range}${index < all.length - 1 ? "\u00a0·" : nothing}</span
-                          >`,
-                    )
-                : row.spokenText === undefined
-                  ? row.text
-                  : html`<span aria-hidden="true">${row.text}</span
-                      ><span class="visually-hidden">${row.spokenText}</span>`
+              row.spokenText === undefined
+                ? this.#rowText(row)
+                : html`<span aria-hidden="true">${this.#rowText(row)}</span
+                    ><span class="visually-hidden">${row.spokenText}</span>`
             }${row.inheritedFrom !== undefined ? html`<span class="visually-hidden">, ${format("day.as_department", { name: row.inheritedFrom })}</span>` : nothing}
           </dd>
         `,
