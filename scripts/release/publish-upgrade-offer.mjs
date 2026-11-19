@@ -14,9 +14,8 @@ const OFFER_TAG = "upgrade-offer";
 const OFFER_ASSET = "waitron-offer.json";
 
 function publishedRelease(gh, tag) {
-  const release = JSON.parse(
-    gh("release", "view", tag, "--json", "tagName,isDraft,isPrerelease,assets"),
-  );
+  const json = gh("release", "view", tag, "--json", "tagName,isDraft,isPrerelease,assets");
+  const release = JSON.parse(json);
   if (release.tagName !== tag || release.isDraft !== false || !Array.isArray(release.assets))
     throw new Error(`Expected a published release for ${tag}`);
   return release;
@@ -48,8 +47,7 @@ export function publishUpgradeOffer({ ref, sha, serial, attempt, input, privateK
       throw new Error(`An automatic upgrade cannot target prerelease ${tag}`);
   }
 
-  const release = publishedRelease(gh, OFFER_TAG);
-  const exists = release.assets.some(({ name }) => name === OFFER_ASSET);
+  const exists = publishedRelease(gh, OFFER_TAG).assets.some(({ name }) => name === OFFER_ASSET);
   if (!exists && attempt !== 1) throw new Error("Dispatch a new run to publish a missing offer");
   if (exists) {
     const previous = download(gh, OFFER_TAG, OFFER_ASSET);
@@ -72,28 +70,32 @@ export function publishUpgradeOffer({ ref, sha, serial, attempt, input, privateK
   }
 }
 
-if (import.meta.main) {
-  const { WAITRON_RELEASE_SIGNING_KEY: privateKey, ...ghEnv } = process.env;
+export function main(env, cwd, logger = console) {
+  const { WAITRON_RELEASE_SIGNING_KEY: privateKey, ...ghEnv } = env;
   try {
     if (!privateKey) throw new Error("Set the release environment signing secret first");
     const keys = ["current.pem", "spare.pem"].map((name) =>
-      readFileSync(join("deploy/box/release-keys", name), "utf8"),
+      readFileSync(join(cwd, "deploy/box/release-keys", name), "utf8"),
     );
     const serial = publishUpgradeOffer(
       {
-        ref: process.env.GITHUB_REF,
-        sha: process.env.GITHUB_SHA,
-        serial: Number(process.env.GITHUB_RUN_NUMBER),
-        attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
-        input: JSON.parse(process.env.OFFER_INPUT),
+        ref: env.GITHUB_REF,
+        sha: env.GITHUB_SHA,
+        serial: Number(env.GITHUB_RUN_NUMBER),
+        attempt: Number(env.GITHUB_RUN_ATTEMPT),
+        input: JSON.parse(env.OFFER_INPUT),
         privateKey,
         keys,
       },
-      (...args) => execFileSync("gh", args, { env: ghEnv, stdio: ["ignore", "pipe", "inherit"] }),
+      (...args) =>
+        execFileSync("gh", args, { cwd, env: ghEnv, stdio: ["ignore", "pipe", "inherit"] }),
     );
-    console.log(`Verified upgrade offer serial ${serial} on GitHub.`);
+    logger.log(`Verified upgrade offer serial ${serial} on GitHub.`);
+    return 0;
   } catch (error) {
-    console.error(`Could not publish the upgrade offer. ${error.message}`);
-    process.exitCode = 1;
+    logger.error(`Could not publish the upgrade offer. ${error.message}`);
+    return 1;
   }
 }
+
+if (import.meta.main) process.exitCode = main(process.env, process.cwd());

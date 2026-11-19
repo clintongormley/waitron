@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
 import {
   existsSync,
@@ -12,9 +11,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { selectUpgradeOffer, signReleaseList } from "../box/release-list.mjs";
-import { publishUpgradeOffer } from "./publish-upgrade-offer.mjs";
+import { main, publishUpgradeOffer } from "./publish-upgrade-offer.mjs";
 
 const { privateKey, publicKey } = generateKeyPairSync("ed25519", {
   privateKeyEncoding: { format: "pem", type: "pkcs8" },
@@ -137,16 +136,8 @@ else process.exit(4);
         GH_TOKEN: "stand-in-token",
         WAITRON_RELEASE_SIGNING_KEY: privateKey,
       };
-      const command = [join(import.meta.dirname, "publish-upgrade-offer.mjs")];
-      const run = (env) =>
-        spawnSync(process.execPath, command, {
-          cwd: scratch,
-          encoding: "utf8",
-          env,
-          timeout: 10_000,
-        });
-      const first = run(env);
-      expect(first.status, first.stderr).toBe(0);
+      const logger = { log: vi.fn(), error: vi.fn() };
+      expect(main(env, scratch, logger)).toBe(0);
       const path = join(scratch, offerName);
       const box = { boxId: "pilot-box", installedVersion: "1.2.0" };
       expect(selectUpgradeOffer(readFileSync(path), keys, box)).toMatchObject({
@@ -155,19 +146,27 @@ else process.exit(4);
       });
 
       unlinkSync(path);
-      const rerun = run({
+      const rerun = {
         ...env,
         GITHUB_RUN_NUMBER: "3",
         GITHUB_RUN_ATTEMPT: "2",
         OFFER_INPUT: JSON.stringify({ ...pause, default: "1.4.0" }),
-      });
-      expect(existsSync(path), rerun.stdout).toBe(false);
-      expect(rerun.status).toBe(1);
-      expect(rerun.stderr).toMatch(/dispatch a new run/i);
+      };
+      expect(main(rerun, scratch, logger)).toBe(1);
+      expect(existsSync(path)).toBe(false);
+      expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/dispatch a new run/i));
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
-  }, 25_000);
+  });
+
+  it("reports a missing signing secret before loading keys", () => {
+    const logger = { log: vi.fn(), error: vi.fn() };
+    expect(main({}, "/missing-keys", logger)).toBe(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringMatching(/release environment signing secret/i),
+    );
+  });
 
   it("uploads the offer once and boxes can verify the group version and older default", () => {
     const repository = github();
@@ -184,6 +183,7 @@ else process.exit(4);
 
   it.each([
     [{ ...offer, format: 2 }, /upgrade offer/i],
+    [{ ...offer, serial: 1 }, /format, entries and default/i],
     [{ ...offer, entries: [{ condition: { all: true }, target: "1.4.0" }] }, /condition/i],
     [
       {
