@@ -140,7 +140,7 @@ it("the certificate CLI reports an invalid chain without a Node stack trace", as
   }
 });
 
-it("the staff entrance forwards only dashboard requests and marks their source remote", async () => {
+it("the staff entrance forwards dashboard requests and marks their source remote", async () => {
   const { requestFromBox } = await import("./request-from-box.js");
   const app = new Hono();
   app.all("*", async (c) =>
@@ -190,7 +190,6 @@ it("the staff entrance forwards only dashboard requests and marks their source r
     "/print-api/x",
     "/api/session",
     "/api/orders",
-    "/public/availability",
     "/node-api/x",
     "/manage-other",
     "/management-api-other/x",
@@ -216,6 +215,43 @@ it("the staff entrance forwards only dashboard requests and marks their source r
     (await staff.request("https://staff.example.test/legal/declaration", { method: "POST" }))
       .status,
   ).toBe(404);
+});
+it("the staff entrance answers public availability and no other /public/ path", async () => {
+  const app = new Hono();
+  let serving = true;
+  mountCloudPublic(app, () => serving);
+  app.get("/public/menu", (c) => c.json({ menu: true }));
+  app.get("/public/menu/*", (c) => c.json({ menu: true }));
+  app.all("*", (c) => c.json({ reached: c.req.path }));
+  const staff = createStaffApp(app, async () => "https://staff.example.test");
+  const ok = await staff.request("https://staff.example.test/public/availability");
+  expect(ok.status).toBe(200);
+  expect(await ok.json()).toEqual({ available: true });
+  const head = await staff.request("https://staff.example.test/public/availability", {
+    method: "HEAD",
+  });
+  expect(head.status).toBe(200);
+  serving = false;
+  const offline = await staff.request("https://staff.example.test/public/availability");
+  expect(offline.status).toBe(503);
+  expect(await offline.json()).toEqual({ available: false });
+  expect(
+    (await staff.request("https://staff.example.test/public/availability", { method: "POST" }))
+      .status,
+  ).toBe(404);
+  for (const path of [
+    "/public/menu",
+    "/public/menu/x",
+    "/public/availability/x",
+    "/public/availabilityx",
+  ]) {
+    for (const method of ["GET", "POST"])
+      expect(
+        (await staff.request(`https://staff.example.test${path}`, { method })).status,
+        `${method} ${path}`,
+      ).toBe(404);
+  }
+  expect((await staff.request("https://other.example.test/public/availability")).status).toBe(404);
 });
 it("the staff entrance lets the tax office's invoice list, PDF, month and its download through", async () => {
   const app = new Hono();

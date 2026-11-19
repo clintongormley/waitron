@@ -89,6 +89,11 @@ it("starts on the first installed Cloud chain, follows a rename across restart, 
     expect(worker?.onStaffCertificate).toBeTypeOf("function");
     await worker!.onStaffCertificate!(new AbortController().signal);
     expect((await ask()).status).toBe(200);
+    const availability = await served.staff!(
+      new Request(`https://${hostname}/public/availability`),
+    );
+    expect(availability.status).toBe(200);
+    expect(await availability.json()).toEqual({ available: true });
     hostname = "staff.next.example.test";
     await f.client.refresh();
     expect((await ask("staff.first.example.test")).status).toBe(200);
@@ -102,6 +107,9 @@ it("starts on the first installed Cloud chain, follows a rename across restart, 
     expect((await ask("staff.first.example.test")).status).toBe(404);
     await f.client.setRemoteAccess(false, async () => {});
     expect((await ask()).status).toBe(404);
+    expect(
+      (await served.staff!(new Request(`https://${hostname}/public/availability`))).status,
+    ).toBe(404);
     await f.client.setRemoteAccess(true, async () => {});
     expect((await ask()).status).toBe(200);
     await f.client.revoke(async () => {});

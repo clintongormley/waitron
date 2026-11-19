@@ -314,7 +314,7 @@ Production boxes and mirrors do not open this entrance.
 
 The separate HTTPS listener serves dashboard pages at `/` and their root paths directly from the built app.
 It forwards the management API, the dashboard's box and backup API groups, theme and content-language
-reads, and help pages to the main app. Till and setup paths return 404, as does a request for another origin. Requests through it are remote even when the gateway connects over
+reads, help and legal pages, and `GET /public/availability` (Cloud's public gate asks it there) to the main app. Till and setup paths return 404, as does a request for another origin. Requests through it are remote even when the gateway connects over
 loopback. Use your usual password; enrol passkeys separately for the staff hostname. The staff roster
 requires a signed-in session through this entrance. Dashboard images are served read-only;
 membership, mirror-bundle and promotion operations stay off it. Sign-in bodies are limited to
