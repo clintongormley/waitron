@@ -11,7 +11,11 @@ export interface PairingClaims {
   organisationId: string;
   legalBusinessId: string;
   issuedAt: number;
+  venueName: string;
 }
+export const PAIRING_VENUE_NAME_MAX = 120;
+export const pairingVenueName = (raw: string): string =>
+  [...raw.trim()].slice(0, PAIRING_VENUE_NAME_MAX).join("").trim();
 export class PairingError extends Error {
   readonly code:
     | "invalid_proof"
@@ -30,7 +34,7 @@ export const isPairingUuid = (value: unknown): value is string =>
 export function pairingPayload(c: PairingClaims): Buffer {
   return Buffer.from(
     JSON.stringify([
-      "waitron-cloud-pair-v2",
+      "waitron-cloud-pair-v3",
       c.origin,
       c.action,
       c.requestId,
@@ -41,6 +45,7 @@ export function pairingPayload(c: PairingClaims): Buffer {
       c.organisationId,
       c.legalBusinessId,
       c.issuedAt,
+      c.venueName,
     ]),
   );
 }
@@ -68,9 +73,10 @@ export function verifyPairingProof(
     const values: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (
       !Array.isArray(values) ||
-      values.length !== 11 ||
-      values[0] !== "waitron-cloud-pair-v2" ||
-      values.slice(0, 10).some((v) => typeof v !== "string")
+      values.length !== 12 ||
+      values[0] !== "waitron-cloud-pair-v3" ||
+      values.slice(0, 10).some((v) => typeof v !== "string") ||
+      typeof values[11] !== "string"
     )
       throw new Error();
     const [
@@ -85,6 +91,7 @@ export function verifyPairingProof(
       organisationId,
       legalBusinessId,
       issuedAt,
+      venueName,
     ] = values;
     if (
       audience !== origin ||
@@ -94,7 +101,9 @@ export function verifyPairingProof(
       (venueId !== "" && !isPairingUuid(venueId)) ||
       !["test", "production"].includes(environment) ||
       !Number.isSafeInteger(issuedAt) ||
-      Math.abs(now - issuedAt) > 60000
+      Math.abs(now - issuedAt) > 60000 ||
+      venueName !== pairingVenueName(venueName) ||
+      (operation !== "start" && venueName !== "")
     )
       throw new Error();
     if (
@@ -123,6 +132,7 @@ export function verifyPairingProof(
       organisationId,
       legalBusinessId,
       issuedAt,
+      venueName,
     };
     if (!pairingPayload(c).equals(bytes) || !verify(null, bytes, key, decode(signature, 86)))
       throw new Error();

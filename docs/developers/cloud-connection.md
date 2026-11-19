@@ -100,6 +100,14 @@ If a request expires or becomes unavailable, choose **Start again**. Waitron che
 Cloud before replacing the request. If Cloud has already completed it, Waitron recovers
 that result. Network failures retain the current operation for a deliberate retry.
 
+When pairing starts, the box signs the venue's display name into the request, trimmed and cut
+to at most 120 Unicode code points, for Cloud's portal to use as the venue's name; `status` and `complete`
+requests carry it empty. The request format is `waitron-cloud-pair-v3`, and the verifier in
+`@waitron/contract` accepts v3 only. Cloud verifies pairing through its pinned copy of that
+package, re-exported unchanged; on 19 November 2026 it pinned 0.2.33, which refuses v3. A box
+running this code therefore pairs only with a Cloud that has adopted a release carrying v3, and
+while Cloud uses that verifier unchanged it refuses a box that still signs v2.
+
 ## Run the integration proof
 
 The Cloud repository owns the local runner. Build this checkout's dashboard with

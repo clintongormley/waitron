@@ -64,6 +64,7 @@ import {
   readDeploymentEnvironment,
   readMembershipTrustSet,
   readNodeMembership,
+  readVenueSettings,
   stampDeployment,
   withTransaction,
   workingOrders,
@@ -677,6 +678,9 @@ describe("startServer, against a migrated venue directory", () => {
           expect(setup.cloudEmergency).toMatchObject({
             address: "https://emergency.example.test/",
           });
+        const venueName = (await readVenueSettings(sharedDb)).doc.name;
+        expect(venueName).not.toBe("");
+        expect(await factory.mock.calls[0]![0].readVenueName()).toBe(venueName);
       } finally {
         await server?.close();
         factory.mockRestore();

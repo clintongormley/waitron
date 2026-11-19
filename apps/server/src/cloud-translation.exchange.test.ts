@@ -201,6 +201,7 @@ it("an unreachable Cloud is cloud.unavailable and a never-connected box is cloud
       stateDir: empty,
       origin: "https://cloud.example",
       readVenueId: async () => null,
+      readVenueName: async () => "",
       recordVenueId: async () => {},
       environment: "test",
     });

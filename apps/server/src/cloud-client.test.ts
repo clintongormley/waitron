@@ -304,7 +304,7 @@ it("starts again only after Cloud refuses the old request, retaining the install
   }
 });
 
-it("emits the fixed version-two wire vector shared with Cloud", async () => {
+it("emits the fixed version-three wire vector shared with Cloud", async () => {
   const f = await fixture();
   const v = JSON.parse(
     await readFile(new URL("../test/cloud-pairing-vector.json", import.meta.url), "utf8"),
@@ -312,7 +312,12 @@ it("emits the fixed version-two wire vector shared with Cloud", async () => {
   expect(createHash("sha256").update(Buffer.from(v.payload, "base64url")).digest("hex")).toBe(
     v.sha256,
   );
-  const options = { ...f.options, origin: v.claims.origin, readVenueId: async () => null };
+  const options = {
+    ...f.options,
+    origin: v.claims.origin,
+    readVenueId: async () => null,
+    readVenueName: async () => v.claims.venueName,
+  };
   await mkdir(join(f.stateDir, "cloud"), { recursive: true });
   await writeFile(
     join(f.stateDir, "cloud/connection.json"),
@@ -353,6 +358,67 @@ it("emits the fixed version-two wire vector shared with Cloud", async () => {
   }
 });
 
+it("signs the trimmed venue name into start only, as empty on status and complete", async () => {
+  const f = await fixture();
+  try {
+    const client = createCloudConnection({
+      ...f.options,
+      readVenueName: async () => "  Bar Pepe  ",
+    });
+    await client.start();
+    f.approve();
+    const approved = await client.check();
+    await client.complete(
+      {
+        requestId: approved.requestId!,
+        organisationId: f.organisationId,
+        legalBusinessId: f.legalBusinessId,
+      },
+      async () => {},
+    );
+    expect(f.requests.map((v) => [v[2], v[11]])).toEqual([
+      ["start", "Bar Pepe"],
+      ["status", ""],
+      ["status", ""],
+      ["complete", ""],
+    ]);
+  } finally {
+    await f.close();
+  }
+});
+
+it("sends a long venue name capped at 120 characters", async () => {
+  const f = await fixture();
+  try {
+    await createCloudConnection({
+      ...f.options,
+      readVenueName: async () => "a".repeat(130),
+    }).start();
+    expect(f.requests[0]![11]).toBe("a".repeat(120));
+  } finally {
+    await f.close();
+  }
+});
+
+it("stamps the start proof's time after the venue name read finishes", async () => {
+  const f = await fixture();
+  let now = Date.now();
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+  try {
+    await createCloudConnection({
+      ...f.options,
+      readVenueName: async () => {
+        now += 60001;
+        return "Bar Pepe";
+      },
+    }).start();
+    expect(f.requests[0]![10]).toBe(now);
+  } finally {
+    clock.mockRestore();
+    await f.close();
+  }
+});
+
 it("records Cloud's id before the pairing file and keeps the empty request binding on retries", async () => {
   const f = await fixture();
   let stored: string | null = null;
@@ -369,7 +435,7 @@ it("records Cloud's id before the pairing file and keeps the empty request bindi
   try {
     const client = createCloudConnection(options);
     await client.start();
-    expect(f.requests[0]![0]).toBe("waitron-cloud-pair-v2");
+    expect(f.requests[0]![0]).toBe("waitron-cloud-pair-v3");
     expect(f.requests[0]![5]).toBe("");
     f.approve();
     const approved = await client.check();

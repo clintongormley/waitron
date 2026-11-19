@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
 import {
   pairingPayload,
+  pairingVenueName,
+  PAIRING_VENUE_NAME_MAX,
   verifyPairingProof,
   encodeMachine,
   verifyMachine,
@@ -24,12 +26,13 @@ const pair = {
   organisationId: "",
   legalBusinessId: "",
   issuedAt: now,
+  venueName: "Bar Pepe",
 };
 const bytes = pairingPayload(pair);
 assert.equal(
   bytes.toString(),
   JSON.stringify([
-    "waitron-cloud-pair-v2",
+    "waitron-cloud-pair-v3",
     origin,
     "start",
     id(1),
@@ -40,8 +43,10 @@ assert.equal(
     "",
     "",
     now,
+    "Bar Pepe",
   ]),
 );
+assert.equal(pairingVenueName(` ${"😀".repeat(121)} `), "😀".repeat(PAIRING_VENUE_NAME_MAX));
 assert.deepEqual(
   verifyPairingProof(
     bytes.toString("base64url"),

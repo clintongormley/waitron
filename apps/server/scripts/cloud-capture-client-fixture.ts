@@ -49,6 +49,9 @@ const client = createCloudConnection({
       await store.close();
     }
   },
+  readVenueName: async () => {
+    throw new Error("The capture fixture does not pair");
+  },
   recordVenueId: async () => {
     throw new Error("The capture fixture does not pair");
   },

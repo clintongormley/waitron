@@ -1,4 +1,4 @@
-import { readCloudVenueId, saveCloudVenueId } from "@waitron/db";
+import { readCloudVenueId, readVenueSettings, saveCloudVenueId } from "@waitron/db";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 // Every database here is a real venue DIRECTORY migrated by the product's own `applyMigrations`,
@@ -356,6 +356,7 @@ describe("fiscal restore, end to end", () => {
       const options = {
         ...f.options,
         readVenueId: () => readCloudVenueId(store!.venue),
+        readVenueName: async () => (await readVenueSettings(store!.venue)).doc.name,
         recordVenueId: (id: string) =>
           withTransaction(store!.venue, (tx) => saveCloudVenueId(tx, id)),
       };

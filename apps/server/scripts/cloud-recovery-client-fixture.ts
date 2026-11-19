@@ -17,6 +17,7 @@ import {
   openVenueDatabase,
   readVenue,
   readCloudVenueId,
+  readVenueSettings,
   saveCloudVenueId,
   withTransaction,
 } from "@waitron/db";
@@ -168,6 +169,7 @@ else if (request.command === "stage") {
       stateDir,
       origin: request.origin,
       readVenueId: () => readCloudVenueId(store.venue),
+      readVenueName: async () => (await readVenueSettings(store.venue)).doc.name,
       recordVenueId: (id) => withTransaction(store.venue, (tx) => saveCloudVenueId(tx, id)),
       environment: "test",
     });

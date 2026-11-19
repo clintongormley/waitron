@@ -1,5 +1,12 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
-import { pairingPayload, verifyPairingProof, PairingError, type PairingClaims } from "../index.js";
+import {
+  pairingPayload,
+  pairingVenueName,
+  verifyPairingProof,
+  PairingError,
+  PAIRING_VENUE_NAME_MAX,
+  type PairingClaims,
+} from "../index.js";
 const keys = generateKeyPairSync("ed25519");
 const now = 1_800_000_000_000;
 const claims: PairingClaims = {
@@ -13,6 +20,7 @@ const claims: PairingClaims = {
   organisationId: "",
   legalBusinessId: "",
   issuedAt: now,
+  venueName: "Bar Pepe",
 };
 const proof = (c = claims) => {
   const bytes = pairingPayload(c);
@@ -23,10 +31,17 @@ const proof = (c = claims) => {
 };
 const check = (p = proof(), origin = claims.origin, action = "start", at = now) =>
   verifyPairingProof(p.payload, p.signature, origin, action, at);
-it("encodes the literal v2 fields and binds every signed field", () => {
+const signed = (value: unknown) => {
+  const bytes = Buffer.from(JSON.stringify(value));
+  return {
+    payload: bytes.toString("base64url"),
+    signature: sign(null, bytes, keys.privateKey).toString("base64url"),
+  };
+};
+it("encodes the literal v3 fields and binds every signed field", () => {
   expect(pairingPayload(claims).toString()).toBe(
     JSON.stringify([
-      "waitron-cloud-pair-v2",
+      "waitron-cloud-pair-v3",
       claims.origin,
       "start",
       claims.requestId,
@@ -37,6 +52,7 @@ it("encodes the literal v2 fields and binds every signed field", () => {
       "",
       "",
       now,
+      "Bar Pepe",
     ]),
   );
   expect(check()).toEqual(claims);
@@ -45,6 +61,7 @@ it("encodes the literal v2 fields and binds every signed field", () => {
     { code: "87654321" },
     { venueId: randomUUID() },
     { environment: "production" as const },
+    { venueName: "Bar Pepa" },
   ])
     expect(() =>
       check({ ...proof({ ...claims, ...changed }), signature: proof().signature }),
@@ -59,7 +76,7 @@ it.each([-60000, 60000])("accepts the inclusive %i ms clock allowance", (delta) 
   }),
 );
 it("enforces the 4096-character encoded payload limit with a matching origin", () => {
-  const value = { ...claims, origin: `https://${"a".repeat(2845)}.test` };
+  const value = { ...claims, origin: `https://${"a".repeat(2834)}.test` };
   const boundary = proof(value);
   expect(boundary.payload).toHaveLength(4096);
   expect(check(boundary, value.origin)).toEqual(value);
@@ -78,6 +95,9 @@ it.each([
   { organisationId: randomUUID() },
   { publicKey: "a".repeat(129) },
   { environment: "dev" },
+  { venueName: " Bar Pepe" },
+  { venueName: "Bar Pepe\n" },
+  { venueName: "😀".repeat(121) },
 ])("refuses invalid claims %j", (changed) =>
   expect(() => check(proof({ ...claims, ...changed } as PairingClaims))).toThrow(PairingError),
 );
@@ -87,6 +107,8 @@ it("refuses malformed, noncanonical and differently signed envelopes", () => {
     {},
     ["v2"],
     [...JSON.parse(pairingPayload(claims).toString()), "extra"],
+    [...JSON.parse(pairingPayload(claims).toString()).slice(0, 11), 5],
+    [...JSON.parse(pairingPayload(claims).toString()).slice(0, 11), null],
   ]) {
     const bytes = Buffer.from(JSON.stringify(value));
     expect(() =>
@@ -116,7 +138,7 @@ it("refuses malformed, noncanonical and differently signed envelopes", () => {
   ).toThrow(PairingError);
 });
 it("requires empty status choices and complete business identifiers", () => {
-  const status = { ...claims, action: "status" as const, code: "" };
+  const status = { ...claims, action: "status" as const, code: "", venueName: "" };
   expect(check(proof(status), claims.origin, "status")).toEqual(status);
   expect(() => check(proof({ ...status, code: "12345678" }), claims.origin, "status")).toThrow(
     PairingError,
@@ -128,6 +150,12 @@ it("requires empty status choices and complete business identifiers", () => {
     legalBusinessId: randomUUID(),
   };
   expect(check(proof(complete), claims.origin, "complete")).toEqual(complete);
+  expect(() => check(proof({ ...status, venueName: "Bar Pepe" }), claims.origin, "status")).toThrow(
+    PairingError,
+  );
+  expect(() =>
+    check(proof({ ...complete, venueName: "Bar Pepe" }), claims.origin, "complete"),
+  ).toThrow(PairingError);
   for (const key of ["organisationId", "legalBusinessId"])
     expect(() => check(proof({ ...complete, [key]: "" }), claims.origin, "complete")).toThrow(
       PairingError,
@@ -166,16 +194,28 @@ it("refuses an unpadded base64 alias of an otherwise valid signature", () => {
   expect(() => check({ ...value, signature: alias })).toThrow(PairingError);
 });
 
-it("accepts a new venue without an id and refuses a signed v1 request", () => {
-  const fresh = { ...claims, venueId: "" };
+it("accepts a new venue without an id or name and refuses signed v1 and v2 requests", () => {
+  const fresh = { ...claims, venueId: "", venueName: "" };
   expect(check(proof(fresh))).toEqual(fresh);
-  const old = JSON.parse(pairingPayload(claims).toString());
-  old[0] = "waitron-cloud-pair-v1";
-  const bytes = Buffer.from(JSON.stringify(old));
-  expect(() =>
-    check({
-      payload: bytes.toString("base64url"),
-      signature: sign(null, bytes, keys.privateKey).toString("base64url"),
-    }),
-  ).toThrow(PairingError);
+  const v2 = JSON.parse(pairingPayload(claims).toString()).slice(0, 11);
+  v2[0] = "waitron-cloud-pair-v2";
+  expect(() => check(signed(v2))).toThrow(PairingError);
+  expect(() => check(signed(["waitron-cloud-pair-v1", ...v2.slice(1)]))).toThrow(PairingError);
+});
+
+it("accepts a name of 120 code points and refuses 121", () => {
+  const longest = { ...claims, venueName: "😀".repeat(PAIRING_VENUE_NAME_MAX) };
+  expect(longest.venueName).toHaveLength(240);
+  expect(check(proof(longest))).toEqual(longest);
+  const longer = { ...claims, venueName: `${longest.venueName}a` };
+  expect(() => check(proof(longer))).toThrow(PairingError);
+});
+
+it("trims a venue name and keeps at most 120 code points", () => {
+  expect(PAIRING_VENUE_NAME_MAX).toBe(120);
+  expect(pairingVenueName("  Bar Pepe \t")).toBe("Bar Pepe");
+  expect(pairingVenueName("   ")).toBe("");
+  expect(pairingVenueName("😀".repeat(121))).toBe("😀".repeat(120));
+  expect(pairingVenueName(` ${"a".repeat(119)} b`)).toBe("a".repeat(119));
+  expect(pairingVenueName("a".repeat(120))).toBe("a".repeat(120));
 });

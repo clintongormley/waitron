@@ -71,6 +71,7 @@ import {
   applicationVersion,
   nodes,
   readCloudVenueId,
+  readVenueSettings,
   saveCloudVenueId,
   type Database,
   type NodeDatabase,
@@ -2575,6 +2576,7 @@ async function bootServer(
         tunnelDir: config.tunnelControlDir,
         origin: cloudOrigin,
         readVenueId: () => readCloudVenueId(db),
+        readVenueName: async () => (await readVenueSettings(db)).doc.name,
         recordVenueId: (id) => withTransaction(db, (tx) => saveCloudVenueId(tx, id)),
         environment: config.environment === "production" ? "production" : "test",
       })

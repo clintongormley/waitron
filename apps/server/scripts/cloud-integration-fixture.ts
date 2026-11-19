@@ -175,6 +175,9 @@ const cloud = createCloudConnection({
       await store.close();
     }
   },
+  readVenueName: async () => {
+    throw new Error("Pair through the running server's management API");
+  },
   recordVenueId: async () => {
     throw new Error("Pair through the running server's management API");
   },
