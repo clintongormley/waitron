@@ -961,7 +961,7 @@ export class TillTenderPay extends LitElement {
   #renderIdle() {
     const disabled = this.store.lineCount === 0 || this.busy;
     if (this.mode !== "prepay" && this.stage === "collect")
-      return this.#renderIdleCollect(disabled || this.hasSetMenus);
+      return this.#renderIdleCollect(disabled);
     return this.#renderIdlePay(disabled, this.mode !== "prepay");
   }
 
@@ -1119,7 +1119,8 @@ export class TillTenderPay extends LitElement {
       ${this.#opensPaymentWindow() ? nothing : html`${this.#renderCardExtras()} ${this.#renderGuests()}`}
       ${this.#renderFormMessage()}
       <div class="actions">
-        ${this.#renderTenderButtons(disabled)} ${this.#renderReceiptLanguageButton(disabled)}
+        ${this.#renderTenderButtons(disabled || this.hasSetMenus)}
+        ${this.#renderReceiptLanguageButton(disabled)}
       </div>
     `;
   }
