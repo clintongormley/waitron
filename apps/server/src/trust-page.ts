@@ -108,28 +108,29 @@ export function renderTrustPage(input: TrustPageInput): string {
 ${PAGE_THEME_STYLE}
 body { margin: 0; } main { max-width: 44rem; margin: auto; padding: 1.5rem 1.5rem 4rem; }
 h1 { line-height: 1.2; font-size: 1.5rem; } h2 { font-size: 1.2rem; } section { margin: 2rem 0; }
-a { color: light-dark(#174da1, #9ec5ff); } li { margin-block: .5rem; }
+a { color: light-dark(#007392, #71cfeb); } li { margin-block: .5rem; }
 details { border: 1px solid light-dark(#c4cbd4, #637080); border-radius: .5rem; padding: .8rem 1rem; margin-block: .7rem; }
 details[open] { padding-bottom: .3rem; }
 details details { padding-inline: .6rem; }
 summary { cursor: pointer; font-weight: 600; }
-/* Four token pairs are inlined below, light then dark, and kept in step by hand: #5c626e/#a1a7b3
-   is --wt-color-text-muted, #b3261e/#ff7f73 is --wt-color-danger, #1f6feb/#4c8dff is
-   --wt-color-primary, and #ffffff/#06101f is --wt-color-on-primary, all declared in
+/* Token values are inlined on this page, light then dark, and kept in step by hand: #626366/#a1a7b3
+   is --wt-color-text-muted, #b3261e/#ff7f73 is --wt-color-danger, #007392/#71cfeb is
+   --wt-color-primary (the button), --wt-color-primary-text (links) and --wt-color-focus (the focus
+   outline), and #ffffff/#001016 is --wt-color-on-primary, all declared in
    packages/ui-core/src/tokens/colors.css. apps/server does not depend on @waitron/ui, and this page must
    stay one self-contained string with no external assets, so it cannot read the custom properties.
    Same arrangement, and the same reason, as packages/ui/brand/README.md. */
-.note { color: light-dark(#5c626e, #a1a7b3); font-size: .92rem; }
+.note { color: light-dark(#626366, #a1a7b3); font-size: .92rem; }
 /* The browser's own warning, in the browser's own colour. The words carry the meaning; the colour
    is emphasis, so a reader who cannot see it loses nothing. */
 .accent, .warning-words { color: light-dark(#b3261e, #ff7f73); }
 .warning-words { font-weight: 600; }
 .button { display: inline-block; padding: .7rem 1.1rem; border-radius: .4rem; font-weight: 600;
-  text-decoration: none; background: light-dark(#1f6feb, #4c8dff); color: light-dark(#ffffff, #06101f); }
+  text-decoration: none; background: light-dark(#007392, #71cfeb); color: light-dark(#ffffff, #001016); }
 code, a { overflow-wrap: anywhere; }
 .logo svg { width: 9.5rem; height: auto; display: block; }
 .qr svg { max-width: 14rem; height: auto; background: white; }
-:focus-visible { outline: 3px solid light-dark(#174da1, #9ec5ff); outline-offset: 4px; }
+:focus-visible { outline: 3px solid light-dark(#007392, #71cfeb); outline-offset: 4px; }
 </style><script>${PAGE_THEME_SCRIPT}</script></head><body><main>
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
 <h1>Connect <span class="accent">securely</span> to this Waitron server</h1>

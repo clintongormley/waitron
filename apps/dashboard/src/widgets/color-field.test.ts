@@ -356,7 +356,7 @@ it("A498 keeps category inheritance selectable without an empty-colour note", as
 it("a legend and a none choice of the caller's own", async () => {
   const { el } = await mount("#b12525", undefined, {
     legend: "Brand colour",
-    noneChoice: { label: "Waitron's", chip: "#1f6feb" },
+    noneChoice: { label: "Waitron's", chip: "#007392" },
   });
   expect(el.shadowRoot!.querySelector("legend")!.textContent!.trim()).toBe("Brand colour");
   expect(el.shadowRoot!.querySelector('[role="radiogroup"]')!.getAttribute("aria-label")).toBe(
@@ -366,7 +366,7 @@ it("a legend and a none choice of the caller's own", async () => {
   expect(none.textContent!.trim()).toBe("Waitron's");
   await expect.element(page.elementLocator(none)).toHaveAccessibleName("Waitron's");
   const chip = none.querySelector<HTMLElement>(".chip")!;
-  expect(getComputedStyle(chip).backgroundColor).toBe("rgb(31, 111, 235)");
+  expect(getComputedStyle(chip).backgroundColor).toBe("rgb(0, 115, 146)");
   await click(el, "");
   expect(el.color).toBeNull();
 });

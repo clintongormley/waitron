@@ -471,7 +471,7 @@ it("paints the revealed name with the shared focus outline", async () => {
   const marker = row(el, "drinks/beer/mi")!.querySelector<HTMLElement>('[aria-current="true"]')!;
   expect(getComputedStyle(marker).outlineStyle).toBe("solid");
   expect(getComputedStyle(marker).outlineWidth).toBe("2px");
-  expect(getComputedStyle(marker).outlineColor).toBe("rgb(31, 111, 235)");
+  expect(getComputedStyle(marker).outlineColor).toBe("rgb(0, 115, 146)");
 });
 
 it("reveals the named occurrence of a repeated subtree rather than the first matching product", async () => {

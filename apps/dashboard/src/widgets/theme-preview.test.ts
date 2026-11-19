@@ -196,8 +196,8 @@ it("a new draft repaints", async () => {
 it("control: Waitron's draft paints Waitron's colours while the page's root keeps its own", async () => {
   paintPage();
   const el = await mountOutside(WAITRON_CHOICES);
-  expect(primary(panel(el, "light"))).toBe("#1f6feb");
-  expect(primary(panel(el, "dark"))).toBe("#4c8dff");
+  expect(primary(panel(el, "light"))).toBe("#007392");
+  expect(primary(panel(el, "dark"))).toBe("#71cfeb");
   expect(primary(document.documentElement)).toBe("#9d8a15");
 });
 

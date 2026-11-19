@@ -553,12 +553,12 @@ it.each([false, true])(
       [
         "light",
         "dark",
-        { mark: "rgb(31, 111, 235)", word: "rgb(22, 24, 29)", action: "rgb(31, 111, 235)" },
+        { mark: "rgb(31, 111, 235)", word: "rgb(22, 24, 29)", action: "rgb(0, 115, 146)" },
       ],
       [
         "dark",
         "light",
-        { mark: "rgb(76, 141, 255)", word: "rgb(236, 238, 242)", action: "rgb(76, 141, 255)" },
+        { mark: "rgb(76, 141, 255)", word: "rgb(236, 238, 242)", action: "rgb(113, 207, 235)" },
       ],
     ] as const) {
       const context = await browser!.newContext({ colorScheme: device });
@@ -596,13 +596,13 @@ it.each(["missing", "invalid", "blocked"])(
       expect(await themeInks(page)).toEqual({
         mark: "rgb(76, 141, 255)",
         word: "rgb(236, 238, 242)",
-        action: "rgb(76, 141, 255)",
+        action: "rgb(113, 207, 235)",
       });
       await page.emulateMedia({ colorScheme: "light" });
       expect(await themeInks(page)).toEqual({
         mark: "rgb(31, 111, 235)",
         word: "rgb(22, 24, 29)",
-        action: "rgb(31, 111, 235)",
+        action: "rgb(0, 115, 146)",
       });
     } finally {
       await context.close();

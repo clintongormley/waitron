@@ -111,7 +111,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
           expect(rendered.querySelector("[data-key-name]")!.textContent).toBe("2026-10-14 · K7QF");
           expect(rendered.documentElement.scrollWidth).toBe(rendered.documentElement.clientWidth);
           expect(getComputedStyle(rendered.documentElement).color).toBe(
-            theme === "light" ? "rgb(22, 24, 29)" : "rgb(236, 238, 242)",
+            theme === "light" ? "rgb(35, 31, 32)" : "rgb(236, 238, 242)",
           );
           await page.screenshot({
             path: `__screenshots__/w41s6-pack/${locale}-${theme}-${width}-print.png`,

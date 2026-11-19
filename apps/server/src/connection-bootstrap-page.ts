@@ -24,14 +24,14 @@ const STYLE = `
 :root {
 color-scheme: light dark;
 --wt-color-bg: light-dark(#f7f7f8, #101216);
---wt-color-text: light-dark(#16181d, #eceef2);
---wt-color-text-muted: light-dark(#5c626e, #a1a7b3);
---wt-color-primary: light-dark(#1f6feb, #4c8dff);
---wt-color-on-primary: light-dark(#ffffff, #06101f);
---wt-color-primary-text: light-dark(#1a5fd0, #78a9ff);
+--wt-color-text: light-dark(#231f20, #eceef2);
+--wt-color-text-muted: light-dark(#626366, #a1a7b3);
+--wt-color-primary: light-dark(#007392, #71cfeb);
+--wt-color-on-primary: light-dark(#ffffff, #001016);
+--wt-color-primary-text: light-dark(#007392, #71cfeb);
 --wt-color-danger: light-dark(#b3261e, #ff7f73);
 --wt-color-border: light-dark(#d6d9e0, #333945);
---wt-color-focus: light-dark(#1f6feb, #4c8dff);
+--wt-color-focus: light-dark(#007392, #71cfeb);
 --wt-space-1: 4px; --wt-space-2: 8px; --wt-space-3: 12px; --wt-space-4: 16px; --wt-space-5: 24px; --wt-space-6: 32px;
 --wt-radius-md: 8px;
 --wt-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;

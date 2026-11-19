@@ -133,9 +133,11 @@ it("shows the browser's own warning words when telling the operator to start aga
 // expected values are literals here, not read from packages/ui-core/src/tokens/colors.css, so a token
 // changed there goes unseen.
 it.each([
-  ["--wt-color-primary", "background: light-dark(#1f6feb, #4c8dff)"],
-  ["--wt-color-on-primary", "color: light-dark(#ffffff, #06101f)"],
-  ["--wt-color-text-muted", "light-dark(#5c626e, #a1a7b3)"],
+  ["--wt-color-primary", "background: light-dark(#007392, #71cfeb)"],
+  ["--wt-color-on-primary", "color: light-dark(#ffffff, #001016)"],
+  ["--wt-color-primary-text", "a { color: light-dark(#007392, #71cfeb); }"],
+  ["--wt-color-focus", "outline: 3px solid light-dark(#007392, #71cfeb)"],
+  ["--wt-color-text-muted", "light-dark(#626366, #a1a7b3)"],
   ["--wt-color-danger", "light-dark(#b3261e, #ff7f73)"],
 ])("keeps %s in step with the design tokens", (_token, declaration) => {
   expect(renderTrustPage(base)).toContain(declaration);
