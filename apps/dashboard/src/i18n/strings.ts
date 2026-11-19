@@ -3457,9 +3457,9 @@ export const en = {
   "menus.set_menu_no_dishes": "Add a dish to this set menu.",
   "menus.set_menu_no_lines": "Add a line to say what one set menu includes.",
   "menus.set_menu_line_without_course":
-    "Line {number} needs a course. Choose a course or remove the line.",
+    "Saved line {number} needs a course. Choose a course or remove the line.",
   "menus.set_menu_line_unfillable":
-    "No dish counts towards line {number}. Add a dish in one of its courses or change the line.",
+    "No dish counts towards saved line {number}. Add a dish in one of its courses or change the line.",
   "menus.set_menu_dish_not_included":
     "{name} counts as {course}, which no line includes. Add {course} to a line, or leave {variant} out.",
   "menus.set_menu_dish_without_course":
@@ -7990,13 +7990,13 @@ export const es: Record<StringKey, string> = {
   "menus.menu_kind": "Carta",
   "menus.set_menu_kind": "Carta a precio fijo",
   "menus.set_menu_terms": "Nombre, precio e IVA",
-  "menus.set_menu_price": "Precio por menú",
+  "menus.set_menu_price": "Precio de la carta a precio fijo",
   "menus.set_menu_eat_in_vat": "IVA para comer aquí",
   "menus.set_menu_load_error": "No se ha podido cargar la carta a precio fijo.",
   "menus.set_menu_published_by":
-    "Los cambios llegan a las cajas cuando publicas una carta que incluye este menú.",
+    "Los cambios llegan a las cajas al publicar una carta que la incluye.",
   "menus.set_menu_place_to_sell": "Añádela a una carta para venderla.",
-  "menus.set_menu_inclusions": "Qué incluye cada menú",
+  "menus.set_menu_inclusions": "Qué incluye cada carta a precio fijo",
   "menus.set_menu_line_number": "Línea {number}",
   "menus.set_menu_count": "Cantidad de platos",
   "menus.set_menu_or": "o",
@@ -8007,12 +8007,12 @@ export const es: Record<StringKey, string> = {
   "menus.set_menu_remove_line": "Quitar línea",
   "menus.set_menu_add_line": "Añadir una línea",
   "menus.set_menu_fix_before_publishing": "Corrige estos problemas antes de publicar",
-  "menus.set_menu_no_dishes": "Añade un plato a este menú.",
-  "menus.set_menu_no_lines": "Añade una línea para indicar qué incluye cada menú.",
+  "menus.set_menu_no_dishes": "Añade un plato a esta carta a precio fijo.",
+  "menus.set_menu_no_lines": "Añade una línea para indicar qué incluye la carta a precio fijo.",
   "menus.set_menu_line_without_course":
-    "La línea {number} necesita un curso. Elige un curso o quita la línea.",
+    "La línea guardada {number} necesita un curso. Elige un curso o quita la línea.",
   "menus.set_menu_line_unfillable":
-    "Ningún plato cuenta para la línea {number}. Añade un plato de uno de sus cursos o cambia la línea.",
+    "Ningún plato cuenta para la línea guardada {number}. Añade un plato de uno de sus cursos o cambia la línea.",
   "menus.set_menu_dish_not_included":
     "{name} cuenta como {course}, pero ninguna línea incluye ese curso. Añade {course} a una línea o excluye {variant}.",
   "menus.set_menu_dish_without_course": "{name} no tiene curso. Asígnale uno o exclúyelo.",

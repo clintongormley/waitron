@@ -86,7 +86,7 @@ export class SetMenuTermsForm extends LitElement {
 
   readonly #feedback = new FormFeedback(this);
   #scope?: DraftScope<Draft>;
-  #savedId?: string;
+  #baseline?: Draft;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -101,7 +101,7 @@ export class SetMenuTermsForm extends LitElement {
         this.#feedback.reset();
       },
     }).scope;
-    if (this.draft) this.#scope.commit(this.#submitted());
+    if (this.#baseline) this.#scope.commit(this.#baseline);
   }
 
   override disconnectedCallback(): void {
@@ -113,7 +113,6 @@ export class SetMenuTermsForm extends LitElement {
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (!changed.has("value") && this.draft) return;
     const value = this.value;
-    this.#savedId = value?.id;
     this.draft = {
       name: value?.name ?? "",
       names: value?.names ?? {},
@@ -121,7 +120,8 @@ export class SetMenuTermsForm extends LitElement {
       setVatClass: value?.vatClass ?? this.defaultVatClass,
       setTakeawayVatClass: value?.takeawayVatClass ?? null,
     };
-    this.#scope?.commit(this.#submitted());
+    this.#baseline = this.#submitted();
+    this.#scope?.commit(this.#baseline);
     this.refusal = {};
     this.#feedback.reset();
   }
@@ -158,22 +158,29 @@ export class SetMenuTermsForm extends LitElement {
 
   async #save(event: Event): Promise<void> {
     event.preventDefault();
-    if (this.saving || saveActionState(this.#scope).unchanged) return;
+    const menuId = this.value?.id;
+    const baseline = this.#baseline;
+    if (!menuId || !baseline || this.saving || saveActionState(this.#scope).unchanged) return;
     this.#feedback.press(...Object.keys(this.refusal));
     if (Object.keys(this.#validate()).length) {
       void this.#feedback.focus(this.shadowRoot!);
       return;
     }
-    const { name, ...terms } = this.#submitted();
+    const submitted = this.#submitted();
+    const { name: internalName, ...terms } = Object.fromEntries(
+      (Object.keys(submitted) as (keyof Draft)[])
+        .filter((key) => !sameValue(baseline[key], submitted[key]))
+        .map((key) => [key, submitted[key]]),
+    ) as Partial<Draft>;
     this.saving = true;
     this.refusal = {};
     try {
-      const existing = this.#savedId;
-      const menuId =
-        existing ?? (await this.api.createMenu(name, { kind: "set_menu", ...terms })).id;
-      if (existing) await this.api.updateMenuDetails(existing, { internalName: name, ...terms });
-      this.#savedId = menuId;
-      this.#scope?.commit({ name, ...terms });
+      await this.api.updateMenuDetails(menuId, {
+        ...(internalName === undefined ? {} : { internalName }),
+        ...terms,
+      });
+      this.#baseline = submitted;
+      this.#scope?.commit(submitted);
       this.dispatchEvent(
         new CustomEvent("set-menu-terms-saved", {
           detail: { menuId },
@@ -271,7 +278,7 @@ export class SetMenuTermsForm extends LitElement {
           .disabled=${action.unchanged || this.saving || Object.keys(validation).length > 0}
           .loading=${this.saving}
           @click=${this.#save}
-          >${t(this.#savedId ? "action.save" : "action.add")}</wt-button
+          >${t("action.save")}</wt-button
         >
       </wt-form-actions>
     </form>`;

@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, currentContentLanguages } from "@waitron/ui";
+import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import type { DashboardApi, SetMenuDetails } from "../api/client.js";
 import type { SetMenuProblem } from "@waitron/shared";
 import { fill, t } from "../i18n/t.js";
@@ -32,6 +32,11 @@ export class SetMenuEditor extends LitElement {
   #terms: SetMenuDetails | null = null;
   #read = 0;
 
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -40,12 +45,12 @@ export class SetMenuEditor extends LitElement {
   async #load(): Promise<void> {
     const generation = ++this.#read;
     const api = this.details ? (this.api.background ?? this.api) : this.api;
-    this.failed = false;
     try {
       const details = await api.readSetMenu(this.menuId);
       if (generation !== this.#read) return;
       this.#terms ??= details;
       this.details = details;
+      this.failed = false;
     } catch {
       if (generation === this.#read) this.failed = true;
     }
@@ -140,7 +145,7 @@ export class SetMenuEditor extends LitElement {
       ></dashboard-set-menu-lines-form>
       ${this.failed ? this.#renderFailure() : nothing}
       ${
-        details.problems.length
+        !this.failed && details.problems.length
           ? html` <h2>${t("menus.set_menu_fix_before_publishing")}</h2>
               <ul>
                 ${details.problems.map((problem) => html`<li>${this.#problem(problem, details)}</li>`)}

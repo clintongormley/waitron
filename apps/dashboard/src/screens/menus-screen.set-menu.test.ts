@@ -1,4 +1,5 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { currentContentLanguages, NavigationGuard, setContentLanguages } from "@waitron/ui";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { DashboardApi, MenuPreview, MenuSummary, SetMenuDetails } from "../api/client.js";
 import { useLocale } from "../testing/locale-setup.js";
@@ -61,13 +62,11 @@ function api() {
     listMenus: vi.fn().mockResolvedValue([menu, daily]),
     listLibraryProducts: vi.fn().mockResolvedValue([]),
     listCategories: vi.fn().mockResolvedValue([]),
-    getMenuSettings: vi
-      .fn()
-      .mockResolvedValue({
-        defaultProductVatClass: "general",
-        defaultColor: null,
-        takeawayVat: true,
-      }),
+    getMenuSettings: vi.fn().mockResolvedValue({
+      defaultProductVatClass: "general",
+      defaultColor: null,
+      takeawayVat: true,
+    }),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "en", languages: ["en", "es"] }),
@@ -80,6 +79,7 @@ function api() {
       nodes: [],
     }),
     getMenuStatus: vi.fn().mockResolvedValue(status),
+    getMenuPrices: vi.fn().mockResolvedValue([]),
     getMenuPreview: vi.fn().mockResolvedValue(preview),
     getMenuPublications: vi
       .fn()
@@ -128,7 +128,6 @@ it("replaces an old Prices address with the set menu's only tab", async () => {
         route.mock.calls.map(([, , address]) => new URL(address!, location.origin).pathname),
       ).toContain(dailyPath);
     });
-    expect(client.getMenuStructure).not.toHaveBeenCalled();
     await expect
       .element(page.getByText("Price per set menu", { exact: false }).first())
       .toBeVisible();
@@ -139,9 +138,11 @@ it("replaces an old Prices address with the set menu's only tab", async () => {
 });
 
 it("links to the full menu that publishes the set menu", async () => {
-  await mount(dailyPath);
+  const client = api();
+  await mount(dailyPath, client);
   const link = page.getByRole("link", { name: "Lunch", exact: true });
   await vi.waitFor(() => expect(link.element().getAttribute("href")).toBe(lunchPath));
+  expect(client.getMenuStructure).not.toHaveBeenCalled();
 });
 
 it("links a publication problem to the set-menu editor", async () => {
@@ -288,12 +289,12 @@ it.each([
   [
     "line_without_course",
     { kind: "line_without_course", lineId: "first" },
-    "Line 1 needs a course.",
+    "Saved line 1 needs a course.",
   ],
   [
     "line_unfillable",
     { kind: "line_unfillable", lineId: "first" },
-    "No dish counts towards line 1.",
+    "No dish counts towards saved line 1.",
   ],
   [
     "dish_without_course",
@@ -328,3 +329,79 @@ it.each(["light", "dark"] as const)(
     await expectNoA11yViolations(el.parentElement!);
   },
 );
+
+it("starts an ordinary menu's structure read while the menus list is still loading", async () => {
+  const client = api();
+  let finishList!: (menus: MenuSummary[]) => void;
+  client.listMenus.mockReturnValue(
+    new Promise<MenuSummary[]>((resolve) => {
+      finishList = resolve;
+    }),
+  );
+  try {
+    const screen = await mount("/menus/menu/lunch/view/structure", client);
+    expect(screen.shadowRoot?.querySelector("wt-tabs")?.value).toBe("structure");
+    await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledWith("lunch"));
+  } finally {
+    finishList([menu, daily]);
+  }
+});
+
+it("adds fields for a content language that becomes available while a draft is open", async () => {
+  const previous = currentContentLanguages();
+  onTestFinished(() => setContentLanguages(previous));
+  const client = api();
+  client.getContentLanguages.mockResolvedValue({ defaultLanguage: "en", languages: ["en"] });
+  const screen = await mount(dailyPath, client);
+  const fields = () =>
+    screen
+      .shadowRoot!.querySelector("dashboard-set-menu-editor")
+      ?.shadowRoot?.querySelector("dashboard-set-menu-terms-form")?.shadowRoot;
+  await vi.waitFor(() => expect(fields()?.querySelector('[name="names-en"]')).toBeTruthy());
+  expect(fields()?.querySelector('[name="names-es"]')).toBeNull();
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+  await vi.waitFor(() => expect(fields()?.querySelector('[name="names-es"]')).toBeTruthy());
+});
+
+it("shows a read failure after saving lines without showing the previous problems as current", async () => {
+  const { root, client } = await mountLines();
+  const count = root.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="count"]')!;
+  await userEvent.fill(page.elementLocator(count.shadowRoot!.querySelector("input")!), "2");
+  client.saveSetMenuLines.mockResolvedValue({ lines: [{ ...starterLine, count: 2 }] });
+  client.readSetMenu.mockRejectedValue(new Error("Connection lost"));
+  root.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!.click();
+  await expect
+    .element(page.getByRole("alert").filter({ hasText: "The set menu could not be loaded." }))
+    .toBeVisible();
+  expect(page.getByRole("link", { name: "Edit Wine" }).elements()).toHaveLength(0);
+  expect(count.value).toBe("2");
+});
+
+it("recovers the ordinary Prices tab after the menus list is retried", async () => {
+  const client = api();
+  client.listMenus.mockRejectedValueOnce(new Error("Connection lost"));
+  const screen = await mount("/menus/menu/lunch/view/prices", client);
+  const retry = () => screen.shadowRoot!.querySelector<HTMLElement>('[data-test="retry"]');
+  await vi.waitFor(() => expect(retry()).toBeTruthy());
+  retry()!.click();
+  await vi.waitFor(() => {
+    expect(retry()).toBeNull();
+    expect(screen.shadowRoot!.querySelector("wt-tabs")?.value).toBe("prices");
+    expect(client.getMenuPrices).toHaveBeenCalledWith("lunch");
+  });
+});
+
+it("keeps the editor and its unsaved price when Back is refused", async () => {
+  const screen = await mount(dailyPath);
+  const price = page.getByRole("textbox", { name: "Price per set menu" });
+  await price.fill("15.00");
+  const request = vi.fn().mockResolvedValue("kept");
+  const guard = new NavigationGuard(window, { isDirty: () => true, request });
+  onTestFinished(() => guard.dispose());
+  await userEvent.click(
+    page.elementLocator(screen.shadowRoot!.querySelector('[data-test="back"]')!),
+  );
+  expect(request).toHaveBeenCalledOnce();
+  expect(new URL(guard.href).pathname).toBe(dailyPath);
+  await expect.element(price).toHaveValue("15.00");
+});

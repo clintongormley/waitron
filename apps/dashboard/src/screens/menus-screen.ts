@@ -1233,7 +1233,6 @@ export class MenusScreen extends LitElement {
   #followStatus(again = false): void {
     const menuId = this.menuId;
     if (menuId !== null) {
-      if (!this.#selectedMenu() && !this.loadError) return;
       this.#statusFor = menuId;
       if (!this.structure?.includedBy.length) {
         this.#statusQueries.release("getMenuStatuses");
@@ -1312,8 +1311,8 @@ export class MenusScreen extends LitElement {
       this.priceRefusals = {};
       this.priceOutcome = null;
       this.#releasePrices();
-    } else if (this.#selectedMenu() && this.#pricesFor !== this.menuId)
-      void this.#watchPrices(this.menuId!);
+    } else if (this.menuId !== null && this.#pricesFor !== this.menuId)
+      void this.#watchPrices(this.menuId);
   }
 
   /** A write that succeeded is never reported as a failed one: a failure here is a load failure. */
@@ -1388,11 +1387,9 @@ export class MenusScreen extends LitElement {
       return;
     }
     const menu = this.#selectedMenu();
-    if (!menu && !this.loadError) {
-      if (!this.loading) {
-        this.#select(null);
-        this.#url.write({ menu: null, view: null, "price-filter": null }, true);
-      }
+    if (!menu && !this.loading && !this.loadError) {
+      this.#select(null);
+      this.#url.write({ menu: null, view: null, "price-filter": null }, true);
       return;
     }
     const view =
@@ -3993,7 +3990,7 @@ export class MenusScreen extends LitElement {
       </div>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
       ${
-        menu === undefined && (this.#statusFor !== menuId || this.view === "set-menu")
+        menu === undefined && this.view === "set-menu"
           ? nothing
           : setMenu
             ? html`<wt-tabs
@@ -4013,43 +4010,46 @@ export class MenusScreen extends LitElement {
                   )}
                 </div>
               </wt-tabs>`
-            : html`${this.#renderClashes(menuId)}
-                ${this.statusesError && this.statusesResetRequired ? html`<p class="error" role="alert" data-test="status-reset-error">${codeMessage("menu.reset_required")}</p>` : nothing}
-                <wt-tabs
-                  data-test="menu-tabs"
-                  label=${name || t("menus.title")}
-                  .value=${this.view}
-                  .items=${[
-                    { key: "structure", label: t("menus.tab_structure") },
-                    { key: "prices", label: t("menus.tab_prices") },
-                    { key: "home", label: t("menus.tab_home") },
-                    {
-                      key: "preview",
-                      label: t("menus.tab_preview"),
-                      marked: this.#marksPreview() ? t("menus.tab_preview_unpublished") : undefined,
-                    },
-                  ]}
-                  @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
-                    this.showPriceClashes = false;
-                    this.#showView(event.detail.value as Tab);
-                    this.#url.write({ view: event.detail.value, "price-filter": null });
-                  }}
-                >
-                  <div slot="structure">${this.#renderStructure()}</div>
-                  <div slot="prices" class="prices">${this.#renderPrices()}</div>
-                  <div slot="home" class="home">${this.#renderHome()}</div>
-                  <div slot="preview">
-                    <dashboard-guest-menu-preview
-                      .api=${this.api}
-                      .menuId=${menuId}
-                    ></dashboard-guest-menu-preview>
-                    ${this.#renderPreview()}
-                  </div>
-                </wt-tabs>
-                ${this.#renderNewSection()} ${this.#renderIncludeEdit()}
-                ${this.#renderAddProducts()} ${this.#renderShortcutPicker()}
-                ${this.#renderPatchDialog(menuId)}`
+            : this.#renderFullMenuEditor(menuId, name)
       }`;
+  }
+
+  #renderFullMenuEditor(menuId: string, name: string) {
+    return html`${this.#renderClashes(menuId)}
+      ${this.statusesError && this.statusesResetRequired ? html`<p class="error" role="alert" data-test="status-reset-error">${codeMessage("menu.reset_required")}</p>` : nothing}
+      <wt-tabs
+        data-test="menu-tabs"
+        label=${name || t("menus.title")}
+        .value=${this.view}
+        .items=${[
+          { key: "structure", label: t("menus.tab_structure") },
+          { key: "prices", label: t("menus.tab_prices") },
+          { key: "home", label: t("menus.tab_home") },
+          {
+            key: "preview",
+            label: t("menus.tab_preview"),
+            marked: this.#marksPreview() ? t("menus.tab_preview_unpublished") : undefined,
+          },
+        ]}
+        @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
+          this.showPriceClashes = false;
+          this.#showView(event.detail.value as Tab);
+          this.#url.write({ view: event.detail.value, "price-filter": null });
+        }}
+      >
+        <div slot="structure">${this.#renderStructure()}</div>
+        <div slot="prices" class="prices">${this.#renderPrices()}</div>
+        <div slot="home" class="home">${this.#renderHome()}</div>
+        <div slot="preview">
+          <dashboard-guest-menu-preview
+            .api=${this.api}
+            .menuId=${menuId}
+          ></dashboard-guest-menu-preview>
+          ${this.#renderPreview()}
+        </div>
+      </wt-tabs>
+      ${this.#renderNewSection()} ${this.#renderIncludeEdit()} ${this.#renderAddProducts()}
+      ${this.#renderShortcutPicker()} ${this.#renderPatchDialog(menuId)}`;
   }
 
   override render() {

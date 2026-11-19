@@ -66,7 +66,8 @@ it("keeps Save quiet until an edit and saves or clears the separate takeaway rat
   const { root, updateMenuDetails } = await mount();
   expect(save(root).disabled).toBe(true);
   change(root, "setPrice", "14.0");
-  await vi.waitFor(() => expect(save(root).disabled).toBe(true));
+  await (root.host as HTMLElementTagNameMap["dashboard-set-menu-terms-form"]).updateComplete;
+  expect(save(root).disabled).toBe(true);
   save(root).click();
   expect(updateMenuDetails).not.toHaveBeenCalled();
   change(root, "setTakeawayVatClass", "general");
@@ -118,3 +119,15 @@ it.each(["light", "dark"] as const)(
     await expectNoA11yViolations(host);
   },
 );
+
+it("sends only the changed term when renaming an existing set menu", async () => {
+  const { root, updateMenuDetails } = await mount();
+  change(root, "name", "Daily lunch");
+  await vi.waitFor(() => expect(save(root).disabled).toBe(false));
+  save(root).click();
+  await vi.waitFor(() =>
+    expect(updateMenuDetails).toHaveBeenCalledExactlyOnceWith("daily", {
+      internalName: "Daily lunch",
+    }),
+  );
+});
