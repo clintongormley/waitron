@@ -144,7 +144,7 @@ it("refuses a pixel change bringing only the narrow picture while a theme's ligh
   });
 });
 
-it("saves a pixel change without dots when only a dark logo is the image", async () => {
+it("needs no dots for a dark logo or an unreadable theme", async () => {
   await withTransaction(suite.db, async (tx) => {
     const { a, dusk } = await threeThemes(tx);
     await tx.execute(sql`delete from custom_themes where id = 'Day'`);

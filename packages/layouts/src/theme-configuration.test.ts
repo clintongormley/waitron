@@ -95,7 +95,7 @@ describe("validateThemeConfiguration", () => {
     ["a theme that is a JSON array", "[]"],
     ["a theme that is JSON null", "null"],
     ["a theme document this release refuses", '{"tokens":{}}'],
-    ["a theme whose brand colour is not hex", JSON.stringify({ ...LEMON, brandColor: "yellow" })],
+    ["a theme whose brand colour is not hex", JSON.stringify({ ...noLogo, brandColor: "yellow" })],
   ])("refuses %s as custom_themes.theme", (_label, theme) => {
     expect(refusal([{ ...row("Lemon", LEMON, null), theme }])).toMatchObject({
       code: "setup.request_invalid",
@@ -104,7 +104,7 @@ describe("validateThemeConfiguration", () => {
   });
 
   it("refuses a copy whose theme has textScale 112", () => {
-    const theme = JSON.stringify({ ...LEMON, textScale: 112 });
+    const theme = JSON.stringify({ ...noLogo, textScale: 112 });
     expect(refusal([{ ...row("Lemon", LEMON, null), theme }])).toMatchObject({
       code: "setup.request_invalid",
       params: { field: "custom_themes.theme" },
@@ -119,7 +119,7 @@ describe("validateThemeConfiguration", () => {
   });
 
   it("refuses a copy whose theme has a 41 px size", () => {
-    const theme = JSON.stringify({ ...LEMON, text: { size: { lg: 41 } } });
+    const theme = JSON.stringify({ ...noLogo, text: { size: { lg: 41 } } });
     expect(refusal([{ ...row("Lemon", LEMON, null), theme }])).toMatchObject({
       code: "setup.request_invalid",
       params: { field: "custom_themes.theme" },
@@ -220,7 +220,7 @@ describe("validateThemeConfiguration", () => {
     });
 
     it.each([
-      ["a logo still in the document", { theme: JSON.stringify(WITH_LOGO) }],
+      ["a logo still in the document", { theme: JSON.stringify(LEMON) }],
       ["a dark logo without a light one", { logo_dark_image: D }],
     ])("refuses %s as custom_themes.theme", (_label, patch) => {
       expect(refusal([{ ...themed(noLogo), ...patch }], images)).toMatchObject({
