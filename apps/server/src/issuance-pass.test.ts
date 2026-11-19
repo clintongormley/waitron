@@ -19,6 +19,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import {
   assignMenuToVenue,
   createMenu,
@@ -105,6 +106,8 @@ type Entry = { id: string; name: string };
  * kitchen names differ.
  */
 async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
+  if (paidWhen === "ticket_then_pay")
+    await seedPerson(suite.db, { id: OPERATOR, displayName: "Operator" });
   const venue = await applyVenue(
     planVenue(
       {

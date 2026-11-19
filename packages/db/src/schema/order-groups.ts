@@ -12,6 +12,7 @@ import {
   tsString,
 } from "./columns.js";
 import { devices } from "./devices.js";
+import { persons } from "./identity/persons.js";
 import { parties } from "./parties.js";
 
 export const orderGroupState = enumType(["held", "fired", "removed"]);
@@ -23,8 +24,8 @@ export type OrderGroupRequestKind = "new_order" | "next_course" | "added";
  * A line names its group in `working_order_lines.group_id`, whichever of the party's bills it sits
  * on. A group emptied while held is `removed`, never deleted, because its events point at it.
  *
- * `fired_by` and `submitted_by` are plain person ids: no key yet. A group fired by a kitchen
- * display names the device in `fired_by_device_id` instead; a held group names neither.
+ * A group fired by a kitchen display names the device in `fired_by_device_id`; a held group
+ * has no firer.
  */
 export const orderGroups = table(
   "order_groups",
@@ -65,6 +66,16 @@ export const orderGroups = table(
       foreignColumns: [devices.id],
       name: "order_groups_fired_by_device_fk",
     }),
+    foreignKey({
+      columns: [t.firedBy],
+      foreignColumns: [persons.id],
+      name: "order_groups_fired_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.submittedBy],
+      foreignColumns: [persons.id],
+      name: "order_groups_submitted_by_fk",
+    }).onDelete("restrict"),
     index("order_groups_party_idx").on(t.partyId),
     index("order_groups_number_party_idx").on(t.numberPartyId),
     check("order_groups_state_ck", enumCheck(t.state)),

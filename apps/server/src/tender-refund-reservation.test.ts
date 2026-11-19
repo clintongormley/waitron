@@ -105,6 +105,7 @@ async function paid(
       : { id: options.saleId };
   let billPaymentId: string | null = null;
   if (options.bill) {
+    await seedPerson(store.db, { id: ACTOR.requestedBy, displayName: "Payment operator" });
     const [billPayment] = await store.db
       .insert(billPayments)
       .values({

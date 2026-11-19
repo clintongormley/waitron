@@ -1,12 +1,11 @@
-import { seedPerson } from "../testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
-import { checkFailed } from "../constraint-target.js";
+import { checkFailed, restrictRefused } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
@@ -14,6 +13,7 @@ import { orderEvents } from "./order-events.js";
 import { orderGroups } from "./order-groups.js";
 import { workingOrderLines } from "./orders.js";
 import { parties } from "./parties.js";
+import { persons } from "./identity/persons.js";
 
 /** An order opened from the dashboard, needing no device. */
 const DASHBOARD = { source: "dashboard", deviceId: null } as const;
@@ -91,6 +91,23 @@ describe("order_groups, order_events and working_order_lines.group_id", () => {
       });
     });
   }
+
+  it.each(["submittedBy", "firedBy"] as const)(
+    "requires a person for order group %s and restricts deleting them",
+    async (column) => {
+      const partyId = await party();
+      const values = { partyId, state: "fired", firedAt: new Date().toISOString() } as const;
+      const error = await captureError(() => group({ ...values, [column]: MISSING }));
+      expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+
+      const personId = await seedPerson(suite.db, { displayName: `Order group ${column}` });
+      await group({ ...values, [column]: personId });
+      const deletion = await captureError(() =>
+        inTx((tx) => tx.delete(persons).where(eq(persons.id, personId))),
+      );
+      expect(restrictRefused(deletion)).toBe(true);
+    },
+  );
 
   it("refuses a fired group with no fired time, and accepts one that has it", async () => {
     const partyId = await party();

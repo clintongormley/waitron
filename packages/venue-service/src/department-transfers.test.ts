@@ -49,6 +49,8 @@ async function venue() {
         name: randomUUID(),
         invoiceLocales: ["en-GB"],
       });
+      await seedPerson(tx, { id: "sender", displayName: "Sender" });
+      await seedPerson(tx, { id: "receiver", displayName: "Receiver" });
     }
     const suffix = existing.revision === 0 ? "" : ` ${randomUUID()}`;
     const cfg = {};

@@ -27,6 +27,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedDevice,
   seedDeviceProfiles,
+  seedPerson,
   seedWorkingOrder,
   seedActivityActor,
   attachStationPrinterForTest,
@@ -599,9 +600,13 @@ describe("permanent station deletion", () => {
     await inTx(v, async (tx) => {
       await tx.insert(workingOrderLines).values({ ...unsent.line, id: randomUUID(), lineNo: 2 });
       for (const state of ["open", "submitted", "discarded"] as const) {
+        const ownerId =
+          state === "open"
+            ? OPERATOR
+            : await seedPerson(tx, { displayName: `${state} draft owner` });
         const [draft] = await tx
           .insert(orderDrafts)
-          .values({ partyId, ownerId: state === "open" ? OPERATOR : randomUUID(), state })
+          .values({ partyId, ownerId, state })
           .returning();
         for (const position of [0, 1])
           await tx.insert(orderDraftLines).values({

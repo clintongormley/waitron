@@ -13,7 +13,7 @@ import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   assignMenuToVenue,
@@ -1406,6 +1406,7 @@ describe("readCurrentOrders (spec §4)", () => {
   });
 
   it("reads every group in sequence with each dish row's served count and kitchen state, across a paid bill, a split one and a later one", async () => {
+    await seedPerson(suite.db, { id: ALEX, displayName: "Round operator" });
     const v = await setupVenue();
     const s = await seated(v);
     const starters = await group(v, s.partyId, "fire", [
@@ -1460,15 +1461,6 @@ describe("readCurrentOrders (spec §4)", () => {
       .where(eq(workingOrders.id, s.tabId));
     expect(bill!.status).toBe("settled");
 
-    // These historical group senders are missing; the party's opening person exists separately.
-    await suite.db
-      .update(orderGroups)
-      .set({ submittedBy: randomUUID() })
-      .where(eq(orderGroups.partyId, s.partyId));
-    await suite.db
-      .update(orderGroups)
-      .set({ firedBy: randomUUID() })
-      .where(and(eq(orderGroups.partyId, s.partyId), isNotNull(orderGroups.firedBy)));
     const read = await currentOrders(s.partyId);
 
     expect(read).toEqual({
@@ -1487,7 +1479,7 @@ describe("readCurrentOrders (spec §4)", () => {
           firedAt: expect.any(String),
           remindAt: null,
           sentAt: expect.any(String),
-          sentBy: null,
+          sentBy: "Round operator",
           rows: [
             row({
               netAmount: "8.00",
@@ -1563,7 +1555,7 @@ describe("readCurrentOrders (spec §4)", () => {
           firedAt: null,
           remindAt: null,
           sentAt: expect.any(String),
-          sentBy: null,
+          sentBy: "Round operator",
           rows: [
             row({
               netAmount: "23.50",
@@ -2058,28 +2050,6 @@ describe("when each group was sent and who sent it (spec §4; owner 2026-09-28)"
     expect(read.groups.map((g) => [g.rows.map((r) => r.name), g.sentAt, g.sentBy])).toEqual([
       [["steak"], T(0), "Alex"],
       [["flan"], T(9), "Mía"],
-    ]);
-  });
-
-  it("reads no sender, and still the time, when the person has no record", async () => {
-    const v = await setupVenue();
-    const s = await seated(v);
-    const operator = await staff("Operator");
-    const starters = await at(T(0), () =>
-      submitAs(v, s.partyId, operator, "fire", [line(v, "croquetas")]),
-    );
-    const mains = await at(T(1), () =>
-      submitAs(v, s.partyId, operator, "hold", [line(v, "steak")]),
-    );
-    const nobody = randomUUID();
-    await inTx(async (tx) => {
-      await tx.update(orderGroups).set({ firedBy: nobody }).where(eq(orderGroups.id, starters.id));
-      await tx.update(orderGroups).set({ submittedBy: nobody }).where(eq(orderGroups.id, mains.id));
-    });
-
-    expect(await sent(s.partyId)).toEqual([
-      [starters.id, T(0), null],
-      [mains.id, T(1), null],
     ]);
   });
 });

@@ -3086,7 +3086,7 @@ describe("startServer, against a migrated venue directory", () => {
         method: "card",
         applied: 500,
         state: "pending",
-        requestedBy: randomUUID(),
+        requestedBy: await seedPerson(sharedDb, { displayName: "Stranded card operator" }),
       })
       .returning({ id: billPayments.id });
 

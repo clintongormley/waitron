@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedPerson } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -153,6 +153,7 @@ async function openOrder(venue: Venue): Promise<string> {
 }
 
 async function billPayment(orderId: string, deviceId: string, state: "pending" | "received") {
+  await seedPerson(suite.db, { id: OPERATOR, displayName: "Bill payment operator" });
   const [row] = await suite.db
     .insert(billPayments)
     .values({

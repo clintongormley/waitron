@@ -55,7 +55,7 @@ import {
   stampAttemptingRef,
 } from "./store.js";
 import { listOpenHolds, recordHold, recordHoldOutcome } from "./holds.js";
-import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
+import { freshNif, seedBillPayment, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
 import { seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
 
@@ -1387,25 +1387,7 @@ describe("listAttempting / stampAttemptingRef", () => {
 });
 
 describe("the link from a provider payment to its bill payment", () => {
-  /** A bill payment on the seeded order, which a `payments` row may name. */
-  async function billPayment(seeded: Seeded): Promise<string> {
-    const [row] = await suite.db
-      .insert(billPayments)
-      .values({
-        workingOrderId: seeded.workingOrderId,
-        source: "device",
-        deviceId: seeded.deviceId,
-        submissionId: `submission-${Math.random()}`,
-        fingerprint: "fingerprint",
-        kind: "contribution",
-        method: "card",
-        applied: 1000,
-        state: "pending",
-        requestedBy: "11111111-1111-1111-1111-111111111111",
-      })
-      .returning({ id: billPayments.id });
-    return row!.id;
-  }
+  const billPayment = (seeded: Seeded) => seedBillPayment(suite.db, seeded);
 
   async function storedLink(paymentRef: string): Promise<string | null> {
     const rows = await suite.db.execute<{ bill_payment_id: string | null }>(
@@ -1705,7 +1687,7 @@ describe("rows written within one millisecond", () => {
         method: "card",
         applied: 10_000,
         state: "pending",
-        requestedBy: "11111111-1111-1111-1111-111111111111",
+        requestedBy: await seedPerson(suite.db),
       })
       .returning({ id: billPayments.id });
     const [payment] = await suite.db
@@ -2056,7 +2038,7 @@ it.each([
         method: "card",
         applied: 1000,
         state: "pending",
-        requestedBy: "11111111-1111-1111-1111-111111111111",
+        requestedBy: await seedPerson(tx),
         source: "device",
         deviceId: seeded.deviceId,
         submissionId: "claim-bill",

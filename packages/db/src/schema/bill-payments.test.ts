@@ -1,13 +1,13 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
-import { checkFailed, refusalOn, triggerRaised } from "../constraint-target.js";
+import { checkFailed, refusalOn, restrictRefused, triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import {
   BILL_PAYMENT_CHANGE_REFUSAL,
@@ -17,6 +17,7 @@ import {
 } from "../trigger-refusals.js";
 import { billPaymentLines, billPaymentRefunds, billPayments } from "./bill-payments.js";
 import { drawerOpens } from "./drawer-opens.js";
+import { persons } from "./identity/persons.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 
@@ -50,6 +51,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
 
   beforeAll(async () => {
     const db = suite.db;
+    await seedPerson(db, { id: PERSON, displayName: "Cashier" });
+    await seedPerson(db, { id: MANAGER, displayName: "Manager" });
     await seedVenue(db, {
       name: "Loc",
       invoiceLocales: ["es"],
@@ -109,6 +112,27 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     );
     return row!.id;
   }
+
+  it.each(["requestedBy", "attestedBy"] as const)(
+    "requires a person for bill payment %s and restricts deleting them",
+    async (column) => {
+      const payment =
+        column === "attestedBy"
+          ? ({ state: "failed", failedAt: AT, attestationNote: "Provider confirmed" } as const)
+          : {};
+      const error = await captureError(() =>
+        insertPayment({ ...payment, [column]: "missing-person" }),
+      );
+      expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+
+      const personId = await seedPerson(suite.db, { displayName: `Payment ${column}` });
+      await insertPayment({ ...payment, [column]: personId });
+      const deletion = await captureError(() =>
+        inTx((tx) => tx.delete(persons).where(eq(persons.id, personId))),
+      );
+      expect(restrictRefused(deletion)).toBe(true);
+    },
+  );
 
   function refundValues(billPaymentId: string, overrides: Partial<RefundValues> = {}) {
     nextSubmission += 1;

@@ -16,6 +16,7 @@ import type { Database } from "@waitron/db";
 import {
   seedDevice,
   seedNode,
+  seedPerson,
   seedVenue,
   seedWorkingOrder as seedOrder,
 } from "@waitron/db/testing/seed.js";
@@ -144,7 +145,10 @@ export async function seedBillPayment(db: Database, seeded: Seeded): Promise<str
       method: "card",
       applied: 1000,
       state: "pending",
-      requestedBy: "11111111-1111-1111-1111-111111111111",
+      requestedBy: await seedPerson(db, {
+        id: "11111111-1111-1111-1111-111111111111",
+        displayName: "Bill payment operator",
+      }),
       source: "device",
       deviceId: seeded.deviceId,
     })

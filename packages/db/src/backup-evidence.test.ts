@@ -15,6 +15,7 @@ import { CORE_OWN_CLASSIFICATION } from "./classification.js";
 import { appendOrderAmendment } from "./append-order-amendment.js";
 import { withTransaction } from "./tenancy.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
+import { seedPerson } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 describe("complete backup table comparison", () => {
@@ -602,6 +603,7 @@ describe("core backup source binding", () => {
   ] as const)("refuses malformed amendment %s = %s", async (column, value) => {
     seed();
     for (const db of [before.db, after.db]) {
+      await seedPerson(db, { id: "operator" });
       db.run(
         sql`insert into working_orders (id, source, node_id, order_number, opened_at, dining) values ('order', 'dashboard', 'source', 1, '2026-10-20T00:00:00.000Z', 'eat_in')`,
       );
@@ -637,6 +639,8 @@ describe("core backup source binding", () => {
 
   it("walks every order amendment chain, including historical middle damage", async () => {
     seed();
+    await seedPerson(before.db, { id: "operator" });
+    await seedPerson(after.db, { id: "operator" });
     for (const id of ["old-order", "new-order"]) {
       for (const db of [before.db, after.db])
         db.run(

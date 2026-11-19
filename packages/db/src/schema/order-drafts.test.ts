@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
-import { checkFailed, refusalOn, triggerRaised } from "../constraint-target.js";
+import { checkFailed, refusalOn, restrictRefused, triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
@@ -13,6 +13,7 @@ import { orderDraftLines, orderDrafts } from "./order-drafts.js";
 import { orderEvents } from "./order-events.js";
 import { orderGroups } from "./order-groups.js";
 import { parties } from "./parties.js";
+import { persons } from "./identity/persons.js";
 
 const ALEX = "cccccccc-2222-4000-8000-000000000001";
 const SAM = "cccccccc-2222-4000-8000-000000000002";
@@ -81,6 +82,19 @@ describe("order_drafts, order_draft_lines and order_events", () => {
       await tx.update(orderDrafts).set({ state }).where(eq(orderDrafts.id, id));
     });
   }
+
+  it("requires a person as draft owner and restricts deleting them", async () => {
+    const partyId = await party();
+    const error = await captureError(() => draft({ partyId, ownerId: MISSING }));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+
+    const ownerId = await seedPerson(suite.db, { displayName: "Draft owner" });
+    await draft({ partyId, ownerId });
+    const deletion = await captureError(() =>
+      inTx((tx) => tx.delete(persons).where(eq(persons.id, ownerId))),
+    );
+    expect(restrictRefused(deletion)).toBe(true);
+  });
 
   it("starts a draft open at revision 0", async () => {
     const id = await draft({ partyId: await party(), ownerId: ALEX });

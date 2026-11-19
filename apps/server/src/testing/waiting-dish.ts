@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { deploymentEnvironment } from "../config.js";
 import { parkOrder } from "../working-order.js";
@@ -9,6 +10,8 @@ import { deviceRequestCfg } from "./session-device.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import type { Venue } from "./venue-fixtures.js";
 import { offerProducts } from "./zone-offers.js";
+
+const OPERATOR = randomUUID();
 
 /** Places a one-coffee counter order at `at`, then puts its dish on `stationId`, fired at `firedAt`. */
 export async function waitingDish(
@@ -49,7 +52,7 @@ export async function waitingDish(
     { admission: testTradingAdmission(), db, backend, clock },
     await deviceRequestCfg(db, venue.cfg),
     orderId,
-    randomUUID(),
+    await seedPerson(db, { id: OPERATOR, displayName: "Waiting dish operator" }),
   );
   await db.execute(
     sql`update ticket_items set station_id = ${stationId}, fired_at = ${firedAt} where working_order_line_id in (select id from working_order_lines where working_order_id = ${orderId})`,

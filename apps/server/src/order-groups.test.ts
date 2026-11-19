@@ -3013,6 +3013,7 @@ describe("a device as the firer", () => {
   }
 
   it("records the device, not a person, on a historical group release, and shows it as the sender", async () => {
+    await seedPerson(db, { id: ALEX, displayName: "Round operator" });
     const v = await setupVenue();
     const s = await specExample(v);
     const device = await firingDevice();
@@ -3026,11 +3027,9 @@ describe("a device as the firer", () => {
       .from(orderEvents)
       .where(and(eq(orderEvents.groupId, s.mains), eq(orderEvents.kind, "group.fired")));
     expect(event).toMatchObject({ actorId: null, actorDeviceId: device.id });
-    // The missing historical firer is distinct from the party's checked opening person.
-    await db.update(orderGroups).set({ firedBy: randomUUID() }).where(eq(orderGroups.id, s.drinks));
     const read = await inTx((tx) => readCurrentOrders(tx, s.partyId));
     expect(read.groups.find((g) => g.id === s.mains)?.sentBy).toBe(device.label);
-    expect(read.groups.find((g) => g.id === s.drinks)?.sentBy).toBeNull();
+    expect(read.groups.find((g) => g.id === s.drinks)?.sentBy).toBe("Round operator");
   });
 
   it("records the device when a group fires, keeping the device's id as the command's operator", async () => {

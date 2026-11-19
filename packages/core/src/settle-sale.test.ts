@@ -18,7 +18,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { AppError, saleId as brandSaleId, stringToCents } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { seedTaxpayer } from "../test/fixtures.js";
@@ -217,7 +217,7 @@ describe("settleSale — a bill paid in parts", () => {
         applied: 4000,
         tendered: 5000,
         state: "received",
-        requestedBy: "cccccccc-0000-4000-8000-000000000001",
+        requestedBy: await seedPerson(suite.db),
         source: "device",
         deviceId: seed.deviceId,
         receivedAt: SETTLED_AT.toISOString(),

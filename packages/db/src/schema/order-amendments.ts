@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, flag, id, label, newId, table, tsString } from "./columns.js";
 import { devices } from "./devices.js";
+import { persons } from "./identity/persons.js";
 import { nodes } from "./nodes.js";
 import { originChecks, sourceColumn } from "./origin.js";
 import { workingOrders } from "./orders.js";
@@ -30,7 +31,6 @@ export const orderAmendments = table(
     // 1-based position within THIS order's amendment chain; contiguous and hashed.
     sequenceNo: count("sequence_no").notNull(),
     kind: orderAmendmentKind("kind").notNull(),
-    // The accountable actor (the operator from the open session). No key yet.
     actorId: id("actor_id").notNull(),
     // NULL on the genesis `order_placed`; required by the app for `order_cancelled`.
     reason: label("reason"),
@@ -60,6 +60,11 @@ export const orderAmendments = table(
       columns: [t.capturedByNodeId],
       foreignColumns: [nodes.id],
       name: "order_amendments_node_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.actorId],
+      foreignColumns: [persons.id],
+      name: "order_amendments_actor_fk",
     }).onDelete("restrict"),
     // THE backstop against two writers claiming one chain position.
     unique("order_amendments_chain_position_key").on(t.workingOrderId, t.sequenceNo),

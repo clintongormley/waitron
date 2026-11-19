@@ -2066,7 +2066,7 @@ export interface CurrentOrderGroup {
   remindAt: string | null;
   /** A fired group's firing; a held group's holding. */
   sentAt: string;
-  /** The display name of whoever fired or held it; null when no person record matches. */
+  /** The name of the person or device recorded as the sender, if one was recorded. */
   sentBy: string | null;
   rows: CurrentOrderRow[];
 }

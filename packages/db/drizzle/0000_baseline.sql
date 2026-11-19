@@ -243,6 +243,7 @@ CREATE TABLE `order_amendments` (
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`captured_by_device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`captured_by_node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`actor_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "order_amendments_sequence_no_ck" CHECK("order_amendments"."sequence_no" > 0),
 	CONSTRAINT "order_amendments_kind_ck" CHECK("order_amendments"."kind" in ('order_placed', 'order_cancelled')),
 	CONSTRAINT "order_amendments_captured_by_source_ck" CHECK("order_amendments"."captured_by_source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')),
@@ -531,6 +532,8 @@ CREATE TABLE `order_groups` (
 	FOREIGN KEY (`number_party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`fired_by_device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`fired_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`submitted_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "order_groups_state_ck" CHECK("order_groups"."state" in ('held', 'fired', 'removed')),
 	CONSTRAINT "order_groups_fired_at_ck" CHECK(("order_groups"."state" = 'fired') = ("order_groups"."fired_at" is not null)),
 	CONSTRAINT "order_groups_firer_ck" CHECK("order_groups"."fired_by" is null or "order_groups"."fired_by_device_id" is null)
@@ -588,6 +591,7 @@ CREATE TABLE `order_drafts` (
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`bill_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`owner_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "order_drafts_state_ck" CHECK("order_drafts"."state" in ('open', 'submitted', 'discarded'))
 );
 --> statement-breakpoint
@@ -600,6 +604,7 @@ CREATE TABLE `line_service_cancellations` (
 	`was_started` integer NOT NULL,
 	`actor_id` text NOT NULL,
 	FOREIGN KEY (`line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`actor_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "line_service_cancellations_quantity_ck" CHECK("line_service_cancellations"."quantity" > 0)
 );
 --> statement-breakpoint
@@ -1286,6 +1291,8 @@ CREATE TABLE `bill_payments` (
 	`attestation_note` text,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`attested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "bill_payments_kind_ck" CHECK("bill_payments"."kind" in ('items', 'contribution', 'share')),
 	CONSTRAINT "bill_payments_source_ck" CHECK("bill_payments"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script')),
 	CONSTRAINT "bill_payments_source_device_ck" CHECK(("bill_payments"."source" = 'device') = ("bill_payments"."device_id" is not null)),
@@ -2509,6 +2516,8 @@ CREATE TABLE `department_transfer_requests` (
 	FOREIGN KEY (`source_department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`destination_department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`destination_zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`sender_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`resolved_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "department_transfer_requests_status_ck" CHECK("department_transfer_requests"."status" in ('pending', 'accepted', 'declined', 'withdrawn')),
 	CONSTRAINT "department_transfer_requests_different_ck" CHECK("department_transfer_requests"."source_department_id" <> "department_transfer_requests"."destination_department_id"),
 	CONSTRAINT "department_transfer_requests_resolved_ck" CHECK(("department_transfer_requests"."status" = 'pending') = ("department_transfer_requests"."resolved_at" is null)),

@@ -1,5 +1,5 @@
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
-import { seedZone } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedZone } from "@waitron/db/testing/seed.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
@@ -2429,8 +2429,8 @@ describe("A803 split", () => {
     const b2 = await splitOff(anna.partyId, anna.tabId, [2]);
     const b3 = await splitOff(anna.partyId, anna.tabId, [3]);
     const firers = [
-      [b2, randomUUID()],
-      [b3, randomUUID()],
+      [b2, await seedPerson(v.db, { displayName: "Wine firer" })],
+      [b3, await seedPerson(v.db, { displayName: "Flan firer" })],
     ] as const;
     for (const [billId, firedBy] of firers) {
       const groupId = (await lineRows(billId))[0]!.groupId!;
@@ -3207,7 +3207,7 @@ describe("A803 split", () => {
       const cake = await lineOn(b1, "Tarta");
       const source = flan.groupId!;
       const firedSource = burger.groupId!;
-      const firedBy = randomUUID();
+      const firedBy = await seedPerson(v.db, { displayName: "Burger firer" });
       await act((tx) =>
         tx.update(orderGroups).set({ firedBy }).where(eq(orderGroups.id, firedSource)),
       );
