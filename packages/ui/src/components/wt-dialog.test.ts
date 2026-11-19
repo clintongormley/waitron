@@ -2706,7 +2706,7 @@ test("the dialog above one put back keeps where its long body was scrolled to", 
   expect(body.scrollTop).toBe(200);
 });
 
-test("an open dialog put back keeps where its long body was scrolled to", async () => {
+test("an open dialog put back keeps its scroll position within the same opening", async () => {
   const el = (await mount(
     '<wt-dialog heading="Edit"><input aria-label="Name" /><div style="height: 3000px"></div></wt-dialog>',
   )) as WtDialog;
@@ -2725,6 +2725,16 @@ test("an open dialog put back keeps where its long body was scrolled to", async 
   await el.updateComplete;
   expect(nativeOf(el).matches(":modal")).toBe(true);
   expect(body.scrollTop).toBe(200);
+
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  expect(body.scrollTop).toBe(0);
+
+  takeOut(el)();
+  await el.updateComplete;
+  expect(body.scrollTop).toBe(0);
 });
 
 test("Escape goes to the dialog above one put back, and focus then lands in the one underneath", async () => {

@@ -465,7 +465,6 @@ export class WtDialog extends LitElement {
   }
 
   private rememberBodyScroll(): void {
-    // Detaching can reset the body's scroll position before the dialog is put back.
     if (this.dialog.matches(":modal")) this.lastBodyScrollTop = this.bodyEl.scrollTop;
   }
 

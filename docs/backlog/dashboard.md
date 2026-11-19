@@ -186,11 +186,11 @@ cloud-recovery code.
 
 ## Bundle: Wt dialog lifecycle
 
-- **Covered-dialog reinsertion and the department and zone wrappers.** The source trace found
-  no screen that puts back a retained lower editor under an open upper editor. Chromium controls
-  showed that raising the lower dialog without restoring the upper either closes the lower
-  dialog on Escape or swallows Escape. Keep the wrappers' current reopening behavior until a
-  screen can demonstrate the issue and verify a fix.
+- **Covered-dialog reinsertion and the department and zone wrappers.** Putting a lower dialog
+  back can blur the upper field and close its choices. The source trace found no screen that
+  puts back a retained lower editor under an open upper editor. Raising the lower window alone
+  sent Escape to the wrong dialog or swallowed it in `native-escape-main.log` (Lane D's dialog
+  receipts). Keep the wrappers' current behavior until a screen can demonstrate and verify a fix.
 
 ## Bundle: Form implementation leftovers
 
@@ -231,10 +231,11 @@ Size M.
   on 2026-11-19 to `printers-screen.ts`, `payments-screen.ts`, `backup-screen.ts`,
   `devices-screen.ts` and `device-profiles-screen.ts`.
 
-- **Dialog Home and End keys (2026-11-19):** keep native keys and vertical containment. In
-  the November 9 Chromium control, End moved the page from 800 to 4156 without containment and
-  kept it at 800 with containment. The November 19 repeat reported FAILURE and measured 800 in
-  both settings.
+- **Dialog Home and End keys (2026-11-19):** keep native keys and vertical containment.
+  In the November 9 Chromium control, End scrolled the body and left the text selected.
+  The underlying page moved from 800 to 4156 without containment and stayed at 800 with it.
+  The November 19 repeat reported FAILURE because it measured 800 in both settings. The
+  decision rests on the November 9 comparison.
 
 - **Password-throttle saturation:** during an address spray, an address sharing a counter with
   sprayed addresses can inherit their failed-password count if it has no cache entry or live

@@ -5,7 +5,8 @@ Check scroll restoration in the shared dialog's browser suite. Settle the remain
 [the dialog backlog](../../backlog/dashboard.md#bundle-wt-dialog-lifecycle)
 from the browser evidence and source. Use one pull request.
 
-1. **Keep the picker window.** #2642 is on main at `c7ca274eeb1426f64a825164ee3411630545efcd`.
+1. **Keep the picker window.** The shared dialog's reconnect restoration landed in #2444 at
+   `1c8bd5b22d0407a187673b8d37293b7f49f87380`.
    In `apps/till/src/widgets/modifier-picker.unsaved.test.ts`, extend the A738 reconnect case.
    Focus the native note field, then remove and return the picker. Check that the same field
    retains focus. Keep the existing checks for native modality, edits, Escape and
@@ -16,8 +17,8 @@ from the browser evidence and source. Use one pull request.
    Run the picker unsaved, quantity and note files plus the basket line-edit cases. In
    `packages/ui/src/components/wt-dialog.test.ts`, check that an overflowing dialog body
    keeps its scroll position when the dialog itself is put back. The test failed on the
-   base. The watcher cleared the shared fix on November 19 at 19:58. In `wt-dialog.ts`,
-   reuse the existing restoration with the last scroll position observed while modal.
+   base. On November 19 at 19:58 the watcher said to “fix it here, reusing the existing restore
+   path with the last body position seen while attached.” Do that in `wt-dialog.ts`.
 2. **Resolve the caret entry from the existing controls.** The November 9 run-it control saw End
    scroll the overflowing dialog body and a plain overflowing control, leaving selection
    `[0,6]` in both. Its tall-page control saw the page move without containment and stay still
