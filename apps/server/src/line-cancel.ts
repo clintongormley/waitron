@@ -172,6 +172,7 @@ export async function cancelItem(
         .select()
         .from(workingOrderLines)
         .where(eq(workingOrderLines.id, lineId));
+      if (line?.setMenuRole === "set_menu") throw new AppError("set_menu.remove_from_summary", {});
       const [bill] = await tx
         .select()
         .from(workingOrders)

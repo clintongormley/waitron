@@ -19,6 +19,7 @@ import {
   isValidGuestCount,
   JOIN_SIDES,
   type JoinSide,
+  type DishMove,
   PERSON_HEADER,
   SUPPORTED_LOCALES,
   thousandthsToDecimal,
@@ -99,6 +100,7 @@ import { listZones } from "./tables.js";
 import {
   abandonHeldOrder,
   advanceTicketItem,
+  assertTabOpen,
   bumpBillReady,
   cancelPlacedOrder,
   captureOrderService,
@@ -144,6 +146,8 @@ import {
   seatTable,
   setPartyName,
   setPartyGuestCount,
+  checkAndBumpParty,
+  partyOfOrder,
   partyRevision,
   partyRevisionOfOrder,
   partyZone,
@@ -151,6 +155,8 @@ import {
 import { finishPartyService } from "./finish-party-service.js";
 import { parseFinishCancellations } from "./finish-party-input.js";
 import { mergeBills, moveDishes } from "./bill-actions.js";
+import { moveSetMenuDishes } from "./set-menu-moves.js";
+import { refuseUnlessSetMenuBill } from "./set-menu-bill.js";
 import type { BillCommand } from "./bill-actions.js";
 import { billNameZoneSubject, setBillName } from "./bill-identities.js";
 import { moveBill, moveWouldSend, previewBillMoveAllergy } from "./move-bill.js";
@@ -443,6 +449,8 @@ export async function resolveCardCollector(
 export const STATUS: Record<string, ContentfulStatusCode> = {
   "settings.invalid": 500,
   "set_menu.no_place": 409,
+  "set_menu.place_taken": 409,
+  "set_menu.remove_from_summary": 409,
   "set_menu.dish_sold_by_measure": 409,
   "set_menu.not_seated": 409,
   "set_menu.payment_not_ready": 409,
@@ -1034,6 +1042,19 @@ function selectionId(value: unknown): string {
 }
 
 /** A list of line ids: a non-UUID is the request's fault, not a line the bill lacks. */
+function requireSetMenuMoves(value: unknown): DishMove[] {
+  if (!Array.isArray(value) || value.length === 0) throw invalid("moves");
+  return value.map((entry: unknown) => {
+    const { lineId, to } = asObject(entry);
+    const { setMenuLineId, place } = asObject(to);
+    if (!int4InRange(place, 0)) throw invalid("moves");
+    return {
+      lineId: requireBodyUuid(lineId, "moves").toLowerCase(),
+      to: { setMenuLineId: requireBodyUuid(setMenuLineId, "moves").toLowerCase(), place },
+    };
+  });
+}
+
 function requireLineIds(value: unknown): string[] {
   if (!Array.isArray(value)) throw invalid("lineIds");
   return value.map((id) => requireBodyUuid(id, "lineIds").toLowerCase());
@@ -4250,6 +4271,31 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         );
       });
       return c.body(null, 200);
+    }),
+  );
+
+  app.post("/api/bills/:id/set-menu-moves", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const cfg = requestCfg(deps.cfg, session);
+      const billId = requireTabParam(c.req.param("id")).toLowerCase();
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const moves = requireSetMenuMoves(body.moves);
+      const expected = requireRevision(body.expectedPartyRevision, "expectedPartyRevision");
+      const result = await withTransaction(deps.db, async (tx) => {
+        await requireEconomicWrite(tx, deps.cfg, deps.admission);
+        await checkZones(tx, session, [{ orderId: billId }]);
+        const revision = await assertTabOpen(tx, billId);
+        await refuseUnlessSetMenuBill(tx, billId);
+        const partyId = await partyOfOrder(tx, billId);
+        if (partyId === null && revision !== expected)
+          throw new AppError("working_order.out_of_date", { workingOrderId: billId, revision });
+        const partyRevision =
+          partyId === null ? revision + 1 : await checkAndBumpParty(tx, partyId, expected, "open");
+        const setMenus = await moveSetMenuDishes(tx, cfg, billId, moves);
+        return { setMenus, partyRevision };
+      });
+      return c.json(result);
     }),
   );
 

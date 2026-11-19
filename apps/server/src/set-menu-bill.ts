@@ -211,7 +211,7 @@ export interface SetMenuDraftLine {
 type WorkingLine = typeof workingOrderLines.$inferInsert;
 export interface SetMenuPlacement {
   workingOrderLineId: string;
-  draft: SetMenuDraftLine;
+  draft: Pick<SetMenuDraftLine, "position" | "setMenuId" | "reserved"> & { draftLineId?: string };
   productId: string;
   variantId: string | null;
 }
@@ -226,15 +226,11 @@ export function setMenuDishColumns(result: PlacementResult) {
   };
 }
 
-export async function placeSetMenuRows(
+export async function readSetMenuReservations(
   tx: Transaction,
   workingOrderId: string,
-  rows: readonly WorkingLine[],
-  order: readonly SetMenuPlacement[],
-): Promise<readonly WorkingLine[]> {
-  if (order.length === 0) return rows;
-  const state = await readBillSetMenus(tx, workingOrderId);
-  const sending = new Set(order.map(({ draft }) => draft.draftLineId));
+  sending: ReadonlySet<string> = new Set(),
+): Promise<DishPlace[]> {
   const reservations = await tx
     .select({
       draftLineId: orderDraftLines.id,
@@ -250,11 +246,23 @@ export async function placeSetMenuRows(
         isNotNull(orderDraftLines.setMenuReservedLineId),
       ),
     );
-  const held = reservations.flatMap(({ draftLineId, setMenuLineId, place }) =>
+  return reservations.flatMap(({ draftLineId, setMenuLineId, place }) =>
     sending.has(draftLineId) || setMenuLineId === null || place === null
       ? []
       : [{ setMenuLineId, place }],
   );
+}
+
+export async function placeSetMenuRows(
+  tx: Transaction,
+  workingOrderId: string,
+  rows: readonly WorkingLine[],
+  order: readonly SetMenuPlacement[],
+): Promise<readonly WorkingLine[]> {
+  if (order.length === 0) return rows;
+  const state = await readBillSetMenus(tx, workingOrderId);
+  const sending = new Set(order.flatMap(({ draft }) => draft.draftLineId ?? []));
+  const held = await readSetMenuReservations(tx, workingOrderId, sending);
   const dishes: DishToPlace[] = [...order]
     .sort((a, b) => a.draft.position - b.draft.position)
     .map(({ workingOrderLineId: id, draft, productId, variantId }) => ({
