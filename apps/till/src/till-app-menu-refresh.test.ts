@@ -32,7 +32,7 @@ import type {
   TillSaleResult,
   ZoneOffers,
 } from "./api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { HOME_DISPLAY_DEFAULTS, setMenuCopyOf } from "@waitron/shared";
 
 // Lunch is published as v1 and then as v2. Lemonade and Burger are on it; Burger offers an extras list
 // (cheese) and an options list (rare / medium).
@@ -3215,4 +3215,127 @@ it("keeps the displayed table bill after a declaration read fails and retries on
   await poll(el);
   expect(tableScreen(el).lines[0]!.nutrition?.allergens).toEqual({ eggs: {} });
   expect(listGroups.mock.calls.length).toBe(groupsRead);
+});
+
+it.each(["recorded", "live"] as const)(
+  "restores a set-menu dish from its %s copy and follows sold-out changes",
+  async (source) => {
+    const dish = {
+      ...offer("menu-hake", "Hake", "5.00"),
+      ordering: "not_sold_separately" as const,
+      countsAsCourseId: null,
+      variantCountsAs: {},
+    };
+    const copy = {
+      key: "daily-copy",
+      menuId: "daily",
+      name: "Daily",
+      changedAt: "2026-11-19T08:00:00Z",
+      terms: {
+        price: "14.00",
+        vatClass: "reduced" as const,
+        takeawayVatClass: "reduced" as const,
+        names: {},
+        lines: [],
+      },
+      structure: { members: [] },
+      offers: [dish],
+    };
+    const recorded = source === "recorded";
+    const bill = partyBillOf(
+      "party-a",
+      "wo-7",
+      1,
+      !recorded
+        ? {}
+        : {
+            setMenuCopies: [copy],
+            setMenus: {
+              copies: [setMenuCopyOf(copy, "retired")],
+              recorded: { daily: "retired" },
+              setMenus: [],
+              dishes: [],
+            },
+          },
+    );
+    drafts.drafts.push({
+      id: "draft-1",
+      partyId: "party-a",
+      billId: "wo-7",
+      ownerId: "p1",
+      ownerName: "Ana",
+      revision: 1,
+      takenOverFrom: null,
+      lines: [
+        {
+          id: "hake",
+          sourceLineId: null,
+          source: null,
+          menuItemId: "menu-hake",
+          menuVersionId: recorded ? "retired" : "v1",
+          setMenuId: "daily",
+          setMenuReservedLineId: null,
+          setMenuReservedPlace: null,
+          quantity: "1",
+          variantId: null,
+          courseId: null,
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
+          note: null,
+          options: [],
+          extras: [],
+          noMerge: false,
+          unavailable: false,
+        },
+      ],
+    });
+    const liveCopy = {
+      ...copy,
+      offers: [{ ...dish, unitPrice: recorded ? "8.00" : "5.00" }],
+      versionIds: ["v1"],
+      orderable: true,
+      newestOnSale: true,
+    };
+    const dining = { ...DINING, setMenus: [liveCopy] };
+    const { el } = await mountApp(
+      tableStubs(dining, {
+        listZoneOffers: vi.fn(async (zoneId: string) => (zoneId === "zone-dining" ? dining : V1)),
+        getPartyBills: vi.fn().mockResolvedValue([bill]),
+      }),
+    );
+    await toTable(el);
+    expect(roundStore(el).lines[0]).toMatchObject({ product: { name: "Hake", unitPrice: "5.00" } });
+    expect(roundStore(el).lines[0]?.blocked).toBeUndefined();
+
+    api.menuState.mockImplementation(async (zoneId: string) =>
+      menuState(
+        "v1",
+        zoneId === "zone-dining" ? { products: ["Hake"], optionLabels: [] } : NOTHING,
+      ),
+    );
+    await poll(el);
+    expect(roundStore(el).lines[0]?.blocked).toBe("unavailable");
+
+    api.menuState.mockImplementation(async () => menuState("v1"));
+    await poll(el);
+    expect(roundStore(el).lines[0]?.blocked).toBeUndefined();
+    expect(dialog(el)).toBeNull();
+  },
+);
+
+it("shows the named dish and available choices when Send cannot place it", async () => {
+  const { el } = await mountApp(
+    tableStubs(DINING, {
+      submitDraft: vi
+        .fn()
+        .mockRejectedValue({ code: "set_menu.no_place", status: 409, dishName: "Sea bass" }),
+    }),
+  );
+  await toTable(el);
+  await sendLemonadeRound(el);
+
+  expect(banner(el)?.textContent).toContain("There is no place for Sea bass");
+  expect(banner(el)?.textContent).toContain("order the dish à la carte");
+  expect(roundStore(el).lineCount).toBe(1);
 });

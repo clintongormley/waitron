@@ -76,6 +76,8 @@ export interface LineSelection {
 }
 
 export interface OrderLine {
+  setMenuId?: string;
+  setMenuReserved?: import("@waitron/shared").DishPlace | null;
   place?: Place;
   draftLineId?: string;
   workingOrderLineId?: string;

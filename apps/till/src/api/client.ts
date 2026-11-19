@@ -1,3 +1,4 @@
+import type { BillSetMenuState, DishMove, ServedSetMenuCopy } from "@waitron/shared";
 import { rememberInvoiceEvidence } from "./invoice-evidence.js";
 import type { InvoiceEvidence } from "./invoice-evidence.js";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
@@ -733,6 +734,9 @@ export interface SubmittedGroups {
 }
 
 export interface FreshDraftLine {
+  setMenuId?: string;
+  setMenuReservedLineId?: string | null;
+  setMenuReservedPlace?: number | null;
   sourceLineId: null;
   source: null;
   id: string;
@@ -2198,9 +2202,16 @@ export interface MergeInvoiceChoice {
   from: InvoiceIdentity;
 }
 
+export interface BillSetMenusReply {
+  setMenus: BillSetMenuState;
+  partyRevision: number;
+}
+
 /** One bill of a seated party from `GET /api/parties/:id/bills`. `outstanding` is zero on a settled or
  * abandoned bill; `receiptAvailable` says a sale was filed for it, so its receipt can be printed again. */
 export interface PartyBill {
+  setMenus?: BillSetMenuState;
+  setMenuCopies?: ServedSetMenuCopy[];
   workingOrderId: string;
   revision: number;
   /** The bill's own way, whatever its department now says. */
@@ -5055,6 +5066,49 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/guests`, "PUT", {
       guestCount,
       expectedPartyRevision,
+    });
+  }
+
+  readBillSetMenus(billId: string): Promise<BillSetMenusReply> {
+    return this.#request(`/api/bills/${billId}/set-menus`, "GET");
+  }
+
+  setSetMenuCount(
+    billId: string,
+    setMenuId: string,
+    count: number,
+    expectedPartyRevision: number,
+    expectedEdit: BillEditExpected | null,
+  ): Promise<BillSetMenusReply> {
+    return this.#request(`/api/bills/${billId}/set-menus/${setMenuId}`, "PUT", {
+      count,
+      expectedPartyRevision,
+      expectedEdit,
+    });
+  }
+
+  removeSetMenu(
+    billId: string,
+    lineId: string,
+    expectedPartyRevision: number,
+    expectedEdit: BillEditExpected | null,
+  ): Promise<BillSetMenusReply> {
+    return this.#request(`/api/bills/${billId}/set-menu-lines/${lineId}`, "DELETE", {
+      expectedPartyRevision,
+      expectedEdit,
+    });
+  }
+
+  moveSetMenuDishes(
+    billId: string,
+    moves: readonly DishMove[],
+    expectedPartyRevision: number,
+    expectedEdit: BillEditExpected | null,
+  ): Promise<BillSetMenusReply> {
+    return this.#request(`/api/bills/${billId}/set-menu-moves`, "POST", {
+      moves,
+      expectedPartyRevision,
+      expectedEdit,
     });
   }
 

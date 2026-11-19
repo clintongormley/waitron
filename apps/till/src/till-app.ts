@@ -463,6 +463,7 @@ import {
   repriceRebuilt,
   withUnavailable,
 } from "./state/menu-refresh.js";
+import { lookupSetMenuLine, orderingCopies, type SetMenuOfferLookup } from "./state/set-menus.js";
 import type { ShellAffordance } from "./widgets/till-shell.js";
 import type { BasketRefusal, OrderLine, SelectedExtra } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
@@ -906,6 +907,14 @@ function tableWriteError(error: unknown): CounterError {
   if (period !== undefined) return period;
   const refused = error as { code?: string; tableId?: unknown } | undefined;
   const code = refused?.code;
+  if (typeof code === "string" && code.startsWith("set_menu.")) {
+    const { setMenuName, dishName, dishNames } = error as {
+      setMenuName?: unknown;
+      dishName?: unknown;
+      dishNames?: unknown;
+    };
+    return { code, setMenuName, dishName, dishNames };
+  }
   if (code === undefined || !TABLE_REFUSALS.has(code)) return "table.error";
   return code === "table.needs_moving" && typeof refused!.tableId === "string"
     ? { code, tableId: refused!.tableId }
@@ -1684,6 +1693,9 @@ type CounterError =
       reason?: string;
       /** The way an `order.dining_fixed` refusal names. */
       dining?: string;
+      setMenuName?: unknown;
+      dishName?: unknown;
+      dishNames?: unknown;
     }
   | { billPayments: string }
   | { replacedGroups: string }
@@ -1806,7 +1818,7 @@ function errorText(
     }
     const message =
       error.dishes === undefined
-        ? codeMessage(error.code, undefined, { reason: error.reason, dining: error.dining })
+        ? codeMessage(error.code, undefined, error)
         : fill(t("station.no_default_named"), { dishes: error.dishes });
     const bill = error.bill;
     if (bill !== undefined) return fill(t("table.refused_on_bill"), { bill, message });
@@ -1932,6 +1944,10 @@ function menusMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus"])
 /** The offers a zone sells now: as loaded, or with the latest poll's unavailable set applied. */
 class ZoneOfferIndex {
   #loaded: TillMenuOffer[] = [];
+  #loadedSetMenus: NonNullable<ZoneOffers["setMenus"]> = [];
+  #unavailable?: MenuUnavailable;
+  #sellingVersions = new Set<string>();
+  setMenus: NonNullable<ZoneOffers["setMenus"]> = [];
   /** The set last applied, as a sorted key, so an unchanged poll answer rebuilds nothing. */
   #unavailableKey: string | null = null;
   /** The offers with the latest unavailable set applied, kept rather than rebuilt at each read. */
@@ -1945,7 +1961,10 @@ class ZoneOfferIndex {
   loaded = false;
   liveFields: string | undefined;
 
-  load(zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "liveFields">, loaded = true): void {
+  load(
+    zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "liveFields" | "setMenus">,
+    loaded = true,
+  ): void {
     this.selectable = new Set(
       zoneOffers.menus.filter((menu) => menu.orderable).map((menu) => menu.id),
     );
@@ -1955,6 +1974,12 @@ class ZoneOfferIndex {
       ),
     );
     this.#loaded = zoneOffers.offers;
+    this.#loadedSetMenus = zoneOffers.setMenus ?? [];
+    this.setMenus = this.#loadedSetMenus;
+    this.#unavailable = undefined;
+    this.#sellingVersions = new Set(
+      zoneOffers.menus.filter((menu) => menu.orderable).map((menu) => menu.versionId),
+    );
     this.#unavailableKey = null;
     this.#setLive(zoneOffers.offers);
     this.versions = new Map(zoneOffers.menus.map((menu) => [menu.id, menu.versionId]));
@@ -1970,7 +1995,12 @@ class ZoneOfferIndex {
     ]);
     if (key === this.#unavailableKey) return false;
     this.#unavailableKey = key;
+    this.#unavailable = unavailable;
     this.#setLive(withUnavailable(this.#loaded, unavailable));
+    this.setMenus = this.#loadedSetMenus.map((copy) => ({
+      ...copy,
+      offers: withUnavailable(copy.offers, unavailable),
+    }));
     return true;
   }
 
@@ -1983,11 +2013,46 @@ class ZoneOfferIndex {
     return this.live.map((offer) => menuOfferToTillProduct(offer, this.versions.get(offer.menuId)));
   }
 
+  setMenuLookup(bill?: PartyBill): SetMenuOfferLookup {
+    const copies = new Map(
+      orderingCopies(bill, this.setMenus, this.#sellingVersions).map((row) => [
+        row.copy.menuId,
+        row,
+      ]),
+    );
+    return ({ setMenuId, menuItemId, menuVersionId }) => {
+      if (setMenuId === undefined) return undefined;
+      const recorded = Object.hasOwn(bill?.setMenus?.recorded ?? {}, setMenuId);
+      const held =
+        menuVersionId === null || recorded
+          ? undefined
+          : this.setMenus.find(
+              (copy) => copy.menuId === setMenuId && copy.versionIds.includes(menuVersionId),
+            );
+      const selected =
+        held !== undefined && menuVersionId !== null
+          ? { copy: held, versionId: menuVersionId }
+          : copies.get(setMenuId);
+      const base = selected?.copy.offers.find((dish) => dish.id === menuItemId);
+      if (selected === undefined || base === undefined) return undefined;
+      const offer =
+        recorded && this.#unavailable !== undefined
+          ? withUnavailable([base], this.#unavailable)[0]!
+          : base;
+      return { offer, versionId: selected.versionId };
+    };
+  }
+
   /** Why each line cannot be sold as it stands. A line with no menu version is the server's to price
    * from the live version, so a missing offer marks only a line that came from a versioned one. */
-  blocks(lines: readonly OrderLine[]): (BlockReason | undefined)[] {
+  blocks(
+    lines: readonly OrderLine[],
+    setMenuOffer?: SetMenuOfferLookup,
+  ): (BlockReason | undefined)[] {
     return lines.map((line) => {
       if (!this.loaded || line.workingOrderLineId !== undefined) return undefined;
+      if (line.setMenuId !== undefined)
+        return lineBlock(line, lookupSetMenuLine(line, setMenuOffer)?.offer)?.reason;
       const offer = this.byId.get(line.product.menuItemId ?? "");
       if (offer === undefined && line.product.menuVersionId === undefined) return undefined;
       return (
@@ -2001,7 +2066,9 @@ class ZoneOfferIndex {
 
   /** The ended period each line is marked with; nothing while the offers could not be read. */
   endedPeriods(lines: readonly OrderLine[]): (EndedPeriod | undefined)[] {
-    return lines.map((line) => (this.loaded ? endedPeriodOf(line, this) : undefined));
+    return lines.map((line) =>
+      this.loaded && line.setMenuId === undefined ? endedPeriodOf(line, this) : undefined,
+    );
   }
 }
 
@@ -6643,7 +6710,7 @@ export class TillApp extends LitElement {
   }
 
   #loadCounterOffers(
-    zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "service" | "liveFields"> &
+    zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "service" | "liveFields" | "setMenus"> &
       Partial<Pick<ZoneOffers, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
@@ -6716,7 +6783,7 @@ export class TillApp extends LitElement {
    */
   #loadTableOffers(
     zoneId: string | undefined,
-    zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "service" | "liveFields"> &
+    zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "service" | "liveFields" | "setMenus"> &
       Partial<Pick<ZoneOffers, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
@@ -6757,17 +6824,11 @@ export class TillApp extends LitElement {
       this.#tableDining = zoneOffers.context.dining ?? null;
     this.tableProducts = this.#tableGridOffers.products();
     if (!loaded) return;
-    const { versions, byId } = this.#tableOffers;
+    const { versions } = this.#tableOffers;
     if (versions.size !== before.size || [...versions].some(([id, v]) => before.get(id) !== v))
       this.#draftRefreshDue = true;
     const sync = this.#draftSync;
-    if (sync !== undefined)
-      sync.reshow(
-        new Map([
-          ...repriceRebuilt(sync.store.lines, byId, versions),
-          ...rebuildReturned(sync.store.lines, byId, versions),
-        ]),
-      );
+    this.#reshowDraftOffers();
     sync?.store.refreshDeclarations(this.#tableOffers.products());
     this.#partylessDraft.refreshDeclarations(this.#tableOffers.products());
     this.#markRounds(true);
@@ -6788,7 +6849,7 @@ export class TillApp extends LitElement {
    * with no mark is dropped. */
   #markRounds(forget = false): void {
     for (const round of this.#markedRounds) {
-      round.setBlocked(this.#tableOffers.blocks(round.lines));
+      round.setBlocked(this.#tableOffers.blocks(round.lines, this.#tableSetMenuLookup()));
       round.setEndedPeriods(this.#tableOffers.endedPeriods(round.lines));
       if (forget && round.lines.every((line) => line.blocked === undefined))
         this.#markedRounds.delete(round);
@@ -6804,7 +6865,7 @@ export class TillApp extends LitElement {
   #markDraft(newer = false, notify = true): void {
     const store = this.#draftSync?.store;
     if (store === undefined || !this.#tableOffers.loaded) return;
-    const reasons = this.#tableOffers.blocks(store.lines);
+    const reasons = this.#tableOffers.blocks(store.lines, this.#tableSetMenuLookup());
     store.setBlocked(reasons, notify);
     store.setEndedPeriods(this.#tableOffers.endedPeriods(store.lines), notify);
     if (newer)
@@ -6851,8 +6912,11 @@ export class TillApp extends LitElement {
    * be a version newer than the till's offers (another device of the person's saved it first), which
    * only a fresh read of the offers tells apart from an older one. */
   #rebuiltUnknown(store: WorkingOrderStore): boolean {
+    const setMenuOffer = this.#tableSetMenuLookup();
     return store.lines.some(
-      (line) => line.earlierPriceUnknown === true && isStale(line, this.#tableOffers.versions),
+      (line) =>
+        line.earlierPriceUnknown === true &&
+        isStale(line, this.#tableOffers.versions, setMenuOffer),
     );
   }
 
@@ -7023,7 +7087,11 @@ export class TillApp extends LitElement {
       if (this.#pendingCounterMenus !== undefined) {
         this.menus = this.#pendingCounterMenus;
         this.#pendingCounterMenus = undefined;
-        this.#counterGridOffers.load({ offers: this.#counterOffers.live, menus: this.menus });
+        this.#counterGridOffers.load({
+          offers: this.#counterOffers.live,
+          menus: this.menus,
+          setMenus: this.#counterOffers.setMenus,
+        });
         this.#showCounterOffers();
       }
     }
@@ -7051,7 +7119,11 @@ export class TillApp extends LitElement {
     if (!this.#tableMenuBusy() && this.#pendingTableMenus !== undefined) {
       this.tableMenus = this.#pendingTableMenus;
       this.#pendingTableMenus = undefined;
-      this.#tableGridOffers.load({ offers: this.#tableOffers.live, menus: this.tableMenus });
+      this.#tableGridOffers.load({
+        offers: this.#tableOffers.live,
+        menus: this.tableMenus,
+        setMenus: this.#tableOffers.setMenus,
+      });
       this.tableProducts = this.#tableGridOffers.products();
     }
     const menuId = this.#resolveZoneMenu(
@@ -7192,7 +7264,8 @@ export class TillApp extends LitElement {
     store: WorkingOrderStore = this.#store,
     offers: ZoneOfferIndex = this.#counterOffers,
   ): "adopted" | "confirming" {
-    const outcome = refreshBasket(store.lines, offers.live, offers.versions);
+    const setMenuOffer = offers === this.#tableOffers ? this.#tableSetMenuLookup() : undefined;
+    const outcome = refreshBasket(store.lines, offers.live, offers.versions, setMenuOffer);
     if (outcome.changed.length === 0 && outcome.blocked.length === 0) {
       if (outcome.adopted.size > 0) store.adoptLines(outcome.adopted);
       return "adopted";
@@ -13522,10 +13595,12 @@ export class TillApp extends LitElement {
       billId,
       personId: this.#sessionPersonId,
       candidates: this.#draftCandidates,
-      rebuild: (lines) =>
-        lines.map((line) =>
-          fromDraftLine(line, this.#tableOffers.byId, this.#tableOffers.versions),
-        ),
+      rebuild: (lines) => {
+        const lookup = this.#tableSetMenuLookup(billId);
+        return lines.map((line) =>
+          fromDraftLine(line, this.#tableOffers.byId, this.#tableOffers.versions, lookup),
+        );
+      },
       onSaved: (snapshot) => {
         if (sync !== this.#draftSync || !this.isConnected) return;
         if (snapshot.invoice !== undefined) {
@@ -13592,6 +13667,25 @@ export class TillApp extends LitElement {
       }
     });
     return { sync, read: await sync.load(this.#draftReadBounds(splitRead)) };
+  }
+
+  #tableSetMenuLookup(billId = this.activeTabId): SetMenuOfferLookup {
+    return this.#tableOffers.setMenuLookup(
+      this.partyBills.find((bill) => bill.workingOrderId === billId),
+    );
+  }
+
+  #reshowDraftOffers(): void {
+    const sync = this.#draftSync;
+    if (sync === undefined || !this.#tableOffers.loaded) return;
+    const { versions, byId } = this.#tableOffers;
+    const lookup = this.#tableSetMenuLookup(sync.billId);
+    sync.reshow(
+      new Map([
+        ...repriceRebuilt(sync.store.lines, byId, versions, lookup),
+        ...rebuildReturned(sync.store.lines, byId, versions, lookup),
+      ]),
+    );
   }
 
   #syncDraftBillStatus(): void {
@@ -13884,27 +13978,31 @@ export class TillApp extends LitElement {
   #otherDrafts(shown: WorkingOrderStore | null): readonly OtherDraft[] {
     const sync = this.#draftSync;
     if (sync === undefined || shown !== sync.store) return [];
-    const key = { others: sync.others, offers: this.tableProducts };
+    const key = { others: sync.others, offers: this.tableProducts, bills: this.partyBills };
     const cached = this.#otherDraftViews;
     if (
       cached !== undefined &&
       cached.key.others === key.others &&
-      cached.key.offers === key.offers
+      cached.key.offers === key.offers &&
+      cached.key.bills === key.bills
     )
       return cached.views;
+    const lookup = this.#tableSetMenuLookup(sync.billId);
     const views = sync.others.map((other) => ({
       id: other.id,
       revision: other.revision,
       ownerName: other.ownerName,
       takenFromYou: other.takenOverFrom?.personId === sync.personId,
-      lines: other.lines.map((line) => fromDraftLine(line, this.#tableOffers.byId)),
+      lines: other.lines.map((line) =>
+        fromDraftLine(line, this.#tableOffers.byId, undefined, lookup),
+      ),
     }));
     this.#otherDraftViews = { key, views };
     return views;
   }
 
   #otherDraftViews?: {
-    key: { others: unknown; offers: unknown };
+    key: { others: unknown; offers: unknown; bills: unknown };
     views: readonly OtherDraft[];
   };
 
@@ -14060,6 +14158,10 @@ export class TillApp extends LitElement {
         this.partyBills = bills;
         this.#followSplitBills(bills);
         this.#syncDraftBillStatus();
+        if (this.#draftSync?.store.lines.some((line) => line.setMenuId !== undefined)) {
+          this.#reshowDraftOffers();
+          this.#markDraft(true);
+        }
         answer.balance = this.#loadBillBalance(balance);
         if (follow) await this.#followBillsRead(answer, before, false, splitRead);
       }

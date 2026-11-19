@@ -793,3 +793,55 @@ describe("orderLineMergeKey (D10, the shared rule)", () => {
     expect(orderLineMergeKey(counter)).toBeNull();
   });
 });
+
+it("restores a set-menu draft line from its recorded offer and preserves its wire fields", () => {
+  const ordinary = offer({ id: "hake", productId: "hake", unitPrice: "20.00" });
+  const recorded = { ...ordinary, unitPrice: "5.00" };
+  const saved = {
+    id: "saved-hake",
+    menuItemId: "hake",
+    menuVersionId: "v1",
+    variantId: null,
+    quantity: "1",
+    courseId: null,
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
+    note: null,
+    options: [],
+    extras: [],
+    noMerge: false,
+    unavailable: false,
+    setMenuId: "daily",
+    setMenuReservedLineId: "first-menu",
+    setMenuReservedPlace: 0,
+  };
+  const restored = fromDraftLine(
+    saved,
+    new Map([[ordinary.id, ordinary]]),
+    new Map([["dinner", "v2"]]),
+    () => ({ offer: recorded, versionId: "v1" }),
+  );
+  expect(restored.product.unitPrice).toBe("5.00");
+  expect(restored.blocked).toBeUndefined();
+  expect(restored.earlierPriceUnknown).toBeUndefined();
+  expect(draftInput(restored)).toEqual({
+    id: "saved-hake",
+    menuItemId: "hake",
+    menuVersionId: "v1",
+    variantId: null,
+    quantity: "1",
+    courseId: null,
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
+    note: null,
+    options: [],
+    extras: [],
+    noMerge: false,
+    setMenuId: "daily",
+    setMenuReservedLineId: "first-menu",
+    setMenuReservedPlace: 0,
+  });
+  expect(orderLineMergeKey(restored)).toBeNull();
+});

@@ -8,6 +8,7 @@ interface Options {
 
 const DEVICE_TYPES = ["devices", "device_profiles", "device_profile_admission_roles"];
 const ORDER_TYPES = [
+  "bill_set_menu_copies",
   "working_orders",
   "working_order_lines",
   "order_groups",
