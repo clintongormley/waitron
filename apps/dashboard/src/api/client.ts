@@ -18,6 +18,7 @@ import type {
   ContentLanguages,
   DeleteImpact,
   MenuKind,
+  SetMenuLine,
 } from "@waitron/shared";
 
 import type { FreshSignInGate } from "./fresh-sign-in.js";
@@ -91,7 +92,7 @@ export interface NodeRecoveryPack {
  * (`scripts/dashboard-browser-purity.test.ts`).
  */
 import type { LegalAbout, TimingBand } from "@waitron/shared";
-import type { ProductItemsChange } from "@waitron/menu";
+import type { ProductItemsChange, SetMenuDetails } from "@waitron/menu";
 import type { ProductItemsRoutingPreview, RoutingView } from "@waitron/venue-service/routing";
 import {
   createRequest,
@@ -569,6 +570,16 @@ export type AllergenDeclaration = Record<string, AllergenEntry> | null;
 
 export { DIETARY_LABELS, DIETARY_SUITABILITY } from "@waitron/shared";
 export type { DietaryLabel, DietarySuitability, ContainsTag, DietOverride } from "@waitron/shared";
+
+export type { SetMenuDetails, SetMenuLine };
+
+type SetMenuDraftTerms = {
+  setPrice?: string;
+  setVatClass?: VatClass;
+  setTakeawayVatClass?: VatClass | null;
+};
+
+type SetMenuDishesResult = { details: SetMenuDetails; addedLines: SetMenuLine[] };
 
 export interface MenuSummary {
   id: string;
@@ -3388,11 +3399,64 @@ export class DashboardApi {
     return this.#request<void>("/management-api/content-languages", "PUT", config);
   }
 
-  createMenu(name: string, details: Omit<SectionInput, "internalName"> = {}): Promise<MenuSummary> {
+  createMenu(
+    name: string,
+    details: Omit<SectionInput, "internalName"> & SetMenuDraftTerms & { kind?: MenuKind } = {},
+  ): Promise<MenuSummary> {
     return this.#request<MenuSummary>("/management-api/menus", "POST", {
       name,
       ...details,
     });
+  }
+
+  readSetMenu(menuId: string): Promise<SetMenuDetails> {
+    return this.#request(`/management-api/menus/${menuId}/set-menu`, "GET");
+  }
+
+  saveSetMenuLines(
+    menuId: string,
+    lines: readonly Omit<SetMenuLine, "id">[],
+  ): Promise<{ lines: SetMenuLine[] }> {
+    return this.#request(`/management-api/menus/${menuId}/set-menu/lines`, "PUT", { lines });
+  }
+
+  saveSetMenuDishCourse(
+    menuId: string,
+    itemId: string,
+    courseId: string | null,
+  ): Promise<SetMenuDishesResult & { removedLines: SetMenuLine[] }> {
+    return this.#request(`/management-api/menus/${menuId}/set-menu/items/${itemId}/course`, "PUT", {
+      courseId,
+    });
+  }
+
+  saveSetMenuVariantChoices(
+    menuId: string,
+    itemId: string,
+    variants: readonly { variantId: string; included: boolean; surcharge: string | null }[],
+  ): Promise<SetMenuDetails> {
+    return this.#request(
+      `/management-api/menus/${menuId}/set-menu/items/${itemId}/variants`,
+      "PUT",
+      { variants },
+    );
+  }
+
+  addSetMenuDishes(
+    menuId: string,
+    dishes: readonly { productId: string; excludedVariantIds: readonly string[] }[],
+  ): Promise<SetMenuDishesResult> {
+    return this.#request(`/management-api/menus/${menuId}/set-menu/dishes`, "POST", { dishes });
+  }
+
+  copySetMenuDishes(menuId: string, fromMenuId: string): Promise<SetMenuDishesResult> {
+    return this.#request(`/management-api/menus/${menuId}/set-menu/copy-dishes`, "POST", {
+      fromMenuId,
+    });
+  }
+
+  placeSetMenu(sectionId: string, menuId: string): Promise<SectionMember> {
+    return this.addSectionMember(sectionId, { kind: "set_menu", menuId });
   }
 
   duplicateMenu(id: string, name: string): Promise<MenuSummary> {
@@ -3837,7 +3901,7 @@ export class DashboardApi {
   createSectionIn(id: string, input: SectionInput): Promise<SectionDetails> {
     return this.#request(`/management-api/sections/${id}/sections`, "POST", input);
   }
-  updateMenuDetails(id: string, input: SectionInput): Promise<void> {
+  updateMenuDetails(id: string, input: Partial<SectionInput> & SetMenuDraftTerms): Promise<void> {
     const { internalName, ...details } = input;
     return this.#request(`/management-api/menus/${id}`, "PATCH", {
       name: internalName,
@@ -3857,7 +3921,10 @@ export class DashboardApi {
     return this.#request(`/management-api/sections/${id}/members`, "POST", { ref });
   }
   /** Appends each product the section does not already hold. */
-  addSectionProducts(id: string, productIds: string[]): Promise<{ added: number }> {
+  addSectionProducts(
+    id: string,
+    productIds: string[],
+  ): Promise<{ added: number; addedLines?: SetMenuLine[] }> {
     return this.#request(`/management-api/sections/${id}/members/products`, "POST", {
       productIds,
     });

@@ -221,10 +221,12 @@ export async function menuStatus(
 ): Promise<Map<string, MenuStatus>> {
   const status = new Map<string, MenuStatus>();
   if (menuIds?.length === 0) return status;
-  const { menus } = await buildMenuDocuments(tx, menuIds);
+  const { graph, menus } = await buildMenuDocuments(tx, menuIds);
   const live = await liveVersions(tx, menuIds, "format");
-  for (const [menuId, { document, clashes }] of menus)
-    status.set(menuId, statusOf(menuDocumentHash(document), live.get(menuId), clashes.length));
+  for (const [menuId, { document, clashes }] of menus) {
+    if (graph.menu(menuId)?.kind !== "set_menu")
+      status.set(menuId, statusOf(menuDocumentHash(document), live.get(menuId), clashes.length));
+  }
   return status;
 }
 

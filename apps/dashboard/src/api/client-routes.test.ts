@@ -2382,3 +2382,78 @@ it("sends recovery discovery and both decisions as explicit POSTs with only thei
     },
   ]);
 });
+
+it("sends set-menu terms and editor commands on their management routes", async () => {
+  const details = {
+    id: "set",
+    name: "Daily menu",
+    names: {},
+    price: "14.00",
+    vatClass: "reduced",
+    takeawayVatClass: "general",
+    dishes: [],
+    lines: [],
+    courses: [],
+    problems: [],
+    heldBy: [],
+  };
+  const terms = {
+    kind: "set_menu",
+    setPrice: "14.00",
+    setVatClass: "reduced",
+    setTakeawayVatClass: "general",
+  } as const;
+  const menu = {
+    id: "set",
+    name: "Daily menu",
+    active: true,
+    kind: "set_menu",
+    setPrice: "14.00",
+    setVatClass: "reduced",
+  };
+  const line = { count: 1, courseIds: ["main"] };
+  const addedLines = [{ id: "line", ...line }];
+  const dishes = [{ productId: "dish", excludedVariantIds: ["variant"] }];
+  const variants = [{ variantId: "variant", included: true, surcharge: "1.00" }];
+  const ref = { kind: "set_menu", menuId: "set" };
+  const member = { id: "member", ref, position: 0 };
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse(menu, true, 201))
+    .mockResolvedValueOnce(emptyResponse())
+    .mockResolvedValueOnce(jsonResponse(details))
+    .mockResolvedValueOnce(jsonResponse({ lines: addedLines }))
+    .mockResolvedValueOnce(jsonResponse({ details, addedLines, removedLines: [] }))
+    .mockResolvedValueOnce(jsonResponse(details))
+    .mockResolvedValueOnce(jsonResponse({ details, addedLines }))
+    .mockResolvedValueOnce(jsonResponse({ details, addedLines }))
+    .mockResolvedValueOnce(jsonResponse(member, true, 201));
+  const api = new DashboardApi("", fetchImpl);
+
+  await expect(api.createMenu("Daily menu", terms)).resolves.toEqual(menu);
+  await expect(
+    api.updateMenuDetails("set", { setTakeawayVatClass: null }),
+  ).resolves.toBeUndefined();
+  await expect(api.readSetMenu("set")).resolves.toEqual(details);
+  await expect(api.saveSetMenuLines("set", [line])).resolves.toEqual({ lines: addedLines });
+  await expect(api.saveSetMenuDishCourse("set", "item", null)).resolves.toEqual({
+    details,
+    addedLines,
+    removedLines: [],
+  });
+  await expect(api.saveSetMenuVariantChoices("set", "item", variants)).resolves.toEqual(details);
+  await expect(api.addSetMenuDishes("set", dishes)).resolves.toEqual({ details, addedLines });
+  await expect(api.copySetMenuDishes("set", "other")).resolves.toEqual({ details, addedLines });
+  await expect(api.placeSetMenu("root", "set")).resolves.toEqual(member);
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/menus", "POST", { name: "Daily menu", ...terms }],
+    ["/management-api/menus/set", "PATCH", { setTakeawayVatClass: null }],
+    ["/management-api/menus/set/set-menu", "GET", undefined],
+    ["/management-api/menus/set/set-menu/lines", "PUT", { lines: [line] }],
+    ["/management-api/menus/set/set-menu/items/item/course", "PUT", { courseId: null }],
+    ["/management-api/menus/set/set-menu/items/item/variants", "PUT", { variants }],
+    ["/management-api/menus/set/set-menu/dishes", "POST", { dishes }],
+    ["/management-api/menus/set/set-menu/copy-dishes", "POST", { fromMenuId: "other" }],
+    ["/management-api/sections/root/members", "POST", { ref }],
+  ]);
+});

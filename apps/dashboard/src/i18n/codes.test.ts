@@ -1274,3 +1274,24 @@ it("words the tax office's month-file refusals, with the disk's sizes in the lan
     "Este archivo ya no está en el servidor. Elige Descargar para prepararlo de nuevo.",
   );
 });
+
+it.each([
+  ["en", "setPrice", "0.00 to 10,000.00"],
+  ["es", "surcharge", "0,00 a 10.000,00"],
+  ["en", "lines", "20 inclusion lines"],
+  ["es", "setTakeawayVatClass", "IVA para llevar"],
+])("explains an invalid set-menu field in %s (%s)", (locale, field, expected) => {
+  expect(codeMessage("set_menu.invalid", locale, { field })).toContain(expected);
+});
+
+it.each(["en", "es"])(
+  "names the set menu and its problem count in a publication refusal in %s",
+  (locale) => {
+    const message = codeMessage("set_menu.not_publishable", locale, {
+      name: "Daily menu",
+      count: 3,
+    });
+    expect(message).toContain("Daily menu");
+    expect(message).toMatch(/3 problem/);
+  },
+);

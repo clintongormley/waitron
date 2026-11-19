@@ -561,9 +561,17 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That menu could not be found",
     es: "No se ha encontrado esa carta",
   },
+  "set_menu.not_found": {
+    en: "That set menu could not be found. Reload the menu list and choose a set menu.",
+    es: "No se ha encontrado ese menú a precio fijo. Recarga la lista y elige un menú a precio fijo.",
+  },
+  "set_menu.invalid": {
+    en: "Check the set-menu details and try again.",
+    es: "Revisa los datos del menú a precio fijo e inténtalo de nuevo.",
+  },
   "set_menu.dishes_only": {
-    en: "A set menu can only hold dishes. Add a dish, or open a regular menu to add a section or another menu.",
-    es: "Una carta a precio fijo solo admite platos. Añade un plato o abre una carta normal para añadir una sección u otra carta.",
+    en: "A set menu lists dishes only. Add products to it. To group them, set each product's course.",
+    es: "Un menú a precio fijo solo admite platos. Añade productos y asigna un curso a cada uno para agruparlos.",
   },
   "set_menu.not_publishable": {
     en: "Fix the problems in the set menu before publishing this menu.",
@@ -571,7 +579,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "set_menu.wrong_place": {
     en: "A set menu is sold by placing it in a menu. Open that menu's Structure and add the set menu there.",
-    es: "Para vender una carta a precio fijo, abre la Estructura de la carta que quieres publicar y añádela allí.",
+    es: "Para vender un menú a precio fijo, abre la Estructura de la carta que quieres publicar y añádelo allí.",
   },
   "node.operation_page_required": {
     en: "This operation needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
@@ -1860,6 +1868,45 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
 };
 
+const SET_MENU_FIELDS: Record<string, { en: string; es: string }> = {
+  setPrice: {
+    en: "Enter a set-menu price from 0.00 to 10,000.00.",
+    es: "Indica un precio entre 0,00 y 10.000,00 para el menú.",
+  },
+  surcharge: {
+    en: "Enter a surcharge from 0.00 to 10,000.00.",
+    es: "Indica un suplemento de 0,00 a 10.000,00.",
+  },
+  setVatClass: {
+    en: "Choose an eat-in VAT rate.",
+    es: "Elige un tipo de IVA para consumo en el local.",
+  },
+  setTakeawayVatClass: {
+    en: "Choose a takeaway VAT rate or clear it to use the eat-in rate.",
+    es: "Elige un tipo de IVA para llevar o quítalo para usar el de consumo en el local.",
+  },
+  lines: {
+    en: "A set menu can have up to 20 inclusion lines. Combine courses in one line or remove a line.",
+    es: "Un menú a precio fijo puede tener hasta 20 líneas. Combina varios cursos en una línea o elimina una.",
+  },
+  count: {
+    en: "Enter a whole number from 1 to 99.",
+    es: "Indica un número entero del 1 al 99.",
+  },
+  courseId: {
+    en: "Choose a course that is still available.",
+    es: "Elige un curso que siga disponible.",
+  },
+  courseIds: {
+    en: "Choose at least one available course and select each course only once per line.",
+    es: "Elige al menos un curso disponible y selecciona cada curso solo una vez por línea.",
+  },
+  variants: {
+    en: "Reload the dish and review the choices for its current variants.",
+    es: "Vuelve a cargar el plato y revisa las opciones de sus variantes actuales.",
+  },
+};
+
 registerCodeMessages(CODE_MESSAGES);
 
 export { codeOf };
@@ -1878,6 +1925,8 @@ export function codeMessage(
   locale: string = currentLocale(),
   params?: {
     reason?: unknown;
+    field?: unknown;
+    name?: unknown;
     count?: unknown;
     seconds?: unknown;
     kind?: unknown;
@@ -1928,6 +1977,26 @@ export function codeMessage(
       "{written}",
       formatBytes(params?.writtenBytes, locale),
     );
+  if (
+    code === "set_menu.invalid" &&
+    typeof params?.field === "string" &&
+    Object.hasOwn(SET_MENU_FIELDS, params.field)
+  )
+    return pickLocale(SET_MENU_FIELDS[params.field]!, locale);
+  if (
+    code === "set_menu.not_publishable" &&
+    typeof params?.name === "string" &&
+    typeof params.count === "number"
+  ) {
+    const { name, count } = params;
+    return pickLocale(
+      {
+        en: `${name} has ${count} ${count === 1 ? "problem" : "problems"}. Fix what its set-menu page lists, then publish this menu.`,
+        es: `${name} tiene ${count} ${count === 1 ? "problema" : "problemas"}. Corrige lo que indica su página y publica esta carta.`,
+      },
+      locale,
+    );
+  }
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   if (code === "receipt.language_orders_open" && typeof params?.count === "number")
     return ordersOpenMessage(params.count, locale);

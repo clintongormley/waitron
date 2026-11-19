@@ -18,6 +18,10 @@ const MENU_PUBLICATION_READS = [
   "products",
   "section_members",
   "sections",
+  "set_menu_dish_courses",
+  "set_menu_line_courses",
+  "set_menu_lines",
+  "set_menu_variant_exclusions",
   "units",
 ] as const;
 

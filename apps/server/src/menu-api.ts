@@ -10,9 +10,11 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   AppError,
   FALLBACK_LOCALE,
+  VAT_CLASSES,
   decimal,
   type ContentLanguageRules,
   type Decimal,
+  type VatClass,
 } from "@waitron/shared";
 import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
@@ -43,6 +45,12 @@ import {
   deleteSections,
   addMember,
   addProducts,
+  addSetMenuDishes,
+  copySetMenuDishes,
+  readSetMenu,
+  saveSetMenuDishCourse,
+  saveSetMenuLines,
+  saveSetMenuVariantChoices,
   removeMember,
   moveMember,
   moveMembersInto,
@@ -219,6 +227,8 @@ function memberRef(value: unknown): MemberRef {
       return { kind: "product", productId: requireUuidParam(value.productId, "ProductId") };
     if (value.kind === "section" && typeof value.sectionId === "string")
       return { kind: "section", sectionId: requireUuidParam(value.sectionId, "SectionId") };
+    if (value.kind === "set_menu" && typeof value.menuId === "string")
+      return { kind: "set_menu", menuId: requireUuidParam(value.menuId, "MenuId") };
   }
   throw new AppError("management.request_invalid", { field: "ref" });
 }
@@ -326,7 +336,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Raised by the op's `decimalToCents`, not by this file's screens.
   "shared.decimal_overflow": 400,
   "menu.not_found": 404,
+  "set_menu.not_found": 404,
+  "set_menu.invalid": 400,
   "set_menu.dishes_only": 409,
+  "set_menu.dish_sold_by_measure": 409,
   "set_menu.wrong_place": 409,
   "set_menu.not_publishable": 409,
   "menu.name_taken": 409,
@@ -402,6 +415,7 @@ const runBodyCategory = runBodyIds("category.not_found");
 // A folder move or delete names its products and folders in the body.
 const runFolder = runBodyIds("category.not_found", "product.not_found");
 const runBodySection = runBodyIds("menu_section.not_found");
+const runBodySetMenu = runBodyIds("set_menu.not_found");
 // The single-variant route names its variant in the path, so an unknown one is a 404; the whole-list
 // PUT names variants in its body, and an unknown one there stays a 400.
 const runVariant = createErrorBoundary(
@@ -636,7 +650,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
     }),
   );
   app.post(members, (c) =>
-    run(c, log, async () => {
+    runBodySetMenu(c, log, async () => {
       const session = requireManagementSession(c);
       const id = sectionId(c);
       const body = await readJsonBody<{ ref?: unknown; position?: unknown }>(c);
@@ -713,7 +727,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
     }),
   );
   app.post(`${member}/replace`, (c) =>
-    run(c, log, async () => {
+    runBodySetMenu(c, log, async () => {
       const session = requireManagementSession(c);
       const id = sectionId(c);
       const held = memberId(c);
@@ -791,6 +805,140 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       const held = memberId(c);
       const to = numberField((await readJsonBody<{ to?: unknown }>(c)).to, "to");
       return c.json(await gated(c, session, (tx) => moveShortcut(tx, menu, held, to)));
+    }),
+  );
+}
+
+function setMenuTerms(body: Record<string, unknown>) {
+  const { setPrice } = body;
+  if (setPrice !== undefined && setPrice !== null && typeof setPrice !== "string")
+    throw new AppError("set_menu.invalid", { field: "setPrice" });
+  const vat = (field: "setVatClass" | "setTakeawayVatClass"): VatClass | null | undefined => {
+    const value = body[field];
+    if (value === undefined || value === null) return value;
+    if (typeof value !== "string" || !VAT_CLASSES.some((candidate) => candidate === value))
+      throw new AppError("set_menu.invalid", { field });
+    return value as VatClass;
+  };
+  return {
+    setPrice,
+    setVatClass: vat("setVatClass"),
+    setTakeawayVatClass: vat("setTakeawayVatClass"),
+  };
+}
+
+function setMenuRows(value: unknown, field: string): Record<string, unknown>[] {
+  if (!Array.isArray(value) || !value.every(isPlainObject))
+    throw new AppError("management.request_invalid", { field });
+  return value;
+}
+
+function mountSetMenuRoutes(app: Hono, gated: GatedWork, log: Logger): void {
+  const draft = "/management-api/menus/:id/set-menu";
+  const menu = (c: Context) => requireUuidParam(c.req.param("id")!, "MenuId");
+  const item = (c: Context) => requireUuidParam(c.req.param("itemId")!, "MenuItemId");
+
+  app.get(draft, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      return c.json(await gated(c, session, (tx) => readSetMenu(tx, menu(c))));
+    }),
+  );
+  app.put(`${draft}/lines`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const { lines } = await readJsonBody<{ lines?: unknown }>(c);
+      const input = setMenuRows(lines, "lines").map(({ count, courseIds }) => {
+        if (typeof count !== "number") throw new AppError("set_menu.invalid", { field: "count" });
+        return { count, courseIds: idList(courseIds, "courseIds", "CourseId") };
+      });
+      return c.json({
+        lines: await gated(c, session, (tx) => saveSetMenuLines(tx, menu(c), input)),
+      });
+    }),
+  );
+  app.put(`${draft}/items/:itemId/course`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const menuId = menu(c);
+      const itemId = item(c);
+      const { courseId } = await readJsonBody<{ courseId?: unknown }>(c);
+      const course = nullOrUuid(courseId, "courseId");
+      return c.json(
+        await gated(c, session, async (tx) => {
+          const lines = await saveSetMenuDishCourse(tx, menuId, itemId, course);
+          return { details: await readSetMenu(tx, menuId), ...lines };
+        }),
+      );
+    }),
+  );
+  app.put(`${draft}/items/:itemId/variants`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const menuId = menu(c);
+      const itemId = item(c);
+      const { variants } = await readJsonBody<{ variants?: unknown }>(c);
+      const input = setMenuRows(variants, "variants").map(({ variantId, included, surcharge }) => {
+        if (typeof included !== "boolean")
+          throw new AppError("set_menu.invalid", { field: "variants" });
+        if (surcharge !== null && typeof surcharge !== "string")
+          throw new AppError("set_menu.invalid", { field: "surcharge" });
+        return {
+          variantId: requireUuidParam(requireString(variantId, "variantId"), "VariantId"),
+          included,
+          surcharge,
+        };
+      });
+      return c.json(
+        await gated(c, session, async (tx) => {
+          await saveSetMenuVariantChoices(tx, menuId, itemId, input);
+          return readSetMenu(tx, menuId);
+        }),
+      );
+    }),
+  );
+  app.post(`${draft}/dishes`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const menuId = menu(c);
+      const { dishes } = await readJsonBody<{ dishes?: unknown }>(c);
+      const input = setMenuRows(dishes, "dishes").map(({ productId, excludedVariantIds }) => ({
+        productId: requireUuidParam(requireString(productId, "productId"), "ProductId"),
+        excludedVariantIds: idList(excludedVariantIds, "excludedVariantIds", "VariantId"),
+      }));
+      return c.json(
+        await gated(c, session, async (tx) => {
+          const addedLines = await addSetMenuDishes(tx, menuId, input);
+          return { details: await readSetMenu(tx, menuId), addedLines };
+        }),
+      );
+    }),
+  );
+  app.post(`${draft}/copy-dishes`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const menuId = menu(c);
+      const { fromMenuId } = await readJsonBody<{ fromMenuId?: unknown }>(c);
+      const source = requireUuidParam(requireString(fromMenuId, "fromMenuId"), "MenuId");
+      try {
+        return c.json(
+          await gated(c, session, async (tx) => {
+            const addedLines = await copySetMenuDishes(tx, menuId, source);
+            return { details: await readSetMenu(tx, menuId), addedLines };
+          }),
+        );
+      } catch (error) {
+        if (
+          error instanceof AppError &&
+          error.code === "set_menu.not_found" &&
+          "menuId" in error.params &&
+          error.params.menuId !== menuId
+        )
+          return runBodySetMenu(c, log, async () => {
+            throw error;
+          });
+        throw error;
+      }
     }),
   );
 }
@@ -890,6 +1038,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
 
   mountSectionRoutes(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
   mountMenuHomeRoutes(app, gated, log);
+  mountSetMenuRoutes(app, gated, log);
   mountContentTranslationsApi(app, gated, log, translationContextFor(deps), deps.managementOrigin);
 
   app.get("/management-api/content-languages", (c) =>
@@ -994,12 +1143,17 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const name = requireString(body.name, "name");
       if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
       const presentation = sectionInput({ ...body, internalName: name }, true);
+      const kind =
+        body.kind === undefined ? undefined : requireEnum(body.kind, "kind", ["menu", "set_menu"]);
+      const terms = setMenuTerms(body);
       const created = await gated(c, sessionId, (tx) =>
         createMenu(tx, {
           name,
           names: presentation.names,
           image: presentation.image,
           color: presentation.color,
+          kind,
+          ...terms,
         }),
       );
       return c.json(created, 201);
@@ -1026,6 +1180,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const presentation = sectionInput({ ...body, internalName: body.name }, false);
       if (presentation.internalName !== undefined && presentation.internalName.trim() === "")
         throw new AppError("management.request_invalid", { field: "name" });
+      const terms = setMenuTerms(body);
       await gated(c, sessionId, (tx) =>
         updateMenuDetails(
           tx,
@@ -1035,6 +1190,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
             names: presentation.names,
             image: presentation.image,
             color: presentation.color,
+            ...terms,
           },
           deps.venueLocale ?? FALLBACK_LOCALE,
         ),

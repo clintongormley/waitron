@@ -1426,3 +1426,21 @@ it("refreshes returned invoice pages passively every minute and watches their ve
   expect(new Headers(fetchImpl.mock.calls[0]![1]?.headers).get("x-waitron-live")).toBe("1");
   expect(active).not.toHaveBeenCalled();
 });
+
+it.each([
+  "set_menu_lines",
+  "set_menu_line_courses",
+  "set_menu_dish_courses",
+  "set_menu_variant_exclusions",
+])("refreshes the full menu's Preview after a %s change", async (type) => {
+  const fetchImpl = vi.fn(async () => new Response("{}"));
+  const api = new DashboardApi("", fetchImpl);
+  const observed = api.liveData.observe(dashboardQuery(api, "getMenuPreview", ["full"]), () => {});
+  try {
+    await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+    api.liveData.invalidate([{ type, id: "set-menu-record" }]);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+  } finally {
+    observed.unsubscribe();
+  }
+});

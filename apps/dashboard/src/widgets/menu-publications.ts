@@ -137,7 +137,10 @@ interface ScheduleRefusal {
   answer?: MenuPublicationsAnswer | null;
 }
 
-function refusalMessage({ code, params, placed, answer }: ScheduleRefusal): string {
+function refusalMessage(
+  { code, params, placed, answer }: ScheduleRefusal,
+  preview: MenuPreview | null,
+): string {
   if (code === null) return t("menu_publications.preview_unavailable");
   if (code === "menu_publication.overtakes_queued" && answer && Array.isArray(params.overtaken))
     return (
@@ -153,6 +156,12 @@ function refusalMessage({ code, params, placed, answer }: ScheduleRefusal): stri
       time: params.time,
       date: localDateWords(params.date),
     });
+  if (code === "set_menu.not_publishable" && typeof params.menuId === "string") {
+    const name =
+      preview?.setMenuProblems.find(({ menuId }) => menuId === params.menuId)?.name ??
+      preview?.document.setMenus?.[params.menuId]?.name;
+    return codeMessage(code, undefined, { name, count: params.count });
+  }
   return codeMessage(code);
 }
 
@@ -782,10 +791,10 @@ export class MenuPublicationsPanel extends LitElement {
     const own = this.#feedback.attempted ? this.#ownErrors() : {};
     const refusal = this.scheduleRefusal;
     const errors = { ...own };
-    if (refusal?.field != null) errors[refusal.field] ??= refusalMessage(refusal);
+    if (refusal?.field != null) errors[refusal.field] ??= refusalMessage(refusal, this.preview);
     const marked = Object.values(errors).some(Boolean);
     const bottom = bottomMessage(
-      refusal !== null && refusal.field === null ? refusalMessage(refusal) : null,
+      refusal !== null && refusal.field === null ? refusalMessage(refusal, this.preview) : null,
       marked ? t("form.fix_fields") : null,
     );
     const invalid = Object.keys(own).length > 0;
