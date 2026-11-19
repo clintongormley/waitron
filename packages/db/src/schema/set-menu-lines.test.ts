@@ -158,6 +158,34 @@ describe("set menu storage on a bill", () => {
     expect(await db.all(sql`select * from bill_set_menu_copies`)).toEqual([]);
   });
 
+  it("keeps a moved menu's copy and price alongside the receiving bill's copy", async () => {
+    const db = suite.db;
+    const receiver = (await seedWorkingOrder(db)).id;
+    const newerCopy = "newer-full-menu-copy";
+    await db.execute(sql`insert into menu_versions
+      (id, menu_id, number, document, content_hash, created_at, created_by)
+      values (${newerCopy}, ${fullMenuId}, 2, '{}', 'newer copy', 1, ${personId})`);
+    await db.execute(sql`insert into bill_set_menu_copies
+      (working_order_id, set_menu_id, menu_version_id)
+      values (${billId}, ${MENU}, ${VERSION}), (${receiver}, ${MENU}, ${newerCopy})`);
+    await addSetMenu();
+
+    await db
+      .update(workingOrderLines)
+      .set({ workingOrderId: receiver })
+      .where(eq(workingOrderLines.id, SET_LINE));
+
+    expect(
+      await db.all(sql`
+      select line.set_menu_version_id as line_version, line.line_total,
+             copies.menu_version_id as bill_version
+      from working_order_lines line inner join bill_set_menu_copies copies
+        on copies.working_order_id = line.working_order_id and copies.set_menu_id = line.set_menu_id
+      where line.id = ${SET_LINE} and line.working_order_id = ${receiver}
+    `),
+    ).toEqual([{ line_version: VERSION, line_total: 1800, bill_version: newerCopy }]);
+  });
+
   it("requires both parts of a draft reservation, and only with its set menu", async () => {
     const db = suite.db;
     const [party] = await db.insert(parties).values({ openedBy: personId }).returning();
