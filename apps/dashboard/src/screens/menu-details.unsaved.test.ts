@@ -77,6 +77,8 @@ for (const kind of ["menu", "section"] as const) {
           expect(screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull(),
         );
         screen.shadowRoot!.querySelector<HTMLElement>("[data-test=add-menu]")!.click();
+        await screen.updateComplete;
+        screen.shadowRoot!.querySelector<HTMLElement>("[data-test=create-menu]")!.click();
       } else {
         await vi.waitFor(() =>
           expect(screen.shadowRoot!.querySelector("dashboard-menu-structure-table")).not.toBeNull(),
