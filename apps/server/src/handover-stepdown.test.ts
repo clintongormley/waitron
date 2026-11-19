@@ -118,7 +118,6 @@ function testDrain(drain: Parameters<typeof drainJob>[0]["drain"]) {
     health: createHealthState(new Date()),
     awaitingCert: { current: false },
     timings: { minTickMs: 1, maxTickMs: 60_000 },
-    monotonicMs: () => performance.now(),
     log: () => {},
   });
 }

@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { DrainResult } from "@waitron/fiscal";
 import type { RunRecord, TickResult } from "@waitron/payments";
-import { DRAIN_DUTY, RECONCILE_DUTY, runPass, type PassDeps } from "./pass.js";
+import { DRAIN_DUTY, RECONCILE_DUTY } from "./pass.js";
+import { drainJob, reconcileJob } from "./fiscal-jobs.js";
+import { createHealthState } from "./health.js";
+import { DEFAULT_DUTY_TIMINGS } from "./config.js";
+
+type TestDeps = Parameters<typeof drainJob>[0] & Parameters<typeof reconcileJob>[0];
 
 const NOW = new Date("2026-07-26T09:00:00Z");
 const SOON = new Date("2026-07-26T09:10:00Z");
@@ -40,80 +45,42 @@ function runRecord(over: Partial<RunRecord> = {}): RunRecord {
   };
 }
 
-function deps(over: Partial<PassDeps> = {}): PassDeps & { lines: string[] } {
+function deps(over: Partial<TestDeps> = {}): TestDeps & { lines: string[] } {
   const lines: string[] = [];
-  // A monotonic clock that advances 10ms per read: two reads per duty plus two for the pass makes
-  // every duration in the assertions below exact rather than merely non-negative.
-  let ticks = 0;
   return {
     lines,
     drain: () => Promise.resolve(drainResult()),
     reconcile: () => Promise.resolve(tickResult()),
     awaitingCert: { current: false },
-    monotonicMs: () => (ticks += 10),
+    getRole: () => "primary",
+    health: createHealthState(NOW),
+    timings: DEFAULT_DUTY_TIMINGS,
     log: (level, event, fields) => lines.push(`${level} ${event} ${JSON.stringify(fields ?? {})}`),
     ...over,
   };
 }
 
-describe("runPass", () => {
-  it("runs drain before reconcile, always", async () => {
-    const order: string[] = [];
+const ctx = { now: NOW, signal: new AbortController().signal };
+const runDrain = (d: TestDeps) => drainJob(d).pass(ctx);
+const runReconcile = (d: TestDeps) => reconcileJob(d).pass(ctx);
+
+describe("fiscal and payment job reports", () => {
+  it.each([
+    [SOON, LATER],
+    [LATER, SOON],
+    [SOON, null],
+    [null, SOON],
+    [null, null],
+  ])("keeps each job's due time: %s and %s", async (filingDue, paymentDue) => {
     const d = deps({
-      drain: () => {
-        order.push("drain");
-        return Promise.resolve(drainResult());
-      },
-      reconcile: () => {
-        order.push("reconcile");
-        return Promise.resolve(tickResult());
-      },
+      drain: async () => drainResult({ nextDueAt: filingDue }),
+      reconcile: async () => tickResult({ nextDueAt: paymentDue }),
     });
-    await runPass(d, NOW);
-    // Drain is the duty with a legal clock, so a reconcile sweep that is behind must never delay it.
-    expect(order).toEqual(["drain", "reconcile"]);
+    expect((await runDrain(d)).nextDueAt).toEqual(filingDue);
+    expect((await runReconcile(d)).nextDueAt).toEqual(paymentDue);
   });
 
-  it("folds the minimum of the non-null answers", async () => {
-    const d = deps({
-      drain: () => Promise.resolve(drainResult({ nextDueAt: SOON })),
-      reconcile: () => Promise.resolve(tickResult({ nextDueAt: LATER })),
-    });
-    expect((await runPass(d, NOW)).nextDueAt).toEqual(SOON);
-  });
-
-  it("folds the minimum even when reconcile answers earlier than drain", async () => {
-    // Here reconcile answers first, which a shortcut preferring drain's answer would get wrong.
-    const d = deps({
-      drain: () => Promise.resolve(drainResult({ nextDueAt: LATER })),
-      reconcile: () => Promise.resolve(tickResult({ nextDueAt: SOON })),
-    });
-    expect((await runPass(d, NOW)).nextDueAt).toEqual(SOON);
-  });
-
-  it("ignores a null rather than letting it win the comparison", async () => {
-    // A null means "no work exists at all" — not a time. Treating it as one would sleep the whole
-    // MAX_TICK while drain had a batch due in ten minutes.
-    const d = deps({
-      drain: () => Promise.resolve(drainResult({ nextDueAt: SOON })),
-      reconcile: () => Promise.resolve(tickResult({ nextDueAt: null })),
-    });
-    expect((await runPass(d, NOW)).nextDueAt).toEqual(SOON);
-  });
-
-  it("folds reconcile's answer when drain has none", async () => {
-    const d = deps({
-      drain: () => Promise.resolve(drainResult({ nextDueAt: null })),
-      reconcile: () => Promise.resolve(tickResult({ nextDueAt: SOON })),
-    });
-    expect((await runPass(d, NOW)).nextDueAt).toEqual(SOON);
-  });
-
-  it("reports null only when neither duty has any work", async () => {
-    expect((await runPass(deps(), NOW)).nextDueAt).toBeNull();
-  });
-
-  it("contains a throwing duty, still runs the other, and records the code", async () => {
+  it("records the failed filing duty without changing the payment check's result", async () => {
     const d = deps({
       drain: () =>
         Promise.reject(
@@ -122,28 +89,21 @@ describe("runPass", () => {
             field: "certKind",
           }),
         ),
-      reconcile: () => Promise.resolve(tickResult({ nextDueAt: LATER })),
+      reconcile: async () => tickResult({ nextDueAt: LATER }),
     });
-    const report = await runPass(d, NOW);
-
-    // The loop must survive a duty that throws: one transient blip must not end the hourly retry.
-    const drainReport = report.duties.find((entry) => entry.duty === DRAIN_DUTY)!;
-    expect(drainReport).toEqual({
-      duty: DRAIN_DUTY,
-      ok: false,
-      errorCode: "server.credential_unusable",
-      nextDueAt: NOW,
-      // Drain's own pair of clock reads: 20 on entry, 30 on the catch branch.
-      durationMs: 10,
-    });
-    expect(report.duties.find((entry) => entry.duty === RECONCILE_DUTY)?.ok).toBe(true);
-    expect(report.nextDueAt).toEqual(NOW);
+    await expect(runDrain(d)).rejects.toMatchObject({ code: "server.credential_unusable" });
+    expect(d.health.duties[DRAIN_DUTY]?.consecutiveFailures).toBe(1);
+    expect(d.lines).toContain(
+      'error duty.failed {"duty":"fiscal.drain","errorCode":"server.credential_unusable"}',
+    );
+    expect(await runReconcile(d)).toEqual({ nextDueAt: LATER, degraded: false });
+    expect(d.health.duties[RECONCILE_DUTY]?.lastOkAt).toEqual(NOW);
   });
 
   it("codes an unstructured throw as unknown", async () => {
     const d = deps({ drain: () => Promise.reject(new Error("socket hang up")) });
-    const report = await runPass(d, NOW);
-    expect(report.duties[0]?.errorCode).toBe("unknown");
+    await expect(runDrain(d)).rejects.toThrow("socket hang up");
+    expect(d.lines).toContain('error duty.failed {"duty":"fiscal.drain","errorCode":"unknown"}');
   });
 
   it("logs drain's skipped taxpayer at warn, because an unsubmittable taxpayer is never silent", async () => {
@@ -158,7 +118,7 @@ describe("runPass", () => {
           }),
         ),
     });
-    await runPass(d, NOW);
+    await runDrain(d);
     expect(d.lines.some((line) => line.startsWith("warn drain.tenant_skipped"))).toBe(true);
     expect(d.lines.some((line) => line.includes("credentials.missing"))).toBe(true);
   });
@@ -176,13 +136,12 @@ describe("runPass", () => {
           }),
         ),
     });
-    const report = await runPass(d, NOW);
-    expect(report.duties.find((e) => e.duty === DRAIN_DUTY)?.ok).toBe(true);
+    await expect(runDrain(d)).resolves.toEqual({ nextDueAt: NOW, degraded: true });
     expect(d.awaitingCert.current).toBe(true);
     expect(d.lines.some((line) => line.startsWith("warn fiscal.awaiting_certificate"))).toBe(true);
     expect(d.lines.some((line) => line.startsWith("warn drain.tenant_skipped"))).toBe(true);
     // It counts toward the duty's skipped total, so /health sees the unmet obligation.
-    expect(report.duties.find((e) => e.duty === DRAIN_DUTY)?.skipped).toBe(1);
+    expect(d.health.duties[DRAIN_DUTY]?.skipped).toBe(1);
   });
 
   it("logs fiscal.awaiting_certificate ONCE across repeated passes with the cert still missing", async () => {
@@ -196,9 +155,9 @@ describe("runPass", () => {
           }),
         ),
     });
-    await runPass(d, NOW);
-    await runPass(d, NOW);
-    await runPass(d, NOW);
+    await runDrain(d);
+    await runDrain(d);
+    await runDrain(d);
     expect(
       d.lines.filter((line) => line.startsWith("warn fiscal.awaiting_certificate")),
     ).toHaveLength(1);
@@ -218,15 +177,15 @@ describe("runPass", () => {
             : drainResult({ nextDueAt: SOON, tenantsWithWork: 1, batchesSent: 1 }),
         ),
     });
-    await runPass(d, NOW); // missing → flag true, one warn
+    await runDrain(d); // missing → flag true, one warn
     missing = false;
-    await runPass(d, NOW); // cert present, work drained → flag false, one recovery info
+    await runDrain(d); // cert present, work drained → flag false, one recovery info
     expect(d.awaitingCert.current).toBe(false);
     expect(
       d.lines.filter((line) => line.startsWith("info fiscal.certificate_available")),
     ).toHaveLength(1);
     missing = true;
-    await runPass(d, NOW); // lost again → flag true, a SECOND warn (one line per episode)
+    await runDrain(d); // lost again → flag true, a SECOND warn (one line per episode)
     expect(d.awaitingCert.current).toBe(true);
     expect(
       d.lines.filter((line) => line.startsWith("warn fiscal.awaiting_certificate")),
@@ -250,11 +209,11 @@ describe("runPass", () => {
             : drainResult(),
         ),
     });
-    await runPass(d, NOW); // missing → flag true
+    await runDrain(d); // missing → flag true
     expect(d.awaitingCert.current).toBe(true);
     missing = false;
-    await runPass(d, NOW); // no work → flag must stay true
-    await runPass(d, NOW);
+    await runDrain(d); // no work → flag must stay true
+    await runDrain(d);
     expect(d.awaitingCert.current).toBe(true);
     expect(
       d.lines.filter((line) => line.startsWith("info fiscal.certificate_available")),
@@ -281,9 +240,9 @@ describe("runPass", () => {
               }),
         ),
     });
-    await runPass(d, NOW); // missing → flag true
+    await runDrain(d); // missing → flag true
     missing = false;
-    await runPass(d, NOW); // due work, cert resolved → flag clears
+    await runDrain(d); // due work, cert resolved → flag clears
     expect(d.awaitingCert.current).toBe(false);
     expect(
       d.lines.filter((line) => line.startsWith("info fiscal.certificate_available")),
@@ -303,7 +262,7 @@ describe("runPass", () => {
           }),
         ),
     });
-    await runPass(d, NOW);
+    await runDrain(d);
     const line = d.lines.find((l) => l.startsWith("info drain.complete"));
     expect(line).toBeDefined();
     expect(line).toContain('"batchesSent":3');
@@ -324,7 +283,7 @@ describe("runPass", () => {
           }),
         ),
     });
-    await runPass(d, NOW);
+    await runReconcile(d);
     const skippedLine = d.lines.find((line) => line.startsWith("warn reconcile.pair_skipped"));
     expect(skippedLine).toContain(`"duty":"${STRIPE_RUN}"`);
     expect(d.lines.some((line) => line.includes('"deferred":4'))).toBe(true);
@@ -348,7 +307,7 @@ describe("runPass", () => {
             }),
           ),
       });
-      await runPass(d, NOW);
+      await runReconcile(d);
       const line = d.lines.find((l) => l.startsWith("info reconcile.complete"));
       expect(line).toBeDefined();
       const fields = JSON.parse(line!.slice(line!.indexOf("{"))) as {
@@ -370,7 +329,7 @@ describe("runPass", () => {
             }),
           ),
       });
-      await runPass(d, NOW);
+      await runReconcile(d);
 
       const failedLine = d.lines.find((l) => l.startsWith("warn reconcile.run_failed"));
       expect(failedLine).toBeDefined();
@@ -399,74 +358,26 @@ describe("runPass", () => {
             }),
           ),
       });
-      const report = await runPass(d, NOW);
-      const reconcileReport = report.duties.find((entry) => entry.duty === RECONCILE_DUTY);
-      // `ok: true` — `runDue` returned normally, exactly like a skipped pair — but `parked: 1`
-      // is what health.ts's recordPass must treat as not-ok; `failed` never contributes to it.
-      expect(reconcileReport).toMatchObject({ ok: true, parked: 1 });
+      await expect(runReconcile(d)).resolves.toEqual({ nextDueAt: null, degraded: true });
+      expect(d.health.duties[RECONCILE_DUTY]?.parked).toBe(1);
     });
 
-    it("reports drain's own parked count as a fixed 0 — DrainResult has no run-level outcome", async () => {
-      const report = await runPass(deps(), NOW);
-      const drainReport = report.duties.find((entry) => entry.duty === DRAIN_DUTY);
-      expect(drainReport).toMatchObject({ ok: true, parked: 0 });
+    it("reports drain's own parked count as a fixed 0", async () => {
+      const d = deps();
+      await expect(runDrain(d)).resolves.toEqual({ nextDueAt: null, degraded: false });
+      expect(d.health.duties[DRAIN_DUTY]?.parked).toBe(0);
     });
 
-    it("leaves DutyReport.parked undefined for a duty that threw, mirroring skipped", async () => {
-      const d = deps({ reconcile: () => Promise.reject(new Error("socket hang up")) });
-      const report = await runPass(d, NOW);
-      const reconcileReport = report.duties.find((entry) => entry.duty === RECONCILE_DUTY);
-      expect(reconcileReport?.ok).toBe(false);
-      expect(reconcileReport?.parked).toBeUndefined();
+    it("clears the prior parked count and preserves the last success when the duty throws", async () => {
+      const d = deps({
+        reconcile: () => Promise.reject(new Error("socket hang up")),
+      });
+      const state = d.health.duties[RECONCILE_DUTY]!;
+      state.parked = 1;
+      state.lastOkAt = new Date("2026-07-25T09:00:00Z");
+      await expect(runReconcile(d)).rejects.toThrow("socket hang up");
+      expect(state.parked).toBe(0);
+      expect(state.lastOkAt).toEqual(new Date("2026-07-25T09:00:00Z"));
     });
-  });
-
-  it("emits exactly one pass.complete line carrying both summaries", async () => {
-    const d = deps();
-    await runPass(d, NOW);
-    const passComplete = d.lines.filter((line) => line.startsWith("info pass.complete"));
-    expect(passComplete).toHaveLength(1);
-
-    // Parsed, because a count alone would stay green if one duty dropped out of `duties`.
-    const fields = JSON.parse(passComplete[0]!.slice(passComplete[0]!.indexOf("{"))) as {
-      duties: { duty: string; ok: boolean }[];
-    };
-    expect(fields.duties).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ duty: DRAIN_DUTY, ok: true }),
-        expect.objectContaining({ duty: RECONCILE_DUTY, ok: true }),
-      ]),
-    );
-  });
-
-  it("reports the pass duration and each duty's own", async () => {
-    const d = deps();
-    await runPass(d, NOW);
-
-    const complete = d.lines.find((line) => line.startsWith("info pass.complete"));
-    expect(complete).toBeDefined();
-    const payload = JSON.parse(complete!.slice("info pass.complete ".length)) as {
-      durationMs: number;
-      duties: { duty: string; durationMs: number }[];
-    };
-    // Clock reads 10ms apart: 10 (pass start), 20/30 (drain), 40/50 (reconcile), 60 (pass end).
-    expect(payload.durationMs).toBe(50);
-    expect(payload.duties.map((entry) => entry.durationMs)).toEqual([10, 10]);
-  });
-
-  it("still reports a duration for a duty that threw", async () => {
-    const d = deps({
-      drain: () =>
-        Promise.reject(
-          new AppError("server.credential_unusable", {
-            purpose: "fiscal.aeat",
-            field: "certKind",
-          }),
-        ),
-    });
-    const report = await runPass(d, NOW);
-
-    expect(report.duties[0]!.ok).toBe(false);
-    expect(report.duties[0]!.durationMs).toBe(10);
   });
 });

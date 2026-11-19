@@ -281,8 +281,12 @@ describe("historical promote: local secondary → primary, live", () => {
     );
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
-      // Phase A — a secondary: the loop is live, but its fiscal pass is empty.
+      // A secondary keeps a filing heartbeat but starts no payment or fiscal lookup.
       await waitForPass(server.health);
+      expect(server.health.readJobs?.()).toMatchObject({
+        "payments.reconcile": { state: "not_applicable", lastRunAt: null },
+        "fiscal.reconciliation": { state: "not_applicable", lastRunAt: null },
+      });
 
       expect(server.promoteLocalSecondaryToPrimary).toBeDefined();
       expect(server.promoteMirrorToPrimary).toBeUndefined();
@@ -306,6 +310,13 @@ describe("historical promote: local secondary → primary, live", () => {
         estado: "pendiente",
         intentos: 1,
         incidencia: true,
+      });
+
+      await poll(async () => {
+        const jobs = server.health.readJobs?.();
+        return jobs?.["payments.reconcile"]?.lastRunAt && jobs["fiscal.reconciliation"]?.lastRunAt
+          ? true
+          : undefined;
       });
 
       const staffB = await fetch(`${base}/api/staff`);

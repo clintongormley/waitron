@@ -2,14 +2,7 @@ import { Hono } from "hono";
 import { isVenueHolderFresh, readVenueHolderAsync, type SingletonRole } from "@waitron/db";
 import type { StreamView } from "@waitron/stream";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
-import {
-  ALL_DUTIES,
-  DRAIN_DUTY,
-  RECONCILE_DUTY,
-  type Duty,
-  type DutyReport,
-  type PassReport,
-} from "./pass.js";
+import { ALL_DUTIES, DRAIN_DUTY, RECONCILE_DUTY, type Duty, type DutyReport } from "./pass.js";
 import type { Logger } from "./logger.js";
 import type { JobView, PublicJobView } from "./job-runner.js";
 import type { TradingAdmissionView } from "./trading-admission.js";
@@ -65,8 +58,7 @@ export function createHealthState(startedAt: Date): HealthState {
   return { startedAt, lastPassAt: null, duties, readStream: () => ({ state: "off" }) };
 }
 
-/** Returned so a caller can log at a level the FRESH count supports; `pass.ts` logs before
- * `recordPass` runs. */
+/** Lets the caller log at a level that reflects the current failure count. */
 export interface DutyRecord {
   duty: string;
   consecutiveFailures: number;
@@ -86,12 +78,11 @@ export interface DutyRecord {
  * `/health` holds one verdict per top-level duty, so one skipped or parked item marks the whole
  * duty degraded.
  */
-export function recordPass(state: HealthState, report: PassReport, at: Date): DutyRecord[] {
-  state.lastPassAt = at;
-  return report.duties.map((entry) => recordDuty(state, entry, at));
-}
-
-export function recordDuty(state: HealthState, entry: DutyReport, at: Date): DutyRecord {
+export function recordDuty(
+  state: HealthState,
+  entry: Pick<DutyReport, "duty" | "ok" | "skipped" | "parked">,
+  at: Date,
+): DutyRecord {
   const duty = (state.duties[entry.duty] ??= {
     lastOkAt: null,
     consecutiveFailures: 0,
@@ -122,7 +113,7 @@ export function recordDuty(state: HealthState, entry: DutyReport, at: Date): Dut
  * The level comes from STALENESS, not the failure count: a count means a different time at each
  * retry cadence, while `stale` is the same `isStale` test `/health` answers 503 on.
  *
- * No `errorCode`: `duty.failed` (`pass.ts`) already logs `codeOf` of the throw.
+ * No `errorCode`: `duty.failed` (the job) already logs `codeOf` of the throw.
  */
 export function logDegradedDuties(log: Logger, records: readonly DutyRecord[]): void {
   for (const record of records) {
@@ -138,7 +129,7 @@ export function logDegradedDuties(log: Logger, records: readonly DutyRecord[]): 
   }
 }
 
-/** `undefined` for a duty name outside `Duty`, which a runtime `PassReport` can carry. */
+/** `undefined` for a duty name outside `Duty`, which a runtime report can carry. */
 function budgetFor(name: string): number | undefined {
   return (DUTY_BUDGET_MS as Readonly<Record<string, number>>)[name];
 }

@@ -149,7 +149,6 @@ describe("promoted primary awaiting the fiscal certificate", () => {
       drain: (now) =>
         FISCAL_SLOT.drain({ db, ring, environment: "production", skipRetryMs: 300_000, log }, now),
       awaitingCert,
-      monotonicMs: () => performance.now(),
       log,
     });
 

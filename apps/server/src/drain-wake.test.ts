@@ -62,7 +62,6 @@ async function filingBox() {
       timings: { minTickMs: 5_000, maxTickMs: 3_600_000 },
       health: createHealthState(START),
       awaitingCert: { current: false },
-      monotonicMs: Date.now,
       log,
     }),
   );

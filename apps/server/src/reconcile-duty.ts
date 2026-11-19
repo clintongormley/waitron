@@ -73,7 +73,7 @@ function summaryOf(result: PaymentReconcileResult): Record<string, unknown> {
 }
 
 /** What a pass reports when it runs no reconciliation: the shape `runDue` returns for a tick with no
- * work, so `runPass` and `health.ts` need no special case. */
+ * work, so the payment job and `health.ts` need no special case. */
 export const NOTHING_TO_RECONCILE: TickResult = {
   ran: [],
   deferred: 0,

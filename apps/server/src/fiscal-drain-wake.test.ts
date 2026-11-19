@@ -80,7 +80,6 @@ describe("the filing loop wakes for a failed batch's scheduled retry", () => {
             awaitingCert: { current: false },
             health: createHealthState(START),
             timings: { minTickMs: 5_000, maxTickMs: 3_600_000 },
-            monotonicMs: () => clock,
             log,
           }),
         );

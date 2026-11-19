@@ -834,7 +834,9 @@ also qualifies the historical operation-description references in this section.
   and photo bytes no image references, in separate batches. Command-answer cleanup is built but
   stays off until the latest possible till retry is confirmed; its bill branch retains abandoned
   bills because they have no closing timestamp.
-  The remaining jobs still need moving onto the runner.
+  Filing, payment reconciliation and fiscal reconciliation also run there. A committed fiscal record
+  wakes filing, subject to the tax agency's wait between submissions. Card recovery still runs in its
+  separate loop until the one-payment-route change retires it.
   Devices hold their assigned station and invoice printer choice revision on the device row.
   Printers now store the device holding them and which documents they pick up on the printer row.
   Receipt and office printers share one table. Each profile stores its ordered printer choices and defaults.

@@ -39,8 +39,8 @@ import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { TEST_RELEASE, writeDeclarationFolder } from "./testing/declaration-folder.js";
-import { runPass, DRAIN_DUTY } from "./pass.js";
-import { singletonPass } from "./singleton-pass.js";
+import { drainJob } from "./fiscal-jobs.js";
+import { createHealthState } from "./health.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
 import { MIRROR_VIEWER_PERSON_ID, MIRROR_VIEWER_SESSION_ID } from "./mirror-session.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -540,9 +540,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
 
   it("runs the trivial empty pass on a mirror — the fiscal drain (AEAT submission) is never invoked", async () => {
     // A node that is not the singleton primary must never file to AEAT under a chain it does not
-    // own. `startServer` builds its AEAT client internally, so this drives the pass
-    // as boot wires it — `singletonPass` around `runPass` with the real drainer — with a
-    // `resolveClient` tripwire in place of the transport.
+    // own. The job runs the real drain with a client resolver that records any attempt to file.
 
     // A pending envío this node must NOT submit.
     const seeded = await seedFiscalRegistro(db.mirror, {
@@ -561,35 +559,26 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
       resolveClientCalled = true;
       return Promise.reject(new Error("mirror must not contact AEAT"));
     };
+    const health = createHealthState(new Date());
     const buildPass = (getRole: () => "primary" | "secondary") =>
-      singletonPass(getRole, (at) =>
-        runPass(
-          {
-            drain: (at2) =>
-              drain(
-                {
-                  db: db.mirror,
-                  resolveClient: tripwireResolveClient,
-                  skipRetryMs: 300_000,
-                  environment: "preproduction",
-                },
-                at2,
-              ),
-            reconcile: () =>
-              Promise.resolve({
-                ran: [],
-                deferred: 0,
-                beyondHorizon: 0,
-                skipped: [],
-                nextDueAt: null,
-              }),
-            awaitingCert: { current: false },
-            monotonicMs: () => performance.now(),
-            log: () => {},
-          },
-          at,
-        ),
-      );
+      drainJob({
+        getRole,
+        health,
+        timings: { minTickMs: 5_000, maxTickMs: 3_600_000 },
+        drain: (now, signal) =>
+          drain(
+            {
+              db: db.mirror,
+              resolveClient: tripwireResolveClient,
+              skipRetryMs: 300_000,
+              environment: "preproduction",
+              signal,
+            },
+            now,
+          ),
+        awaitingCert: { current: false },
+        log: () => {},
+      }).pass;
 
     // The role `setNodeMode('mirror')` set, not one invented for the test.
     const role = (await readNodeMode(stores.mirror.node, TILL_ENV.WAITRON_NODE_ID)).singletonRole;
@@ -598,9 +587,12 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     // An hour ahead, so the seeded envío is unambiguously due for the primary control below.
     const drainAt = new Date(Date.now() + 3_600_000);
 
-    const mirrorReport = await buildPass(() => role)(drainAt);
+    const ctx = { now: drainAt, signal: new AbortController().signal };
+    const mirrorReport = await buildPass(() => role)(ctx);
     expect(resolveClientCalled).toBe(false);
-    expect(mirrorReport).toEqual({ nextDueAt: null, duties: [] });
+    expect(mirrorReport).toEqual({ nextDueAt: null });
+    expect(health.lastPassAt).toEqual(drainAt);
+    expect(health.duties["fiscal.drain"]?.consecutiveFailures).toBe(0);
 
     const afterMirror = await db.mirror.execute<{ estado: string }>(
       sql`select estado from envios where registro_id = ${seeded.registroId}`,
@@ -609,9 +601,10 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
 
     // The control: the same wiring as 'primary' reaches the tripwire, so the mirror's clean pass is
     // the singleton gate working, not a drainer that never fires.
-    const primaryReport = await buildPass(() => "primary")(drainAt);
+    const primaryReport = await buildPass(() => "primary")(ctx);
     expect(resolveClientCalled).toBe(true);
-    expect(primaryReport.duties.some((d) => d.duty === DRAIN_DUTY)).toBe(true);
+    expect(primaryReport.degraded).toBe(true);
+    expect(health.duties["fiscal.drain"]?.consecutiveFailures).toBe(1);
 
     // The tripwire proves drain was reached, not that anything was filed.
     const afterPrimary = await db.mirror.execute<{ estado: string }>(

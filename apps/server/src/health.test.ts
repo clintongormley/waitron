@@ -4,17 +4,19 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { lockVenueDatabase, type SingletonRole } from "@waitron/db";
 import type { StreamStatus, StreamView } from "@waitron/stream";
-import type { DrainResult } from "@waitron/fiscal";
+import { emptyDrainResult } from "@waitron/fiscal";
 import type { TickResult } from "@waitron/payments";
 import { DEFAULT_DUTY_TIMINGS, DEFAULT_MAX_TICK_MS } from "./config.js";
-import { DRAIN_DUTY, RECONCILE_DUTY, runPass, type DutyReport, type PassReport } from "./pass.js";
+import { DRAIN_DUTY, RECONCILE_DUTY, type DutyReport, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
+import { drainJob, reconcileJob } from "./fiscal-jobs.js";
 import {
   createHealthState,
+  type HealthState,
   healthApp,
   healthSnapshot,
   logDegradedDuties,
-  recordPass,
+  recordDuty,
   DUTY_BUDGET_MS,
 } from "./health.js";
 
@@ -53,18 +55,13 @@ function report(drainOkOrEntries: boolean | DutyReport[], reconcileOk = true): P
   };
 }
 
-/** A real pass whose reconcile ran one run that ended `failed` and none `parked`. */
-async function failedOnlyReconcilePass(at: Date): Promise<PassReport> {
-  const drain: DrainResult = {
-    nextDueAt: null,
-    tenantsWithWork: 0,
-    batchesSent: 0,
-    recordsSubmitted: 0,
-    recordsAccepted: 0,
-    recordsHalted: 0,
-    incidentsRaised: 0,
-    skipped: [],
-  };
+function recordPass(state: HealthState, report: PassReport, at: Date) {
+  state.lastPassAt = at;
+  return report.duties.map((entry) => recordDuty(state, entry, at));
+}
+
+/** Real jobs where the reconcile runs once, fails, and parks nothing. */
+async function recordFailedOnlyReconcilePass(health: HealthState, at: Date): Promise<void> {
   const reconcile: TickResult = {
     ran: [
       {
@@ -81,19 +78,20 @@ async function failedOnlyReconcilePass(at: Date): Promise<PassReport> {
     nextDueAt: null,
   };
   const lines: string[] = [];
-  let ticks = 0;
-  const pass = await runPass(
-    {
-      drain: () => Promise.resolve(drain),
-      reconcile: () => Promise.resolve(reconcile),
-      awaitingCert: { current: false },
-      monotonicMs: () => (ticks += 10),
-      log: collect(lines),
-    },
-    at,
-  );
+  const ctx = { now: at, signal: new AbortController().signal };
+  const deps = {
+    getRole: () => "primary" as const,
+    health,
+    timings: DEFAULT_DUTY_TIMINGS,
+    log: collect(lines),
+  };
+  await drainJob({
+    ...deps,
+    drain: async () => emptyDrainResult(),
+    awaitingCert: { current: false },
+  }).pass(ctx);
+  await reconcileJob({ ...deps, reconcile: async () => reconcile }).pass(ctx);
   expect(lines.filter((line) => line.startsWith("warn reconcile.run_failed"))).toHaveLength(1);
-  return pass;
 }
 
 function collect(lines: string[]): Logger {
@@ -366,8 +364,8 @@ describe("health state", () => {
     it("does not flip health for a failed-only run (parked stays 0)", async () => {
       const state = createHealthState(BOOT);
       const later = new Date(AT.getTime() + 60_000);
-      recordPass(state, await failedOnlyReconcilePass(AT), AT);
-      recordPass(state, await failedOnlyReconcilePass(later), later);
+      await recordFailedOnlyReconcilePass(state, AT);
+      await recordFailedOnlyReconcilePass(state, later);
       expect(state.duties[RECONCILE_DUTY]).toMatchObject({ consecutiveFailures: 0, parked: 0 });
       expect(healthSnapshot(state, later).ok).toBe(true);
     });
@@ -476,7 +474,7 @@ describe("healthApp", () => {
   it("stays 200 when reconcile has failed runs but nothing parked", async () => {
     const state = createHealthState(BOOT);
     const app = healthApp(state, () => AT);
-    recordPass(state, await failedOnlyReconcilePass(AT), AT);
+    await recordFailedOnlyReconcilePass(state, AT);
     const res = await app.request("/health");
     expect(res.status).toBe(200);
   });

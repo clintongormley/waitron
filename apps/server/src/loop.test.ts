@@ -95,9 +95,6 @@ describe("runLoop", () => {
   });
 
   it("keeps looping when a pass itself throws", async () => {
-    // runPass contains its own duties' failures, so a throw HERE is something unforeseen — a bug in
-    // the pass, or an OOM in a log sink. The loop still must not die: a process that exits on the
-    // unforeseen breaches the hourly duty in exactly the case nobody predicted.
     const controller = new AbortController();
     const slept: number[] = [];
     let calls = 0;
@@ -125,9 +122,6 @@ describe("runLoop", () => {
   });
 
   it("logs pass.threw with a structured code, never the raw error message", async () => {
-    // Whatever reaches this branch is by definition unclassified — `runPass` already turned every
-    // ordinary duty failure into a `DutyReport` before it got here — so a bare `.message` could
-    // carry anything a driver or client library chose to embed, like connection credentials.
     const controller = new AbortController();
     const events: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
     const secret = "postgres://user:hunter2@host/db";

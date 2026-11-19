@@ -36,7 +36,6 @@ function setup() {
     drain: async () => emptyDrainResult(),
     reconcile: async () => cleanReconcile,
     getRole: () => "primary" as const,
-    monotonicMs: () => 0,
     log: vi.fn(),
   };
 }
@@ -119,6 +118,7 @@ it("records a filing failure for health and rethrows for the runner's retry", as
 
 it("gives the drain the job's stepdown signal", async () => {
   const deps = setup();
+  const checked = vi.fn(async () => cleanReconcile);
   const active = gate<AbortSignal>();
   const resume = gate<void>();
   const runner = createJobRunner({ now: () => START, log: deps.log });
@@ -140,4 +140,7 @@ it("gives the drain the job's stepdown signal", async () => {
   expect(stopSignal.aborted).toBe(false);
   runner.signalStepdown();
   expect(stopSignal.aborted).toBe(true);
+  runner.add(reconcileJob({ ...deps, reconcile: checked }));
+  expect(runner.views()["payments.reconcile"]?.state).toBe("stopped");
+  expect(checked).not.toHaveBeenCalled();
 });

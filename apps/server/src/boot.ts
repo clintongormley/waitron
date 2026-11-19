@@ -4542,7 +4542,6 @@ async function bootServer(
     getRole: readSingletonRole,
     health,
     timings,
-    monotonicMs: () => performance.now(),
     log,
   };
   jobRunner.add(

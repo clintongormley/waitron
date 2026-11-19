@@ -81,7 +81,6 @@ describe("independent jobs against a migrated database", () => {
       getRole: () => "primary" as const,
       health,
       timings: DEFAULT_DUTY_TIMINGS,
-      monotonicMs: () => performance.now(),
       log: createLogger(
         (line) => lines.push(line),
         () => NOW,
