@@ -39,7 +39,8 @@ const ownOriginal = alias(printJobs, "owed_own_original");
 const laterOriginal = alias(printJobs, "owed_later_original");
 
 // A print that gave up, and an email that failed, still owe the ticket; a delivery that may have
-// arrived (`unknown`), on any medium, does not. `saleId` names `sales.id` or a column equal to it.
+// arrived (`unknown`), on any medium, does not. `saleId` names `sales.id` or a column equal to it,
+// and the caller's query has `sales` in its FROM: the check reads its `corrects_sale_id`.
 function stillOwed(q: Transaction, saleId: SQLiteColumn): SQL {
   return and(
     isNull(sales.correctsSaleId),
@@ -87,7 +88,7 @@ const LOOK_AGAIN_MS = 60 * 60_000;
 const ENDED_NOT_FAILED = [PRINTER_DELETED, PRINTER_UNPAIRED, PRINT_JOB_MOVED];
 
 /** The newest original of each owed sale issued in the last day, given up on an active printer. */
-function givenUpOriginals(q: Transaction, now: Date, jobId?: string) {
+export function givenUpOriginals(q: Transaction, now: Date, jobId?: string) {
   return (
     q
       .select({ id: printJobs.id, claimedAt: printJobs.claimedAt })

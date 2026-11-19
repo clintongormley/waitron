@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -31,7 +31,12 @@ import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import type { Transaction } from "@waitron/db";
 import type { Logger } from "./logger.js";
-import { owedReceiptJob, owesOriginal, startFreshRounds } from "./owed-receipts.js";
+import {
+  givenUpOriginals,
+  owedReceiptJob,
+  owesOriginal,
+  startFreshRounds,
+} from "./owed-receipts.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -634,4 +639,17 @@ describe("owedReceiptJob", () => {
       await suite.db.select().from(printJobs).where(eq(printJobs.saleId, saleId)),
     ).toHaveLength(2);
   });
+});
+
+it("finds candidates through the issued-time index, and checks unpaid departures per print job, not per sale", async () => {
+  const plan = await withTransaction(suite.db, async (tx) => {
+    const rows = await tx.execute<{ detail: string }>(
+      sql`explain query plan ${givenUpOriginals(tx, new Date(AT)).getSQL()}`,
+    );
+    return rows.rows.map((row) => row.detail);
+  });
+  const joined = plan.indexOf("SEARCH print_jobs USING INDEX print_jobs_sale_id_idx (sale_id=?)");
+  expect(plan[0]).toBe("SEARCH sales USING INDEX sales_issued_idx (issued_at>?)");
+  expect(joined).toBe(1);
+  expect(plan.indexOf("SCAN unpaid_departures")).toBeGreaterThan(joined);
 });
