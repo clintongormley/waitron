@@ -2750,10 +2750,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         { db: deps.db, backend: deps.backend },
         cfg,
         id,
-        false,
-        undefined,
-        session.personId,
-        ifOwed === true,
+        ifOwed === true ? "owed" : "original",
+        { personId: session.personId },
       );
       return c.body(null, 200);
     }),

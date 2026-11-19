@@ -610,7 +610,7 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
     { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
     OPERATOR,
   );
-  await printSaleReceipt(deps(), cfg, id, false);
+  await printSaleReceipt(deps(), cfg, id, "original");
 
   const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
   const papers = jobs.map((job) => decodeTicket(new Uint8Array(job.payload))).filter(Boolean);
@@ -626,7 +626,7 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
     { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
     OPERATOR,
   );
-  await printSaleReceipt(deps(), cfg, id, false);
+  await printSaleReceipt(deps(), cfg, id, "original");
   expect(
     (await printJobsFor(cfg))
       .filter((job) => job.printerId === printerId)
@@ -782,7 +782,7 @@ describe("receipt grouping after table changes", () => {
             OPERATOR,
           );
         await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, orderId, OPERATOR);
-        if (orderFlow === "issued") await printSaleReceipt(deps(), cfg, orderId, false);
+        if (orderFlow === "issued") await printSaleReceipt(deps(), cfg, orderId, "original");
         if (orderFlow === "ticket_then_pay") {
           await collectOrder(
             { ...deps(), admission: testTradingAdmission() },
@@ -796,7 +796,7 @@ describe("receipt grouping after table changes", () => {
           );
         }
       }
-      if (orderFlow !== "issued") await printSaleReceipt(deps(), cfg, orderId, false);
+      if (orderFlow !== "issued") await printSaleReceipt(deps(), cfg, orderId, "original");
       expect(
         (await printJobsFor(cfg))
           .map((job) => decodeTicket(new Uint8Array(job.payload)))
@@ -856,7 +856,7 @@ describe("receipt original and copy tracking", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, workingOrderId, false);
+    await printSaleReceipt(deps(), cfg, workingOrderId, "original");
     const before = await withTransaction(suite.db, (tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, workingOrderId)),
     );
@@ -880,8 +880,8 @@ describe("receipt original and copy tracking", () => {
         tx.select().from(sales).where(eq(sales.workingOrderId, workingOrderId)),
       ),
     ).toEqual(before);
-    await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, false);
-    await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, false);
+    await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, "original");
+    await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, "original");
     const repeated = await withTransaction(suite.db, (tx) => tx.select().from(printJobs));
     expect(repeated.filter((job) => job.receiptCopy === false)).toHaveLength(1);
     expect(repeated.filter((job) => job.receiptCopy === true)).toHaveLength(1);
@@ -909,7 +909,7 @@ describe("simplified invoice original requests", () => {
         },
         OPERATOR,
       );
-      await printSaleReceipt(deps(), cfg, workingOrderId, false);
+      await printSaleReceipt(deps(), cfg, workingOrderId, "original");
       const saleId = await onlySaleId();
       await withTransaction(suite.db, (tx) =>
         tx
@@ -921,8 +921,8 @@ describe("simplified invoice original requests", () => {
       const fiscal = await suite.db.select().from(registrosFacturacion);
       const invoices = await suite.db.select().from(sales);
       await Promise.all([
-        printSaleReceipt(deps(), cfg, workingOrderId, false),
-        printSaleReceipt(deps(), cfg, workingOrderId, false),
+        printSaleReceipt(deps(), cfg, workingOrderId, "original"),
+        printSaleReceipt(deps(), cfg, workingOrderId, "original"),
       ]);
       expect(await suite.db.select().from(printJobs)).toEqual(before);
       expect(await suite.db.select().from(sales)).toEqual(invoices);
@@ -948,8 +948,8 @@ describe("simplified invoice original requests", () => {
     const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     await Promise.all([
-      printSaleReceipt(deps(), cfg, workingOrderId, false),
-      printSaleReceipt(deps(), cfg, workingOrderId, false),
+      printSaleReceipt(deps(), cfg, workingOrderId, "original"),
+      printSaleReceipt(deps(), cfg, workingOrderId, "original"),
     ]);
     const jobs = await suite.db.select().from(printJobs);
     expect(jobs).toHaveLength(1);
@@ -980,7 +980,7 @@ describe("cash payment drawer separation", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, explicitPrintOrder1, false);
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder1, "original");
     expect(result.total).toBe("1.50");
     expect(await fiscalRecordCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
@@ -1040,7 +1040,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, explicitPrintOrder2, false);
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder2, "original");
     const receipt = (await printJobsFor(cfg))
       .map((job) => new Uint8Array(job.payload))
       .find((payload) => decodeTicket(payload).includes("VERI*FACTU"))!;
@@ -1077,7 +1077,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, explicitPrintOrder3, false);
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder3, "original");
 
     // Filing is unaffected by the print hook: the chained fiscal record exists.
     expect(result.total).toBe("3.00");
@@ -1130,7 +1130,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, explicitPrintOrder4, false);
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder4, "original");
 
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(2);
@@ -1171,7 +1171,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       expect(result.outcome).toBe("captured");
       if (result.outcome === "captured")
         expect(result.ticket.simulatedCardPayment).toBe(provider === "simulator");
-      await printSaleReceipt(deps(), cfg, orderId, false);
+      await printSaleReceipt(deps(), cfg, orderId, "original");
       const receipt = (await printJobsFor(cfg)).find((job) =>
         decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"),
       )!;
@@ -1201,7 +1201,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, explicitPrintOrder5, false);
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder5, "original");
 
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(2);
@@ -1231,7 +1231,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, explicitPrintOrder6, false);
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder6, "original");
 
     expect(await fiscalRecordCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
@@ -1272,7 +1272,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, explicitPrintOrder7, false);
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder7, "original");
 
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
@@ -1297,7 +1297,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, explicitPrintOrder8, false);
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder8, "original");
 
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
@@ -1317,7 +1317,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
     });
-    await printSaleReceipt(deps(), cfg, unattributedPrintOrder1, false);
+    await printSaleReceipt(deps(), cfg, unattributedPrintOrder1, "original");
 
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
@@ -1462,7 +1462,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       },
       OPERATOR,
     );
-    await expect(printSaleReceipt(deps(), cfg, orderId, false)).rejects.toMatchObject({
+    await expect(printSaleReceipt(deps(), cfg, orderId, "original")).rejects.toMatchObject({
       code: "receipt.no_printer",
     });
     expect(await fiscalRecordCount(cfg)).toBe(1);
@@ -1483,7 +1483,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
-    await printSaleReceipt(deps(), cfg, unattributedPrintOrder2, false);
+    await printSaleReceipt(deps(), cfg, unattributedPrintOrder2, "original");
 
     expect(await fiscalRecordCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
@@ -1505,7 +1505,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     });
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
     await issueOrderInvoice({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
-    await printSaleReceipt(deps(), cfg, id, false);
+    await printSaleReceipt(deps(), cfg, id, "original");
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
     expect(jobs[0]!.printerId).toBe(printerId);
@@ -1526,7 +1526,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     });
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
     await issueOrderInvoice({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR);
-    await printSaleReceipt(deps(), cfg, id, false);
+    await printSaleReceipt(deps(), cfg, id, "original");
     const issuedJobs = await printJobsFor(cfg);
     expect(issuedJobs).toHaveLength(1);
     const original = new Uint8Array(issuedJobs[0]!.payload);
@@ -1597,7 +1597,7 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, workingOrderId, false);
+    await printSaleReceipt(deps(), cfg, workingOrderId, "original");
   }
 
   /** Each job's printer, and whether it is a drawer kick or a document. */
@@ -1782,7 +1782,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, workingOrderId, false);
+    await printSaleReceipt(deps(), cfg, workingOrderId, "original");
   }
 
   /** A venue whose device prints receipts on `receipt` and opens the drawer of `drawer`. */
@@ -1921,7 +1921,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     );
     expect((await allJobs()).map((job) => [job.printerId, job.kind])).toEqual([[drawer, "drawer"]]);
 
-    await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, false);
+    await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, "original");
     await reprintSale({ db: suite.db, backend }, cfg, workingOrderId);
 
     const jobs = await allJobs();
@@ -1996,7 +1996,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
         .orderBy(sql`rowid desc`)
         .limit(1),
     );
-    await printSaleReceipt(deps(), venue.cfg, sale!.workingOrderId!, false);
+    await printSaleReceipt(deps(), venue.cfg, sale!.workingOrderId!, "original");
     return { saleId: sale!.saleId, workingOrderId: sale!.workingOrderId! };
   }
 
@@ -2018,7 +2018,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
     const printerId = await makePrinter({ hasCashDrawer: true });
     await configureReceipt(venue.cfg, { printerId });
     const sale = await sell(venue, "cash");
-    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, sale.workingOrderId, false);
+    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, sale.workingOrderId, "original");
     await reprintSale({ db: suite.db, backend }, venue.cfg, sale.workingOrderId);
 
     expect((await jobs()).map(({ kind, saleId }) => ({ kind, saleId }))).toEqual([
@@ -2229,7 +2229,7 @@ describe("receipt issuer", () => {
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
     });
-    await printSaleReceipt(deps(), cfg, explicitPrintOrder9, false);
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder9, "original");
     const saleId = await onlySaleId();
     const original = (await printJobsFor(cfg)).map((job) =>
       printedLines(new Uint8Array(job.payload)).map((line) => line.trim()),
@@ -2326,7 +2326,7 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
     await orderForParty(v, partyId, ["Burger"], tabId);
 
     await pay(v, tabId, "12.00");
-    await printSaleReceipt({ db: v.db, backend: v.backend }, v.cfg, tabId, false);
+    await printSaleReceipt({ db: v.db, backend: v.backend }, v.cfg, tabId, "original");
 
     const receipts = (await printJobsFor(v.cfg))
       .map((job) => decodeTicket(new Uint8Array(job.payload)))
@@ -2389,7 +2389,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
     await orderForParty(v, partyId, ["Burger"], tabId);
 
     await pay(v, tabId, "12.00");
-    await printSaleReceipt({ db: v.db, backend: v.backend }, v.cfg, tabId, false);
+    await printSaleReceipt({ db: v.db, backend: v.backend }, v.cfg, tabId, "original");
 
     const receipts = (await printJobsFor(v.cfg))
       .map((job) => decodeTicket(new Uint8Array(job.payload)))
@@ -2444,7 +2444,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
     return {
       newReceipts,
       changeCountTo,
-      print: () => printSaleReceipt(deps, v.cfg, tabId, false),
+      print: () => printSaleReceipt(deps, v.cfg, tabId, "original"),
       reprint: () => reprintSale(deps, v.cfg, tabId),
     };
   }
@@ -2495,7 +2495,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
       const { partyId, tabId } = await seat(v, await v.table(table), 4);
       await orderForParty(v, partyId, ["Burger"], tabId);
       await pay(v, tabId, "12.00", ...chosen);
-      await printSaleReceipt({ db: v.db, backend: v.backend }, v.cfg, tabId, false);
+      await printSaleReceipt({ db: v.db, backend: v.backend }, v.cfg, tabId, "original");
       const [sale] = await inTx(v, (tx) =>
         tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, tabId)),
       );
@@ -2642,7 +2642,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, workingOrderId, false);
+    await printSaleReceipt(deps(), cfg, workingOrderId, "original");
     return ticket;
   }
 
@@ -3584,7 +3584,7 @@ describe("department receipt presentation on thermal jobs", () => {
         },
         OPERATOR,
       );
-      await printSaleReceipt(deps(), cfg, workingOrderId, false);
+      await printSaleReceipt(deps(), cfg, workingOrderId, "original");
       return ticket;
     };
     const documents = async () =>
@@ -3727,7 +3727,7 @@ describe("department receipt presentation on thermal jobs", () => {
         },
         OPERATOR,
       );
-      await printSaleReceipt(deps(), cfg, sold[0]!.workingOrderId!, false);
+      await printSaleReceipt(deps(), cfg, sold[0]!.workingOrderId!, "original");
       expect(replay.invoiceNumber).toBe(ticket.invoiceNumber);
       expect(await fiscalRecordCount(cfg)).toBe(1);
       expect(await suite.db.select().from(tenders)).toHaveLength(1);
@@ -3931,7 +3931,7 @@ describe("the theme's logo on thermal receipts", () => {
         },
         OPERATOR,
       );
-      await printSaleReceipt(deps(), cfg, workingOrderId, false);
+      await printSaleReceipt(deps(), cfg, workingOrderId, "original");
       return ticket;
     };
     const documents = async () =>
@@ -4154,13 +4154,13 @@ it("keeps the original history after printer deletion and prints a marked copy o
     },
     OPERATOR,
   );
-  await printSaleReceipt(deps(), cfg, workingOrderId, false);
+  await printSaleReceipt(deps(), cfg, workingOrderId, "original");
   const fiscal = await suite.db.select().from(registrosFacturacion);
   const drawer = await suite.db.select().from(drawerOpens);
   await withTransaction(suite.db, (tx) => deletePrinter(tx, firstPrinter));
   const replacement = await makePrinter();
   await configureReceipt(cfg, { printerId: replacement });
-  await printSaleReceipt(deps(), cfg, workingOrderId, false);
+  await printSaleReceipt(deps(), cfg, workingOrderId, "original");
   await reprintSale(deps(), cfg, workingOrderId);
   const documents = (await suite.db.select().from(printJobs)).filter(
     (job) => job.receiptCopy !== null,

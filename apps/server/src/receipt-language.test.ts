@@ -490,7 +490,7 @@ describe("a bill paid in parts and an unpaid invoice file the venue's language w
       id,
       venue.operatorId,
     );
-    await printSaleReceipt(deps, venue.cfg, id, false);
+    await printSaleReceipt(deps, venue.cfg, id, "original");
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
     const receipt = await takeReceipt(suite.db);
     expect(startsWith(receipt, "Tipus Base IVA Total"), "Tipus Base IVA Total").toBe(true);
@@ -535,7 +535,7 @@ describe("a card-reader sale files and prints in the venue's language when the o
     if (out.outcome !== "captured") throw new Error("unreachable");
     expect(out.ticket.locale).toBe("ca-ES");
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
-    await printSaleReceipt(deps, venue.cfg, id, false);
+    await printSaleReceipt(deps, venue.cfg, id, "original");
     const receipt = await takeReceipt(suite.db);
     expect(startsWith(receipt, "Targeta"), "Targeta").toBe(true);
     expect(startsWith(receipt, "Tarjeta")).toBe(false);
@@ -568,7 +568,7 @@ describe("a card-reader sale files and prints in the venue's language when the o
     if (out.outcome !== "captured") throw new Error("unreachable");
     expect(out.ticket.locale).toBe("ca-ES");
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
-    await printSaleReceipt(deps, venue.cfg, id, false);
+    await printSaleReceipt(deps, venue.cfg, id, "original");
     const receipt = await takeReceipt(suite.db);
     expect(startsWith(receipt, "Targeta"), "Targeta").toBe(true);
     expect(startsWith(receipt, "Tarjeta")).toBe(false);

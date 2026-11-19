@@ -1030,19 +1030,13 @@ export async function readSettledTicket(
   };
 }
 
-/**
- * The action determines original versus duplicate; both only enqueue paper for an existing sale.
- * `ifOwed` queues the original only while {@link owesOriginal} holds and no original job exists,
- * on the device's receipt printer even when it is switched off, and otherwise does nothing.
- */
+/** Every mode only enqueues paper for an existing sale. */
 export async function printSaleReceipt(
   deps: { db: Database; backend: FiscalBackend },
   cfg: OriginConfig,
   workingOrderId: string,
-  duplicate: boolean,
-  language?: string,
-  personId?: string,
-  ifOwed = false,
+  mode: "original" | "duplicate" | "owed",
+  { language, personId }: { language?: string; personId?: string } = {},
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
     const [existing] = await tx
@@ -1058,16 +1052,16 @@ export async function printSaleReceipt(
     }
     // No filed sale → nothing to print. This keeps `readSettledTicket`'s "no sale" throw unreachable.
     if (existing === undefined) return;
-    if (ifOwed && !(await owesOriginal(tx, existing.id))) return;
+    if (mode === "owed" && !(await owesOriginal(tx, existing.id))) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
-    if (ifOwed) {
+    if (mode === "owed") {
       await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, {
         personId,
-        includeSwitchedOff: true,
+        printers: printerLookup(tx, cfg.origin, { whileSwitchedOff: true }),
       });
       return;
     }
-    if (duplicate) {
+    if (mode === "duplicate") {
       await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);
       return;
     }
@@ -2571,5 +2565,5 @@ export async function reprintSale(
   language?: string,
   personId?: string,
 ): Promise<void> {
-  await printSaleReceipt(deps, cfg, workingOrderId, true, language, personId);
+  await printSaleReceipt(deps, cfg, workingOrderId, "duplicate", { language, personId });
 }

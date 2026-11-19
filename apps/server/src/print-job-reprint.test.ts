@@ -144,7 +144,7 @@ async function paidSale(setting: EscSetting) {
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
     );
     // Paper is printed only when chosen (A739 cut 7b, #2791): choose it, as the till does.
-    await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, false);
+    await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, "original");
     const [original] = await inTx(venue, (tx) =>
       tx
         .select()

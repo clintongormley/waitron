@@ -1478,7 +1478,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(first.outcome).toBe("captured");
 
     expect(await printJobPayloads(printerId)).toHaveLength(0);
-    await printSaleReceipt(deps, cfg, id, false);
+    await printSaleReceipt(deps, cfg, id, "original");
     const afterFirst = await printJobPayloads(printerId);
     expect(afterFirst).toHaveLength(1);
     const payload = new Uint8Array(afterFirst[0]!);
