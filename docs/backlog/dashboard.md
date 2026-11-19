@@ -3,15 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Users, sign-in and the dashboard shell". This file holds
 their full text.
 
-## Dashboard leftovers from the coverage branch
-
-**Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #538).** Each from
-reading unless marked run:
-
-- Guards no test can reach, left uncovered rather than deleted: several `?? []` and `?? null`
-  fallbacks in the printers, payments, backup and device files (including device profiles).
-  **Next action:** delete them with a receipt each, or leave them as defensive code by decision.
-
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
@@ -195,36 +186,12 @@ cloud-recovery code.
 
 ## Bundle: Wt dialog lifecycle
 
-- **Dashboard leftovers from the coverage branch**: the printer, payment, backup and device
-  fallbacks remain outside the dialog work.
-  [Detail](dashboard.md#dashboard-leftovers-from-the-coverage-branch)
-- **Home/End caret behavior remains unresolved.** In macOS Chromium, End in an overflowing dialog
-  left text selected and scrolled the body. Removing vertical containment let short-body tests
-  pass but introduced underlying-page scrolling. In the 390×844 compact-modal control, End kept
-  selection `[0,6]` and moved page scrollTop `800→4156` without containment, versus `800→800` with
-  it. The earlier touch-emulation control kept the page at 800 past both body ends with no
-  overscroll events, so that touch result did not cover the keyboard path. Receipts:
-  `wt-dialog-key-page-control-20261109.log`, `wt-dialog-touch-probe-20261109.log`, and the
-  634-second run-it review (which measured a 4104px page movement in its own viewport).
-  Watcher 2026-11-09 19:15 kept containment and deferred this partial fix. Next: establish the
-  intended native key behavior and a discriminating long-form/page-scroll check before changing it.
-- **The till's modifier picker still recreates its modal when put back.** A738 added that because
-  `wt-dialog` lost modality there. Check whether the recreation is still needed after lane C's
-  #2642 lands; preserve the picker's draft and dismissal protections.
-- **The department and zone edit dialogs still close on removal and reopen on return**, so they
-  come back on top with focus as at opening. Their wrappers stay unchanged until the shared
-  covered-dialog case below can be fixed without breaking Escape.
-- **Putting a lower dialog back blurs the upper field and closes its open choices.** The focused
-  Chromium probes reproduced both effects. No production reinsertion trigger was found during
-  the 2026-11-09 source trace; that is not proof that none exists. Deferring the lower native
-  modal preserves focus and geometry, but changes native Escape order. The bare controls
-  `wt-dialog-native-close-control-20261109.log` and
-  `wt-dialog-native-close-before-control-20261109.log` in Lane D's receipts observed: with
-  `closedby=closerequest`, Escape closes the reattached lower dialog; `none`, `auto`, or no
-  attribute swallow Escape for the upper dialog and a native popover opened before reinsertion.
-  A popover opened after reinsertion still closes in that controlled setup. The fix needs explicit
-  Escape routing for the upper dialog and its open popovers; watcher 2026-11-09 18:51 deferred that mechanism.
-  Next: name a production trigger and obtain approval for that routing before changing restoration.
+- **Covered-dialog reinsertion and the department and zone wrappers.** Putting a lower dialog
+  back can blur the upper field and close its choices. The source trace found no screen that
+  puts back a retained lower editor under an open upper editor. After the lower window was raised
+  alone, Escape closed it or did nothing. See
+  `~/waitron-campaign-d/receipts/dash-dialog-lifecycle/native-escape-main.log`.
+  Keep the wrappers' current behavior until a screen can demonstrate and verify a fix.
 
 ## Bundle: Form implementation leftovers
 
@@ -261,8 +228,15 @@ Size M.
 
 - **Dashboard empty-value fallbacks (D-DASHBOARD-TEST-LOOSE-ENDS, 2026-11-17):** keep the
   remaining `?? []` and `?? null` in `dashboard-app.ts`, `login-screen.ts`, `extra-list-form.ts`
-  and `option-list-form.ts` as deliberate defensive code, without a claim that every fallback
-  has a test.
+  and `option-list-form.ts` as deliberate defensive code. The watcher extended that decision
+  on 2026-11-19 to `printers-screen.ts`, `payments-screen.ts`, `backup-screen.ts`,
+  `devices-screen.ts` and `device-profiles-screen.ts`.
+
+- **Dialog Home and End keys (2026-11-19):** keep native keys and vertical containment.
+  In the November 9 Chromium control, End scrolled the body and left the text selected.
+  The underlying page moved from 800 to 4156 without containment and stayed at 800 with it.
+  The November 19 repeat reported FAILURE because it measured 800 in both settings. The
+  decision rests on the November 9 comparison.
 
 - **Password-throttle saturation:** during an address spray, an address sharing a counter with
   sprayed addresses can inherit their failed-password count if it has no cache entry or live

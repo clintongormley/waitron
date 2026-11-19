@@ -222,6 +222,7 @@ export class WtDialog extends LitElement {
   /** Where focus last was inside this dialog. The browser has already moved it by
    * `disconnectedCallback`, so it cannot be read on leaving. */
   private lastFocused: HTMLElement | null = null;
+  private lastBodyScrollTop = 0;
 
   private opened = false;
   private openingGeneration = 0;
@@ -381,6 +382,7 @@ export class WtDialog extends LitElement {
         this.returnFocusVisible = this.returnTarget?.matches(":focus-visible");
         this.openedAt = ++WtDialog.openings;
         this.showModalWithOpeningFocus();
+        this.lastBodyScrollTop = this.bodyEl.scrollTop;
         WtDialog.track(this);
         this.watchContent();
       }
@@ -444,7 +446,7 @@ export class WtDialog extends LitElement {
     const above = [...WtDialog.openDialogs]
       .filter((other) => other.openedAt > this.openedAt)
       .sort((a, b) => a.openedAt - b.openedAt);
-    this.showAgain();
+    this.showAgain(this.lastBodyScrollTop);
     // Asked here, not above: moving focus can run a page's handlers, and one may remove or close
     // any of these. A dialog off the page is not modal either.
     for (const each of above) if (each.dialog.matches(":modal")) each.showAgain();
@@ -452,15 +454,18 @@ export class WtDialog extends LitElement {
 
   /** `close()`, because a modal whose `open` attribute is removed keeps its place in the top layer.
    * Its native report arrives with the dialog open again, and `onClose` ignores that. */
-  private showAgain(): void {
+  private showAgain(scrolled = this.bodyEl.scrollTop): void {
     const focused = this.lastFocused;
-    const scrolled = this.bodyEl.scrollTop;
     this.dialog.close();
     this.showModalWithOpeningFocus();
     focused?.focus();
     if (focused === this.bodyEl && this.shadowRoot!.activeElement === this.bodyEl)
       this.bodyEl.classList.toggle("opening-focus", this.bodyLeftWithOpeningFocus);
     this.bodyEl.scrollTop = scrolled;
+  }
+
+  private rememberBodyScroll(): void {
+    if (this.dialog.matches(":modal")) this.lastBodyScrollTop = this.bodyEl.scrollTop;
   }
 
   private onClose(): void {
@@ -697,7 +702,13 @@ export class WtDialog extends LitElement {
              violations, even fully nameless; adding role="dialog" made the same break get
              flagged. Removing this attribute would silently blind wt-dialog.a11y.test.ts. -->
         ${this.fixedHeading ? html`<div class="header">${this.renderHeading()}</div>` : nothing}
-        <div class="body" part="body" @keydown=${this.endOpeningFocus} @blur=${this.onBodyBlur}>
+        <div
+          class="body"
+          part="body"
+          @keydown=${this.endOpeningFocus}
+          @blur=${this.onBodyBlur}
+          @scroll=${this.rememberBodyScroll}
+        >
           ${this.fixedHeading ? nothing : this.renderHeading()}
           <slot @wt-form-error=${this.onBodyMessage} @slotchange=${this.observeBody}></slot>
         </div>
