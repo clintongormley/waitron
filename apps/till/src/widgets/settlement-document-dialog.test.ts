@@ -413,16 +413,16 @@ it("names the Done button Listo in Spanish", async () => {
 
 const closingLines = {
   prints: {
-    en: "Closing prints the receipt unless you email it.",
-    es: "Al cerrar se imprime el recibo, salvo que lo envíes por correo electrónico.",
+    en: "Closing prints the receipt.",
+    es: "Al cerrar se imprime el recibo.",
   },
   "switched-off": {
     en: "Bar is switched off. The receipt will print when it is switched back on.",
     es: "Bar está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
   },
   "no-printer": {
-    en: "This device has no receipt printer. Choose one above or email the receipt before closing.",
-    es: "Este dispositivo no tiene impresora de recibos. Elige una arriba o envía el recibo por correo antes de cerrar.",
+    en: "This device has no receipt printer. Choose one above before closing.",
+    es: "Este dispositivo no tiene impresora de recibos. Elige una arriba antes de cerrar.",
   },
   "not-allowed": {
     en: "This device may not print or email receipts. Print it from Find a bill on a till that can.",
@@ -430,8 +430,18 @@ const closingLines = {
   },
 } as const;
 type ClosingState = keyof typeof closingLines;
+const closingLinesWithEmail: Partial<Record<ClosingState, { en: string; es: string }>> = {
+  prints: {
+    en: "Closing prints the receipt unless you email it.",
+    es: "Al cerrar se imprime el recibo, salvo que lo envíes por correo electrónico.",
+  },
+  "no-printer": {
+    en: "This device has no receipt printer. Choose one above or email the receipt before closing.",
+    es: "Este dispositivo no tiene impresora de recibos. Elige una arriba o envía el recibo por correo antes de cerrar.",
+  },
+};
 
-function closingProps(state: ClosingState) {
+function closingProps(state: ClosingState, email = false) {
   const bar = equipmentItem("bar", "Bar", {
     kind: "receipt",
     available: state !== "switched-off",
@@ -444,21 +454,62 @@ function closingProps(state: ClosingState) {
     canPrintReceipt: state !== "not-allowed",
     receiptEquipment:
       state === "no-printer" ? roleOf("receipt", null, [bar]) : roleOf("receipt", bar, [bar]),
+    deliveries: {
+      current: null,
+      history: [],
+      originalCompleted: false,
+      originalPrinterId: null,
+      actions: {
+        print: null,
+        receiptInstead: null,
+        retryOriginal: null,
+        email: email ? { designation: "original" as const } : null,
+      },
+    },
   };
 }
 
 for (const language of ["en", "es"] as const)
   for (const state of Object.keys(closingLines) as ClosingState[])
-    it(`says what closing does when ${state}, in ${language}`, async () => {
-      setLocale(language === "en" ? "en-GB" : "es-ES");
+    for (const email of [false, true])
+      it(`says what closing does when ${state}, ${email ? "with" : "without"} email offered, in ${language}`, async () => {
+        setLocale(language === "en" ? "en-GB" : "es-ES");
+        const { el } = await mountWidget<TillSettlementDocumentDialog>(
+          "till-settlement-document-dialog",
+          closingProps(state, email),
+        );
+        expect(el.shadowRoot!.querySelector("[data-test=email-invoice]") !== null).toBe(
+          email && state !== "not-allowed",
+        );
+        const lines = [...el.shadowRoot!.querySelectorAll("[data-settlement-closing]")];
+        expect(lines.map((line) => line.getAttribute("data-settlement-closing"))).toEqual([state]);
+        const expected = (email && closingLinesWithEmail[state]) || closingLines[state];
+        expect(lines[0]!.textContent?.trim()).toBe(expected[language]);
+      });
+
+for (const invoiceType of ["F2", "F1"] as const)
+  for (const state of Object.keys(closingLines) as ClosingState[]) {
+    const promisesPrint = state === "prints" || state === "switched-off";
+    it(`${promisesPrint ? "drops" : "keeps"} "not sent to a printer" on a ${invoiceType} when closing ${state}`, async () => {
       const { el } = await mountWidget<TillSettlementDocumentDialog>(
         "till-settlement-document-dialog",
-        closingProps(state),
+        {
+          ...closingProps(state, true),
+          result: { ...invoiceOf("30.00"), invoiceType },
+        },
       );
-      const lines = [...el.shadowRoot!.querySelectorAll("[data-settlement-closing]")];
-      expect(lines.map((line) => line.getAttribute("data-settlement-closing"))).toEqual([state]);
-      expect(lines[0]!.textContent?.trim()).toBe(closingLines[state][language]);
+      expect(
+        el
+          .shadowRoot!.querySelector("[data-settlement-closing]")
+          ?.getAttribute("data-settlement-closing"),
+      ).toBe(state);
+      const delivery = el.shadowRoot!.querySelector("[data-test=original-delivery]");
+      expect(delivery).not.toBeNull();
+      expect(delivery!.textContent?.includes("The original has not been sent to a printer.")).toBe(
+        !promisesPrint,
+      );
     });
+  }
 
 it.each<[string, Partial<TillSettlementDocumentDialog>]>([
   ["queued", { originalReceiptPrint: { status: "queued", jobId: "original", canRetry: false } }],

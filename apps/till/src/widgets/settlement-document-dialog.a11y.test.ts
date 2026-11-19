@@ -130,8 +130,15 @@ for (const theme of ["light", "dark"] as const)
 
 for (const language of ["en-GB", "es-ES"])
   for (const theme of ["light", "dark"] as const)
-    for (const state of ["prints", "switched-off", "no-printer", "not-allowed"] as const)
-      it(`closing line ${state} is accessible in ${language} ${theme}`, async () => {
+    for (const [state, email] of [
+      ["prints", true],
+      ["prints", false],
+      ["switched-off", true],
+      ["no-printer", true],
+      ["no-printer", false],
+      ["not-allowed", true],
+    ] as const)
+      it(`closing line ${state}${email ? "" : " without email"} is accessible in ${language} ${theme}`, async () => {
         setLocale(language);
         const bar = equipmentItem("bar", "Bar", {
           kind: "receipt",
@@ -149,6 +156,18 @@ for (const language of ["en-GB", "es-ES"])
               state === "no-printer"
                 ? roleOf("receipt", null, [bar])
                 : roleOf("receipt", bar, [bar]),
+            deliveries: {
+              current: null,
+              history: [],
+              originalCompleted: false,
+              originalPrinterId: null,
+              actions: {
+                print: null,
+                receiptInstead: null,
+                retryOriginal: null,
+                email: email ? { designation: "original" } : null,
+              },
+            },
           },
           theme,
         );

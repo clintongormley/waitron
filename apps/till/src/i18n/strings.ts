@@ -423,10 +423,13 @@ export const en = {
   "settlement.full_invoice": "Full invoice",
   "settlement.done": "Done",
   "settlement.closing_prints": "Closing prints the receipt unless you email it.",
+  "settlement.closing_prints_no_email": "Closing prints the receipt.",
   "settlement.closing_switched_off":
     "{printer} is switched off. The receipt will print when it is switched back on.",
   "settlement.closing_no_printer":
     "This device has no receipt printer. Choose one above or email the receipt before closing.",
+  "settlement.closing_no_printer_no_email":
+    "This device has no receipt printer. Choose one above before closing.",
   "settlement.closing_not_allowed":
     "This device may not print or email receipts. Print it from Find a bill on a till that can.",
   "settlement.replacement_unavailable":
@@ -2568,10 +2571,13 @@ export const es: Record<StringKey, string> = {
   "settlement.done": "Listo",
   "settlement.closing_prints":
     "Al cerrar se imprime el recibo, salvo que lo envíes por correo electrónico.",
+  "settlement.closing_prints_no_email": "Al cerrar se imprime el recibo.",
   "settlement.closing_switched_off":
     "{printer} está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
   "settlement.closing_no_printer":
     "Este dispositivo no tiene impresora de recibos. Elige una arriba o envía el recibo por correo antes de cerrar.",
+  "settlement.closing_no_printer_no_email":
+    "Este dispositivo no tiene impresora de recibos. Elige una arriba antes de cerrar.",
   "settlement.closing_not_allowed":
     "Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda.",
   "settlement.replacement_unavailable":

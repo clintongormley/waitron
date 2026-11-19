@@ -453,6 +453,15 @@ export class TillTicketView extends LitElement {
     return status === "not_queued" && !this.receiptCopiesOnly ? "original" : null;
   }
 
+  protected emailAction(): InvoiceDeliveryStatus["actions"]["email"] {
+    return this.canPrintReceipt ? (this.deliveries?.actions.email ?? null) : null;
+  }
+
+  /** Whether closing this view sends the original to a printer, so "not sent" would mislead. */
+  protected closingQueuesOriginal(): boolean {
+    return false;
+  }
+
   #renderDocumentPrinter() {
     if (!this.invoicePrintersEnabled || !this.canPrintReceipt) return nothing;
     const receipt = this.printDocument === "receipt";
@@ -830,7 +839,7 @@ export class TillTicketView extends LitElement {
     const retainedPrinter = this.#retainedReceiptPrinterName();
     const insteadPrinter =
       retainedPrinter ?? this.receiptEquipment?.resolved?.name ?? t("equipment.none");
-    const email = this.canPrintReceipt ? status?.actions.email : null;
+    const email = this.emailAction();
     const emailAgainId =
       this.canPrintReceipt && status?.actions.retryOriginal?.medium === "email"
         ? status.current?.id
@@ -977,10 +986,13 @@ export class TillTicketView extends LitElement {
                   : nothing
               }
               ${
-                // An A4 or email attempt says where the invoice is; "not sent to a printer", or a
-                // receipt failure that no longer matters, would contradict it.
+                // An A4 or email attempt says where the invoice is, and a window whose closing
+                // prints the original says what happens next; "not sent to a printer", or a receipt
+                // failure that no longer matters, would contradict either.
                 !this.originalReceiptReadFailed &&
-                ((notQueued && attempt != null && attempt.medium !== "receipt") ||
+                ((notQueued &&
+                  ((attempt != null && attempt.medium !== "receipt") ||
+                    this.closingQueuesOriginal())) ||
                   failedButSuperseded)
                   ? nothing
                   : html`<p>

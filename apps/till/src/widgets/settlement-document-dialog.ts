@@ -19,22 +19,35 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     this.printDocument = "receipt";
   }
 
+  #closingState(): "prints" | "switched-off" | "no-printer" | "not-allowed" | null {
+    if (this.receiptDesignation() !== "original") return null;
+    if (!this.canPrintReceipt) return "not-allowed";
+    if (this.receiptEquipment === undefined) return null;
+    const printer = this.receiptEquipment.resolved;
+    return printer == null ? "no-printer" : printer.available ? "prints" : "switched-off";
+  }
+
+  protected override closingQueuesOriginal(): boolean {
+    const state = this.#closingState();
+    return state === "prints" || state === "switched-off";
+  }
+
   #closingLine() {
-    if (this.receiptDesignation() !== "original") return nothing;
-    const printer = this.receiptEquipment?.resolved;
-    const [state, text] = !this.canPrintReceipt
-      ? ["not-allowed", t("settlement.closing_not_allowed")]
-      : this.receiptEquipment === undefined
-        ? [null, ""]
-        : printer == null
-          ? ["no-printer", t("settlement.closing_no_printer")]
-          : !printer.available
-            ? [
-                "switched-off",
-                t("settlement.closing_switched_off").replace("{printer}", () => printer.name),
-              ]
-            : ["prints", t("settlement.closing_prints")];
-    return state === null ? nothing : html`<p data-settlement-closing=${state}>${text}</p>`;
+    const state = this.#closingState();
+    if (state === null) return nothing;
+    const email = this.emailAction() !== null;
+    const text =
+      state === "not-allowed"
+        ? t("settlement.closing_not_allowed")
+        : state === "no-printer"
+          ? t(email ? "settlement.closing_no_printer" : "settlement.closing_no_printer_no_email")
+          : state === "switched-off"
+            ? t("settlement.closing_switched_off").replace(
+                "{printer}",
+                () => this.receiptEquipment!.resolved!.name,
+              )
+            : t(email ? "settlement.closing_prints" : "settlement.closing_prints_no_email");
+    return html`<p data-settlement-closing=${state}>${text}</p>`;
   }
 
   #close(): void {
