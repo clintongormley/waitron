@@ -262,7 +262,6 @@ export async function seedTender(
   });
 }
 
-// A plain person id: `requested_by` and its siblings carry no key.
 const PERSON = "dddddddd-0000-4000-8000-000000000001";
 
 /**
