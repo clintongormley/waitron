@@ -199,6 +199,7 @@ export class TillPresentedPayDialog extends LitElement {
   @property({ attribute: false }) refusal: PayRefusal | null = null;
   /** A whole payment sent with no answer: the sheet shows it, fixed, and only sends it again. */
   @property({ attribute: false }) confirmation: RetainedTender | undefined = undefined;
+  @property({ type: Boolean }) canPayInParts = false;
   @property({ attribute: false }) deferredOffered: DeferredOffer = { state: "hidden" };
 
   @state() private method: Method = "card";
@@ -471,7 +472,21 @@ export class TillPresentedPayDialog extends LitElement {
         <dt>${t("presented_pay.balance")}</dt>
         <dd>${this.#money(this.amount)}</dd>
       </dl>
-      <p class="whole" data-presented-pay-whole>${t("presented_pay.whole_only")}</p>
+      ${
+        this.canPayInParts
+          ? html`<div class="deferred">
+              <wt-button
+                variant="secondary"
+                data-presented-pay-parts
+                .disabled=${this.busy}
+                @click=${async () => {
+                  if (await this.#beforeClose("navigation")) this.#emit("presented-pay-parts");
+                }}
+                >${t("presented_pay.parts")}</wt-button
+              >
+            </div>`
+          : html`<p class="whole" data-presented-pay-whole>${t("presented_pay.whole_only")}</p>`
+      }
       ${this.#deferred()} ${this.#methodFields(errors)}
       ${this.asksGuests ? this.#guests(errors.get("guests")) : nothing}
       ${this.#methods().length === 0 ? payNotice(this.notice) : nothing}`;

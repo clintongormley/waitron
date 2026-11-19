@@ -15,6 +15,7 @@ import {
   takeReaderBillPayment,
 } from "./bill-payments.js";
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
+import { settleFromProviderRow } from "./bill-payments-loop.js";
 import { refundBillPayment, refundProvidersOf, refundTender } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
 import { printBillPaymentSlip } from "./payment-slip-print.js";
@@ -284,6 +285,16 @@ export function mountBillPaymentsApi(
           {
             ...fiscal,
             provider,
+            settleCapturedReplay: async (tx, paymentId, now, guestCount) => {
+              const settled = await settleFromProviderRow(
+                tx,
+                { ...fiscal, cfg: saleCfg },
+                paymentId,
+                now,
+                guestCount,
+              );
+              return settled.settled === "received" ? settled.invoice : null;
+            },
             ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
             deviceProfileId: device.deviceProfileId,
             ...(deps.disk === undefined ? {} : { disk: deps.disk }),

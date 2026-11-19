@@ -12934,6 +12934,24 @@ describe("till-app", () => {
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
     });
 
+    it("pays a newly placed counter bill by reader using its stored lines", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        pay,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(coffee, "2");
+      emit(c, "place-order");
+      await flush(el);
+      expect(tenderPay(el).stage).toBe("collect");
+
+      emit(c, "collect-card", {});
+      await flush(el);
+      expect(pay).toHaveBeenCalledWith(expect.objectContaining({ id: c.store.id, lines: [] }));
+    });
+
     it("place-order on an UNEDITED retrieved order does NOT re-sync — placeOrder files the stored composition", async () => {
       // Symmetric with the unedited retrieve→pay path: retrieving adopts the order's id and marks it
       // persisted+clean (loadFrom). An UNEDITED retrieved order must NOT re-sync before placing, and

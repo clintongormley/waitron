@@ -21,6 +21,7 @@ import type { RefundProviderFor } from "./bill-refunds.js";
 import { perDatabase } from "./live-in-process.js";
 import type { TradingContext } from "./trading-context.js";
 import type { TillSaleResult } from "./till-sale.js";
+import type { GuestCountChoice } from "./receipt-guests.js";
 import "./errors.js";
 
 /**
@@ -94,6 +95,7 @@ export async function settleFromProviderRow(
   deps: BillPaymentsLoopDeps,
   billPaymentId: string,
   now: Date,
+  guestCount?: GuestCountChoice,
 ): Promise<SettledFromRow> {
   await requireEconomicWrite(tx, deps.cfg, deps.admission);
   const [payment] = await tx.select().from(billPayments).where(eq(billPayments.id, billPaymentId));
@@ -131,6 +133,8 @@ export async function settleFromProviderRow(
     deps.cfg,
     billPaymentId,
     provided.settledAt === null ? now : new Date(provided.settledAt),
+    undefined,
+    guestCount,
   );
   return { settled: "received", invoice: done.invoice };
 }

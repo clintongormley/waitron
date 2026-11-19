@@ -1858,6 +1858,7 @@ export const en = {
   "bill_pay.waiting_since": "Waiting for {time}",
   "bill_pay.retry_on_reader": "Try again on {reader}",
   "presented_pay.balance": "Bill presented",
+  "presented_pay.parts": "Pay in parts",
   "presented_pay.whole_only":
     "This bill has already been presented: it is paid whole, in one payment.",
   "bill_pay.taken": "Payment taken.",
@@ -4007,6 +4008,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.waiting_since": "Esperando desde hace {time}",
   "bill_pay.retry_on_reader": "Reintentar en {reader}",
   "presented_pay.balance": "Cuenta presentada",
+  "presented_pay.parts": "Cobrar por partes",
   "presented_pay.whole_only": "Esta cuenta ya está presentada: se cobra entera, en un solo pago.",
   "bill_pay.taken": "Pago cobrado.",
   "bill_pay.taken_change": "Pago cobrado. Devuelve {amount} de cambio.",

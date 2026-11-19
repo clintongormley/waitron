@@ -819,8 +819,8 @@ and **Still to pay**. Start with what is still to pay, rather than the bill's or
 Choose **An amount** for a contribution, **Split equally** for one equal share, or **Items** for
 particular dishes. For an equal share, enter how many people are still to pay, including this
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
-A printed bill offers the same choices for what it still owes. A bill presented for collection
-before it is printed offers the whole amount only.
+A printed bill offers these choices for what it still owes. If the bill is presented for collection
+and its invoice has yet to be issued, choose **Pay in parts** to see the same choices.
 
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.

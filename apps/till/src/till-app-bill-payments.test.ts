@@ -9315,6 +9315,52 @@ describe("till-app: switching bills reads the balance of the bill now shown", ()
   });
 });
 
+it("takes a first cash contribution on a presented bill before its invoice is issued", async () => {
+  const takeBillPayment = vi
+    .fn()
+    .mockResolvedValue(
+      takenOf(
+        { applied: "30.00", tendered: "30.00", change: "0.00" },
+        { status: "placed", received: "30.00", outstanding: "90.00" },
+      ),
+    );
+  const { el } = await mountApp({
+    getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+    getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+    previewBillPayment: vi.fn().mockResolvedValue(cash("30.00", "0.00")),
+    takeBillPayment,
+  });
+  const order = await openTable(el);
+  await showBillFooter(order);
+  order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+  await flush(el);
+
+  const whole = el.shadowRoot!.querySelector("till-presented-pay-dialog");
+  const split = whole?.shadowRoot?.querySelector<HTMLElement>("[data-presented-pay-parts]");
+  expect(split).toBeDefined();
+  split!.click();
+  await flush(el);
+  expect(dialog(el)).not.toBeNull();
+  const part = inDialog(el, 'input[name="way"][value="contribution"]');
+  expect(part).not.toBeNull();
+  part!.click();
+  await flush(el);
+  emit(dialog(el)!, "bill-pay-preview", {
+    choice: { kind: "contribution", amount: "30.00" },
+    pay: { method: "cash", tendered: "30.00" },
+  });
+  await vi.waitFor(() => expect(dialog(el)!.preview).not.toBeNull());
+  emit(dialog(el)!, "bill-pay-confirm");
+  await vi.waitFor(() => expect(takeBillPayment).toHaveBeenCalledOnce());
+  expect(takeBillPayment).toHaveBeenCalledWith(
+    "wo-4",
+    expect.objectContaining({ kind: "contribution", applied: "30.00", tendered: "30.00" }),
+    expect.anything(),
+  );
+  await flush(el);
+  expect(shownBalance(el)).toEqual(balanceShows("120.00", "30.00", "90.00"));
+});
+
 it("a handheld opens the remaining bill payment after a short presented-bill capture", async () => {
   const balance = balanceOf({
     status: "placed",

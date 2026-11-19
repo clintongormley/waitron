@@ -7780,7 +7780,7 @@ export class TillApp extends LitElement {
           this.api.pay({
             expectedEdit: this.#counterExpectedEdit(id),
             id,
-            lines,
+            lines: this.stage === "collect" ? [] : lines,
             dining: this.#store.dining,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
             ...(this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : {}),
@@ -12641,6 +12641,10 @@ export class TillApp extends LitElement {
       open === null ? undefined : this.partyBills.find((row) => row.workingOrderId === open.billId);
     if (open === null || bill === undefined) return nothing;
     const reason = this.#payReaderReason();
+    const canPayInParts =
+      !bill.receiptAvailable &&
+      !this.#unknownCardOutcome.has(open.billId) &&
+      compareDecimal(decimal(bill.outstanding), decimal("0")) > 0;
     return html`<till-presented-pay-dialog
       .slipPrinterAvailable=${this.#slipPrinterAvailable()}
       .checkTimeOffered=${this.checkTimeOffered}
@@ -12666,6 +12670,7 @@ export class TillApp extends LitElement {
       .busy=${this.submitting}
       .refusal=${open.refusal}
       .confirmation=${this.#unansweredWholePayments.get(open.billId)}
+      .canPayInParts=${canPayInParts}
       .deferredOffered=${this.#deferredOfferOn(bill)}
       @pay-equipment-pick=${(event: CustomEvent<PayEquipmentPick>) =>
         void this.#onPayEquipmentPick(event.detail)}
@@ -12674,6 +12679,11 @@ export class TillApp extends LitElement {
       @pay-equipment-nfc=${() => this.#askNfc()}
       @presented-pay=${(event: Event) => void this.#onPresentedPay(event)}
       @presented-pay-resend=${() => void this.#onPresentedResend()}
+      @presented-pay-parts=${() => {
+        if (!canPayInParts || this.submitting || this.#presentedNow(open.id) === null) return;
+        this.#closePresented(open.id);
+        void this.#openBillPaying("contribution", this.#payLinesOnScreen());
+      }}
       @presented-pay-deferred=${() => this.#onPresentedPayDeferred()}
       @presented-pay-close=${() => this.#closePresented(open.id)}
     ></till-presented-pay-dialog>`;
@@ -21338,8 +21348,7 @@ export class TillApp extends LitElement {
   #onPayPresented(event: Event): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     if (workingOrderId !== this.activeTabId) return;
-    // The presented sheet cannot check a bill payment again, and the bill takes nothing while one
-    // holds it, so that payment's own sheet opens instead.
+    // The presented sheet cannot check an unanswered part payment.
     if (this.#billPaymentHeld(workingOrderId)) {
       void this.#openBillPaying("whole", this.#payLinesOnScreen());
       return;
@@ -21386,9 +21395,7 @@ export class TillApp extends LitElement {
     };
   }
 
-  /** The presented bill's sheet asks to take its whole amount: a card on the phone's reader through
-   * `POST /api/pay`, cash or another card machine through {@link #payWholeTab}. A send with no answer
-   * closes the sheet; it opens again locked on that payment. */
+  /** The presented bill's whole-payment sheet reopens locked on a tender that got no answer. */
   async #onPresentedPay(event: Event): Promise<void> {
     const open = this.#presentedNow();
     if (open === null || this.submitting) return;

@@ -56,6 +56,7 @@ import { DEFAULT_PROFILE_CAPABILITIES } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, loginWithPin, persons } from "@waitron/identity";
 import {
+  captureAttempting,
   cardReaders,
   insertCapturedPayment,
   payments,
@@ -1183,6 +1184,45 @@ describe("a contribution (design §8 test 2)", () => {
     );
     expect(provided.map((row) => row.state).sort()).toEqual(["captured", "failed"]);
     expect(new Set(provided.map((row) => row.provider))).toEqual(new Set(["simulator"]));
+  });
+
+  it("settles a captured whole-bill reader payment when the till retries before the recovery pass", async () => {
+    const billId = await bill120();
+    expect((await request("POST", `/api/working-orders/${billId}/place`, {})).status).toBe(200);
+    const path = `/api/working-orders/${billId}/payments`;
+    const body = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      applied: "120.00",
+      tip: "0.00",
+      simulationOutcome: "attempting",
+    };
+    const first = await request("POST", path, body);
+    expect(first.json).toMatchObject({ outcome: "timeout", balance: { reserved: "120.00" } });
+    await inTx(async (tx) => {
+      const [attempt] = await tx.select().from(payments).where(eq(payments.workingOrderId, billId));
+      await captureAttempting(tx, {
+        provider: "simulator",
+        paymentRef: attempt!.paymentRef,
+        externalRef: attempt!.paymentRef,
+        settledAt: clock.now().instant,
+      });
+    });
+
+    const replay = await request("POST", path, body);
+    expect(replay.status).toBe(200);
+    expect(replay.json).toMatchObject({
+      outcome: "received",
+      payment: { id: (first.json.payment as { id: string }).id },
+      balance: { status: "settled", received: "120.00", reserved: "0.00" },
+      invoice: { total: "120.00" },
+    });
+    expect(
+      await inTx((tx) => tx.select().from(payments).where(eq(payments.workingOrderId, billId))),
+    ).toHaveLength(1);
   });
 
   it("refuses a tip with the venue's tips off, showing what can be charged, and writes nothing", async () => {
