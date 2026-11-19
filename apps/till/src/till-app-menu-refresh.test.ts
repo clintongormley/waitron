@@ -1,4 +1,5 @@
 import { idleLiveReadFor } from "./widgets/test-helpers.js";
+import { liveReadFixture } from "../test/live-connection.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -3292,33 +3293,49 @@ it.each(["recorded", "live"] as const)(
     });
     const liveCopy = {
       ...copy,
-      offers: [{ ...dish, unitPrice: recorded ? "8.00" : "5.00" }],
+      offers: recorded ? [] : [dish],
       versionIds: ["v1"],
       orderable: true,
       newestOnSale: true,
     };
     const dining = { ...DINING, setMenus: [liveCopy] };
+    const stream = liveReadFixture();
     const { el } = await mountApp(
       tableStubs(dining, {
         listZoneOffers: vi.fn(async (zoneId: string) => (zoneId === "zone-dining" ? dining : V1)),
         getPartyBills: vi.fn().mockResolvedValue([bill]),
+        readLiveEvents: stream.read,
       }),
     );
     await toTable(el);
+    stream.event("ready");
+    await flush(el);
+    // The live menu poll cannot announce the availability of a dish it no longer offers.
+    await poll(el);
     expect(roundStore(el).lines[0]).toMatchObject({ product: { name: "Hake", unitPrice: "5.00" } });
     expect(roundStore(el).lines[0]?.blocked).toBeUndefined();
 
-    api.menuState.mockImplementation(async (zoneId: string) =>
-      menuState(
-        "v1",
-        zoneId === "zone-dining" ? { products: ["Hake"], optionLabels: [] } : NOTHING,
-      ),
-    );
-    await poll(el);
+    const showAvailability = async (available: boolean) => {
+      if (recorded) {
+        api.getPartyBills.mockResolvedValue([
+          { ...bill, setMenuCopies: [{ ...copy, offers: [{ ...dish, available }] }] },
+        ]);
+        stream.event("change", JSON.stringify([{ type: "products" }]));
+        await flush(el);
+      } else {
+        api.menuState.mockImplementation(async (zoneId: string) =>
+          menuState(
+            "v1",
+            !available && zoneId === "zone-dining" ? { products: ["Hake"] } : NOTHING,
+          ),
+        );
+      }
+      await poll(el);
+    };
+    await showAvailability(false);
     expect(roundStore(el).lines[0]?.blocked).toBe("unavailable");
 
-    api.menuState.mockImplementation(async () => menuState("v1"));
-    await poll(el);
+    await showAvailability(true);
     expect(roundStore(el).lines[0]?.blocked).toBeUndefined();
     expect(dialog(el)).toBeNull();
   },

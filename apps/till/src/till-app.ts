@@ -1945,7 +1945,6 @@ function menusMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus"])
 class ZoneOfferIndex {
   #loaded: TillMenuOffer[] = [];
   #loadedSetMenus: NonNullable<ZoneOffers["setMenus"]> = [];
-  #unavailable?: MenuUnavailable;
   #sellingVersions = new Set<string>();
   setMenus: NonNullable<ZoneOffers["setMenus"]> = [];
   /** The set last applied, as a sorted key, so an unchanged poll answer rebuilds nothing. */
@@ -1976,7 +1975,6 @@ class ZoneOfferIndex {
     this.#loaded = zoneOffers.offers;
     this.#loadedSetMenus = zoneOffers.setMenus ?? [];
     this.setMenus = this.#loadedSetMenus;
-    this.#unavailable = undefined;
     this.#sellingVersions = new Set(
       zoneOffers.menus.filter((menu) => menu.orderable).map((menu) => menu.versionId),
     );
@@ -1995,7 +1993,6 @@ class ZoneOfferIndex {
     ]);
     if (key === this.#unavailableKey) return false;
     this.#unavailableKey = key;
-    this.#unavailable = unavailable;
     this.#setLive(withUnavailable(this.#loaded, unavailable));
     this.setMenus = this.#loadedSetMenus.map((copy) => ({
       ...copy,
@@ -2033,13 +2030,11 @@ class ZoneOfferIndex {
         held !== undefined && menuVersionId !== null
           ? { copy: held, versionId: menuVersionId }
           : copies.get(setMenuId);
-      const base = selected?.copy.offers.find((dish) => dish.id === menuItemId);
-      if (selected === undefined || base === undefined) return undefined;
-      const offer =
-        recorded && this.#unavailable !== undefined
-          ? withUnavailable([base], this.#unavailable)[0]!
-          : base;
-      return { offer, versionId: selected.versionId };
+      // Bill reads apply availability to recorded copies, including dishes absent from the zone.
+      const offer = selected?.copy.offers.find((dish) => dish.id === menuItemId);
+      return selected === undefined || offer === undefined
+        ? undefined
+        : { offer, versionId: selected.versionId };
     };
   }
 
