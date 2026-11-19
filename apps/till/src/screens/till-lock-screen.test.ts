@@ -15,7 +15,12 @@ import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { expectChooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  expectChooserFaces,
+  cleanupWidgets,
+  mountWidget,
+  tokenColour,
+} from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
 import { liveConnectionFixture } from "../../test/live-connection.js";
@@ -888,6 +893,36 @@ describe("till-lock-screen", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll("[data-clock-notice]")).toHaveLength(0);
   });
+
+  it.each([
+    ["error", "--wt-color-danger"],
+    ["warning", "--wt-color-warning"],
+  ] as const)(
+    "paints the clock-waiting line in the strip's %s tone: edge and icon %s, bold words",
+    async (severity, token) => {
+      const { el, host } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi(),
+        clockNotice: {
+          owner: "box-clock",
+          key: "clock.unconfirmed",
+          code: "clock.unconfirmed",
+          severity,
+          params: { agreed: 0, cause: "start" },
+        },
+      });
+      await flush(el);
+      const line = el.shadowRoot!.querySelector<HTMLElement>("[data-clock-notice]")!;
+      expect(line.getAttribute("role")).toBe("status");
+      expect(line.dataset.noticeTone).toBe(severity);
+      const expected = tokenColour(host, token);
+      expect(getComputedStyle(line).borderInlineStartColor).toBe(expected);
+      expect(getComputedStyle(line.querySelector("wt-icon")!).color).toBe(expected);
+      expect(getComputedStyle(line).color).toBe(tokenColour(host, "--wt-color-text"));
+      expect(getComputedStyle(line.querySelector(".main")!).fontWeight).toBe(
+        getComputedStyle(host).getPropertyValue("--wt-font-weight-bold").trim(),
+      );
+    },
+  );
 
   it("draws the logged-out-by-somebody-else line only while loggedOutByOther is set", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });

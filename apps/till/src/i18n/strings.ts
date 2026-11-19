@@ -2175,6 +2175,8 @@ export const en = {
   "staff_notice.more_label": "{n} more notices",
   "staff_notice.more_label_one": "1 more notice",
   "staff_notice.list": "Notices",
+  "staff_notice.hide": "Hide",
+  "staff_notice.hide_label": "Hide the other notices",
   "about.title": "About Waitron",
   "about.title_version": "About Waitron · {version}",
 } as const;
@@ -4331,6 +4333,8 @@ export const es: Record<StringKey, string> = {
   "staff_notice.more_label": "{n} avisos más",
   "staff_notice.more_label_one": "1 aviso más",
   "staff_notice.list": "Avisos",
+  "staff_notice.hide": "Ocultar",
+  "staff_notice.hide_label": "Ocultar los demás avisos",
   "about.title": "Acerca de Waitron",
   "about.title_version": "Acerca de Waitron · {version}",
 };

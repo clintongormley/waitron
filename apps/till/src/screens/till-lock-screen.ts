@@ -19,6 +19,7 @@ import { chooserStyles } from "../widgets/chooser-styles.js";
 import { themeChooser } from "../widgets/theme-chooser.js";
 import "../widgets/about-button.js";
 import "../widgets/main-server-strip.js";
+import { noticeIcon, noticeLineStyles, toneOf } from "../widgets/notice-strip.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
 import { staffNoticeText } from "../i18n/staff-notices.js";
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
@@ -62,6 +63,7 @@ export class TillLockScreen extends LitElement {
   static override styles = [
     baseStyles,
     chooserStyles,
+    noticeLineStyles,
     css`
       :host {
         display: block;
@@ -105,6 +107,10 @@ export class TillLockScreen extends LitElement {
       .servers,
       .clock {
         margin-top: var(--wt-space-4);
+      }
+
+      .clock.line {
+        background: var(--wt-color-surface-raised);
       }
 
       .servers wt-button {
@@ -424,8 +430,15 @@ export class TillLockScreen extends LitElement {
         ${
           this.clockNotice === undefined
             ? nothing
-            : html`<p class="clock status" role="status" data-clock-notice>
-                ${staffNoticeText(this.clockNotice).main}
+            : html`<p
+                class="clock line"
+                role="status"
+                data-clock-notice
+                data-notice-tone=${toneOf(this.clockNotice.severity)}
+              >
+                ${noticeIcon(this.clockNotice)}<span class="words"
+                  ><strong class="main">${staffNoticeText(this.clockNotice).main}</strong></span
+                >
               </p>`
         }
         ${

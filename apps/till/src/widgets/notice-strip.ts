@@ -17,44 +17,121 @@ registerIcons({
 });
 
 /** A severity a newer server sends that this till does not know is drawn in the notice tone. */
-function toneOf(severity: string): Tone {
+export function toneOf(severity: string): Tone {
   return (TONES as readonly string[]).includes(severity) ? (severity as Tone) : "notice";
 }
 
+/** One notice line's look, shared with the PIN screen's waiting line. */
+export const noticeLineStyles = css`
+  .line {
+    display: flex;
+    align-items: center;
+    gap: var(--wt-space-2);
+    margin: 0;
+    padding: var(--wt-space-2) var(--wt-space-3);
+    border-inline-start: var(--wt-space-1) solid;
+    color: var(--wt-color-text);
+  }
+
+  .line[data-notice-tone="error"] {
+    border-inline-start-color: var(--wt-color-danger);
+  }
+  .line[data-notice-tone="error"] wt-icon {
+    color: var(--wt-color-danger);
+  }
+  .line[data-notice-tone="warning"] {
+    border-inline-start-color: var(--wt-color-warning);
+  }
+  .line[data-notice-tone="warning"] wt-icon {
+    color: var(--wt-color-warning);
+  }
+  .line[data-notice-tone="notice"] {
+    border-inline-start-color: var(--wt-color-primary);
+  }
+  .line[data-notice-tone="notice"] wt-icon {
+    color: var(--wt-color-primary);
+  }
+
+  wt-icon {
+    flex: none;
+  }
+
+  .words {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Capped beside the icon, so an action that does not fit after the whole sentence wraps below it
+     instead of the sentence wrapping around the action. */
+  .acts {
+    flex-wrap: wrap;
+  }
+
+  .acts .words {
+    flex: 0 1 auto;
+    max-inline-size: calc(100% - var(--wt-font-size-md) - var(--wt-space-2));
+  }
+
+  .main {
+    font-weight: var(--wt-font-weight-bold);
+  }
+
+  .hint {
+    color: var(--wt-color-text-muted);
+  }
+`;
+
+export function noticeIcon(notice: Pick<StaffNotice, "severity">): TemplateResult {
+  return html`<wt-icon name=${`staff-notice-${toneOf(notice.severity)}`}></wt-icon>`;
+}
+
+function hasAction(notice: StaffNotice, checkTime: boolean, host: TillNoticeStrip): boolean {
+  return (
+    checksTime(notice, checkTime) ||
+    (notice.code === "print_job.drawer_expired" && host.canOpenDrawer)
+  );
+}
+
+function action(notice: StaffNotice, checkTime: boolean, host: TillNoticeStrip): TemplateResult {
+  return checksTime(notice, checkTime)
+    ? html`<wt-button
+        data-check-time
+        variant="secondary"
+        @click=${() =>
+          host.dispatchEvent(new CustomEvent("till-check-time", { bubbles: true, composed: true }))}
+        >${staffNoticeText(notice, checkTime).hint}</wt-button
+      >`
+    : html`<wt-button
+        data-open-drawer
+        variant="secondary"
+        .disabled=${host.drawerBusy}
+        @click=${() =>
+          host.dispatchEvent(
+            new CustomEvent("till-open-drawer", { bubbles: true, composed: true }),
+          )}
+        >${t("action.open_drawer")}</wt-button
+      >`;
+}
+
+/** The icon, the words and any action, as siblings so the action never splits the sentence. */
 function words(notice: StaffNotice, checkTime: boolean, host: TillNoticeStrip): TemplateResult {
   const { main, hint } = staffNoticeText(notice, checkTime);
-  return html`<wt-icon name=${`staff-notice-${toneOf(notice.severity)}`}></wt-icon
-    ><span class="words"
+  const acts = hasAction(notice, checkTime, host);
+  return html`${noticeIcon(notice)}<span class="words"
       ><strong class="main">${main}</strong>${
-        checksTime(notice, checkTime)
-          ? html` <wt-button
-              data-check-time
-              variant="secondary"
-              @click=${() =>
-                host.dispatchEvent(
-                  new CustomEvent("till-check-time", { bubbles: true, composed: true }),
-                )}
-              >${hint}</wt-button
-            >`
-          : notice.code === "print_job.drawer_expired"
-            ? host.canOpenDrawer
-              ? html` <wt-button
-                  data-open-drawer
-                  variant="secondary"
-                  .disabled=${host.drawerBusy}
-                  @click=${() => host.dispatchEvent(new CustomEvent("till-open-drawer", { bubbles: true, composed: true }))}
-                  >${t("action.open_drawer")}</wt-button
-                >`
-              : nothing
-            : html` · <span class="hint">${hint}</span>`
+        acts || notice.code === "print_job.drawer_expired"
+          ? nothing
+          : html` · <span class="hint">${hint}</span>`
       }</span
-    >`;
+    >${acts ? action(notice, checkTime, host) : nothing}`;
 }
 
 @customElement("till-notice-strip")
 export class TillNoticeStrip extends LitElement {
   static override styles = [
     baseStyles,
+    noticeLineStyles,
     css`
       :host {
         display: block;
@@ -64,53 +141,6 @@ export class TillNoticeStrip extends LitElement {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
         border-block-end: 1px solid var(--wt-color-border);
-      }
-
-      .line {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        margin: 0;
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border-inline-start: var(--wt-space-1) solid;
-        color: var(--wt-color-text);
-      }
-
-      .line[data-notice-tone="error"] {
-        border-inline-start-color: var(--wt-color-danger);
-      }
-      .line[data-notice-tone="error"] wt-icon {
-        color: var(--wt-color-danger);
-      }
-      .line[data-notice-tone="warning"] {
-        border-inline-start-color: var(--wt-color-warning);
-      }
-      .line[data-notice-tone="warning"] wt-icon {
-        color: var(--wt-color-warning);
-      }
-      .line[data-notice-tone="notice"] {
-        border-inline-start-color: var(--wt-color-primary);
-      }
-      .line[data-notice-tone="notice"] wt-icon {
-        color: var(--wt-color-primary);
-      }
-
-      wt-icon {
-        flex: none;
-      }
-
-      .words {
-        flex: 1 1 auto;
-        min-inline-size: 0;
-        overflow-wrap: anywhere;
-      }
-
-      .main {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .hint {
-        color: var(--wt-color-text-muted);
       }
 
       button.line {
@@ -141,6 +171,10 @@ export class TillNoticeStrip extends LitElement {
         background: none;
         border: 0;
         cursor: pointer;
+      }
+
+      .acts button.toggle {
+        margin-inline-start: auto;
       }
 
       .more {
@@ -187,16 +221,24 @@ export class TillNoticeStrip extends LitElement {
     const checkTime = this.checkTimeOffered;
     if (this.notices.length === 1) {
       return html`<div class="strip" data-notice-strip>
-        <p class="line" data-notice-tone=${toneOf(first.severity)}>
+        <p
+          class=${hasAction(first, checkTime, this) ? "line acts" : "line"}
+          data-notice-tone=${toneOf(first.severity)}
+        >
           ${words(first, checkTime, this)}
         </p>
       </div>`;
     }
     const more = this.notices.length - 1;
     const moreWords = html`<span class="more" data-notice-more
-      ><span aria-hidden="true">${t("staff_notice.more").replace("{n}", String(more))}</span
+      ><span aria-hidden="true"
+        >${this.open ? t("staff_notice.hide") : t("staff_notice.more").replace("{n}", String(more))}</span
       ><span class="visually-hidden"
-        >${countText(more, "staff_notice.more_label", "staff_notice.more_label_one")}</span
+        >${
+          this.open
+            ? t("staff_notice.hide_label")
+            : countText(more, "staff_notice.more_label", "staff_notice.more_label_one")
+        }</span
       ></span
     >`;
     const toggle = (cls: string, content: TemplateResult) =>
@@ -213,9 +255,8 @@ export class TillNoticeStrip extends LitElement {
     // An action and the notice-list toggle are siblings, so a button never holds another button.
     return html`<div class="strip" data-notice-strip>
       ${
-        checksTime(first, checkTime) ||
-        (first.code === "print_job.drawer_expired" && this.canOpenDrawer)
-          ? html`<div class="line" data-notice-tone=${toneOf(first.severity)}>
+        hasAction(first, checkTime, this)
+          ? html`<div class="line acts" data-notice-tone=${toneOf(first.severity)}>
               ${words(first, checkTime, this)} ${toggle("toggle", moreWords)}
             </div>`
           : toggle("line", html`${words(first, checkTime, this)} ${moreWords}`)
@@ -228,12 +269,17 @@ export class TillNoticeStrip extends LitElement {
               tabindex="0"
               aria-label=${t("staff_notice.list")}
             >
-              ${this.notices.map(
-                (notice) =>
-                  html`<li class="line" data-notice-tone=${toneOf(notice.severity)}>
-                    ${words(notice, checkTime, this)}
-                  </li>`,
-              )}
+              ${this.notices
+                .slice(1)
+                .map(
+                  (notice) =>
+                    html`<li
+                      class=${hasAction(notice, checkTime, this) ? "line acts" : "line"}
+                      data-notice-tone=${toneOf(notice.severity)}
+                    >
+                      ${words(notice, checkTime, this)}
+                    </li>`,
+                )}
             </ul>`
           : nothing
       }
