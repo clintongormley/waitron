@@ -82,6 +82,8 @@ vi.mock("./clock-correction.js", async (original) => {
 const mounted = vi.hoisted(() => ({
   till: undefined as (() => boolean) | undefined,
   payments: undefined as (() => boolean) | undefined,
+  /** The gate on the trading context boot handed `mountTillApi`, which opening a bill reads. */
+  tillContext: undefined as (() => boolean) | undefined,
 }));
 vi.mock("./till-api.js", async (original) => {
   const actual = await original<typeof import("./till-api.js")>();
@@ -89,6 +91,7 @@ vi.mock("./till-api.js", async (original) => {
     ...actual,
     mountTillApi: (...args: Parameters<typeof actual.mountTillApi>) => {
       mounted.till = args[1].clockUnconfirmed;
+      mounted.tillContext = args[1].cfg.clockUnconfirmed;
       actual.mountTillApi(...args);
     },
   };
@@ -257,6 +260,21 @@ describe("the start clock gate as boot wires it", () => {
     });
 
     expect(seen).toEqual({ waiting: [true, true], confirmed: [false, false] });
+  });
+
+  it("hands the till's trading context, which opening a bill reads, the same gate as the till", async () => {
+    mounted.till = mounted.tillContext = undefined;
+    const seen = await serving(unsynchronisedHost().host, async () => {
+      const waiting = mounted.tillContext?.();
+      built.start!.confirm("by_devices", {});
+      return {
+        same: mounted.tillContext === mounted.till,
+        waiting,
+        confirmed: mounted.tillContext?.(),
+      };
+    });
+
+    expect(seen).toEqual({ same: true, waiting: true, confirmed: false });
   });
 
   it("hands the box-health routes the start check it builds", async () => {

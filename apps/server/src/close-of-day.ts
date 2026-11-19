@@ -1,4 +1,4 @@
-import { and, count, eq, exists, inArray, isNotNull, max, sql } from "drizzle-orm";
+import { and, count, eq, exists, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 import { withIssuanceTransaction } from "@waitron/core";
 import {
   invoiceSeries,
@@ -36,11 +36,9 @@ import {
 } from "./working-order.js";
 import "./errors.js";
 
-/** What "due" means for one call: bills opened before `dayStartedAt` are due. */
+/** What "due" means for one call: bills counted as opened before `dayStartedAt` are due. */
 export interface CloseOfDayRule {
   dayStartedAt: Date;
-  /** The time a bill counts as opened at when its stored opening time is not to be trusted. */
-  openedAt?: (billId: string) => Date | undefined;
 }
 
 const MONEY_MOVING: ReadonlySet<string> = new Set([
@@ -136,7 +134,7 @@ async function readDueBill(
       status: workingOrders.status,
       partyId: workingOrders.partyId,
       nodeId: workingOrders.nodeId,
-      openedAt: workingOrders.openedAt,
+      openedAt: workingOrders.trustedOpenedAt,
       openedBy: parties.openedBy,
       lines: count(workingOrderLines.id),
     })
@@ -148,7 +146,7 @@ async function readDueBill(
   if (bill === undefined || bill.lines === 0 || bill.nodeId !== cfg.nodeId) return undefined;
   if ((await readIssuedSales(tx, [billId])).has(billId)) return undefined;
   const retiredAt = await latestRetirement(tx, cfg.nodeId);
-  if (!openedInDueSpan(billId, bill.openedAt, retiredAt, rule)) return undefined;
+  if (!openedInDueSpan(bill.openedAt, retiredAt, rule)) return undefined;
   return { status: bill.status, partyId: bill.partyId!, openedBy: bill.openedBy };
 }
 
@@ -160,60 +158,29 @@ async function latestRetirement(tx: Transaction, nodeId: string): Promise<number
   return series?.retiredAt == null ? undefined : new Date(series.retiredAt).getTime();
 }
 
-/** After this node's latest series retirement (D6) and before the day began, counting the bill's
- * opening time as `rule` says. */
+/** After this node's latest series retirement (D6) and before the day began, counted from the
+ * bill's trusted opening time; a bill with none yet is never due. */
 function openedInDueSpan(
-  billId: string,
-  storedOpenedAt: string,
+  trustedOpenedAt: string | null,
   retiredAt: number | undefined,
   rule: CloseOfDayRule,
 ): boolean {
-  const openedAt = rule.openedAt?.(billId)?.getTime() ?? Date.parse(storedOpenedAt);
+  if (trustedOpenedAt === null) return false;
+  const openedAt = Date.parse(trustedOpenedAt);
   if (retiredAt !== undefined && openedAt <= retiredAt) return false;
   return openedAt < rule.dayStartedAt.getTime();
 }
 
-/** Bills opened while the clock gate held: rows above `after`, up to `upTo`, count as opened at
- * `releasedAt`, the trusted clock's reading when the gate let go. */
-export interface ClockWindow {
-  after: number;
-  upTo: number;
-  releasedAt: Date;
-}
-
-export function openedAtInWindows(
-  windows: readonly ClockWindow[],
-  rowId: number,
-): Date | undefined {
-  return windows.find((window) => rowId > window.after && rowId <= window.upTo)?.releasedAt;
-}
-
-/** The highest `working_orders` row id: rows are never deleted, so a later bill has a higher one. */
-export function highestBillRow(db: Database): number {
-  const [row] = db.all<{ top: number | null }>(sql`select max(rowid) as top from working_orders`);
-  return row?.top ?? 0;
-}
-
-/** Table bills up to row `upToRow` that look due under `rule`; `issueBillAtClose` checks each again in its own
+/** Table bills that look due under `rule`; `issueBillAtClose` checks each again in its own
  * transaction. */
-async function dueBills(
-  tx: Transaction,
-  nodeId: string,
-  upToRow: number,
-  rule: (rows: ReadonlyMap<string, number>) => CloseOfDayRule,
-): Promise<{ ids: string[]; rule: CloseOfDayRule }> {
+async function dueBills(tx: Transaction, nodeId: string, rule: CloseOfDayRule): Promise<string[]> {
   const rows = await tx
-    .select({
-      id: workingOrders.id,
-      rowId: sql<number>`${workingOrders}.rowid`,
-      openedAt: workingOrders.openedAt,
-    })
+    .select({ id: workingOrders.id, openedAt: workingOrders.trustedOpenedAt })
     .from(workingOrders)
     .innerJoin(parties, eq(parties.id, workingOrders.partyId))
     .where(
       and(
         eq(workingOrders.nodeId, nodeId),
-        sql`${workingOrders}.rowid <= ${upToRow}`,
         inArray(workingOrders.status, ["open", "placed"]),
         exists(
           tx
@@ -224,19 +191,29 @@ async function dueBills(
       ),
     )
     .orderBy(sql`${workingOrders}.rowid`);
-  const passRule = rule(new Map(rows.map((row) => [row.id, row.rowId])));
   const issuedSales = await readIssuedSales(
     tx,
     rows.map((row) => row.id),
   );
   const retiredAt = await latestRetirement(tx, nodeId);
-  const ids = rows
-    .filter(
-      (row) =>
-        !issuedSales.has(row.id) && openedInDueSpan(row.id, row.openedAt, retiredAt, passRule),
-    )
+  return rows
+    .filter((row) => !issuedSales.has(row.id) && openedInDueSpan(row.openedAt, retiredAt, rule))
     .map((row) => row.id);
-  return { ids, rule: passRule };
+}
+
+/** Gives this node's open bills that were opened while the time was unconfirmed `releasedAt`, the
+ * trusted clock's reading once it was confirmed, as their trusted opening time. */
+async function stampReleasedBills(tx: Transaction, nodeId: string, releasedAt: Date) {
+  await tx
+    .update(workingOrders)
+    .set({ trustedOpenedAt: releasedAt.toISOString() })
+    .where(
+      and(
+        eq(workingOrders.nodeId, nodeId),
+        isNull(workingOrders.trustedOpenedAt),
+        inArray(workingOrders.status, ["open", "placed"]),
+      ),
+    );
 }
 
 export interface CloseOfDayJobDeps extends CloseOfDayDeps {
@@ -246,8 +223,6 @@ export interface CloseOfDayJobDeps extends CloseOfDayDeps {
   clockUnconfirmed: () => boolean;
   /** Grows each time a hold `clockUnconfirmed` covers begins, so a hold between two looks is seen. */
   clockHoldsBegun: () => number;
-  /** The highest bill row when the start began waiting for its time: the first window opens here. */
-  startMark: number;
 }
 
 const LOOK_MS = 60_000;
@@ -259,9 +234,8 @@ const LOOK_MS = 60_000;
  */
 export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
   const cfg = closeOfDayConfig(deps.cfg);
-  const windows: ClockWindow[] = [];
-  let mark = deps.startMark;
-  // The start's wait for its time is the first window.
+  // A start may have waited for its time, and an earlier process may have stopped before its
+  // release stamp.
   let held = true;
   let holdsSeen: number | undefined;
   let queryAgain = true;
@@ -283,29 +257,17 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
     return undefined;
   }
 
-  async function issueDue(
-    dayStartedAt: Date,
-    upToRow: number,
-    holds: number,
-    signal: AbortSignal,
-  ): Promise<void> {
-    let due: Awaited<ReturnType<typeof dueBills>>;
+  async function issueDue(dayStartedAt: Date, holds: number, signal: AbortSignal): Promise<void> {
+    const rule = { dayStartedAt };
+    let due: string[];
     try {
-      due = await withTransaction(deps.db, (tx) =>
-        dueBills(tx, cfg.nodeId, upToRow, (rows) => ({
-          dayStartedAt,
-          openedAt: (billId) => {
-            const row = rows.get(billId);
-            return row === undefined ? undefined : openedAtInWindows(windows, row);
-          },
-        })),
-      );
+      due = await withTransaction(deps.db, (tx) => dueBills(tx, cfg.nodeId, rule));
     } catch (error) {
       queryAgain = true;
       throw error;
     }
     const failures: unknown[] = [];
-    for (const billId of due.ids) {
+    for (const billId of due) {
       let stop = stopBeforeBill(holds, signal);
       try {
         if (stop === undefined) {
@@ -316,7 +278,7 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
             async (tx) => {
               stop = stopBeforeBill(holds, signal);
               return stop === undefined
-                ? await issueBillAtClose(tx, deps, cfg, billId, due.rule)
+                ? await issueBillAtClose(tx, deps, cfg, billId, rule)
                 : null;
             },
             deps.log,
@@ -367,9 +329,6 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
     maxSleepMs: LOOK_MS,
     backoff: { firstMs: 5_000, maxMs: 300_000 },
     async pass({ signal }) {
-      // The row before the count: a hold that begins after the count is read covers only rows
-      // above `top`, which this look leaves for the next.
-      const top = highestBillRow(deps.db);
       const holds = deps.clockHoldsBegun();
       if (deps.clockUnconfirmed()) {
         held = true;
@@ -379,11 +338,17 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
       holdsSeen = holds;
       const reading = deps.clock.now().instant;
       if (held) {
-        if (top > mark) windows.push({ after: mark, upTo: top, releasedAt: reading });
+        // Checked again under the write lock: a hold begun since the count was read may have
+        // opened bills after `reading`, so the stamp waits for that hold's release.
+        const stamped = await withTransaction(deps.db, async (tx) => {
+          if (deps.clockUnconfirmed() || deps.clockHoldsBegun() !== holds) return false;
+          await stampReleasedBills(tx, cfg.nodeId, reading);
+          return true;
+        });
+        if (!stamped) return { nextDueAt: null };
         held = false;
         queryAgain = true;
       }
-      mark = top;
       const venueClock = await readVenueClock(deps.db);
       const dayStartedAt = new Date(
         businessDayBounds(venueClock, businessDayAt(venueClock, reading)).startAt,
@@ -391,7 +356,7 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
       if (!queryAgain && dayStartedAt.getTime() <= queriedDayStart) return { nextDueAt: null };
       queryAgain = false;
       queriedDayStart = dayStartedAt.getTime();
-      await issueDue(dayStartedAt, top, holds, signal);
+      await issueDue(dayStartedAt, holds, signal);
       return { nextDueAt: null };
     },
   };

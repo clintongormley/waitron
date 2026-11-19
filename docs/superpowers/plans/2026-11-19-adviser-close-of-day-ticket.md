@@ -156,6 +156,8 @@ opened at that release reading. The start's wait is the first window, from a mar
 before the trading listener starts (`:4469`). So a box starting a day behind, seating tables while
 it waits, then corrected, issues none of them mid-service. Limit, stated in the pull request: the
 windows live in memory, so a restart during a wait loses them.
+(2026-11-19, after review: both run-it reviews showed any restart that day loses them, so the windows
+were replaced by a stored `working_orders.trusted_opened_at`; see PR #3847.)
 
 **While the gate holds** the pass writes nothing, and each bill's transaction calls
 `refuseUntilRecordable` itself, so a gate that starts holding mid-pass rolls that bill back and ends

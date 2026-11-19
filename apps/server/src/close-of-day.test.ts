@@ -100,6 +100,12 @@ function close(billId: string, at: CloseOfDayRule = rule) {
   );
 }
 
+function trustOpeningAt(billId: string, at: Date) {
+  venue.db.run(
+    sql`update working_orders set trusted_opened_at = ${at.toISOString()} where id = ${billId}`,
+  );
+}
+
 async function partyStateOf(partyId: string) {
   const [row] = await inTx(venue, (tx) =>
     tx.select({ state: parties.state }).from(parties).where(eq(parties.id, partyId)),
@@ -569,13 +575,20 @@ describe("issueBillAtClose", () => {
 
     it("a bill counted as opened after the day began, whatever its stored time", async () => {
       const party = await seatedWith(venue, "Red wine bottle");
-      const late = new Date(rule.dayStartedAt.getTime() + 1);
-      const counted: CloseOfDayRule = {
-        ...rule,
-        openedAt: (billId) => (billId === party.tabId ? late : undefined),
-      };
+      trustOpeningAt(party.tabId, new Date(rule.dayStartedAt.getTime() + 1));
 
-      expect(await leftAlone(party, () => close(party.tabId, counted))).toEqual({
+      expect(await leftAlone(party, () => close(party.tabId))).toEqual({
+        kind: "not_due",
+      });
+    });
+
+    it("a bill opened while the time was unconfirmed and not yet given a trusted opening time", async () => {
+      const party = await seatedWith(venue, "Red wine bottle");
+      venue.db.run(
+        sql`update working_orders set trusted_opened_at = null where id = ${party.tabId}`,
+      );
+
+      expect(await leftAlone(party, () => close(party.tabId))).toEqual({
         kind: "not_due",
       });
     });
@@ -649,13 +662,9 @@ describe("issueBillAtClose", () => {
         .values({ nodeId: venue.cfg.nodeId, code: `OLD-${randomUUID().slice(0, 8)}`, retiredAt })
         .returning({ id: invoiceSeries.id }),
     );
-    const counted: CloseOfDayRule = {
-      ...rule,
-      openedAt: (billId) =>
-        billId === party.tabId ? new Date(retiredAt.getTime() + 1000) : undefined,
-    };
+    trustOpeningAt(party.tabId, new Date(retiredAt.getTime() + 1000));
     try {
-      expect(await close(party.tabId, counted)).toMatchObject({ kind: "issued" });
+      expect(await close(party.tabId)).toMatchObject({ kind: "issued" });
     } finally {
       await inTx(venue, (tx) => tx.delete(invoiceSeries).where(eq(invoiceSeries.id, retired!.id)));
     }

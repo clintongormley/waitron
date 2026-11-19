@@ -918,6 +918,62 @@ describe("working_orders_enforce_transition's handover exception for a placed or
   });
 });
 
+/** Every column of `working_orders` giving a placed order its trusted opening time must leave as
+ * it is. */
+const FROZEN_TRUST_COLUMNS = connection
+  .prepare(`select name from pragma_table_info('working_orders') order by cid`)
+  .all()
+  .map((row) => String(row.name))
+  .filter((name) => name !== "trusted_opened_at");
+
+describe("working_orders_enforce_transition's exception for a placed order's trusted opening time", () => {
+  it("reads the table's columns, so the per-column cases below are not vacuous", () => {
+    expect(FROZEN_TRUST_COLUMNS).toEqual(
+      expect.arrayContaining(["id", "status", "opened_at", "party_id", "collected_at"]),
+    );
+  });
+
+  it("accepts giving a placed order with none its trusted opening time alone", () => {
+    placedCounterOrder("wo-trust-alone");
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set trusted_opened_at = '${STAMP}' where id = 'wo-trust-alone'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it.each(FROZEN_TRUST_COLUMNS)(
+    "refuses a placed order's trusted opening time when %s changes with it",
+    (column) => {
+      const id = `wo-trust-with-${column}`;
+      placedCounterOrder(id);
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set trusted_opened_at = '${STAMP}', ${column} = 'changed' ` +
+            `where id = '${id}'`,
+        ),
+      ).toBe(TRANSITION_REFUSAL);
+    },
+  );
+
+  it("refuses moving or clearing a placed order's trusted opening time once it has one", () => {
+    placedCounterOrder("wo-trust-kept");
+    connection.exec(
+      `update working_orders set trusted_opened_at = '${STAMP}' where id = 'wo-trust-kept'`,
+    );
+    for (const value of ["'2026-09-22T11:00:00.000Z'", "null"]) {
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set trusted_opened_at = ${value} where id = 'wo-trust-kept'`,
+        ),
+      ).toBe(TRANSITION_REFUSAL);
+    }
+  });
+});
+
 /** The two columns a finished delivery order's table release changes. */
 const RELEASE_COLUMNS = new Set(["delivery_table_id", "delivery_table_label"]);
 /** Every column of `working_orders` a delivery table's release must leave as it is. */

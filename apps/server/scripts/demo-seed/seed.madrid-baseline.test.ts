@@ -1155,6 +1155,12 @@ for (const locale of ["en", "es"] as const) {
       );
       for (const name of ["zone_id", "department_id", "service_mode"])
         orders.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
+      orders.columns.splice(
+        orders.columns.findIndex((column) => column.name === "opened_at") + 1,
+        0,
+        { name: "trusted_opened_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(orders.rows)) row.trusted_opened_at = row.opened_at;
       for (const row of Object.values(orders.rows))
         Object.assign(row, {
           bill_number: null,

@@ -428,7 +428,7 @@ import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } fr
 import { createJobRunner } from "./job-runner.js";
 import { menuActivationJob } from "./menu-activation.js";
 import { owedReceiptJob } from "./owed-receipts.js";
-import { closeOfDayJob, highestBillRow } from "./close-of-day.js";
+import { closeOfDayJob } from "./close-of-day.js";
 import { housekeepingJob } from "./housekeeping.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
@@ -2557,6 +2557,7 @@ async function bootServer(
     operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
     operationDescriptionDefault,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
+    clockUnconfirmed: startClockHolds,
   };
   const cloudConnection = cloudOrigin
     ? createCloudConnection({
@@ -4453,8 +4454,6 @@ async function bootServer(
     }),
   );
 
-  // Read before any till can open a bill: bills above it were opened while the start waited.
-  const closeOfDayStartMark = highestBillRow(db);
   // A mirror's ambient administrator session must stay off the staff entrance.
   const staffAdmitted = () => cloudConnection?.staffAdmitted() ?? Promise.resolve(false);
   let staffListener =
@@ -4523,7 +4522,6 @@ async function bootServer(
       clockUnconfirmed: startClockHolds,
       // A set with the host holds from its step on (`clockCorrection`'s `steps`).
       clockHoldsBegun: () => startClock.waitsBegun() + correction.steps(),
-      startMark: closeOfDayStartMark,
     }),
   );
 

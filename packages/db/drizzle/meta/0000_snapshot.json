@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2a645cdc-411d-40c3-8683-532ab34ccfe2",
+  "id": "f73edd88-55b3-4773-8020-a1fc8294e3b5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1218,6 +1218,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "trusted_opened_at": {
+          "name": "trusted_opened_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "settled_at": {

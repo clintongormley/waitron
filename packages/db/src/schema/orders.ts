@@ -82,6 +82,9 @@ export const workingOrders = table(
     label: label("label"),
     status: workingOrderStatus("status").notNull().default("open"),
     openedAt: tsString("opened_at").notNull().$defaultFn(nowIso),
+    // `opened_at` when the box's time was confirmed at opening; null while it waited, until the
+    // close-of-day job stamps its reading at the release. The close counts the bill from here.
+    trustedOpenedAt: tsString("trusted_opened_at"),
     settledAt: tsString("settled_at"),
     // Set ⇒ this counter order is delivered to that table; a party's bill names its party instead.
     /* v8 ignore start */

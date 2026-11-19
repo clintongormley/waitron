@@ -291,6 +291,7 @@ export async function seedSales(
         status: "open",
         invoiceType: "F2",
         openedAt: instant.toISOString(),
+        trustedOpenedAt: instant.toISOString(),
         dining: takeaway ? "takeaway" : "eat_in",
       });
       await insertInChunks(

@@ -12,12 +12,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, businessDayAt, businessDayBounds, type BusinessDayClock } from "@waitron/shared";
-import {
-  closeOfDayJob,
-  highestBillRow,
-  openedAtInWindows,
-  type ClockWindow,
-} from "./close-of-day.js";
+import { closeOfDayJob } from "./close-of-day.js";
 import { createJobRunner } from "./job-runner.js";
 import type { Logger } from "./logger.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
@@ -64,6 +59,8 @@ vi.mock("@waitron/db", async (importOriginal) => {
 });
 
 let venue: BillVenue;
+/** The till's routes, opening bills under the gate the job reads. */
+let seatingApp: BillVenue["app"];
 let venueClock: BusinessDayClock;
 let today: string;
 /** The trusted clock's reading, in ms. */
@@ -94,6 +91,7 @@ useVenueDb({
     );
     venueClock = await inTx(venue, (tx) => readVenueClock(tx));
     today = businessDayAt(venueClock, new Date());
+    seatingApp = venue.appWith({ clockUnconfirmed: () => seatHolds });
   },
 });
 
@@ -139,7 +137,7 @@ function sellingSwitch(): SellingSwitch {
   return state;
 }
 
-function job(opts: { startMark?: number; selling?: Selling } = {}) {
+function job(opts: { selling?: Selling } = {}) {
   return closeOfDayJob({
     admission: testTradingAdmission(),
     db: venue.db,
@@ -153,7 +151,6 @@ function job(opts: { startMark?: number; selling?: Selling } = {}) {
     selling: opts.selling ?? primary,
     clockUnconfirmed: () => jobSeesHold(),
     clockHoldsBegun: () => holdsBegun,
-    startMark: opts.startMark ?? highestBillRow(venue.db),
   });
 }
 
@@ -161,12 +158,17 @@ function look(definition: ReturnType<typeof job>) {
   return definition.pass({ now: new Date(at), signal: new AbortController().signal });
 }
 
-/** A seated table bill with a dish sent, counted as opened at `openedAt`. */
+/** A seated table bill with a dish sent, stored as opened at `openedAt`: its trusted opening time
+ * too, unless it was seated while the time was unconfirmed. */
 async function billOpenedAt(openedAt: number) {
-  const party = await seatedWith(venue, "Red wine bottle");
-  venue.db.run(
-    sql`update working_orders set opened_at = ${new Date(openedAt).toISOString()} where id = ${party.tabId}`,
-  );
+  const party = await seatedWith({ ...venue, app: seatingApp }, "Red wine bottle");
+  const stored = new Date(openedAt).toISOString();
+  venue.db.run(sql`
+    update working_orders
+    set opened_at = ${stored},
+      trusted_opened_at = iif(trusted_opened_at is null, null, ${stored})
+    where id = ${party.tabId}
+  `);
   return party.tabId;
 }
 
@@ -179,23 +181,6 @@ function salesOf(billId: string) {
 function issued(billId: string): boolean {
   return salesOf(billId).length === 1;
 }
-
-describe("openedAtInWindows", () => {
-  const windows: ClockWindow[] = [
-    { after: 3, upTo: 7, releasedAt: new Date("2026-11-20T10:00:00Z") },
-    { after: 9, upTo: 12, releasedAt: new Date("2026-11-21T10:00:00Z") },
-  ];
-
-  it("gives a row inside a window that window's release reading", () => {
-    expect(openedAtInWindows(windows, 4)).toEqual(new Date("2026-11-20T10:00:00Z"));
-    expect(openedAtInWindows(windows, 7)).toEqual(new Date("2026-11-20T10:00:00Z"));
-    expect(openedAtInWindows(windows, 12)).toEqual(new Date("2026-11-21T10:00:00Z"));
-  });
-
-  it("leaves a row outside every window, the mark itself included, to its stored time", () => {
-    for (const row of [1, 3, 8, 9, 13]) expect(openedAtInWindows(windows, row)).toBeUndefined();
-  });
-});
 
 describe("bills.close_of_day", () => {
   beforeEach(() => {
@@ -616,5 +601,95 @@ describe("bills.close_of_day", () => {
     } finally {
       await runner.stopJobs();
     }
+  });
+});
+
+describe("a bill opened while the box's time is unconfirmed", () => {
+  beforeEach(() => {
+    seatHolds = false;
+  });
+
+  function openings(billId: string) {
+    return venue.db.all<{ openedAt: string; trustedOpenedAt: string | null }>(sql`
+      select opened_at as openedAt, trusted_opened_at as trustedOpenedAt
+      from working_orders where id = ${billId}
+    `)[0];
+  }
+
+  it("is stored with no trusted opening time, and one opened once the time is confirmed with its opening time", async () => {
+    hold();
+    const unconfirmed = (await seatedWith({ ...venue, app: seatingApp }, "Red wine bottle")).tabId;
+    seatHolds = false;
+    const confirmed = (await seatedWith({ ...venue, app: seatingApp }, "Red wine bottle")).tabId;
+
+    expect(openings(unconfirmed)).toEqual({ openedAt: expect.any(String), trustedOpenedAt: null });
+    const stored = openings(confirmed)!;
+    expect(stored.trustedOpenedAt).toBe(stored.openedAt);
+  });
+
+  it("is given the reading at the release as its trusted opening time, which a later release keeps", async () => {
+    at = day(38).startAt + 9 * HOUR;
+    hold();
+    const definition = job();
+    await look(definition);
+    const bill = await billOpenedAt(day(37).startAt + 10 * HOUR);
+    seatHolds = false;
+    at += HOUR;
+    await look(definition);
+    const releasedAt = new Date(at).toISOString();
+    expect(openings(bill)!.trustedOpenedAt).toBe(releasedAt);
+
+    at += HOUR;
+    await look(job());
+    expect(openings(bill)!.trustedOpenedAt).toBe(releasedAt);
+  });
+
+  it("after a restart later that business day, issues no ticket mid-service, only at the end of the day it was counted in", async () => {
+    const definition = job();
+    at = day(34).startAt + 9 * HOUR;
+    hold();
+    await look(definition);
+    // Seated while the box's clock reads a day behind.
+    const bill = await billOpenedAt(day(33).startAt + 10 * HOUR);
+    seatHolds = false;
+    at += HOUR;
+    await look(definition);
+    expect(fiscalRecordCount(venue, bill)).toBe(0);
+    // Seated once the time is confirmed, but stored as opened the day before.
+    const control = await billOpenedAt(day(33).startAt + 11 * HOUR);
+
+    at += HOUR;
+    const restarted = job();
+    await look(restarted);
+    at += 60_000;
+    await look(restarted);
+    expect(fiscalRecordCount(venue, bill)).toBe(0);
+    expect(issued(control)).toBe(true);
+
+    at = day(34).endAt + 60_000;
+    await look(restarted);
+    expect(issued(bill)).toBe(true);
+  });
+
+  it("counts a bill seated during a wait that a restart cut short as opened when the next start's time is confirmed", async () => {
+    at = day(36).startAt + 9 * HOUR;
+    hold();
+    await look(job());
+    // Seated while the box's clock reads a day behind.
+    const bill = await billOpenedAt(day(35).startAt + 10 * HOUR);
+
+    const restarted = job();
+    at += HOUR;
+    await look(restarted);
+    seatHolds = false;
+    at += HOUR;
+    await look(restarted);
+    at += 60_000;
+    await look(restarted);
+    expect(fiscalRecordCount(venue, bill)).toBe(0);
+
+    at = day(36).endAt + 60_000;
+    await look(restarted);
+    expect(issued(bill)).toBe(true);
   });
 });

@@ -294,7 +294,12 @@ export async function provisionBillVenue(
         db,
         backend: seat,
         clock: at,
-        cfg: { ...cfg, tipsEnabled, practiceMode },
+        cfg: {
+          ...cfg,
+          tipsEnabled,
+          practiceMode,
+          ...(clockUnconfirmed === undefined ? {} : { clockUnconfirmed }),
+        },
         secureCookies: false,
         venueLocale: LOCALE,
         pool,

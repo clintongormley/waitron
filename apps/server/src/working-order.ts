@@ -1625,6 +1625,7 @@ export async function createOpenOrder(
     creditedTo: placement.creditedTo ?? null,
   }));
   const orderNumber = await allocateOrderNumber(tx);
+  const openedAt = nowIso();
 
   await tx.insert(workingOrders).values({
     id,
@@ -1634,6 +1635,9 @@ export async function createOpenOrder(
     orderNumber,
     label,
     status: "open",
+    openedAt,
+    // Read under the write lock, which the close-of-day job's release stamp also takes.
+    trustedOpenedAt: cfg.clockUnconfirmed?.() === true ? null : openedAt,
     invoiceType: recipient === null ? "F2" : "F1",
     recipientTaxId: recipient?.taxId ?? null,
     recipientLegalName: recipient?.legalName ?? null,
