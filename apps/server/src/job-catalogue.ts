@@ -14,6 +14,7 @@ export const JOB_CATALOGUE = {
     stepdown: { keepRunning: "maintains this disk's advisory venue tag locally" },
   },
   "menu.activation": stop,
+  "receipt.owed": stop,
   "fiscal.tamper_watch": {
     kind: "job",
     stepdown: {

@@ -1,7 +1,23 @@
-import { and, eq, inArray, lt, or } from "drizzle-orm";
-import { invoiceDeliveries, printJobs, sales, unpaidDepartures } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
-import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
+import { and, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  invoiceDeliveries,
+  printers,
+  printJobs,
+  sales,
+  unpaidDepartures,
+  withTransaction,
+} from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
+import {
+  MAX_DELIVERY_ATTEMPTS,
+  PRINT_JOB_MOVED,
+  PRINTER_DELETED,
+  PRINTER_UNPAIRED,
+} from "@waitron/printing";
+import { codeOf } from "@waitron/server-kit";
+import { resendInvoicePrintJob } from "./invoice-print.js";
+import type { JobDefinition } from "./job-runner.js";
+import type { Logger } from "./logger.js";
 
 // A print that gave up, and an email that failed, still owe the ticket; a delivery that may have
 // arrived (`unknown`), on any medium, does not.
@@ -44,4 +60,70 @@ export async function owesOriginal(tx: Transaction, saleId: string): Promise<boo
     )
     .limit(1);
   return delivered === undefined;
+}
+
+const ROUND_AFTER_MS = 10 * 60_000;
+const OWED_FOR_MS = 24 * 60 * 60_000;
+const ROUND_EVERY_MS = 60_000;
+// A job ended because its printer went away or it moved elsewhere may already have printed (an
+// unpairing can end a job mid-print), so a fresh round there could print a second original.
+const ENDED_NOT_FAILED = [PRINTER_DELETED, PRINTER_UNPAIRED, PRINT_JOB_MOVED];
+
+/** Resends, as the till's Retry original does, each owed original that gave up a while ago. */
+export async function startFreshRounds(db: Database, now: Date, log: Logger): Promise<string[]> {
+  const later = sql.raw("later");
+  const candidates = await db
+    .select({ id: printJobs.id, saleId: sales.id })
+    .from(sales)
+    .innerJoin(printJobs, eq(printJobs.saleId, sales.id))
+    .innerJoin(printers, eq(printers.id, printJobs.printerId))
+    .where(
+      and(
+        gte(sales.issuedAt, new Date(now.getTime() - OWED_FOR_MS).toISOString()),
+        eq(printJobs.kind, "document"),
+        eq(printJobs.receiptCopy, false),
+        eq(printJobs.status, "failed"),
+        gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
+        or(isNull(printJobs.lastError), sql`${printJobs.lastError} not in ${ENDED_NOT_FAILED}`),
+        lt(printJobs.claimedAt, new Date(now.getTime() - ROUND_AFTER_MS).toISOString()),
+        isNull(printers.deletedAt),
+        sql`not exists (
+          select 1 from ${printJobs} as ${later}
+          where ${later}.sale_id = ${printJobs.saleId} and ${later}.kind = 'document'
+            and ${later}.receipt_copy = 0
+            and (${later}.created_at > ${printJobs.createdAt}
+              or (${later}.created_at = ${printJobs.createdAt} and ${later}.rowid > ${printJobs}.rowid)))`,
+      ),
+    );
+  const resent: string[] = [];
+  for (const { id, saleId } of candidates) {
+    try {
+      const retry = await withTransaction(db, async (tx) =>
+        (await owesOriginal(tx, saleId)) ? resendInvoicePrintJob(tx, id, null, now) : undefined,
+      );
+      if (retry !== undefined) resent.push(retry.jobId);
+    } catch (error) {
+      log("warn", "receipt.fresh_round_failed", { jobId: id, errorCode: codeOf(error) });
+    }
+  }
+  return resent;
+}
+
+export function owedReceiptJob(deps: {
+  db: Database;
+  isPrimary: () => boolean;
+  log: Logger;
+}): JobDefinition {
+  return {
+    name: "receipt.owed",
+    applies: deps.isPrimary,
+    minSleepMs: ROUND_EVERY_MS,
+    maxSleepMs: ROUND_EVERY_MS,
+    backoff: { firstMs: ROUND_EVERY_MS, maxMs: ROUND_EVERY_MS },
+    async pass({ now }) {
+      for (const jobId of await startFreshRounds(deps.db, now, deps.log))
+        deps.log("info", "receipt.fresh_round", { jobId });
+      return { nextDueAt: null };
+    },
+  };
 }
