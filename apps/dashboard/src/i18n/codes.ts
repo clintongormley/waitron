@@ -171,8 +171,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El acceso remoto requiere un plan de Cloud que lo incluya. Inicia la prueba gratuita del local en Facturación de Waitron Cloud.",
   },
   "cloud.tunnel_refused": {
-    en: "Cloud refused remote access for this box. Check the venue’s remote access in Waitron Cloud, then refresh status.",
-    es: "Cloud rechazó el acceso remoto para este servidor. Revisa el acceso remoto del local en Waitron Cloud y actualiza el estado.",
+    en: "Waitron Cloud refused remote access for this box. Open Waitron Cloud to check the box’s connection.",
+    es: "Waitron Cloud rechazó el acceso remoto para este servidor. Abre Waitron Cloud para revisar la conexión del servidor.",
   },
   "cloud.request_unavailable": {
     en: "This request is unavailable. Start again to get a new code.",

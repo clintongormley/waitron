@@ -476,15 +476,17 @@ it("reports that the plan excludes remote access and retries after the venue sta
   try {
     f.mode("remote_plan_required");
     const logged: unknown[] = [];
+    const menuChecks: AbortSignal[] = [];
+    const signal = new AbortController().signal;
     const job = cloudConnectionJob({
       connection: f.client,
       isPrimary: () => true,
       onError: (error) => logged.push(error),
+      onGuestMenu: (menuSignal) => menuChecks.push(menuSignal),
     });
-    await expect(
-      job.pass({ now: new Date(), signal: new AbortController().signal }),
-    ).rejects.toMatchObject({ code: "cloud.tunnel_plan_required" });
+    await job.pass({ now: new Date(), signal });
     expect(logged).toMatchObject([{ code: "cloud.tunnel_plan_required" }]);
+    expect(menuChecks).toEqual([signal]);
     expect((await f.client.status()).installation?.state).toBe("active");
     await expect(readFile(join(f.directory, "peer.json"))).rejects.toMatchObject({
       code: "ENOENT",

@@ -95,11 +95,11 @@ for (const [locale, on, off, theme] of [
   });
 
 for (const locale of ["en", "es"] as const)
-  for (const code of [
-    "cloud.tunnel_unavailable",
-    "cloud.tunnel_conflict",
-    "cloud.tunnel_plan_required",
-    "cloud.tunnel_refused",
+  for (const [code, status] of [
+    ["cloud.tunnel_unavailable", 422],
+    ["cloud.tunnel_conflict", 409],
+    ["cloud.tunnel_plan_required", 403],
+    ["cloud.tunnel_refused", 403],
   ] as const)
     it(`${locale} explains ${code} and keeps the stop confirmation available`, async () => {
       const previous = currentLocale();
@@ -117,7 +117,7 @@ for (const locale of ["en", "es"] as const)
         );
         const api = new DashboardApi("", async (url) => {
           if (String(url).endsWith("/refresh"))
-            return Response.json({ error: { code, params: {} } }, { status: 503 });
+            return Response.json({ error: { code, params: {} } }, { status });
           if (String(url).endsWith("/billing"))
             return Response.json(
               { error: { code: "cloud.unavailable", params: {} } },

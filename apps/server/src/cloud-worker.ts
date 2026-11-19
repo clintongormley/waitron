@@ -21,7 +21,16 @@ export function cloudConnectionJob(options: {
     async pass({ signal }) {
       try {
         if (options.isPrimary()) {
-          const status = await options.connection.refresh(signal);
+          const status = await options.connection.refresh(signal).catch((error: unknown) => {
+            const code = codeOf(error);
+            if (
+              signal.aborted ||
+              (code !== "cloud.tunnel_plan_required" && code !== "cloud.tunnel_refused")
+            )
+              throw error;
+            options.onError?.(error);
+            return options.connection.status();
+          });
           if (
             options.managementOrigin &&
             status.installation?.state === "active" &&
