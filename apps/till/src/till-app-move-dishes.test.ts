@@ -324,19 +324,29 @@ describe("set menus in Move dishes", () => {
     expect(api.moveDishes).not.toHaveBeenCalled();
   });
 
-  it("keeps the new bill refusal when the first target read arrives later", async () => {
-    const read = heldRead<BillSetMenusReply>();
-    const move = await openSetMenuMove({ readBillSetMenus: read.call });
+  it("keeps a newer price when an older read of the same target arrives later", async () => {
+    const older = heldRead<BillSetMenusReply>();
+    const newer = heldRead<BillSetMenusReply>();
+    const readBillSetMenus = vi
+      .fn()
+      .mockImplementationOnce(older.call)
+      .mockImplementationOnce(newer.call);
+    const move = await openSetMenuMove({ readBillSetMenus });
     await move.pick("sent-sirloin");
     await move.chooseBill("bill-1");
-    await vi.waitFor(() => expect(read.call).toHaveBeenCalledWith("bill-1"));
+    await vi.waitFor(() => expect(older.call).toHaveBeenCalledWith("bill-1"));
     await move.chooseBill("new");
-    read.settle({ setMenus: targetMenus, partyRevision: 3 });
+    await move.chooseBill("bill-1");
+    await vi.waitFor(() => expect(newer.call).toHaveBeenCalledWith("bill-1"));
+    newer.settle({ setMenus: targetMenus, partyRevision: 3 });
+    await vi.waitFor(() => expect(move.preview()).toContain(money("0.00")));
+
+    older.settle({ setMenus: { ...targetMenus, setMenus: [] }, partyRevision: 3 });
     await flush(move.el, 6);
 
-    expect(move.preview()).toContain("The other bill has no place for Sirloin");
-    expect(move.preview()).not.toContain(money("0.00"));
-    expect(move.root.querySelector("[data-move-dishes-confirm]")).toHaveAttribute("disabled");
+    expect(move.preview()).toContain(money("0.00"));
+    expect(move.root.querySelector("[data-move-dishes-confirm]")).not.toHaveAttribute("disabled");
+    expect(readBillSetMenus).toHaveBeenCalledTimes(2);
   });
 
   it("shows what to do when the server refuses a move after the preview", async () => {
