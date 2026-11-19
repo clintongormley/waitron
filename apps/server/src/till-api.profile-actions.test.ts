@@ -36,6 +36,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import {
   counterOrder,
   order,
+  placeByHand,
   seat,
   setupPartyVenue,
   type PartyVenue,
@@ -1043,6 +1044,23 @@ describe("the order of a sale's refusals", () => {
 });
 
 describe("the person's permission and the profile's action are both needed", () => {
+  it("takes a presented bill's cash payment on a till without take-orders", async () => {
+    const billId = await counterOrder(v, "Caña");
+    await placeByHand(v, billId);
+    const paid = await send(
+      sessions.get("take-orders")!,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        ...billPayment("cash"),
+        amount: "3.00",
+        tendered: "3.00",
+        applied: "3.00",
+      },
+    );
+    expect(paid).toMatchObject({ status: 200, body: { balance: { status: "settled" } } });
+  });
+
   it("refuses a staff member the drawer on a profile that opens it, for want of cash.drawer", async () => {
     const { cookie } = await signIn(CAPABILITY_FLAGS, "staff");
     const open = await send(cookie, "POST", "/api/drawer/open", {});

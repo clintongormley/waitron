@@ -1601,6 +1601,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Ended dashboard sessions are deleted; sign-in history comes from activity records. Email-change
   proofs use the pending address without copying it into the proof row.
   Invoice delivery records describe the request and its outcome. The shared mail and print queues keep the retry schedule and active claims.
+  [One way to pay](superpowers/plans/2026-11-19-a1308-one-way-to-pay.md) covers the till switch,
+  the counter's save-and-pay request and retirement of the older payment routes before the refund slices.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 

@@ -65,7 +65,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { giveAway } from "./testing/cancel-line.js";
+import { seedGivenAwayLine } from "./testing/cancel-line.js";
 import {
   BASIC_ACTIONS,
   revokedDeviceSessionCookie,
@@ -1023,7 +1023,7 @@ describe("a bill that owes nothing", () => {
 
   it("invoices and settles an open bill whose every line was given away, beside a bill it records", async () => {
     const anna = await seatedWith(venue, "Caña");
-    await giveAway(venue, anna.tabId, 1);
+    await seedGivenAwayLine(venue, anna.tabId, 1);
     const lewis = await seatedWith(venue, "Red wine bottle");
     const joined = await send(
       venue.app,
@@ -1093,7 +1093,7 @@ describe("a bill that owes nothing", () => {
 
   it("closes a party whose only owing bill was given away in full, invoicing it at 0.00 and settling it", async () => {
     const party = await seatedWith(venue, "Caña");
-    await giveAway(venue, party.tabId, 1);
+    await seedGivenAwayLine(venue, party.tabId, 1);
 
     const answer = await depart(party.partyId, {
       expectedPartyRevision: revisionOf(party.partyId),
@@ -1407,7 +1407,7 @@ describe("a departure sent together with a payment or Finish table on the same p
     "closes a party whose only bill was given away in full once when Finish table is sent too, with %s",
     async (_, first) => {
       const party = await seatedWith(venue, "Caña");
-      await giveAway(venue, party.tabId, 1);
+      await seedGivenAwayLine(venue, party.tabId, 1);
       const revision = revisionOf(party.partyId);
 
       const [departed, finished] = await together(

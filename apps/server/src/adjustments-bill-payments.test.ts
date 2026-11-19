@@ -216,6 +216,17 @@ describe("a bill discount over a paid line", () => {
   });
 });
 
+it("closes a bill when a fixed-amount comp brings it to zero", async () => {
+  const billId = await tabWith(venue, "Caña");
+
+  const adjusted = await adjust(billId, 1, { action: "discount_amount", amount: "3.00" });
+
+  expect(adjusted).toMatchObject({ status: 200, json: { invoice: { total: "0.00" } } });
+  expect(await statusOf(venue, billId)).toBe("settled");
+  expect(fiscalRecordCount(venue, billId)).toBe(1);
+  expect(await tendersOfBill(venue, billId)).toEqual([]);
+});
+
 describe("a reduction after contributions (design §8 test 11)", () => {
   it("refuses a €20.00 comp by the €10.00 excess; after a €10.00 refund the comp issues the €40.00 invoice", async () => {
     const billId = await tabWith(venue, "Red wine bottle", "Octopus", "Croquettes");

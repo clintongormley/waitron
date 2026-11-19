@@ -23,7 +23,7 @@ import { seedDevice, seedZone } from "@waitron/db/testing/seed.js";
 import { deviceOrigin, thousandthsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { endMeal } from "./meal-end.js";
-import { cancelLine, giveAway } from "./testing/cancel-line.js";
+import { cancelLine, seedGivenAwayLine } from "./testing/cancel-line.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import {
   fiscalRecordCount,
@@ -294,7 +294,7 @@ describe("Print the bill", () => {
 
   it("a €0.00 bill is issued and settled", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
-    await giveAway(venue, party.tabId, 1);
+    await seedGivenAwayLine(venue, party.tabId, 1);
     await serveAll(party);
     venue.db.run(
       sql`update parties set bill_requested_at = ${new Date().toISOString()} where id = ${party.partyId}`,

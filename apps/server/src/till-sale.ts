@@ -139,7 +139,7 @@ export interface TillMoneyOperator {
   sessionId: string;
 }
 
-async function captureWholePayment(
+export async function captureWholePayment(
   tx: Transaction,
   attendance: AttendanceRecorder | undefined,
   orderId: string,
@@ -662,10 +662,10 @@ function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknow
  * changing in the update that settles it. `order` is the row as the caller read it in this
  * transaction, with nothing written to it since.
  */
-async function storeSentReceiptLanguage(
+export async function storeSentReceiptLanguage(
   tx: Transaction,
   workingOrderId: string,
-  order: { status: string; revision: number; receiptLocale: string | null },
+  order: { revision: number; receiptLocale: string | null },
   language: string | undefined,
 ): Promise<void> {
   if (language === undefined || order.receiptLocale === language) return;

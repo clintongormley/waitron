@@ -3,10 +3,12 @@ import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
-import { readRawJsonBody } from "@waitron/server-kit";
-import { invalid, MONEY } from "./bill-allocation.js";
+import { AppError, compareDecimal, decimal } from "@waitron/shared";
+import { readRawJsonBody, requireString } from "@waitron/server-kit";
+import { requireDining } from "./order-dining.js";
+import { invalid, MONEY, ZERO } from "./bill-allocation.js";
 import {
+  closeZeroBill,
   getBillBalance,
   previewBillPayment,
   takeBillPayment,
@@ -81,6 +83,7 @@ function parseAsk(body: Record<string, unknown>): BillPaymentAsk {
     method,
     expectedEdit: body.expectedEdit == null ? null : parseBillEditExpected(body.expectedEdit),
   };
+  if (body.dining !== undefined) ask.dining = requireDining(body.dining);
   if (kind === "items") ask.lines = parseLines(body.lines);
   else if (body.lines !== undefined) throw invalid("lines");
   if (kind === "contribution") ask.amount = moneyField(body.amount, "amount");
@@ -119,6 +122,8 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     applied: moneyField(body.applied, "applied"),
     tip: moneyField(body.tip, "tip"),
   };
+  if (body.receiptLanguage !== undefined)
+    request.receiptLanguage = requireString(body.receiptLanguage, "receiptLanguage");
   const guestCount = readGuestCountChoice(body.guestCount);
   if (guestCount !== undefined) request.guestCount = guestCount;
   const readerOnly = ["readerId", "simulationOutcome", "printCardSlip"] as const;
@@ -239,9 +244,33 @@ export function mountBillPaymentsApi(
       await gateZones(deps, session, [{ orderId: id }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const request = parseRequest(body);
+      const device = session.device;
+      assertTakesTender(
+        device,
+        request.method === "cash"
+          ? "cash"
+          : request.entry === "reader"
+            ? "reader-card"
+            : "hand-keyed-card",
+      );
+      const readerId = request.entry === "reader" ? parseReaderId(body) : undefined;
+      if (
+        request.entry === "reader" &&
+        request.simulationOutcome !== undefined &&
+        deps.cardProvider?.provider !== "simulator"
+      ) {
+        throw invalid("simulationOutcome");
+      }
+      const saleCfg = sendingCfg(cfg, c, device);
+      if (request.kind === "contribution" && compareDecimal(decimal(request.amount!), ZERO) === 0) {
+        return c.json(
+          await closeZeroBill({ ...fiscal, disk: deps.disk }, saleCfg, id, request, {
+            personId,
+            sessionId,
+          }),
+        );
+      }
       if (request.entry !== "reader") {
-        const saleCfg = sendingCfg(cfg, c, session.device);
-        assertTakesTender(session.device, request.method === "cash" ? "cash" : "hand-keyed-card");
         return c.json(
           await takeBillPayment({ ...fiscal, disk: deps.disk }, saleCfg, id, request, {
             personId,
@@ -249,15 +278,6 @@ export function mountBillPaymentsApi(
           }),
         );
       }
-      // The guards `/api/pay` runs before a reader is asked, in its order. A card outcome is data,
-      // answered 200 even for a decline.
-      const device = session.device;
-      assertTakesTender(device, "reader-card");
-      const readerId = parseReaderId(body);
-      if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
-        throw invalid("simulationOutcome");
-      }
-      const saleCfg = sendingCfg(cfg, c, device);
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
       return c.json(
         await takeReaderBillPayment(

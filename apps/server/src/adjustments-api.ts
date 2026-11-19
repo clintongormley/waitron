@@ -3,7 +3,12 @@ import { requireEconomicWrite } from "./trading-admission.js";
 import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
-import { ADJUSTMENT_ACTIONS, listAdjustmentReasons, NOT_SERVED_REASON } from "@waitron/adjustments";
+import {
+  ADJUSTMENT_ACTIONS,
+  COMP_ACTIONS,
+  listAdjustmentReasons,
+  NOT_SERVED_REASON,
+} from "@waitron/adjustments";
 import { workingOrderLines, withTransaction, type Database } from "@waitron/db";
 import { listActivePersonsWithPermission, persons, type PinThrottle } from "@waitron/identity";
 import { requireNullableBodyUuid, requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
@@ -240,7 +245,10 @@ export function mountAdjustmentsApi(
               deps.attendance === undefined
                 ? undefined
                 : { recorder: deps.attendance, clock: deps.clock },
-              () => issueIfFullyPaid(tx, fiscal, saleCfg, id, personId),
+              () =>
+                issueIfFullyPaid(tx, fiscal, saleCfg, id, personId, {
+                  closeZero: COMP_ACTIONS.some((action) => action === ask.action),
+                }),
             );
             await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
             return {

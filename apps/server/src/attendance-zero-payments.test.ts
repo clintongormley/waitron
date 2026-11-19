@@ -3,6 +3,8 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
+import { closeZeroBill } from "./bill-payments.js";
+import { readBillEditState } from "./bill-editing.js";
 import { newId, tenders, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -143,6 +145,31 @@ describe("a human zero-owing command remains attendance evidence", () => {
       expect(await operations()).toMatchObject([evidence()]);
     },
   );
+  it("records staff activity once when the bill route closes an issued zero bill", async () => {
+    const id = await zeroBill(true);
+    at();
+    const req = {
+      expectedEdit: await readBillEditState(suite.db, id),
+      submissionId: newId(),
+      kind: "contribution" as const,
+      amount: "0.00",
+      method: "cash" as const,
+      tendered: "20.00",
+      applied: "0.00",
+      tip: "0.00",
+    };
+    const fiscal = { ...deps(), admission: testTradingAdmission() };
+    const closed = await closeZeroBill(fiscal, v.cfg, id, req, collector);
+    expect(closed.invoice).toMatchObject({ total: "0.00", tender: { method: "unpaid" } });
+    expect(await operations()).toMatchObject([evidence()]);
+    await noMoney();
+
+    vi.spyOn(v.clock, "now").mockImplementation(() => {
+      throw new Error("New clock unavailable");
+    });
+    expect(await closeZeroBill(fiscal, v.cfg, id, req, v.operator)).toEqual(closed);
+    expect(await operations()).toMatchObject([evidence()]);
+  });
   it.each(["issued", "placed", "retrieved", "counter"] as const)(
     "records an integrated %s zero-owing action without a charge",
     async (path) => {

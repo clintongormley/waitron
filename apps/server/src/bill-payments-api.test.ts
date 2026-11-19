@@ -767,6 +767,56 @@ describe("the balance", () => {
   });
 });
 
+describe("payments on a presented table bill", () => {
+  it("refuses a payment whose dining choice disagrees with its stored bill", async () => {
+    const billId = await tabWith("Cake");
+
+    const paid = await request("POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      dining: "takeaway",
+      tendered: "18.00",
+      applied: "18.00",
+      tip: "0.00",
+    });
+
+    expect(paid).toMatchObject({ status: 409, json: { code: "working_order.out_of_date" } });
+    expect(fiscalRecordCount(billId)).toBe(0);
+  });
+
+  it("takes the first part after presentation and files one invoice when the rest is paid", async () => {
+    const billId = await tabWith("Cake");
+    expect((await request("POST", `/api/working-orders/${billId}/place`)).status).toBe(200);
+
+    const preview = await request("POST", `/api/working-orders/${billId}/payments/preview`, {
+      kind: "contribution",
+      amount: "5.00",
+      method: "cash",
+      tendered: "5.00",
+    });
+    expect(preview).toMatchObject({ status: 200, json: { applied: "5.00" } });
+
+    const part = await contribute(billId, "5.00");
+    expect(part).toMatchObject({
+      status: 200,
+      json: { balance: { status: "placed", received: "5.00", outstanding: "13.00" } },
+    });
+    expect(fiscalRecordCount(billId)).toBe(0);
+
+    const rest = await contribute(billId, "13.00");
+    expect(rest).toMatchObject({
+      status: 200,
+      json: {
+        balance: { status: "settled", received: "18.00", outstanding: "0.00" },
+        invoice: { total: "18.00" },
+      },
+    });
+    expect(fiscalRecordCount(billId)).toBe(1);
+  });
+});
+
 describe("a contribution (design §8 test 2)", () => {
   it("leaves €70.00 outstanding on a €120.00 bill, changes no line's price, and issues no invoice", async () => {
     const billId = await bill120();

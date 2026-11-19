@@ -14,6 +14,8 @@ with **Approve comps** and ask them to enter their PIN. They approve past those 
 apply their own comps without a second person's PIN. By default, all staff can apply within the
 limits; supervisors, managers and administrators can approve.
 
+When a comp brings the bill to zero, Waitron closes the bill and issues the invoice straight away. Give the guest that invoice.
+
 In the dashboard's **Voids and comps**, set a limit to **0** when each comp needs approval.
 New reasons start at 0; change the amount or clear it when you want to allow comps without a limit.
 **Complaint**, **On the house** and **Discount** start at 0; **Staff meal** allows up to 50% off

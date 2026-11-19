@@ -422,7 +422,7 @@ describe("approval through the route (plan D6)", () => {
   });
 
   it("refuses a staff member's comp with no approver, then applies it with a manager's PIN, leaving the waiter signed in", async () => {
-    const { billId } = await billWith(venue, [{ name: "Burger" }]);
+    const { billId } = await billWith(venue, [{ name: "Burger" }, { name: "Bottle" }]);
 
     const refused = await post(billId, await comp(billId), { cookie: venue.cookie.staff });
     expect(refused.status).toBe(403);
@@ -1213,6 +1213,7 @@ describe("the route's own rules", () => {
       adjustmentIds: [expect.any(String)],
       revision: revision + 1,
       party: null,
+      invoice: expect.objectContaining({ total: "0.00", tender: { method: "unpaid" } }),
     });
     expect(await recordedOn(orderId)).toMatchObject([
       { action: "comp", lineId: rows[0]!.id, reduction: 1200 },
@@ -1258,7 +1259,7 @@ describe("the route's own rules", () => {
   });
 
   it("maps a give-away that takes nothing off to 409", async () => {
-    const { billId } = await billWith(venue, [{ name: "Burger" }]);
+    const { billId } = await billWith(venue, [{ name: "Burger" }, { name: "Bottle" }]);
     const comp = async () => ({
       ...(await todayLine(venue, billId, 1)),
       action: "comp",

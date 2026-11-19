@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -33,7 +34,7 @@ import {
   tendersOfBill,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { compWholeBill, giveAway } from "./testing/cancel-line.js";
+import { compWholeBill, seedGivenAwayLine } from "./testing/cancel-line.js";
 import "./errors.js";
 
 // Paying a bill that owes nothing: the sale is filed at 0.00 and settled with no tender, no card
@@ -79,7 +80,7 @@ function productIdOf(name: string): string {
 /** A table's bill holding one Caña, given away. */
 async function givenAwayBill(): Promise<{ partyId: string; tabId: string }> {
   const party = await seatedWith(venue, "Caña");
-  await giveAway(venue, party.tabId, 1);
+  await seedGivenAwayLine(venue, party.tabId, 1);
   return party;
 }
 
@@ -309,7 +310,7 @@ describe("the card reader on a bill whose every line was given away", () => {
         ],
         operatorId: venue.operatorId,
       });
-      await giveAway(venue, id, 1);
+      await seedGivenAwayLine(venue, id, 1);
     }
     await inTx(venue, async (tx) => {
       const table = await createTable(tx, venue.cfg, {
@@ -375,7 +376,7 @@ async function presentedGivenAway(): Promise<string> {
     zoneId: counter.zoneId,
     operatorId: venue.operatorId,
   });
-  await giveAway(venue, id, 1);
+  await seedGivenAwayLine(venue, id, 1);
   await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
   expect(await statusOf(venue, id)).toBe("placed");
   expect(fiscalRecordCount(venue, id)).toBe(0);
@@ -383,17 +384,55 @@ async function presentedGivenAway(): Promise<string> {
 }
 
 describe("other ways a bill owing nothing is paid", () => {
-  it("closes a bill comped free as a whole on a cash Pay of 0, with an invoice of 0.00, no tender and no drawer", async () => {
+  it("settles a free bill through the bill payment route without taking a card or opening a drawer", async () => {
+    const { tabId } = await givenAwayBill();
+    const body = {
+      submissionId: randomUUID(),
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
+      kind: "contribution",
+      amount: "0.00",
+      method: "card",
+      entry: "reader",
+      applied: "0.00",
+      tip: "0.00",
+    };
+    const calls = venue.card.collectCalls.length;
+    const drawerJobs = drawerJobCount();
+    const take = () =>
+      send(venue.app, venue.cookie, "POST", `/api/working-orders/${tabId}/payments`, body);
+
+    const closed = await take();
+
+    expect(closed).toMatchObject({
+      status: 200,
+      json: {
+        outcome: "settled",
+        balance: { status: "settled", payments: [] },
+        invoice: { total: "0.00", tender: { method: "unpaid" } },
+      },
+    });
+    expect(closed.json.payment).toBeUndefined();
+    expect(await take()).toEqual(closed);
+    await expectClosedOwingNothing(tabId);
+    expect(venue.card.collectCalls.length).toBe(calls);
+    expect(drawerJobCount()).toBe(drawerJobs);
+  });
+
+  it("files and settles a 0.00 invoice as soon as a whole-bill comp leaves nothing due", async () => {
     const { tabId } = await seatedWith(venue, "Caña");
-    await compWholeBill(venue, tabId, 10000);
     const drawerJobs = drawerJobCount();
 
-    const answer = await pay(tabId, { method: "cash", amount: "0" });
+    await compWholeBill(venue, tabId, 10000);
 
-    expect(answer.status).toBe(200);
-    expect(answer.json).toMatchObject({ total: "0.00", tender: { method: "unpaid" } });
     await expectClosedOwingNothing(tabId);
     expect(drawerJobCount()).toBe(drawerJobs);
+
+    const replay = await pay(tabId, { method: "cash", amount: "0" });
+    expect(replay).toMatchObject({
+      status: 200,
+      json: { total: "0.00", tender: { method: "unpaid" } },
+    });
+    await expectClosedOwingNothing(tabId);
   });
 
   it("refuses a cash Pay of 0 on a bill comped only by half, which still owes, leaving it open with nothing filed", async () => {

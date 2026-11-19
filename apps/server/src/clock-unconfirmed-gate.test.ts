@@ -57,7 +57,14 @@ import {
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { cancelBody, cancelItemRequest, cancelReasonId, giveAway } from "./testing/cancel-line.js";
+import {
+  cancelBody,
+  cancelItemRequest,
+  cancelReasonId,
+  GIVE_AWAY_REASON,
+  reasonIdOf,
+  seedGivenAwayLine,
+} from "./testing/cancel-line.js";
 import { heldRow } from "./testing/held-row.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -262,6 +269,7 @@ function moneyState() {
   return {
     records: fiscalRecordCount(venue),
     sales: rowCount("sales"),
+    settlements: rowCount("sale_settlements"),
     tenders: rowCount("tenders"),
     payments: rowCount("payments"),
     billPayments: rowCount("bill_payments"),
@@ -500,10 +508,39 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
   },
   "POST /api/pay, a bill that owes nothing": async () => {
     const { tabId } = await seatedWith(venue, threeEuroDish());
-    await giveAway(venue, tabId, 1);
+    await seedGivenAwayLine(venue, tabId, 1);
     return {
       send: (app) => as(app, "POST", "/api/pay", { dining: "eat_in", id: tabId, lines: [] }),
       grows: ["sales", "records"],
+    };
+  },
+  "POST /api/working-orders/:id/payments, an issued bill that owes nothing": async () => {
+    const { tabId } = await seatedWith(venue, threeEuroDish());
+    await seedGivenAwayLine(venue, tabId, 1);
+    await issueOrderInvoice(
+      {
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        admission: testTradingAdmission(),
+      },
+      venue.cfg,
+      tabId,
+      venue.operatorId,
+    );
+    const body = {
+      submissionId: randomUUID(),
+      expectedEdit: await readBillEditState(venue.db, tabId),
+      kind: "contribution",
+      amount: "0.00",
+      method: "card",
+      entry: "reader",
+      applied: "0.00",
+      tip: "0.00",
+    };
+    return {
+      send: (app) => as(app, "POST", `/api/working-orders/${tabId}/payments`, body),
+      grows: ["settlements"],
     };
   },
   "POST /api/sales, a cash sale": async () => {
@@ -754,6 +791,50 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
 };
 
 describe("the till's money routes behind the start clock gate", () => {
+  it("refuses only the comp that closes a bill until time is confirmed, then files it once", async () => {
+    const closes = await tabWith(venue, threeEuroDish());
+    const staysOpen = await tabWith(venue, threeEuroDish(), "Tarta");
+    const reasonId = await inTx(venue, (tx) => reasonIdOf(tx, GIVE_AWAY_REASON));
+    const state = startClockState();
+    const holds = startClockGateHolds(
+      state,
+      () => true,
+      () => false,
+    );
+    const app = venue.appWith({
+      backend: gateSeatOnStartClock(venue.backend, holds),
+      clockUnconfirmed: holds,
+    });
+    const comp = async (id: string) => {
+      const body = { ...(await cancelBody(venue.db, id, 1)), reasonId, action: "comp" };
+      return () => as(app, "POST", `/api/working-orders/${id}/adjustments`, body);
+    };
+    const close = await comp(closes);
+    const reduce = await comp(staysOpen);
+    const before = moneyState();
+
+    expect(await close()).toMatchObject({ status: 409, json: { code: "clock.unconfirmed" } });
+    expect(moneyState()).toEqual(before);
+
+    const reduced = await reduce();
+    expect(reduced.status).toBe(200);
+    expect(reduced.json.invoice).toBeUndefined();
+    expect(moneyState()).toMatchObject({
+      adjustments: before.adjustments + 1,
+      records: before.records,
+      sales: before.sales,
+      tenders: before.tenders,
+    });
+
+    state.confirm("by_person", {});
+    const closed = await close();
+
+    expect(closed).toMatchObject({ status: 200, json: { invoice: { total: "0.00" } } });
+    expect(await close()).toEqual(closed);
+    expect(fiscalRecordCount(venue, closes)).toBe(1);
+    expect(fiscalRecordCount(venue, staysOpen)).toBe(0);
+  });
+
   it.each(Object.keys(moneyRoutes))(
     "%s: refuses clock.unconfirmed while the start waits, moving and writing nothing, and is served once confirmed",
     async (name) => {

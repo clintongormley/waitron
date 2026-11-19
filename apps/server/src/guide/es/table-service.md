@@ -20,6 +20,8 @@ autorización. Los motivos nuevos empiezan en 0; cambia el importe o bórralo pa
 **Queja**, **Invitación** y **Descuento** empiezan en 0; **Comida de
 personal** permite hasta un 50% de descuento por artículo antes de pedir autorización.
 
+Si una invitación deja la cuenta a cero, Waitron la cierra y emite la factura en el momento. Entrega esa factura al cliente.
+
 ## Repartir una cuenta del mostrador {#counter-part-payments}
 
 Pulsa **Cobrar** para cobrar toda o parte de una cuenta del mostrador. Empiezas con **Toda la cuenta**

@@ -2259,27 +2259,109 @@ describe("a sale files in the receipt language saved on its order", () => {
       },
     );
 
-    it("stores and files the language sent with the collect of a placed order", async () => {
+    const WHOLE_CASH = {
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: CASH.amount,
+      applied: "18.00",
+      tip: "0.00",
+    };
+
+    it("leaves the receipt language and edit revision alone after a part payment", async () => {
       const venue = await barcelonaVenue();
       const id = await placedTarta(venue);
+      const before = await orderRow(venue, id);
 
-      const collected = await send(
+      const paid = await send(
         venue.app,
         venue.cookie,
         "POST",
-        `/api/working-orders/${id}/collect`,
-        { tender: CASH, receiptLanguage: "es-ES" },
+        `/api/working-orders/${id}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "1.00",
+          method: "cash",
+          tendered: "1.00",
+          applied: "1.00",
+          tip: "0.00",
+          receiptLanguage: "es-ES",
+        },
       );
 
-      expect(collected.status).toBe(200);
-      expect(collected.json.locale).toBe("es-ES");
-      expect(collected.json.namesLocale).toBe("ca-ES");
-      expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
+      expect(paid).toMatchObject({ status: 200, json: { balance: { outstanding: "17.00" } } });
+      expect(await orderRow(venue, id)).toEqual(before);
+    });
+
+    it("files in the chosen language when cash covers the rest while a reader payment is pending", async () => {
+      const venue = await barcelonaVenue();
+      const id = await placedTarta(venue);
+      const path = `/api/working-orders/${id}/payments`;
+      const part = { kind: "contribution", amount: "9.00", applied: "9.00", tip: "0.00" };
+      const release = venue.card.holdNextCollect();
+      const pending = send(venue.app, venue.cookie, "POST", path, {
+        ...part,
+        submissionId: randomUUID(),
+        method: "card",
+        entry: "reader",
+      });
+      try {
+        await expect.poll(() => venue.card.collectCalls.length).toBe(1);
+        const paid = await send(venue.app, venue.cookie2, "POST", path, {
+          ...part,
+          submissionId: randomUUID(),
+          method: "cash",
+          tendered: "9.00",
+          receiptLanguage: "es-ES",
+        });
+        expect(paid).toMatchObject({
+          status: 200,
+          json: { balance: { received: "9.00", reserved: "9.00" } },
+        });
+        expect(paid.json.invoice).toBeUndefined();
+      } finally {
+        release();
+        await pending;
+      }
+
       expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
     });
 
-    it.each([
+    const placedCashRequests = [
       ["collect", (id: string) => [`/api/working-orders/${id}/collect`, { tender: CASH }] as const],
+      [
+        "bill payment",
+        (id: string) =>
+          [
+            `/api/working-orders/${id}/payments`,
+            { ...WHOLE_CASH, submissionId: randomUUID() },
+          ] as const,
+      ],
+    ] as const;
+
+    it.each(placedCashRequests)(
+      "stores and files the language sent with %s on a placed order",
+      async (method, request) => {
+        const venue = await barcelonaVenue();
+        const id = await placedTarta(venue);
+        const [path, body] = request(id);
+
+        const paid = await send(venue.app, venue.cookie, "POST", path, {
+          ...body,
+          receiptLanguage: "es-ES",
+        });
+
+        expect(paid.status).toBe(200);
+        const ticket = method === "collect" ? paid.json : paid.json.invoice;
+        expect(ticket).toMatchObject({ locale: "es-ES", namesLocale: "ca-ES" });
+        expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
+        expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+      },
+    );
+
+    it.each([
+      ...placedCashRequests,
       ["card pay", (id: string) => ["/api/pay", { dining: "eat_in", id, lines: [] }] as const],
     ] as const)(
       "ignores the language sent with the %s of a placed order whose invoice is already issued",
