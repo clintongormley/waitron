@@ -1522,11 +1522,16 @@ describe("TillApi", () => {
     });
   });
 
-  it("returns the reader decline reason when paying a placed bill", async () => {
-    const fetchStub = wholeBillReplies("placed", "10.00", {
-      outcome: "declined",
-      failureReason: "lost_card",
-    });
+  it.each([
+    [{ outcome: "pending" }, { outcome: "timeout" }],
+    [{ outcome: "timeout" }, { outcome: "timeout" }],
+    [{ outcome: "failed" }, { outcome: "declined" }],
+    [
+      { outcome: "declined", failureReason: "lost_card" },
+      { outcome: "declined", failureReason: "lost_card" },
+    ],
+  ])("presents reader result %j on a placed bill", async (reply, outcome) => {
+    const fetchStub = wholeBillReplies("placed", "10.00", reply);
     await expect(
       new TillApi("", fetchStub).pay({
         id: "wo1",
@@ -1534,7 +1539,29 @@ describe("TillApi", () => {
         expectedEdit: null,
         dining: "eat_in",
       }),
-    ).resolves.toEqual({ outcome: "declined", failureReason: "lost_card" });
+    ).resolves.toEqual(outcome);
+  });
+
+  it("closes a zero-value bill through the zero payment", async () => {
+    const invoice = { invoiceNumber: "A/8", total: "0.00" };
+    const fetchStub = wholeBillReplies("placed", "0.00", { outcome: "settled", invoice });
+    await expect(
+      new TillApi("", fetchStub).collectOrder(
+        "wo1",
+        { method: "cash", amount: "0.00" },
+        undefined,
+        null,
+        null,
+      ),
+    ).resolves.toEqual(invoice);
+    expect(postedBodies(fetchStub)).toEqual([
+      expect.objectContaining({
+        kind: "contribution",
+        amount: "0.00",
+        applied: "0.00",
+        tip: "0.00",
+      }),
+    ]);
   });
 
   it("listStations GETs the venue's active kitchen stations", async () => {

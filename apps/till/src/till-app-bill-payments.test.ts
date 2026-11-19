@@ -9361,6 +9361,21 @@ it("takes a first cash contribution on a presented bill before its invoice is is
   expect(shownBalance(el)).toEqual(balanceShows("120.00", "30.00", "90.00"));
 });
 
+it("offers whole payment on a presented bill that already has an invoice", async () => {
+  const { el } = await mountApp({
+    getPartyBills: vi
+      .fn()
+      .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
+  });
+  const order = await openTable(el);
+  await showBillFooter(order);
+  order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+  await flush(el);
+  const whole = el.shadowRoot!.querySelector("till-presented-pay-dialog")!.shadowRoot!;
+  expect(whole.querySelector("[data-presented-pay-take]")).not.toBeNull();
+  expect(whole.querySelector("[data-presented-pay-parts]")).toBeNull();
+});
+
 it("a handheld opens the remaining bill payment after a short presented-bill capture", async () => {
   const balance = balanceOf({
     status: "placed",
