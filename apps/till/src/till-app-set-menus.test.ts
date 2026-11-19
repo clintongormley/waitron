@@ -8,10 +8,20 @@ import {
   openTable,
   resetAllergyFixture,
 } from "../test/allergy-app-fixture.js";
+import { setMenuCopyOf } from "@waitron/shared";
+import {
+  emit,
+  flush as flushCounter,
+  lock,
+  offers,
+  resetBillPayDrafts,
+  stubApi as counterApi,
+} from "../test/bill-pay-app.js";
+import type { TillApp } from "./till-app.js";
 import { daily, bill, special } from "../test/set-menu-widgets.js";
 import { setMenuProduct } from "./widgets/product-pick.js";
 import { showView } from "./screens/till-table-order-screen.test-helpers.js";
-import { cleanupWidgets, partyBillOf } from "./widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, partyBillOf } from "./widgets/test-helpers.js";
 
 beforeEach(resetAllergyFixture);
 afterEach(cleanupWidgets);
@@ -129,4 +139,108 @@ it("opens the same choices for the exact drafted dish Send refuses", async () =>
   await userEvent.click(page.elementLocator(browser).getByRole("button", { name: "Cancel" }));
   expect(openPlace).toHaveBeenCalledExactlyOnceWith(screen.draftStore!.lines[1]);
   expect(screen.draftStore!.lines.map((line) => line.product.name)).toEqual(["Sirloin", "Sirloin"]);
+});
+
+it("saves the counter's first set-menu count and keeps a drafted dish until Park", async () => {
+  resetBillPayDrafts();
+  const saved = {
+    copies: [setMenuCopyOf(daily, "v1")],
+    recorded: { [daily.menuId]: "v1" },
+    setMenus: [bill.setMenus[0]!],
+    dishes: [],
+  };
+  const parkOrder = vi.fn(async ({ id }: { id: string }) => ({
+    id,
+    orderNumber: 10,
+    revision: 7,
+    setMenus: saved,
+  }));
+  const zone = {
+    ...offers,
+    context: { ...offers.context, dining: { policy: "till_choice", startsAs: "eat_in" } },
+    setMenus: [{ ...daily, versionIds: ["v1"], orderable: true, newestOnSale: true }],
+  };
+  const updateWorkingOrder = vi.fn(async () => ({ revision: 8 }));
+  const retrieveWorkingOrder = vi.fn(async (id: string) => ({
+    id,
+    orderNumber: 10,
+    revision: 8,
+    zoneId: offers.context.zoneId,
+    label: null,
+    expectedEdit: null,
+    invoiceType: "F2",
+    dining: "takeaway",
+    diningChoice: "locked",
+    kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+    lines: [],
+    setMenus: saved,
+    setMenuCopies: [daily],
+  }));
+  const api = counterApi({
+    listDefaultZoneOffers: vi.fn(async () => zone),
+    listZoneOffers: vi.fn(async () => zone),
+    parkOrder,
+    updateWorkingOrder,
+    retrieveWorkingOrder,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flushCounter(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flushCounter(el);
+  const counter = el.shadowRoot!.querySelector("till-counter-screen")!;
+  counter.store.addProduct(
+    {
+      id: "cola",
+      menuItemId: "cola-offer",
+      menuId: "cat-default",
+      name: "Cola",
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "general",
+      category: null,
+      allergens: null,
+    },
+    "1",
+  );
+  await userEvent.click(page.elementLocator(counter).getByText("Take away", { exact: true }));
+  await vi.waitFor(() => expect(counter.store.dining).toBe("takeaway"));
+  const counts = counter.shadowRoot!.querySelector("till-set-menu-counts");
+  expect(counts).not.toBeNull();
+  await userEvent.click(
+    page.elementLocator(counts!).getByRole("button", { name: "Increase Daily menu" }),
+  );
+  await vi.waitFor(() => {
+    expect(counter.store.revision).toBe(7);
+    expect(counter.store.persisted).toBe(true);
+    expect(parkOrder).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        id: counter.store.id,
+        zoneId: offers.context.zoneId,
+        dining: "takeaway",
+        lines: [],
+        firstSetMenuId: daily.menuId,
+      }),
+    );
+  });
+  expect(counter.store.dirty).toBe(true);
+  expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Cola"]);
+  expect(updateWorkingOrder).not.toHaveBeenCalled();
+
+  const id = counter.store.id;
+  const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
+  await userEvent.click(
+    page.elementLocator(tender).getByRole("button", { name: "Park", exact: true }),
+  );
+  await vi.waitFor(() => expect(tender.shadowRoot!.querySelector(".park")).not.toBeNull());
+  await userEvent.click(tender.shadowRoot!.querySelector(".park")!);
+  await vi.waitFor(() => expect(counter.store.id).not.toBe(id));
+  expect(parkOrder).toHaveBeenCalledTimes(1);
+  expect(updateWorkingOrder).toHaveBeenCalledExactlyOnceWith(
+    id,
+    expect.objectContaining({
+      revision: 7,
+      dining: "takeaway",
+      lines: [expect.objectContaining({ menuItemId: "cola-offer", quantity: "1" })],
+    }),
+  );
 });

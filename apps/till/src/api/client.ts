@@ -3443,11 +3443,14 @@ export class TillApi {
     label?: string;
     kitchenNote?: string | null;
     lateSend?: LateSend;
+    firstSetMenuId?: string;
   }): Promise<{
     id: string;
     orderNumber: number;
+    revision?: number;
+    setMenus?: BillSetMenuState;
   }> {
-    return this.#request<{ id: string; orderNumber: number }>("/api/working-orders", "POST", {
+    return this.#request("/api/working-orders", "POST", {
       ...req,
       zoneId: req.zoneId ?? this.#serviceZoneId,
     });

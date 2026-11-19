@@ -1,3 +1,6 @@
+import type { BillSetMenuState } from "@waitron/shared";
+import type { OrderingCopy } from "../state/set-menus.js";
+import "../widgets/set-menu-counts.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/product-info.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { MenuState } from "../api/client.js";
@@ -257,6 +260,12 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) diningChoice: DiningChoice | null = null;
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
+  @property({ attribute: false }) setMenuBill?: BillSetMenuState;
+  @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = [];
+  @property({ attribute: false }) saveSetMenuCount?: (
+    menuId: string,
+    count: number,
+  ) => Promise<string | undefined>;
 
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
@@ -364,6 +373,19 @@ export class TillCounterScreen extends LitElement {
             this,
             this.stage === "collect" || this.busy || this.orderInFlight,
           )}
+          ${
+            this.stage === "order" &&
+            this.store.dining === "takeaway" &&
+            this.setMenuCopies.length > 0
+              ? html`<till-set-menu-counts
+                  .bill=${this.setMenuBill ?? null}
+                  .draft=${this.store.lines}
+                  .onSale=${this.setMenuCopies.map(({ copy }) => copy)}
+                  .busy=${this.store.editsLocked || this.busy || this.orderInFlight}
+                  .saveCount=${this.saveSetMenuCount}
+                ></till-set-menu-counts>`
+              : nothing
+          }
           <till-basket
             stacked
             .store=${this.store}

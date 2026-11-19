@@ -2175,7 +2175,7 @@ class ZoneOfferIndex {
     return this.live.map((offer) => menuOfferToTillProduct(offer, this.versions.get(offer.menuId)));
   }
 
-  ordering(bill: PartyBill): readonly OrderingCopy[] {
+  ordering(bill: Parameters<typeof orderingCopies>[0]): readonly OrderingCopy[] {
     return orderingCopies(bill, this.setMenus, this.#sellingVersions);
   }
 
@@ -3491,6 +3491,7 @@ export class TillApp extends LitElement {
   @state() private tableDepartmentName = "";
   /** Live offers drive refusal and refresh checks; a boundary's grid waits for an empty order. */
   readonly #counterOffers = new ZoneOfferIndex();
+  #counterSetMenuBill?: Pick<HeldOrder, "id" | "setMenus" | "setMenuCopies">;
   readonly #counterGridOffers = new ZoneOfferIndex();
   readonly #tableOffers = new ZoneOfferIndex();
   readonly #tableGridOffers = new ZoneOfferIndex();
@@ -10109,6 +10110,50 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.#pushDrill({ kind: "expo" });
   }
+
+  #changeCounterSetMenu = async (menuId: string, count: number): Promise<string | undefined> => {
+    const store = this.#store;
+    const zoneId = this.counterServiceZoneId;
+    if (zoneId === "" || store.dining !== "takeaway" || store.editsLocked || store.sending)
+      return t("table.error");
+    const id = store.id;
+    const visit = store.loadGeneration;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const bill = this.#counterSetMenuBill?.id === id ? this.#counterSetMenuBill : undefined;
+    const copies = this.#counterOffers.ordering(bill);
+    const unlock = store.lockEdits();
+    try {
+      const reply = store.persisted
+        ? await api
+            .setSetMenuCount(id, menuId, count, store.revision, this.#counterExpectedEdit(id))
+            .then(({ partyRevision, setMenus }) => ({ revision: partyRevision, setMenus }))
+        : await api.parkOrder({
+            id,
+            zoneId,
+            dining: "takeaway",
+            lines: [],
+            firstSetMenuId: menuId,
+          });
+      if (visit !== store.loadGeneration || session !== this.#operatorSession || api !== this.api)
+        return;
+      if (reply.revision === undefined || reply.setMenus === undefined) return t("table.error");
+      store.markPersisted(true);
+      store.markSaved(reply.revision);
+      const keys = new Set(reply.setMenus.copies.map(({ id }) => id));
+      this.#counterSetMenuBill = {
+        id,
+        setMenus: reply.setMenus,
+        setMenuCopies: copies.map(({ copy }) => copy).filter(({ key }) => keys.has(key)),
+      };
+    } catch (error) {
+      const params = error as ({ code?: string } & Parameters<typeof codeMessage>[2]) | null;
+      return codeMessage(params?.code ?? "server.internal", undefined, params ?? undefined);
+    } finally {
+      unlock();
+      this.requestUpdate();
+    }
+  };
 
   async #onParkOrder(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
     if (this.parking) return;
@@ -23308,7 +23353,12 @@ export class TillApp extends LitElement {
 
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
     if (tab === "counter") {
+      const bill =
+        this.#counterSetMenuBill?.id === this.#store.id ? this.#counterSetMenuBill : undefined;
       return html`<till-counter-screen
+        .setMenuBill=${bill?.setMenus}
+        .setMenuCopies=${this.#counterOffers.ordering(bill)}
+        .saveSetMenuCount=${this.#changeCounterSetMenu}
         .changeAvailability=${this.#availabilityFor(this.counterServiceZoneId)}
         .changeOptionAvailability=${this.#optionAvailabilityFor(this.counterServiceZoneId)}
         .api=${this.api}
