@@ -161,7 +161,7 @@ const documentChoice = (el: TillApp) =>
   el.shadowRoot!.querySelector("till-settlement-document-dialog");
 
 async function closeDocuments(el: TillApp): Promise<void> {
-  documentChoice(el)!.shadowRoot!.querySelector<HTMLElement>("[data-settlement-none]")!.click();
+  documentChoice(el)!.shadowRoot!.querySelector<HTMLElement>("[data-settlement-done]")!.click();
   await flush(el);
 }
 
@@ -3692,14 +3692,14 @@ describe("the document choice on a handheld", () => {
     expect(vi.mocked(api.finishTable).mock.calls[0]![0]).toBe("v1");
   });
 
-  it("None returns to the table's order without a new history entry", async () => {
+  it("Done returns to the table's order without a new history entry", async () => {
     const { el } = await threeShares(simplified());
     await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     const reads = vi.mocked(api.getPartyBills).mock.calls.length;
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     try {
-      inChoice(el, "[data-settlement-none]")!.click();
+      inChoice(el, "[data-settlement-done]")!.click();
       await flush(el);
 
       expect(documentChoice(el)).toBeNull();
@@ -3715,7 +3715,7 @@ describe("the document choice on a handheld", () => {
     }
   });
 
-  it("after None, Finish table refused because another bill still owes shows the table's refusal", async () => {
+  it("after Done, Finish table refused because another bill still owes shows the table's refusal", async () => {
     const { el } = await threeShares(simplified(), {
       finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
     });
@@ -3741,7 +3741,7 @@ describe("the document choice on a handheld", () => {
     ["not permitted", { code: "authorization.not_permitted" }],
     ["unanswered", new TypeError("Failed to fetch")],
   ] as const)(
-    "after None, Finish table refused (%s) says so where it can be seen",
+    "after Done, Finish table refused (%s) says so where it can be seen",
     async (_, refusal) => {
       const { el } = await threeShares(simplified(), {
         finishTable: vi.fn().mockRejectedValue(refusal),
@@ -3837,7 +3837,7 @@ describe("the document choice on a handheld", () => {
     expect(text(alert)).toBe(t("table.finish_bill_holds_money"));
   }
 
-  it("after None, Finish table with unserved paid dishes opens confirmation; refusing it because a bill owes shows the table's refusal", async () => {
+  it("after Done, Finish table with unserved paid dishes opens confirmation; refusing it because a bill owes shows the table's refusal", async () => {
     const el = await refusedAfterUnserved({ code: "party.bill_outstanding" });
 
     expect(documentChoice(el)).toBeNull();
@@ -3865,7 +3865,7 @@ describe("the document choice on a handheld", () => {
     },
   );
 
-  it("after None, Finish table refused because a bill holds money keeps the instruction on the table", async () => {
+  it("after Done, Finish table refused because a bill holds money keeps the instruction on the table", async () => {
     const { el } = await threeShares(simplified(), {
       finishTable: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
     });
@@ -3883,7 +3883,7 @@ describe("the document choice on a handheld", () => {
     holdsMoneyOnOrder(el);
   });
 
-  it("an unanswered print-status read leaves None usable, then Finish table sends once", async () => {
+  it("an unanswered print-status read leaves Done usable, then Finish table sends once", async () => {
     const { el } = await threeShares(simplified(), {
       getReceiptPrintStatus: vi.fn(() => new Promise(() => {})),
       finishTable: vi.fn(() => new Promise(() => {})),
@@ -3891,7 +3891,7 @@ describe("the document choice on a handheld", () => {
     await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     await documentChoice(el)!.updateComplete;
     expect(
-      inChoice(el, "[data-settlement-none]")!.shadowRoot!.querySelector("button")!.disabled,
+      inChoice(el, "[data-settlement-done]")!.shadowRoot!.querySelector("button")!.disabled,
     ).toBe(false);
 
     await finishFromTable(el);
@@ -4020,7 +4020,7 @@ describe("the document choice on a handheld", () => {
       expect(tableOrder(el)).not.toBeNull();
       expect(ticketView(el)).toBeNull();
       expect(vi.mocked(api.collectOrder)).toHaveBeenCalledOnce();
-      expect(vi.mocked(api.printReceipt)).not.toHaveBeenCalled();
+      expect(vi.mocked(api.printReceipt)).toHaveBeenCalledExactlyOnceWith("wo-4", { ifOwed: true });
     });
     it("a simplified invoice opens the document choice with its total", async () => {
       const { el } = await payPresented(simplified());
@@ -4196,7 +4196,7 @@ describe("the document choice on a handheld", () => {
     ["while the last table's party is still held", true],
     ["with no table held", false],
   ])(
-    "a counter order paid %s shows its own invoice number, and None goes home",
+    "a counter order paid %s shows its own invoice number, and Done goes home",
     async (_, tableHeld) => {
       const { el } = await payCounterOrder({ tableHeld });
 
@@ -4239,7 +4239,7 @@ describe("the document choice on a handheld", () => {
       status: "settled",
       outstanding: "0.00",
     });
-    const backButton = (el: TillApp) => inChoice(el, "[data-settlement-none]")!;
+    const backButton = (el: TillApp) => inChoice(el, "[data-settlement-done]")!;
     const firstDrawn = async (el: TillApp) => {
       await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
       await documentChoice(el)!.updateComplete;
@@ -4361,7 +4361,7 @@ describe("the document choice on a handheld", () => {
       );
     });
 
-    describe("Finish table refused after None", () => {
+    describe("Finish table refused after Done", () => {
       const billOnePaidAndRest = threeBills.map((bill) =>
         bill === billOne ? settled(bill) : bill,
       );
@@ -4809,7 +4809,7 @@ describe("the document choice on a handheld", () => {
       ]);
     });
 
-    it("None on a table of one bill keeps that bill and refreshes the table balance", async () => {
+    it("Done on a table of one bill keeps that bill and refreshes the table balance", async () => {
       const { el } = await payBillOne([billOne]);
       await firstDrawn(el);
 
@@ -4825,7 +4825,7 @@ describe("the document choice on a handheld", () => {
       expect(text(inOrder(tableOrder(el), "[data-party-outstanding]"))).toBe(money("0.00"));
     });
 
-    it("with a draft save refused at None, the table keeps its bill and says why", async () => {
+    it("with a draft save refused at Done, the table keeps its bill and says why", async () => {
       const { el } = await payBillOne(threeBills, () => new Promise<PartyBill[]>(() => {}));
       await firstDrawn(el);
       vi.mocked(api.saveDraft).mockRejectedValue(new TypeError("Failed to fetch"));

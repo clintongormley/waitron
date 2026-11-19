@@ -324,6 +324,7 @@ export function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     previewBillPayment: vi.fn().mockResolvedValue(cash("40.00", "10.00")),
     takeBillPayment: vi.fn(),
     reprint: vi.fn().mockResolvedValue(undefined),
+    printReceipt: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     ...adjustmentStubs(),
     listDrafts: drafts.listDrafts,
