@@ -7312,19 +7312,10 @@ describe("A1208 a retrieved counter order's portions", () => {
       emit(c, "place-order");
       return flush(el);
     };
-
-    it("leaves a newer basket alone when a save sent from an earlier one answers late", async () => {
-      let answerSave!: (value: { revision: number }) => void;
-      const updateWorkingOrder = vi.fn(
-        () =>
-          new Promise<{ revision: number }>((resolve) => {
-            answerSave = resolve;
-          }),
-      );
+    const twoBaskets = () => {
       const savedReads = reads();
-      const { el, c } = await retrieved({
+      return {
         ...savedReads,
-        updateWorkingOrder,
         listWorkingOrders: vi.fn().mockResolvedValue([{ ...summary(false), id: "wo-2" }]),
         retrieveWorkingOrder: vi.fn((id: string) =>
           id === "wo-2"
@@ -7343,11 +7334,9 @@ describe("A1208 a retrieved counter order's portions", () => {
               })
             : savedReads.retrieveWorkingOrder(),
         ),
-        placeOrder: vi.fn().mockRejectedValue({ code: "place.refused" }),
-      });
-      c.store.setLineQuantity(0, "4");
-      emit(c, "place-order");
-      await vi.waitFor(() => expect(answerSave).toBeTypeOf("function"));
+      };
+    };
+    async function moveToOtherBasket(el: TillApp, c: TillCounterScreen) {
       c.orderList = "parked";
       await c.updateComplete;
       const heldList = c.shadowRoot!.querySelector("till-held-orders")!;
@@ -7364,6 +7353,25 @@ describe("A1208 a retrieved counter order's portions", () => {
       expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
         ["Tostada", "1"],
       ]);
+    }
+
+    it("leaves a newer basket alone when a save sent from an earlier one answers late", async () => {
+      let answerSave!: (value: { revision: number }) => void;
+      const updateWorkingOrder = vi.fn(
+        () =>
+          new Promise<{ revision: number }>((resolve) => {
+            answerSave = resolve;
+          }),
+      );
+      const { el, c } = await retrieved({
+        ...twoBaskets(),
+        updateWorkingOrder,
+        placeOrder: vi.fn().mockRejectedValue({ code: "place.refused" }),
+      });
+      c.store.setLineQuantity(0, "4");
+      emit(c, "place-order");
+      await vi.waitFor(() => expect(answerSave).toBeTypeOf("function"));
+      await moveToOtherBasket(el, c);
       answerSave({ revision: 5 });
       await flush(el);
       expect(c.store.id).toBe("wo-2");
@@ -7383,51 +7391,17 @@ describe("A1208 a retrieved counter order's portions", () => {
               rejectSave = reject;
             }),
         );
-        const savedReads = reads();
         const { el, c } = await retrieved({
-          ...savedReads,
+          ...twoBaskets(),
           ...(action === "placement"
             ? { updateWorkingOrder: refuseLate }
             : { recordSale: refuseLate }),
-          listWorkingOrders: vi.fn().mockResolvedValue([{ ...summary(false), id: "wo-2" }]),
-          retrieveWorkingOrder: vi.fn((id: string) =>
-            id === "wo-2"
-              ? Promise.resolve({
-                  ...held(1),
-                  id: "wo-2",
-                  kitchenNote: { ...held(1).kitchenNote, scope: { workingOrderId: "wo-2" } },
-                  lines: [
-                    {
-                      workingOrderLineId: "t1",
-                      menuItemId: "menu-item-tostada-0",
-                      quantity: "1.000",
-                      product: toast,
-                    },
-                  ],
-                })
-              : savedReads.retrieveWorkingOrder(),
-          ),
         });
         c.store.setLineQuantity(0, "4");
         if (action === "placement") emit(c, "place-order");
         else emit(c, "confirm-payment", { method: "cash", amount: "10" });
         await vi.waitFor(() => expect(rejectSave).toBeTypeOf("function"));
-        c.orderList = "parked";
-        await c.updateComplete;
-        const heldList = c.shadowRoot!.querySelector("till-held-orders")!;
-        expect(heldList).not.toBeNull();
-        await heldList.updateComplete;
-        heldList.shadowRoot!.querySelector<HTMLElement>(".retrieve")!.click();
-        await flush(el);
-        const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
-        expect(question.open).toBe(true);
-        question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-        await flush(el);
-        expect(c.store.id).toBe("wo-2");
-        expect(c.store.revision).toBe(1);
-        expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
-          ["Tostada", "1"],
-        ]);
+        await moveToOtherBasket(el, c);
         rejectSave({ code: "working_order.out_of_date" });
         await flush(el);
         expect(c.store.id).toBe("wo-2");
@@ -7435,6 +7409,37 @@ describe("A1208 a retrieved counter order's portions", () => {
           ["Tostada", "1"],
         ]);
         expect(banner(el)?.textContent ?? "").not.toContain(t("held.changed_elsewhere"));
+      },
+    );
+
+    it.each(["cash", "reader"])(
+      "shows the earlier basket's receipt when its %s payment completes after switching baskets",
+      async (method) => {
+        let finish!: () => void;
+        const payment = new Promise<void>((resolve) => (finish = resolve));
+        const recordSale = vi.fn(async () => {
+          await payment;
+          return saleResult;
+        });
+        const pay = vi.fn(async () => {
+          await payment;
+          return { outcome: "captured", ticket: saleResult };
+        });
+        const { el, c } = await retrieved({ ...twoBaskets(), recordSale, pay });
+        c.store.setLineQuantity(0, "4");
+        if (method === "cash") emit(c, "confirm-payment", { method: "cash", amount: "10" });
+        else emit(c, "collect-card", {});
+        await vi.waitFor(() => expect(method === "cash" ? recordSale : pay).toHaveBeenCalledOnce());
+        await moveToOtherBasket(el, c);
+
+        finish();
+        await flush(el);
+
+        expect(ticket(el)?.result).toEqual(saleResult);
+        expect(c.store.id).toBe("wo-2");
+        expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+          ["Tostada", "1"],
+        ]);
       },
     );
 

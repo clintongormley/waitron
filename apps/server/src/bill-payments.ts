@@ -265,6 +265,10 @@ export interface BillPaymentResult {
 
 type SettledBill = { outcome: "settled"; balance: BillBalance; invoice: TillSaleResult };
 
+function settledBill(balance: BillBalance, invoice: TillSaleResult): SettledBill {
+  return { outcome: "settled", balance, invoice };
+}
+
 type PaymentRow = typeof billPayments.$inferSelect;
 type PaymentLineRow = typeof billPaymentLines.$inferSelect;
 type RefundRow = typeof billPaymentRefunds.$inferSelect;
@@ -1340,11 +1344,7 @@ async function closeZeroBillIn(
   diskFull: boolean,
 ): Promise<SettledBill> {
   if (balance.status === "settled") {
-    return {
-      outcome: "settled",
-      balance,
-      invoice: await readSettledTicket(deps.backend, tx, cfg, workingOrderId),
-    };
+    return settledBill(balance, await readSettledTicket(deps.backend, tx, cfg, workingOrderId));
   }
 
   const payable = await requirePayableBill(tx, workingOrderId);
@@ -1373,7 +1373,7 @@ async function closeZeroBillIn(
     operator.personId,
     reading.instant,
   );
-  return { outcome: "settled", balance: await readBillBalance(tx, workingOrderId), invoice };
+  return settledBill(await readBillBalance(tx, workingOrderId), invoice);
 }
 
 async function saveCounterBasket(
@@ -1497,11 +1497,10 @@ async function beginBillPayment(
     counterStatus = order?.status;
     if (counterStatus === "settled") {
       return {
-        settled: {
-          outcome: "settled",
-          balance: await readBillBalance(tx, workingOrderId),
-          invoice: await readSettledTicket(deps.backend, tx, cfg, workingOrderId),
-        },
+        settled: settledBill(
+          await readBillBalance(tx, workingOrderId),
+          await readSettledTicket(deps.backend, tx, cfg, workingOrderId),
+        ),
       };
     }
   }
@@ -1544,13 +1543,7 @@ async function beginBillPayment(
         { total, guestCount: req.guestCount },
       );
       if (invoice !== null) {
-        return {
-          settled: {
-            outcome: "settled",
-            balance: await readBillBalance(tx, workingOrderId, total),
-            invoice,
-          },
-        };
+        return { settled: settledBill(await readBillBalance(tx, workingOrderId, total), invoice) };
       }
     }
     throw new AppError("bill.payments_received", { workingOrderId });

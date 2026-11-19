@@ -7626,9 +7626,10 @@ export class TillApp extends LitElement {
         ...change,
       );
       this.#saleSendEnded(id);
-      if (session !== this.#operatorSession || basketVisit !== this.#store.loadGeneration) return;
+      if (session !== this.#operatorSession) return;
       this.result = result;
-      if (this.#store.id === id) this.#commitBasket(payload);
+      if (this.#store.id === id && basketVisit === this.#store.loadGeneration)
+        this.#commitBasket(payload);
       this.#showTicket(id, true, {
         surface: "counter",
         cashChange: result.tender.method === "cash" ? result.tender.change : null,
@@ -7819,7 +7820,12 @@ export class TillApp extends LitElement {
         id,
       );
       this.#saleSendEnded(id);
-      if (session !== this.#operatorSession || basketVisit !== this.#store.loadGeneration) return;
+      if (session !== this.#operatorSession) return;
+      if (out.outcome !== "captured" && out.outcome !== "partial") {
+        this.#cardOutcomes.set(id, { outcome: { ...out }, detail });
+        this.requestUpdate();
+      }
+      if (out.outcome !== "captured" && basketVisit !== this.#store.loadGeneration) return;
       if (out.slipPrintFailed) this.errorKey = slipFailureKey(out.outcome === "partial", "counter");
       if (out.outcome === "partial") {
         await this.#reloadCounterOrder(id, session);
@@ -7837,7 +7843,8 @@ export class TillApp extends LitElement {
       this.captureWarning = out.captureWarning ?? null;
       if (out.outcome === "captured") {
         this.result = out.ticket;
-        if (this.#store.id === id) this.#commitBasket(payload);
+        if (this.#store.id === id && basketVisit === this.#store.loadGeneration)
+          this.#commitBasket(payload);
         this.#showTicket(id, true, { surface: "counter", cashChange: null });
         paid = true;
       } else {
@@ -7865,10 +7872,6 @@ export class TillApp extends LitElement {
                   ? "locked"
                   : "open",
           };
-        }
-        if (session === this.#operatorSession) {
-          this.#cardOutcomes.set(id, { outcome: { ...out }, detail });
-          this.requestUpdate();
         }
       }
     } catch (error) {
