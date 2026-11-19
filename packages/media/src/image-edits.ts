@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { customThemes, nowIso, type Transaction, mediaBlobs, mediaImages } from "@waitron/db";
 import { departments } from "@waitron/venue-service";
 import { AppError, type ReceiptLogoRasters } from "@waitron/shared";
@@ -72,7 +72,10 @@ export async function saveImage(
   const logoMatch = eq(departments.receiptLogoImageId, current.id);
   if (pixelsChanged) {
     const users = await tx.select({ id: departments.id }).from(departments).where(logoMatch);
-    const themeMatch = eq(customThemes.logoLightImage, current.filename);
+    const themeMatch = and(
+      eq(customThemes.logoLightImage, current.filename),
+      sql`json_valid(${customThemes.theme})`,
+    );
     const themes = await tx.select({ id: customThemes.id }).from(customThemes).where(themeMatch);
     if ((users.length || themes.length) && (!rasters?.["58mm"] || !rasters["80mm"]))
       throw new Error("Receipt logo requires both printable pictures");

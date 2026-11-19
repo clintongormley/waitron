@@ -219,6 +219,16 @@ describe("validateThemeConfiguration", () => {
       });
     });
 
+    it.each([
+      ["a logo still in the document", { theme: JSON.stringify(WITH_LOGO) }],
+      ["a dark logo without a light one", { logo_dark_image: D }],
+    ])("refuses %s as custom_themes.theme", (_label, patch) => {
+      expect(refusal([{ ...themed(noLogo), ...patch }], images)).toMatchObject({
+        code: "setup.request_invalid",
+        params: { field: "custom_themes.theme" },
+      });
+    });
+
     const validTheme = themed(WITH_LOGO);
     const lightOnly = validTheme.theme as string;
     const escapedBrand = '"\\u0062randColor"';

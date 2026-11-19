@@ -54,7 +54,7 @@ async function threeThemes(tx: Transaction) {
   const dusk = JSON.stringify({ printedLogo: R1 });
   await addTheme(tx, "Day", day, a.filename);
   await addTheme(tx, "Dusk", dusk, b.filename, a.filename);
-  await addTheme(tx, "Broken", "{broken");
+  await addTheme(tx, "Broken", "{broken", a.filename);
   return { a, day, dusk };
 }
 
