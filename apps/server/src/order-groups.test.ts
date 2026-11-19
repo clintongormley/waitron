@@ -3013,6 +3013,7 @@ describe("a device as the firer", () => {
   }
 
   it("records the device, not a person, on a historical group release, and shows it as the sender", async () => {
+    await seedPerson(db, { id: ALEX, displayName: "Round operator" });
     const v = await setupVenue();
     const s = await specExample(v);
     const device = await firingDevice();
@@ -3028,6 +3029,7 @@ describe("a device as the firer", () => {
     expect(event).toMatchObject({ actorId: null, actorDeviceId: device.id });
     const read = await inTx((tx) => readCurrentOrders(tx, s.partyId));
     expect(read.groups.find((g) => g.id === s.mains)?.sentBy).toBe(device.label);
+    expect(read.groups.find((g) => g.id === s.drinks)?.sentBy).toBe("Round operator");
   });
 
   it("records the device when a group fires, keeping the device's id as the command's operator", async () => {

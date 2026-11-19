@@ -1406,6 +1406,7 @@ describe("readCurrentOrders (spec §4)", () => {
   });
 
   it("reads every group in sequence with each dish row's served count and kitchen state, across a paid bill, a split one and a later one", async () => {
+    await seedPerson(suite.db, { id: ALEX, displayName: "Round operator" });
     const v = await setupVenue();
     const s = await seated(v);
     const starters = await group(v, s.partyId, "fire", [
@@ -1478,7 +1479,7 @@ describe("readCurrentOrders (spec §4)", () => {
           firedAt: expect.any(String),
           remindAt: null,
           sentAt: expect.any(String),
-          sentBy: ALEX,
+          sentBy: "Round operator",
           rows: [
             row({
               netAmount: "8.00",
@@ -1554,7 +1555,7 @@ describe("readCurrentOrders (spec §4)", () => {
           firedAt: null,
           remindAt: null,
           sentAt: expect.any(String),
-          sentBy: ALEX,
+          sentBy: "Round operator",
           rows: [
             row({
               netAmount: "23.50",

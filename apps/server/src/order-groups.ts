@@ -2066,7 +2066,7 @@ export interface CurrentOrderGroup {
   remindAt: string | null;
   /** A fired group's firing; a held group's holding. */
   sentAt: string;
-  /** The name of the person or device that fired it, or the person who held it. */
+  /** The name of the person or device recorded as the sender, if one was recorded. */
   sentBy: string | null;
   rows: CurrentOrderRow[];
 }
@@ -2121,11 +2121,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       firedAt: orderGroups.firedAt,
       remindAt: orderGroups.remindAt,
       createdAt: orderGroups.createdAt,
-      sentBy: sql<string | null>`case
-        when ${orderGroups.state} = 'fired' and ${orderGroups.firedByDeviceId} is not null
-        then ${devices.label}
-        else ${persons.displayName}
-      end`,
+      sentBy: sql<string | null>`coalesce(${persons.displayName}, ${devices.label})`,
     })
     .from(orderGroups)
     .leftJoin(
