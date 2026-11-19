@@ -237,7 +237,7 @@ describe("reprintJobOn", () => {
       new Date("2026-11-14T04:00:00.000Z"),
       new AbortController().signal,
     );
-    expect((await jobRow(id)).payload.byteLength).toBe(0);
+    expect((await jobRow(id)).payload!.byteLength).toBe(0);
     expect(await links()).toEqual(before);
     expect((await refusal(id, target)).code).toBe("print_job.payload_expired");
   });
@@ -300,7 +300,7 @@ describe("reprintJobOn", () => {
     expect(await jobRow(first.jobId)).toMatchObject({
       printerId: target,
       resendOf: ticket,
-      payload: readPrintArea(stored)!.centredOn(dots(at80)),
+      payload: readPrintArea(stored!)!.centredOn(dots(at80)),
     });
     await setJob(first.jobId, { status: "done" });
     const wider = await printerAt(at80fine);
@@ -308,7 +308,7 @@ describe("reprintJobOn", () => {
     expect(await jobRow(second.jobId)).toMatchObject({
       printerId: wider,
       resendOf: ticket,
-      payload: readPrintArea(stored)!.centredOn(dots(at80fine)),
+      payload: readPrintArea(stored!)!.centredOn(dots(at80fine)),
     });
   });
 
@@ -320,7 +320,7 @@ describe("reprintJobOn", () => {
     expect(await jobRow(jobId)).toMatchObject({
       printerId: target,
       saleId: null,
-      payload: readPrintArea(stored)!.centredOn(dots(at80)),
+      payload: readPrintArea(stored!)!.centredOn(dots(at80)),
     });
   });
 
@@ -521,7 +521,7 @@ describe("the print queue's resend to another printer", () => {
       new Date("2026-11-14T04:00:00.000Z"),
       new AbortController().signal,
     );
-    expect((await jobRow(id)).payload.byteLength).toBe(0);
+    expect((await jobRow(id)).payload!.byteLength).toBe(0);
     const response = await printApi().request("/management-api/print-jobs", {
       headers: { cookie: venue.adminDashboard },
     });

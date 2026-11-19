@@ -352,13 +352,15 @@ async function printJobsFor(
 ): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    return tx
-      .select({
-        printerId: printJobs.printerId,
-        status: printJobs.status,
-        payload: printJobs.payload,
-      })
-      .from(printJobs);
+    return (
+      await tx
+        .select({
+          printerId: printJobs.printerId,
+          status: printJobs.status,
+          payload: printJobs.payload,
+        })
+        .from(printJobs)
+    ).map((job) => ({ ...job, payload: job.payload! }));
   });
 }
 
@@ -867,11 +869,11 @@ describe("receipt original and copy tracking", () => {
     expect(copies).toHaveLength(1);
     expect(drawers).toHaveLength(1);
     expect(drawers[0]!.receiptCopy).toBeNull();
-    expect(decodeTicket(new Uint8Array(originals[0]!.payload))).not.toContain("DUPLICADO");
-    expect(decodeTicket(new Uint8Array(copies[0]!.payload))).toContain("DUPLICADO");
+    expect(decodeTicket(new Uint8Array(originals[0]!.payload!))).not.toContain("DUPLICADO");
+    expect(decodeTicket(new Uint8Array(copies[0]!.payload!))).toContain("DUPLICADO");
     for (const job of [...originals, ...copies]) {
       expect(job.saleId).toBe(before[0]!.id);
-      expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
+      expect(opensDrawer(new Uint8Array(job.payload!))).toBe(false);
     }
     expect(
       await withTransaction(suite.db, (tx) =>
@@ -1822,8 +1824,8 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     ]);
     const kick = jobs.find((job) => job.kind === "drawer")!;
     expect(kick.saleId).toBeNull();
-    expect([...new Uint8Array(kick.payload)]).toEqual([...DRAWER_KICK]);
-    expect(opensDrawer(new Uint8Array(jobs.find((job) => job.kind === "document")!.payload))).toBe(
+    expect([...new Uint8Array(kick.payload!)]).toEqual([...DRAWER_KICK]);
+    expect(opensDrawer(new Uint8Array(jobs.find((job) => job.kind === "document")!.payload!))).toBe(
       false,
     );
     expect(await drawerOpensFor(cfg)).toEqual([
@@ -1924,7 +1926,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
       [receipt, "document"],
       [receipt, "document"],
     ]);
-    for (const job of jobs.slice(1)) expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
+    for (const job of jobs.slice(1)) expect(opensDrawer(new Uint8Array(job.payload!))).toBe(false);
     expect(await drawerOpensFor(cfg)).toHaveLength(1);
   });
 });
@@ -2425,7 +2427,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
           .orderBy(sql`rowid`),
       );
       const all = jobs
-        .map((job) => decodeTicket(new Uint8Array(job.payload)))
+        .map((job) => decodeTicket(new Uint8Array(job.payload!)))
         .filter((text) => text.includes("TOTAL"));
       const fresh = all.slice(seen);
       seen = all.length;
@@ -2508,7 +2510,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
                 .orderBy(sql`rowid`),
             )
           )
-            .map((job) => decodeTicket(new Uint8Array(job.payload)))
+            .map((job) => decodeTicket(new Uint8Array(job.payload!)))
             .filter((text) => text.includes("TOTAL")),
         stored: () =>
           inTx(v, (tx) =>
@@ -2981,7 +2983,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
         const jobs = await suite.db.select().from(printJobs);
         expect(jobs).toHaveLength(1);
         expect(jobs[0]).toMatchObject({ kind: "document", receiptCopy: true });
-        expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain(
+        expect(decodeTicket(new Uint8Array(jobs[0]!.payload!))).toContain(
           receiptLabelsFor(LOCALE).duplicate,
         );
         await suite.db
@@ -3190,7 +3192,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
       const jobs = await suite.db.select().from(printJobs);
       expect(jobs).toHaveLength(1);
-      expect(logos(jobs[0]!.payload)).toEqual([[0xf0, 0x0f]]);
+      expect(logos(jobs[0]!.payload!)).toEqual([[0xf0, 0x0f]]);
       expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
@@ -3216,8 +3218,8 @@ describe("automatic F1 receipt delivery enrollment", () => {
         generation: 1,
       }),
     ]);
-    expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).not.toContain("DUPLICADO");
-    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+    expect(decodeTicket(new Uint8Array(jobs[0]!.payload!))).not.toContain("DUPLICADO");
+    expect(opensDrawer(new Uint8Array(jobs[0]!.payload!))).toBe(false);
     await withTransaction(suite.db, (tx) =>
       enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId }),
     );
@@ -3257,13 +3259,26 @@ describe("automatic F1 receipt delivery enrollment", () => {
           designation: "original",
           status: "queued",
           generation: 1,
-          printJobId: null,
+          printJobId: medium === "a4" ? expect.any(String) : null,
           ...(medium === "email"
             ? { recipient: "customer@example.test", printerId: null }
             : { recipient: null, printerId: pagePrinterId }),
         }),
       ]);
-      expect(await suite.db.select().from(printJobs)).toEqual([]);
+      const jobs = await suite.db.select().from(printJobs);
+      expect(jobs).toEqual(
+        medium === "a4"
+          ? [
+              expect.objectContaining({
+                id: deliveries[0]!.printJobId,
+                kind: "a4",
+                printerId: pagePrinterId,
+                saleId,
+                payload: null,
+              }),
+            ]
+          : [],
+      );
       expect(await suite.db.select().from(drawerOpens)).toEqual([]);
       await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
       expect(await suite.db.select().from(invoiceDeliveries)).toEqual(deliveries);
@@ -3276,7 +3291,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       const completed = await suite.db.select().from(invoiceDeliveries);
       await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
       expect(await suite.db.select().from(invoiceDeliveries)).toEqual(completed);
-      expect(await suite.db.select().from(printJobs)).toEqual([]);
+      expect(await suite.db.select().from(printJobs)).toEqual(jobs);
       expect(await suite.db.select().from(sales)).toEqual(invoices);
       expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
     },
@@ -3381,7 +3396,9 @@ describe("automatic F1 receipt delivery enrollment", () => {
         status: "queued",
       }),
     ]);
-    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    expect(await suite.db.select().from(printJobs)).toMatchObject([
+      { kind: "a4", printerId: pagePrinterId, saleId, payload: null },
+    ]);
   });
 
   it("reports an unattributed staged A4 that names no staff member as a missing operator", async () => {
@@ -3436,11 +3453,11 @@ describe("automatic F1 receipt delivery enrollment", () => {
     const jobs = await suite.db.select().from(printJobs);
     expect(jobs).toHaveLength(1);
     expect(jobs[0]).toMatchObject({ kind: "document", saleId: null });
-    const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
+    const text = decodeTicket(new Uint8Array(jobs[0]!.payload!));
     expect(text).toContain(String(ticket.orderNumber));
     expect(text).not.toContain("FACTURA");
     expect(text).not.toContain("TOTAL");
-    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+    expect(opensDrawer(new Uint8Array(jobs[0]!.payload!))).toBe(false);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
       expect.objectContaining({ saleId, medium: "email", status: "queued" }),
     ]);
@@ -3590,7 +3607,7 @@ describe("department receipt presentation on thermal jobs", () => {
         .set({ receiptText: {}, receiptLogoImageId: null, receiptLogoRasters: null })
         .where(eq(departments.id, departmentId));
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
-      const logoBytes = (await documents()).map((job) => logos(job.payload));
+      const logoBytes = (await documents()).map((job) => logos(job.payload!));
       expect(logoBytes).toEqual(
         paperWidth === "58mm" ? [[[255, 255]], []] : [[[255, 255, 255]], []],
       );
@@ -3935,7 +3952,7 @@ describe("the theme's logo on thermal receipts", () => {
       await putThemeInUse(suite.db);
       await sell();
       const [job] = await documents();
-      expect(logos(job!.payload)).toEqual(paperWidth === "58mm" ? [[0xf0]] : [[0xf0, 0x0f]]);
+      expect(logos(job!.payload!)).toEqual(paperWidth === "58mm" ? [[0xf0]] : [[0xf0, 0x0f]]);
       expect(await fiscalRecordCount(cfg)).toBe(1);
     },
   );
@@ -3948,7 +3965,7 @@ describe("the theme's logo on thermal receipts", () => {
     await putThemeInUse(suite.db);
     await sell();
     const [job] = await documents();
-    expect(logos(job!.payload)).toEqual([[0xf0, 0x0f]]);
+    expect(logos(job!.payload!)).toEqual([[0xf0, 0x0f]]);
     expect(decodeTicket(job!.payload)).toContain("Retained own text");
     expect(await fiscalRecordCount(cfg)).toBe(1);
   });
@@ -3959,7 +3976,7 @@ describe("the theme's logo on thermal receipts", () => {
     await putThemeInUse(suite.db);
     await sell();
     const [job] = await documents();
-    expect(logos(job!.payload)).toEqual([[255, 255, 255]]);
+    expect(logos(job!.payload!)).toEqual([[255, 255, 255]]);
     expect(await fiscalRecordCount(cfg)).toBe(1);
   });
 
@@ -3975,7 +3992,7 @@ describe("the theme's logo on thermal receipts", () => {
     await putThemeInUse(suite.db);
     await sell();
     const [job] = await documents();
-    expect(logos(job!.payload)).toEqual([]);
+    expect(logos(job!.payload!)).toEqual([]);
     expect(decodeTicket(job!.payload)).toContain("Retained own text");
     expect(await fiscalRecordCount(cfg)).toBe(1);
   });
@@ -3992,7 +4009,7 @@ describe("the theme's logo on thermal receipts", () => {
       });
       await sell();
       const [job] = await documents();
-      expect(logos(job!.payload)).toEqual(paperWidth === "58mm" ? [[0xf0]] : []);
+      expect(logos(job!.payload!)).toEqual(paperWidth === "58mm" ? [[0xf0]] : []);
       const text = decodeTicket(job!.payload);
       expect(text).toContain("Mineral water");
       expect(text).toContain("TOTAL");
@@ -4007,7 +4024,7 @@ describe("the theme's logo on thermal receipts", () => {
       const themeId = await putThemeInUse(suite.db);
       const ticket = await sell();
       const [original] = await documents();
-      expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+      expect(logos(original!.payload!)).toEqual([[0xf0, 0x0f]]);
       const response = await saveThemeThroughRoute(
         suite.db,
         themeId,
@@ -4016,7 +4033,7 @@ describe("the theme's logo on thermal receipts", () => {
           : WAITRON_CHOICES,
       );
       expect(response.status).toBe(200);
-      expect(logos((await reprint(ticket)).payload)).toEqual([]);
+      expect(logos((await reprint(ticket)).payload!)).toEqual([]);
     },
   );
 
@@ -4025,17 +4042,20 @@ describe("the theme's logo on thermal receipts", () => {
     await putThemeInUse(suite.db);
     const ticket = await sell();
     const [original] = await documents();
-    expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+    expect(logos(original!.payload!)).toEqual([[0xf0, 0x0f]]);
     await putThemeInUse(suite.db, {
       printedLogo: { ...THEME_DOTS, "80mm": { widthDots: 8, heightDots: 1, data: "/w==" } },
     });
-    expect(logos((await reprint(ticket)).payload)).toEqual([[0xff]]);
+    expect(logos((await reprint(ticket)).payload!)).toEqual([[0xff]]);
     await suite.db.execute(sql`update custom_themes set in_use = null where in_use = 1`);
-    expect(logos((await reprint(ticket)).payload)).toEqual([]);
+    expect(logos((await reprint(ticket)).payload!)).toEqual([]);
   });
 
-  async function expectTextOnlyReprint(job: { payload: Uint8Array }, cfg: DeviceRequestConfig) {
-    expect(logos(job.payload)).toEqual([]);
+  async function expectTextOnlyReprint(
+    job: { payload: Uint8Array | null },
+    cfg: DeviceRequestConfig,
+  ) {
+    expect(logos(job.payload!)).toEqual([]);
     expect(decodeTicket(job.payload)).toContain("Mineral water");
     const lines = printedLines(job.payload).map((line) => line.trim().replace(/\s+/g, " "));
     expect(lines.find((line) => line.startsWith("TOTAL"))).toBe("TOTAL 1,50 €");
@@ -4051,7 +4071,7 @@ describe("the theme's logo on thermal receipts", () => {
       await putThemeInUse(suite.db);
       const ticket = await sell();
       const [original] = await documents();
-      expect(logos(original!.payload)).toEqual([[255, 255, 255]]);
+      expect(logos(original!.payload!)).toEqual([[255, 255, 255]]);
       let applied = false;
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {
@@ -4074,7 +4094,7 @@ describe("the theme's logo on thermal receipts", () => {
       await putThemeInUse(suite.db);
       const ticket = await sell();
       const [original] = await documents();
-      expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+      expect(logos(original!.payload!)).toEqual([[0xf0, 0x0f]]);
       let applied = false;
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {
@@ -4094,7 +4114,7 @@ describe("the theme's logo on thermal receipts", () => {
     await putThemeInUse(suite.db);
     const ticket = await sell();
     const [original] = await documents();
-    expect(logos(original!.payload)).toEqual([[0xf0, 0x0f]]);
+    expect(logos(original!.payload!)).toEqual([[0xf0, 0x0f]]);
     let hidden = false;
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {

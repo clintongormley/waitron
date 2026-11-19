@@ -1,3 +1,4 @@
+import { dateA4Job, readDeliveryAndClaim } from "./testing/a4-print-job.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -121,6 +122,7 @@ async function attempt(
     .update(invoiceDeliveries)
     .set({ nextAttemptAt: START.toISOString() })
     .where(eq(invoiceDeliveries.id, reserved.id));
+  if (medium === "a4") await dateA4Job(suite.db, reserved.printJobId!, START);
   if (status !== "queued") {
     const held = await withTransaction(suite.db, async (tx) => {
       const holder = medium === "email" ? "server-one" : v.agentId;
@@ -172,10 +174,7 @@ async function heldA4(v: Venue, saleId: string, hold: A4HoldCode, pagePrinterId 
       pagePrinterId,
     }),
   );
-  await suite.db
-    .update(invoiceDeliveries)
-    .set({ createdAt: START.toISOString(), nextAttemptAt: START.toISOString() })
-    .where(eq(invoiceDeliveries.id, reserved.id));
+  await dateA4Job(suite.db, reserved.printJobId!, START);
   const claim = (await withTransaction(suite.db, (tx) =>
     claimInvoiceDelivery(tx, reserved.id, v.agentId, START),
   ))!;
@@ -839,13 +838,7 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
         resolveDelivery: async () => ({ mode: "unconfigured" }),
         log: () => {},
       });
-    const row = async () =>
-      (
-        await suite.db
-          .select()
-          .from(invoiceDeliveries)
-          .where(eq(invoiceDeliveries.id, claim.deliveryId))
-      )[0]!;
+    const row = () => readDeliveryAndClaim(suite.db, eq(invoiceDeliveries.id, claim.deliveryId));
     const justBefore = new Date(START.getTime() + INVOICE_DELIVERY_LEASE_MS - 1);
     const lapsed = new Date(START.getTime() + INVOICE_DELIVERY_LEASE_MS);
 

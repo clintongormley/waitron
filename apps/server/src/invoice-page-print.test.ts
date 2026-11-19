@@ -1,7 +1,8 @@
+import { dateA4Job, readDeliveryAndClaim } from "./testing/a4-print-job.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   type A4HoldCode,
@@ -15,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
-import { createPrinter, enqueuePrintJob } from "@waitron/printing";
+import { createPrinter, enqueuePrintJob, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -26,8 +27,10 @@ import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
   reserveInvoiceDelivery,
+  tokenHash,
   type InvoiceDeliveryClaim,
 } from "./invoice-delivery.js";
+import { resendInvoicePrintJob } from "./invoice-print.js";
 import { registerPagePrinter } from "./page-printers.js";
 import {
   claimInvoicePagePrint,
@@ -149,10 +152,7 @@ async function queueA4(saleId: string, pagePrinterId: string, ms = 0) {
       pagePrinterId,
     }),
   );
-  await suite.db
-    .update(invoiceDeliveries)
-    .set({ createdAt: at(ms).toISOString(), nextAttemptAt: at(ms).toISOString() })
-    .where(eq(invoiceDeliveries.id, delivery.id));
+  await dateA4Job(suite.db, delivery.printJobId!, at(ms));
   return delivery.id;
 }
 
@@ -182,17 +182,77 @@ function expire(ms: number) {
   return withTransaction(suite.db, (tx) => expireInvoiceDeliveryClaims(tx, at(ms)));
 }
 
-async function row(id: string) {
-  const [found] = await suite.db
-    .select()
-    .from(invoiceDeliveries)
-    .where(eq(invoiceDeliveries.id, id));
-  return found!;
+function row(id: string) {
+  return readDeliveryAndClaim(suite.db, eq(invoiceDeliveries.id, id));
 }
 
 async function allRows() {
   return suite.db.select().from(invoiceDeliveries).orderBy(invoiceDeliveries.generation);
 }
+
+it("reserves a payload-free job and stores the office printer claim on it", async () => {
+  const v = await venue();
+  const office = await printer(v.agentOne);
+  const saleId = await fullInvoice(v.nodeId);
+  let tick = 0;
+  const iso = Date.prototype.toISOString;
+  const clock = vi
+    .spyOn(Date.prototype, "toISOString")
+    .mockImplementation(() => iso.call(at(tick++)));
+  const delivery = await withTransaction(suite.db, (tx) =>
+    reserveInvoiceDelivery(tx, saleId, {
+      requestKey: randomUUID(),
+      personId: "staff-one",
+      medium: "a4",
+      pagePrinterId: office,
+    }),
+  ).finally(() => clock.mockRestore());
+  expect(delivery.nextAttemptAt).toBe(delivery.createdAt);
+  const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.saleId, saleId));
+  expect(job).toMatchObject({
+    id: delivery.printJobId,
+    kind: "a4",
+    printerId: office,
+    payload: null,
+    createdAt: delivery.createdAt,
+    nextAttemptAt: null,
+  });
+
+  const pulled = (await pull(v.agentOne, tick)).job;
+  expect(pulled?.claim).toMatchObject({ deliveryId: delivery.id, holder: v.agentOne });
+  const [claimed] = await suite.db.select().from(printJobs).where(eq(printJobs.id, job!.id));
+  expect(claimed).toMatchObject({
+    status: "printing",
+    claimedBy: v.agentOne,
+    claimedAt: expect.any(String),
+    claimTokenHash: tokenHash(pulled!.claim.token),
+    attempts: 1,
+  });
+  const [stored] = await suite.db
+    .select()
+    .from(invoiceDeliveries)
+    .where(eq(invoiceDeliveries.id, delivery.id));
+  expect(stored).toMatchObject({
+    status: "sending",
+    attempts: 0,
+    claimedAt: null,
+    claimedBy: null,
+    claimedAgentId: null,
+    claimTokenHash: null,
+    printerHold: null,
+  });
+});
+
+it("refuses an office job in receipt resend", async () => {
+  const v = await venue();
+  const office = await printer(v.agentOne);
+  const id = await queueA4(await fullInvoice(v.nodeId), office);
+  const jobId = (await row(id)).printJobId!;
+
+  await expect(
+    withTransaction(suite.db, (tx) => resendInvoicePrintJob(tx, jobId, "staff-one", at(0))),
+  ).rejects.toMatchObject({ code: "print_job.not_found", params: { id: jobId } });
+});
 
 describe("claiming an A4 delivery", () => {
   it("hands its own agent the oldest due delivery with the printer's endpoint and records the claim", async () => {
@@ -213,6 +273,7 @@ describe("claiming an A4 delivery", () => {
     const job = await claim(v.agentOne, 5_000);
 
     expect(job).toEqual({
+      jobId: (await row(oldest)).printJobId,
       claim: { deliveryId: oldest, generation: 1, token: expect.any(String), holder: v.agentOne },
       saleId: oldestSale,
       designation: "original",
@@ -289,6 +350,7 @@ describe("claiming an A4 delivery", () => {
       ...before,
       status: "failed",
       failureCode: "printer_disabled",
+      attempts: MAX_DELIVERY_ATTEMPTS,
     });
     expect((await row(notDue)).status).toBe("queued");
   });
@@ -645,7 +707,10 @@ describe("reporting an A4 delivery", () => {
         });
       });
       expect(next).toMatchObject({ medium, designation: "duplicate", generation: 2 });
-      if (medium === "receipt") expect(await suite.db.select().from(printJobs)).toHaveLength(1);
+      if (medium === "receipt")
+        expect(
+          await suite.db.select().from(printJobs).where(eq(printJobs.kind, "document")),
+        ).toHaveLength(1);
     },
   );
 

@@ -215,7 +215,7 @@ describe("dashboard Print invoice", () => {
     );
     expect(printed!.id).not.toBe(delivery!.printJobId);
     expect(printed!.saleId).toBe(saleId);
-    expect(printed!.payload.byteLength).toBeGreaterThan(0);
+    expect(printed!.payload!.byteLength).toBeGreaterThan(0);
   });
 
   it("queues an A4 original on the chosen printer for a staff dashboard session", async () => {
@@ -595,12 +595,17 @@ describe("the order detail's delivery status", () => {
   it("shows what the office printer is holding the A4 for", async () => {
     const { billId, saleId } = await fullInvoice();
     const printed = await printInvoice(venue.adminDashboard, billId, printBody());
-    await inTx(venue, (tx) =>
-      tx
+    await inTx(venue, async (tx) => {
+      const [delivery] = await tx
         .update(invoiceDeliveries)
-        .set({ status: "sending", claimedAt: new Date().toISOString(), printerHold: "paper_out" })
-        .where(eq(invoiceDeliveries.saleId, saleId)),
-    );
+        .set({ status: "sending" })
+        .where(eq(invoiceDeliveries.saleId, saleId))
+        .returning({ printJobId: invoiceDeliveries.printJobId });
+      await tx
+        .update(printJobs)
+        .set({ status: "printing", claimedAt: new Date().toISOString(), printerHold: "paper_out" })
+        .where(eq(printJobs.id, delivery!.printJobId!));
+    });
     expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
       deliveries: {
         current: {
@@ -615,12 +620,17 @@ describe("the order detail's delivery status", () => {
   it("ends a lapsed A4 claim before reading", async () => {
     const { billId, saleId } = await fullInvoice();
     expect((await printInvoice(venue.adminDashboard, billId, printBody())).status).toBe(200);
-    await inTx(venue, (tx) =>
-      tx
+    await inTx(venue, async (tx) => {
+      const [delivery] = await tx
         .update(invoiceDeliveries)
-        .set({ status: "sending", claimedAt: new Date(Date.now() - 120_000).toISOString() })
-        .where(eq(invoiceDeliveries.saleId, saleId)),
-    );
+        .set({ status: "sending" })
+        .where(eq(invoiceDeliveries.saleId, saleId))
+        .returning({ printJobId: invoiceDeliveries.printJobId });
+      await tx
+        .update(printJobs)
+        .set({ status: "printing", claimedAt: new Date(Date.now() - 120_000).toISOString() })
+        .where(eq(printJobs.id, delivery!.printJobId!));
+    });
     expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
       deliveries: { current: { status: "unknown", failureCode: "timeout" } },
     });

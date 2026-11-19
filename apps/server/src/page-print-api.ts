@@ -7,6 +7,7 @@ import {
   invoiceDeliveries,
   isA4Printer,
   printers,
+  printJobs,
   withTransaction,
   type Database,
   type Transaction,
@@ -82,18 +83,32 @@ export const renderInvoicePage: RenderInvoicePage = async (document, format, res
   );
 };
 
-function readClaim(body: Record<string, unknown>, deliveryId: string, holder: string) {
-  const { generation, token } = body;
-  if (
-    typeof generation !== "number" ||
-    !Number.isSafeInteger(generation) ||
-    generation < 1 ||
-    typeof token !== "string" ||
-    !isUuid(token)
-  ) {
+function readPageClaim(body: Record<string, unknown>, id: string, holder: string) {
+  const { token } = body;
+  if (typeof token !== "string" || !isUuid(token)) {
     throw new AppError("management.request_invalid", { field: "claim" });
   }
-  return { deliveryId, generation, token, holder } satisfies InvoiceDeliveryClaim;
+  return { id, token, holder };
+}
+
+function testPageClaim({
+  id,
+  token,
+  holder,
+}: ReturnType<typeof readPageClaim>): InvoiceDeliveryClaim {
+  return { deliveryId: id, generation: 1, token, holder };
+}
+
+async function deliveryClaim(
+  tx: Transaction,
+  { id, token, holder }: ReturnType<typeof readPageClaim>,
+): Promise<InvoiceDeliveryClaim> {
+  const [delivery] = await tx
+    .select({ deliveryId: invoiceDeliveries.id, generation: invoiceDeliveries.generation })
+    .from(invoiceDeliveries)
+    .where(and(eq(invoiceDeliveries.medium, "a4"), eq(invoiceDeliveries.printJobId, id)));
+  if (!delivery) throw new AppError("invoice_delivery.claim_lost", {});
+  return { ...delivery, token, holder };
 }
 
 /** What an agent may report; `printer_disabled` and `switched` are the server's own. */
@@ -132,8 +147,7 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
     string,
     { format: PageFormat; resolutionDpi: number; touchedAt: number }
   >();
-  const keyOf = (claim: InvoiceDeliveryClaim) =>
-    `${claim.deliveryId}:${claim.generation}:${tokenHash(claim.token)}`;
+  const keyOf = (id: string, token: string) => `${id}:${tokenHash(token)}`;
   // A record untouched for longer than the lease belongs to a claim the database has also ended.
   const forgetLapsed = (at: Date) => {
     for (const [key, record] of claimed) {
@@ -142,9 +156,9 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
   };
   const claimFrom = async (c: Context) => {
     const { agentId } = await requireAgent({ db: deps.db }, c);
-    const id = requireUuidParam(c.req.param("id")!, "InvoiceDeliveryId");
+    const id = requireUuidParam(c.req.param("id")!, "PrintJobId");
     const body = await readJsonBody<Record<string, unknown>>(c);
-    return { claim: readClaim(body, id, agentId), body };
+    return { claim: readPageClaim(body, id, agentId), body };
   };
 
   app.post("/print-api/agent/page-jobs/claim", (c) =>
@@ -174,7 +188,6 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
         const { page, printer } = job;
         return c.json({
           id: page.id,
-          generation: page.generation,
           token: page.token,
           printer: {
             id: printer.id,
@@ -187,14 +200,13 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
           },
         });
       }
-      claimed.set(keyOf(job.claim), {
+      claimed.set(keyOf(job.jobId, job.claim.token), {
         format: job.printer.documentFormat,
         resolutionDpi: job.printer.resolutionDpi,
         touchedAt: at.getTime(),
       });
       return c.json({
-        id: job.claim.deliveryId,
-        generation: job.claim.generation,
+        id: job.jobId,
         token: job.claim.token,
         printer: job.printer,
       });
@@ -204,8 +216,8 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
   app.post("/print-api/agent/page-jobs/:id/document", (c) =>
     run(c, log, async () => {
       const { claim } = await claimFrom(c);
-      if (deps.testPages.knows(claim.deliveryId)) {
-        const held = deps.testPages.printing(claim);
+      if (deps.testPages.knows(claim.id)) {
+        const held = deps.testPages.printing(testPageClaim(claim));
         if (held === undefined) throw new AppError("invoice_delivery.claim_lost", {});
         const bytes = await render(
           { ...sampleDocument(deps.receiptQrText, held.receiptLocale), surface: "a4" },
@@ -219,20 +231,23 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
       }
       const at = now();
       forgetLapsed(at);
-      const record = claimed.get(keyOf(claim));
+      const record = claimed.get(keyOf(claim.id, claim.token));
       if (record === undefined) throw new AppError("invoice_delivery.claim_lost", {});
       const read = await withTransaction(deps.db, async (tx) => {
         await expireInvoiceDeliveryClaims(tx, at);
         const [current] = await tx
           .select({ saleId: invoiceDeliveries.saleId, designation: invoiceDeliveries.designation })
           .from(invoiceDeliveries)
+          .innerJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
           .where(
             and(
-              eq(invoiceDeliveries.id, claim.deliveryId),
+              eq(invoiceDeliveries.medium, "a4"),
+              eq(printJobs.id, claim.id),
+              eq(printJobs.kind, "a4"),
+              eq(printJobs.status, "printing"),
               eq(invoiceDeliveries.status, "sending"),
-              eq(invoiceDeliveries.generation, claim.generation),
-              eq(invoiceDeliveries.claimTokenHash, tokenHash(claim.token)),
-              eq(invoiceDeliveries.claimedBy, claim.holder),
+              eq(printJobs.claimTokenHash, tokenHash(claim.token)),
+              eq(printJobs.claimedBy, claim.holder),
             ),
           );
         if (current === undefined) return undefined;
@@ -258,8 +273,8 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
     run(c, log, async () => {
       const { claim, body } = await claimFrom(c);
       const hold = readHold(body);
-      if (deps.testPages.knows(claim.deliveryId)) {
-        if (!deps.testPages.renew(claim, hold)) {
+      if (deps.testPages.knows(claim.id)) {
+        if (!deps.testPages.renew(testPageClaim(claim), hold)) {
           throw new AppError("invoice_delivery.claim_lost", {});
         }
         return c.body(null, 204);
@@ -267,10 +282,10 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
       const at = now();
       // Before the transaction, so a claim poll that runs while this renewal waits for the write
       // lock does not drop the record of a claim the renewal then keeps.
-      const record = claimed.get(keyOf(claim));
+      const record = claimed.get(keyOf(claim.id, claim.token));
       if (record !== undefined) record.touchedAt = at.getTime();
-      const renewed = await withTransaction(deps.db, (tx) =>
-        renewInvoicePagePrint(tx, claim, hold, at),
+      const renewed = await withTransaction(deps.db, async (tx) =>
+        renewInvoicePagePrint(tx, await deliveryClaim(tx, claim), hold, at),
       );
       if (renewed === "lost") throw new AppError("invoice_delivery.claim_lost", {});
       return c.body(null, 204);
@@ -281,19 +296,19 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
     run(c, log, async () => {
       const { claim, body } = await claimFrom(c);
       const outcome = readOutcome(body);
-      if (deps.testPages.knows(claim.deliveryId)) {
-        if (!deps.testPages.report(claim, outcome)) {
+      if (deps.testPages.knows(claim.id)) {
+        if (!deps.testPages.report(testPageClaim(claim), outcome)) {
           throw new AppError("invoice_delivery.claim_lost", {});
         }
         return c.body(null, 204);
       }
-      const reported = await withTransaction(deps.db, (tx) =>
-        reportInvoicePagePrint(tx, claim, outcome, now()),
+      const reported = await withTransaction(deps.db, async (tx) =>
+        reportInvoicePagePrint(tx, await deliveryClaim(tx, claim), outcome, now()),
       );
       if (!reported.updated && !reported.historical && !reported.repeated) {
         throw new AppError("invoice_delivery.claim_lost", {});
       }
-      claimed.delete(keyOf(claim));
+      claimed.delete(keyOf(claim.id, claim.token));
       return c.body(null, 204);
     }),
   );

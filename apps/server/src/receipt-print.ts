@@ -501,7 +501,7 @@ function originalReceiptOf(
     id: string;
     status: "queued" | "printing" | "failed" | "done";
     attempts: number;
-    kind: "document" | "drawer";
+    kind: typeof printJobs.$inferSelect.kind;
     lastError: string | null;
     handedOverBy: string | null;
     handedOverAt: string | null;

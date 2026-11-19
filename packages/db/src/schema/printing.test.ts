@@ -181,7 +181,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     // `Buffer.isBuffer` is the discriminating assertion: a Buffer is also a Uint8Array, so
     // `instanceof Uint8Array` would hold either way.
     expect(Buffer.isBuffer(row!.payload)).toBe(false);
-    expect(new TextDecoder().decode(row!.payload)).toBe("Hello");
+    expect(new TextDecoder().decode(row!.payload!)).toBe("Hello");
   });
 
   it("print_jobs: stores a drawer command kind", async () => {

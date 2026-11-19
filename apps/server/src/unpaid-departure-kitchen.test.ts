@@ -485,7 +485,7 @@ describe("unpaid departure stops kitchen work", () => {
           }),
         ),
       ).toEqual({ claimed: 1, delivered: 1, failed: 0 });
-      expect(await received).toEqual(Buffer.from(job!.payload));
+      expect(await received).toEqual(Buffer.from(job!.payload!));
       expect(
         (await venue.db.select().from(printJobs).where(eq(printJobs.id, job!.id)))[0],
       ).toMatchObject({ status: "done", claimedBy: agentId });

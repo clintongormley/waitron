@@ -33,7 +33,7 @@ export type InvoicePrintJob = ClaimedJob & { invoiceClaim?: InvoicePrintClaim };
 export function assertPrintPayload(
   job: Pick<typeof printJobs.$inferSelect, "id" | "kind" | "saleId" | "payload">,
 ): void {
-  if (job.kind === "document" && job.payload.byteLength === 0) {
+  if (job.kind === "document" && job.payload?.byteLength === 0) {
     throw new AppError(
       job.saleId === null ? "print_job.payload_expired" : "print_job.sale_payload_expired",
       { id: job.id },
@@ -50,7 +50,8 @@ export async function resendInvoicePrintJob(
   to?: { printerId: string; payload: Uint8Array },
 ): Promise<{ jobId: string }> {
   const [job] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));
-  if (job === undefined) throw new AppError("print_job.not_found", { id: jobId });
+  if (job === undefined || job.kind === "a4")
+    throw new AppError("print_job.not_found", { id: jobId });
   assertPrintPayload(job);
   const [invoice] = await tx
     .select({

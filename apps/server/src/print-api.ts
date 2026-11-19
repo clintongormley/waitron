@@ -1703,7 +1703,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             preview:
               row.kind === "drawer"
                 ? null
-                : previewPrintJob(row.payload, {
+                : previewPrintJob(row.payload!, {
                     widthDots: textGrid(row.paperWidth, row.resolution).widthDots,
                   }),
           })),
@@ -1720,7 +1720,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const recentCompleted = tx
           .select({ id: printJobs.id })
           .from(printJobs)
-          .where(eq(printJobs.status, "done"))
+          .where(and(ne(printJobs.kind, "a4"), eq(printJobs.status, "done")))
           .orderBy(sql`${printJobs.deliveredAt} desc nulls last`, desc(printJobs.id))
           .limit(RECENT_JOBS_LIMIT);
         const recentFailed = tx
@@ -1728,6 +1728,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .from(printJobs)
           .where(
             and(
+              ne(printJobs.kind, "a4"),
               eq(printJobs.status, "failed"),
               or(eq(printJobs.kind, "drawer"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
             ),
@@ -1762,15 +1763,18 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .from(printJobs)
           .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
           .where(
-            or(
-              and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
-              and(
-                eq(printJobs.kind, "document"),
-                eq(printJobs.status, "failed"),
-                lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
+            and(
+              ne(printJobs.kind, "a4"),
+              or(
+                and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
+                and(
+                  eq(printJobs.kind, "document"),
+                  eq(printJobs.status, "failed"),
+                  lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
+                ),
+                inArray(printJobs.id, recentCompleted),
+                inArray(printJobs.id, recentFailed),
               ),
-              inArray(printJobs.id, recentCompleted),
-              inArray(printJobs.id, recentFailed),
             ),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id));
@@ -1918,7 +1922,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       assertPrintPayload(job);
       // The printer's setting now sizes only a job that draws no line of text.
       return c.json(
-        previewPrintJob(job.payload, {
+        previewPrintJob(job.payload!, {
           widthDots: textGrid(job.paperWidth, job.resolution).widthDots,
         }),
       );

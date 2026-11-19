@@ -1,3 +1,4 @@
+import { dateA4Job, readDeliveryAndClaim } from "./testing/a4-print-job.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -13,6 +14,7 @@ import {
   printerDocumentFormat,
   printerMedia,
   printers,
+  printJobs,
   printAgents,
   sales,
   taxpayer,
@@ -202,24 +204,16 @@ async function queueA4(saleId: string, pagePrinterId: string, ms = 0): Promise<s
       pagePrinterId,
     }),
   );
-  await suite.db
-    .update(invoiceDeliveries)
-    .set({ createdAt: at(ms).toISOString(), nextAttemptAt: at(ms).toISOString() })
-    .where(eq(invoiceDeliveries.id, delivery.id));
-  return delivery.id;
+  await dateA4Job(suite.db, delivery.printJobId!, at(ms));
+  return delivery.printJobId!;
 }
 
-async function row(id: string) {
-  const [found] = await suite.db
-    .select()
-    .from(invoiceDeliveries)
-    .where(eq(invoiceDeliveries.id, id));
-  return found!;
+function row(id: string) {
+  return readDeliveryAndClaim(suite.db, eq(invoiceDeliveries.printJobId, id));
 }
 
 type Job = {
   id: string;
-  generation: number;
   token: string;
   printer: {
     id: string;
@@ -250,7 +244,7 @@ async function claim(v: Venue, token = v.tokenOne): Promise<Job | undefined> {
   return (await res.json()) as Job;
 }
 
-const held = (job: Job) => ({ generation: job.generation, token: job.token });
+const held = (job: Job) => ({ token: job.token });
 
 function fetchDocument(v: Venue, id: string, body: unknown, token = v.tokenOne) {
   return post(v, `/print-api/agent/page-jobs/${id}/document`, token, body);
@@ -319,7 +313,7 @@ describe("agent authentication", () => {
     const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v), office);
     const before = await row(id);
-    const claimBody = { generation: 1, token: randomUUID() };
+    const claimBody = { token: randomUUID() };
     const [revoked] = await suite.db
       .insert(printAgents)
       .values({
@@ -367,7 +361,6 @@ describe("claiming a page job", () => {
 
     expect(job).toEqual({
       id,
-      generation: 1,
       token: expect.any(String),
       printer: {
         id: office,
@@ -423,7 +416,7 @@ describe("claiming a page job", () => {
 });
 
 describe("renewing a page job", () => {
-  it("keeps the claim alive past 60 s, and refuses another token, generation or agent", async () => {
+  it("keeps the claim alive past 60 s, and refuses another token or agent", async () => {
     const v = await venue();
     const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v), office);
@@ -437,7 +430,6 @@ describe("renewing a page job", () => {
     expect((await fetchDocument(v, id, held(job))).status).toBe(200);
 
     await lost(await renew(v, id, { ...held(job), token: randomUUID() }));
-    await lost(await renew(v, id, { ...held(job), generation: 2 }));
     await lost(await renew(v, id, held(job), v.tokenTwo));
     await lost(await renew(v, randomUUID(), held(job)));
   });
@@ -505,15 +497,9 @@ describe("renewing a page job", () => {
     const office = await printer(v.agentOne);
     const id = await queueA4(await fullInvoice(v), office);
     const job = (await claim(v))!;
-    const query = `?generation=${job.generation}&token=${job.token}`;
+    const query = `?token=${job.token}`;
 
-    for (const body of [
-      {},
-      { generation: "1", token: job.token },
-      { generation: 0, token: job.token },
-      { generation: 1.5, token: job.token },
-      { generation: 1, token: "not-a-uuid" },
-    ]) {
+    for (const body of [{}, { token: 1 }, { token: "not-a-uuid" }]) {
       const res = await renew(v, id, body);
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
@@ -634,7 +620,6 @@ describe("reporting a page job", () => {
     const job = (await claim(v))!;
 
     await lost(await result(v, id, { ...held(job), token: randomUUID(), status: "sent" }));
-    await lost(await result(v, id, { ...held(job), generation: 2, status: "sent" }));
     await lost(await result(v, id, { ...held(job), status: "sent" }, v.tokenTwo));
     expect((await row(id)).status).toBe("sending");
 
@@ -745,7 +730,6 @@ describe("the print agent's own client", () => {
     const job = claimed.value;
     expect(job).toEqual({
       id,
-      generation: 1,
       token: expect.any(String),
       printer: {
         id: office,
@@ -767,7 +751,7 @@ describe("the print agent's own client", () => {
     });
     expect(await row(id)).toMatchObject({ status: "sending", printerHold: "paper_out" });
     expect(
-      await agentClient.renewPageJob(url, v.tokenOne, { ...job, generation: 2 }, null),
+      await agentClient.renewPageJob(url, v.tokenOne, { ...job, id: randomUUID() }, null),
     ).toEqual({
       ok: false,
       failure: { kind: "claim_lost" },
@@ -850,7 +834,6 @@ describe("fetching a page job's document", () => {
     const job = (await claim(v))!;
 
     await lost(await fetchDocument(v, first, { ...held(job), token: randomUUID() }));
-    await lost(await fetchDocument(v, first, { ...held(job), generation: 2 }));
     await lost(await fetchDocument(v, first, held(job), v.tokenTwo));
     v.state.now = at(60_000);
     await lost(await fetchDocument(v, first, held(job)));
@@ -869,9 +852,8 @@ describe("fetching a page job's document", () => {
     const { job: unrecorded } = await withTransaction(suite.db, (tx) =>
       claimInvoicePagePrint(tx, v.agentOne, {}, at(60_000)),
     );
-    expect(unrecorded?.claim.deliveryId).toBe(direct);
-    const { generation, token } = unrecorded!.claim;
-    await lost(await fetchDocument(v, direct, { generation, token }));
+    expect(unrecorded?.jobId).toBe(direct);
+    await lost(await fetchDocument(v, direct, { token: unrecorded!.claim.token }));
     expect(rendered).toBe(1);
   });
 
@@ -882,17 +864,17 @@ describe("fetching a page job's document", () => {
     const job = (await claim(v))!;
     expect((await fetchDocument(v, id, held(job))).status).toBe(200);
 
-    // Guards against a future writer that claims a row again under a new token or generation.
+    // A different token or holder invalidates an in-memory render claim.
     const recorded = (await row(id)).claimTokenHash;
     await suite.db
-      .update(invoiceDeliveries)
+      .update(printJobs)
       .set({ claimTokenHash: "another claim" })
-      .where(eq(invoiceDeliveries.id, id));
+      .where(eq(printJobs.id, id));
     await lost(await fetchDocument(v, id, held(job)));
     await suite.db
-      .update(invoiceDeliveries)
-      .set({ claimTokenHash: recorded, generation: 2 })
-      .where(eq(invoiceDeliveries.id, id));
+      .update(printJobs)
+      .set({ claimTokenHash: recorded, claimedBy: v.agentTwo })
+      .where(eq(printJobs.id, id));
     await lost(await fetchDocument(v, id, held(job)));
   });
 

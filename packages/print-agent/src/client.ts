@@ -136,7 +136,6 @@ export type PageHold = (typeof PAGE_HOLDS)[number];
 /** An A4 invoice this agent holds a claim on, and the office printer it goes to. */
 export interface PageJob {
   id: string;
-  generation: number;
   token: string;
   printer: {
     id: string;
@@ -453,9 +452,6 @@ async function parsePageJob(response: Response): Promise<PageJob | null | undefi
   if (
     typeof b.id !== "string" ||
     !UUID.test(b.id) ||
-    typeof b.generation !== "number" ||
-    !Number.isSafeInteger(b.generation) ||
-    b.generation < 1 ||
     typeof b.token !== "string" ||
     !UUID.test(b.token) ||
     typeof printer.id !== "string" ||
@@ -478,7 +474,6 @@ async function parsePageJob(response: Response): Promise<PageJob | null | undefi
     return undefined;
   return {
     id: b.id,
-    generation: b.generation,
     token: b.token,
     printer: {
       id: printer.id,
@@ -655,6 +650,6 @@ function claimed(token: string, job: PageJob, extra: object) {
   return {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify({ generation: job.generation, token: job.token, ...extra }),
+    body: JSON.stringify({ token: job.token, ...extra }),
   };
 }

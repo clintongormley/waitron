@@ -128,6 +128,21 @@ function issue(tx: Transaction, orderId: string) {
   );
 }
 
+function officeJobs(kind: string, id: string | null, printerId: string, saleId: string) {
+  return kind === "a4"
+    ? [
+        expect.objectContaining({
+          id,
+          kind: "a4",
+          printerId,
+          saleId,
+          status: "queued",
+          payload: null,
+        }),
+      ]
+    : [];
+}
+
 describe("unpaid invoice delivery", () => {
   it.each(["email", "a4", "disabled-a4"] as const)(
     "reserves a synthetic %s original in the unpaid issuance transaction",
@@ -139,7 +154,8 @@ describe("unpaid invoice delivery", () => {
       const medium = kind === "email" ? "email" : "a4";
       async function assertIssued(tx: Transaction) {
         const result = await issue(tx, orderId);
-        expect(await tx.select().from(invoiceDeliveries)).toEqual([
+        const deliveries = await tx.select().from(invoiceDeliveries);
+        expect(deliveries).toEqual([
           expect.objectContaining({
             saleId: result.saleId,
             requestKey: `issuance:${result.saleId}`,
@@ -155,7 +171,10 @@ describe("unpaid invoice delivery", () => {
           }),
         ]);
         expect(await tx.select().from(saleSettlements)).toEqual([]);
-        expect(await tx.select().from(printJobs)).toEqual(before.jobs);
+        expect(await tx.select().from(printJobs)).toEqual([
+          ...before.jobs,
+          ...officeJobs(kind, deliveries[0]!.printJobId, pagePrinterId, result.saleId),
+        ]);
         const rows = await tx.select().from(sales).where(eq(sales.id, result.saleId));
         expect(rows).toEqual([
           expect.objectContaining({
@@ -236,7 +255,7 @@ describe("unpaid invoice delivery", () => {
   it.each(["email", "a4"] as const)(
     "issues the saved F1 and reserves its %s original without a synthetic selection",
     async (kind) => {
-      const { orderId } = await bill(kind);
+      const { orderId, pagePrinterId } = await bill(kind);
       const result = await withTransaction(suite.db, (tx) => issue(tx, orderId));
       const after = await withTransaction(suite.db, state);
       expect(after.sales).toEqual([
@@ -251,7 +270,9 @@ describe("unpaid invoice delivery", () => {
         }),
       ]);
       expect(after.settlements).toEqual([]);
-      expect(after.jobs).toEqual([]);
+      expect(after.jobs).toEqual(
+        officeJobs(kind, after.deliveries[0]!.printJobId, pagePrinterId, result.saleId),
+      );
     },
   );
 });

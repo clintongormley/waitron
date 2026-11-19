@@ -1,4 +1,4 @@
-import { and, eq, min, max, ne, sql } from "drizzle-orm";
+import { and, eq, min, max, ne } from "drizzle-orm";
 import {
   invoiceDeliveries,
   printJobs,
@@ -21,12 +21,10 @@ import type { MailKindOwner } from "./mail-sender.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 async function invoicePrintDeadline(db: Transaction, now: Date) {
-  const claimedAt = sql<string | null>`case when ${invoiceDeliveries.medium} = 'receipt'
-    then ${printJobs.claimedAt} else ${invoiceDeliveries.claimedAt} end`;
   const [claims] = await db
-    .select({ oldest: min(claimedAt), newest: max(claimedAt) })
+    .select({ oldest: min(printJobs.claimedAt), newest: max(printJobs.claimedAt) })
     .from(invoiceDeliveries)
-    .leftJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
+    .innerJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
     .where(and(ne(invoiceDeliveries.medium, "email"), eq(invoiceDeliveries.status, "sending")));
   if (!claims?.oldest) return { now: false, nextAt: null };
 

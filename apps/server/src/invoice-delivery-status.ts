@@ -9,10 +9,9 @@ import { deliversAsFullInvoice } from "./invoice-selection.js";
 
 export const invoiceDeliveryAttemptColumns = {
   ...getTableColumns(invoiceDeliveries),
-  claimedAt: sql<string | null>`case ${invoiceDeliveries.medium}
-    when 'receipt' then ${printJobs.claimedAt}
-    when 'email' then ${outgoingMail.claimedAt}
-    else ${invoiceDeliveries.claimedAt} end`,
+  claimedAt: sql<string | null>`case when ${invoiceDeliveries.medium} = 'email'
+    then ${outgoingMail.claimedAt} else ${printJobs.claimedAt} end`,
+  printerHold: printJobs.printerHold,
 };
 
 export const invoiceDeliveryMailJoin = and(

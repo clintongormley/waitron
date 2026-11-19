@@ -16,6 +16,7 @@ export type {
   UpdatePrinterInput,
 } from "./printers.js";
 export {
+  enqueueA4PrintJob,
   enqueuePrintJob,
   resendPrintJob,
   canResendPrintJob,

@@ -136,7 +136,7 @@ export async function reprintJobOn(
           sql`select ${linkedKitchenPrintoutSql(job.resendOf ?? job.id)} as linked`,
         )
       ).rows[0]?.linked === 1;
-    const area = linked ? readPrintArea(job.payload) : null;
+    const area = linked && job.payload !== null ? readPrintArea(job.payload) : null;
     const { rule, fits } = reprintRule(null, area?.widthDots ?? null);
     if (rule === "own" || area === null)
       throw new AppError("print_job.own_printer_only", { id: jobId });

@@ -28,7 +28,7 @@ import {
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedCashSale, seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashSessionToken,
   persons,
@@ -2209,7 +2209,7 @@ describe("printer cash-drawer calibration", () => {
     const { jobId } = (await response.json()) as { jobId: string };
     const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
     expect(job).toMatchObject({ printerId: id, kind: "drawer", status: "queued" });
-    expect([...job!.payload]).toEqual([0x1b, 0x70, 0, 25, 250]);
+    expect([...job!.payload!]).toEqual([0x1b, 0x70, 0, 25, 250]);
     const audit = await suite.db.execute<{
       person_id: string;
       device_id: string | null;
@@ -2350,7 +2350,7 @@ describe("mountPrintApi — management: test-print", () => {
           .select({ payload: printJobs.payload })
           .from(printJobs)
           .where(eq(printJobs.id, jobId));
-        expect([...new Uint8Array(job!.payload)]).toEqual([
+        expect([...new Uint8Array(job!.payload!)]).toEqual([
           ...formatTestPage({ locale: expected }),
         ]);
       } finally {
@@ -2391,7 +2391,7 @@ describe("mountPrintApi — management: test-print", () => {
       .select({ payload: printJobs.payload })
       .from(printJobs)
       .where(eq(printJobs.id, jobId));
-    expect([...new Uint8Array(job!.payload)]).toEqual([
+    expect([...new Uint8Array(job!.payload!)]).toEqual([
       ...formatSampleReceipt(settings, undefined, "es-ES"),
     ]);
   });
@@ -2411,7 +2411,7 @@ describe("mountPrintApi — management: test-print", () => {
       .select({ payload: printJobs.payload })
       .from(printJobs)
       .where(eq(printJobs.id, jobId));
-    const payload = new Uint8Array(job!.payload);
+    const payload = new Uint8Array(job!.payload!);
     expect([...payload]).toEqual([...formatSampleReceipt(settings, words, "es-ES")]);
     expect(printedLines(payload).map((line) => line.trim())).toContain("LEG-Y");
   });
@@ -2477,7 +2477,7 @@ describe("mountPrintApi — management: test-print", () => {
         .select({ payload: printJobs.payload })
         .from(printJobs)
         .where(eq(printJobs.id, jobId));
-      expect([...new Uint8Array(job!.payload)]).toEqual([
+      expect([...new Uint8Array(job!.payload!)]).toEqual([
         ...formatTestPage({ locale: venueLocale }),
       ]);
     },
@@ -2524,7 +2524,7 @@ describe("mountPrintApi — management: print-test-page", () => {
       .select({ id: printJobs.id, kind: printJobs.kind, payload: printJobs.payload })
       .from(printJobs)
       .where(eq(printJobs.printerId, printerId));
-    return rows.map((row) => ({ ...row, payload: new Uint8Array(row.payload) }));
+    return rows.map((row) => ({ ...row, payload: new Uint8Array(row.payload!) }));
   }
 
   it("prints calibration in the committed venue zone without remounting the routes", async () => {
@@ -2700,6 +2700,23 @@ describe("mountPrintApi — management: print-test-page", () => {
 });
 
 describe("mountPrintApi — management: recent jobs", () => {
+  async function officeHistory(status: "done" | "failed") {
+    await withTransaction(suite.db, async (tx) => {
+      const printerId = await insertA4Printer(tx);
+      const { saleId } = await seedCashSale(tx);
+      const at = "2100-01-01T00:00:00.000Z";
+      await tx.insert(printJobs).values({
+        printerId,
+        saleId,
+        kind: "a4",
+        status,
+        createdAt: at,
+        attempts: MAX_DELIVERY_ATTEMPTS,
+        deliveredAt: status === "done" ? at : null,
+      });
+    });
+  }
+
   it("shows Demo paper and drawer openings newest first, only to managers in practice mode", async () => {
     const app = mountApp({ practiceMode: true });
     const printerId = await createUsbPrinter(app, "WAITRON-DEMO-PRINTER", "Demo printer");
@@ -2743,7 +2760,7 @@ describe("mountPrintApi — management: recent jobs", () => {
       { kind: "document", text: "Kitchen ticket\n" },
     ]);
     expect(
-      (await suite.db.select().from(printJobs).where(eq(printJobs.id, receipt)))[0]!.payload
+      (await suite.db.select().from(printJobs).where(eq(printJobs.id, receipt)))[0]!.payload!
         .byteLength,
     ).toBe(0);
     await withTransaction(suite.db, (tx) =>
@@ -2757,7 +2774,7 @@ describe("mountPrintApi — management: recent jobs", () => {
       "document",
     ]);
     expect(
-      (await suite.db.select().from(printJobs).where(eq(printJobs.id, drawer.jobId)))[0]!.payload
+      (await suite.db.select().from(printJobs).where(eq(printJobs.id, drawer.jobId)))[0]!.payload!
         .byteLength,
     ).toBe(0);
   });
@@ -3000,6 +3017,7 @@ describe("mountPrintApi — management: recent jobs", () => {
           }),
         )
         .returning({ id: printJobs.id, deliveredAt: printJobs.deliveredAt });
+      await officeHistory("done");
       const result = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,
       });
@@ -3073,6 +3091,7 @@ describe("mountPrintApi — management: recent jobs", () => {
           })),
         )
         .returning({ id: printJobs.id, createdAt: printJobs.createdAt });
+      await officeHistory("failed");
       const response = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,
       });

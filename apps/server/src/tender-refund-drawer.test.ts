@@ -150,7 +150,7 @@ describe("settled-tender refund audited drawer", () => {
     expect(await jobs()).toEqual([
       expect.objectContaining({ printerId: drawerId, kind: "drawer", saleId: null }),
     ]);
-    expect([...(await jobs())[0]!.payload]).toEqual([0x1b, 0x70, 0x00, 0x19, 0xfa]);
+    expect([...(await jobs())[0]!.payload!]).toEqual([0x1b, 0x70, 0x00, 0x19, 0xfa]);
   });
   it("uses an explicit drawer choice independently of the receipt choice", async () => {
     await setPrinterListsForTest(store.db, profileId, {

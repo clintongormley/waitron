@@ -3,16 +3,18 @@ import {
   invoiceDeliveries,
   isA4Printer,
   printers,
+  printJobs,
   type A4FailureCode,
   type A4HoldCode,
   type Transaction,
 } from "@waitron/db";
 import {
+  a4DeliveryClaim,
   claimInvoiceDelivery,
-  deliveryDue,
+  dueA4Print,
+  endA4PrintJobs,
   expireInvoiceDeliveryClaims,
   reportInvoiceDelivery,
-  tokenHash,
   type InvoiceDeliveryClaim,
 } from "./invoice-delivery.js";
 
@@ -22,6 +24,7 @@ export type A4DeliveryOutcome =
   { status: "sent" } | { status: "failed" | "unknown"; failureCode: A4FailureCode };
 
 export type PagePrintJob = {
+  jobId: string;
   claim: InvoiceDeliveryClaim;
   saleId: string;
   designation: "original" | "duplicate";
@@ -52,46 +55,47 @@ export async function claimInvoicePagePrint(
   const busyPrinterIds = (
     await tx
       .selectDistinct({ id: printers.id })
-      .from(invoiceDeliveries)
-      .innerJoin(printers, and(isA4Printer(), eq(printers.id, invoiceDeliveries.printerId)))
-      .where(and(eq(invoiceDeliveries.medium, "a4"), eq(invoiceDeliveries.status, "sending")))
+      .from(printJobs)
+      .innerJoin(printers, and(isA4Printer(), eq(printers.id, printJobs.printerId)))
+      .where(and(eq(printJobs.kind, "a4"), eq(printJobs.status, "printing")))
   ).map(({ id }) => id);
   const skipped = [...busyPrinterIds, ...(ctx.exceptPrinterIds ?? [])];
-  const due = and(eq(invoiceDeliveries.status, "queued"), deliveryDue(now));
-  await tx
+  const due = dueA4Print(now);
+  const disabled = tx
+    .select({ id: printJobs.id })
+    .from(printJobs)
+    .innerJoin(printers, and(isA4Printer(), eq(printers.id, printJobs.printerId)))
+    .where(and(due, eq(printers.active, false)));
+  const ended = await tx
     .update(invoiceDeliveries)
     .set({ status: "failed", failureCode: "printer_disabled" })
     .where(
-      and(
-        due,
-        inArray(
-          invoiceDeliveries.printerId,
-          tx
-            .select({ id: printers.id })
-            .from(printers)
-            .where(and(isA4Printer(), eq(printers.active, false))),
-        ),
-      ),
-    );
+      and(eq(invoiceDeliveries.status, "queued"), inArray(invoiceDeliveries.printJobId, disabled)),
+    )
+    .returning({ printJobId: invoiceDeliveries.printJobId });
+  await endA4PrintJobs(tx, ended, "printer_disabled");
   const [next] = await tx
-    .select({ delivery: invoiceDeliveries, printer: pagePrinterColumns })
-    .from(invoiceDeliveries)
-    .innerJoin(printers, and(isA4Printer(), eq(printers.id, invoiceDeliveries.printerId)))
+    .select({ jobId: printJobs.id, delivery: invoiceDeliveries, printer: pagePrinterColumns })
+    .from(printJobs)
+    .innerJoin(invoiceDeliveries, eq(invoiceDeliveries.printJobId, printJobs.id))
+    .innerJoin(printers, and(isA4Printer(), eq(printers.id, printJobs.printerId)))
     .where(
       and(
         due,
+        eq(invoiceDeliveries.status, "queued"),
         eq(printers.agentId, agentId),
         eq(printers.active, true),
         skipped.length === 0 ? undefined : notInArray(printers.id, skipped),
       ),
     )
-    .orderBy(asc(invoiceDeliveries.createdAt), sql`${invoiceDeliveries}.rowid`)
+    .orderBy(asc(printJobs.createdAt), sql`${printJobs}.rowid`)
     .limit(1);
   if (next === undefined) return { job: undefined, busyPrinterIds };
   const claim = await claimInvoiceDelivery(tx, next.delivery.id, agentId, now);
   const printer = next.printer as PagePrinter;
   return {
     job: {
+      jobId: next.jobId,
       claim: claim!,
       saleId: next.delivery.saleId,
       designation: next.delivery.designation,
@@ -120,20 +124,15 @@ export async function renewInvoicePagePrint(
   now = new Date(),
 ): Promise<"renewed" | "lost"> {
   await expireInvoiceDeliveryClaims(tx, now);
+  const activeClaim = tx
+    .select({ id: invoiceDeliveries.printJobId })
+    .from(invoiceDeliveries)
+    .where(and(a4DeliveryClaim(claim), eq(invoiceDeliveries.status, "sending")));
   const renewed = await tx
-    .update(invoiceDeliveries)
+    .update(printJobs)
     .set({ claimedAt: now.toISOString(), printerHold: hold })
-    .where(
-      and(
-        eq(invoiceDeliveries.id, claim.deliveryId),
-        eq(invoiceDeliveries.medium, "a4"),
-        eq(invoiceDeliveries.status, "sending"),
-        eq(invoiceDeliveries.generation, claim.generation),
-        eq(invoiceDeliveries.claimTokenHash, tokenHash(claim.token)),
-        eq(invoiceDeliveries.claimedBy, claim.holder),
-      ),
-    )
-    .returning({ id: invoiceDeliveries.id });
+    .where(and(eq(printJobs.status, "printing"), inArray(printJobs.id, activeClaim)))
+    .returning({ id: printJobs.id });
   return renewed.length === 0 ? "lost" : "renewed";
 }
 
@@ -158,14 +157,6 @@ export async function reportInvoicePagePrint(
   const [reported] = await tx
     .select({ id: invoiceDeliveries.id })
     .from(invoiceDeliveries)
-    .where(
-      and(
-        eq(invoiceDeliveries.id, claim.deliveryId),
-        eq(invoiceDeliveries.generation, claim.generation),
-        eq(invoiceDeliveries.claimTokenHash, tokenHash(claim.token)),
-        eq(invoiceDeliveries.claimedBy, claim.holder),
-        isNotNull(invoiceDeliveries.reportedAt),
-      ),
-    );
+    .where(and(a4DeliveryClaim(claim), isNotNull(invoiceDeliveries.reportedAt)));
   return { updated: false, historical: false, repeated: reported !== undefined };
 }

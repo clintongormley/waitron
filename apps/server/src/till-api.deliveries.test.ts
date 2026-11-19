@@ -8,7 +8,7 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
@@ -528,7 +528,7 @@ async function jobsOf(saleId: string) {
   return suite.db
     .select()
     .from(printJobs)
-    .where(eq(printJobs.saleId, saleId))
+    .where(and(eq(printJobs.saleId, saleId), ne(printJobs.kind, "a4")))
     .orderBy(sql`${printJobs}.rowid`);
 }
 
@@ -544,9 +544,9 @@ async function agentClaims(v: Venue, now = new Date()): Promise<PagePrintJob> {
 async function lapsedClaim(v: Venue) {
   const job = await agentClaims(v);
   await suite.db
-    .update(invoiceDeliveries)
+    .update(printJobs)
     .set({ claimedAt: new Date(Date.now() - 61_000).toISOString() })
-    .where(eq(invoiceDeliveries.id, job.claim.deliveryId));
+    .where(eq(printJobs.id, job.jobId));
 }
 
 /** A receipt original for the sale on the venue's receipt printer, set to `set`. */
@@ -1451,6 +1451,11 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/to-receipt (paper instead)"
         generation: 2,
       }),
     ]);
+    const [ended] = await suite.db
+      .select()
+      .from(printJobs)
+      .where(eq(printJobs.id, rows[0]!.printJobId!));
+    expect(ended).toMatchObject({ kind: "a4", status: "failed", lastError: "switched" });
     expect(answer.body).toMatchObject({
       id: rows[1]!.id,
       medium: "receipt",
@@ -1580,10 +1585,11 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/to-receipt (paper instead)"
   it("refuses a waiting A4 row that records a claim, leaving it waiting", async () => {
     const v = await venue();
     const { orderId, saleId, a4 } = await queuedA4(v);
+    const [delivery] = await deliveryRows(saleId);
     await suite.db
-      .update(invoiceDeliveries)
+      .update(printJobs)
       .set({ claimedAt: new Date().toISOString() })
-      .where(eq(invoiceDeliveries.id, a4));
+      .where(eq(printJobs.id, delivery!.printJobId!));
     const rows = await deliveryRows(saleId);
     expect(await toReceipt(v, orderId, a4)).toEqual(refusal(409, "invoice_delivery.active"));
     expect(await deliveryRows(saleId)).toEqual(rows);

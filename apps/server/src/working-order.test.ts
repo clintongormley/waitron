@@ -6944,12 +6944,14 @@ describe("correction slips on line changes and cancellations (A6)", () => {
   }
 
   /** Read print-job ids for the before/after enqueue comparison. */
-  function jobRows(
+  async function jobRows(
     tx: Transaction,
   ): Promise<{ id: string; printerId: string; payload: Uint8Array }[]> {
-    return tx
-      .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
-      .from(printJobs);
+    return (
+      await tx
+        .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
+        .from(printJobs)
+    ).map((job) => ({ ...job, payload: job.payload! }));
   }
 
   it("(c) voiding a FIRED line enqueues ONE VOID slip at that station's printer", async () => {

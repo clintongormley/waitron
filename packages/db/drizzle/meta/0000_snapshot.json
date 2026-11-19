@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7e4340fc-a329-4be9-a170-9b3e0e30b8ad",
+  "id": "959941d6-7c89-4e8b-937c-338ea89efdd8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5649,7 +5649,7 @@
           "name": "payload",
           "type": "blob",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "kind": {
@@ -5727,6 +5727,13 @@
         },
         "claim_token_hash": {
           "name": "claim_token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "printer_hold": {
+          "name": "printer_hold",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -5878,11 +5885,27 @@
       "checkConstraints": {
         "print_jobs_kind_ck": {
           "name": "print_jobs_kind_ck",
-          "value": "\"print_jobs\".\"kind\" in ('document', 'drawer')"
+          "value": "\"print_jobs\".\"kind\" in ('document', 'drawer', 'a4')"
         },
         "print_jobs_status_ck": {
           "name": "print_jobs_status_ck",
           "value": "\"print_jobs\".\"status\" in ('queued', 'printing', 'done', 'failed')"
+        },
+        "print_jobs_payload_ck": {
+          "name": "print_jobs_payload_ck",
+          "value": "(\"print_jobs\".\"kind\" = 'a4') = (\"print_jobs\".\"payload\" is null)"
+        },
+        "print_jobs_a4_sale_ck": {
+          "name": "print_jobs_a4_sale_ck",
+          "value": "\"print_jobs\".\"kind\" <> 'a4' or \"print_jobs\".\"sale_id\" is not null"
+        },
+        "print_jobs_printer_hold_ck": {
+          "name": "print_jobs_printer_hold_ck",
+          "value": "\"print_jobs\".\"printer_hold\" in ('paper_jam', 'cover_open', 'paper_out', 'tray_missing', 'ink_or_toner_out', 'output_full', 'paused', 'stopped')"
+        },
+        "print_jobs_a4_hold_ck": {
+          "name": "print_jobs_a4_hold_ck",
+          "value": "\"print_jobs\".\"printer_hold\" is null or \"print_jobs\".\"kind\" = 'a4'"
         },
         "print_jobs_handover_pair_ck": {
           "name": "print_jobs_handover_pair_ck",

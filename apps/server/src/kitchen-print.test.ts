@@ -145,14 +145,16 @@ function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promi
 async function printJobsFor(
   tx: Transaction,
 ): Promise<{ id: string; printerId: string; status: string; payload: Uint8Array }[]> {
-  return tx
-    .select({
-      id: printJobs.id,
-      printerId: printJobs.printerId,
-      status: printJobs.status,
-      payload: printJobs.payload,
-    })
-    .from(printJobs);
+  return (
+    await tx
+      .select({
+        id: printJobs.id,
+        printerId: printJobs.printerId,
+        status: printJobs.status,
+        payload: printJobs.payload,
+      })
+      .from(printJobs)
+  ).map((job) => ({ ...job, payload: job.payload! }));
 }
 
 /** The dot widths of a payload's drawn lines of text. */

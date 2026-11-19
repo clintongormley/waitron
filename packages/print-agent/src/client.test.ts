@@ -750,7 +750,6 @@ const PRINTER = {
 } as const;
 const PAGE_JOB: PageJob = {
   id: DELIVERY,
-  generation: 3,
   token: CLAIM_TOKEN,
   printer: PRINTER,
 };
@@ -760,9 +759,7 @@ describe("createClient — page jobs", () => {
   it("claims with the Bearer and reads the claim and its printer", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(
-        reply(200, { id: DELIVERY, generation: 3, token: CLAIM_TOKEN, printer: PRINTER }),
-      );
+      .mockResolvedValue(reply(200, { id: DELIVERY, token: CLAIM_TOKEN, printer: PRINTER }));
     const client = createClient({ fetch: fetchImpl });
     expect(await client.claimPageJob(URL_A, "a1.s")).toEqual({ ok: true, value: PAGE_JOB });
     const [url, init] = fetchImpl.mock.calls[0]!;
@@ -778,8 +775,6 @@ describe("createClient — page jobs", () => {
 
   it.each([
     ["a non-uuid id", { id: "d1" }],
-    ["a generation below 1", { generation: 0 }],
-    ["a fractional generation", { generation: 1.5 }],
     ["a non-uuid token", { token: "t" }],
     ["no printer", { printer: null }],
     ["a printer port of 0", { printer: { ...PRINTER, port: 0 } }],
@@ -794,7 +789,6 @@ describe("createClient — page jobs", () => {
     const client = createClient({
       fetch: stub(200, {
         id: DELIVERY,
-        generation: 3,
         token: CLAIM_TOKEN,
         printer: PRINTER,
         ...change,
@@ -823,7 +817,7 @@ describe("createClient — page jobs", () => {
     expect(init.method).toBe("POST");
     expect(init.headers.authorization).toBe("Bearer a1.s");
     expect(init.headers["content-type"]).toBe("application/json");
-    expect(JSON.parse(init.body as string)).toEqual({ generation: 3, token: CLAIM_TOKEN });
+    expect(JSON.parse(init.body as string)).toEqual({ token: CLAIM_TOKEN });
   });
 
   it("waits longer for the document than for any other call", async () => {
@@ -865,7 +859,7 @@ describe("createClient — page jobs", () => {
       expect(url).toBe(`${URL_A}/print-api/agent/page-jobs/${DELIVERY}/renew`);
       expect(init.method).toBe("POST");
       expect(init.headers.authorization).toBe("Bearer a1.s");
-      expect(JSON.parse(init.body as string)).toEqual({ generation: 3, token: CLAIM_TOKEN, hold });
+      expect(JSON.parse(init.body as string)).toEqual({ token: CLAIM_TOKEN, hold });
     },
   );
 
@@ -885,7 +879,6 @@ describe("createClient — page jobs", () => {
     expect(init.method).toBe("POST");
     expect(init.headers.authorization).toBe("Bearer a1.s");
     expect(JSON.parse(init.body as string)).toEqual({
-      generation: 3,
       token: CLAIM_TOKEN,
       ...outcome,
     });

@@ -291,7 +291,7 @@ async function receipts(db: Database): Promise<string[]> {
       .orderBy(sql`rowid`),
   );
   return jobs
-    .map((job) => decodeTicket(new Uint8Array(job.payload)))
+    .map((job) => decodeTicket(new Uint8Array(job.payload!)))
     .filter((text) => text.includes("TOTAL"));
 }
 

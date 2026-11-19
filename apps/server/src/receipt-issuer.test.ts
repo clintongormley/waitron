@@ -113,7 +113,7 @@ describe("receipt issue facts independent of recipient and current venue zone", 
           const job = await enqueueReceiptCopy(tx, v.cfg, ticket, sale.saleId, printer!, "en-GB");
           expect(job).toBeDefined();
           const [savedJob] = await tx.select().from(printJobs).where(eq(printJobs.id, job!.jobId));
-          const preview = previewPrintJob(savedJob!.payload);
+          const preview = previewPrintJob(savedJob!.payload!);
           expect(preview.truncated).toBe(false);
           expect(preview.unsupported).toBe(false);
           expect(preview.text).toContain(prepared ? "15 Oct 2026, 01:30" : "14 Oct 2026, 23:30");

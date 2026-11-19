@@ -756,7 +756,7 @@ describe("management invoice receipt resends", () => {
           new AbortController().signal,
         ),
       ).toBe(changed);
-      expect((await ctx.jobRow()).payload.byteLength).toBe(2);
+      expect((await ctx.jobRow()).payload!.byteLength).toBe(2);
       expect(await ctx.row()).toEqual(delivery);
     }
     await suite.db

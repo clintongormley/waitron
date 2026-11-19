@@ -1621,17 +1621,17 @@ describe("the invoice at full payment", () => {
       expect(jobs).toHaveLength(1);
       for (const job of jobs) {
         expect(job.kind).toBe("document");
-        expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
-        expect(decodeTicket(new Uint8Array(job.payload))).toContain(
+        expect(opensDrawer(new Uint8Array(job.payload!))).toBe(false);
+        expect(decodeTicket(new Uint8Array(job.payload!))).toContain(
           completed.invoice!.invoiceNumber,
         );
-        expect(decodeTicket(new Uint8Array(job.payload))).not.toContain("DUPLICADO");
+        expect(decodeTicket(new Uint8Array(job.payload!))).not.toContain("DUPLICADO");
       }
       if (invoiceType === "F1") {
-        expect(decodeTicket(new Uint8Array(jobs[0]!.payload)).replace(/\s+/g, " ")).toContain(
+        expect(decodeTicket(new Uint8Array(jobs[0]!.payload!)).replace(/\s+/g, " ")).toContain(
           `FACTURA ${completed.invoice!.invoiceNumber}`,
         );
-        expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("Cliente SL");
+        expect(decodeTicket(new Uint8Array(jobs[0]!.payload!))).toContain("Cliente SL");
       }
       expect(
         await inTx((tx) =>
@@ -1690,13 +1690,13 @@ describe("the invoice at full payment", () => {
     expect(original).toBeDefined();
     expect(copy).toBeDefined();
     for (const job of [original!, copy!]) {
-      const bytes = new Uint8Array(job.payload);
+      const bytes = new Uint8Array(job.payload!);
       expect(decodeTicket(bytes)).toContain(completed.invoice!.invoiceNumber);
       expect(decodeTicket(bytes)).toContain("Cliente SL");
       expect(opensDrawer(bytes)).toBe(false);
     }
-    expect(decodeTicket(new Uint8Array(original!.payload))).not.toContain("DUPLICADO");
-    expect(decodeTicket(new Uint8Array(copy!.payload))).toContain("DUPLICADO");
+    expect(decodeTicket(new Uint8Array(original!.payload!))).not.toContain("DUPLICADO");
+    expect(decodeTicket(new Uint8Array(copy!.payload!))).toContain("DUPLICADO");
     expect(
       await inTx((tx) => tx.select().from(sales).where(eq(sales.workingOrderId, billId))),
     ).toEqual(before);
@@ -1774,7 +1774,7 @@ describe("the invoice at full payment", () => {
         expect(originals).toHaveLength(1);
         if (copyFirst) expect(jobs.filter((job) => job.receiptCopy === true)).toHaveLength(1);
         if (!missingPrinter) expect(jobs).toEqual(beforeJobs);
-        const bytes = new Uint8Array(originals[0]!.payload);
+        const bytes = new Uint8Array(originals[0]!.payload!);
         expect(decodeTicket(bytes)).toContain(completed.invoice!.invoiceNumber);
         expect(decodeTicket(bytes)).not.toContain("DUPLICADO");
         expect(opensDrawer(bytes)).toBe(false);
@@ -2803,6 +2803,18 @@ describe("the invoice at full payment", () => {
       const medium = kind === "email" ? "email" : "a4";
       const billId = await tabWith("Beer");
       const pagePrinterId = randomUUID();
+      const expectedJobs = (jobId: string | null) =>
+        kind === "a4"
+          ? [
+              expect.objectContaining({
+                id: jobId,
+                kind: "a4",
+                printerId: pagePrinterId,
+                payload: null,
+              }),
+            ]
+          : [];
+
       await withDepartmentContact({ email: "dining@example.test" }, async () => {
         await inTx(async (tx) => {
           await insertA4Printer(tx, { id: pagePrinterId, name: "Invoice", host: pagePrinterId });
@@ -2873,7 +2885,7 @@ describe("the invoice at full payment", () => {
               }),
             ]);
             expect(await tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))).toEqual(
-              [],
+              expectedJobs(rows[0]!.printJobId),
             );
             throw rollback;
           }),
@@ -2927,7 +2939,7 @@ describe("the invoice at full payment", () => {
         ).toEqual(deliveries);
         expect(
           await inTx((tx) => tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))),
-        ).toEqual([]);
+        ).toEqual(expectedJobs(deliveries[0]!.printJobId));
       });
     },
   );
