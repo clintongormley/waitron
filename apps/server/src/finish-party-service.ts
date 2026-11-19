@@ -33,6 +33,7 @@ import {
   requirePartyClosingEdits,
   runServiceCommand,
 } from "./parties.js";
+import { notSetMenuLine } from "./set-menu-bill.js";
 import "./errors.js";
 
 export interface UnservedDish {
@@ -276,6 +277,7 @@ async function readFinishState(tx: Transaction, args: FinishStateArgs) {
             .map((bill) => bill.id),
         ),
         isNull(sql`+${workingOrderLines.parentLineId}`),
+        notSetMenuLine(),
       ),
     )
     .orderBy(workingOrders.id, workingOrderLines.lineNo);

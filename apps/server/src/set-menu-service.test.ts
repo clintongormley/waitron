@@ -11,6 +11,7 @@ import { readPassCardRows } from "./pass-board.js";
 import { readRestOfOrder } from "./rest-of-order.js";
 import { readStepFacts } from "./service-step-signals.js";
 import { inTx, OPERATOR, revisionOf } from "./testing/party-venue.js";
+import { seedBillSetMenu } from "./testing/set-menu-bill-fixture.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 
 let fixture: Awaited<ReturnType<typeof setupSetMenuReaders>>;
@@ -48,14 +49,20 @@ it("does not assign a group to a set menu when its bill arrives at a table", asy
 });
 
 it("reckons all served from the set menu's dish", async () => {
-  const { tableId, partyId, dishId } = await setMenuBill(fixture);
-  const { venue } = fixture;
-  const servedAt = "2026-11-19T12:06:00.000Z";
+  const { tableId, partyId, billId, menuLineId, dishId } = await setMenuBill(fixture);
+  const { venue, copy } = fixture;
+  const servedAt = "2026-11-19T11:56:00.000Z";
   const facts = await inTx(venue, async (tx) => {
+    const openedMenuAt = "2026-11-19T11:30:00.000Z";
+    await tx
+      .update(workingOrderLines)
+      .set({ servedAt: openedMenuAt, sentAt: openedMenuAt })
+      .where(eq(workingOrderLines.id, menuLineId));
     await tx
       .update(workingOrderLines)
       .set({ servedAt, servedQuantity: 1000 })
       .where(eq(workingOrderLines.id, dishId));
+    await seedBillSetMenu(tx, billId, copy, 3);
     const [{ openedAt }] = await tx
       .select({ openedAt: parties.openedAt })
       .from(parties)
@@ -65,16 +72,20 @@ it("reckons all served from the set menu's dish", async () => {
   expect(facts.get(tableId)?.facts.allServedAt).toBe(Date.parse(servedAt));
 });
 
-it("allows service to finish once the only dish on a settled set-menu bill is served", async () => {
-  const { billId, partyId, dishId } = await setMenuBill(fixture);
+it("finishes service even if a settled bill's set-menu heading has no served quantity", async () => {
+  const { billId, partyId, menuLineId, dishId } = await setMenuBill(fixture);
   const { venue } = fixture;
   const at = "2026-11-19T12:06:00.000Z";
-  await inTx(venue, (tx) =>
-    tx
+  await inTx(venue, async (tx) => {
+    await tx
+      .update(workingOrderLines)
+      .set({ servedAt: null, servedQuantity: 0 })
+      .where(eq(workingOrderLines.id, menuLineId));
+    await tx
       .update(workingOrders)
       .set({ status: "settled", settledAt: at })
-      .where(eq(workingOrders.id, billId)),
-  );
+      .where(eq(workingOrders.id, billId));
+  });
   const expectedPartyRevision = await revisionOf(venue, partyId);
   const readiness = () =>
     inTx(venue, async (tx) =>

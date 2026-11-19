@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { kitchenPrintJobs, printJobs, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -10,6 +10,7 @@ import { readStationDeleteImpact } from "./station-delete.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { inTx } from "./testing/party-venue.js";
+import { addPortionRound } from "./testing/portion-bill.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 import { fireLines, fireableLineColumns, listStationQueue } from "./working-order.js";
 
@@ -34,13 +35,16 @@ useVenueDb({
 });
 
 it("keeps the set menu off kitchen paper and the station queue while showing its dish", async () => {
-  const { billId, menuLineId } = await setMenuBill(fixture);
+  const { billId, menuLineId, dishId } = await setMenuBill(fixture, { send: false });
   const { venue } = fixture;
   await inTx(venue, async (tx) => {
+    const [{ lineId: ordinaryId }] = await addPortionRound(tx, venue.cfg, billId, [
+      { menuItemId: venue.item("Burger"), quantity: "1" },
+    ]);
     const lines = await tx
       .select(fireableLineColumns)
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.id, menuLineId));
+      .where(inArray(workingOrderLines.id, [menuLineId, dishId, ordinaryId]));
     await fireLines(tx, venue.cfg, billId, lines);
   });
   const jobs = await venue.db
@@ -50,17 +54,19 @@ it("keeps the set menu off kitchen paper and the station queue while showing its
     .where(eq(kitchenPrintJobs.workingOrderId, billId));
   const paper = jobs.flatMap((job) => printedLines(job.payload)).join(" ");
   expect(paper).toContain("FLAN");
+  expect(paper).toContain("BURG");
   expect(paper).not.toContain("Daily menu");
   const queue = await inTx(venue, (tx) => listStationQueue(tx, stationId));
   expect(queue.find((group) => group.orderId === billId)?.items.map((item) => item.name)).toEqual([
     "FLAN",
+    "BURG",
   ]);
   expect(
     await venue.db.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, menuLineId)),
   ).toEqual([]);
-  expect(await inTx(venue, (tx) => openDishCount(tx, stationId))).toBe(1);
+  expect(await inTx(venue, (tx) => openDishCount(tx, stationId))).toBe(2);
   const impact = await inTx(venue, (tx) => readStationDeleteImpact(tx, stationId));
   expect(
     impact.refusals.find((refusal) => refusal.code === "station.work_in_progress")?.params,
-  ).toEqual({ stationId, count: 1 });
+  ).toEqual({ stationId, count: 2 });
 });
