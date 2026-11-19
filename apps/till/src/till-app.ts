@@ -4328,9 +4328,8 @@ export class TillApp extends LitElement {
    * revision it describes: once the party moves past it, the list is taken down, and Print anyway
    * sends that revision, so the server refuses it for a table changed since. */
   @state() private mealEnd: (MealEndShown & { partyId: string; revision?: number }) | null = null;
-  /** The bill whose Print the bill request is out: that bill takes no other action meanwhile, and
-   * no other bill can be printed, so only one request is ever out. */
-  @state() private mealEndPrinting: string | null = null;
+  /** The Print the bill request out, and the sign-in that pressed it; see {@link #billPrinting}. */
+  @state() private mealEndPrinting: { billId: string; session: number } | null = null;
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
   @state() private departureApprovers?: StaffMember[];
@@ -20101,7 +20100,7 @@ export class TillApp extends LitElement {
     ).detail;
     if (
       showFirst === true &&
-      this.mealEndPrinting === null &&
+      this.#billPrinting() === null &&
       this.activeTabId !== workingOrderId
     ) {
       const { api, orderParty: pressed } = this;
@@ -20125,7 +20124,7 @@ export class TillApp extends LitElement {
     const warned = this.#mealEndShown();
     if (
       party === null ||
-      this.mealEndPrinting !== null ||
+      this.#billPrinting() !== null ||
       this.activeTabId !== workingOrderId ||
       bill === undefined ||
       !printBillOffered(bill, {
@@ -20164,7 +20163,8 @@ export class TillApp extends LitElement {
       this.activeTabId === workingOrderId;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     this.mealEnd = null;
-    this.mealEndPrinting = workingOrderId;
+    const printing = { billId: workingOrderId, session: asked.session };
+    this.mealEndPrinting = printing;
     let earlierSendUnanswered = false;
     try {
       await this.#resend(
@@ -20187,7 +20187,7 @@ export class TillApp extends LitElement {
       return;
     } finally {
       limit.done();
-      this.mealEndPrinting = null;
+      if (this.mealEndPrinting === printing) this.mealEndPrinting = null;
     }
     if (live()) await this.#onMealEnded(party.id, workingOrderId, visit, sent);
   }
@@ -20240,6 +20240,14 @@ export class TillApp extends LitElement {
       await this.#loadPartyBills();
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
     }
+  }
+
+  /** The bill this sign-in's Print the bill request is out for: that bill takes no other action
+   * meanwhile, and this sign-in can print no other. A request left by someone who has signed out
+   * holds nobody back; the server refuses a second ticket for a bill. */
+  #billPrinting(): string | null {
+    const printing = this.mealEndPrinting;
+    return printing?.session === this.#operatorSession ? printing.billId : null;
   }
 
   /** The server lets a request from no device through, so only a device's profile can forbid it. */
@@ -23006,8 +23014,8 @@ export class TillApp extends LitElement {
       .splitRead=${this.splitRead}
       .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
       .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
-      .busy=${this.submitting || this.invoiceRecipientReading || this.mealEndPrinting === this.activeTabId}
-      .billPrintPending=${this.mealEndPrinting !== null}
+      .busy=${this.submitting || this.invoiceRecipientReading || this.#billPrinting() === this.activeTabId}
+      .billPrintPending=${this.#billPrinting() !== null}
       .sendingTender=${this.sendingTender}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
@@ -23201,8 +23209,8 @@ export class TillApp extends LitElement {
           .splitRead=${this.splitRead}
           .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
           .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
-          .busy=${this.submitting || this.invoiceRecipientReading || this.mealEndPrinting === this.activeTabId}
-          .billPrintPending=${this.mealEndPrinting !== null}
+          .busy=${this.submitting || this.invoiceRecipientReading || this.#billPrinting() === this.activeTabId}
+          .billPrintPending=${this.#billPrinting() !== null}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
           .takesCash=${this.#takesCash()}

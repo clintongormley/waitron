@@ -1460,7 +1460,7 @@ export class TillTableOrderScreen extends LitElement {
   /** Finish table was refused because a bill is unpaid. */
   @property({ type: Boolean }) finishRefused = false;
   @property({ attribute: false }) mealEnd: MealEndShown | null = null;
-  /** A Print the bill request has no answer yet, for any bill: the till sends one at a time. */
+  /** This sign-in's Print the bill request has no answer yet, for any bill: it sends one at a time. */
   @property({ type: Boolean }) billPrintPending = false;
   /** This device's profile hands over orders, which marking a dish served needs. */
   @property({ type: Boolean }) canMarkServed = false;

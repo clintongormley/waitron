@@ -1203,6 +1203,59 @@ describe("till-app: Print the bill while a part payment on the bill is held", ()
   });
 });
 
+describe("till-app: a print left unanswered when its person signs out", () => {
+  const printInMenu = (el: TillApp) =>
+    shadow(el).querySelector<HTMLElement & { disabled: boolean }>(
+      '[data-table-menu] [data-action="print-bill"]',
+    )!;
+
+  /** The first person presses Print the bill, gets no answer and signs out; the next opens the table. */
+  async function pressThenNextPerson(overrides: Record<string, unknown>) {
+    const opened = await openBill(overrides);
+    await printBill(opened.el);
+    expect(tableOrder(opened.el).billPrintPending).toBe(true);
+    emit(shell(opened.el), "logout");
+    await flush(opened.el, 6);
+    await openTable(opened.el, ["payment.take"]);
+    await flush(opened.el, 6);
+    return opened;
+  }
+
+  it("leaves Print the bill usable for the next person, whose press is sent", async () => {
+    const endMeal = vi.fn(() => new Promise(() => {}));
+    const { el } = await pressThenNextPerson({ endMeal });
+
+    expect(tableOrder(el).billPrintPending).toBe(false);
+    expect(tableOrder(el).busy).toBe(false);
+    expect(printInMenu(el).disabled).toBe(false);
+
+    await printBill(el);
+
+    expect(endMeal).toHaveBeenCalledTimes(2);
+    const [first, second] = sentBodies(endMeal);
+    expect(second!.submissionId).not.toBe(first!.submissionId);
+  });
+
+  it("still sends the next person one request at a time when the first person's answer arrives", async () => {
+    const first = heldAnswer<EndedMeal>();
+    const endMeal = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValue(new Promise(() => {}));
+    const { el } = await pressThenNextPerson({ endMeal });
+    await printBill(el);
+    expect(tableOrder(el).billPrintPending).toBe(true);
+
+    first.reject({ code: "bill.nothing_outstanding", status: 409 });
+    await flush(el, 6);
+
+    expect(tableOrder(el).billPrintPending).toBe(true);
+    expect(tableOrder(el).busy).toBe(true);
+    await printBill(el);
+    expect(endMeal).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("till-app: Print the bill from Finish table's refusal", () => {
   it("sends nothing when the table was left, reopened and moved on while the pressed bill was read", async () => {
     let revision = 3;
