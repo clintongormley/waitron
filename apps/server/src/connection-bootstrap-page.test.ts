@@ -540,8 +540,8 @@ it.each(["en", "es"] as const)(
 
 async function themeInks(page: Page) {
   return page.evaluate(() => ({
-    mark: getComputedStyle(document.querySelector(".wt-logo-mark")!).fill,
-    word: getComputedStyle(document.querySelector(".wt-logo-word")!).fill,
+    teal: getComputedStyle(document.querySelector(".teal")!).fill,
+    ink: getComputedStyle(document.querySelector(".ink")!).fill,
     action: getComputedStyle(document.querySelector(".button, button")!).backgroundColor,
   }));
 }
@@ -553,12 +553,12 @@ it.each([false, true])(
       [
         "light",
         "dark",
-        { mark: "rgb(31, 111, 235)", word: "rgb(22, 24, 29)", action: "rgb(0, 115, 146)" },
+        { teal: "rgb(0, 115, 146)", ink: "rgb(35, 31, 32)", action: "rgb(0, 115, 146)" },
       ],
       [
         "dark",
         "light",
-        { mark: "rgb(76, 141, 255)", word: "rgb(236, 238, 242)", action: "rgb(113, 207, 235)" },
+        { teal: "rgb(0, 115, 146)", ink: "rgb(236, 238, 242)", action: "rgb(113, 207, 235)" },
       ],
     ] as const) {
       const context = await browser!.newContext({ colorScheme: device });
@@ -594,14 +594,14 @@ it.each(["missing", "invalid", "blocked"])(
       const page = await context.newPage();
       await open(page);
       expect(await themeInks(page)).toEqual({
-        mark: "rgb(76, 141, 255)",
-        word: "rgb(236, 238, 242)",
+        teal: "rgb(0, 115, 146)",
+        ink: "rgb(236, 238, 242)",
         action: "rgb(113, 207, 235)",
       });
       await page.emulateMedia({ colorScheme: "light" });
       expect(await themeInks(page)).toEqual({
-        mark: "rgb(31, 111, 235)",
-        word: "rgb(22, 24, 29)",
+        teal: "rgb(0, 115, 146)",
+        ink: "rgb(35, 31, 32)",
         action: "rgb(0, 115, 146)",
       });
     } finally {
@@ -618,9 +618,9 @@ it("without JavaScript certificate help keeps readable device inks", async () =>
     expect(await page.getByRole("link", { name: "Download the certificate" }).isVisible()).toBe(
       true,
     );
-    expect(
-      await page.locator(".wt-logo-word").evaluate((word) => getComputedStyle(word).fill),
-    ).toBe("rgb(236, 238, 242)");
+    expect(await page.locator(".ink").evaluate((word) => getComputedStyle(word).fill)).toBe(
+      "rgb(236, 238, 242)",
+    );
   } finally {
     await context.close();
   }

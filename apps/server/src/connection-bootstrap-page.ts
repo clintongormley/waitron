@@ -44,7 +44,7 @@ h1 { font-size: var(--wt-font-size-xl); line-height: 1.3; }
 h2 { font-size: var(--wt-font-size-lg); }
 section { margin-block: var(--wt-space-6); }
 a { color: var(--wt-color-primary-text); overflow-wrap: anywhere; }
-.logo svg { width: 150px; height: auto; }
+.logo svg { width: auto; height: 26px; }
 nav { display: flex; gap: var(--wt-space-4); margin-block: var(--wt-space-4); }
 button, .button { display: inline-block; box-sizing: border-box; max-width: 100%; border: 0; border-radius: var(--wt-radius-md); padding: var(--wt-space-3) var(--wt-space-4); background: var(--wt-color-primary); color: var(--wt-color-on-primary); font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
 button:disabled { cursor: wait; }

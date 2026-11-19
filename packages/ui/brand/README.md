@@ -1,32 +1,34 @@
 # Brand assets
 
-The mark is a cloche: a serving dome with a knob and a highlight cut out of it, on a plate. The
-wordmark is "waitron" in lower case, set in Outfit Medium (SIL Open Font License) at -0.03em and
-drawn as outlines, so nothing loads a font. The lockup is the two together, side by side.
+The logo is the designer's W beside the word "WAITRON" in spaced capitals. The W is three pieces: a
+near-black left stroke, a sky-blue middle (`#71cfeb`) and a teal right stroke (`#007392`). The word
+is near-black (`#231f20`). Everything is drawn as outlines, so nothing loads a font.
 
 ## Sources and derived files
 
-You edit the two source drawings by hand. `build-icons.mjs` writes the derived files from those
-drawings and the dark colour tokens. The derived files are committed, so run the command whenever
-you change a source drawing or a dark token. Two things are kept by hand outside the drawings:
-`WORD_BASELINE` in `packages/ui/src/components/wt-waitron-lockup.ts`, where the word's letters sit,
-which changes when the wordmark is redrawn; and the certificate page's copy of the lockup (below),
-which changes when either drawing is.
+The two source drawings are kept by hand, cut from the designer's `Waitron Line.svg` and
+`Waitron IconCol.svg` to a tight `viewBox` around the drawing (the origin is not `0 0`). Each holds,
+in this order: `<g class="ink" fill="#231f20">` with every near-black piece, one element
+`class="sky" fill="#71cfeb"` and one element `class="teal" fill="#007392"`. No other fills, no
+`<style>`, no `id`s. `wt-waitron-lockup` (`packages/ui/src/components/wt-waitron-lockup.ts`) finds
+the pieces by those class names.
 
-| File                          | Kind    | Read by                                                                                                                                                                                                                                                                                                       |
-| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `waitron-mark.svg`            | source  | The cloche alone, fixed blue, transparent, tight viewBox. Use for anything that is not a favicon.                                                                                                                                                                                                             |
-| `waitron-wordmark.svg`        | source  | The word alone, ink, cut to the mark's height: its viewBox is `0 0 <width> <the mark's height>`, and the generator refuses any other.                                                                                                                                                                         |
-| `waitron-lockup.svg`          | derived | The mark, a gap, then the word, both unscaled. The logo. `wt-waitron-lockup` draws it inline.                                                                                                                                                                                                                 |
-| `waitron-lockup-dark.svg`     | derived | The lockup in the dark theme's colours, for an `<img>` on a dark ground (addresses in `packages/ui/src/waitron-lockup.ts`; outside tests, only the UI demo reads it).                                                                                                                                         |
-| `public/favicon.svg`          | derived | Chrome, Edge, Firefox, Safari 26+. Carries a `prefers-color-scheme` rule; the rasters below cannot. Once a page starts, `startThemedFavicon` (`packages/ui/src/themed-favicon.ts`) replaces it with a copy painted in the page's `--wt-color-primary`, so it follows the Theme setting and a venue's colours. |
-| `public/favicon.ico`          | derived | Safari below 26, and a browser's implicit `/favicon.ico` request. 16, 32 and 48 as embedded PNGs.                                                                                                                                                                                                             |
-| `public/apple-touch-icon.png` | derived | iOS and iPadOS home screens. 180x180, and deliberately **opaque** — see below.                                                                                                                                                                                                                                |
-| `public/icon-192.png`         | derived | The till's web app manifest icon (`apps/till/src/manifest.ts`), 192x192. Opaque, drawn on the same white ground as `apple-touch-icon.png`.                                                                                                                                                                    |
-| `public/icon-512.png`         | derived | The till's web app manifest icon (`apps/till/src/manifest.ts`), 512x512. Opaque, drawn on the same white ground as `apple-touch-icon.png`.                                                                                                                                                                    |
-| `png/waitron-lockup.png`      | derived | The lockup in the light colours, 1200 px wide, transparent: for places that cannot draw an SVG or read the theme.                                                                                                                                                                                             |
-| `png/waitron-lockup-dark.png` | derived | The same in the dark theme's colours, for a dark ground.                                                                                                                                                                                                                                                      |
-| `png/waitron-mark.png`        | derived | The cloche alone in the light blue, 512 px wide, transparent.                                                                                                                                                                                                                                                 |
+`build-icons.mjs` writes the derived files from the two sources and one dark colour token. The
+derived files are committed, so run it whenever you change a source drawing or that token.
+
+| File                          | Kind    | What it is                                                                                                                                                                           |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `waitron-lockup.svg`          | source  | The logo: the W and the word. `wt-waitron-lockup` draws it inline.                                                                                                                   |
+| `waitron-mark.svg`            | source  | The W alone. Use for anything that is not a favicon.                                                                                                                                 |
+| `waitron-lockup-dark.svg`     | derived | The logo with the ink in the dark theme's text colour, for an `<img>` on a dark ground (addresses in `packages/ui/src/waitron-lockup.ts`; outside tests, only the UI demo reads it). |
+| `public/favicon.svg`          | derived | Chrome, Edge, Firefox, Safari 26+. The W on a square, with a `prefers-color-scheme` rule that turns the ink light; the rasters below cannot.                                         |
+| `public/favicon.ico`          | derived | Safari below 26, and a browser's implicit `/favicon.ico` request. 16, 32 and 48 as embedded PNGs, transparent.                                                                       |
+| `public/apple-touch-icon.png` | derived | iOS and iPadOS home screens. 180x180, and deliberately **opaque** — see below.                                                                                                       |
+| `public/icon-192.png`         | derived | The till's web app manifest icon (`apps/till/src/manifest.ts`), 192x192. Opaque, drawn on the same white ground as `apple-touch-icon.png`.                                           |
+| `public/icon-512.png`         | derived | The till's web app manifest icon (`apps/till/src/manifest.ts`), 512x512. Opaque, drawn on the same white ground as `apple-touch-icon.png`.                                           |
+| `png/waitron-lockup.png`      | derived | The logo in the light colours, 1200 px wide, transparent: for places that cannot draw an SVG or read the theme.                                                                      |
+| `png/waitron-lockup-dark.png` | derived | The same with the dark ink, for a dark ground.                                                                                                                                       |
+| `png/waitron-mark.png`        | derived | The W alone in the light colours, 512 px wide, transparent.                                                                                                                          |
 
 `public/` is what the apps serve: `apps/{till,dashboard,setup}/vite.config.ts` each point `publicDir`
 at it, so there is one copy rather than three. Vite prefixes the URLs with each app's `base` at build
@@ -34,33 +36,33 @@ time: the dashboard emits `/favicon.ico`, the till `/till/favicon.ico`, and the 
 build keeps its relative `./favicon.ico`. `scripts/brand-icons.test.ts` (root project, so it runs on every non-docs push) fails
 if an app links to a file this directory does not hold, or points its `publicDir` somewhere else.
 
-Standalone SVGs carry literal colours because an `<img>` cannot read the page's CSS custom
-properties. The screens do not use them as images: `wt-waitron-lockup`
-(`packages/ui/src/components/wt-waitron-lockup.ts`) imports `waitron-lockup.svg` through a `?raw`
-import and repaints its first top-level group with `--wt-color-primary` and its last with
-`--wt-color-text`, so the dashboard's banner, `wt-powered-by`, the Look card preview and the setup
-wizard's header follow light, dark and a venue's own colours. When you change a dark token in `packages/ui-core/src/tokens/colors.css`, re-run the
-generator: it reads `--wt-color-primary` and `--wt-color-text` from that file's
-`@media (prefers-color-scheme: dark)` block for the dark lockup and the favicon's dark rule.
-It expects six-digit hex values and an unindented closing brace for that block; a missing block or
-token stops generation before any output is written. Explicit `data-theme` blocks and deployment
-overrides are not read. `scripts/brand-build.test.ts` runs the generator in scratch copies with
-changed and missing tokens; its raster renderer is a stub, so it checks SVG generation, not PNG paint.
+## Colours
 
-The light source SVGs still carry `#1f6feb` and `#16181d`; keep these in step with the light
-tokens by hand. `apps/server/src/trust-page-logo.ts` holds a copy of the whole lockup for the certificate page,
-which must stay one self-contained string with nothing to fetch. `scripts/trust-page-logo.test.ts`
-compares the two DRAWINGS and deliberately ignores paint, so it will not catch a colour that drifts.
-`scripts/brand-icons.test.ts` does check both lockups' two colours against `colors.css`, weaker than
-that sounds: it reads the file as text, takes each light value from the file's first declaration
-and each dark value from the `@media (prefers-color-scheme: dark)` block, so a `[data-theme]` block
-that disagrees with either is not seen, and it checks neither the favicon nor the certificate page's
-copy.
+The W's sky blue and teal are fixed: the same in light and dark, on every venue's screens, and
+never painted from a token. Only the ink changes. Standalone SVGs carry literal colours because an
+`<img>` cannot read the page's CSS custom properties; on screens, `wt-waitron-lockup` paints the
+ink with `--wt-color-text`.
 
-`wt-waitron-lockup` paints by position, so it relies on the order `build-icons.mjs` writes the groups
-in, cloche first. The
-paint cases in `apps/setup/src/setup-app.test.ts` find each group by the ink this file gives it, so a
-reordered file fails them.
+The generator reads one value: `--wt-color-text` from the `@media (prefers-color-scheme: dark)`
+block of `packages/ui-core/src/tokens/colors.css`, for the dark lockup's ink and the favicon's dark
+rule. It expects a six-digit hex value and an unindented closing brace for that block; a missing
+block or token stops generation before any output is written. Explicit `data-theme` blocks and
+deployment overrides are not read. `scripts/brand-build.test.ts` runs the generator in scratch
+copies with changed and missing tokens; its raster renderer is a stub, so it checks SVG generation,
+not PNG paint.
+
+The sources' ink, `#231f20`, is the light `--wt-color-text`; keep the two in step by hand.
+`scripts/brand-icons.test.ts` checks the two lockups' ink against `colors.css` and the three SVGs'
+blues against the fixed values, weaker than that sounds: it reads the files as text, takes the
+light value from the file's first declaration and the dark value from the
+`@media (prefers-color-scheme: dark)` block, so a `[data-theme]` block that disagrees with either is
+not seen, and it checks neither the favicon's paint nor the server pages' copy.
+
+`apps/server/src/trust-page-logo.ts` holds a copy of the whole logo for the certificate page and
+the connection page, which must stay one self-contained string with nothing to fetch; its own
+`<style>` turns the ink light in dark mode, and the blues stay literal.
+`scripts/trust-page-logo.test.ts` compares the two DRAWINGS and deliberately ignores paint, so it
+will not catch a colour that drifts.
 
 ## Why an .ico and a PNG as well as the SVG
 

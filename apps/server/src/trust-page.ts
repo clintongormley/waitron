@@ -128,7 +128,7 @@ summary { cursor: pointer; font-weight: 600; }
 .button { display: inline-block; padding: .7rem 1.1rem; border-radius: .4rem; font-weight: 600;
   text-decoration: none; background: light-dark(#007392, #71cfeb); color: light-dark(#ffffff, #001016); }
 code, a { overflow-wrap: anywhere; }
-.logo svg { width: 9.5rem; height: auto; display: block; }
+.logo svg { width: auto; height: 1.62rem; display: block; }
 .qr svg { max-width: 14rem; height: auto; background: white; }
 :focus-visible { outline: 3px solid light-dark(#007392, #71cfeb); outline-offset: 4px; }
 </style><script>${PAGE_THEME_SCRIPT}</script></head><body><main>

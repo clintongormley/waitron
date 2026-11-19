@@ -38,11 +38,14 @@ function generate(css: string, prepare: (brand: string) => void = () => {}) {
   return { brand, result };
 }
 
-describe("brand generation reads the dark theme at run time", () => {
+describe("brand generation reads the dark text token at run time", () => {
+  const committed = (file: string) =>
+    readFileSync(join(REPO_ROOT, "packages", "ui", "brand", file), "utf8");
+
   it.each([
     { primary: "#123456", text: "#eceef2" },
     { primary: "#4c8dff", text: "#abcdef" },
-  ])("uses $primary and $text from the media block", ({ primary, text }) => {
+  ])("uses $text from the media block and nothing else", ({ primary, text }) => {
     const { brand, result } = generate(`:root {
   --wt-color-primary: #112233;
   --wt-color-text: #445566;
@@ -60,53 +63,27 @@ describe("brand generation reads the dark theme at run time", () => {
 `);
     expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: "" });
     const dark = readFileSync(join(brand, "waitron-lockup-dark.svg"), "utf8");
-    expect([...dark.matchAll(/<g fill="([^"]+)"/g)].map((m) => m[1])).toEqual([primary, text]);
-    expect(readFileSync(join(brand, "public", "favicon.svg"), "utf8")).toContain(
-      `@media (prefers-color-scheme: dark){.m{fill:${primary}}}`,
-    );
+    expect([...dark.matchAll(/<g class="ink" fill="([^"]+)"/g)].map((m) => m[1])).toEqual([text]);
+    const favicon = readFileSync(join(brand, "public", "favicon.svg"), "utf8");
+    expect(favicon).toContain(`@media (prefers-color-scheme: dark){.ink{fill:${text}}}`);
+    expect(favicon).not.toMatch(/\.(sky|teal)\b/);
+    for (const file of ["waitron-lockup-dark.svg", "public/favicon.svg"]) {
+      expect(readFileSync(join(brand, file), "utf8"), file).not.toContain(primary);
+    }
     expect(readFileSync(join(brand, "waitron-lockup.svg"), "utf8")).toBe(
-      readFileSync(join(REPO_ROOT, "packages", "ui", "brand", "waitron-lockup.svg"), "utf8"),
+      committed("waitron-lockup.svg"),
     );
   });
 
-  it.each(["primary", "text"])("refuses a missing dark %s token before writing", (missing) => {
-    const css = `@media (prefers-color-scheme: dark) {
-  --wt-color-${missing === "primary" ? "text" : "primary"}: #123456;
-}
-`;
-    const { brand, result } = generate(css);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain(`colors.css declares no dark --wt-color-${missing}`);
-    expect(readFileSync(join(brand, "waitron-lockup-dark.svg"), "utf8")).toBe(
-      readFileSync(join(REPO_ROOT, "packages", "ui", "brand", "waitron-lockup-dark.svg"), "utf8"),
-    );
-  });
-
-  it("refuses a wordmark not cut to the mark's height before writing", () => {
-    const { brand, result } = generate(
-      `@media (prefers-color-scheme: dark) {
+  it("refuses a missing dark text token before writing", () => {
+    const { brand, result } = generate(`@media (prefers-color-scheme: dark) {
   --wt-color-primary: #123456;
-  --wt-color-text: #abcdef;
 }
-`,
-      (dir) => {
-        const path = join(dir, "waitron-wordmark.svg");
-        const source = readFileSync(path, "utf8");
-        // A new ink too, so a light lockup written anyway would differ from the committed one.
-        const altered = source
-          .replace(/viewBox="0 0 ([\d.]+) [\d.]+"/, 'viewBox="0 0 $1 90"')
-          .replace(/(<svg[^>]*fill=")[^"]+"/, '$1#fedcba"');
-        expect(altered).toMatch(/viewBox="0 0 [\d.]+ 90"/);
-        expect(altered).toContain('fill="#fedcba"');
-        writeFileSync(path, altered);
-      },
-    );
+`);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("waitron-wordmark.svg: viewBox must be 0 0 <width>");
+    expect(result.stderr).toContain("colors.css declares no dark --wt-color-text");
     for (const file of ["public/favicon.svg", "waitron-lockup.svg", "waitron-lockup-dark.svg"]) {
-      expect(readFileSync(join(brand, file), "utf8"), file).toBe(
-        readFileSync(join(REPO_ROOT, "packages", "ui", "brand", file), "utf8"),
-      );
+      expect(readFileSync(join(brand, file), "utf8"), file).toBe(committed(file));
     }
   });
 
@@ -119,7 +96,7 @@ describe("brand generation reads the dark theme at run time", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("colors.css has no dark media block");
     expect(readFileSync(join(brand, "waitron-lockup-dark.svg"), "utf8")).toBe(
-      readFileSync(join(REPO_ROOT, "packages", "ui", "brand", "waitron-lockup-dark.svg"), "utf8"),
+      committed("waitron-lockup-dark.svg"),
     );
   });
 });
