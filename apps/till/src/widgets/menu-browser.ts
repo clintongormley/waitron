@@ -1310,8 +1310,8 @@ export class TillMenuBrowser extends LitElement {
         this.placeRequest === undefined
           ? nothing
           : html`<wt-dialog
-              data-set-menu-place
               ${trackDialog()}
+              data-set-menu-place
               .open=${true}
               .dismissible=${!this.changingSetMenu}
               .heading=${fill(t("set_menu.no_place_heading"), { dish: this.placeRequest.detail.offer.name })}

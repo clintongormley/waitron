@@ -14867,7 +14867,7 @@ export class TillApp extends LitElement {
     const tabId = this.activeTabId;
     const tableId = this.activeTableId;
     let party = this.orderParty;
-    if (tabId === undefined || store?.sending === true || store?.editsLocked === true) return;
+    if (tabId === undefined || store?.sending === true) return;
     if (sent?.some((line) => line.blocked === "period_ended")) {
       this.errorKey = "menu.last_orders_ended";
       return;
@@ -14889,7 +14889,7 @@ export class TillApp extends LitElement {
       this.errorKey = "table.error";
       return;
     }
-    if (store.sending) return;
+    if (store.sending || store.editsLocked) return;
     if (
       this.#openLateSendFromMarks(
         sent,
