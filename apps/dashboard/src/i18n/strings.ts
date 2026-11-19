@@ -1271,7 +1271,7 @@ export const en = {
   "business_day.title": "Business-day start",
   "business_day.starts_at": "Starts at",
   "business_day.starts_at_help":
-    "Choose a time when the venue is closed. Table bills still open then get their ticket, without printing.",
+    "Choose a time when the venue is closed. Table bills still open then get their receipt, without printing.",
   "business_day.new_start": "New start",
   "business_day.new_start_value": "{time}, from {when}",
   "business_day.day_length": "Business day {day} lasts {duration}.",

@@ -472,15 +472,6 @@ export function fiscalRecordCount(venue: Pick<BillVenue, "db">, billId?: string)
   return Number(row!.count);
 }
 
-/** The origin each fiscal record of `billId` names. */
-export function fiscalRecordOrigins(venue: Pick<BillVenue, "db">, billId: string) {
-  return venue.db.all<{ source: string; deviceId: string | null }>(sql`
-    select r.source as source, r.device_id as deviceId
-    from registros_facturacion r join sales s on s.id = r.sale_id
-    where s.working_order_id = ${billId}
-  `);
-}
-
 export async function tendersOfBill(venue: BillVenue, billId: string) {
   return inTx(venue, (tx) =>
     tx

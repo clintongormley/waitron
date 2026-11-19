@@ -74,10 +74,9 @@ Asked as [S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) (
   record carries only what is left.
 
 To build: an advance's ticket when money is paid towards a bill whose ticket is not yet issued,
-and its deduction on the final ticket and record. Issuing a table bill left open when the trading
-day ends is built ([plan](../superpowers/plans/2026-11-19-adviser-close-of-day-ticket.md)). Today a payment that leaves a bill part-paid issues no invoice
-(`apps/server/src/bill-payments-api.test.ts:771`, "leaves €70.00 outstanding on a €120.00 bill …
-and issues no invoice"). Printing the bill issues the ticket before payment; a payment after that
+and its deduction on the final ticket and record. Today a payment that leaves a bill part-paid
+issues no invoice (`apps/server/src/bill-payments-api.test.ts:771`, "leaves €70.00 outstanding on
+a €120.00 bill … and issues no invoice"). Printing the bill issues the ticket before payment; a payment after that
 is not an advance but a payment slip (question 2). An advance taken at the till is issued by Waitron when the payment is
 taken, as one line «Pago a cuenta — consumo en mesa 7» ("payment on account for the meal at
 table 7") at the venue's eat-in rate (owner, 2026-11-18). Waitron also issues an advance paid before the

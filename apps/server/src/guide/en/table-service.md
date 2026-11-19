@@ -560,7 +560,7 @@ from **Find a bill** and take the rest there. The table stays open while another
 or paid food still needs serving. Serve the remaining food, then choose **Finish table** when
 everyone has finished.
 
-A bill still open when the business day ends gets its ticket then, without printing. Take its
+A bill still open when the business day ends gets its receipt then, without printing. Take its
 payment with **Pay**, or record an unpaid departure. A bill with dishes held or not yet sent stays
 open.
 

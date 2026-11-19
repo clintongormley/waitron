@@ -160,7 +160,7 @@ it("explains, in help mode, that open table bills get their ticket at the day's 
   expect(help?.getAttribute("aria-label")).toBe("Help: Business day starts at");
   expect(help?.getAttribute("guide-href")).toBe("/help/en/table-service#bill-switcher");
   expect(text(help)).toBe(
-    "Choose a time when the venue is closed. Table bills still open then get their ticket, without printing.",
+    "Choose a time when the venue is closed. Table bills still open then get their receipt, without printing.",
   );
 });
 it("ignores a late preview for the previous draft", async () => {

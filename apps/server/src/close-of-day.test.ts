@@ -16,6 +16,7 @@ import {
   withTransaction,
   workingOrders,
 } from "@waitron/db";
+import { invoiceRecords } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
@@ -29,7 +30,6 @@ import { clockAt } from "./testing/deferred-close-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import {
   fiscalRecordCount,
-  fiscalRecordOrigins,
   inTx,
   provisionBillVenue,
   seatedHeldWith,
@@ -157,6 +157,15 @@ function salesOf(billId: string) {
       .from(sales)
       .where(eq(sales.workingOrderId, billId)),
   );
+}
+
+function recordSources(billId: string) {
+  return venue.db
+    .select({ source: invoiceRecords.source, deviceId: invoiceRecords.deviceId })
+    .from(invoiceRecords)
+    .innerJoin(sales, eq(sales.id, invoiceRecords.saleId))
+    .where(eq(sales.workingOrderId, billId))
+    .all();
 }
 
 function countOf(table: typeof printJobs | typeof ticketItems | typeof invoiceDeliveries) {
@@ -304,9 +313,7 @@ describe("issueBillAtClose", () => {
     ]);
     expect(outcome).toEqual({ kind: "issued", saleId: issued[0]!.id });
     expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
-    expect(fiscalRecordOrigins(venue, party.tabId)).toEqual([
-      { source: "trading_day_close", deviceId: null },
-    ]);
+    expect(recordSources(party.tabId)).toEqual([{ source: "trading_day_close", deviceId: null }]);
     expect(await statusOf(venue, party.tabId)).toBe("placed");
     expect(revisionOf(party.partyId)).toBeGreaterThan(revision);
     expect(await partyStateOf(party.partyId)).toBe("open");

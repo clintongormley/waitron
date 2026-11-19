@@ -25,7 +25,7 @@ never-printed bill being issued then, showing the amount still owed (`:95-96`).
 printed, fully paid or recorded as a walkout, gets its ticket a few seconds after the day ends, for
 everything on the bill, showing payments already taken and the amount still owed. Next shift the
 till shows the bill as printed, as after **Print the bill**: staff take payment with **Pay**, record
-a walkout, or print the ticket from **Find a bill**. A box that was off at the day's end does this as
+a walkout, or print the ticket from **Find a bill**. (Corrected 2026-11-19 while building: on main no screen prints an issued, unpaid ticket; it reaches paper when the bill is paid and the payment window closes; a bill then recorded as a walkout gets no printed ticket. Put back to the owner as D3.) A box that was off at the day's end does this as
 it starts; a box waiting for its time to be confirmed does it once the time is confirmed. The day's
 start setting now issues tickets, so its help text says to pick an hour when the venue is closed.
 
@@ -73,7 +73,7 @@ values in the fiscal package's database layout, which is why D2 is yours.
 - **D3. No printing at the close.** You said: "It is required to deliver a ticket. We must always
   print one unless we email it instead" (`adviser-meeting.md`, question 3). At 05:00 nobody is there
   to take it, so this is an **exception for you to accept**: no receipt prints; staff print it from
-  **Find a bill** when the guest comes back. It is one of the sales #3835 (ADVISER-NO-NONE) already
+  **Find a bill** when the guest comes back. (Corrected 2026-11-19 while building: on main no screen prints an issued, unpaid ticket; it reaches paper when the bill is paid and the payment window closes; a bill then recorded as a walkout gets no printed ticket. Put back to the owner as D3.) It is one of the sales #3835 (ADVISER-NO-NONE) already
   leaves unprinted (its point 2); whether ADVISER-TICKET-OWED-MARK should print it later is that
   item's question. A full invoice the guests asked for on A4 or by email still goes out: the email
   is sent, and the A4 page is queued on the office printer and prints when it is on

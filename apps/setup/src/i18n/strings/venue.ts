@@ -133,7 +133,7 @@ export const venueEn = {
   "venue.help.province":
     "The province must match the postal code. It determines the fiscal territory and time zone.",
   "venue.help.day_cutover":
-    "Sales before this time belong to the previous business day. Choose a time when the venue is closed. Table bills still open then get their ticket, without printing.",
+    "Sales before this time belong to the previous business day. Choose a time when the venue is closed. Table bills still open then get their receipt, without printing.",
   "venue.help.series_code":
     "Ordinary invoice numbers start with this prefix, then a code Waitron adds, then the invoice's number: for example FS-0CSQW/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FS unless you need another invoice series.",
   "venue.help.full_series_code":
