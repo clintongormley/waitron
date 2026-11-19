@@ -3,8 +3,8 @@
 A box on numbered releases can receive updated verification code and keys. Then a
 release operator can offer a stable release to a group, widen the group or pause for
 everybody. Boxes check without a Cloud account. Trust refresh (1c) landed in #3814.
-The owner chose the signed offer on 19 November. The revised offer plan (1d) awaits
-watcher clearance. [Parent plan](2026-11-09-a950-shorter-upgrades.md) ·
+The owner chose the signed offer on 19 November. Claude reviewed the revised offer plan (1d).
+The watcher cleared it on 19 November at 15:24 in Lane F’s questions.md. [Parent plan](2026-11-09-a950-shorter-upgrades.md) ·
 [Signed manual install](2026-11-18-a950-signed-manual-install.md)
 
 ## 1c. Refresh trust through checked numbered installs
