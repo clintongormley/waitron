@@ -3380,6 +3380,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     session: Awaited<ReturnType<typeof requireSession>>,
     billId: string,
     expected: number,
+    expectedEdit: BillEditExpected | null,
     change: (tx: Transaction) => Promise<Awaited<ReturnType<typeof readBillSetMenus>>>,
   ) {
     return withTransaction(deps.db, async (tx) => {
@@ -3387,6 +3388,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       await checkZones(tx, session, [{ orderId: billId }]);
       const revision = await assertTabOpen(tx, billId);
       const partyId = await partyOfOrder(tx, billId);
+      await requireOrderBillEditor(tx, billId, { operatorId: session.personId, expectedEdit });
       if (partyId === null && revision !== expected)
         throw new AppError("working_order.out_of_date", { workingOrderId: billId, revision });
       const next =
@@ -3406,8 +3408,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const count = body.count;
       if (typeof count !== "number" || !Number.isInteger(count) || count < 0 || count > 99)
         throw new AppError("management.request_invalid", { field: "count" });
-      const result = await changeSetMenus(session, billId, expected, (tx) =>
-        setSetMenuCount(tx, cfg, billId, menuId, count, session.personId),
+      const result = await changeSetMenus(
+        session,
+        billId,
+        expected,
+        body.expectedEdit as BillEditExpected | null,
+        (tx) => setSetMenuCount(tx, cfg, billId, menuId, count, session.personId),
       );
       return c.json(result);
     }),
@@ -3420,8 +3426,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const lineId = requireOtherBill(c.req.param("lineId"), "lineId");
       const body = asObject(await readRawJsonBody<unknown>(c));
       const expected = requireRevision(body.expectedPartyRevision, "expectedPartyRevision");
-      const result = await changeSetMenus(session, billId, expected, (tx) =>
-        removeSetMenuLines(tx, billId, [lineId]),
+      const result = await changeSetMenus(
+        session,
+        billId,
+        expected,
+        body.expectedEdit as BillEditExpected | null,
+        (tx) => removeSetMenuLines(tx, billId, [lineId]),
       );
       return c.json(result);
     }),

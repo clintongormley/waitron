@@ -7,12 +7,13 @@ import { loginWithPin } from "@waitron/identity";
 import { updateMenuDetails } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import * as venueService from "@waitron/venue-service";
+import { readBillEditState } from "./bill-editing.js";
 import { insertPartyBill, partyRevision } from "./parties.js";
 import { mountTillApi } from "./till-api.js";
 import { inTx, seatWithNoAllergies } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
-import { seedBillSetMenu } from "./testing/set-menu-bill-fixture.js";
+import { saveSetMenuDraft, seedBillSetMenu } from "./testing/set-menu-bill-fixture.js";
 import { setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
@@ -75,7 +76,8 @@ it("sets a bill's count, reads it for a move, cancels one line and refuses the s
   const { partyId, tabId } = await seated();
   const expectedPartyRevision = await inTx(venue, (tx) => partyRevision(tx, partyId));
   const path = `/api/bills/${tabId}/set-menus`;
-  const count = { count: 2, expectedPartyRevision };
+  const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, tabId));
+  const count = { count: 2, expectedPartyRevision, expectedEdit };
   const raised = await request("PUT", `${path}/${copy.menuId}`, count);
   expect(raised.status).toBe(200);
   const answer = await raised.json();
@@ -97,6 +99,7 @@ it("sets a bill's count, reads it for a move, cancels one line and refuses the s
   const [first, second] = answer.setMenus.setMenus;
   const removed = await request("DELETE", `/api/bills/${tabId}/set-menu-lines/${first.lineId}`, {
     expectedPartyRevision: answer.partyRevision,
+    expectedEdit,
   });
   expect(removed.status).toBe(200);
   expect(await removed.json()).toMatchObject({
@@ -110,6 +113,38 @@ it("sets a bill's count, reads it for a move, cancels one line and refuses the s
       .where(eq(workingOrderLines.workingOrderId, tabId)),
   ).toEqual([{ id: second.lineId }]);
 });
+
+it.each(["PUT", "DELETE"] as const)(
+  "%s refuses a change while another person owns the bill's draft",
+  async (method) => {
+    const { venue, copy } = fixture;
+    const bill = await seated();
+    const lineId = await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, copy, 1));
+    await saveSetMenuDraft(venue, bill, {
+      menuItemId: copy.menuItemId,
+      menuVersionId: copy.versionId,
+      setMenuId: copy.menuId,
+      quantity: "1",
+    });
+    const expectedPartyRevision = await inTx(venue, (tx) => partyRevision(tx, bill.partyId));
+    const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, bill.tabId));
+    const path = method === "PUT" ? `set-menus/${copy.menuId}` : `set-menu-lines/${lineId}`;
+    const response = await request(method, `/api/bills/${bill.tabId}/${path}`, {
+      count: 2,
+      expectedPartyRevision,
+      expectedEdit,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "draft.taken_over" } });
+    expect(
+      await venue.db
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, bill.tabId)),
+    ).toEqual([{ id: lineId }]);
+    expect(await inTx(venue, (tx) => partyRevision(tx, bill.partyId))).toBe(expectedPartyRevision);
+  },
+);
 
 it.each([-1, 100, 1.5, "2", null])("refuses an invalid count %s", async (count) => {
   const { copy } = fixture;
