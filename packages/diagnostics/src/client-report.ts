@@ -31,6 +31,7 @@ const KEYS: Record<string, readonly string[]> = {
   "theme.load_failed": ["code"],
   "tax_office_download.load_failed": ["code"],
   "ui.popover_load_failed": ["errorType"],
+  "receipt.owed_request_failed": ["code", "errorType"],
   "server-switch": [],
 };
 const METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);

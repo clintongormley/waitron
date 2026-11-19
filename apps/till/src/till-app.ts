@@ -3637,6 +3637,9 @@ export class TillApp extends LitElement {
   get #lockedForRefusedPerson(): boolean {
     return this.#refusedPerson !== undefined && this.#refusedPerson === this.#tabPerson;
   }
+  get #mayPrintReceipt(): boolean {
+    return this.deviceId === undefined || this.capabilities.includes("print-receipt");
+  }
   @state() private deviceZoneSelection: DeviceZoneSelection | null = null;
   @state() private deviceSettingsOpen = false;
   @state() private deviceZonesOpen = false;
@@ -20438,19 +20441,17 @@ export class TillApp extends LitElement {
 
   #askForOwedReceipt(): void {
     const owed = this.ticketWorkingOrderId;
-    if (
-      this.settlementDocument === null ||
-      owed === undefined ||
-      (this.deviceId !== undefined && !this.capabilities.includes("print-receipt"))
-    )
-      return;
-    this.api.printReceipt(owed, { ifOwed: true }).catch((error: unknown) =>
-      diag.record("warn", "receipt.owed_request_failed", {
-        error:
-          (error as { code?: unknown } | undefined)?.code ??
-          (error instanceof Error ? error.name : "Unknown"),
-      }),
-    );
+    if (this.settlementDocument === null || owed === undefined || !this.#mayPrintReceipt) return;
+    this.api.printReceipt(owed, { ifOwed: true }).catch((error: unknown) => {
+      const code = (error as { code?: unknown } | null | undefined)?.code;
+      diag.record(
+        "warn",
+        "receipt.owed_request_failed",
+        typeof code === "string"
+          ? { code }
+          : { errorType: error instanceof Error ? error.name : "Unknown" },
+      );
+    });
   }
 
   #endOperatorSession(): void {
@@ -22798,7 +22799,7 @@ export class TillApp extends LitElement {
             slot="drill"
             .acknowledgment=${this.historicalReceipt.acknowledgment}
             .busy=${this.findBillBusy || this.refundPrintBusy}
-            .canPrint=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
+            .canPrint=${this.#mayPrintReceipt}
             @refund-original=${(event: Event) => {
               event.stopPropagation();
               void this.#openRefundOriginal();
@@ -22844,9 +22845,7 @@ export class TillApp extends LitElement {
           .deliveryRefusal=${this.invoiceDeliveryRefusal}
           .emailOpen=${this.invoiceEmailOpen}
           .emailRefusal=${this.invoiceEmailRefusal}
-          .canPrintReceipt=${
-            this.deviceId === undefined || this.capabilities.includes("print-receipt")
-          }
+          .canPrintReceipt=${this.#mayPrintReceipt}
           .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
         ></till-ticket-view>`;
       case "hours":
@@ -23472,7 +23471,7 @@ export class TillApp extends LitElement {
                 .deliveryRefusal=${this.invoiceDeliveryRefusal}
                 .emailOpen=${this.invoiceEmailOpen}
                 .emailRefusal=${this.invoiceEmailRefusal}
-                .canPrintReceipt=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
+                .canPrintReceipt=${this.#mayPrintReceipt}
                 @invoice-printer-open=${(event: CustomEvent<{ role: "receipt" | "invoice" }>) => void this.#readInvoicePrinters(event.detail.role)}
                 @equipment-change=${(event: CustomEvent<EquipmentChange>) => {
                   event.stopPropagation();

@@ -465,22 +465,25 @@ describe.each(surfaces)("closing the documents window after %s", (_surface, pay)
     },
   );
 
-  it("closes, and throws nothing, when the request for the original fails", async () => {
-    const api = closingApi({
-      printReceipt: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-    });
-    const { el } = await mountWidget<TillApp>("till-app", { api });
-    const id = await pay(el, api);
-    const record = vi.spyOn(diag, "record");
-    closeBy.Done(el);
-    await flush(el);
-    expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith(id, { ifOwed: true });
-    expect(documents(el)).toBeNull();
-    expect(record).toHaveBeenCalledWith("warn", "receipt.owed_request_failed", {
-      error: "TypeError",
-    });
-    record.mockRestore();
-  });
+  it.each([
+    ["unreachable", new TypeError("Failed to fetch"), { errorType: "TypeError" }],
+    ["refused", { code: "storage.disk_full", status: 507 }, { code: "storage.disk_full" }],
+    ["thrown without a name", "boom", { errorType: "Unknown" }],
+  ])(
+    "closes, and throws nothing, when the request for the original is %s",
+    async (_how, failure, fields) => {
+      const api = closingApi({ printReceipt: vi.fn().mockRejectedValue(failure) });
+      const { el } = await mountWidget<TillApp>("till-app", { api });
+      const id = await pay(el, api);
+      const record = vi.spyOn(diag, "record");
+      closeBy.Done(el);
+      await flush(el);
+      expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith(id, { ifOwed: true });
+      expect(documents(el)).toBeNull();
+      expect(record).toHaveBeenCalledWith("warn", "receipt.owed_request_failed", fields);
+      record.mockRestore();
+    },
+  );
 
   it("asks for nothing on a device that may not print receipts", async () => {
     const api = closingApi({
