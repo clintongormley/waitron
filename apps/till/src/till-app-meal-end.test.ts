@@ -1532,6 +1532,72 @@ describe("till-app: Print the bill with dishes not served", () => {
     expect(warning(el)!.querySelector("[data-mark-served]")).toBeNull();
   });
 
+  const namingCustomer = billOf({
+    invoiceType: "F1",
+    recipient: { taxId: "B12345678", legalName: "Acme SL", address: "Calle 1", countryCode: "ES" },
+  });
+  const canServe: CapabilityFlag[] = ["print-receipt", "take-cash", "hand-over-orders"];
+  const cannotServe: CapabilityFlag[] = ["print-receipt", "take-cash"];
+
+  it.each([
+    ["with Mark served", canServe, true],
+    ["without Mark served", cannotServe, false],
+  ])(
+    "tells staff a full invoice naming a customer cannot be corrected later, %s, and still offers Print anyway",
+    async (_case, capabilities, marksServed) => {
+      const { el } = await openBill(
+        {
+          endMeal: vi.fn().mockRejectedValue(unservedRefusal),
+          getPartyBills: vi.fn(async () => [namingCustomer]),
+        },
+        capabilities,
+      );
+
+      await printBill(el);
+
+      const said = text(warning(el));
+      expect(said).toContain(t("meal_end.unserved_full_invoice"));
+      expect(said).not.toContain(codeMessage("meal_end.unserved_dishes"));
+      expect(said).not.toContain(t("meal_end.unserved_no_mark"));
+      expect(warning(el)!.querySelector("[data-print-anyway]")).not.toBeNull();
+      expect(warning(el)!.querySelector("[data-mark-served]") !== null).toBe(marksServed);
+    },
+  );
+
+  it.each([
+    ["with Mark served", canServe, codeMessage("meal_end.unserved_dishes")],
+    ["without Mark served", cannotServe, t("meal_end.unserved_no_mark")],
+  ])(
+    "keeps today's sentence for a simplified bill, %s, even when another bill names a customer",
+    async (_case, capabilities, sentence) => {
+      const { el } = await openBill(
+        {
+          endMeal: vi.fn().mockRejectedValue(unservedRefusal),
+          getPartyBills: vi.fn(async () => [
+            billOf(),
+            { ...namingCustomer, workingOrderId: "wo-9", billNumber: 2 },
+          ]),
+        },
+        capabilities,
+      );
+
+      await printBill(el);
+
+      expect(text(warning(el))).toContain(sentence);
+      expect(text(warning(el))).not.toContain(t("meal_end.unserved_full_invoice"));
+    },
+  );
+
+  it("words the notice for a full invoice naming a customer exactly, in English and Spanish", () => {
+    expect(t("meal_end.unserved_full_invoice")).toBe(
+      "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot file a correction for it, so take off any dish that may not come before you print.",
+    );
+    setLocale("es");
+    expect(t("meal_end.unserved_full_invoice")).toBe(
+      "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede presentar una rectificación para ella, así que quita antes de imprimir los platos que puedan no llegar.",
+    );
+  });
+
   it("Cancel takes the list down and sends nothing; Print the bill then asks again without printing anyway", async () => {
     const endMeal = vi.fn().mockRejectedValue(unservedRefusal);
     const { el } = await openBill({ endMeal });

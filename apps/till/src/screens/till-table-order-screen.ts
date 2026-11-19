@@ -5339,10 +5339,17 @@ export class TillTableOrderScreen extends LitElement {
     if ("printed" in shown)
       return html`<p class="bill-printed" role="status" data-bill-printed>${t("bill.issued")}</p>`;
     const servable = this.canMarkServed ? shown.unserved.filter((dish) => dish.released) : [];
+    const bill = this.bills.find((row) => row.workingOrderId === shown.workingOrderId);
+    // A recipient becomes the sale's customer tax number, and the server refuses to correct a sale
+    // that has one, so the usual "refunded with Correct invoice" would be untrue.
+    const notice =
+      (bill?.recipient ?? null) !== null
+        ? t("meal_end.unserved_full_invoice")
+        : servable.length === 0
+          ? t("meal_end.unserved_no_mark")
+          : codeMessage("meal_end.unserved_dishes");
     return html`<div class="finish-refusal meal-end-unserved" role="alert" data-meal-end-unserved>
-      <span
-        >${servable.length === 0 ? t("meal_end.unserved_no_mark") : codeMessage("meal_end.unserved_dishes")}</span
-      >
+      <span>${notice}</span>
       <span>${t("meal_end.unserved_heading")}</span>
       <ul>
         ${shown.unserved.map(
