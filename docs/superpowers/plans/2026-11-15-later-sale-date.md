@@ -457,6 +457,8 @@ ended.
 | G. A bill still open after its trading day closed, then paid (B, C), printed (A), recorded as a walkout (`unpaid-departure-api.ts:54` → `unpaid-departure.ts:122`), closed as deferred (`deferred-close.ts:160`) or completed by an edit (H) | — | close of its trading day; nothing issues then on main | yes, until ADVISER-CLOSE-OF-DAY-TICKET issues it at the close; afterwards the bill already holds its ticket and a walkout issues nothing (`unpaid-departure.ts:107-114`) | D2: one date (the issue date), as main today | — |
 | H. An edit that leaves a paid bill owing nothing | `issueIfFullyPaid` `bill-payments.ts:920` from `till-api.ts:3332`, `:3880`, `:3920`, `:4059`, `:4302`, `:4435`, `adjustments-api.ts:178`, `:243`, `line-cancel-api.ts:272`, `working-order.ts:7346` | the edit makes it fully paid | later trading day: row G. Same trading day, after midnight: only a bill already fully paid but held by an open draft (`bill-payments.ts:789-790`) | one date; that held case is a stated limit | — |
 
+Row D, "when the card was taken": 2026-11-19, R3 review: see the correction under D3 — SumUp's time is the checkout's start; a card found later by either provider carries roughly when the reader was asked, and a tap after midnight still files the earlier day.
+
 Issue nothing new: `finalizeSettleRecovery` (`till-sale.ts:2215`) only settles a bill already
 issued; `recordSubstitution` (`packages/core/src/record-substitution.ts:57`) has no caller under
 `apps/`; the readiness check's test sale (`fiscal-readiness-runner.ts:112`) is no meal; correctives
@@ -505,6 +507,8 @@ SumUp's time, and never by a live answer (payments store tests); finding 1
 Monday, then paid in cash, printed, or recorded as a walkout on Thursday → no sale date (D2). Must
 stay green unedited: the owner's example (card row created 14 March 23:50, found by the reconciler
 15 March 09:10 → 14 March), the live 23:58/00:01 card with one date, Task 1's fingerprint control.
+
+  SumUp card tapped 1 April 00:01 above: 2026-11-19, R3 review: see the correction under D3 — SumUp's time is the checkout's start; a card found later by either provider carries roughly when the reader was asked, and a tap after midnight still files the earlier day.
 
 **6. Fiscal points.** The kept Task 1 changes the code that builds the record sent to AEAT:
 `VerifactuBackend.recordSale` now adds `FechaOperacion` to ordinary invoices (F1) and simplified
@@ -612,6 +616,7 @@ match the owner's "correct" to "a dinner that ends after midnight on 1 April tak
   nothing; the gap is the wait between the answer and that clock reading (inference: normally under
   a second, longer if the box is busy writing), and SumUp's live answer is itself up to its one-second
   poll interval after the tap (`provider.ts:43-45`). (d) A Stripe card found later (D3).
+  (d): 2026-11-19, R3 review: see the correction under D3 — SumUp's time is the checkout's start; a card found later by either provider carries roughly when the reader was asked, and a tap after midnight still files the earlier day.
 
 **8. Size.** Production code: about 110 lines removed (Task 6a's column and writers, Task 6's
 serving-mark reads), about 70 added (D3's column and SumUp's reconciler writing it, and the

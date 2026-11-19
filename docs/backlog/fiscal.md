@@ -1159,8 +1159,9 @@ sale now files that day as `FechaOperacion`, uses its VAT rates, prints it as th
 keeps it in `sales.supply_day`, counts in its period on the VAT return and in the accountant export,
 which shows it in its last column. The sale's day is when staff last marked a dish served, if every
 dish still owed was served and that fell on an earlier business day than the payment; otherwise the
-payment's (for an unpaid departure, when it was recorded), and for a card the box finishes later,
-when the card was taken (`saleCloseDay`). Owner's
+payment's (for an unpaid departure, when it was recorded); a card answered live and filed late
+takes its settle time, and a card found later takes roughly when the reader was asked (a stated
+limit: a tap after midnight still files the earlier day). Owner's
 answers, relayed by the watcher at 12:12 (lane L `questions.md`): Q1 "Monday, last dish", so a bill
 paid on Monday whose last unserved dish is removed on Wednesday files Monday, and an unpaid
 departure recorded days later follows the same rule; Q2 "sale day" for the VAT return and the

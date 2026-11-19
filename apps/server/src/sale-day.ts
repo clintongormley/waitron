@@ -31,8 +31,8 @@ export interface CardTiming {
 /**
  * The moment a card payment dates its sale by, or null for one that never settled: a live answer's
  * `settled_at`; for a card a check found after its live answer was missed, which settles the row
- * when the check asked, the provider's start of the checkout, or, for a row recording a resolution,
- * when the row was written.
+ * when the check asked, the provider's start of the checkout (or, when SumUp names none, when the
+ * row was written), or, for a row recording a resolution, when the row was written.
  */
 export function cardSaleMoment(card: CardTiming): string | null {
   if (card.providerCheckoutStartedAt !== null) return card.providerCheckoutStartedAt;

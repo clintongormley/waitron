@@ -81,8 +81,8 @@ export const payments = table(
     requestedAmount: money("requested_amount"),
     state: paymentState("state").notNull(),
     settledAt: tsString("settled_at"),
-    /** When the provider says the checkout began, written once, only by a check that finds the
-     * card after its live answer was missed. */
+    /** When the provider says the checkout began, or, when SumUp names none, when the row was
+     * written; written once, only by a check that finds the card after its live answer was missed. */
     providerCheckoutStartedAt: tsString("provider_checkout_started_at"),
     /** Committed before reversing an orphan; the provider's reconciler owns recovery of this claim. */
     reconcileRemediatedAt: tsString("reconcile_remediated_at"),
