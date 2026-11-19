@@ -1484,7 +1484,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **A951-S provider trials.** Public staff-name changes and automatic certificates still need joint
   qualification. Translate all returned one editable menu suggestion on the test box;
   address completion still needs its trial. Keep the approved consent and request limits.
-  Idle gateway recovery still needs a check through both public Cloud routes.
+  Idle gateway recovery still needs testing through Cloud’s staff and public HTTPS routes.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** first-contact trust bootstrap; and the cloud-standby end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.

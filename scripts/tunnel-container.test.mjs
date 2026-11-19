@@ -47,8 +47,10 @@ if(name==="socat") {process.on("SIGTERM",()=>{fs.appendFileSync(process.env.TRAC
     `#!/bin/sh\nexec python3 -c 'import os,sys,time; gate=os.getenv("SETSID_GATE"); gate and open(gate,"w").close(); gate and time.sleep(60); os.setsid(); os.execvp(sys.argv[1],sys.argv[1:])' "$@"\n`,
   );
   await chmod(setsid, 0o755);
-  const sleep = join(bin, "sleep");
-  await writeFile(sleep, '#!/bin/sh\nexec /bin/sleep "${TUNNEL_TEST_POLL_DELAY:-$1}"\n');
+  const fastPoll = join(bin, "fast-poll");
+  await mkdir(fastPoll);
+  const sleep = join(fastPoll, "sleep");
+  await writeFile(sleep, `#!${process.execPath}\nsetTimeout(() => {}, 100);\n`);
   await chmod(sleep, 0o755);
   const timeout = join(bin, "timeout");
   await writeFile(timeout, '#!/bin/sh\n[ "$1" = 1 ] || exit 1\nshift\nexec "$@"\n');
@@ -83,13 +85,12 @@ async function start(
   const child = spawn("sh", [script, control, keys], {
     env: {
       ...process.env,
-      PATH: bin + ":" + process.env.PATH,
+      PATH: (failedProbe ? join(bin, "fast-poll") + ":" : "") + bin + ":" + process.env.PATH,
       TRACE: trace,
       SNAPSHOT: snapshot,
       ...(unavailable ? { WG_GATE: trace + ".gate" } : {}),
       SOCAT_EXIT: deadProxy ? "1" : "0",
       PROBE_EXIT: failedProbe ? "1" : "0",
-      ...(failedProbe ? { TUNNEL_TEST_POLL_DELAY: "0.1" } : {}),
       ...(delayedProxy ? { SETSID_GATE: trace + ".setsid" } : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -241,7 +242,16 @@ it("reports a failed datagram send and keeps managing the staff forwarder", asyn
   expect(run.error.split("\n").filter((line) => line === "tunnel.probe_failed")).toHaveLength(1);
   expect((await events(run)).filter(([command]) => command === "closed")).toHaveLength(1);
   expect(run.child.exitCode).toBeNull();
-}, 35000);
+  await writeFile(
+    join(run.control, "peer.json"),
+    JSON.stringify({ ...configuration, address: "10.77.17.3" }),
+  );
+  await expect
+    .poll(() => run.error.split("\n").filter((line) => line === "tunnel.probe_failed").length, {
+      timeout: 10000,
+    })
+    .toBe(2);
+}, 45000);
 
 it("rejects two complete JSON documents and an oversized valid document", async () => {
   for (const raw of [
