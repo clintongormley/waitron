@@ -23,8 +23,15 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     if (this.receiptDesignation() !== "original") return null;
     if (!this.canPrintReceipt) return "not-allowed";
     if (this.receiptEquipment === undefined) return null;
-    const printer = this.receiptEquipment.resolved;
-    return printer == null ? "no-printer" : printer.available ? "prints" : "switched-off";
+    const { resolved: printer, choices } = this.receiptEquipment;
+    if (printer == null) return choices.length === 0 ? null : "no-printer";
+    return printer.available ? "prints" : "switched-off";
+  }
+
+  protected override renderReceiptPrinterNote(designation: "original" | "duplicate") {
+    return designation === "original" && this.#closingState() !== null
+      ? nothing
+      : super.renderReceiptPrinterNote(designation);
   }
 
   protected override closingQueuesOriginal(): boolean {
