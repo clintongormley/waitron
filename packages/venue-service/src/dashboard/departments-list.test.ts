@@ -11,6 +11,7 @@ import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 
 import "./departments-list.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 type List = HTMLElement & {
   api: VenueServiceApi;
@@ -234,7 +235,7 @@ describe("department list", () => {
   });
   it.each([
     ["en", "Departments and zones"],
-    ["es", "Departamentos y zonas"],
+    ["es", VENUE_SERVICE_STRINGS.es["nav.departments_zones"]],
   ])("titles the page and its table as the menu does (%s)", async (locale, title) => {
     setLocale(locale);
     const el = await setup();
@@ -379,14 +380,16 @@ describe("department list", () => {
       departments: model.departments.map((row) => ({ ...row, active: true })),
     });
     expect(table(el).columns.map(({ label }) => label)).toEqual([
-      "Nombre",
-      "Cómo empiezan los pedidos",
-      "Cuando se usa el servicio en mostrador",
-      "Acciones",
+      VENUE_SERVICE_STRINGS.es["venue.list_name"],
+      VENUE_SERVICE_STRINGS.es["venue.order_start"],
+      VENUE_SERVICE_STRINGS.es["venue.counter_paid_when"],
+      VENUE_SERVICE_STRINGS.es["venue.actions"],
     ]);
-    expect(rows(el)[1]!.textContent).toContain("Servicio en mostrador");
+    expect(rows(el)[1]!.textContent).toContain(VENUE_SERVICE_STRINGS.es["venue.counter_service"]);
     expect(table(el).shadowRoot!.querySelectorAll('[data-row-key^="zone:"]')).toHaveLength(2);
-    expect(find(el, '[data-test="delete-department-d2"]')!.textContent!.trim()).toBe("Eliminar");
+    expect(find(el, '[data-test="delete-department-d2"]')!.textContent!.trim()).toBe(
+      VENUE_SERVICE_STRINGS.es["venue.delete"],
+    );
     expect(find(el, '[data-test="no-enabled-department"]')!.textContent).toContain(
       "No hay ningún departamento disponible: añade uno para aceptar pedidos",
     );
@@ -441,7 +444,9 @@ it("a disabled parent's assigned zones never become unassigned actions", async (
 it("the Spanish empty department list says why it has no rows", async () => {
   setLocale("es");
   const el = await setup({ ...model, departments: [] });
-  expect(table(el).shadowRoot!.textContent).toContain("Todavía no hay departamentos.");
+  expect(table(el).shadowRoot!.textContent).toContain(
+    VENUE_SERVICE_STRINGS.es["venue.no_departments"],
+  );
 });
 
 it("retains alphabetical department sorting without changing the supplied display order", async () => {

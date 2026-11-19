@@ -5,6 +5,7 @@ import { applyTokens } from "@waitron/ui";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { PeriodDialog } from "./period-dialog.js";
 import "./period-dialog.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 const menus = [
@@ -158,7 +159,7 @@ it("orders Name, Colour, Customer menu, Staff-only menus, in English and Spanish
   setLocale("es");
   el.requestUpdate();
   await el.updateComplete;
-  expect(field(el, "menuId").label).toBe("Carta de clientes");
+  expect(field(el, "menuId").label).toBe(VENUE_SERVICE_STRINGS.es["period.customer_menu"]);
   expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Editar periodo · Restaurant");
   expect(el.shadowRoot!.querySelector("[data-test=menu-includes]")!.textContent!.trim()).toBe(
     "Incluye Drinks",
@@ -598,7 +599,9 @@ it("no Floor plan field when adding or editing, and a save sends no floor plan",
     dialog.requestUpdate();
     await dialog.updateComplete;
     expect(dialog.shadowRoot!.querySelector("[name=floorPlanId]")).toBeNull();
-    expect(dialog.shadowRoot!.innerHTML).not.toContain("Plano de sala");
+    expect(dialog.shadowRoot!.innerHTML).not.toContain(
+      VENUE_SERVICE_STRINGS.es["period.floor_plan"],
+    );
   }
 });
 
@@ -748,7 +751,9 @@ it("Painted in shows season chips in the order given with their tints, then spec
   el.requestUpdate();
   await el.updateComplete;
   expect(
-    el.shadowRoot!.querySelector("[data-test=painted-in]")!.textContent!.includes("Pintado en"),
+    el
+      .shadowRoot!.querySelector("[data-test=painted-in]")!
+      .textContent!.includes(VENUE_SERVICE_STRINGS.es["period.painted_in"]),
   ).toBe(true);
 });
 
@@ -793,7 +798,7 @@ it("a period painted nowhere says Not painted anywhere", async () => {
   setLocale("es");
   el.requestUpdate();
   await el.updateComplete;
-  expect(note()?.textContent?.trim()).toBe("Sin pintar en ningún sitio");
+  expect(note()?.textContent?.trim()).toBe(VENUE_SERVICE_STRINGS.es["period.not_painted"]);
 });
 
 it("no Painted in section while paintedIn is not given, nor when adding", async () => {
@@ -859,7 +864,9 @@ it("from the Periods page, Add asks for the department first, preselects a lone 
   setLocale("es");
   el.requestUpdate();
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Añadir periodo");
+  expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
+    VENUE_SERVICE_STRINGS.es["period.add"],
+  );
 });
 
 it("with two departments, the preselected colour follows the department chosen until a colour is picked; after a pick, changing department keeps it", async () => {
@@ -1093,7 +1100,7 @@ it("draws Floor plan after Staff-only menus and before Painted in, not required,
   setLocale("es");
   el.requestUpdate();
   await el.updateComplete;
-  expect(field(el, "floorPlanSetId").label).toBe("Plano de sala");
+  expect(field(el, "floorPlanSetId").label).toBe(VENUE_SERVICE_STRINGS.es["period.floor_plan"]);
 });
 
 it("offers the default first by its own name, muted, then the other sets in the read's order", async () => {

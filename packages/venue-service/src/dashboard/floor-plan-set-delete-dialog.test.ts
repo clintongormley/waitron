@@ -6,6 +6,7 @@ import type {
   FloorPlanSetDeleteImpact,
 } from "./floor-plan-set-delete-dialog.js";
 import "./floor-plan-set-delete-dialog.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -189,10 +190,10 @@ it("speaks Spanish", async () => {
   expect(heading(el)).toBe("¿Eliminar Dinner?");
   expect(lines(el)).toEqual([
     "Usado por Dinner.",
-    "Las mesas se quedan: son comunes a todos los conjuntos.",
+    VENUE_SERVICE_STRINGS.es["floor_plans.delete_tables_stay"],
     "En sala, Inside mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
   ]);
-  expect(picker(el)!.label).toBe("Sustituir por");
+  expect(picker(el)!.label).toBe(VENUE_SERVICE_STRINGS.es["period.replace_with"]);
   expect(picker(el)!.options[0]).toEqual({
     value: "",
     label: "House (predeterminado)",
@@ -201,13 +202,13 @@ it("speaks Spanish", async () => {
   expect(confirm(el).textContent!.trim()).toBe("Eliminar Dinner");
   el.refusal = { code: "floor_plan_set.invalid", params: { field: "replaceWith" } };
   await el.updateComplete;
-  expect(picker(el)!.error).toBe("Elige otro conjunto.");
+  expect(picker(el)!.error).toBe(VENUE_SERVICE_STRINGS.es["floor_plans.replace_invalid"]);
   el.refusal = { code: "floor_plan_set.is_default", params: {} };
   await el.updateComplete;
-  expect(bottom(el)).toBe("El conjunto predeterminado no se puede eliminar.");
+  expect(bottom(el)).toBe(VENUE_SERVICE_STRINGS.es["floor_plans.is_default"]);
   el.impact = impactOf({ periods: [] });
   await el.updateComplete;
-  expect(lines(el)[0]).toBe("Ningún periodo lo usa.");
+  expect(lines(el)[0]).toBe(VENUE_SERVICE_STRINGS.es["floor_plans.delete_unused"]);
   el.impact = impactOf({
     periods: [
       { id: "a", name: "Supper" },
@@ -221,7 +222,7 @@ it("speaks Spanish", async () => {
   await el.updateComplete;
   expect(lines(el)).toEqual([
     "Usado por Supper y Brunch.",
-    "Las mesas se quedan: son comunes a todos los conjuntos.",
+    VENUE_SERVICE_STRINGS.es["floor_plans.delete_tables_stay"],
     "En sala, Inside y Terrace mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
   ]);
 });

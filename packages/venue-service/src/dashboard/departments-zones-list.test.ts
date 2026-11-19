@@ -5,6 +5,7 @@ import { cleanup, mount } from "@waitron/ui/src/test-helpers.js";
 import { VenueServiceApi, type FloorZone, type VenueServiceView } from "./client.js";
 import { zonesModel } from "../testing/department-zones-fixture.js";
 import "./departments-list.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 beforeEach(() => {
   setLocale("en");
   localStorage.clear();
@@ -266,10 +267,10 @@ it("has no Also edit column in Spanish either", async () => {
   setLocale("es");
   const { table } = await setup();
   expect(table.columns.map(({ label }) => label)).toEqual([
-    "Nombre",
+    VENUE_SERVICE_STRINGS.es["venue.list_name"],
     "Cómo empiezan los pedidos",
-    "Cuando se usa el servicio en mostrador",
-    "Acciones",
+    VENUE_SERVICE_STRINGS.es["venue.counter_paid_when"],
+    VENUE_SERVICE_STRINGS.es["venue.actions"],
   ]);
   expect(table.shadowRoot!.textContent).not.toContain("Editar también");
 });

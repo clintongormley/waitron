@@ -14,6 +14,7 @@ import { addDays } from "../hours-rules.js";
 import { monthModel } from "../testing/opening-hours-month-fixture.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 type Calendar = HTMLElementTagNameMap["dashboard-opening-hours-screen"];
 const originalUrl = location.href;
 
@@ -210,7 +211,9 @@ describe("A725 Calendar station month, migrated from Times", () => {
       const { el } = await mount();
       await drawn(el, "2026-12-01", "rest").not.toBeNull();
       expect(picker(el)!.name).toBe("departmentId");
-      expect(picker(el)!.label).toBe(locale === "en" ? "Show" : "Mostrar");
+      expect(picker(el)!.label).toBe(
+        locale === "en" ? "Show" : VENUE_SERVICE_STRINGS.es["opening.show"],
+      );
       expect(picker(el)!.search).toBe("never");
       expect(picker(el)!.options.filter(({ value }) => value.startsWith("station:"))).toEqual([
         {
@@ -219,7 +222,8 @@ describe("A725 Calendar station month, migrated from Times", () => {
           depth: 1,
           icon: "prep-station",
           iconPosition: "end",
-          iconLabel: locale === "en" ? "Prep station" : "Estación de preparación",
+          iconLabel:
+            locale === "en" ? "Prep station" : VENUE_SERVICE_STRINGS.es["opening.prep_station"],
         },
         {
           value: "station:kitchen",
@@ -227,7 +231,8 @@ describe("A725 Calendar station month, migrated from Times", () => {
           depth: 1,
           icon: "prep-station",
           iconPosition: "end",
-          iconLabel: locale === "en" ? "Prep station" : "Estación de preparación",
+          iconLabel:
+            locale === "en" ? "Prep station" : VENUE_SERVICE_STRINGS.es["opening.prep_station"],
         },
         {
           value: "station:pass",
@@ -235,7 +240,8 @@ describe("A725 Calendar station month, migrated from Times", () => {
           depth: 1,
           icon: "prep-station",
           iconPosition: "end",
-          iconLabel: locale === "en" ? "Prep station" : "Estación de preparación",
+          iconLabel:
+            locale === "en" ? "Prep station" : VENUE_SERVICE_STRINGS.es["opening.prep_station"],
         },
       ]);
       expect(picker(el)!.value).toBe("station:grill");
@@ -510,7 +516,7 @@ describe("A725 Calendar station month, migrated from Times", () => {
                 : "No se ha podido cargar el horario de apertura. Se volverá a intentar."
               : locale === "en"
                 ? "This station's times could not be loaded. It will be tried again."
-                : "No se han podido cargar los horarios de esta estación. Se volverá a intentar.",
+                : VENUE_SERVICE_STRINGS.es["prep.times.load_error"],
           ]);
         expect(monthRoot(el)?.querySelectorAll("[data-date]").length ?? 0).toBe(0);
         h.failing[failed] = false;
@@ -610,7 +616,7 @@ describe.each(["en", "es"] as const)("A725 Calendar station accessibility (%s)",
             cell(el, "2026-12-06")!.querySelector('.track[data-row="rest"] .segment'),
           ).toBeNull();
           expect(text(cell(el, "2026-12-15")!.querySelector('[data-test="no-orders"]'))).toBe(
-            locale === "en" ? "Closed" : "Cerrada",
+            locale === "en" ? "Closed" : VENUE_SERVICE_STRINGS.es["month.no_orders"],
           );
         }
       }

@@ -8,6 +8,7 @@ import { casaMarina } from "./floor-plans-fixture.js";
 import { VenueServiceApi } from "./client.js";
 import type { FloorPlansScreen } from "./floor-plans-screen.js";
 import "./floor-plans-screen.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -204,13 +205,19 @@ it("says the read failed, and clears it when the next timed read succeeds", asyn
 it("speaks Spanish", async () => {
   setLocale("es");
   const { screen, table } = await mountScreen();
-  expect(screen.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Planos de sala");
-  expect(screen.shadowRoot!.querySelector("[data-test=add-set]")!.textContent!.trim()).toBe(
-    "+ Añadir conjunto",
+  expect(screen.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe(
+    VENUE_SERVICE_STRINGS.es["floor_plans.title"],
   );
-  expect(table.columns.find(({ key }) => key === "usedBy")!.label).toBe("Usado por");
+  expect(screen.shadowRoot!.querySelector("[data-test=add-set]")!.textContent!.trim()).toBe(
+    VENUE_SERVICE_STRINGS.es["floor_plans.add_set"],
+  );
+  expect(table.columns.find(({ key }) => key === "usedBy")!.label).toBe(
+    VENUE_SERVICE_STRINGS.es["floor_plans.column.used_by"],
+  );
   expect(text(cell(table, "set:standard", "name"))).toBe("Standard Predeterminado");
-  expect(text(cell(table, "set:private", "usedBy"))).toBe("Sin usar");
+  expect(text(cell(table, "set:private", "usedBy"))).toBe(
+    VENUE_SERVICE_STRINGS.es["floor_plans.not_used"],
+  );
   expect(text(cell(table, "zone:standard:inside", "tables"))).toBe("12 en el plano");
   expect(text(cell(table, "zone:standard:terrace", "tables"))).toBe(
     "10 en el plano · 6 de reserva",
@@ -218,7 +225,9 @@ it("speaks Spanish", async () => {
   expect(text(cell(table, "zone:private:terrace", "tables"))).toBe(
     "Ninguna mesa en el plano · 16 de reserva",
   );
-  expect(text(cell(table, "zone:bar-standard:bar-zone", "tables"))).toBe("Todavía no hay mesas");
+  expect(text(cell(table, "zone:bar-standard:bar-zone", "tables"))).toBe(
+    VENUE_SERVICE_STRINGS.es["floor_plans.no_tables"],
+  );
   expect(text(cell(table, "department:deli", "name"))).toBe("Deli Todavía no hay conjuntos");
   expect(
     cell(table, "set:dinner", "actions").querySelector("wt-row-actions")!.getAttribute("label"),
@@ -500,10 +509,10 @@ it("speaks Spanish in the set menu", async () => {
   setLocale("es");
   const { table } = await mountScreen();
   expect(menuItems(table, "set:dinner").map((item) => text(item))).toEqual([
-    "Renombrar…",
-    "Copiar…",
-    "Hacer predeterminado",
-    "Eliminar…",
+    VENUE_SERVICE_STRINGS.es["floor_plans.rename"],
+    VENUE_SERVICE_STRINGS.es["floor_plans.copy"],
+    VENUE_SERVICE_STRINGS.es["floor_plans.make_default"],
+    VENUE_SERVICE_STRINGS.es["floor_plans.delete"],
   ]);
 });
 

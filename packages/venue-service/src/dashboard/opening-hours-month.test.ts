@@ -13,6 +13,7 @@ import type {
 } from "./opening-hours-month.js";
 import "./opening-hours-month.js";
 import type { ShowStation, StationShow } from "./station-show.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -535,7 +536,9 @@ describe("Opening hours month", () => {
     setLocale("es");
     el.requestUpdate();
     await el.updateComplete;
-    await expect.element(link).toHaveAccessibleDescription("Todo el año");
+    await expect
+      .element(link)
+      .toHaveAccessibleDescription(VENUE_SERVICE_STRINGS.es["month.year_view_hint"]);
   });
 
   it.each([
@@ -819,9 +822,13 @@ describe("Opening hours month", () => {
         const today = dayButton(el, "2026-12-30");
         expect(getComputedStyle(today).boxShadow, `${locale} ${width}`).not.toBe("none");
         expect(getComputedStyle(dayButton(el, "2026-12-29")).boxShadow).toBe("none");
-        await named(today).toHaveAccessibleName(containing(locale === "en" ? "Today" : "Hoy"));
+        await named(today).toHaveAccessibleName(
+          containing(locale === "en" ? "Today" : VENUE_SERVICE_STRINGS.es["hours.today"]),
+        );
         const marker = cell(el, "2026-12-30").querySelector<HTMLElement>('[data-test="today"]')!;
-        expect(text(marker)).toBe(locale === "en" ? "Today" : "Hoy");
+        expect(text(marker)).toBe(
+          locale === "en" ? "Today" : VENUE_SERVICE_STRINGS.es["hours.today"],
+        );
         const box = marker.getBoundingClientRect();
         if (width === DESKTOP) {
           expect(box.width, `${locale} ${width}`).toBeGreaterThan(1);
@@ -1136,19 +1143,25 @@ describe("Opening hours month, a station shown", () => {
       expect(show(el).options.map(({ value, label, depth }) => ({ value, label, depth }))).toEqual([
         {
           value: "show:all",
-          label: locale === "en" ? "Show all" : "Mostrar todo",
+          label: locale === "en" ? "Show all" : VENUE_SERVICE_STRINGS.es["opening.show_all"],
           depth: undefined,
         },
         {
           value: "all",
-          label: locale === "en" ? "All departments" : "Todos los departamentos",
+          label:
+            locale === "en"
+              ? "All departments"
+              : VENUE_SERVICE_STRINGS.es["opening.all_departments"],
           depth: undefined,
         },
         { value: "rest", label: "Restaurant", depth: 1 },
         { value: "bar", label: "Bar", depth: 1 },
         {
           value: "show:stations",
-          label: locale === "en" ? "All prep stations" : "Todas las estaciones de preparación",
+          label:
+            locale === "en"
+              ? "All prep stations"
+              : VENUE_SERVICE_STRINGS.es["opening.all_stations"],
           depth: undefined,
         },
         { value: "station:grill", label: "Grill", depth: 1 },
@@ -1249,7 +1262,7 @@ describe("Opening hours month, a station shown", () => {
   it("a date no department sends on reads Closed once", async () => {
     for (const [locale, words] of [
       ["en", "Closed"],
-      ["es", "Cerrada"],
+      ["es", VENUE_SERVICE_STRINGS.es["month.no_orders"]],
     ] as const) {
       setLocale(locale);
       const el = await mount(monthModel(), { stations: STATIONS, station: grill() });

@@ -1398,15 +1398,15 @@ it("names the tabs and the Orders and payment heading in Spanish", async () => {
   setLocale("es");
   const { el } = await mount();
   await strip(el).updateComplete;
-  expect(strip(el).label).toBe("Departamento");
+  expect(strip(el).label).toBe(VENUE_SERVICE_STRINGS.es["venue.department"]);
   expect(strip(el).items.map((item) => item.label)).toEqual([
-    "Datos",
-    "Servicio",
-    "Mesas",
-    "Traslados",
+    VENUE_SERVICE_STRINGS.es["venue.department_tab.details"],
+    VENUE_SERVICE_STRINGS.es["venue.department_tab.service"],
+    VENUE_SERVICE_STRINGS.es["venue.department_tab.tables"],
+    VENUE_SERVICE_STRINGS.es["venue.department_tab.transfers"],
   ]);
   expect(el.shadowRoot!.querySelector("[slot=service] h3")!.textContent!.trim()).toBe(
-    "Pedidos y cobro",
+    VENUE_SERVICE_STRINGS.es["venue.orders_and_payment"],
   );
 });
 it("offers no Transfers tab with one active department", async () => {
@@ -1670,8 +1670,10 @@ it("reads in Spanish", async () => {
   setLocale("es");
   const { el } = await mount();
   const section = needsClearing(el).closest("section")!;
-  expect(section.querySelector("h3")!.textContent!.trim()).toBe("Estados de la mesa");
-  expect(needsClearing(el).label).toBe("Por recoger");
+  expect(section.querySelector("h3")!.textContent!.trim()).toBe(
+    VENUE_SERVICE_STRINGS.es["venue.table_states"],
+  );
+  expect(needsClearing(el).label).toBe(VENUE_SERVICE_STRINGS.es["venue.needs_clearing"]);
   expect(section.querySelector(".hint")!.textContent!.trim()).toBe(
     "Una mesa queda «Por recoger» cuando el grupo se va, hasta que se marca como recogida.",
   );
@@ -2054,8 +2056,8 @@ it("reads the reminder in Spanish", async () => {
   );
   expect(control.label).toBe(VENUE_SERVICE_STRINGS.es["venue.release_reminder"]);
   expect(control.options.map((option) => option.label)).toEqual([
-    "Deshabilitado",
-    "Al momento",
+    VENUE_SERVICE_STRINGS.es["venue.release_reminder.off"],
+    VENUE_SERVICE_STRINGS.es["venue.release_reminder.at_once"],
     "5 minutos",
     "10 minutos",
     "15 minutos",
@@ -2978,15 +2980,19 @@ it("shows both the list refusal and the correction sentence when a field is high
   expect(field(el, "name").error).toBe("This field is required.");
   expect(await bottom(el)).toBe(`${STEP_CHANGED} Correct the highlighted fields to continue.`);
 });
-it("reads in Spanish: Pasos de servicio under Estados de la mesa", async () => {
+it("reads in Spanish: the service steps sit under the table states heading", async () => {
   setLocale("es");
   const { el } = await mount(stepsView());
   await selectDepartmentTab(el, "tables");
   const section = needsClearing(el).closest("section")!;
-  expect(section.querySelector("h3")!.textContent!.trim()).toBe("Estados de la mesa");
+  expect(section.querySelector("h3")!.textContent!.trim()).toBe(
+    VENUE_SERVICE_STRINGS.es["venue.table_states"],
+  );
   const list = stepList(el);
   expect(section.contains(list)).toBe(true);
-  expect(list.shadowRoot!.querySelector("h4")!.textContent!.trim()).toBe("Pasos de servicio");
+  expect(list.shadowRoot!.querySelector("h4")!.textContent!.trim()).toBe(
+    VENUE_SERVICE_STRINGS.es["venue.service_steps"],
+  );
 });
 
 it("hides each switch's visible hint from screen readers, which hear it as the switch's description", async () => {

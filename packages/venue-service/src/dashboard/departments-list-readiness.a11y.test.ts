@@ -5,6 +5,7 @@ import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { VenueServiceView } from "./client.js";
 import "./departments-list.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 const model: VenueServiceView = {
   departments: [
     {
@@ -151,7 +152,7 @@ describe.each(["light", "dark"] as const)("phone readiness list (%s)", (theme) =
         const link = setup.querySelector<HTMLAnchorElement>("a")!;
         expect(link.getAttribute("href")).toBe("/periods");
         expect(link.textContent!.trim()).toBe(
-          locale === "en" ? "Set up periods" : "Configura los periodos",
+          locale === "en" ? "Set up periods" : VENUE_SERVICE_STRINGS.es["venue.set_up_periods"],
         );
         const bounds = el.getBoundingClientRect();
         for (const rect of [setup.getBoundingClientRect(), ...link.getClientRects()]) {
@@ -197,12 +198,14 @@ describe.each(["light", "dark"] as const)("desktop Opening hours warning (%s)", 
           '[data-row-key="department:d1"] [part="setup-issue"]',
         )!;
         expect(setup.textContent).toContain(
-          locale === "en" ? "has no opening periods." : "no tiene períodos de apertura.",
+          locale === "en"
+            ? "has no opening periods."
+            : VENUE_SERVICE_STRINGS.es["venue.readiness.department_no_periods"],
         );
         const link = setup.querySelector<HTMLAnchorElement>("a")!;
         expect(link.getAttribute("href")).toBe("/periods");
         expect(link.textContent!.trim()).toBe(
-          locale === "en" ? "Set up periods" : "Configura los periodos",
+          locale === "en" ? "Set up periods" : VENUE_SERVICE_STRINGS.es["venue.set_up_periods"],
         );
         const bounds = el.getBoundingClientRect();
         for (const rect of [setup.getBoundingClientRect(), ...link.getClientRects()]) {

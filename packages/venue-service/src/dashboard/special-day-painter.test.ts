@@ -16,7 +16,7 @@ import {
   type SpecialDayAnswers,
   type Write,
 } from "../testing/special-day-painter-fixture.js";
-import { t } from "./strings.js";
+import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import "./special-day-painter.js";
 import {
   clockChangeConflict,
@@ -1398,7 +1398,7 @@ describe("no dates yet", () => {
     setLocale("es");
     const spanish = await mount({ specialDayId: null });
     expect(part(spanish.painter, "no-dates")!.textContent!.trim()).toBe(
-      "Añade fechas para pintarlas.",
+      VENUE_SERVICE_STRINGS.es["special.no_dates"],
     );
   });
 

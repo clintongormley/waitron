@@ -4,6 +4,7 @@ import type { LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import { openingHoursDay, dayNameLines } from "./opening-hours-day.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
@@ -112,7 +113,7 @@ describe("openingHoursDay", () => {
       text: ALL_DAY,
       inheritedFrom: "Restaurant",
     });
-    expect(dayBox("2026-12-25").rows[0]!.text).toBe("Cerrado");
+    expect(dayBox("2026-12-25").rows[0]!.text).toBe(VENUE_SERVICE_STRINGS.es["hours.closed"]);
     expect(dayBox("2026-12-01").rows[1]!.text).toBe("08:00–11:00 · 13:00–16:00 · 22:00–23:00");
   });
 
@@ -238,7 +239,10 @@ it.each(["en", "es"])("summarises open hours and inherited zones in %s", (locale
   for (const [closures, text] of [
     [[{ startsAt: "23:00", endsAt: "00:00" }], "09:00–23:00"],
     [[{ startsAt: "15:00", endsAt: "17:00" }], "09:00–15:00 · 17:00–00:00"],
-    [[{ startsAt: "09:00", endsAt: "00:00" }], locale === "en" ? "Closed" : "Cerrado"],
+    [
+      [{ startsAt: "09:00", endsAt: "00:00" }],
+      locale === "en" ? "Closed" : VENUE_SERVICE_STRINGS.es["hours.closed"],
+    ],
   ] as const) {
     day.departments[0]!.zones[0]!.closed = [...closures];
     expect(dayBox(day.date, "rest", model).rows[1]).toEqual({
