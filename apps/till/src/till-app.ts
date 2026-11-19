@@ -23464,10 +23464,11 @@ export class TillApp extends LitElement {
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
     if (tab === "counter") {
       const bill = this.#currentCounterSetMenuBill;
+      const copies = this.#counterOffers.ordering(bill);
       return html`<till-counter-screen
         .setMenuBill=${bill?.setMenus}
-        .setMenuCopies=${this.#counterOffers.ordering(bill)}
-        .setMenuCourses=${Object.fromEntries(this.courses.map(({ id, name }) => [id, name]))}
+        .setMenuCopies=${copies}
+        .setMenuCourses=${copies.length === 0 ? {} : Object.fromEntries(this.courses.map(({ id, name }) => [id, name]))}
         .saveSetMenuCount=${this.#saveCounterSetMenuCount}
         .moveSetMenuDishes=${this.#moveCounterSetMenuDishes}
         .changeAvailability=${this.#availabilityFor(this.counterServiceZoneId)}
