@@ -897,6 +897,28 @@ describe("scheduling a publication", () => {
     expect(submitButton(el).disabled).toBe(false);
   });
 
+  it("names the set menu whose problems prevent scheduling", async () => {
+    const api = stubApi({
+      scheduleMenuPublication: vi.fn().mockRejectedValue({
+        code: "set_menu.not_publishable",
+        params: { menuId: "daily", count: 2 },
+      }),
+    });
+    const el = await mount(api, {
+      preview: draftPreview({
+        setMenuProblems: [
+          { menuId: "daily", name: "Daily menu", problems: [{ kind: "no_lines" }] },
+        ],
+      }),
+    });
+    await openSchedule(el);
+    await enter(el, "date", "2026-10-10");
+    await enter(el, "time", "12:00");
+    await submit(el);
+    expect(await bottom(el)).toContain("Daily menu has 2 problems");
+    expect(scheduleDialog(el).open).toBe(true);
+  });
+
   it.each(["menu.changed_since_preview", "menu_publication.unchanged"])(
     "shows a %s refusal in the bottom message alone",
     async (code) => {

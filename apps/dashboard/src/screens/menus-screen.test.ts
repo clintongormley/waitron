@@ -10329,6 +10329,32 @@ describe("publishing", () => {
     expect(client.publishMenu).toHaveBeenLastCalledWith("menu-lunch", "e".repeat(64));
   });
 
+  it("names the set menu whose problems prevent publishing", async () => {
+    const set = {
+      id: "set-daily",
+      name: "Daily menu",
+      active: true,
+      kind: "set_menu",
+      setPrice: "14.00",
+      setVatClass: "reduced",
+    };
+    const client = api({
+      listMenus: vi.fn().mockResolvedValue([...menus, set]),
+      publishMenu: vi.fn().mockRejectedValue({
+        code: "set_menu.not_publishable",
+        status: 409,
+        params: { menuId: set.id, count: 2 },
+      }),
+    });
+    const el = await mountPreview(client);
+    await publish(el);
+    await vi.waitFor(() => {
+      const result = text(inPanel(el, "result"));
+      expect(result).toContain("Daily menu has 2 problems");
+      expect(result).toContain("version 2 is still live");
+    });
+  });
+
   it("says a failed publish left the live version in place and the changes saved", async () => {
     const client = api({
       publishMenu: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),

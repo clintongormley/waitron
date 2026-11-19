@@ -160,7 +160,16 @@ export {
   type MenuStructureNode,
 } from "./menu-structure.js";
 export { duplicateMenu } from "./menu-copy.js";
-export { refuseSetMenu } from "./set-menus.js";
+export {
+  addSetMenuDishes,
+  copySetMenuDishes,
+  readSetMenu,
+  refuseSetMenu,
+  saveSetMenuDishCourse,
+  saveSetMenuLines,
+  saveSetMenuVariantChoices,
+  type SetMenuDetails,
+} from "./set-menus.js";
 export {
   MENU_DOCUMENT_FORMAT,
   applyLiveFields,

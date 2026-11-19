@@ -8,6 +8,7 @@ const MENU_PUBLICATION_READS = [
   "settings.venue",
   "extra_list_items",
   "extra_lists",
+  "kitchen_courses",
   "menu_item_variant_overrides",
   "menu_items",
   "menu_releases",
@@ -18,6 +19,10 @@ const MENU_PUBLICATION_READS = [
   "products",
   "section_members",
   "sections",
+  "set_menu_dish_courses",
+  "set_menu_line_courses",
+  "set_menu_lines",
+  "set_menu_variant_exclusions",
   "units",
 ] as const;
 

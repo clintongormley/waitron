@@ -210,21 +210,18 @@ function statusOf(hash: string, version: LiveVersion | undefined, clashes = 0): 
       };
 }
 
-/**
- * Each menu's publication state, or every menu's when `menuIds` is left out. Every menu's document
- * is built in one pass, because the menu list asks again on every live change. An id that names no
- * menu is left out.
- */
 export async function menuStatus(
   tx: Transaction,
   menuIds?: readonly string[],
 ): Promise<Map<string, MenuStatus>> {
   const status = new Map<string, MenuStatus>();
   if (menuIds?.length === 0) return status;
-  const { menus } = await buildMenuDocuments(tx, menuIds);
+  const { graph, menus } = await buildMenuDocuments(tx, menuIds);
   const live = await liveVersions(tx, menuIds, "format");
-  for (const [menuId, { document, clashes }] of menus)
-    status.set(menuId, statusOf(menuDocumentHash(document), live.get(menuId), clashes.length));
+  for (const [menuId, { document, clashes }] of menus) {
+    if (graph.menu(menuId)?.kind !== "set_menu")
+      status.set(menuId, statusOf(menuDocumentHash(document), live.get(menuId), clashes.length));
+  }
   return status;
 }
 

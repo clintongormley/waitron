@@ -4918,7 +4918,7 @@ describe("publishing a menu", () => {
     ]);
   });
 
-  it("answers every menu's status in one request", async () => {
+  it("answers every ordinary menu's status in one request", async () => {
     const app = mountApp();
     const published = await menuWithProduct(app);
     const { hash } = await preview(app, published.menuId);
@@ -4926,6 +4926,14 @@ describe("publishing a menu", () => {
       body: { expectedHash: hash },
     });
     const unpublished = await menuWithProduct(app);
+    await withTransaction(suite.db, (tx) =>
+      createMenu(tx, {
+        name: "No own publication",
+        kind: "set_menu",
+        setPrice: "14",
+        setVatClass: "reduced",
+      }),
+    );
     const path = "/management-api/menus/status";
     const anonymous = await send(app, "GET", path, { cookie: null });
     expect(anonymous.status).toBe(401);
@@ -4948,8 +4956,14 @@ describe("publishing a menu", () => {
     expect(all[unpublished.menuId]).toEqual({ state: "unpublished", clashes: 0 });
     const menus = (await (await send(app, "GET", "/management-api/menus")).json()) as {
       id: string;
+      kind: string;
     }[];
-    expect(Object.keys(all).sort()).toEqual(menus.map((menu) => menu.id).sort());
+    expect(Object.keys(all).sort()).toEqual(
+      menus
+        .filter(({ kind }) => kind === "menu")
+        .map(({ id }) => id)
+        .sort(),
+    );
   });
 
   it.each(["status", "preview"])(

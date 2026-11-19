@@ -508,7 +508,7 @@ export async function saveSetMenuDishCourse(
   const courses = await activeCourses(tx);
   const before = await dishSettings(tx, root, courses);
   const dish = before.find((candidate) => candidate.menuItemId === menuItemId);
-  if (dish === undefined) throw new AppError("set_menu.not_found", { menuId });
+  if (dish === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
   if (courseId !== null && !courses.some(({ id }) => id === courseId))
     throw new AppError("set_menu.invalid", { field: "courseId" });
 

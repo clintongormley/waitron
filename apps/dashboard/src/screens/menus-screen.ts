@@ -1585,8 +1585,12 @@ export class MenusScreen extends LitElement {
     } else if (this.view === "preview") void this.#watchPreview(menuId);
   }
 
-  /** An overtake refusal names the scheduled versions in the way, read from the menu's list. */
   async #publishRefusal(menuId: string, code: string, error: unknown): Promise<string> {
+    if (code === "set_menu.not_publishable") {
+      const params = (error as { params?: { menuId?: unknown; count?: unknown } }).params;
+      const name = this.menus.find(({ id }) => id === params?.menuId)?.name;
+      return codeMessage(code, undefined, { name, count: params?.count });
+    }
     if (code !== "menu_publication.overtakes_queued") return codeMessage(code);
     const overtaken = (error as { params?: { overtaken?: unknown } }).params?.overtaken;
     if (!Array.isArray(overtaken)) return codeMessage(code);
