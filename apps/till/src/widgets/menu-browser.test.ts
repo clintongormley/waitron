@@ -306,6 +306,10 @@ describe("set-menu folders", () => {
       menu: lunch({ structure: { members } }),
       setMenuCopies: [{ copy: daily, versionId: "lunch" }],
     });
+    const nested = members[0]?.kind === "section";
+    if (nested) await tap(el, entry(el, "structure", "Lunch choices"));
+    expect(names(entries(el, nested ? "section" : "structure"))).toContain("Daily menu");
+
     await search(el, "Daily menu");
     expect(names(entries(el, "results"))).toEqual(["Daily menu"]);
     const result = entry(el, "results", "Daily menu");
