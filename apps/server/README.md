@@ -675,7 +675,7 @@ path. The service rechecks its applicability once a minute; `roleChanged()` has 
 caller. A1279 owns the immediate wiring and promotion test if that path gains a caller. When the duty table
 closes, runner jobs stop together first and services stop last, so the bucket copy can finish
 copying writes made during close.
-A committed fiscal record queued for submission wakes `fiscal.drain`. A manager's retry and the
+A commit that queues a new local fiscal record wakes `fiscal.drain`. A manager's retry and the
 arrival of returned invoices wake the same job. Payment reconciliation runs as `payments.reconcile`,
 so filing can carry on during a slow payment check. The optional `fiscal.reconciliation` job checks
 the tax agency's copy on a filing primary.
