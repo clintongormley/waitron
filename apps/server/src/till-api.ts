@@ -156,7 +156,7 @@ import { finishPartyService } from "./finish-party-service.js";
 import { parseFinishCancellations } from "./finish-party-input.js";
 import { mergeBills, moveDishes } from "./bill-actions.js";
 import { moveSetMenuDishes } from "./set-menu-moves.js";
-import { readBillSetMenus, refuseUnlessSetMenuBill } from "./set-menu-bill.js";
+import { readBillSetMenus, refuseUnlessSetMenuBill, SET_MENU_DRAFT_LINE } from "./set-menu-bill.js";
 import { removeSetMenuLines, setSetMenuCount } from "./set-menu-count.js";
 import type { BillCommand } from "./bill-actions.js";
 import { billNameZoneSubject, setBillName } from "./bill-identities.js";
@@ -2111,6 +2111,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           quantity: string;
           extras?: ExtraSelection[];
           options?: OptionSelection[];
+          setMenuId?: unknown;
+          setMenuReservedLineId?: unknown;
+          setMenuReservedPlace?: unknown;
         } & LineExtras)[];
         label?: string;
         revision?: unknown;
@@ -2119,6 +2122,46 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         dining?: unknown;
       }>(c);
       const expected = requireRevision(body.revision);
+      const lines = body.lines.map((line, position) => {
+        const { setMenuId, setMenuReservedLineId, setMenuReservedPlace, ...dish } = line;
+        if (
+          setMenuId === undefined &&
+          setMenuReservedLineId === undefined &&
+          setMenuReservedPlace === undefined
+        )
+          return dish;
+        const field = (name: string) => `lines[${position}].${name}`;
+        const menuId = requireBodyUuid(setMenuId, field("setMenuId")).toLowerCase();
+        const menuVersionId = requireBodyUuid(
+          dish.menuVersionId,
+          field("menuVersionId"),
+        ).toLowerCase();
+        if (typeof dish.quantity !== "string" || !/^1(?:\.0{1,3})?$/.test(dish.quantity))
+          throw new AppError("management.request_invalid", { field: field("quantity") });
+        const place = setMenuReservedPlace;
+        let reserved = null;
+        if (setMenuReservedLineId !== undefined || place !== undefined) {
+          const setMenuLineId = requireBodyUuid(
+            setMenuReservedLineId,
+            field("setMenuReservedLineId"),
+          ).toLowerCase();
+          if (typeof place !== "number" || !Number.isSafeInteger(place) || place < 0)
+            throw new AppError("management.request_invalid", {
+              field: field("setMenuReservedPlace"),
+            });
+          reserved = { setMenuLineId, place };
+        }
+        return {
+          ...dish,
+          menuVersionId,
+          [SET_MENU_DRAFT_LINE]: {
+            setMenuId: menuId,
+            position,
+            held: false,
+            reserved,
+          },
+        };
+      });
       const lateSend = parseLateSend(body.lateSend);
       const dining = requireDining(body.dining);
       const sendCfg = sendingCfg(cfg, c, session.device);
@@ -2128,7 +2171,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           sendCfg,
           id,
           {
-            lines: body.lines,
+            lines,
             label: body.label,
             revision: expected,
             operatorId: personId,

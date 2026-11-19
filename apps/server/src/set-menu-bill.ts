@@ -314,11 +314,11 @@ export function setMenuLineDescriptions(
   );
 }
 
-/** Only saved draft lines supply a placement order and reservation at Send. */
+/** Server-validated lines carry their placement order and reservation into pricing. */
 export const SET_MENU_DRAFT_LINE = Symbol("setMenuDraftLine");
 
 export interface SetMenuDraftLine {
-  draftLineId: string;
+  draftLineId?: string;
   position: number;
   setMenuId: string;
   held: boolean;
@@ -328,7 +328,7 @@ export interface SetMenuDraftLine {
 type WorkingLine = typeof workingOrderLines.$inferInsert;
 export interface SetMenuPlacement {
   workingOrderLineId: string;
-  draft: Pick<SetMenuDraftLine, "position" | "setMenuId" | "reserved"> & { draftLineId?: string };
+  draft: Pick<SetMenuDraftLine, "position" | "setMenuId" | "reserved" | "draftLineId">;
   productId: string;
   variantId: string | null;
 }

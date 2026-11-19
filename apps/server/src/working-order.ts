@@ -5651,6 +5651,7 @@ export interface UpdateHeldOrderRequest {
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
+    [SET_MENU_DRAFT_LINE]?: SetMenuDraftLine;
   } & LineExtras)[];
   label?: string;
   revision: number;
@@ -6031,7 +6032,10 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
     parents,
     maxLineNo: Math.max(0, ...lines.map((line) => line.lineNo)),
     newWork: rows.some(
-      (line) => line.sentAt !== null && (!line.madeHere || line.groupState !== "held"),
+      (line) =>
+        line.setMenuRole !== "set_menu" &&
+        line.sentAt !== null &&
+        (!line.madeHere || line.groupState !== "held"),
     )
       ? "fire"
       : lines.some((line) => line.ticket !== null || line.groupId !== null)
@@ -6864,7 +6868,10 @@ async function applyLineEdits(
     }
     for (const [rowIndex, row] of group.rows.entries()) {
       const origin = as.origin;
-      if (row.parentLineId === null && origin?.setMenuId != null) {
+      const placement = group.contexts[rowIndex]!.placement;
+      if (placement !== undefined) {
+        setMenuPlacements.push({ workingOrderLineId: row.id!, ...placement });
+      } else if (row.parentLineId === null && origin?.setMenuId != null) {
         setMenuPlacements.push({
           workingOrderLineId: row.id!,
           draft: {
@@ -7315,11 +7322,9 @@ export async function saveHeldOrderIn(
     operatorId: req.operatorId,
     expectedEdit: req.expectedEdit,
   });
-  // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
-  if (req.lines.length === 0) {
-    throw new AppError("sale.empty_basket", {});
-  }
   const order = await readEditableOrder(tx, id);
+  if (req.lines.length === 0 && !order.lines.some((line) => line.setMenuRole === "set_menu"))
+    throw new AppError("sale.empty_basket", {});
   const byId = new Map(order.parents.map((parent) => [parent.id, parent]));
   const claimed = new Set<string>();
   const edits: { parent: EditableParent; intent: LineIntent }[] = [];

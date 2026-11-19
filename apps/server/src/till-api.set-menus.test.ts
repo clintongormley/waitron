@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
-import { floorZones, persons, workingOrders, workingOrderLines } from "@waitron/db";
+import { floorZones, persons, ticketItems, workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin } from "@waitron/identity";
 import { updateMenuDetails } from "@waitron/menu";
@@ -386,4 +386,62 @@ it("reopens a counter takeaway with the original menu's price and dishes after r
       total: "14.00",
     }),
   );
+});
+
+it("saves a dish at its recorded set-menu price without sending it to the kitchen", async () => {
+  const { venue, copy } = fixture;
+  const body = await counterTakeaway();
+  const opened = await request("POST", "/api/working-orders", body);
+  expect(opened.status).toBe(200);
+  const { revision, setMenus } = await opened.json();
+  const path = `/api/working-orders/${body.id}`;
+  const response = await request("PUT", path, {
+    dining: body.dining,
+    expectedEdit: null,
+    revision,
+    lines: [
+      {
+        menuItemId: copy.menuItemId,
+        menuVersionId: setMenus.recorded[copy.menuId],
+        setMenuId: copy.menuId,
+        quantity: "1",
+        setMenuReservedLineId: setMenus.setMenus[0].lineId,
+        setMenuReservedPlace: 0,
+      },
+    ],
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ revision: revision + 1 });
+  expect(
+    await venue.db
+      .select({
+        role: workingOrderLines.setMenuRole,
+        price: workingOrderLines.unitPriceGross,
+        reservedMenu: workingOrderLines.setMenuLineId,
+        place: workingOrderLines.setMenuPlace,
+        sentAt: workingOrderLines.sentAt,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, body.id))
+      .orderBy(workingOrderLines.lineNo),
+  ).toMatchObject([
+    { role: "set_menu", sentAt: expect.any(String) },
+    { role: "dish", price: 0, reservedMenu: setMenus.setMenus[0].lineId, place: 0, sentAt: null },
+  ]);
+  const reopened = await request("GET", path);
+  expect(reopened.status).toBe(200);
+  const saved = await reopened.json();
+  expect(saved).toMatchObject({
+    lines: [{ menuItemId: copy.menuItemId, product: { unitPrice: "0.00" } }],
+    setMenus: { dishes: [{ setMenuLineId: setMenus.setMenus[0].lineId, place: 0 }] },
+  });
+  const placed = await request("POST", `${path}/place`, { expectedEdit: null });
+  expect(placed.status).toBe(200);
+  expect(await placed.json()).toMatchObject({ id: body.id, status: "placed" });
+  expect(
+    await venue.db
+      .select({ lineId: ticketItems.workingOrderLineId })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, saved.lines[0].workingOrderLineId)),
+  ).toEqual([{ lineId: saved.lines[0].workingOrderLineId }]);
 });
