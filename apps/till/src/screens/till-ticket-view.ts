@@ -514,27 +514,36 @@ export class TillTicketView extends LitElement {
   /** Why the receipt Print button beside it is greyed, once the device's printers are read. */
   protected renderReceiptPrinterNote(designation: "original" | "duplicate") {
     const role = this.receiptEquipment;
-    if (role === undefined || this.invoicePrinterLoading || this.invoicePrinterReadFailed)
+    if (
+      role === undefined ||
+      this.invoicePrinterLoading ||
+      this.invoicePrinterReadFailed ||
+      this.invoicePrinterBlocked
+    )
       return nothing;
     const destination = role.resolved;
     if (destination?.available) return nothing;
+    if (destination !== null)
+      return html`<p data-test="receipt-printer-off">
+        ${t(
+          role.choices.length === 0
+            ? "document.printer_off_no_other"
+            : "pay_equipment.printer_switched_off",
+        ).replace("{item}", () => destination.name)}
+      </p>`;
     if (role.choices.length === 0)
       // The open printer list already says this.
       return this.invoicePrinterOpen && this.invoicePrintersEnabled
         ? nothing
-        : html`<p data-test="receipt-no-printers">${t("document.no_printers")}</p>`;
-    if (destination === null)
-      return html`<p data-test="receipt-no-printer">
-        ${
-          designation === "duplicate"
-            ? codeMessage("receipt.no_printer")
-            : this.result.invoiceType === "F1"
-              ? codeMessage("invoice_delivery.receipt_unavailable")
-              : t("document.no_receipt_printer")
-        }
-      </p>`;
-    return html`<p data-test="receipt-printer-off">
-      ${t("pay_equipment.printer_switched_off").replace("{item}", () => destination.name)}
+        : html`<p data-test="receipt-no-printers">${t("document.no_printers_note")}</p>`;
+    return html`<p data-test="receipt-no-printer">
+      ${
+        designation === "duplicate"
+          ? codeMessage("receipt.no_printer")
+          : this.result.invoiceType === "F1"
+            ? codeMessage("invoice_delivery.receipt_unavailable")
+            : t("document.no_receipt_printer")
+      }
     </p>`;
   }
 

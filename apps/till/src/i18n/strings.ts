@@ -430,6 +430,10 @@ export const en = {
   "document.no_printers": "No receipt printers are available. Refresh after changing Equipment.",
   "document.no_receipt_printer":
     "This device has no receipt printer switched on. Choose one in Equipment, then try again.",
+  "document.no_printers_note":
+    "No receipt printer is available to this device. Print the receipt from another device.",
+  "document.printer_off_no_other":
+    "{item} is switched off, and this device has no other receipt printer. Print from another device.",
   "action.reprint": "Reprint",
   "action.print_receipt": "Print receipt",
   "action.payment_slip": "Payment slip",
@@ -2561,6 +2565,10 @@ export const es: Record<StringKey, string> = {
     "No hay impresoras de recibos disponibles. Actualiza después de cambiar el equipo.",
   "document.no_receipt_printer":
     "Este dispositivo no tiene ninguna impresora de tickets activada. Elige una en Equipo e inténtalo de nuevo.",
+  "document.no_printers_note":
+    "Este dispositivo no tiene ninguna impresora de tickets disponible. Imprime el recibo desde otro dispositivo.",
+  "document.printer_off_no_other":
+    "{item} está desactivada y este dispositivo no tiene otra impresora de tickets. Imprime desde otro dispositivo.",
   "action.reprint": "Reimprimir",
   "action.print_receipt": "Imprimir recibo",
   "action.payment_slip": "Justificante de pago",

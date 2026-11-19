@@ -1974,26 +1974,58 @@ describe("A790 recorded document then printer", () => {
   });
 
   it("adds nothing to the empty list's own line when the profile lists no receipt printer", async () => {
-    const off = equipmentItem("bar", "Bar", { kind: "receipt", available: false });
     const { el } = await mountChoice(
-      { originalReceiptAvailable: false, originalReceiptPrint: done },
+      {
+        originalReceiptAvailable: false,
+        originalReceiptPrint: done,
+        receiptEquipment: roleOf("receipt", null, []),
+      },
       "F2",
     );
-    for (const receiptEquipment of [roleOf("receipt", null, []), roleOf("receipt", off, [])]) {
-      el.receiptEquipment = receiptEquipment;
-      await el.updateComplete;
-      if (part(el, "reprint") === null) await press(el, "document-print-toggle");
-      expect(part(el, "reprint")!.hasAttribute("disabled")).toBe(true);
-      expect(text(el)).toContain(uiText("document.no_printers"));
-      expect(noPrinter(el)).toBeUndefined();
-      expect(printerOff(el)).toBeUndefined();
-      expect(part(el, "receipt-no-printers")).toBeNull();
-    }
+    await press(el, "document-print-toggle");
+    expect(part(el, "reprint")!.hasAttribute("disabled")).toBe(true);
+    expect(text(el)).toContain(uiText("document.no_printers"));
+    expect(noPrinter(el)).toBeUndefined();
+    expect(printerOff(el)).toBeUndefined();
+    expect(part(el, "receipt-no-printers")).toBeNull();
     await press(el, "invoice-printer-toggle");
     expect(part(el, "receipt-no-printers")!.textContent!.trim()).toBe(
-      uiText("document.no_printers"),
+      uiText("document.no_printers_note"),
     );
-    expect(text(el).split(uiText("document.no_printers"))).toHaveLength(2);
+    expect(text(el)).not.toContain(uiText("document.no_printers"));
+  });
+
+  it("says the only receipt printer is switched off, with nothing else to choose", async () => {
+    const off = equipmentItem("bar", "Bar", { kind: "receipt", available: false });
+    const { el } = await mountChoice(
+      {
+        originalReceiptAvailable: false,
+        originalReceiptPrint: done,
+        receiptEquipment: roleOf("receipt", off, []),
+      },
+      "F2",
+    );
+    await press(el, "document-print-toggle");
+    expect(part(el, "reprint")!.hasAttribute("disabled")).toBe(true);
+    expect(noPrinter(el)).toBeUndefined();
+    expect(part(el, "receipt-no-printers")).toBeNull();
+    expect(printerOff(el)).toBe(uiText("document.printer_off_no_other").replace("{item}", "Bar"));
+  });
+
+  it("says nothing about the printer while a printer choice is being saved", async () => {
+    const { el } = await mountChoice(
+      {
+        originalReceiptAvailable: false,
+        originalReceiptPrint: done,
+        receiptEquipment: roleOf("receipt", null, [bar]),
+      },
+      "F2",
+    );
+    await press(el, "document-print-toggle");
+    expect(noPrinter(el)).toBe(codeMessage("receipt.no_printer"));
+    el.invoicePrinterBlocked = true;
+    await el.updateComplete;
+    expect(noPrinter(el)).toBeUndefined();
   });
 
   it("asks before taking another device's Receipt printer and sends takeOver only after Take", async () => {

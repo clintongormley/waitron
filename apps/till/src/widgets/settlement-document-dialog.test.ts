@@ -358,7 +358,13 @@ describe("why the receipt Print button is greyed", () => {
       "no receipt printer listed",
       roleOf("receipt", null, []),
       "receipt-no-printers",
-      () => t("document.no_printers"),
+      () => t("document.no_printers_note"),
+    ],
+    [
+      "its only receipt printer switched off",
+      roleOf("receipt", off, []),
+      "receipt-printer-off",
+      () => t("document.printer_off_no_other").replace("{item}", "Bar"),
     ],
   ] as const)("says why with %s", async (_name, receiptEquipment, key, words) => {
     const { el } = await mount(receiptEquipment);
@@ -369,6 +375,10 @@ describe("why the receipt Print button is greyed", () => {
     expect(lines(el)).toEqual([]);
     el.invoicePrinterLoading = false;
     el.invoicePrinterReadFailed = true;
+    await el.updateComplete;
+    expect(lines(el)).toEqual([]);
+    el.invoicePrinterReadFailed = false;
+    el.invoicePrinterBlocked = true;
     await el.updateComplete;
     expect(lines(el)).toEqual([]);
   });
