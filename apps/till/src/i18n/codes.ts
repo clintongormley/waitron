@@ -1076,7 +1076,7 @@ export function codeMessage(
   // Object.prototype member under a bare lookup.
   const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code]! : GENERIC;
   const message = pickLocale(entry, locale);
-  if (!code.startsWith("set_menu.")) return message;
+  if (typeof code !== "string" || !code.startsWith("set_menu.")) return message;
   const setMenuName =
     typeof params?.setMenuName === "string"
       ? params.setMenuName
