@@ -15519,9 +15519,9 @@ export class TillApp extends LitElement {
     });
   }
 
-  /** A serve sent from the revision the not-served list describes, and so the only change since,
-   * takes what it served off the list, which then describes the serve's revision. A serve from any
-   * other revision takes the list down. */
+  /** A serve sent from the revision the not-served list describes takes what it served off the
+   * list, which then describes the serve's revision. A serve from any other revision takes the list
+   * down. */
   #takeServedFromMealEnd(
     partyId: string,
     items: { lineId: string; quantity: string }[],
