@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -257,13 +258,18 @@ async function ringSale(
   deviceCookie: string,
   menuItemId: string,
 ): Promise<void> {
-  const res = await app.request("/api/sales", {
+  const billId = randomUUID();
+  const res = await app.request(`/api/working-orders/${billId}/payments`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: `${sessionCookie}; ${deviceCookie}` },
     body: JSON.stringify({
       dining: "eat_in",
-      lines: [{ menuItemId, quantity: "2" }],
-      tender: { method: "cash", amount: "5.00" },
+      submissionId: billId,
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "5.00",
+      basket: { lines: [{ menuItemId, quantity: "2" }] },
     }),
   });
   expect(res.status).toBe(200);
@@ -378,7 +384,7 @@ describe("H2 receipt: a sale's device resolves from the request, the chain does 
 describe("a sale posted with the dev-override header files under THAT device (devMode)", () => {
   it("resolves the sale's device from the x-waitron-dev-device header", async () => {
     // Under `devMode`, a session signed in with the `x-waitron-dev-device: <id>` header (no
-    // `waitron_device` cookie) is that device's, and its `POST /api/sales` files under THAT device;
+    // `waitron_device` cookie) is that device's, and its bill payment files under THAT device;
     // were the header ignored the sign-in would answer `device.unauthorized` (401).
     const { cfg, product, operatorId } = await setupVenue();
 
@@ -388,7 +394,8 @@ describe("a sale posted with the dev-override header files under THAT device (de
     const deviceY = await enrolTillDeviceId(cfg, "Caja override");
     // Signed in through the same header, as a dev tab running that device does.
     const sessionCookie = await login(app, operatorId, { devHeader: deviceY });
-    const res = await app.request("/api/sales", {
+    const billId = randomUUID();
+    const res = await app.request(`/api/working-orders/${billId}/payments`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -397,8 +404,12 @@ describe("a sale posted with the dev-override header files under THAT device (de
       },
       body: JSON.stringify({
         dining: "eat_in",
-        lines: [{ menuItemId: product.menuItemId, quantity: "2" }],
-        tender: { method: "cash", amount: "5.00" },
+        submissionId: billId,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "5.00",
+        basket: { lines: [{ menuItemId: product.menuItemId, quantity: "2" }] },
       }),
     });
     expect(res.status).toBe(200);

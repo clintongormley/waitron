@@ -17,9 +17,9 @@ import { recordDailyClose, businessDayStart, computeDailyClose } from "@waitron/
 import { createOpenOrder } from "./working-order.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-payment-fixture.js";
+import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 import { eq, sql } from "drizzle-orm";
 import {
   BUSINESS_DAY_SETTINGS,
@@ -255,12 +255,19 @@ async function prepareSale(observeClock?: () => void) {
     deploymentEnvironment: "preproduction",
   });
   const cfg = await deviceRequestCfg(suite.db, venue.cfg);
+  const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
   return () =>
-    recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
-      zoneId: offers.zoneId,
-      lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    payFreshCounterInCash(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      operator,
+      randomUUID(),
+      {
+        zoneId: offers.zoneId,
+        lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
+      },
+      "1.50",
+    );
 }
 
 describe("venue detail edits", () => {
@@ -1259,11 +1266,17 @@ describe("venue detail consumer reads", () => {
       environment: "preproduction",
       deploymentEnvironment: "preproduction",
     });
-    await recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
-      zoneId: offers.zoneId,
-      lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    await payFreshCounterInCash(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      await counterFixtureOperator(suite.db, cfg.origin.deviceId),
+      randomUUID(),
+      {
+        zoneId: offers.zoneId,
+        lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
+      },
+      "1.50",
+    );
     const app = new Hono();
     mountReportApi(app, { db: suite.db, cfg: venue.cfg, venueLocale: "en-GB" }, () => {});
     const httpReport = async (businessDay: string) => {

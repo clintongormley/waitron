@@ -9,7 +9,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
-import { collectOrder, recordTillSale } from "./testing/whole-payment-fixture.js";
+import { takeBillPayment } from "./bill-payments.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import {
   setupPartyVenue,
   seat,
@@ -63,17 +64,6 @@ function at(instant = "2026-01-05T11:00:00.987Z") {
   vi.spyOn(v.clock, "now").mockReturnValue({ ...reading, instant: new Date(instant) });
 }
 const operations = () => suite.db.select().from(staffActivity);
-const tender = (method: "cash" | "card") => ({
-  method,
-  amount: "20.00",
-  ...(method === "card" ? { externalRef: "hand keyed" } : {}),
-});
-const request = (id: string = newId()) => ({
-  workingOrderId: id,
-  zoneId: v.counter.zoneId,
-  lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
-  tender: tender("cash"),
-});
 function evidence() {
   return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" };
 }
@@ -96,19 +86,36 @@ describe("accepted whole-order payment attendance", () => {
     "captures a %s counter sale from the collector",
     async (method) => {
       at();
-      const req = { ...request(), tender: tender(method) };
-      const ticket = await recordTillSale(
+      const id = newId();
+      const paid = await takeBillPayment(
         { ...deps(), admission: testTradingAdmission() },
         v.cfg,
-        req,
+        id,
+        {
+          expectedEdit: null,
+          submissionId: id,
+          kind: "share",
+          shareOf: 1,
+          method,
+          ...(method === "cash"
+            ? { tendered: "20.00" }
+            : { entry: "manual", externalRef: "hand keyed" }),
+          applied: "0.00",
+          tip: "0.00",
+        },
         collector,
+        {
+          zoneId: v.counter.zoneId,
+          lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+        },
       );
-      expect(ticket.total).toBe("12.00");
-      expect(ticket.tender).toEqual(
-        method === "cash"
-          ? { method: "cash", change: "8.00" }
-          : { method: "card", charged: "12.00", tip: "0.00", reference: "hand keyed" },
-      );
+      expect(paid).toMatchObject({
+        invoice: { total: "12.00" },
+        payment:
+          method === "cash"
+            ? { method: "cash", change: "8.00" }
+            : { method: "card", applied: "12.00", tip: "0.00", externalRef: "hand keyed" },
+      });
       expect(await operations()).toMatchObject([evidence()]);
     },
   );
@@ -116,11 +123,12 @@ describe("accepted whole-order payment attendance", () => {
     const { tabId } = await seat(v, await v.table("Retrieved attendance"));
     await order(v, tabId, "Burger");
     at();
-    const ticket = await recordTillSale(
+    const ticket = await paySavedBillInCash(
       { ...deps(), admission: testTradingAdmission() },
       v.cfg,
-      { ...request(tabId), lines: [] },
       collector,
+      tabId,
+      "20.00",
     );
     expect(ticket.total).toBe("12.00");
     expect(await operations()).toMatchObject([evidence()]);
@@ -131,11 +139,12 @@ describe("accepted whole-order payment attendance", () => {
       const id = await bill(issued);
       const before = await suite.db.select().from(sales);
       at();
-      const ticket = await collectOrder(
+      const ticket = await paySavedBillInCash(
         { ...deps(), admission: testTradingAdmission() },
         v.cfg,
-        { id, lines: [], tender: tender("cash") },
         collector,
+        id,
+        "20.00",
       );
       expect(ticket.total).toBe("12.00");
       expect(await operations()).toMatchObject([evidence()]);

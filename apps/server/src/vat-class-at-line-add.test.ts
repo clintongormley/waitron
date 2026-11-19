@@ -1,3 +1,8 @@
+import {
+  payFreshCounterInCash,
+  paySavedBillInCash,
+  takeBillPayment,
+} from "./testing/bill-payment-fixture.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -45,11 +50,8 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { systemClock } from "./till-backend.js";
 import {
-  collectOrderOrchestration as collectOrder,
-  payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   printSaleReceipt,
-  recordTillSaleOrchestration as recordTillSale,
   reprintSale,
 } from "./testing/whole-payment-fixture.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
@@ -65,7 +67,7 @@ import { issueOrderInvoice } from "./testing/issue-order.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 
 // A line takes the VAT class the zone's published menu version froze, when its price locks, and
 // issuance files that stored class's rate on every path. Every product is published at `reduced`
@@ -208,12 +210,22 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     counter: await offerProducts(tx, cfg, { paidWhen }),
     tables: await offerProducts(tx, cfg, { zone: "tables" }),
   }));
-  return { cfg, products, counter, tables };
+  const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
+  return { cfg, products, counter, tables, operator };
 }
 
 type Venue = Awaited<ReturnType<typeof setupVenue>>;
 
 const deps = () => ({ db: suite.db, backend, clock });
+
+const payCash = (v: Venue, id: string, tendered: string) =>
+  paySavedBillInCash(
+    { ...deps(), admission: testTradingAdmission() },
+    v.cfg,
+    v.operator,
+    id,
+    tendered,
+  );
 
 async function setVat(productId: string, vatClass: VatClass): Promise<void> {
   await withTransaction(suite.db, (tx) => updateProduct(tx, productId, { vatClass }));
@@ -334,35 +346,53 @@ function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
   return { admission: testTradingAdmission(), ...deps(), provider, readerRef: "reader_1" };
 }
 
+async function payBeer(v: Venue, id: string) {
+  const { invoice } = await takeBillPayment(
+    { ...deps(), admission: testTradingAdmission() },
+    v.cfg,
+    id,
+    {
+      submissionId: id,
+      kind: "contribution",
+      amount: "2.50",
+      method: "cash",
+      tendered: "2.50",
+      applied: "2.50",
+      tip: "0.00",
+    },
+    v.operator,
+  );
+  if (invoice == null) throw new Error(`no invoice for ${id}`);
+  return invoice;
+}
+
 describe("a product's VAT class changed with no new publish: the sale files the class its line was added at", () => {
   it("walk-up: files at the rate of the published class", async () => {
     const v = await setupVenue();
     await setVat(v.products.beer, "general");
     const id = randomUUID();
 
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      workingOrderId: id,
-      zoneId: v.counter.zoneId,
-      lines: one(v, v.products.beer),
-      tender: { method: "cash", amount: "2.50" },
-    });
+    await payFreshCounterInCash(
+      { ...deps(), admission: testTradingAdmission() },
+      v.cfg,
+      v.operator,
+      id,
+      { zoneId: v.counter.zoneId, lines: one(v, v.products.beer) },
+      "2.50",
+    );
 
     expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await rates(id)).toEqual([1000]);
   });
 
-  it("held order paid on POST /api/sales: files 10% at the same gross, and a reprint and a replay after a further change leave the sale and the stored line as filed", async () => {
+  it("paying a held order: files 10% at the same gross, and a reprint and a replay after a further change leave the sale and the stored line as filed", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.beer));
     const storedAtAdd = await stored(id);
     expect(storedAtAdd[0]!.vatClass).toBe("reduced");
     await setVat(v.products.beer, "general");
 
-    const ticket = await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    const ticket = await payBeer(v, id);
 
     const sale = await filed(id);
     expect(sale).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
@@ -380,11 +410,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
       expect(decodeTicket(new Uint8Array(job.payload!))).toContain(
         "10%          2,27        0,23         2,50",
       );
-    const replay = await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    const replay = await payBeer(v, id);
 
     expect(replay.lines).toEqual(ticket.lines);
     expect(replay.vatBreakdown).toEqual(ticket.vatBreakdown);
@@ -414,11 +440,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     await setVat(v.products.cheese, "super_reduced");
     await setVat(v.products.beer, "general");
 
-    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "13.25" },
-    });
+    await payCash(v, tabId, "13.25");
 
     const sale = await filed(tabId);
     expect(sale.lines.map((line) => [line.productId, line.vatRate, line.lineGross])).toEqual([
@@ -440,11 +462,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     ]);
     await setVat(v.products.coffee, "general");
 
-    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "2.20" },
-    });
+    await payCash(v, id, "2.20");
 
     const sale = await filed(id);
     expect(sale.lines.map((line) => [line.productId, line.vatRate])).toEqual([
@@ -536,11 +554,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const spy = await sessionPrepareSpy(prepared);
     let ticket;
     try {
-      ticket = await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-        id: before,
-        lines: [],
-        tender: { method: "cash", amount: "2.50" },
-      });
+      ticket = await payCash(v, before, "2.50");
     } finally {
       spy.restore();
     }
@@ -568,20 +582,12 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
     await setVat(v.products.beer, "general");
 
-    const ticket = await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    const ticket = await payBeer(v, id);
 
     expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await rates(id)).toEqual([1000]);
     expect((await stored(id)).map((line) => line.vatClass)).toEqual(["reduced"]);
-    const replay = await collectOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "2.50" },
-    });
+    const replay = await payBeer(v, id);
     expect(replay.lines).toEqual(ticket.lines);
     expect(replay.vatBreakdown).toEqual(BEER_AT_10_PERCENT);
   });
@@ -654,11 +660,7 @@ describe("an edit prices only what it adds", () => {
       ],
       revision,
     });
-    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "10.75" },
-    });
+    await payCash(v, id, "10.75");
 
     expect((await stored(id)).map((line) => [line.productId, line.vatClass])).toEqual([
       [v.products.burger, "reduced"],
@@ -689,11 +691,7 @@ describe("an edit prices only what it adds", () => {
       ],
       revision,
     });
-    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "7.50" },
-    });
+    await payCash(v, id, "7.50");
 
     const sale = await filed(id);
     expect(sale.lines.map((line) => [line.vatRate, line.lineGross])).toEqual([
@@ -727,11 +725,7 @@ describe("a new version published with the new class", () => {
       ],
       revision,
     });
-    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await payCash(v, id, "5.00");
 
     expect(await rates(id)).toEqual([1000, 2100]);
     expect((await filed(id)).total).toBe(500);
@@ -750,11 +744,7 @@ describe("a new version published with the new class", () => {
       ]),
     );
 
-    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await payCash(v, tabId, "5.00");
 
     expect(await rates(tabId)).toEqual([1000, 2100]);
   });

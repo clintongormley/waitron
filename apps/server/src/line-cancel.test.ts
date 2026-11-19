@@ -1,3 +1,4 @@
+import { cashPayment } from "./testing/bill-venue.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -52,7 +53,6 @@ import {
   markServed,
   splitLinesWithinOrder,
 } from "./working-order.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { cancellationRefundValue } from "./cancellation-refund-value.js";
@@ -68,6 +68,11 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 let venue: AdjustmentVenue;
+
+async function payCash(billId: string, amount: string) {
+  const paid = await cashPayment(venue, venue.cookie.staff, billId, amount);
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+}
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -118,15 +123,7 @@ async function servePaid(order: Fixture, quantity: string) {
 
 async function paidWithServing(quantity: string) {
   const order = await fixture();
-  await payWorkingOrder(
-    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
-    venue.cfg,
-    {
-      id: order.billId,
-      tender: { method: "cash", amount: "36.00" },
-      lines: [],
-    },
-  );
+  await payCash(order.billId, "36.00");
   await servePaid(order, quantity);
   return order;
 }
@@ -302,16 +299,7 @@ describe("Cancel item service command", () => {
         await printHoldTickets(tx, venue.cfg, [order.parent.groupId!]);
         await setStationsWaitForPass(tx, true, [extraStation]);
       });
-      await payWorkingOrder(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        { id: order.billId, tender: { method: "cash", amount: "36.00" }, lines: [] },
-      );
+      await payCash(order.billId, "36.00");
       await inTx(venue, async (tx) => {
         const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
         await fireGroup(tx, venue.cfg, order.partyId, order.parent.groupId!, {
@@ -1075,20 +1063,7 @@ describe("Cancel item service command", () => {
     "stops a genuinely paid %s dish without altering its filed sale or payment",
     async (release) => {
       const order = await fixture(release);
-      await payWorkingOrder(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        {
-          id: order.billId,
-          tender: { method: "cash", amount: "36.00" },
-          lines: [],
-        },
-      );
+      await payCash(order.billId, "36.00");
       async function money() {
         return inTx(venue, async (tx) => {
           const sale = await tx.select().from(sales).where(eq(sales.workingOrderId, order.billId));
@@ -1224,20 +1199,7 @@ describe("Cancel item service command", () => {
       await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: printed }));
       try {
         const order = await fixture("hold");
-        await payWorkingOrder(
-          {
-            admission: testTradingAdmission(),
-            db: venue.db,
-            backend: venue.backend,
-            clock: venue.clock,
-          },
-          venue.cfg,
-          {
-            id: order.billId,
-            tender: { method: "cash", amount: "36.00" },
-            lines: [],
-          },
-        );
+        await payCash(order.billId, "36.00");
         const beforeJobs = await inTx(venue, (tx) => tx.select().from(printJobs));
         await cancel(order, await askFor(order, "keep_charge", "3"));
         const jobs = (await inTx(venue, (tx) => tx.select().from(printJobs))).filter(
@@ -1323,16 +1285,7 @@ describe("Cancel item service command", () => {
         [{ name: "Steak" }, { name: "Fish" }, { name: "Salad" }],
         { release: "hold" },
       );
-      await payWorkingOrder(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        { id: order.billId, tender: { method: "cash", amount: "47.99" }, lines: [] },
-      );
+      await payCash(order.billId, "47.99");
       const lines = await inTx(venue, (tx) =>
         tx
           .select()
@@ -1476,20 +1429,7 @@ describe("Cancel item service command", () => {
 
 describe("What a cancel records for refunds", () => {
   async function pay(billId: string, amount: string) {
-    await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      {
-        id: billId,
-        tender: { method: "cash", amount },
-        lines: [],
-      },
-    );
+    await payCash(billId, amount);
   }
   async function adjust(order: Fixture, args: { action: "comp" }) {
     const ask = await askFor(order);

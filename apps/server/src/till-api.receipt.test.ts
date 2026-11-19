@@ -410,7 +410,6 @@ async function loginOnDevice(app: Hono, deviceCookie: string, operatorId: string
   return `${res.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
 }
 
-/** `POST /api/sales` resolves its till from the enrolled device. */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(
   cfg: TradingContext,
@@ -474,15 +473,18 @@ async function ringSale(
   guestCount?: number,
 ): Promise<string> {
   const workingOrderId = randomUUID();
-  const res = await app.request("/api/sales", {
+  const res = await app.request(`/api/working-orders/${workingOrderId}/payments`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
       dining: "eat_in",
-      workingOrderId,
+      submissionId: workingOrderId,
+      kind: "share",
+      shareOf: 1,
+      method,
+      ...(method === "cash" ? { tendered: "1.50" } : { entry: "manual" }),
       guestCount,
-      lines: [{ menuItemId, quantity: "1" }],
-      tender: { method, amount: "1.50" },
+      basket: { lines: [{ menuItemId, quantity: "1" }] },
     }),
   });
   expect(res.status).toBe(200);
@@ -3288,7 +3290,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     ]);
     expect(
       (await drawerOpensFor(cfg)).map((row) => [row.reason, row.printerId, row.personId]),
-    ).toEqual([["cash_sale", drawer, operatorId]]);
+    ).toEqual([["bill_payment", drawer, operatorId]]);
   });
 
   it("opens no drawer on a cash sale at a till whose profile does not allow the drawer", async () => {

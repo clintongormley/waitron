@@ -13,7 +13,7 @@ import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { SimulatorPaymentProvider } from "@waitron/payments/src/simulator.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import { recordTillSale, payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
+import { takeBillPayment, takeReaderBillPayment } from "./bill-payments.js";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
 import {
   counterOrder,
@@ -42,9 +42,9 @@ describe("initial kitchen notes on ordering paths", () => {
   const lines = () => [{ menuItemId: v.counterItem("Burger"), quantity: "1", note: "No onions" }];
   const deps = () => ({ db: v.db, clock: v.clock, backend: v.backend });
 
-  it.each(["/api/working-orders", "/api/sales", "/api/pay"])(
+  it.each(["park", "cash", "reader"] as const)(
     "accepts the initial note through %s",
-    async (url) => {
+    async (path) => {
       const token = randomUUID();
       await suite.db.insert(tillSessions).values({
         deviceId: v.cfg.origin.deviceId,
@@ -66,19 +66,32 @@ describe("initial kitchen notes on ordering paths", () => {
       );
       const requestCookie = await sessionCookieForTest(suite.db, token);
       const id = randomUUID();
-      const response = await app.request(url, {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: requestCookie },
-        body: JSON.stringify({
-          id,
-          workingOrderId: id,
-          zoneId: v.counter.zoneId,
-          lines: lines(),
-          tender: { method: "cash", amount: "12.00" },
-          kitchenNote: "Shared kitchen instruction",
-          dining: "eat_in",
-        }),
-      });
+      const basket = {
+        zoneId: v.counter.zoneId,
+        lines: lines(),
+        kitchenNote: "Shared kitchen instruction",
+      };
+      const response = await app.request(
+        path === "park" ? "/api/working-orders" : `/api/working-orders/${id}/payments`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: requestCookie },
+          body: JSON.stringify(
+            path === "park"
+              ? { id, dining: "eat_in", ...basket }
+              : {
+                  dining: "eat_in",
+                  submissionId: id,
+                  kind: "share",
+                  shareOf: 1,
+                  ...(path === "cash"
+                    ? { method: "cash", tendered: "12.00" }
+                    : { method: "card", entry: "reader" }),
+                  basket,
+                },
+          ),
+        },
+      );
       expect(response.status, JSON.stringify(await response.json())).toBe(200);
       expect(await note(id)).toMatchObject({ note: "Shared kitchen instruction", revision: 1 });
     },
@@ -98,30 +111,30 @@ describe("initial kitchen notes on ordering paths", () => {
     "saves the initial %s sale note without including it on the receipt",
     async (method) => {
       const id = randomUUID();
-      const req = {
-        workingOrderId: id,
-        zoneId: v.counter.zoneId,
-        lines: lines(),
-        tender: { method, amount: "12.00" },
-        kitchenNote: "All together; train at 14:30",
-      };
-      const ticket = await recordTillSale(
-        { ...deps(), admission: testTradingAdmission() },
-        v.cfg,
-        req,
-        v.operator,
-      );
-      expect(await note(id)).toMatchObject({ note: "All together; train at 14:30", revision: 1 });
-      expect(JSON.stringify(ticket)).not.toContain("All together; train at 14:30");
-      await inTx(v, (tx) => writeKitchenNote(tx, { workingOrderId: id }, 1, "New departure time"));
-      expect(
-        await recordTillSale(
+      const pay = () =>
+        takeBillPayment(
           { ...deps(), admission: testTradingAdmission() },
           v.cfg,
-          { ...req, kitchenNote: "Stale retry" },
+          id,
+          {
+            expectedEdit: null,
+            submissionId: id,
+            kind: "share",
+            shareOf: 1,
+            method,
+            ...(method === "cash" ? { tendered: "12.00" } : { entry: "manual" }),
+            applied: "0.00",
+            tip: "0.00",
+          },
           v.operator,
-        ),
-      ).toEqual(ticket);
+          { zoneId: v.counter.zoneId, lines: lines(), kitchenNote: "All together; train at 14:30" },
+        );
+      const { invoice } = await pay();
+      expect(await note(id)).toMatchObject({ note: "All together; train at 14:30", revision: 1 });
+      expect(invoice).toMatchObject({ total: "12.00" });
+      expect(JSON.stringify(invoice)).not.toContain("All together; train at 14:30");
+      await inTx(v, (tx) => writeKitchenNote(tx, { workingOrderId: id }, 1, "New departure time"));
+      expect((await pay()).invoice).toEqual(invoice);
       expect(await note(id)).toMatchObject({ note: "New departure time", revision: 2 });
     },
   );
@@ -134,29 +147,29 @@ describe("initial kitchen notes on ordering paths", () => {
       expect(await note(id)).toMatchObject({ note: "All together before the train", revision: 1 });
       return collect(args);
     });
-    const req = {
-      id,
-      zoneId: v.counter.zoneId,
-      lines: lines(),
-      kitchenNote: "All together before the train",
-    };
-    const result = await payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), ...deps(), provider },
-      v.cfg,
-      req,
-      v.operator,
-    );
-    expect(result.outcome).toBe("captured");
-    expect(await note(id)).toMatchObject({ note: "All together before the train", revision: 1 });
-    await inTx(v, (tx) => writeKitchenNote(tx, { workingOrderId: id }, 1, "Later update"));
-    expect(
-      await payWorkingOrderIntegrated(
+    const pay = () =>
+      takeReaderBillPayment(
         { admission: testTradingAdmission(), ...deps(), provider },
         v.cfg,
-        { ...req, kitchenNote: "Stale retry" },
+        id,
+        {
+          expectedEdit: null,
+          submissionId: id,
+          kind: "share",
+          shareOf: 1,
+          method: "card",
+          entry: "reader",
+          applied: "0.00",
+          tip: "0.00",
+        },
         v.operator,
-      ),
-    ).toEqual(result);
+        { zoneId: v.counter.zoneId, lines: lines(), kitchenNote: "All together before the train" },
+      );
+    const result = await pay();
+    expect(result).toMatchObject({ outcome: "received", invoice: { total: "12.00" } });
+    expect(await note(id)).toMatchObject({ note: "All together before the train", revision: 1 });
+    await inTx(v, (tx) => writeKitchenNote(tx, { workingOrderId: id }, 1, "Later update"));
+    expect(await pay()).toEqual(result);
     expect(await note(id)).toMatchObject({ note: "Later update", revision: 2 });
   });
 
