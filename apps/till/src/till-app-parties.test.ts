@@ -338,6 +338,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     collectOrder: vi.fn().mockResolvedValue(saleResult),
     moveBill: vi.fn().mockResolvedValue({ partyId: null, billId: "wo-check" }),
     reprint: vi.fn().mockResolvedValue(undefined),
+    printReceipt: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     ...adjustmentStubs(),
     ...cancellationStubs(),

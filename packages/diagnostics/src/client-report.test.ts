@@ -141,6 +141,29 @@ describe("local browser report", () => {
       },
     ]);
   });
+  it("keeps a failed request for an owed receipt in the exported problem report, naming only a report code or a standard error", () => {
+    const failure = (fields: TrailEvent["fields"], ago: number) =>
+      event(
+        { ...fields, message: "secret", stack: "at secret" },
+        "receipt.owed_request_failed",
+        ago,
+      );
+    const snapshot = capture([
+      failure({ code: "storage.disk_full" }, 4000),
+      failure({ code: "john.smith" }, 3000),
+      failure({ errorType: "TypeError" }, 2000),
+      failure({ errorType: "john.smith" }, 1000),
+    ]);
+    const report = diagnostics.renderClientReport!(snapshot, "The receipt never printed.")!;
+    expect(
+      parsed(report.text).trail.map((row: TrailEvent) => [row.event, row.level, row.fields]),
+    ).toEqual([
+      ["receipt.owed_request_failed", "warn", { code: "storage.disk_full" }],
+      ["receipt.owed_request_failed", "warn", { code: "unknown" }],
+      ["receipt.owed_request_failed", "warn", { errorType: "TypeError" }],
+      ["receipt.owed_request_failed", "warn", {}],
+    ]);
+  });
   it("normalizes report metadata without copying extra client fields", () => {
     const client = Object.assign(
       { ...CLIENT },

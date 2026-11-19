@@ -19,6 +19,54 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     this.printDocument = "receipt";
   }
 
+  // The server's `owesOriginal` (apps/server/src/owed-receipts.ts) prints nothing at close beside
+  // any original attempt that may have arrived.
+  #originalMayHaveArrived(): boolean {
+    return (
+      this.deliveries?.history.some(
+        (attempt) => attempt.designation === "original" && attempt.status !== "failed",
+      ) === true
+    );
+  }
+
+  #closingState(): "prints" | "switched-off" | "no-printer" | "not-allowed" | null {
+    if (this.receiptDesignation() !== "original" || this.#originalMayHaveArrived()) return null;
+    if (!this.canPrintReceipt) return "not-allowed";
+    if (this.receiptEquipment === undefined) return null;
+    const { resolved: printer, choices } = this.receiptEquipment;
+    if (printer == null) return choices.length === 0 ? null : "no-printer";
+    return printer.available ? "prints" : "switched-off";
+  }
+
+  protected override renderReceiptPrinterNote(designation: "original" | "duplicate") {
+    return designation === "original" && this.#closingState() !== null
+      ? nothing
+      : super.renderReceiptPrinterNote(designation);
+  }
+
+  protected override closingQueuesOriginal(): boolean {
+    const state = this.#closingState();
+    return state === "prints" || state === "switched-off";
+  }
+
+  #closingLine() {
+    const state = this.#closingState();
+    if (state === null) return nothing;
+    const email = this.emailAction() !== null;
+    const text =
+      state === "not-allowed"
+        ? t("settlement.closing_not_allowed")
+        : state === "no-printer"
+          ? t(email ? "settlement.closing_no_printer" : "settlement.closing_no_printer_no_email")
+          : state === "switched-off"
+            ? t("settlement.closing_switched_off").replace(
+                "{printer}",
+                () => this.receiptEquipment!.resolved!.name,
+              )
+            : t(email ? "settlement.closing_prints" : "settlement.closing_prints_no_email");
+    return html`<p data-settlement-closing=${state}>${text}</p>`;
+  }
+
   #close(): void {
     this.dispatchEvent(new CustomEvent("settlement-close", { bubbles: true, composed: true }));
   }
@@ -110,13 +158,14 @@ export class TillSettlementDocumentDialog extends TillTicketView {
             ></till-invoice-email-dialog>`
           : nothing
       }
+      ${this.#closingLine()}
       <wt-form-actions slot="footer">
         <wt-button
-          data-settlement-none
+          data-settlement-done
           slot="cancel"
           variant="secondary"
           @click=${() => this.#close()}
-          >${t("settlement.none")}</wt-button
+          >${t("settlement.done")}</wt-button
         >
       </wt-form-actions>
     </wt-dialog>`;

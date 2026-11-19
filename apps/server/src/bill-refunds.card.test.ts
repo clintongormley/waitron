@@ -2173,7 +2173,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
         ["cash", 2000],
       ].sort(),
     );
-    await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, false);
+    await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, "original");
     const tickets = (await documentJobs())
       .filter((job) => !jobsBefore.has(job.id))
       .map((job) => printedLines(job.payload).map((line) => line.trim().replace(/\s+/g, " ")))

@@ -2607,7 +2607,8 @@ remain historical implementation references.
 Read the [authoritative addendum](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
 and [implementation plan](../superpowers/plans/2026-10-27-a739-approved-payment-flow.md).
 Plan and build are approved; the driver executes inline after E/A948 #2122 lands, preserving F1
-in every environment. Dismissed Receipt / Full invoice / None means None, without pending work,
+in every environment. (19 November 2026: None was removed by ADVISER-NO-NONE; closing the window now
+prints the receipt unless an original was emailed or sent to an A4 printer.) Dismissed Receipt / Full invoice / None means None, without pending work,
 recovery item, timer or zone fallback. Each reader's “Prints its own slip automatically” setting
 defaults false: true excludes Waitron slips; false offers Print card slip initially unticked.
 No provider printing control or hardware qualification gate. Cash/manual card have no Waitron slip.

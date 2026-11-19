@@ -157,6 +157,38 @@ describe("enqueuePrintJob (never-block outbox)", () => {
     },
   );
 
+  it("queues on a switched-off receipt printer only when asked to, and never on a deleted one", async () => {
+    await setup();
+    const enqueue = (printerId: string, whileSwitchedOff?: boolean) =>
+      withTransaction(suite.db, (tx) =>
+        enqueuePrintJob(tx, printerId, new Uint8Array([1]), "document", {
+          ...(whileSwitchedOff === undefined ? {} : { whileSwitchedOff }),
+        }),
+      );
+    const [off, deleted] = await withTransaction(suite.db, async (tx) => {
+      const ids = [];
+      for (const name of ["Off", "Deleted"]) {
+        const { id } = await createPrinter(tx, { name, transport: "usb", localKey: name });
+        await updatePrinter(tx, id, { active: false });
+        ids.push(id);
+      }
+      await tx
+        .update(printers)
+        .set({ deletedAt: "2026-11-19T00:00:00.000Z" })
+        .where(eq(printers.id, ids[1]!));
+      return ids as [string, string];
+    });
+    for (const attempt of [() => enqueue(off), () => enqueue(off, false)])
+      await expect(attempt()).rejects.toMatchObject({ code: "printer.not_found" });
+    await expect(enqueue(deleted, true)).rejects.toMatchObject({ code: "printer.not_found" });
+    const { jobId } = await enqueue(off, true);
+    expect(
+      await suite.db
+        .select({ id: printJobs.id, printerId: printJobs.printerId, status: printJobs.status })
+        .from(printJobs),
+    ).toEqual([{ id: jobId, printerId: off, status: "queued" }]);
+  });
+
   it("throws printer.not_found for an absent printer, still opening no socket", async () => {
     await setup();
     const noNet = spyOnNoSocketOpened();

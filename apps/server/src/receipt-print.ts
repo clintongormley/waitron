@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   receiptRollColumns,
   deviceProfiles,
@@ -47,7 +47,7 @@ export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
 /** The printers table's own default setting. */
 export const DEFAULT_PRINTER: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
 
-/** One of a device's current printers, when active, and the settings it lays documents out for. */
+/** One of a device's current printers and the settings it lays documents out for. */
 export interface DevicePrinter extends EscSetting {
   id: string;
   hasCashDrawer: boolean;
@@ -55,15 +55,26 @@ export interface DevicePrinter extends EscSetting {
   opensDrawer: boolean;
 }
 
-export type PrinterLookup = (role: ProfilePrinterRole) => Promise<DevicePrinter | undefined>;
+export type PrinterLookup = ((role: ProfilePrinterRole) => Promise<DevicePrinter | undefined>) & {
+  /** It also resolves switched-off printers, so a job may be queued on the one it returns. */
+  readonly whileSwitchedOff?: boolean;
+};
 
-/** Do not reuse after changing the device's equipment: its role map is cached. */
-export function printerLookup(tx: Transaction, origin: Origin): PrinterLookup {
+/**
+ * Do not reuse after changing the device's equipment: its role map is cached. `whileSwitchedOff`
+ * also resolves a printer that is switched off, though never a deleted one.
+ */
+export function printerLookup(
+  tx: Transaction,
+  origin: Origin,
+  { whileSwitchedOff = false }: { whileSwitchedOff?: boolean } = {},
+): PrinterLookup {
   let read: Promise<Map<ProfilePrinterRole, DevicePrinter>> | undefined;
-  return async (role) => {
-    read ??= readDevicePrinters(tx, origin);
+  const lookup = async (role: ProfilePrinterRole) => {
+    read ??= readDevicePrinters(tx, origin, whileSwitchedOff);
     return (await read).get(role);
   };
+  return Object.assign(lookup, { whileSwitchedOff });
 }
 
 /**
@@ -127,10 +138,11 @@ export async function resolveInvoicePrinter(
   return { kind: printer.kind, id: printer.id, name: printer.name };
 }
 
-/** Each role's printer, by role, when the device resolves one and it is switched on. */
+/** Each role's printer, by role, when the device resolves one (see {@link printerLookup}). */
 async function readDevicePrinters(
   tx: Transaction,
   origin: Origin,
+  whileSwitchedOff: boolean,
 ): Promise<Map<ProfilePrinterRole, DevicePrinter>> {
   if (origin.source !== "device") return new Map();
   const roles = await readPrinterRoles(tx, origin.deviceId);
@@ -148,7 +160,11 @@ async function readDevicePrinters(
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .innerJoin(
       printers,
-      and(isReceiptPrinter(), inArray(printers.id, ids), eq(printers.active, true)),
+      and(
+        isReceiptPrinter(),
+        inArray(printers.id, ids),
+        whileSwitchedOff ? isNull(printers.deletedAt) : eq(printers.active, true),
+      ),
     )
     .where(eq(devices.id, origin.deviceId));
   const byId = new Map(
@@ -234,10 +250,7 @@ async function buildReceiptBytes(
   });
 }
 
-/**
- * `undefined` when there is no active printer or the receipt cannot be built; callers then enqueue
- * nothing.
- */
+/** `undefined` when `printers` resolves no receipt printer or the receipt cannot be built. */
 async function resolvePrinterAndReceipt(
   tx: Transaction,
   cfg: OriginConfig,
@@ -545,7 +558,8 @@ export async function confirmReceiptHandover(
 /**
  * Queues the sale's original receipt on the receipt printer, and says what it did: `"exists"` when
  * the sale already has an original job, `"not_queued"` when no printer or receipt resolves, else the
- * queued job and whether it is marked a copy.
+ * queued job and whether it is marked a copy. A switched-off printer the lookup resolves
+ * (`whileSwitchedOff`) is queued on, and the job waits until it is switched on.
  */
 export async function enqueueOriginalReceipt(
   tx: Transaction,
@@ -591,6 +605,7 @@ export async function enqueueOriginalReceipt(
   const job = await enqueuePrintJob(tx, resolved.printer.id, resolved.receiptBytes, "document", {
     saleId,
     receiptCopy: duplicate,
+    whileSwitchedOff: printers.whileSwitchedOff === true,
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey);
   return { jobId: job.jobId, receiptCopy: duplicate };

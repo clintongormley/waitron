@@ -562,9 +562,19 @@ describe("the guests a finished card payment's receipt prints", () => {
       );
       expect(stored).toEqual([{ saleId: expect.any(String), guests: 4 }]);
 
-      await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, false);
+      await printSaleReceipt(
+        { db: venue.db, backend: venue.backend },
+        venue.cfg,
+        billId,
+        "original",
+      );
       await countGuests(billId, 6);
-      await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, true);
+      await printSaleReceipt(
+        { db: venue.db, backend: venue.backend },
+        venue.cfg,
+        billId,
+        "duplicate",
+      );
       const copies = await inTx(venue, (tx) =>
         tx
           .select({ payload: printJobs.payload })

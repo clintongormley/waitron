@@ -714,7 +714,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     const prepare = await sessionPrepareSpy(statements);
     try {
       await reprintSale(deps(), v.cfg, id);
-      await printSaleReceipt(deps(), v.cfg, id, false);
+      await printSaleReceipt(deps(), v.cfg, id, "original");
       await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, sale);
     } finally {
       prepare.restore();

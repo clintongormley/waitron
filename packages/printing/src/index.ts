@@ -21,6 +21,7 @@ export {
   resendPrintJob,
   canResendPrintJob,
   endMovedPrintJob,
+  originalPrintDoneOrTrying,
   PRINT_JOB_MOVED,
 } from "./outbox.js";
 export { FEED_BEFORE_CUT, EscBuilder, esc } from "./escpos.js";

@@ -44,7 +44,7 @@ export function assertPrintPayload(
 export async function resendInvoicePrintJob(
   tx: Transaction,
   jobId: string,
-  personId: string,
+  personId: string | null,
   now = new Date(),
   requestKey?: string,
   to?: { printerId: string; payload: Uint8Array },

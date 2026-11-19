@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, printAgents, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { endMovedPrintJob, enqueuePrintJob } from "./outbox.js";
+import { endMovedPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
 import { endDeletedPrinterJobs } from "./printer-delete-jobs.js";
 import { createPrinter } from "./printers.js";
 import { claimPrintJobs, endUnpairedPrinterJobs, reportPrintJob } from "./runtime.js";
@@ -140,4 +140,40 @@ it("holds later documents on the same printer while drawers and other printers c
   expect(await claim()).toEqual([id]);
   expect(await report(id, "done")).toEqual({ updated: true });
   expect(await claim()).toEqual([later]);
+});
+
+async function failRemainingAttempts(id: string) {
+  for (const wait of [5_000, 15_000, 30_000, 60_000]) {
+    expect(await claim()).toEqual([]);
+    vi.advanceTimersByTime(wait);
+    expect(await claim()).toEqual([id]);
+    expect(await report(id, "failed")).toEqual({ updated: true });
+  }
+}
+
+async function freshRound() {
+  const givenUp = await failFirstAttempt();
+  await failRemainingAttempts(givenUp);
+  return async () => {
+    vi.advanceTimersByTime(1);
+    return withTransaction(suite.db, async (tx) => (await resendPrintJob(tx, givenUp)).jobId);
+  };
+}
+
+it("prints a kitchen ticket queued before a fresh round's receipt without waiting", async () => {
+  const startRound = await freshRound();
+  const kitchen = await queue();
+  const round = await startRound();
+  expect(await claim()).toEqual([kitchen]);
+  expect(await report(kitchen, "done")).toEqual({ updated: true });
+  expect(await claim()).toEqual([round]);
+});
+
+it("holds a kitchen ticket queued during a fresh round only while the round retries", async () => {
+  const round = await (await freshRound())();
+  expect(await claim()).toEqual([round]);
+  expect(await report(round, "failed")).toEqual({ updated: true });
+  const kitchen = await queue();
+  await failRemainingAttempts(round);
+  expect(await claim()).toEqual([kitchen]);
 });

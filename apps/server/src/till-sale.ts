@@ -132,6 +132,7 @@ import {
   enqueueSaleReceipt,
   printerLookup,
 } from "./receipt-print.js";
+import { owesOriginal } from "./owed-receipts.js";
 import { saleReceiptFacts, type GuestCountChoice } from "./receipt-guests.js";
 
 export interface TillMoneyOperator {
@@ -1029,14 +1030,13 @@ export async function readSettledTicket(
   };
 }
 
-/** The action determines original versus duplicate; both only enqueue paper for an existing sale. */
+/** Every mode only enqueues paper for an existing sale. */
 export async function printSaleReceipt(
   deps: { db: Database; backend: FiscalBackend },
   cfg: OriginConfig,
   workingOrderId: string,
-  duplicate: boolean,
-  language?: string,
-  personId?: string,
+  mode: "original" | "duplicate" | "owed",
+  { language, personId }: { language?: string; personId?: string } = {},
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
     const [existing] = await tx
@@ -1052,8 +1052,16 @@ export async function printSaleReceipt(
     }
     // No filed sale → nothing to print. This keeps `readSettledTicket`'s "no sale" throw unreachable.
     if (existing === undefined) return;
+    if (mode === "owed" && !(await owesOriginal(tx, existing.id))) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
-    if (duplicate) {
+    if (mode === "owed") {
+      await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, {
+        personId,
+        printers: printerLookup(tx, cfg.origin, { whileSwitchedOff: true }),
+      });
+      return;
+    }
+    if (mode === "duplicate") {
       await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);
       return;
     }
@@ -2557,5 +2565,5 @@ export async function reprintSale(
   language?: string,
   personId?: string,
 ): Promise<void> {
-  await printSaleReceipt(deps, cfg, workingOrderId, true, language, personId);
+  await printSaleReceipt(deps, cfg, workingOrderId, "duplicate", { language, personId });
 }

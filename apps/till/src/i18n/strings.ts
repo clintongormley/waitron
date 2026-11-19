@@ -421,7 +421,17 @@ export const en = {
   "document.print": "Print/Reprint",
   "settlement.document": "Customer document",
   "settlement.full_invoice": "Full invoice",
-  "settlement.none": "None",
+  "settlement.done": "Done",
+  "settlement.closing_prints": "Closing prints the receipt unless you email it.",
+  "settlement.closing_prints_no_email": "Closing prints the receipt.",
+  "settlement.closing_switched_off":
+    "{printer} is switched off. The receipt will print when it is switched back on.",
+  "settlement.closing_no_printer":
+    "This device has no receipt printer. Choose one above or email the receipt before closing.",
+  "settlement.closing_no_printer_no_email":
+    "This device has no receipt printer. Choose one above before closing.",
+  "settlement.closing_not_allowed":
+    "This device may not print or email receipts. Print it from Find a bill on a till that can.",
   "settlement.replacement_unavailable":
     "Full invoice replacement is not available yet. You can print the receipt.",
   "document.receipt": "Receipt",
@@ -434,6 +444,8 @@ export const en = {
     "No receipt printer is available to this device. Print the receipt from another device.",
   "document.printer_off_no_other":
     "{item} is switched off, and this device has no other receipt printer. Print from another device.",
+  "document.printer_off_choose_other":
+    "{item} is switched off: unless you choose another, no ticket will print",
   "action.reprint": "Reprint",
   "action.print_receipt": "Print receipt",
   "action.payment_slip": "Payment slip",
@@ -1026,7 +1038,7 @@ export const en = {
   "pay_equipment.reader_gone": "{item} is no longer available",
   "pay_equipment.choose_in_hand": "Choose the reader in your hand.",
   "pay_equipment.printer_switched_off":
-    "{item} is switched off: unless you choose another, no ticket will print",
+    "{item} is switched off: unless you choose another, the ticket will print when it is switched back on",
   "pay_equipment.printer_none": "No ticket printer: unless you choose one, no ticket will print",
   "product_info.sold_out": "Mark sold out",
   "product_info.restore": "Back on sale",
@@ -2558,7 +2570,18 @@ export const es: Record<StringKey, string> = {
   "document.print": "Imprimir/Reimprimir",
   "settlement.document": "Documento para el cliente",
   "settlement.full_invoice": "Factura completa",
-  "settlement.none": "Ninguno",
+  "settlement.done": "Listo",
+  "settlement.closing_prints":
+    "Al cerrar se imprime el recibo, salvo que lo envíes por correo electrónico.",
+  "settlement.closing_prints_no_email": "Al cerrar se imprime el recibo.",
+  "settlement.closing_switched_off":
+    "{printer} está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
+  "settlement.closing_no_printer":
+    "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo antes de cerrar.",
+  "settlement.closing_no_printer_no_email":
+    "Este dispositivo no tiene impresora de tickets. Elige una arriba antes de cerrar.",
+  "settlement.closing_not_allowed":
+    "Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda.",
   "settlement.replacement_unavailable":
     "El cambio por una factura completa aún no está disponible. Puedes imprimir el recibo.",
   "document.receipt": "Recibo",
@@ -2573,6 +2596,8 @@ export const es: Record<StringKey, string> = {
     "Este dispositivo no tiene ninguna impresora de tickets disponible. Imprime el recibo desde otro dispositivo.",
   "document.printer_off_no_other":
     "{item} está desactivada y este dispositivo no tiene otra impresora de tickets. Imprime desde otro dispositivo.",
+  "document.printer_off_choose_other":
+    "{item} está desactivada: si no eliges otra, no se imprimirá el ticket",
   "action.reprint": "Reimprimir",
   "action.print_receipt": "Imprimir recibo",
   "action.payment_slip": "Justificante de pago",
@@ -3150,7 +3175,7 @@ export const es: Record<StringKey, string> = {
   "pay_equipment.reader_gone": "{item} ya no está disponible",
   "pay_equipment.choose_in_hand": "Elige el lector que tienes en la mano.",
   "pay_equipment.printer_switched_off":
-    "{item} está desactivada: si no eliges otra, no se imprimirá el ticket",
+    "{item} está desactivada: si no eliges otra, el ticket se imprimirá cuando vuelva a activarse",
   "pay_equipment.printer_none":
     "Sin impresora de tickets: si no eliges una, no se imprimirá el ticket",
   "product_info.sold_out": "Marcar como agotado",

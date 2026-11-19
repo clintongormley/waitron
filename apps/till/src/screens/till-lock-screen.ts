@@ -173,6 +173,9 @@ export class TillLockScreen extends LitElement {
   /** The HTTP face of the till. Set before the element connects (its lifecycle fetches the roster). */
   @property({ attribute: false }) api!: TillApi;
 
+  /** What a sign-in waits for before it asks the server for a session; it never rejects. */
+  @property({ attribute: false }) untilSignedOut: () => Promise<void> | undefined = () => undefined;
+
   @property({ attribute: false }) live?: TillLiveConnection;
 
   @property() deviceName?: string;
@@ -219,6 +222,8 @@ export class TillLockScreen extends LitElement {
   readonly #venueLogo = new VenueLogoController(this);
   #throttleTimer?: ReturnType<typeof setInterval>;
   #connection = 0;
+  /** Advanced by Cancel and by leaving the page, so a sign-in still waiting to be sent is dropped. */
+  #submission = 0;
   #staffLive?: { stop(): void };
   #initialStaffRead?: Promise<void>;
 
@@ -246,6 +251,7 @@ export class TillLockScreen extends LitElement {
     this.#initialStaffRead = undefined;
     super.disconnectedCallback();
     this.#connection++;
+    this.#submission++;
     this.pin = "";
     this.selected = undefined;
     this.staff = undefined;
@@ -293,6 +299,7 @@ export class TillLockScreen extends LitElement {
   }
 
   #cancel(): void {
+    this.#submission++;
     this.selected = undefined;
     this.pin = "";
     this.errorKey = undefined;
@@ -315,9 +322,15 @@ export class TillLockScreen extends LitElement {
     if (person === undefined || this.pin === "" || this.throttleRemaining > 0 || this.signingIn)
       return;
     const connection = this.#connection;
+    const submission = ++this.#submission;
     const submitted = this.pin;
     this.signingIn = true;
     try {
+      const signedOut = this.untilSignedOut();
+      if (signedOut !== undefined) {
+        await signedOut;
+        if (!this.isConnected || submission !== this.#submission) return;
+      }
       const { personId, permissions, locale } = await this.api.login(person.personId, submitted);
       if (!this.isConnected || connection !== this.#connection) return;
       this.pin = "";

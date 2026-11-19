@@ -2743,13 +2743,15 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       await assertRequestDevice(deps, c, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await gateZones(deps, session, [{ orderId: id }]);
+      const { ifOwed } = await readJsonBody<{ ifOwed?: unknown }>(c);
+      if (ifOwed !== undefined && typeof ifOwed !== "boolean")
+        throw new AppError("management.request_invalid", { field: "ifOwed" });
       await printSaleReceipt(
         { db: deps.db, backend: deps.backend },
         cfg,
         id,
-        false,
-        undefined,
-        session.personId,
+        ifOwed === true ? "owed" : "original",
+        { personId: session.personId },
       );
       return c.body(null, 200);
     }),

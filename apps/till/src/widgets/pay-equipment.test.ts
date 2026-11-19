@@ -388,7 +388,7 @@ describe("till-pay-equipment", () => {
     });
   });
 
-  describe("a printer that would print nothing (default 19)", () => {
+  describe("a printer that cannot print now (default 19)", () => {
     const OFF = item("p1", "Barra", { available: false });
     const warning = (el: TillPayEquipment) =>
       q(el, "[data-pay-printer-warning]")?.textContent!.trim();
@@ -397,7 +397,7 @@ describe("till-pay-equipment", () => {
       ["chosen", chosen(OFF, [BAR_PRINTER, TERRACE_PRINTER])],
       ["by default", byDefault(OFF, [BAR_PRINTER, TERRACE_PRINTER])],
     ] as const)(
-      "a switched-off printer %s leaves the printer field empty and warns no ticket will print",
+      "a switched-off printer %s leaves the printer field empty and warns the ticket waits for it",
       async (_how, receipt) => {
         const el = await mount({ open: true, equipment: equipment(receipt) });
         expect(box(el, "receiptPrinterId")!.value).toBe("");

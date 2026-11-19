@@ -291,6 +291,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     saveDraft: server.saveDraft,
     submitDraft: server.submitDraft,
     takeOverDraft: server.takeOverDraft,
+    printReceipt: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as Record<string, ReturnType<typeof vi.fn>>);
@@ -9264,7 +9265,7 @@ describe("native app phone order view with mixed dish families", () => {
 });
 
 it.each(["reducing", "adding"])(
-  "locks the recovered invoice draft after a %s save and keeps its paid notice after None",
+  "locks the recovered invoice draft after a %s save and keeps its paid notice after Done",
   async (kind) => {
     const previousLocale = currentLocale();
     try {
@@ -9301,7 +9302,7 @@ it.each(["reducing", "adding"])(
       expect(banner(el)?.textContent).toContain(codeMessage("bill.paid"));
       expect(draft(el).editsLocked).toBe(true);
       el.shadowRoot!.querySelector("till-settlement-document-dialog")!
-        .shadowRoot!.querySelector<HTMLElement>("[data-settlement-none]")!
+        .shadowRoot!.querySelector<HTMLElement>("[data-settlement-done]")!
         .click();
       await vi.advanceTimersByTimeAsync(0);
       await el.updateComplete;

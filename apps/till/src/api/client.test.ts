@@ -1894,6 +1894,18 @@ describe("TillApi", () => {
     });
   });
 
+  it("printReceipt asks for the original only if it is still owed when told to", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.printReceipt("wo1", { ifOwed: true })).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/sales/wo1/receipt",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ ifOwed: true }) }),
+    );
+  });
+
   it.each([
     ["printReceipt", "/api/sales/wo1/receipt", (api: TillApi) => api.printReceipt("wo1")],
     [

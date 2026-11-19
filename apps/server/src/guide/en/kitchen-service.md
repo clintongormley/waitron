@@ -14,7 +14,7 @@ For whole or part payments at a table, open **Pay** and use the [payment window]
 
 To split a Counter payment between guests, follow [Share a Counter bill](table-service.md#counter-part-payments).
 
-After the final payment, follow [Choose documents after paying](table-service.md#settlement-document) to print or email a receipt, or keep serving without one.
+After the final payment, follow [Choose documents after paying](table-service.md#settlement-document) to print or email a receipt.
 
 ## Set a cash register’s station {#device-station}
 

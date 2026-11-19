@@ -100,7 +100,9 @@ and handhelds that print their receipts, payment slips or full invoices to it. C
 paper, power and cable. The notice goes once the printer prints anything sent to it after that
 ticket. If the server stopped trying to send a ticket, the tills then show **Printer “Kitchen”
 could not print a ticket · Reprint it** in amber until a reprint of it (a station ticket from the
-table, a receipt from its sale) or a resend from **Printers** has printed.
+table, a receipt from its sale) or a resend from **Printers** has printed. An original receipt that did
+not print is also tried again by itself about every 10 minutes for a day after the sale, so to print
+it now, open its sale and press **Retry original** rather than printing a copy.
 
 **The server needs attention · See Box status in the dashboard** is a notice this till has no words for, perhaps from
 a newer version of the server.

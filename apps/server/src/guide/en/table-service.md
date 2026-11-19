@@ -65,7 +65,7 @@ lists it on the refund day. That path has not yet been tested with SumUp.
 
 ## Choose documents after paying {#settlement-document}
 
-After the final payment, choose **Receipt**, **Full invoice** or **None**. An edit that finishes
+After the final payment, choose **Receipt** or **Full invoice**. An edit that finishes
 paying the bill offers the same choice. To print, wait for **Print on {printer}** to name your
 destination, then press it. A full invoice keeps its recorded customer.
 
@@ -75,7 +75,10 @@ email address and press **Send**. Printing and email are separate actions. If th
 look at the printer first. If sending fails, or the customer does not have it, use **Send the email
 again** to retry the same address, or choose another address.
 
-Choose **None** or close the window to carry on without printing. You close the table separately.
+Press **Done** or close the window to carry on. Unless you emailed it, the receipt prints when you
+close. If the printer is switched off or not working, it prints by itself when it is back; if it has
+not printed by the next day, print it from the sale. If the device has no receipt printer, nothing
+prints: choose one or send the email before closing. You close the table separately.
 For a document later, open the sale and choose **Print/Reprint**.
 
 ## Check a card before cancelling {#cancel-pending-card}
@@ -117,8 +120,8 @@ At the counter, choose **Full invoice** before **Pay**. Paying the order in full
 invoice. Placing a counter order alone does not issue an invoice.
 
 When the form shows **Delivery**, **A4 on {printer}** or **Email** sends the original by itself
-once the invoice is issued. With **Receipt printer: print after paying**, press **Print on
-{printer}** in the window after payment.
+once the invoice is issued. With **Receipt printer: print after paying**, the receipt prints when
+you close the window after payment.
 
 ## Choose a document and printer {#invoice-printer}
 

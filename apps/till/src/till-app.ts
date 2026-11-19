@@ -596,6 +596,17 @@ const DELIVERY_REREAD_MS = 5_000;
 const PENDING_REREAD_MS = 5_000;
 /** How long the full-invoice dialog waits for the delivery options before opening without them. */
 const INVOICE_OPTIONS_LIMIT_MS = 5_000;
+/** How long a sign-out waits for the request for the owed receipt before ending the server session,
+ * which would refuse the request if it arrived first. */
+export const OWED_RECEIPT_WAIT_MS = 3_000;
+/** How long a sign-in waits for the server's answer to the sign-out before it, once that is sent. */
+export const SIGN_OUT_ANSWER_WAIT_MS = 3_000;
+
+async function settledWithin(work: Promise<unknown>, ms: number): Promise<void> {
+  const limit = limited(ms);
+  await Promise.race([work, pause(limit.signal)]);
+  limit.done();
+}
 
 registerIcons({
   ...NUTRITION_ICONS,
@@ -3698,6 +3709,9 @@ export class TillApp extends LitElement {
   #refusedPerson: SessionPerson | undefined;
   get #lockedForRefusedPerson(): boolean {
     return this.#refusedPerson !== undefined && this.#refusedPerson === this.#tabPerson;
+  }
+  get #mayPrintReceipt(): boolean {
+    return this.deviceId === undefined || this.capabilities.includes("print-receipt");
   }
   @state() private deviceZoneSelection: DeviceZoneSelection | null = null;
   @state() private deviceSettingsOpen = false;
@@ -20539,6 +20553,22 @@ export class TillApp extends LitElement {
     await this.#refreshFloor();
   }
 
+  /** Settles, never rejects, once the request has its answer. */
+  #askForOwedReceipt(): Promise<void> | undefined {
+    const owed = this.ticketWorkingOrderId;
+    if (this.settlementDocument === null || owed === undefined || !this.#mayPrintReceipt) return;
+    return this.api.printReceipt(owed, { ifOwed: true }).catch((error: unknown) => {
+      const code = (error as { code?: unknown } | null | undefined)?.code;
+      diag.record(
+        "warn",
+        "receipt.owed_request_failed",
+        typeof code === "string"
+          ? { code }
+          : { errorType: error instanceof Error ? error.name : "Unknown" },
+      );
+    });
+  }
+
   #endOperatorSession(): void {
     this.shadowRoot?.querySelector<TillProblemReport>("till-problem-report")?.close();
     this.#counterRefreshRequest++;
@@ -22331,8 +22361,15 @@ export class TillApp extends LitElement {
     void flushed.then(() => (session !== this.#operatorSession ? undefined : this.#refreshFloor()));
   }
 
+  /** A sign-in waits for this before it asks the server: its new session replaces the cookie that
+   * names the session a sign-out is still to end. Only a sign-out that waits for the owed receipt
+   * sets it. */
+  #serverSignOut: Promise<void> | undefined;
+  readonly #untilSignedOut = (): Promise<void> | undefined => this.#serverSignOut;
+
   /** Keeps the basket: it belongs to the till. */
   async #onLogout(endServerSession = true): Promise<void> {
+    const owedReceipt = this.#askForOwedReceipt();
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.#tableToResume =
@@ -22387,22 +22424,26 @@ export class TillApp extends LitElement {
       sync?.drop();
       for (const each of own) each.drop();
     }
-    if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
-    if (endServerSession)
-      try {
-        await api.logout();
-      } catch {
-        // The device is already locked locally.
-      }
+    const stale = () =>
+      signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api;
+    if (stale()) return;
+    if (endServerSession) {
+      let answered: Promise<void> = Promise.resolve();
+      const sent = (async () => {
+        if (owedReceipt !== undefined) await settledWithin(owedReceipt, OWED_RECEIPT_WAIT_MS);
+        if (stale()) return;
+        // A failure is not reported: the device is already locked locally.
+        answered = api.logout().catch(() => undefined);
+        await settledWithin(answered, SIGN_OUT_ANSWER_WAIT_MS);
+      })();
+      if (owedReceipt !== undefined) this.#serverSignOut = sent;
+      await sent;
+      if (this.#serverSignOut === sent) this.#serverSignOut = undefined;
+      await answered;
+    }
     // After the round trip, so guarded: a detached till must not change a live sibling's module-global
     // locale.
-    if (
-      !this.isConnected ||
-      signIns !== this.#signIns ||
-      session !== this.#operatorSession ||
-      api !== this.api
-    )
-      return;
+    if (!this.isConnected || stale()) return;
     setLocale(this.#preLoginLocale());
   }
 
@@ -22883,7 +22924,7 @@ export class TillApp extends LitElement {
             slot="drill"
             .acknowledgment=${this.historicalReceipt.acknowledgment}
             .busy=${this.findBillBusy || this.refundPrintBusy}
-            .canPrint=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
+            .canPrint=${this.#mayPrintReceipt}
             @refund-original=${(event: Event) => {
               event.stopPropagation();
               void this.#openRefundOriginal();
@@ -22929,9 +22970,7 @@ export class TillApp extends LitElement {
           .deliveryRefusal=${this.invoiceDeliveryRefusal}
           .emailOpen=${this.invoiceEmailOpen}
           .emailRefusal=${this.invoiceEmailRefusal}
-          .canPrintReceipt=${
-            this.deviceId === undefined || this.capabilities.includes("print-receipt")
-          }
+          .canPrintReceipt=${this.#mayPrintReceipt}
           .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
         ></till-ticket-view>`;
       case "hours":
@@ -23557,7 +23596,7 @@ export class TillApp extends LitElement {
                 .deliveryRefusal=${this.invoiceDeliveryRefusal}
                 .emailOpen=${this.invoiceEmailOpen}
                 .emailRefusal=${this.invoiceEmailRefusal}
-                .canPrintReceipt=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
+                .canPrintReceipt=${this.#mayPrintReceipt}
                 @invoice-printer-open=${(event: CustomEvent<{ role: "receipt" | "invoice" }>) => void this.#readInvoicePrinters(event.detail.role)}
                 @equipment-change=${(event: CustomEvent<EquipmentChange>) => {
                   event.stopPropagation();
@@ -23570,6 +23609,7 @@ export class TillApp extends LitElement {
                 }}
                 @settlement-close=${() => {
                   const close = () => {
+                    void this.#askForOwedReceipt();
                     if (this.settlementDocument?.surface === "table") void this.#onBackToTable();
                     else {
                       this.settlementDocument = null;
@@ -23901,6 +23941,7 @@ export class TillApp extends LitElement {
                         `${this.#lockLanguagePicks}:${this.#operatorSession}`,
                         html`<till-lock-screen
                           .api=${this.api}
+                          .untilSignedOut=${this.#untilSignedOut}
                           .live=${this.#live}
                           .deviceName=${this.deviceName}
                           .legalName=${this.issuer?.venueName ?? ""}

@@ -41,13 +41,13 @@ for (const language of ["en-GB", "es-ES"])
           await dialog.updateComplete;
           await document.fonts.ready;
           await expectNoA11yViolations(host);
-          const none =
+          const done =
             el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-              "[data-settlement-none]",
+              "[data-settlement-done]",
             )!;
-          await none.updateComplete;
+          await done.updateComplete;
           expect(
-            none.shadowRoot!.querySelector("button")!.getBoundingClientRect().width,
+            done.shadowRoot!.querySelector("button")!.getBoundingClientRect().width,
           ).toBeGreaterThan(0);
           const box = dialog.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
           expect(box.left).toBeGreaterThanOrEqual(0);
@@ -127,3 +127,51 @@ for (const theme of ["light", "dark"] as const)
     );
     await expectNoA11yViolations(host);
   });
+
+for (const language of ["en-GB", "es-ES"])
+  for (const theme of ["light", "dark"] as const)
+    for (const [state, email] of [
+      ["prints", true],
+      ["prints", false],
+      ["switched-off", true],
+      ["no-printer", true],
+      ["no-printer", false],
+      ["not-allowed", true],
+    ] as const)
+      it(`closing line ${state}${email ? "" : " without email"} is accessible in ${language} ${theme}`, async () => {
+        setLocale(language);
+        const bar = equipmentItem("bar", "Bar", {
+          kind: "receipt",
+          available: state !== "switched-off",
+        });
+        const { el, host } = await mountWidget<TillSettlementDocumentDialog>(
+          "till-settlement-document-dialog",
+          {
+            result: { ...invoiceOf("30.00"), invoiceType: "F2" },
+            invoicePrintersEnabled: true,
+            originalReceiptAvailable: true,
+            originalReceiptPrint: { status: "not_queued" },
+            canPrintReceipt: state !== "not-allowed",
+            receiptEquipment:
+              state === "no-printer"
+                ? roleOf("receipt", null, [bar])
+                : roleOf("receipt", bar, [bar]),
+            deliveries: {
+              current: null,
+              history: [],
+              originalCompleted: false,
+              originalPrinterId: null,
+              actions: {
+                print: null,
+                receiptInstead: null,
+                retryOriginal: null,
+                email: email ? { designation: "original" } : null,
+              },
+            },
+          },
+          theme,
+        );
+        await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+        expect(el.shadowRoot!.querySelector(`[data-settlement-closing="${state}"]`)).not.toBeNull();
+        await expectNoA11yViolations(host);
+      });

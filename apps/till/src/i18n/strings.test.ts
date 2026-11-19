@@ -428,3 +428,53 @@ describe("till texts say where a problem is put right", () => {
     },
   );
 });
+
+it("says what closing the documents window does with the receipt, in both languages", () => {
+  const keys = [
+    "settlement.closing_prints",
+    "settlement.closing_prints_no_email",
+    "settlement.closing_switched_off",
+    "settlement.closing_no_printer",
+    "settlement.closing_no_printer_no_email",
+    "settlement.closing_not_allowed",
+  ] as const;
+  expect(keys.map((key) => [en[key], es[key]])).toEqual([
+    [
+      "Closing prints the receipt unless you email it.",
+      "Al cerrar se imprime el recibo, salvo que lo envíes por correo electrónico.",
+    ],
+    ["Closing prints the receipt.", "Al cerrar se imprime el recibo."],
+    [
+      "{printer} is switched off. The receipt will print when it is switched back on.",
+      "{printer} está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
+    ],
+    [
+      "This device has no receipt printer. Choose one above or email the receipt before closing.",
+      "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo antes de cerrar.",
+    ],
+    [
+      "This device has no receipt printer. Choose one above before closing.",
+      "Este dispositivo no tiene impresora de tickets. Elige una arriba antes de cerrar.",
+    ],
+    [
+      "This device may not print or email receipts. Print it from Find a bill on a till that can.",
+      "Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda.",
+    ],
+  ]);
+});
+
+it("says whether a switched-off receipt printer still gets the ticket, in both languages", () => {
+  expect([
+    [en["pay_equipment.printer_switched_off"], es["pay_equipment.printer_switched_off"]],
+    [en["document.printer_off_choose_other"], es["document.printer_off_choose_other"]],
+  ]).toEqual([
+    [
+      "{item} is switched off: unless you choose another, the ticket will print when it is switched back on",
+      "{item} está desactivada: si no eliges otra, el ticket se imprimirá cuando vuelva a activarse",
+    ],
+    [
+      "{item} is switched off: unless you choose another, no ticket will print",
+      "{item} está desactivada: si no eliges otra, no se imprimirá el ticket",
+    ],
+  ]);
+});

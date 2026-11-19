@@ -453,6 +453,15 @@ export class TillTicketView extends LitElement {
     return status === "not_queued" && !this.receiptCopiesOnly ? "original" : null;
   }
 
+  protected emailAction(): InvoiceDeliveryStatus["actions"]["email"] {
+    return this.canPrintReceipt ? (this.deliveries?.actions.email ?? null) : null;
+  }
+
+  /** Whether closing this view sends the original to a printer, so "not sent" would mislead. */
+  protected closingQueuesOriginal(): boolean {
+    return false;
+  }
+
   #renderDocumentPrinter() {
     if (!this.invoicePrintersEnabled || !this.canPrintReceipt) return nothing;
     const receipt = this.printDocument === "receipt";
@@ -543,7 +552,7 @@ export class TillTicketView extends LitElement {
         ${t(
           role.choices.length === 0
             ? "document.printer_off_no_other"
-            : "pay_equipment.printer_switched_off",
+            : "document.printer_off_choose_other",
         ).replace("{item}", () => destination.name)}
       </p>`;
     if (role.choices.length === 0)
@@ -830,7 +839,7 @@ export class TillTicketView extends LitElement {
     const retainedPrinter = this.#retainedReceiptPrinterName();
     const insteadPrinter =
       retainedPrinter ?? this.receiptEquipment?.resolved?.name ?? t("equipment.none");
-    const email = this.canPrintReceipt ? status?.actions.email : null;
+    const email = this.emailAction();
     const emailAgainId =
       this.canPrintReceipt && status?.actions.retryOriginal?.medium === "email"
         ? status.current?.id
@@ -957,6 +966,10 @@ export class TillTicketView extends LitElement {
         attempt.medium !== "receipt" &&
         (attempt.status === "queued" || attempt.status === "sending"));
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
+    // Before closing no print job exists, so there is no print status to state or check.
+    const closingPrints =
+      notQueued && !this.originalReceiptReadFailed && this.closingQueuesOriginal();
+    if (closingPrints && this.result.invoiceType !== "F1") return this.renderDelivery();
     return html`
       ${
         (this.result.invoiceType === "F1" && (!this.historical || this.historicalDelivery)) ||
@@ -977,11 +990,13 @@ export class TillTicketView extends LitElement {
                   : nothing
               }
               ${
-                // An A4 or email attempt says where the invoice is; "not sent to a printer", or a
-                // receipt failure that no longer matters, would contradict it.
-                !this.originalReceiptReadFailed &&
-                ((notQueued && attempt != null && attempt.medium !== "receipt") ||
-                  failedButSuperseded)
+                // An A4 or email attempt says where the invoice is, and a window whose closing
+                // prints the original says what happens next; "not sent to a printer", or a receipt
+                // failure that no longer matters, would contradict either.
+                closingPrints ||
+                (!this.originalReceiptReadFailed &&
+                  ((notQueued && attempt != null && attempt.medium !== "receipt") ||
+                    failedButSuperseded))
                   ? nothing
                   : html`<p>
                       ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.printerWithdrawn ? "invoice.print_failed_withdrawn" : this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "failed" && this.#mayHaveArrived ? "invoice.print_failed_check" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
@@ -1001,13 +1016,17 @@ export class TillTicketView extends LitElement {
                     >`
                   : nothing
               }
-              <wt-button
-                variant="secondary"
-                data-test="refresh-receipt"
-                ?disabled=${receiptBusy}
-                @click=${() => this.dispatchEvent(new CustomEvent("refresh-receipt", { bubbles: true, composed: true }))}
-                >${t("invoice.check_print")}</wt-button
-              >
+              ${
+                closingPrints
+                  ? nothing
+                  : html`<wt-button
+                      variant="secondary"
+                      data-test="refresh-receipt"
+                      ?disabled=${receiptBusy}
+                      @click=${() => this.dispatchEvent(new CustomEvent("refresh-receipt", { bubbles: true, composed: true }))}
+                      >${t("invoice.check_print")}</wt-button
+                    >`
+              }
               ${includeRetry ? this.renderReceiptRetry(failedButSuperseded) : nothing}
             </section>`
           : nothing

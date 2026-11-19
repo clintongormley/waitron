@@ -1045,21 +1045,6 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   (`git grep -l 'const pg = ' packages/fiscal-verifactu`), among them `write-path.e2e.test.ts` and
   `inmutabilidad.test.ts`. Rename it in the same authorised edit. Left by the T2 sweep (2026-09-23).
 
-## Every ticket is printed unless it is emailed: the till's None choice goes
-
-Owner, 2026-11-18 (the adviser is still to confirm the details; question 3 of the
-[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)): "It is required to deliver a
-ticket. We must always print one unless we email it instead." The owner had kept None on
-16 November (decision D2, [adviser answers B2](../compliance/2026-11-15-adviser-answers.md#b2-a-ticket-can-end-up-never-delivered)).
-
-After payment the till's document window has a None button that closes the window
-(`apps/till/src/widgets/settlement-document-dialog.ts:113-119`, sending `settlement-close`, as
-the window's own close does at `:37`). To build: the ticket prints at payment unless the customer
-chooses email, however the window closes, and None leaves the window, the guides and the tests.
-The email step should tell the customer how the ticket will arrive and that paper is available
-(the sheet's wording: "We'll email your ticket to this address. You can ask for a paper copy at
-any time."); the till's strings (`apps/till/src/i18n/strings.ts`) hold no such sentence.
-
 ## An incident record the venue can show the tax office: hardware faults, a break-in, lost data
 
 Asked whether a venue whose server was restored from an old backup may rebuild the missing
@@ -1090,7 +1075,8 @@ when A1418 part 1 lands.
 The owner chose to keep counter full invoices through the shared Pay window as main issues them:
 "keep what works, fix the printer choice". The Full invoice choice, with an Email or A4 original,
 is saved before Pay and the invoice is issued on the last payment; paper is printed after payment,
-from **Print on {printer}** in the window that follows it. Direct `POST /api/sales`, `POST /api/pay`, unissued
+from **Print on {printer}** in the window that follows it (from 19 November 2026, ADVISER-NO-NONE,
+closing that window also prints the receipt unless an original was emailed or sent to an A4 printer). Direct `POST /api/sales`, `POST /api/pay`, unissued
 `/collect`, closing a counter bill by transfer and zero-total counter bills still refuse F1 with
 `sale.full_invoice_unavailable`. Pinned by the full-invoice cases in
 `apps/server/src/counter-bill-payments.test.ts`. Relayed by the watcher in lane L's

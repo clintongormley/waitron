@@ -583,6 +583,10 @@ export const ALERT_WORDS: Readonly<
         en: "putting scheduled menus live",
         es: "la publicación de las cartas programadas",
       },
+      "receipt.owed": {
+        en: "retrying receipts that did not print",
+        es: "el reintento de los tickets que no se imprimieron",
+      },
       "fiscal.tamper_watch": {
         en: "checking the invoice record's protections",
         es: "la comprobación de las protecciones del registro de facturas",

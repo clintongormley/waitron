@@ -1,13 +1,19 @@
 // Keeps errors.ts's codes reachable from the throwing file (scripts/errors-reachable.test.ts).
 import "./errors.js";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import type { SQL, SQLWrapper } from "drizzle-orm";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { AppError } from "@waitron/shared";
 import { printJobs, isA4Printer, isReceiptPrinter, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 
-/** Keep hardware I/O in the worker so enqueueing a job does not wait for the printer. */
+/**
+ * Keep hardware I/O in the worker so enqueueing a job does not wait for the printer.
+ * `whileSwitchedOff` also queues on a switched-off (never a deleted) printer, where the job waits
+ * until the printer is switched on.
+ */
 export async function enqueuePrintJob(
   tx: Transaction,
   printerId: string,
@@ -17,10 +23,12 @@ export async function enqueuePrintJob(
     saleId = null,
     receiptCopy = null,
     tenderRefundId = null,
+    whileSwitchedOff = false,
   }: {
     saleId?: string | null;
     receiptCopy?: boolean | null;
     tenderRefundId?: string | null;
+    whileSwitchedOff?: boolean;
   } = {},
 ): Promise<{ jobId: string }> {
   return insertPrintJob(tx, printerId, payload, kind, {
@@ -28,6 +36,7 @@ export async function enqueuePrintJob(
     saleId,
     receiptCopy,
     tenderRefundId,
+    whileSwitchedOff,
   });
 }
 
@@ -59,6 +68,7 @@ async function insertPrintJob(
     tenderRefundId,
     pageDocument,
     createdAt,
+    whileSwitchedOff = false,
   }: {
     resendOf: string | null;
     saleId: string | null;
@@ -66,9 +76,11 @@ async function insertPrintJob(
     tenderRefundId: string | null;
     pageDocument?: "invoice";
     createdAt?: string;
+    whileSwitchedOff?: boolean;
   },
 ): Promise<{ jobId: string }> {
-  // A deactivated or deleted printer is reported as `printer.not_found`, not a code of its own.
+  // A deleted printer, or a deactivated one without `whileSwitchedOff`, is reported as
+  // `printer.not_found`, not a code of its own.
   const [printer] = await tx
     .select({ id: printers.id })
     .from(printers)
@@ -76,7 +88,7 @@ async function insertPrintJob(
       and(
         kind === "a4" ? isA4Printer() : isReceiptPrinter(),
         eq(printers.id, printerId),
-        eq(printers.active, true),
+        whileSwitchedOff ? undefined : eq(printers.active, true),
         isNull(printers.deletedAt),
       ),
     );
@@ -132,6 +144,21 @@ export async function endMovedPrintJob(tx: Transaction, jobId: string): Promise<
   return ended.rows.length > 0;
 }
 
+/** A sale's original print, as `jobs` (default `print_jobs`), that printed or is still trying to. */
+export function originalPrintDoneOrTrying(
+  saleId: string | SQLWrapper,
+  jobs: Record<"saleId" | "receiptCopy" | "status" | "attempts", SQLiteColumn> = printJobs,
+): SQL {
+  return and(
+    eq(jobs.saleId, saleId),
+    eq(jobs.receiptCopy, false),
+    or(
+      inArray(jobs.status, ["queued", "printing", "done"]),
+      and(eq(jobs.status, "failed"), lt(jobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+    ),
+  )!;
+}
+
 /**
  * Resend the opaque document to its original printer, or `to` another with the bytes given,
  * preserving delivery history. The
@@ -156,18 +183,7 @@ export async function resendPrintJob(
     const [reserved] = await tx
       .select({ id: printJobs.id })
       .from(printJobs)
-      .where(
-        and(
-          eq(printJobs.saleId, job.saleId),
-          eq(printJobs.receiptCopy, false),
-          or(
-            eq(printJobs.status, "done"),
-            eq(printJobs.status, "queued"),
-            eq(printJobs.status, "printing"),
-            and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
-          ),
-        ),
-      )
+      .where(originalPrintDoneOrTrying(job.saleId))
       .limit(1);
     if (reserved !== undefined) throw new AppError("print_job.not_resendable", { id: jobId });
   }

@@ -3249,8 +3249,8 @@ export class TillApi {
   }
 
   /** Print the ORIGINAL receipt offered at invoice issuance. */
-  async printReceipt(workingOrderId: string): Promise<void> {
-    await this.#request<void>(`/api/sales/${workingOrderId}/receipt`, "POST", {});
+  async printReceipt(workingOrderId: string, options: { ifOwed?: true } = {}): Promise<void> {
+    await this.#request<void>(`/api/sales/${workingOrderId}/receipt`, "POST", options);
   }
 
   async printBillPaymentSlip(workingOrderId: string, paymentId: string): Promise<void> {

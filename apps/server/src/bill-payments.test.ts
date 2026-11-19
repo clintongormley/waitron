@@ -1613,7 +1613,7 @@ describe("the invoice at full payment", () => {
       expect(
         await inTx((tx) => tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))),
       ).toEqual([]);
-      await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
+      await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, "original");
       const jobs = await inTx((tx) =>
         tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)),
       );
@@ -1676,7 +1676,7 @@ describe("the invoice at full payment", () => {
         new Date(),
       ),
     );
-    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
+    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, "original");
     const before = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
     );
@@ -1745,7 +1745,7 @@ describe("the invoice at full payment", () => {
           tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
         );
         if (!missingPrinter)
-          await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
+          await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, "original");
         if (!missingPrinter)
           await inTx((tx) =>
             tx
@@ -1764,8 +1764,8 @@ describe("the invoice at full payment", () => {
             .where(eq(devices.id, device!.id)),
         );
         if (copyFirst) await reprintSale({ db: suite.db, backend }, venue.cfg, billId);
-        await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
-        await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
+        await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, "original");
+        await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, "original");
         const jobs = await inTx((tx) =>
           tx.select().from(printJobs).where(eq(printJobs.saleId, before[0]!.id)),
         );
@@ -1820,7 +1820,7 @@ describe("the invoice at full payment", () => {
       const [sale] = await inTx((tx) =>
         tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
       );
-      await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
+      await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, "original");
       await inTx((tx) =>
         tx
           .update(printJobs)
@@ -1868,7 +1868,7 @@ describe("the invoice at full payment", () => {
     expect(
       (await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId))).invoiceType,
     ).toBe("F1");
-    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
+    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, "original");
     const [original] = await inTx((tx) =>
       tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)),
     );
@@ -1918,7 +1918,7 @@ describe("the invoice at full payment", () => {
     const [sale] = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
     );
-    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
+    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, "original");
     const [original] = await inTx((tx) =>
       tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)),
     );
@@ -2024,7 +2024,7 @@ describe("the invoice at full payment", () => {
       expect(await inTx((tx) => readOriginalReceiptPrint(tx, sale!.id))).toEqual({
         status: "not_queued",
       });
-      await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
+      await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, "original");
       const original = (
         await inTx((tx) => tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)))
       ).find((job) => job.receiptCopy === false)!;

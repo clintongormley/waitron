@@ -270,10 +270,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   removed it ([plan](superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md)) on the owner's 2026-10-09 answer. Until 2026-10-12 this entry asked
   that the consent request say how the invoice will arrive and how consent is withdrawn._
 
-- **Every ticket is printed unless it is emailed: the till's None choice goes (go-live).** Owner, 2026-11-18 (question 3 of the
-  [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): "We must always print one unless we email it instead." This
-  reverses the owner's decision D2 of 16 November to keep None; the adviser is still to confirm the details. Fiscal: the owner lands it.
-  [Detail](backlog/fiscal.md#every-ticket-is-printed-unless-it-is-emailed-the-tills-none-choice-goes)
+- **The till's email step does not tell the customer how the ticket arrives** (left open by ADVISER-NO-NONE, which
+  removed the till's None). Question 3 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md) tells the
+  adviser the till says "We'll email your ticket to this address. You can ask for a paper copy at any time."; the till's
+  strings (`apps/till/src/i18n/strings.ts`) hold no such sentence, and the adviser's answer on consent to email rests on it.
 
 - **Loose ends left by A230 (`@waitron/verifactu` 0.2.1, #1099).**
   An unusable `TiempoEsperaEnvio` is not recorded anywhere (the raw value is dropped).

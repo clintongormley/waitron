@@ -336,6 +336,34 @@ describe("till-ticket-view", () => {
     expect(el.shadowRoot!.querySelector("[data-test=refresh-receipt]")).not.toBeNull();
   });
 
+  it("still says a bill found in Find a bill has not been sent to a printer, with a working printer", async () => {
+    const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result: { ...result, invoiceType: "F2" },
+      historical: true,
+      historicalDelivery: true,
+      invoicePrintersEnabled: true,
+      originalReceiptPrint: { status: "not_queued" },
+      receiptEquipment: roleOf("receipt", bar, [bar]),
+      deliveries: {
+        current: null,
+        history: [],
+        originalCompleted: false,
+        originalPrinterId: null,
+        actions: {
+          print: null,
+          receiptInstead: null,
+          retryOriginal: null,
+          email: { designation: "original" },
+        },
+      },
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent).toContain(
+      "The original has not been sent to a printer.",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=refresh-receipt]")).not.toBeNull();
+  });
+
   it("emits original retry and status check events while preserving the filed result", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
       result: { ...result, invoiceType: "F1" },
@@ -2043,7 +2071,10 @@ describe("A790 recorded document then printer", () => {
     expect(part(el, "reprint")!.hasAttribute("disabled")).toBe(true);
     expect(noPrinter(el)).toBeUndefined();
     expect(printerOff(el)).toBe(
-      uiText("pay_equipment.printer_switched_off").replace("{item}", "Bar"),
+      "Bar is switched off: unless you choose another, no ticket will print",
+    );
+    expect(printerOff(el)).toBe(
+      uiText("document.printer_off_choose_other").replace("{item}", "Bar"),
     );
     el.invoicePrinterLoading = true;
     await el.updateComplete;

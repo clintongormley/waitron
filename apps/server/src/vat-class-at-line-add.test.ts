@@ -373,7 +373,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     await setVat(v.products.beer, "super_reduced");
     await giveReceiptPrinter(v.cfg.origin.deviceId);
     await reprintSale(deps(), v.cfg, id);
-    await printSaleReceipt(deps(), v.cfg, id, false);
+    await printSaleReceipt(deps(), v.cfg, id, "original");
     // The copy and the original were both built and queued, each printing the filed 10%.
     expect(await suite.db.select().from(printJobs)).toHaveLength(2);
     for (const job of await suite.db.select().from(printJobs))

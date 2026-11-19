@@ -302,7 +302,7 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
       { db: suite.db, backend },
       { ...venue.cfg, origin: deviceOrigin(a) },
       orderId,
-      false,
+      "original",
     );
     expect(await documentJobPrinters()).toEqual([bar]);
     expect((await inTx((tx) => resolvePaymentSlipPrinter(tx, deviceOrigin(a))))?.id).toBe(counter);

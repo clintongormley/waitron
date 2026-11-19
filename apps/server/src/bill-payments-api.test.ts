@@ -1959,7 +1959,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         { db: suite.db, backend },
         { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
         billId,
-        false,
+        "original",
       );
       const [sale] = await saleOf(billId);
       const [snapshot] = suite.db.all<{
@@ -3266,7 +3266,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       { db: suite.db, backend },
       { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
       billId,
-      false,
+      "original",
     );
     const receiptsAfter = suite.db.all<{ n: number }>(
       sql`select count(*) as n from print_jobs where printer_id = ${venue.printerId} and kind = 'document'`,
@@ -4914,7 +4914,7 @@ describe("refund first (design §4.3, §6a)", () => {
       { db: suite.db, backend },
       { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
       billId,
-      false,
+      "original",
     );
     const tickets = (await documentJobs())
       .filter((job) => !jobsBefore.has(job.id))
@@ -4963,7 +4963,7 @@ describe("the ticket after a refund", () => {
       { db: suite.db, backend },
       { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
       billId,
-      false,
+      "original",
     );
     const printed = (await documentJobs())
       .filter((job) => !jobsBefore.has(job.id))
@@ -5751,7 +5751,7 @@ describe("simplified invoice original HTTP requests", () => {
             { db: suite.db, backend },
             { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
             billId,
-            false,
+            "original",
           );
         const before = await inTx((tx) =>
           tx.select().from(printJobs).where(eq(printJobs.saleId, sale.id)),
