@@ -210,11 +210,7 @@ function statusOf(hash: string, version: LiveVersion | undefined, clashes = 0): 
       };
 }
 
-/**
- * Each menu's publication state, or every menu's when `menuIds` is left out. Every menu's document
- * is built in one pass, because the menu list asks again on every live change. An id that names no
- * menu is left out.
- */
+/** Build the documents in one pass because the menu list reads again on each live change. */
 export async function menuStatus(
   tx: Transaction,
   menuIds?: readonly string[],

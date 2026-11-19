@@ -182,8 +182,8 @@ it("refuses an inactive or unknown course and a dish that is not on this set men
     return (await readSetMenu(tx, other.id)).dishes[0]!.menuItemId;
   });
   await expect(change(otherItem, f.starters)).rejects.toMatchObject({
-    code: "set_menu.not_found",
-    params: { menuId: f.menuId },
+    code: "menu_item.not_found",
+    params: { menuId: f.menuId, menuItemId: otherItem },
   });
   expect(await read()).toEqual(before);
 });

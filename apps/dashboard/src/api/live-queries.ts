@@ -8,6 +8,7 @@ const MENU_PUBLICATION_READS = [
   "settings.venue",
   "extra_list_items",
   "extra_lists",
+  "kitchen_courses",
   "menu_item_variant_overrides",
   "menu_items",
   "menu_releases",

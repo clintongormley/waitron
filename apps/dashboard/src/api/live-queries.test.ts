@@ -1428,6 +1428,7 @@ it("refreshes returned invoice pages passively every minute and watches their ve
 });
 
 it.each([
+  "kitchen_courses",
   "set_menu_lines",
   "set_menu_line_courses",
   "set_menu_dish_courses",

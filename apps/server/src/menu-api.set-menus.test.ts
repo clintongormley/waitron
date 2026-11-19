@@ -148,6 +148,19 @@ it("names an invalid takeaway VAT class on creation and update", async () => {
   );
 });
 
+it.each([undefined, "menu"])(
+  "refuses set-menu terms when the requested kind is %s",
+  async (kind) => {
+    const { send } = await fixture();
+    await refused(
+      await send("POST", menus, { kind, name: "Menu without set-menu kind", setPrice: "14.00" }),
+      400,
+      "management.request_invalid",
+      { field: "kind" },
+    );
+  },
+);
+
 it("updates set-menu terms and clears the takeaway override with null", async () => {
   const { send, draft, set } = await fixture();
   const path = `${menus}/${set.id}`;
@@ -228,6 +241,17 @@ it("returns adjusted lines and the updated draft after changing a dish's course"
   );
 });
 
+it("reports a missing dish at the course route even though the set menu still exists", async () => {
+  const { send, draft, set } = await fixture();
+  const menuItemId = crypto.randomUUID();
+  await refused(
+    await send("PUT", `${draft}/items/${menuItemId}/course`, { courseId: null }),
+    404,
+    "menu_item.not_found",
+    { menuId: set.id, menuItemId },
+  );
+});
+
 it("returns saved variant choices and refuses an unrecognised variant", async () => {
   const f = await fixture();
   const [cup, bowl] = await withTransaction(suite.db, (tx) =>
@@ -302,12 +326,27 @@ it("copies dishes into the target set menu and refuses an ordinary source menu",
   });
 });
 
-it("keeps set-menu reads and writes behind menu management permission", async () => {
-  const { send, draft, staffToken } = await fixture();
-  expect((await send("GET", draft, undefined, null)).status).toBe(401);
-  expect(
-    await json(await send("PUT", `${draft}/lines`, { lines: [] }, staffToken), 403),
-  ).toMatchObject({ error: { code: "authorization.not_permitted" } });
+it("keeps every set-menu editor route behind menu management permission", async () => {
+  const { send, draft, set, staffToken } = await fixture();
+  const item = `${draft}/items/${crypto.randomUUID()}`;
+  const calls = [
+    ["GET", draft, undefined],
+    ["PUT", `${draft}/lines`, { lines: [] }],
+    ["PUT", `${item}/course`, { courseId: null }],
+    ["PUT", `${item}/variants`, { variants: [] }],
+    ["POST", `${draft}/dishes`, { dishes: [] }],
+    ["POST", `${draft}/copy-dishes`, { fromMenuId: set.id }],
+    ["POST", menus, { ...terms, name: "Unapproved draft" }],
+    ["PATCH", `${menus}/${set.id}`, { setPrice: "15.00" }],
+  ] as const;
+  for (const [method, path, body] of calls) {
+    expect(await json(await send(method, path, body, null), 401)).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    expect(await json(await send(method, path, body, staffToken), 403)).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "menu.manage" } },
+    });
+  }
 });
 
 it("places a set menu and can replace a member with a set menu", async () => {
@@ -374,6 +413,16 @@ it("refuses to publish a set menu on its own", async () => {
   );
 });
 
+it("explains why a set menu has no status on both single-menu reads", async () => {
+  const { send, set } = await fixture();
+  const path = `${menus}/${set.id}`;
+  const error = { code: "set_menu.wrong_place", params: { menuId: set.id } };
+  expect(await json(await send("GET", `${path}/status`), 409)).toEqual({ error });
+  expect(await json(await send("GET", `${path}/read?part=status`), 200)).toMatchObject({
+    status: { status: 409, body: { error } },
+  });
+});
+
 it("reports a full menu as changed after saving one of its set-menu lines", async () => {
   const f = await fixture();
   await addSoup(f);
@@ -381,10 +430,8 @@ it("reports a full menu as changed after saving one of its set-menu lines", asyn
   const path = `${menus}/${f.full.id}`;
   const { hash } = await json<{ hash: string }>(await f.send("GET", `${path}/preview`), 200);
   await json(await f.send("POST", `${path}/publish`, { expectedHash: hash }), 200);
-  const statuses = () =>
-    f
-      .send("GET", `${menus}/status`)
-      .then((res) => json<Record<string, { state: string }>>(res, 200));
+  const statuses = async () =>
+    json<Record<string, { state: string }>>(await f.send("GET", `${menus}/status`), 200);
   const before = await statuses();
   expect(before[f.full.id]?.state).toBe("current");
   await json(

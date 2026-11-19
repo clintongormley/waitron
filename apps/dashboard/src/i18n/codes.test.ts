@@ -1295,3 +1295,10 @@ it.each(["en", "es"])(
     expect(message).toMatch(/3 problem/);
   },
 );
+
+it.each([
+  ["en", "This dish is no longer on the menu."],
+  ["es", "Este plato ya no está en la carta."],
+])("explains a missing menu dish in %s", (locale, explanation) => {
+  expect(codeMessage("menu_item.not_found", locale)).toContain(explanation);
+});

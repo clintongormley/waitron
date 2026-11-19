@@ -579,6 +579,12 @@ type SetMenuDraftTerms = {
   setTakeawayVatClass?: VatClass | null;
 };
 
+type CreateMenuDetails = Omit<SectionInput, "internalName"> &
+  (
+    | { kind?: "menu"; setPrice?: never; setVatClass?: never; setTakeawayVatClass?: never }
+    | ({ kind: "set_menu" } & SetMenuDraftTerms)
+  );
+
 type SetMenuDishesResult = { details: SetMenuDetails; addedLines: SetMenuLine[] };
 
 export interface MenuSummary {
@@ -3399,10 +3405,7 @@ export class DashboardApi {
     return this.#request<void>("/management-api/content-languages", "PUT", config);
   }
 
-  createMenu(
-    name: string,
-    details: Omit<SectionInput, "internalName"> & SetMenuDraftTerms & { kind?: MenuKind } = {},
-  ): Promise<MenuSummary> {
+  createMenu(name: string, details: CreateMenuDetails = {}): Promise<MenuSummary> {
     return this.#request<MenuSummary>("/management-api/menus", "POST", {
       name,
       ...details,
@@ -3487,7 +3490,6 @@ export class DashboardApi {
     return this.#request<MenuPriceRow[]>(`/management-api/menus/${id}/prices`, "GET");
   }
 
-  /** Every menu's publication status, keyed by menu id. */
   getMenuStatuses(): Promise<Record<string, MenuStatus>> {
     return this.#request<Record<string, MenuStatus>>("/management-api/menus/status", "GET");
   }

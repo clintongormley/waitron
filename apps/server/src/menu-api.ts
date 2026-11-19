@@ -48,6 +48,7 @@ import {
   addSetMenuDishes,
   copySetMenuDishes,
   readSetMenu,
+  refuseSetMenu,
   saveSetMenuDishCourse,
   saveSetMenuLines,
   saveSetMenuVariantChoices,
@@ -809,6 +810,13 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
   );
 }
 
+async function readMenuStatus(tx: Transaction, menuId: string) {
+  await refuseSetMenu(tx, menuId);
+  const status = (await menuStatus(tx, [menuId])).get(menuId);
+  if (status === undefined) throw new AppError("menu.not_found", { menuId });
+  return status;
+}
+
 function setMenuTerms(body: Record<string, unknown>) {
   const { setPrice } = body;
   if (setPrice !== undefined && setPrice !== null && typeof setPrice !== "string")
@@ -1127,7 +1135,6 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
     }),
   );
 
-  // One request for every menu's status, so the menus list does not ask once per row.
   app.get("/management-api/menus/status", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1145,6 +1152,13 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const presentation = sectionInput({ ...body, internalName: name }, true);
       const kind =
         body.kind === undefined ? undefined : requireEnum(body.kind, "kind", ["menu", "set_menu"]);
+      if (
+        kind !== "set_menu" &&
+        [body.setPrice, body.setVatClass, body.setTakeawayVatClass].some(
+          (value) => value !== undefined,
+        )
+      )
+        throw new AppError("management.request_invalid", { field: "kind" });
       const terms = setMenuTerms(body);
       const created = await gated(c, sessionId, (tx) =>
         createMenu(tx, {
@@ -1217,9 +1231,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
             if (part === "structure") return c.json(await readMenuStructure(tx, menuId));
             if (part === "home") return c.json(await readMenuHome(tx, menuId));
             if (part === "preview") return c.json(await previewMenu(tx, menuId));
-            const status = (await menuStatus(tx, [menuId])).get(menuId);
-            if (status === undefined) throw new AppError("menu.not_found", { menuId: menuId });
-            return c.json(status);
+            return c.json(await readMenuStatus(tx, menuId));
           });
           responses[part] = { status: response.status, body: await response.json() };
         }
@@ -1249,11 +1261,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const status = await gated(c, sessionId, async (tx) =>
-        (await menuStatus(tx, [menuId])).get(menuId),
-      );
-      if (status === undefined) throw new AppError("menu.not_found", { menuId: menuId });
-      return c.json(status);
+      return c.json(await gated(c, sessionId, (tx) => readMenuStatus(tx, menuId)));
     }),
   );
 
