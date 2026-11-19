@@ -1447,8 +1447,12 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
     expect(tableOrder(el).orderId).toBe("wo-9");
     expect(tableOrder(el).party!.revision).toBe(4);
 
+    const said = banner(el)?.textContent;
+
     release();
     await flush(el, 6);
+
+    expect(banner(el)?.textContent).toBe(said);
 
     expect(endMeal).not.toHaveBeenCalled();
     expect(tableOrder(el).orderId).toBe("wo-9");
@@ -1471,8 +1475,12 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
     await flush(el, 6);
     expect(tableOrder(el).party!.revision).toBe(3);
 
+    const said = banner(el)?.textContent;
+
     release();
     await flush(el, 6);
+
+    expect(banner(el)?.textContent).toBe(said);
 
     expect(endMeal).not.toHaveBeenCalled();
   });
@@ -1494,8 +1502,12 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
     expect(tableOrder(el).party!.id).toBe("v2");
     expect(tableOrder(el).party!.revision).toBe(3);
 
+    const said = banner(el)?.textContent;
+
     release();
     await flush(el, 6);
+
+    expect(banner(el)?.textContent).toBe(said);
 
     expect(endMeal).not.toHaveBeenCalled();
   });
@@ -1512,8 +1524,12 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
     el.api = { ...api, endMeal: elsewhere } as unknown as TillApi;
     await flush(el);
 
+    const said = banner(el)?.textContent;
+
     release();
     await flush(el, 6);
+
+    expect(banner(el)?.textContent).toBe(said);
 
     expect(endMeal).not.toHaveBeenCalled();
     expect(elsewhere).not.toHaveBeenCalled();
@@ -1535,8 +1551,12 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
     emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
     await flush(el, 6);
 
+    const said = banner(el)?.textContent;
+
     release();
     await flush(el, 6);
+
+    expect(banner(el)?.textContent).toBe(said);
 
     expect(endMeal).not.toHaveBeenCalled();
   });
@@ -1565,6 +1585,47 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
     expect(sentBodies(endMeal)[0]).toEqual(
       expect.objectContaining({ billId: "wo-9", expectedPartyRevision: 4 }),
     );
+  });
+
+  it("says the table changed when its revision moves while the pressed bill is read and staff are still on it", async () => {
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    const { el, endMeal } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines,
+    });
+    await pressPrintFromFinishRefusal(el);
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+    expect(banner(el)).toBeNull();
+
+    release();
+    await flush(el, 6);
+
+    expect(endMeal).not.toHaveBeenCalled();
+    expect(tableOrder(el).orderId).toBe("wo-9");
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
+    expect(banner(el)!.textContent).toContain(t("party.try_again"));
+  });
+
+  it("says nothing when the revision moves but staff have left the pressed bill for another", async () => {
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    const { el, endMeal } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines,
+    });
+    await pressPrintFromFinishRefusal(el);
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-4" });
+    await flush(el, 6);
+
+    release();
+    await flush(el, 6);
+
+    expect(endMeal).not.toHaveBeenCalled();
+    expect(banner(el)).toBeNull();
   });
 
   it("shows the bill the refusal names before printing it, and says it is printed under that bill", async () => {

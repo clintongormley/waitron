@@ -20118,16 +20118,19 @@ export class TillApp extends LitElement {
       const visit = this.#orderVisit;
       if (!(await this.#switchToBill(workingOrderId))) return;
       await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
+      const sameTable = () =>
+        api === this.api &&
+        session === this.#operatorSession &&
+        visit === this.#orderVisit &&
+        pressed?.id === this.orderParty?.id;
+      if (!sameTable()) return;
       // Issuing a ticket cannot be undone: a table that moved on is not the one the press saw, and
       // the revision read now would pass the server's stale check.
-      if (
-        api !== this.api ||
-        session !== this.#operatorSession ||
-        visit !== this.#orderVisit ||
-        pressed?.id !== this.orderParty?.id ||
-        pressed?.revision !== this.orderParty?.revision
-      )
+      if (pressed?.revision !== this.orderParty?.revision) {
+        const onTarget = () => sameTable() && this.activeTabId === workingOrderId;
+        if (onTarget()) await this.#onPartyOutOfDate({ code: "party.out_of_date" }, onTarget);
         return;
+      }
     }
     const party = this.orderParty;
     const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
