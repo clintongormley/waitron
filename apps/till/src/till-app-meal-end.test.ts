@@ -867,6 +867,38 @@ describe("till-app: a refusal after a send that got no answer", () => {
     expect(text(printedNotice(el))).toBe(t("bill.issued"));
   });
 
+  const cancelDishList = async (el: TillApp) => {
+    warning(el)!.querySelector<HTMLElement>("[data-meal-end-cancel]")!.click();
+    await flush(el, 6);
+  };
+
+  it("shows the warning again when the dish list is cancelled with an earlier print unresolved", async () => {
+    const { el, endMeal } = await printAnywayLeftUnanswered(() => Promise.reject(unservedRefusal));
+    await printBill(el);
+    expect(warning(el)).not.toBeNull();
+    expect(banner(el)).toBeNull();
+
+    await cancelDishList(el);
+
+    expect(warning(el)).toBeNull();
+    expectWarned(el);
+    expect(endMeal).toHaveBeenCalledTimes(3);
+  });
+
+  it("shows nothing when the dish list is cancelled on a bill other than the unresolved one", async () => {
+    const { el } = await pressLeftUnanswered(unservedRefusal, { getPartyBills: twoBills() });
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    emit(tableOrder(el), "end-meal", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    expect(warning(el)).not.toBeNull();
+
+    await cancelDishList(el);
+
+    expect(warning(el)).toBeNull();
+    expect(banner(el)).toBeNull();
+  });
+
   it("keeps both lost sends when a resend of one is refused", async () => {
     let answer = (options: unknown): Promise<unknown> =>
       unansweredUntilDeadline(undefined, undefined, options);
@@ -2185,6 +2217,7 @@ describe("till-app: Print the bill with dishes not served", () => {
     await flush(el, 6);
 
     expect(warning(el)).toBeNull();
+    expect(banner(el)).toBeNull();
     expect(endMeal).toHaveBeenCalledOnce();
 
     emit(tableOrder(el), "end-meal", { workingOrderId: "wo-4", printAnyway: true });

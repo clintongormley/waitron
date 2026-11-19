@@ -20388,6 +20388,20 @@ export class TillApp extends LitElement {
     return said !== undefined && "error" in said ? said.error : undefined;
   }
 
+  /** The not-served list took the place of any warning, so cancelling it brings the warning back
+   * while the bill is uncertain. */
+  #onMealEndDeclined(): void {
+    const billId = this.activeTabId;
+    if (billId === undefined) return;
+    const answer = this.mealEndAnswers.get(billId);
+    this.#setMealEndAnswer(
+      billId,
+      answer !== undefined && this.#mealEndUnanswered.has(billId)
+        ? { ...answer, said: { error: "meal_end.unconfirmed" } }
+        : undefined,
+    );
+  }
+
   #rememberUnanswered(billId: string, send: UnansweredPrint): void {
     const sends = this.#mealEndUnanswered.get(billId) ?? [];
     if (!sends.includes(send)) this.#mealEndUnanswered.set(billId, [...sends, send]);
@@ -23837,9 +23851,7 @@ export class TillApp extends LitElement {
         @finish-table=${() => void this.#onFinishTable()}
         @record-unpaid-departure=${(event: Event) => this.#onRecordUnpaidDeparture(event)}
         @end-meal=${(event: Event) => void this.#onEndMeal(event)}
-        @meal-end-declined=${() => {
-          if (this.activeTabId !== undefined) this.#setMealEndAnswer(this.activeTabId, undefined);
-        }}
+        @meal-end-declined=${() => this.#onMealEndDeclined()}
         @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event)}
         @request-bill=${(event: Event) => void this.#onRequestBill(event)}
         @take-payment=${(event: Event) => void this.#onSwitchBill(event)}
