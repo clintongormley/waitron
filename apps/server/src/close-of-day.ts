@@ -69,7 +69,7 @@ export function closeOfDayConfig(base: TradingContext): SaleOriginConfig {
 
 /**
  * Issue one table bill's ticket at the end of the business day, for its whole total, paid or not,
- * as Print the bill does, but printing nothing and sending nothing to the kitchen. The ticket names
+ * as Print the bill does, but printing no receipt and sending nothing to the kitchen. The ticket names
  * the person who seated the table. A refusal from the issue path throws, for the caller's
  * transaction to roll back.
  */

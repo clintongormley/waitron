@@ -140,7 +140,7 @@ lines of tests. Medium; one pull request.
 
 **When.** A new job, `bills.close_of_day`, looks every minute (`maxSleepMs` 60 s, `minSleepMs` 500
 as `attendance.end_of_day` has, since the pass reads the trusted clock and the runner the wall
-clock). Most looks only check the clock gate and read the day-start setting. It runs the due query on its first pass, when
+clock). It runs the due query on its first pass, when
 the day's end has passed since its last query, when the clock gate has just let go, and when a
 retry is pending. A **due bill**: on a party; `open` or `placed`; no sale; at least one line; opened
 by this node, after this node's latest series retirement (D6); and opened before today's business
@@ -201,7 +201,7 @@ pnpm exec prettier --check <changed files>
 
 Add `business_day_close` to `SOURCES` and `SALE_SOURCES` (`packages/shared/src/origin.ts`); its
 label beside `apps/dashboard/src/i18n/strings.ts:1246` and `:5922` ("Close of business day" /
-"Cierre de la jornada"); a `SaleOriginConfig` in `apps/server/src/trading-context.ts` (a trading
+"Fin del día de trabajo"); a `SaleOriginConfig` in `apps/server/src/trading-context.ts` (a trading
 context whose origin is a `SaleOrigin`), and `issueUnpaidInvoice`'s parameter
 (`working-order.ts:7631`) widened to it. Its body should need no change (the helpers it calls take a
 trading context, e.g. `invoice-selection.ts:88`); if the typecheck finds one, widen that callee's
@@ -249,8 +249,8 @@ src/unpaid-departure.test.ts` (the last two unedited).
 Add `closeOfDayJob(deps)` to `close-of-day.ts` (shaped like `menu-activation.ts:10-40`): the looks,
 the windows, the due query, the loop, the 60-second retry, the throw after the loop. Add
 `"bills.close_of_day": stop` to `job-catalogue.ts`; its words to `alert-messages.ts` `job_name`
-("issuing the tickets of bills left open at the end of the business day" / "emitir los tiques de las
-cuentas abiertas al cierre de la jornada"; guard `scripts/ongoing-alert-codes.test.ts:37-40`); in
+("issuing the receipts of bills left open at the end of the business day" / "la emisión de los
+tickets de las cuentas abiertas al terminar el día de trabajo"; guard `scripts/ongoing-alert-codes.test.ts:37-40`); in
 `boot.ts`, read the start mark before `:4469` and register the job beside `menuActivationJob`
 (`:4491`) with the gated seat, `clockUnconfirmed: startClockHolds` and `applies`. Failing tests
 first:
