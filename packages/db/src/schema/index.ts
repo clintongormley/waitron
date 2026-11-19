@@ -4,6 +4,7 @@ export * from "./taxpayer.js";
 export * from "./nodes.js";
 export * from "./series.js";
 export * from "./orders.js";
+export * from "./set-menu-copies.js";
 export * from "./order-amendments.js";
 export * from "./order-events.js";
 export * from "./sale-line-dishes.js";

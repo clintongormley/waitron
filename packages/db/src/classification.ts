@@ -151,6 +151,11 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "order lines in flight; copied to a standby, never drained back",
   ),
   classify(
+    "bill_set_menu_copies",
+    "state",
+    "menu copies used on a bill in flight; copied to a standby, never drained back",
+  ),
+  classify(
     "line_service_cancellations",
     "state",
     "cancelled service that retains its bill charge; copied to a standby, never drained back",

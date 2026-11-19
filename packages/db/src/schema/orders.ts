@@ -16,7 +16,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
-import { products } from "./menus.js";
+import { menus, products } from "./menus.js";
 import { devices } from "./devices.js";
 import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
@@ -31,6 +31,8 @@ import { persons } from "./identity/persons.js";
 import { parties } from "./parties.js";
 import { dining } from "./sale-rule-types.js";
 import { departments } from "./venue-service/service.js";
+
+const setMenuRole = enumType(["set_menu", "dish"]);
 
 export const workingOrderStatus = enumType([
   "open",
@@ -287,6 +289,13 @@ export const workingOrderLines = table(
     cohortId: id("cohort_id"),
     cohortOrdinal: count("cohort_ordinal"),
     wholePortion: flag("whole_portion"),
+    setMenuRole: setMenuRole("set_menu_role"),
+    setMenuId: id("set_menu_id"),
+    setMenuVersionId: id("set_menu_version_id"),
+    setMenuLineId: id("set_menu_line_id"),
+    setMenuPlace: count("set_menu_place"),
+    // Placement establishes the course, which can later be deleted from the menu.
+    setMenuCountsAsCourseId: id("set_menu_counts_as_course_id"),
   },
   (t) => [
     foreignKey({
@@ -359,6 +368,39 @@ export const workingOrderLines = table(
       foreignColumns: [persons.id],
       name: "working_order_lines_credited_to_fk",
     }),
+    foreignKey({
+      columns: [t.setMenuId],
+      foreignColumns: [menus.id],
+      name: "working_order_lines_set_menu_fk",
+    }),
+    foreignKey({
+      columns: [t.setMenuVersionId],
+      foreignColumns: [menuVersions.id],
+      name: "working_order_lines_set_menu_version_fk",
+    }),
+    foreignKey({
+      columns: [t.setMenuLineId],
+      foreignColumns: [t.id],
+      name: "working_order_lines_set_menu_line_fk",
+    }).onDelete("set null"),
+    check("working_order_lines_set_menu_role_ck", enumCheck(t.setMenuRole)),
+    check(
+      "working_order_lines_set_menu_ck",
+      sql`(${t.setMenuRole} is null
+          and ${t.setMenuId} is null and ${t.setMenuVersionId} is null
+          and ${t.setMenuLineId} is null and ${t.setMenuPlace} is null
+          and ${t.setMenuCountsAsCourseId} is null)
+        or (${t.setMenuRole} is 'set_menu'
+          and ${t.setMenuId} is not null and ${t.setMenuVersionId} is not null
+          and ${t.productId} is null and ${t.menuItemId} is null and ${t.parentLineId} is null
+          and ${t.courseId} is null and ${t.groupId} is null and ${t.cohortId} is null
+          and ${t.setMenuLineId} is null and ${t.setMenuPlace} is null
+          and ${t.setMenuCountsAsCourseId} is null)
+        or (${t.setMenuRole} is 'dish'
+          and ${t.setMenuId} is not null and ${t.menuItemId} is not null
+          and ${t.setMenuPlace} is not null and ${t.setMenuCountsAsCourseId} is not null
+          and ${t.parentLineId} is null and ${t.setMenuVersionId} is null)`,
+    ),
     uniqueIndex("working_order_lines_cohort_ordinal_key").on(t.cohortId, t.cohortOrdinal),
     check(
       "working_order_lines_cohort_ck",

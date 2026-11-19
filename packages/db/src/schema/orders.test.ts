@@ -899,7 +899,7 @@ describe("working_order_lines", () => {
     expect(line.descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
   });
 
-  it("carries the product, extras list, menu and menu item identifiers", async () => {
+  it("carries the product, extras list, menu, menu item and set-menu identifiers", async () => {
     // Reads column NAMES only, so a menu reference under an unrelated name passes.
     const cols = await rows<{ name: string }>(
       db,
@@ -909,7 +909,13 @@ describe("working_order_lines", () => {
       .map((c) => c.name)
       .filter((n) => /(product|item|menu|catalog|menu|sku|variant|category|list)_id$/i.test(n))
       .sort();
-    expect(references).toEqual(["extra_list_id", "menu_id", "menu_item_id", "product_id"]);
+    expect(references).toEqual([
+      "extra_list_id",
+      "menu_id",
+      "menu_item_id",
+      "product_id",
+      "set_menu_id",
+    ]);
   });
 
   it("records when a line was sent and the extras list a pick came from, both unset at first", async () => {

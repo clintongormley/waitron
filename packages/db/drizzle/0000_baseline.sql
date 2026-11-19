@@ -125,6 +125,12 @@ CREATE TABLE `working_order_lines` (
 	`cohort_id` text,
 	`cohort_ordinal` integer,
 	`whole_portion` integer,
+	`set_menu_role` text,
+	`set_menu_id` text,
+	`set_menu_version_id` text,
+	`set_menu_line_id` text,
+	`set_menu_place` integer,
+	`set_menu_counts_as_course_id` text,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE restrict,
@@ -135,12 +141,30 @@ CREATE TABLE `working_order_lines` (
 	FOREIGN KEY (`menu_version_id`) REFERENCES `menu_versions`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`late_confirmed_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`credited_to`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`set_menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`set_menu_version_id`) REFERENCES `menu_versions`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`set_menu_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE set null,
 	CONSTRAINT "working_order_lines_unit_precision_ck" CHECK("working_order_lines"."unit_precision" is null or "working_order_lines"."unit_precision" between 0 and 3),
 	CONSTRAINT "working_order_lines_quantity_ck" CHECK("working_order_lines"."quantity" <> 0),
 	CONSTRAINT "working_order_lines_price_quantity_ck" CHECK("working_order_lines"."price_quantity" > 0),
 	CONSTRAINT "working_order_lines_vat_class_ck" CHECK("working_order_lines"."vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "working_order_lines_takeaway_vat_class_ck" CHECK("working_order_lines"."takeaway_vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "working_order_lines_line_no_ck" CHECK("working_order_lines"."line_no" >= 1),
+	CONSTRAINT "working_order_lines_set_menu_role_ck" CHECK("working_order_lines"."set_menu_role" in ('set_menu', 'dish')),
+	CONSTRAINT "working_order_lines_set_menu_ck" CHECK(("working_order_lines"."set_menu_role" is null
+          and "working_order_lines"."set_menu_id" is null and "working_order_lines"."set_menu_version_id" is null
+          and "working_order_lines"."set_menu_line_id" is null and "working_order_lines"."set_menu_place" is null
+          and "working_order_lines"."set_menu_counts_as_course_id" is null)
+        or ("working_order_lines"."set_menu_role" is 'set_menu'
+          and "working_order_lines"."set_menu_id" is not null and "working_order_lines"."set_menu_version_id" is not null
+          and "working_order_lines"."product_id" is null and "working_order_lines"."menu_item_id" is null and "working_order_lines"."parent_line_id" is null
+          and "working_order_lines"."course_id" is null and "working_order_lines"."group_id" is null and "working_order_lines"."cohort_id" is null
+          and "working_order_lines"."set_menu_line_id" is null and "working_order_lines"."set_menu_place" is null
+          and "working_order_lines"."set_menu_counts_as_course_id" is null)
+        or ("working_order_lines"."set_menu_role" is 'dish'
+          and "working_order_lines"."set_menu_id" is not null and "working_order_lines"."menu_item_id" is not null
+          and "working_order_lines"."set_menu_place" is not null and "working_order_lines"."set_menu_counts_as_course_id" is not null
+          and "working_order_lines"."parent_line_id" is null and "working_order_lines"."set_menu_version_id" is null)),
 	CONSTRAINT "working_order_lines_cohort_ck" CHECK(("working_order_lines"."cohort_id" is null and "working_order_lines"."cohort_ordinal" is null and "working_order_lines"."whole_portion" is null)
         or ("working_order_lines"."cohort_id" is not null and "working_order_lines"."cohort_ordinal" is not null
           and "working_order_lines"."cohort_ordinal" >= 1 and "working_order_lines"."whole_portion" is not null
@@ -225,6 +249,16 @@ CREATE INDEX `working_orders_uncollected_idx` ON `working_orders` (`id`) WHERE "
 CREATE INDEX `working_orders_status_idx` ON `working_orders` (`status`);--> statement-breakpoint
 CREATE INDEX `working_orders_opened_at_idx` ON `working_orders` (`opened_at`);--> statement-breakpoint
 CREATE INDEX `working_orders_party_idx` ON `working_orders` (`party_id`);--> statement-breakpoint
+CREATE TABLE `bill_set_menu_copies` (
+	`working_order_id` text NOT NULL,
+	`set_menu_id` text NOT NULL,
+	`menu_version_id` text NOT NULL,
+	PRIMARY KEY(`working_order_id`, `set_menu_id`),
+	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`set_menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`menu_version_id`) REFERENCES `menu_versions`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
 CREATE TABLE `order_amendments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
@@ -566,12 +600,19 @@ CREATE TABLE `order_draft_lines` (
 	`join_group_id` text,
 	`after_group_id` text,
 	`no_merge` integer DEFAULT false NOT NULL,
+	`set_menu_id` text,
+	`set_menu_reserved_line_id` text,
+	`set_menu_reserved_place` integer,
 	FOREIGN KEY (`draft_id`) REFERENCES `order_drafts`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`menu_item_id`) REFERENCES `menu_items`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`make_at_station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`join_group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`after_group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`set_menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "order_draft_lines_set_menu_ck" CHECK(("order_draft_lines"."set_menu_reserved_line_id" is null and "order_draft_lines"."set_menu_reserved_place" is null)
+        or ("order_draft_lines"."set_menu_id" is not null and "order_draft_lines"."set_menu_reserved_line_id" is not null
+          and "order_draft_lines"."set_menu_reserved_place" is not null)),
 	CONSTRAINT "order_draft_lines_quantity_ck" CHECK("order_draft_lines"."quantity" > 0),
 	CONSTRAINT "order_draft_lines_slot_ck" CHECK("order_draft_lines"."slot" >= 0),
 	CONSTRAINT "order_draft_lines_place_ck" CHECK("order_draft_lines"."join_group_id" is null or "order_draft_lines"."slot" = 0),
@@ -3185,6 +3226,12 @@ BEGIN
       AND new.line_no IS old.line_no
       AND new.name IS old.name
       AND new.product_id IS old.product_id
+      AND new.set_menu_role IS old.set_menu_role
+      AND new.set_menu_id IS old.set_menu_id
+      AND new.set_menu_version_id IS old.set_menu_version_id
+      AND new.set_menu_line_id IS old.set_menu_line_id
+      AND new.set_menu_place IS old.set_menu_place
+      AND new.set_menu_counts_as_course_id IS old.set_menu_counts_as_course_id
       AND new.variant_name IS old.variant_name
       AND new.variant_descriptions IS old.variant_descriptions
       AND new.variant_kitchen_name IS old.variant_kitchen_name
@@ -3251,6 +3298,12 @@ BEGIN
       AND new.line_no IS old.line_no
       AND new.name IS old.name
       AND new.product_id IS old.product_id
+      AND new.set_menu_role IS old.set_menu_role
+      AND new.set_menu_id IS old.set_menu_id
+      AND new.set_menu_version_id IS old.set_menu_version_id
+      AND new.set_menu_line_id IS old.set_menu_line_id
+      AND new.set_menu_place IS old.set_menu_place
+      AND new.set_menu_counts_as_course_id IS old.set_menu_counts_as_course_id
       AND new.variant_name IS old.variant_name
       AND new.variant_descriptions IS old.variant_descriptions
       AND new.variant_kitchen_name IS old.variant_kitchen_name
@@ -3332,6 +3385,12 @@ BEGIN
       AND new.line_no IS old.line_no
       AND new.name IS old.name
       AND new.product_id IS old.product_id
+      AND new.set_menu_role IS old.set_menu_role
+      AND new.set_menu_id IS old.set_menu_id
+      AND new.set_menu_version_id IS old.set_menu_version_id
+      AND new.set_menu_line_id IS old.set_menu_line_id
+      AND new.set_menu_place IS old.set_menu_place
+      AND new.set_menu_counts_as_course_id IS old.set_menu_counts_as_course_id
       AND new.variant_name IS old.variant_name
       AND new.variant_descriptions IS old.variant_descriptions
       AND new.variant_kitchen_name IS old.variant_kitchen_name

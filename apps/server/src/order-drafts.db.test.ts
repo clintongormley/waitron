@@ -4096,6 +4096,23 @@ describe("fresh drafts alongside existing bill families", () => {
     );
     const own = await billDraft(v, partyId, intoId);
     const source = await billDraft(v, partyId, tabId);
+    const setMenu = await inTx((tx) =>
+      createMenu(tx, {
+        name: "Lunch set menu",
+        kind: "set_menu",
+        setPrice: "18.00",
+        setVatClass: "reduced",
+      }),
+    );
+    const reservation = {
+      setMenuId: setMenu.id,
+      setMenuReservedLineId: randomUUID(),
+      setMenuReservedPlace: 1,
+    };
+    await db
+      .update(orderDraftLines)
+      .set(reservation)
+      .where(eq(orderDraftLines.id, source.lines[0]!.id));
     const frozen = await family(v, tabId);
     const allergy = await inTx(async (tx) =>
       savePartyAllergy(
@@ -4141,6 +4158,7 @@ describe("fresh drafts alongside existing bill families", () => {
     const [read] = await draftsOf(partyId);
     expect(await draftsOf(partyId)).toHaveLength(1);
     expect(read).toMatchObject({ id: own.id, billId: intoId, revision: 1 });
+    expect(read!.lines.find(({ id }) => id === source.lines[0]!.id)).toMatchObject(reservation);
     expect(read!.lines.map((line) => [line.id, line.slot])).toEqual([
       [own.lines[0]!.id, 1],
       [own.lines[1]!.id, 1],

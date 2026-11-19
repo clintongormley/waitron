@@ -7821,6 +7821,42 @@ describe("a dish's extras children", () => {
     });
   });
 
+  it("retains the set-menu placement metadata when carving a stored dish row", async () => {
+    const { cfg, coffeeId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const setMenu = await createMenu(tx, {
+        name: "Lunch set menu",
+        kind: "set_menu",
+        setPrice: "18.00",
+        setVatClass: "reduced",
+      });
+      const tableId = await makeTable(tx, cfg);
+      const tabId = await openExtrasTab(tx, cfg, tableId, [{ productId: coffeeId, quantity: "2" }]);
+      const placement = {
+        setMenuRole: "dish",
+        setMenuId: setMenu.id,
+        setMenuPlace: 2,
+        setMenuCountsAsCourseId: randomUUID(),
+      } as const;
+      await tx
+        .update(workingOrderLines)
+        .set(placement)
+        .where(eq(workingOrderLines.workingOrderId, tabId));
+
+      await splitLinesWithinOrder(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
+
+      const rows = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo);
+      expect(rows).toMatchObject([
+        { ...placement, quantity: 1000 },
+        { ...placement, quantity: 1000 },
+      ]);
+    });
+  });
+
   it("splits a 50 g child with its dish without changing either frozen price", async () => {
     const { cfg, coffeeId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {
