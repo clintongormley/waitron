@@ -48,12 +48,19 @@ it("groups dishes in course order and links from No course to the product", asyn
 it("moves Bravas to Starters and explains both line changes, then restores its product course", async () => {
   const { api } = await mountDishes();
   const moved = { ...bravas, courseId: starters.id, courseOverrideId: starters.id };
+  let finishMove!: () => void;
   api.saveSetMenuDishCourse
-    .mockResolvedValueOnce({
-      details: { ...details, dishes: [hake, moved, soup], lines: [starterLine] },
-      addedLines: [starterLine],
-      removedLines: [sharingLine],
-    })
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishMove = () =>
+            resolve({
+              details: { ...details, dishes: [hake, moved, soup], lines: [starterLine] },
+              addedLines: [starterLine],
+              removedLines: [sharingLine],
+            });
+        }),
+    )
     .mockResolvedValueOnce({ details, addedLines: [sharingLine], removedLines: [starterLine] });
   await expect.element(page.getByRole("combobox", { name: /^Course for Bravas/ })).toBeVisible();
   await expect
@@ -66,6 +73,8 @@ it("moves Bravas to Starters and explains both line changes, then restores its p
     await page.getByRole("option", { name, exact: true }).click();
   };
   await choose("Starters");
+  await expect.element(page.getByRole("combobox", { name: /^Course for Bravas/ })).toBeDisabled();
+  finishMove();
   await expect
     .element(
       page
@@ -89,6 +98,35 @@ it("moves Bravas to Starters and explains both line changes, then restores its p
     )
     .toBeVisible();
   expect(api.saveSetMenuDishCourse).toHaveBeenNthCalledWith(2, "daily", "bravas-item", null);
+});
+
+it("leaves the next field focused if the manager moved on while a course change was saving", async () => {
+  const { api } = await mountDishes();
+  const moved = { ...bravas, courseId: starters.id, courseOverrideId: starters.id };
+  let finishMove!: () => void;
+  api.saveSetMenuDishCourse.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishMove = () => resolve({ details: { ...details, dishes: [hake, moved, soup] } });
+      }),
+  );
+  const course = page.getByRole("combobox", { name: /^Course for Bravas/ });
+  await course.click();
+  await page.getByRole("option", { name: "Starters", exact: true }).click();
+  await expect.element(course).toBeDisabled();
+  const next = page.getByRole("textbox", { name: "Price per set menu" });
+  await next.click();
+  finishMove();
+
+  await expect
+    .element(
+      page
+        .getByRole("region", { name: "Starters" })
+        .getByRole("cell", { name: "Bravas", exact: true }),
+    )
+    .toBeVisible();
+  const field = next.element();
+  expect((field.getRootNode() as ShadowRoot).activeElement === field).toBe(true);
 });
 
 it("shows Included while blank, saves on Enter, and clears the surcharge on blur", async () => {
@@ -222,6 +260,10 @@ it("keeps the line added by a dish when saving an already edited inclusion count
   await page.getByRole("button", { name: "Add selected" }).click();
   await expect.element(page.getByText("Added a line: 1 × Drinks")).toBeVisible();
 
+  const count = lineForm.getByRole("spinbutton", { name: "Number of dishes" }).first();
+  await count.fill("1");
+  await expect.element(lineForm.getByRole("button", { name: "Save" })).toBeDisabled();
+  await count.fill("2");
   await lineForm.getByRole("button", { name: "Save" }).click();
   await vi.waitFor(() =>
     expect(api.saveSetMenuLines).toHaveBeenCalledExactlyOnceWith("daily", [

@@ -171,6 +171,8 @@ export class SetMenuDishes extends LitElement {
     const id = dish.menuItemId;
     const courseId = event.detail.value || null;
     if (this.changingCourse.has(id) || courseId === dish.courseOverrideId) return;
+    // An open native popover keeps focus in the combobox's shadow root.
+    const focused = Boolean(control.shadowRoot?.activeElement);
     this.changingCourse = new Set(this.changingCourse).add(id);
     this.courseErrors = new Map(this.courseErrors);
     this.courseErrors.delete(id);
@@ -180,7 +182,12 @@ export class SetMenuDishes extends LitElement {
       try {
         const result = await this.api.saveSetMenuDishCourse(this.details.id, id, courseId);
         const moved = result.details.dishes.find(({ menuItemId }) => menuItemId === id);
-        restoreFocus = moved?.courseId !== dish.courseId && control.matches(":focus-within");
+        restoreFocus =
+          moved !== undefined &&
+          moved.courseId !== dish.courseId &&
+          focused &&
+          (Boolean(control.shadowRoot?.activeElement) ||
+            this.ownerDocument.activeElement === this.ownerDocument.body);
         this.#saved(result);
       } catch (error) {
         const field = fieldOf(error);
