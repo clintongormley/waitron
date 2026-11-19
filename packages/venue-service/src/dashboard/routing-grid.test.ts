@@ -7,6 +7,7 @@ import type { CellAddress, RouteTarget, RoutingCell, RoutingPeriod } from "../ro
 import type { RetiredFallbackRoutingView as RoutingView } from "../../test/retired-routing-fixture-types.js";
 import type { RoutingGrid } from "./routing-grid.js";
 import "./routing-grid.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -593,13 +594,13 @@ describe("venue-routing-grid", () => {
     );
   });
 
-  it("the disabled-station warning says Deshabilitada in Spanish", async () => {
+  it("the disabled-station warning reads in Spanish", async () => {
     setLocale("es");
     const { el } = await mount();
     const warning = cell(el, "c:food", "inside").querySelector('[data-test="disabled-target"]')!;
     expect(warning.textContent).toContain("Deshabilitada");
-    expect(rowLabels(el)).toContain("Sin categoría");
-    expect(rowLabels(el)[0]).toBe("Todas las categorías");
+    expect(rowLabels(el)).toContain(VENUE_SERVICE_STRINGS.es["routing.no_category"]);
+    expect(rowLabels(el)[0]).toBe(VENUE_SERVICE_STRINGS.es["routing.all_categories"]);
   });
 
   it("blank emits target null; No preparation emits the no_preparation target", async () => {
@@ -976,7 +977,7 @@ describe("venue-routing-grid", () => {
     it("says none of it in Spanish either", async () => {
       setLocale("es");
       const { el } = await mount();
-      expect(text(el, "p:bread", "terrace")).toBe("Sin preparación");
+      expect(text(el, "p:bread", "terrace")).toBe(VENUE_SERVICE_STRINGS.es["prep.no_preparation"]);
       await name(el, "p:bread", "terrace").toHaveAccessibleName(
         spoken("Bread, Terrace: Sin preparación, heredado."),
       );
@@ -2390,7 +2391,10 @@ describe("one period", () => {
       .updateComplete;
     await userEvent.fill(searchInput(el), "margh");
     await el.updateComplete;
-    expect(periodField(el)!.options[0]).toEqual({ value: "", label: "Todos los periodos" });
+    expect(periodField(el)!.options[0]).toEqual({
+      value: "",
+      label: VENUE_SERVICE_STRINGS.es["routing.all_periods"],
+    });
   });
 
   it("a search and a chosen period together show the matching rows with each cell's station during the period", async () => {
@@ -2587,8 +2591,11 @@ describe("one period", () => {
   it("reads in Spanish", async () => {
     setLocale("es");
     const { el } = await mount(twoDepartments());
-    expect(periodField(el)!.label).toBe("Periodo");
-    expect(periodField(el)!.options[0]).toEqual({ value: "", label: "Todos los periodos" });
+    expect(periodField(el)!.label).toBe(VENUE_SERVICE_STRINGS.es["routing.period"]);
+    expect(periodField(el)!.options[0]).toEqual({
+      value: "",
+      label: VENUE_SERVICE_STRINGS.es["routing.all_periods"],
+    });
   });
 });
 

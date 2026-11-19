@@ -315,11 +315,11 @@ it.each(
     }
 
     expect(tabs.items.find((item) => item.key === "routing")!.label).toBe(
-      locale === "en" ? "Routes" : "Rutas",
+      locale === "en" ? "Routes" : VENUE_SERVICE_STRINGS.es["prep.tab.routing"],
     );
     expect(
       (await routingGrid(el))!.shadowRoot!.querySelector("table")!.getAttribute("aria-label"),
-    ).toBe(locale === "en" ? "Routes" : "Rutas");
+    ).toBe(locale === "en" ? "Routes" : VENUE_SERVICE_STRINGS.es["routing.grid"]);
     const cocktails = gridCombo((await routingGrid(el))!, "c:cocktails", "every")!;
     await cocktails.named().toHaveAccessibleName(containing("Drinks › Cocktails"));
     expect(cocktails.value).toBe("station:bar");
@@ -663,10 +663,10 @@ it.each([
   [
     "es",
     [
-      "Esperando a partir de (min)",
-      "Con retraso a partir de (min)",
-      "Olvidado a partir de (min)",
-      "Listo sin recoger a partir de (min)",
+      VENUE_SERVICE_STRINGS.es["prep.warm"],
+      VENUE_SERVICE_STRINGS.es["prep.overdue"],
+      VENUE_SERVICE_STRINGS.es["prep.forgotten"],
+      VENUE_SERVICE_STRINGS.es["prep.ready_warning"],
     ],
   ],
 ] as const)(
@@ -1776,7 +1776,7 @@ it("retains Delete after a failed write, without a disposition draft", async () 
 });
 it.each([
   ["en", "Delete", "Delete station"],
-  ["es", "Eliminar", "Eliminar estación"],
+  ["es", VENUE_SERVICE_STRINGS.es["prep.delete"], VENUE_SERVICE_STRINGS.es["prep.delete_heading"]],
 ] as const)("offers only translated permanent Delete in %s", async (locale, label, heading) => {
   setLocale(locale);
   const next = withUpstairs({ open: true, why: "open" });
@@ -2198,9 +2198,9 @@ it.each([
   },
   {
     locale: "es",
-    heading: "Categoría o producto",
+    heading: VENUE_SERVICE_STRINGS.es["routing.row_heading"],
     field: "Todas las categorías, Todas las zonas: Bar, la estación predeterminada.",
-    disable: "Eliminar",
+    disable: VENUE_SERVICE_STRINGS.es["prep.delete"],
   },
 ])(
   "uses category and Delete wording without deleted stations ($locale)",
@@ -2516,7 +2516,7 @@ it.each([
       expect(rest.label).toBe(
         locale === "en"
           ? "Also list the order's dishes from other stations"
-          : "Mostrar también los platos del pedido de otras estaciones",
+          : VENUE_SERVICE_STRINGS.es["prep.shows_rest_of_order"],
       );
       await expectNoA11yViolations(host);
       rest.scrollIntoView({ block: "nearest", inline: "end" });
@@ -2607,7 +2607,7 @@ it.each([false, true])(
 
 it.each([
   ["en", "Edit", "Delete"],
-  ["es", "Editar", "Eliminar"],
+  ["es", VENUE_SERVICE_STRINGS.es["venue.edit"], VENUE_SERVICE_STRINGS.es["prep.delete"]],
 ])(
   "Stations row menus identify their row and use permanent Delete wording in %s",
   async (locale, edit, disable) => {
@@ -3131,7 +3131,7 @@ it.each([
 
 it.each([
   ["en", "No results"],
-  ["es", "Sin resultados"],
+  ["es", VENUE_SERVICE_STRINGS.es["venue.combobox_no_results"]],
 ])(
   "the station editor names its chosen printers and localises an empty search in %s",
   async (locale, empty) => {
@@ -3230,7 +3230,7 @@ it("a missing station closes its printer editor without changing the saved membe
 
 it.each([
   ["en", "No prep stations yet"],
-  ["es", "Todavía no hay estaciones de preparación"],
+  ["es", VENUE_SERVICE_STRINGS.es["prep.stations_empty"]],
 ] as const)(
   "Stations shows its localised empty state and no printer read-out with no stations (%s)",
   async (locale, message) => {
@@ -3254,16 +3254,16 @@ it.each(["en", "es"] as const)(
       locale === "en"
         ? ["Name", "Tickets printed on", "Shown on", "Held at the pass", "Actions"]
         : [
-            "Nombre",
+            VENUE_SERVICE_STRINGS.es["prep.name"],
             VENUE_SERVICE_STRINGS.es["prep.printed_on"],
-            "Se muestra en",
+            VENUE_SERVICE_STRINGS.es["prep.shown_on"],
             VENUE_SERVICE_STRINGS.es["prep.waits_for_pass"],
-            "Acciones",
+            VENUE_SERVICE_STRINGS.es["prep.actions"],
           ],
     );
     expect(q(manager.el, '[data-test="printed-on-bar"]')!.textContent?.trim()).toBe("Old printer");
     expect(q(manager.el, '[data-test="printed-on-upstairs"]')!.textContent?.trim()).toBe(
-      locale === "en" ? "No printer" : "Sin impresora",
+      locale === "en" ? "No printer" : VENUE_SERVICE_STRINGS.es["prep.no_printer"],
     );
     expect(q(manager.el, '[data-test="screens-bar"]')!.textContent).toContain("Bar screen");
     expect(q(manager.el, '[data-test="screens-upstairs"]')!.textContent).toContain("Other screen");
@@ -3865,7 +3865,7 @@ describe("Routing grid", () => {
       expect(sentences(es.preview)).toEqual([
         "Food, Todas las zonas: 1 producto pasa de Kitchen a Bar.",
       ]);
-      expect(zoneCells(es.preview)).toEqual(["Todas las zonas"]);
+      expect(zoneCells(es.preview)).toEqual([VENUE_SERVICE_STRINGS.es["routing.every_zone"]]);
     });
 
     it("an extra counts once in its group whatever dishes carry it", async () => {
@@ -3904,7 +3904,9 @@ describe("Routing grid", () => {
         "Food, Terrace: 1 producto pasa de Kitchen a Bar.",
         "Food, Terrace: 14 productos pasan de Kitchen a Bar durante Lunch.",
       ]);
-      expect(preview.querySelector("wt-disclosure")!.heading).toBe("Ver productos");
+      expect(preview.querySelector("wt-disclosure")!.heading).toBe(
+        VENUE_SERVICE_STRINGS.es["prep.preview_show_products"],
+      );
       expect(rowNames(preview).slice(0, 3)).toEqual([
         "Bread",
         "CLANDESTINA durante Lunch",
@@ -4523,7 +4525,7 @@ describe("Routing grid", () => {
       what: "category",
       row: "c:drinks",
       locale: "es",
-      message: "Tu elección no se ha guardado: su categoría ya no está en la cuadrícula.",
+      message: VENUE_SERVICE_STRINGS.es["routing.dropped_category"],
       remove: (next: PrepStationsView) => {
         next.routing.categories = next.routing.categories.filter((c) => c.id !== "drinks");
         next.routing.cells = [];
@@ -4534,7 +4536,7 @@ describe("Routing grid", () => {
       what: "zone",
       row: "c:drinks",
       locale: "es",
-      message: "Tu elección no se ha guardado: su zona ya no está en la cuadrícula.",
+      message: VENUE_SERVICE_STRINGS.es["routing.dropped_zone"],
       remove: (next: PrepStationsView) => {
         next.routing.zones = [];
         next.zones = [];
@@ -4804,7 +4806,7 @@ describe("Routing grid", () => {
     },
     {
       locale: "es",
-      message: "Tu elección no se ha guardado: la fila Sin categoría ya no está en la cuadrícula.",
+      message: VENUE_SERVICE_STRINGS.es["routing.dropped_no_category"],
     },
   ])(
     "a pending No category choice whose row a refresh removes closes its preview and says it was not saved ($locale)",
@@ -5767,8 +5769,8 @@ it.each(["en", "es"] as const)(
             { key: "routing", label: "Routes" },
           ]
         : [
-            { key: "stations", label: "Estaciones" },
-            { key: "routing", label: "Rutas" },
+            { key: "stations", label: VENUE_SERVICE_STRINGS.es["prep.tab.stations"] },
+            { key: "routing", label: VENUE_SERVICE_STRINGS.es["prep.tab.routing"] },
           ],
     );
     expect(location.pathname).toBe("/prep-stations/view/stations");
@@ -6065,7 +6067,9 @@ describe("A773 station policy: the pass coverage warning", () => {
       filled("es", "prep.pass_gap_no_zone", { stations: "Grill" }),
     ]);
     expect(lines(el)[0]).toContain("Grill y Cold");
-    expect(warning(el)!.querySelector("a")!.textContent).toBe("Dispositivos");
+    expect(warning(el)!.querySelector("a")!.textContent).toBe(
+      VENUE_SERVICE_STRINGS.es["prep.devices"],
+    );
   });
 
   it("A773 station policy: a failed coverage read has its own line, which the routing read's failure and recovery leave alone", async () => {

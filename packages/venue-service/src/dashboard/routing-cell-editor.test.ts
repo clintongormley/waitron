@@ -5,6 +5,7 @@ import { applyTokens } from "@waitron/ui";
 import type { RoutingPeriod } from "../routing-types.js";
 import type { RoutingCellEditor, RoutingCellEditorCell } from "./routing-cell-editor.js";
 import "./routing-cell-editor.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const dining = { departmentId: "dining", departmentName: "Dining", colour: "blue" as const };
 const bar = { departmentId: "bar", departmentName: "Bar", colour: "blue" as const };
@@ -110,7 +111,11 @@ it("offers a zone column its department's periods that meet the row, ungrouped",
 
 it.each([
   ["en", "Station", "Any other time"],
-  ["es", "Estación", "El resto del tiempo"],
+  [
+    "es",
+    VENUE_SERVICE_STRINGS.es["routing.line_station"],
+    VENUE_SERVICE_STRINGS.es["routing.any_other_time"],
+  ],
 ] as const)("names the fallback for the current routes in %s", async (locale, station, other) => {
   setLocale(locale);
   const el = await mount();
@@ -564,8 +569,12 @@ it("shows no left-out line when every inherited period is kept", async () => {
 it("speaks Spanish", async () => {
   setLocale("es");
   const el = await mount({ inheritedFrom: "Todas las zonas" });
-  expect(one<Combobox>(el, "[name=target]")!.label).toBe("Estación");
-  expect(button(el, "add-line")!.textContent!.trim()).toBe("+ Añadir ruta");
+  expect(one<Combobox>(el, "[name=target]")!.label).toBe(
+    VENUE_SERVICE_STRINGS.es["routing.line_station"],
+  );
+  expect(button(el, "add-line")!.textContent!.trim()).toBe(
+    VENUE_SERVICE_STRINGS.es["routing.add_line"],
+  );
   expect(one(el, "[data-test=inherited-from]")!.textContent!.trim()).toBe("De Todas las zonas");
 });
 
@@ -826,7 +835,7 @@ it.each(
       el.setAttribute("data-theme", theme);
       await el.updateComplete;
       expect(button(el, "add-line")!.textContent!.trim()).toBe(
-        locale === "en" ? "+ Add route" : "+ Añadir ruta",
+        locale === "en" ? "+ Add route" : VENUE_SERVICE_STRINGS.es["routing.add_line"],
       );
       await page.screenshot({
         path: `__screenshots__/look/a457-route-editor-${locale}-${theme}-${width}.png`,

@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { DeleteDialogCopy } from "@waitron/ui";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 afterEach(() => setLocale("en"));
 import { serviceDeleteCopy, serviceDeleteError } from "./service-delete-copy.js";
 async function copy(kind: "zone" | "department") {
@@ -149,8 +150,8 @@ it.each([
   ],
   [
     "es",
-    "Eliminar zona",
-    "Eliminar departamento",
+    VENUE_SERVICE_STRINGS.es["venue.delete_zone_heading"],
+    VENUE_SERVICE_STRINGS.es["venue.delete_department_heading"],
     "Se borra la zona predeterminada de Mostrador; ninguna zona restante la sustituye.",
   ],
 ] as const)(
@@ -195,9 +196,9 @@ it.each([
   ],
   [
     "es",
-    "Se borra el departamento predeterminado.",
+    VENUE_SERVICE_STRINGS.es["venue.delete_default_empty"],
     "No se pudo eliminar. Vuelve a intentarlo.",
-    "Conserva al menos un departamento.",
+    VENUE_SERVICE_STRINGS.es["venue.delete_refusal_department_last_active"],
   ],
 ] as const)(
   "explains absent replacements and safe error fallbacks in %s",
@@ -219,7 +220,7 @@ it.each([
     expect(serviceDeleteError("zone", { code: "zone.order_in_progress", params: {} })).toBe(
       locale === "en"
         ? "An order is still open or placed in this zone."
-        : "Hay un pedido abierto o enviado en esta zona.",
+        : VENUE_SERVICE_STRINGS.es["venue.delete_refusal_zone_order_in_progress"],
     );
     expect(serviceDeleteError("zone", new Error("private diagnostic"))).toBe(fallback);
   },
