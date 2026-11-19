@@ -35,7 +35,6 @@ export async function readDeliveryAndClaim(db: Database, matches: SQL) {
     attempts: job?.attempts ?? 0,
     claimedAt: job?.claimedAt ?? null,
     claimedBy: job?.claimedBy ?? null,
-    claimedAgentId: job?.claimedBy ?? null,
     claimTokenHash: job?.claimTokenHash ?? null,
     printerHold: job?.printerHold ?? null,
   };
