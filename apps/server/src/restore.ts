@@ -978,8 +978,8 @@ function wrapHookError(module: string, err: unknown): unknown {
  * transaction. Order: check the node exists → hooks in
  * list order → at most one module may return `series` → if one did, retire the node's live series and
  * open the returned ones → on EVERY path require one live standard and one live full series —
- * zero or two of either aborts the transaction → give the node's open bills with no trusted
- * opening time its latest retirement. Returns the standard series id and the hooks' reports.
+ * zero or two of either aborts the transaction → mark every open and placed bill
+ * `before_restore`. Returns the standard series id and the hooks' reports.
  */
 export async function runRestoreHooks(args: {
   db: Database;
