@@ -2,9 +2,9 @@
 
 A box on numbered releases can receive updated verification code and keys. Then a
 release operator can offer a stable release to a group, widen the group or pause for
-everybody. Boxes check without a Cloud account. The watcher authorised planning on
-the signed-file default on 19 November at 00:01. This offer plan awaits the owner's
-publication decision and watcher clearance. [Parent plan](2026-11-09-a950-shorter-upgrades.md) ·
+everybody. Boxes check without a Cloud account. Trust refresh (1c) landed in #3814.
+The owner chose the signed offer on 19 November. The revised offer plan (1d) awaits
+watcher clearance. [Parent plan](2026-11-09-a950-shorter-upgrades.md) ·
 [Signed manual install](2026-11-18-a950-signed-manual-install.md)
 
 ## 1c. Refresh trust through checked numbered installs
@@ -37,40 +37,70 @@ publication decision and watcher clearance. [Parent plan](2026-11-09-a950-shorte
 
 ## 1d. Publish and select a signed offer
 
-- `scripts/box/release-offer.mjs` reuses the Ed25519 envelope from `release-list.mjs`
-  with format 1, `kind: "offer"`, a serial, one version and the SHA-256 of its
-  `waitron-release.json` bytes. Match any `bucketBelow` (1–99, exclusive),
-  `installations` or `atLeast` rule. `none` and `all` each stand alone. Use
-  `WAITRON_NODE_ID` from `trading.env`. Reuse the state-volume reader in `waitron.sh`
-  and document how an operator reads just this field. If the read fails or the ID
-  is absent, defer. A restore retaining its saved ID keeps the same group.
-  Take the first four bytes of SHA-256 of `boxId + ":" + version` as an unsigned
-  big-endian integer modulo 100. The publisher accepts only these format-1 rules.
-- `.github/workflows/publish-upgrade-offer.yml` runs from a published numeric tag
-  that contains the workflow, once it is on main. Use the `release` environment
-  after the owner sets its `v*` tag rule. Pin the workflow path, as its run number
-  is the offer serial, and use a constant concurrency group. The release operator
-  creates the `upgrade-offer` release with `--latest=false`. The signer validates
-  the stable release file, refuses an older serial or conflicting retry, replaces
-  only `waitron-offer.json`, then reads it back and compares bytes. Pause with
-  `none` from the newest eligible tag and confirm the published serial and rule.
-  In an emergency remove the asset to stop fresh reads, then publish signed `none`.
-- The selector takes the offer and release file, keys, box id, installed version,
-  and last-seen offer number and digest. It checks the rules and requires a newer
-  stable version. It rejects older serials and different bytes at the same serial,
-  binds the selected release to its signed asset, and returns the image choices.
-  Step 5 owns downloading the files, reading the box id, saving the highest serial
-  and digest for every accepted offer including `none`, and deciding what a
-  missing or unreadable saved serial means. It rechecks before Apply. A fresh pause
-  read prevents a new start and an attempt past the recheck finishes.
-  Until boxes take a release that expands the download list, offer them that
-  release before a later one that needs the new file.
-- Start with `release-offer.test.mjs` for the groups and eligibility. The verifier
-  suite owns wrong-kind, replay after pause, wrong asset and prerelease checks.
-  The signer and workflow suites own refusal before upload and publication admission.
-  Ship the new verifier module through the 1c trust update and box recipe path.
-  Update `docs/operations/release.md` and the A950 backlog. Estimate +275/−20
-  production and +320/−0 tests and support.
+A release operator can publish one signed offer at the fixed location, the `upgrade-offer`
+release’s `waitron-offer.json`. The selector can find the version allowed for a box without a
+Cloud account. Step 5 connects it to automatic upgrades. The owner chose a version per group and a
+default on 19 November at 13:26–13:30, as relayed in Lane F’s questions.md at 13:31.
+
+- Add `scripts/box/release-offer.mjs`, reusing the Ed25519 envelope and key checks in
+  `scripts/box/release-list.mjs`. Its strict format-1 payload has `kind: "offer"`, one serial,
+  ordered entries and a required default. Each entry has one `bucketBelow`, `installations` or
+  `atLeast` condition and a target; the default is a target. A target is `none` or a stable
+  version plus SHA-256 of that version’s signed `waitron-release.json` bytes. `installations`
+  matches the installation ID; `atLeast` compares the installed version with its floor. First
+  matching entry wins, otherwise default. A pause or a target no newer than installed ends
+  selection without falling through. An unsupported rule defers the offer so an older verifier
+  cannot fall through to a version intended for other boxes. An empty entry list with default
+  `none` pauses everybody.
+
+- Keep `bucketBelow` at integers 1–99, exclusive. Hash `installationId + ":" + targetVersion`;
+  take SHA-256’s first four bytes as an unsigned big-endian integer modulo 100. When its target
+  becomes `none`, retain the paused version as `bucketVersion` in that same signed entry, solely
+  to seed the hash and preserve membership. Require it for paused bucket entries; reject it
+  elsewhere. No release download is needed for this seed. Step 5 reads `WAITRON_NODE_ID` from
+  `trading.env`, reusing `deploy/waitron.sh`’s state-volume reader. Failed reads or absent IDs
+  defer. A restore retaining its ID retains membership for the same seed.
+
+- The pure selector takes offer bytes, trusted keys, box ID, installed version and last-seen
+  serial and digest. It returns the selected target or no upgrade, together with the accepted
+  offer’s serial and digest. Compare against the entire signed offer. Refuse older serials and
+  changed bytes at the same serial. Accept identical retries. Verify the selected release in a
+  second pure check with its own signed bytes, matching version, stable status and exact
+  metadata-byte digest before returning image choices. Publication checks every non-paused
+  target’s own signed release. An older default remains eligible even when an earlier group names
+  a newer release.
+
+- Add `scripts/release/publish-upgrade-offer.mjs` and
+  `.github/workflows/publish-upgrade-offer.yml`. Admit only a published numeric tag containing the
+  workflow, after it lands on main. Use the `release` environment after its owner-configured `v*`
+  tag restriction. Keep the workflow path fixed because its run number supplies the single serial.
+  Use publication with a constant concurrency group. The operator creates `upgrade-offer` with
+  `--latest=false`. Verify the existing offer before comparison; refuse older serials, conflicting
+  retries and unreadable existing assets. Validate and sign before upload, replace only
+  `waitron-offer.json`, then read back and compare bytes. Publish pauses from the newest eligible
+  tag and confirm serial and targets. Emergency asset removal stops fresh reads. Follow it with
+  signed default `none`.
+
+- Start with failing `scripts/box/release-offer.test.mjs` cases distinguishing overlapping groups,
+  newer group/older default upgrades, equal/older targets, default/group pauses, preserved bucket
+  membership and offer replay after pause. That suite also owns unsupported rule,
+  wrong-kind/signature, substituted metadata and prerelease refusals. Add
+  `scripts/release/publish-upgrade-offer.test.mjs` for refusals before upload, retries and
+  read-back failures. Use `scripts/ci-workflow.test.mjs` for publication admission and the fixed
+  workflow path. Retain `release-list.test.mjs` assertions when sharing envelope code. Run these
+  focused files through root Vitest. `scripts/waitron-sh.test.mjs` owns changed trust-download
+  assertions.
+
+- Modify `deploy/waitron.sh` and `deploy/box/build.sh` to ship the offer module through 1c’s trust
+  path. Introduce download-list additions one release before importing them, keep keys unchanged
+  in that transition release, and offer it before releases needing the file. Step 5 owns
+  downloads, durable highest-serial/digest storage for every accepted offer including pauses,
+  missing/unreadable replay-state policy, and the pre-Apply recheck. A fresh pause prevents a new
+  start; an attempt past that recheck finishes. Update `docs/operations/release.md` with the fixed
+  asset, selection/pause examples and reading only the installation ID. Update the A950 backlog.
+  Automation, manual release checks, signing setup, prerelease publishing and physical
+  qualification stay in their slices. Estimate production +330/−20 lines and tests/support
+  +420/−0.
 
 `pnpm release prepare 1.2.3-rc.1 --place Madrid` refuses the suffix. The separate
 prerelease publishing slice changes fiscal-adjacent tagging and signing to mark
