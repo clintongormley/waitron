@@ -764,6 +764,27 @@ describe("readInvoiceDeliveries", () => {
     expect(result!.actions.print).toMatchObject({ designation: "original" });
   });
 
+  it("counts an email success reported late as the original, making a queued retry a duplicate", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    const first = await attempt(v, saleId, "email", "unknown");
+    const retry = await reserve(saleId, "email");
+    expect(retry.designation).toBe("original");
+
+    await withTransaction(suite.db, (tx) =>
+      settleInvoiceEmail(tx, first, 1, { status: "sent" }, new Date("2026-10-12T10:05:00.000Z")),
+    );
+
+    const result = await read(saleId);
+    expect(result!.originalCompleted).toBe(true);
+    expect(result!.history.map((entry) => [entry.id, entry.status, entry.lateSuccess])).toEqual([
+      [retry.id, "queued", false],
+      [first.id, "sent", false],
+    ]);
+    expect(result!.current).toMatchObject({ id: retry.id, designation: "duplicate" });
+    expect(result!.actions).toMatchObject({ retryOriginal: null, receiptInstead: null });
+  });
+
   describe("email", () => {
     it("offers no email and no email retry when email cannot be sent", async () => {
       const v = await venue();

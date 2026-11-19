@@ -31,7 +31,12 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { jobOrigin, nodeId as brandNode, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
-import { reserveInvoiceDelivery } from "./invoice-delivery.js";
+import {
+  abandonInvoiceEmail,
+  reserveInvoiceDelivery,
+  settleInvoiceEmail,
+  startInvoiceEmail,
+} from "./invoice-delivery.js";
 import { claimInvoicePagePrint } from "./invoice-page-print.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { registerPagePrinter } from "./page-printers.js";
@@ -818,6 +823,36 @@ describe("fetching a page job's document", () => {
     const bytes = Buffer.from(await res.arrayBuffer());
     expect(bytes.equals(await renderInvoicePdf(await documentFor(v, saleId, true)))).toBe(true);
     expect(await pdfText(bytes)).toContain("DUPLICADO");
+  });
+
+  it("marks «duplicado» a queued A4 original once an earlier email's late success counts", async () => {
+    const v = await venue();
+    const office = await printer(v.agentOne);
+    const saleId = await fullInvoice(v);
+    const first = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, saleId, {
+        requestKey: randomUUID(),
+        personId: "staff-one",
+        medium: "email",
+        recipient: "customer@example.test",
+      }),
+    );
+    await withTransaction(suite.db, async (tx) => {
+      await startInvoiceEmail(tx, first.id);
+      await abandonInvoiceEmail(tx, first.id, at(60_000));
+    });
+    const page = await queueA4(saleId, office);
+    expect(await row(page)).toMatchObject({ designation: "original" });
+
+    await withTransaction(suite.db, (tx) =>
+      settleInvoiceEmail(tx, first, 1, { status: "sent" }, at(61_000)),
+    );
+
+    expect(await row(page)).toMatchObject({ status: "queued", designation: "duplicate" });
+    const job = (await claim(v))!;
+    const res = await fetchDocument(v, page, held(job));
+    expect(res.status).toBe(200);
+    expect(await pdfText(Buffer.from(await res.arrayBuffer()))).toContain("DUPLICADO");
   });
 
   it("gives a stale, lapsed, reported, historical or unrecorded claim no bytes", async () => {

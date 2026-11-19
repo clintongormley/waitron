@@ -469,27 +469,28 @@ describe("invoiceDeliveryAlertSource", () => {
 describe("invoiceDeliveryAlertSource, after a success reported too late to count", () => {
   const LATE = new Date("2026-10-12T10:30:00.000Z");
 
-  /** An email attempt whose claim has lapsed, with the claim its sender still holds. */
-  async function lapsedEmail(saleId: string) {
+  /** An A4 attempt whose claim has lapsed, with the claim its agent still holds. */
+  async function lapsedA4(v: Venue, saleId: string) {
     const reserved = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, saleId, {
         requestKey: randomUUID(),
         personId: "staff-one",
-        medium: "email",
-        recipient: CUSTOMER.email,
+        medium: "a4",
+        pagePrinterId: v.officeId,
       }),
     );
-    await withTransaction(suite.db, async (tx) => {
-      await startInvoiceEmail(tx, reserved.id);
-      await abandonInvoiceEmail(tx, reserved.id, EXPIRED);
-    });
-    return reserved;
+    await dateA4Job(suite.db, reserved.printJobId!, START);
+    const claim = (await withTransaction(suite.db, (tx) =>
+      claimInvoiceDelivery(tx, reserved.id, v.agentId, START),
+    ))!;
+    await withTransaction(suite.db, (tx) => expireInvoiceDeliveryClaims(tx, EXPIRED));
+    return claim;
   }
 
   const reportLate = (
-    delivery: InvoiceDelivery,
-    outcome: Parameters<typeof settleInvoiceEmail>[3],
-  ) => withTransaction(suite.db, (tx) => settleInvoiceEmail(tx, delivery, 1, outcome, LATE));
+    claim: Awaited<ReturnType<typeof lapsedA4>>,
+    outcome: Parameters<typeof reportInvoiceDelivery>[2],
+  ) => withTransaction(suite.db, (tx) => reportInvoiceDelivery(tx, claim, outcome, LATE));
 
   const sent = { status: "sent" } as const;
 
@@ -507,7 +508,7 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
     async (medium) => {
       const v = await venue();
       const sale = await invoice(v);
-      const claim = await lapsedEmail(sale.saleId);
+      const claim = await lapsedA4(v, sale.saleId);
       await attempt(v, sale.saleId, medium, "failed");
       await reportLate(claim, sent);
 
@@ -520,7 +521,7 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
   it("replaces a raised failed alert when the late success arrives", async () => {
     const v = await venue();
     const sale = await invoice(v);
-    const claim = await lapsedEmail(sale.saleId);
+    const claim = await lapsedA4(v, sale.saleId);
     await attempt(v, sale.saleId, "email", "failed");
     expect(await alerts()).toEqual([
       alertFor(sale.saleId, sale.number, "invoice_delivery.failed", REPORTED),
@@ -536,7 +537,7 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
   it("still asks for a check when a further retry fails after the late success", async () => {
     const v = await venue();
     const sale = await invoice(v);
-    const claim = await lapsedEmail(sale.saleId);
+    const claim = await lapsedA4(v, sale.saleId);
     await attempt(v, sale.saleId, "email", "failed");
     await reportLate(claim, sent);
 
@@ -550,7 +551,7 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
   it("clears when a retry after the late success is delivered", async () => {
     const v = await venue();
     const sale = await invoice(v);
-    const claim = await lapsedEmail(sale.saleId);
+    const claim = await lapsedA4(v, sale.saleId);
     await attempt(v, sale.saleId, "email", "failed");
     await reportLate(claim, sent);
     expect(await alerts()).toHaveLength(1);
@@ -563,7 +564,7 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
   it("raises nothing when no retry was reserved, because the late success delivers the original", async () => {
     const v = await venue();
     const sale = await invoice(v);
-    const claim = await lapsedEmail(sale.saleId);
+    const claim = await lapsedA4(v, sale.saleId);
     expect(await alerts()).toEqual([
       alertFor(sale.saleId, sale.number, "invoice_delivery.uncertain", EXPIRED),
     ]);
@@ -576,7 +577,7 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
   it("raises nothing for a failed copy after the original was delivered", async () => {
     const v = await venue();
     const sale = await invoice(v);
-    const claim = await lapsedEmail(sale.saleId);
+    const claim = await lapsedA4(v, sale.saleId);
     await attempt(v, sale.saleId, "email", "failed");
     await reportLate(claim, sent);
     await attempt(v, sale.saleId, "email", "sent");
@@ -586,10 +587,40 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
     expect(await alerts()).toEqual([]);
   });
 
+  it.each(["email", "a4", "receipt"] as const)(
+    "raises nothing once a late email success counts as the original, though a newer %s attempt failed",
+    async (medium) => {
+      const v = await venue();
+      const sale = await invoice(v);
+      const first = await withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, {
+          requestKey: randomUUID(),
+          personId: "staff-one",
+          medium: "email",
+          recipient: CUSTOMER.email,
+        }),
+      );
+      await withTransaction(suite.db, async (tx) => {
+        await startInvoiceEmail(tx, first.id);
+        await abandonInvoiceEmail(tx, first.id, EXPIRED);
+      });
+      await attempt(v, sale.saleId, medium, "failed");
+      expect(await alerts()).toEqual([
+        alertFor(sale.saleId, sale.number, "invoice_delivery.failed", REPORTED),
+      ]);
+
+      await withTransaction(suite.db, (tx) =>
+        settleInvoiceEmail(tx, first, 1, { status: "sent" }, LATE),
+      );
+
+      expect(await alerts()).toEqual([]);
+    },
+  );
+
   it("keeps the failed alert when the old attempt's late report was a failure", async () => {
     const v = await venue();
     const sale = await invoice(v);
-    const claim = await lapsedEmail(sale.saleId);
+    const claim = await lapsedA4(v, sale.saleId);
     await attempt(v, sale.saleId, "email", "failed");
 
     await reportLate(claim, { status: "failed", failureCode: "transport_failed" });
@@ -602,7 +633,7 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
   it("keeps the alert a held newer attempt raises", async () => {
     const v = await venue();
     const sale = await invoice(v);
-    const claim = await lapsedEmail(sale.saleId);
+    const claim = await lapsedA4(v, sale.saleId);
     await attempt(v, sale.saleId, "a4", "unknown", undefined, "paper_out");
     await reportLate(claim, sent);
 
@@ -617,7 +648,7 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
   it("keeps the alert for a newer A4 no agent has taken", async () => {
     const v = await venue();
     const sale = await invoice(v);
-    const claim = await lapsedEmail(sale.saleId);
+    const claim = await lapsedA4(v, sale.saleId);
     await attempt(v, sale.saleId, "a4", "queued");
     await reportLate(claim, sent);
 

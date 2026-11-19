@@ -471,7 +471,9 @@ async function recordDeliveryReport(
       ),
     )
     .limit(1);
-  const historical = newer !== undefined;
+  // A late email success always completes its attempt: SMTP acceptance is completion for email.
+  const historical =
+    newer !== undefined && !(delivery.medium === "email" && outcome.status === "sent");
   if (delivery.printJobId !== null) {
     const [live] = await tx
       .select({ id: printJobs.id })
@@ -509,6 +511,21 @@ async function recordDeliveryReport(
           }),
     })
     .where(eq(invoiceDeliveries.id, delivery.id));
+  if (newer !== undefined && !historical) {
+    // Queued attempts read their designation only when they go out; one already out keeps it.
+    await tx
+      .update(invoiceDeliveries)
+      .set({ designation: "duplicate" })
+      .where(
+        and(
+          eq(invoiceDeliveries.saleId, delivery.saleId),
+          gt(invoiceDeliveries.generation, delivery.generation),
+          eq(invoiceDeliveries.status, "queued"),
+          eq(invoiceDeliveries.designation, "original"),
+          inArray(invoiceDeliveries.medium, ["email", "a4"]),
+        ),
+      );
+  }
   if (!historical && delivery.printJobId !== null && holder !== undefined) {
     await tx
       .update(printJobs)
@@ -556,13 +573,24 @@ async function retryInvoiceEmail(
 ) {
   const delay = RETRY_DELAYS_MS[attempt - 1];
   if (delay === undefined) return;
+  const [completedOriginal] = await tx
+    .select({ id: invoiceDeliveries.id })
+    .from(invoiceDeliveries)
+    .where(
+      and(
+        eq(invoiceDeliveries.saleId, delivery.saleId),
+        eq(invoiceDeliveries.designation, "original"),
+        eq(invoiceDeliveries.status, "sent"),
+      ),
+    )
+    .limit(1);
   const [retry] = await tx
     .insert(invoiceDeliveries)
     .values({
       saleId: delivery.saleId,
       requestKey: randomUUID(),
       medium: "email",
-      designation: delivery.designation,
+      designation: completedOriginal === undefined ? delivery.designation : "duplicate",
       generation: delivery.generation + 1,
       recipient: delivery.recipient,
       personId: delivery.personId,
