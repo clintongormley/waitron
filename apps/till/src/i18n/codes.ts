@@ -9,6 +9,46 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Connected card payments are off. Take cash or use a separate card terminal.",
     es: "Los pagos con tarjeta conectada están desactivados. Cobra en efectivo o usa un terminal de tarjeta independiente.",
   },
+  "set_menu.not_seated": {
+    en: "Set menus are available at a seated table or on a takeaway or delivery order. Open one of those orders, or order dishes à la carte here.",
+    es: "Los menús están disponibles en una mesa ocupada o en un pedido para llevar o a domicilio. Abre uno de esos pedidos o pide aquí los platos a la carta.",
+  },
+  "set_menu.not_selling": {
+    en: "{setMenuName} is no longer on sale. Choose a set menu on sale or order dishes à la carte.",
+    es: "{setMenuName} ya no está a la venta. Elige un menú a la venta o pide los platos a la carta.",
+  },
+  "set_menu.holds_dishes": {
+    en: "{setMenuName} holds {dishNames}. Cancel those dishes or use Move to put them in another set menu. If the guests still want a cancelled dish, order it à la carte.",
+    es: "{setMenuName} tiene {dishNames}. Anula esos platos o usa Mover para pasarlos a otro menú. Si los clientes aún quieren un plato anulado, pídelo a la carta.",
+  },
+  "set_menu.needed_by_draft": {
+    en: "Only {setMenuName} has a place for {dishNames} in the unsent order. Remove them from the order first, or keep the set menu.",
+    es: "Solo {setMenuName} tiene sitio para {dishNames} en el pedido sin enviar. Quítalos primero del pedido o mantén el menú.",
+  },
+  "set_menu.no_place": {
+    en: "There is no place for {dishName} in the set menus on this bill. Add a set menu with a place for it, or order the dish à la carte.",
+    es: "No hay sitio para {dishName} en los menús de esta cuenta. Añade un menú con sitio para el plato o pídelo a la carta.",
+  },
+  "set_menu.place_taken": {
+    en: "The place you chose for {dishName} is taken. Choose a free place in a set menu or leave the dish where it is.",
+    es: "El sitio que elegiste para {dishName} está ocupado. Elige un sitio libre en un menú o deja el plato donde está.",
+  },
+  "set_menu.no_place_on_target": {
+    en: "The other bill has no place for {dishName}. Move its set menu with it, or leave it on this bill.",
+    es: "La otra cuenta no tiene sitio para {dishName}. Mueve también su menú o deja el plato en esta cuenta.",
+  },
+  "set_menu.dish_sold_by_measure": {
+    en: "A dish sold by weight or measure cannot go in a set menu. Order it à la carte.",
+    es: "Un plato vendido al peso o por medida no puede ir en un menú. Pídelo a la carta.",
+  },
+  "set_menu.remove_from_summary": {
+    en: "This item is a set menu. To remove it, use Cancel in the set-menu summary.",
+    es: "Este artículo es un menú. Para quitarlo, usa Anular en el resumen de menús.",
+  },
+  "set_menu.payment_not_ready": {
+    en: "Bills with set menus can't be paid on this version yet. À la carte dishes can be moved to another bill and paid there.",
+    es: "Las cuentas con menús aún no se pueden cobrar en esta versión. Los platos a la carta se pueden pasar a otra cuenta y cobrar allí.",
+  },
   "sale.empty_basket": {
     en: "This order has no items. Add an item before continuing.",
     es: "Este pedido no tiene artículos. Añade uno antes de continuar.",
@@ -1006,7 +1046,13 @@ const DINING_FIXED: Record<string, { en: string; es: string }> = {
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),
-  params?: { reason?: unknown; dining?: unknown },
+  params?: {
+    reason?: unknown;
+    dining?: unknown;
+    setMenuName?: unknown;
+    dishName?: unknown;
+    dishNames?: unknown;
+  },
 ): string {
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   if (
@@ -1029,7 +1075,28 @@ export function codeMessage(
   // Own-key check, not `?? GENERIC`: a code such as `constructor` would resolve an inherited
   // Object.prototype member under a bare lookup.
   const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code]! : GENERIC;
-  return pickLocale(entry, locale);
+  const message = pickLocale(entry, locale);
+  if (typeof code !== "string" || !code.startsWith("set_menu.")) return message;
+  const setMenuName =
+    typeof params?.setMenuName === "string"
+      ? params.setMenuName
+      : pickLocale({ en: "This set menu", es: "Este menú" }, locale);
+  const dishName =
+    typeof params?.dishName === "string"
+      ? params.dishName
+      : pickLocale({ en: "this dish", es: "este plato" }, locale);
+  const dishNames = Array.isArray(params?.dishNames)
+    ? params.dishNames.filter((name): name is string => typeof name === "string")
+    : [];
+  const listed =
+    dishNames.length > 0
+      ? new Intl.ListFormat(pickLocale({ en: "en-GB", es: "es-ES" }, locale)).format(dishNames)
+      : pickLocale({ en: "the dishes", es: "los platos" }, locale);
+  return message.replace(/\{(setMenuName|dishName|dishNames)\}/g, (_, field: string) => {
+    if (field === "setMenuName") return setMenuName;
+    if (field === "dishName") return dishName;
+    return listed;
+  });
 }
 
 function zoneAdmissionMessage(reason: unknown, locale: string): string {

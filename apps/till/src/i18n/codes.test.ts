@@ -1123,3 +1123,26 @@ it.each([
   expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
   expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
 });
+
+it.each([
+  ["set_menu.not_seated", "seated table", "mesa ocupada"],
+  ["set_menu.not_selling", "Daily", "Daily"],
+  ["set_menu.holds_dishes", "Hake and Soup", "Hake y Soup"],
+  ["set_menu.needed_by_draft", "Hake and Soup", "Hake y Soup"],
+  ["set_menu.no_place", "Hake", "Hake"],
+  ["set_menu.place_taken", "Hake", "Hake"],
+  ["set_menu.no_place_on_target", "Hake", "Hake"],
+  ["set_menu.dish_sold_by_measure", "by weight", "al peso"],
+  ["set_menu.remove_from_summary", "summary", "resumen"],
+  ["set_menu.payment_not_ready", "À la carte", "a la carta"],
+] as const)("words %s in English and Spanish", (code, english, spanish) => {
+  const params = { setMenuName: "Daily", dishNames: ["Hake", "Soup"], dishName: "Hake" };
+  expect(codeMessage(code, "en-GB", params)).toContain(english);
+  expect(codeMessage(code, "es-ES", params)).toContain(spanish);
+});
+
+it("names the set menu whose removal depends on the dishes", () => {
+  const params = { setMenuName: "Daily", dishNames: ["Hake"] };
+  expect(codeMessage("set_menu.needed_by_draft", "en", params)).toContain("Daily");
+  expect(codeMessage("set_menu.holds_dishes", "es", params)).toContain("Daily");
+});

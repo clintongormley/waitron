@@ -1,3 +1,4 @@
+import { lookupSetMenuLine, type SetMenuOfferLookup } from "./set-menus.js";
 import { effectiveDefaultLabelId } from "@waitron/menu/src/option-default.js";
 import { compareDecimal, decimal } from "@waitron/shared";
 import {
@@ -57,10 +58,10 @@ export interface BasketRefresh {
  * The offers with every availability flag read from `unavailable` — the whole of what cannot be sold
  * now — rather than from when they were loaded, so a poll greys and restores without a reload.
  */
-export function withUnavailable(
-  offers: readonly TillMenuOffer[],
+export function withUnavailable<T extends TillMenuOffer>(
+  offers: readonly T[],
   unavailable: MenuUnavailable,
-): TillMenuOffer[] {
+): T[] {
   const products = new Set(unavailable.products);
   const labels = new Set(unavailable.optionLabels);
   return offers.map((offer) => ({
@@ -99,7 +100,8 @@ export function lineBlock(
 ): LineBlock | undefined {
   const name = lineProductName(line.product);
   if (offer === undefined) return { reason: "removed", name };
-  if (offer.ordering === "not_sold_separately") return { reason: "not_sold_separately", name };
+  if (line.setMenuId === undefined && offer.ordering === "not_sold_separately")
+    return { reason: "not_sold_separately", name };
   if (!offer.available) return { reason: "unavailable", name };
   let variant: TillMenuOffer["variants"][number] | undefined;
   if (line.product.variantId !== undefined) {
@@ -192,12 +194,16 @@ export function repriceRebuilt(
   lines: readonly OrderLine[],
   offerById: ReadonlyMap<string, TillMenuOffer>,
   liveVersions: ReadonlyMap<string, string>,
+  setMenuOffer?: SetMenuOfferLookup,
 ): Map<number, OrderLine> {
   const repriced = new Map<number, OrderLine>();
   lines.forEach((line, index) => {
-    if (line.earlierPriceUnknown !== true || isStale(line, liveVersions)) return;
+    if (line.earlierPriceUnknown !== true || isStale(line, liveVersions, setMenuOffer)) return;
     const { menuItemId, menuVersionId } = line.product;
-    const offer = offerById.get(menuItemId ?? "");
+    const offer =
+      line.setMenuId === undefined
+        ? offerById.get(menuItemId ?? "")
+        : lookupSetMenuLine(line, setMenuOffer)?.offer;
     if (offer === undefined || menuVersionId === undefined) return;
     const reason = lineBlock(line, offer)?.reason;
     if (reason === "variant_removed" || reason === "unit_changed") return;
@@ -208,9 +214,17 @@ export function repriceRebuilt(
 
 /** Whether the line was priced against a version of its menu other than the live one. A line with
  * no version is priced by the server from the live version. */
-export function isStale(line: OrderLine, liveVersions: ReadonlyMap<string, string>): boolean {
+export function isStale(
+  line: OrderLine,
+  liveVersions: ReadonlyMap<string, string>,
+  setMenuOffer?: SetMenuOfferLookup,
+): boolean {
   const { menuVersionId, menuId } = line.product;
-  return menuVersionId !== undefined && liveVersions.get(menuId ?? "") !== menuVersionId;
+  const version =
+    line.setMenuId === undefined
+      ? liveVersions.get(menuId ?? "")
+      : lookupSetMenuLine(line, setMenuOffer)?.versionId;
+  return menuVersionId !== undefined && version !== menuVersionId;
 }
 
 /**
@@ -227,15 +241,19 @@ export function refreshBasket(
   lines: readonly OrderLine[],
   offers: readonly TillMenuOffer[],
   liveVersions: ReadonlyMap<string, string>,
+  setMenuOffer?: SetMenuOfferLookup,
 ): BasketRefresh {
   const offerById = new Map(offers.map((offer) => [offer.id, offer]));
   const outcome: BasketRefresh = { changed: [], blocked: [], adopted: new Map() };
   lines.forEach((line, index) => {
-    if (line.workingOrderLineId !== undefined || !isStale(line, liveVersions)) return;
+    if (line.workingOrderLineId !== undefined || !isStale(line, liveVersions, setMenuOffer)) return;
     const { product } = line;
-    const live = liveVersions.get(product.menuId ?? "");
+    const selected = lookupSetMenuLine(line, setMenuOffer);
     const lineNo = index + 1;
-    const offer = offerById.get(product.menuItemId ?? "");
+    const [offer, live] =
+      line.setMenuId === undefined
+        ? [offerById.get(product.menuItemId ?? ""), liveVersions.get(product.menuId ?? "")]
+        : [selected?.offer, selected?.versionId];
     const block = lineBlock(line, offer);
     if (block !== undefined) outcome.blocked.push({ lineNo, ...block });
     if (

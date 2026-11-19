@@ -206,3 +206,7 @@ it("subscribes the menu to saved device zone changes", () => {
   connection.addInterests("menu", TILL_LIVE_TYPES.menu!);
   expect(reads.at(-1)!.types).toContain("device_approved_profiles");
 });
+
+it("follows changes to a bill's recorded set-menu copies", () => {
+  expect(TILL_LIVE_TYPES.billDraft).toContain("bill_set_menu_copies");
+});

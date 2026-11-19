@@ -8,6 +8,7 @@ import {
   type TillMenuOffer,
   type TillProduct,
 } from "../api/client.js";
+import type { SetMenuOfferLookup } from "./set-menus.js";
 import { optionSnapshotOf } from "./held-options.js";
 import {
   displayQuantity,
@@ -44,6 +45,13 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
     extras: toWireModifiers(line).extras ?? [],
     ...(line.makeAt === undefined ? {} : { makeAt: line.makeAt }),
     noMerge: line.noMerge === true,
+    ...(line.setMenuId === undefined
+      ? {}
+      : {
+          setMenuId: line.setMenuId,
+          setMenuReservedLineId: line.setMenuReserved?.setMenuLineId ?? null,
+          setMenuReservedPlace: line.setMenuReserved?.place ?? null,
+        }),
   };
 }
 
@@ -75,13 +83,16 @@ export function fromDraftLine(
   },
   offers: ReadonlyMap<string, TillMenuOffer>,
   liveVersions?: ReadonlyMap<string, string>,
+  setMenuOffer?: SetMenuOfferLookup,
 ): OrderLine {
-  const offer = offers.get(line.menuItemId);
+  const selected = line.setMenuId === undefined ? undefined : setMenuOffer?.(line);
+  const offer = line.setMenuId === undefined ? offers.get(line.menuItemId) : selected?.offer;
   const earlierPrice =
     offer !== undefined &&
     line.menuVersionId !== null &&
-    liveVersions !== undefined &&
-    liveVersions.get(offer.menuId) !== line.menuVersionId;
+    (selected !== undefined
+      ? selected.versionId !== line.menuVersionId
+      : liveVersions !== undefined && liveVersions.get(offer.menuId) !== line.menuVersionId);
   const offered =
     offer === undefined
       ? unofferedProduct(line)
@@ -97,6 +108,15 @@ export function fromDraftLine(
   return {
     ...(line.id === undefined ? {} : { draftLineId: line.id }),
     product,
+    ...(line.setMenuId === undefined
+      ? {}
+      : {
+          setMenuId: line.setMenuId,
+          setMenuReserved:
+            line.setMenuReservedLineId == null || line.setMenuReservedPlace == null
+              ? null
+              : { setMenuLineId: line.setMenuReservedLineId, place: line.setMenuReservedPlace },
+        }),
     ...(line.joinGroupId !== null
       ? { place: { kind: "join" as const, groupId: line.joinGroupId } }
       : line.slot > 0
@@ -136,18 +156,24 @@ export function rebuildReturned(
   lines: readonly OrderLine[],
   offers: ReadonlyMap<string, TillMenuOffer>,
   liveVersions: ReadonlyMap<string, string>,
+  setMenuOffer?: SetMenuOfferLookup,
 ): Map<number, OrderLine> {
   const rebuilt = new Map<number, OrderLine>();
   lines.forEach((line, index) => {
     if (line.notOffered !== true) return;
     const saved = toDraftLineInput(line);
-    if (!offers.has(saved.menuItemId)) return;
+    if (
+      saved.setMenuId === undefined
+        ? !offers.has(saved.menuItemId)
+        : setMenuOffer?.(saved) === undefined
+    )
+      return;
     const returned = {
       ...saved,
       ...(line.course === undefined ? {} : { course: line.course }),
       unavailable: line.unavailableOnServer === true,
     };
-    rebuilt.set(index, fromDraftLine(returned, offers, liveVersions));
+    rebuilt.set(index, fromDraftLine(returned, offers, liveVersions, setMenuOffer));
   });
   return rebuilt;
 }
