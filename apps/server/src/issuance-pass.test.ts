@@ -709,8 +709,13 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     const statements: string[] = [];
     const prepare = await sessionPrepareSpy(statements);
     try {
-      await reprintSale(deps(), v.cfg, id);
-      await printSaleReceipt(deps(), v.cfg, id, false);
+      // This venue's device has no receipt printer, so both are refused after the printer lookup.
+      await expect(reprintSale(deps(), v.cfg, id)).rejects.toMatchObject({
+        code: "receipt.no_printer",
+      });
+      await expect(printSaleReceipt(deps(), v.cfg, id, false)).rejects.toMatchObject({
+        code: "receipt.no_printer",
+      });
       await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, sale);
     } finally {
       prepare.restore();

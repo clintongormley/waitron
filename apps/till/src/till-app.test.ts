@@ -6847,6 +6847,24 @@ describe("till-app", () => {
     expect(banner!.textContent).not.toContain(t("reprint.error"));
   });
 
+  it("print receipt: a device with no receipt printer says so, without the copy's wording", async () => {
+    const printReceipt = vi.fn().mockRejectedValue({ code: "receipt.no_printer", status: 409 });
+    const { el } = await mountApp({ printReceipt });
+    const c = await toCounter(el);
+    c.store.addProduct(coffee, "2");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    emit(ticket(el)!, "print-receipt");
+    await flush(el);
+    expect(printReceipt).toHaveBeenCalledOnce();
+    const banner = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(banner!.textContent).toContain(t("document.no_receipt_printer"));
+    expect(banner!.textContent).not.toContain(t("receipt.error"));
+    expect(banner!.textContent).not.toContain(codeMessage("receipt.no_printer"));
+  });
+
   it("confirm-payment: a CARD tender forwards intact (method, amount, externalRef) with the store's stable id", async () => {
     // `#onConfirmPayment` forwards whichever tender the widget emits without branching — this pins that
     // a CARD tender reaches recordSale UNCHANGED (method still "card", externalRef still present, never

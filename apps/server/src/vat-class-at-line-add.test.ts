@@ -367,8 +367,13 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     expect(await stored(id)).toEqual(storedAtAdd);
 
     await setVat(v.products.beer, "super_reduced");
-    await reprintSale(deps(), v.cfg, id);
-    await printSaleReceipt(deps(), v.cfg, id, false);
+    // This venue's device has no receipt printer, so both are refused after the printer lookup.
+    await expect(reprintSale(deps(), v.cfg, id)).rejects.toMatchObject({
+      code: "receipt.no_printer",
+    });
+    await expect(printSaleReceipt(deps(), v.cfg, id, false)).rejects.toMatchObject({
+      code: "receipt.no_printer",
+    });
     const replay = await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],

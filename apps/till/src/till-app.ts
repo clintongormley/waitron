@@ -10836,11 +10836,16 @@ export class TillApp extends LitElement {
         this.#readInvoiceDeliveries(target, session, visit),
       ]);
     } catch (error) {
-      if (this.#ticketIsCurrent(target, session, visit))
+      if (this.#ticketIsCurrent(target, session, visit)) {
+        const code = (error as { code?: string } | undefined)?.code;
+        // The code's own text speaks of a copy; this is the original.
         this.errorKey =
-          (error as { code?: string } | undefined)?.code === "storage.disk_full"
-            ? { code: "storage.disk_full" }
-            : "receipt.error";
+          code === "storage.disk_full"
+            ? { code }
+            : code === "receipt.no_printer"
+              ? "document.no_receipt_printer"
+              : "receipt.error";
+      }
     } finally {
       if (this.#ticketIsCurrent(target, session, visit)) this.originalReceiptBusy = false;
     }
