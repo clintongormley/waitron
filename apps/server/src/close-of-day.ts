@@ -267,29 +267,62 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
   let queryAgain = true;
   let queriedDayStart = 0;
 
-  async function issueDue(dayStartedAt: Date, upToRow: number): Promise<void> {
-    const due = await withTransaction(deps.db, (tx) =>
-      dueBills(tx, cfg.nodeId, upToRow, (rows) => ({
-        dayStartedAt,
-        openedAt: (billId) => {
-          const row = rows.get(billId);
-          return row === undefined ? undefined : openedAtInWindows(windows, row);
-        },
-      })),
+  function applies(): boolean {
+    return (
+      deps.selling.mode() === "primary" &&
+      deps.selling.role() === "primary" &&
+      !deps.selling.fenced()
     );
+  }
+
+  /** Why the pass must stop before its next bill: `holds` is the count the pass read at its start,
+   * and its cutoff is only good while no hold has begun since. */
+  function stopBeforeBill(holds: number, signal: AbortSignal): "hold" | "stepdown" | undefined {
+    if (deps.clockUnconfirmed() || deps.clockHoldsBegun() !== holds) return "hold";
+    if (signal.aborted || !applies()) return "stepdown";
+    return undefined;
+  }
+
+  async function issueDue(
+    dayStartedAt: Date,
+    upToRow: number,
+    holds: number,
+    signal: AbortSignal,
+  ): Promise<void> {
+    let due: Awaited<ReturnType<typeof dueBills>>;
+    try {
+      due = await withTransaction(deps.db, (tx) =>
+        dueBills(tx, cfg.nodeId, upToRow, (rows) => ({
+          dayStartedAt,
+          openedAt: (billId) => {
+            const row = rows.get(billId);
+            return row === undefined ? undefined : openedAtInWindows(windows, row);
+          },
+        })),
+      );
+    } catch (error) {
+      queryAgain = true;
+      throw error;
+    }
     const failures: unknown[] = [];
     for (const billId of due.ids) {
-      if (deps.clockUnconfirmed()) {
-        endUntilRelease();
-        break;
-      }
+      let stop = stopBeforeBill(holds, signal);
       try {
-        const outcome = await withIssuanceTransaction(
-          deps.db,
-          (tx) => issueBillAtClose(tx, deps, cfg, billId, due.rule),
-          deps.log,
-        );
-        if (outcome.kind === "money_moving") queryAgain = true;
+        if (stop === undefined) {
+          // Checked again under the write lock: a hold or a stepdown may have begun while this
+          // waited for it.
+          const outcome = await withIssuanceTransaction(
+            deps.db,
+            async (tx) => {
+              stop = stopBeforeBill(holds, signal);
+              return stop === undefined
+                ? await issueBillAtClose(tx, deps, cfg, billId, due.rule)
+                : null;
+            },
+            deps.log,
+          );
+          if (outcome?.kind === "money_moving") queryAgain = true;
+        }
       } catch (error) {
         if (clockUnconfirmedRefusal(error)) {
           endUntilRelease();
@@ -305,6 +338,14 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
         });
         failures.push(error);
       }
+      if (stop === "hold") {
+        endUntilRelease();
+        break;
+      }
+      if (stop === "stepdown") {
+        queryAgain = true;
+        break;
+      }
     }
     if (failures.length > 0) {
       queryAgain = true;
@@ -319,16 +360,13 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
 
   return {
     name: "bills.close_of_day",
-    applies: () =>
-      deps.selling.mode() === "primary" &&
-      deps.selling.role() === "primary" &&
-      !deps.selling.fenced(),
+    applies,
     wakeOn: ["day_cutover_changes", "settings.business_day"],
     // The pass reads the trusted clock; the runner sleeps on the wall clock.
     minSleepMs: 500,
     maxSleepMs: LOOK_MS,
     backoff: { firstMs: 5_000, maxMs: 300_000 },
-    async pass() {
+    async pass({ signal }) {
       // The row before the count: a hold that begins after the count is read covers only rows
       // above `top`, which this look leaves for the next.
       const top = highestBillRow(deps.db);
@@ -346,14 +384,14 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
         queryAgain = true;
       }
       mark = top;
-      const venueClock = await withTransaction(deps.db, (tx) => readVenueClock(tx));
+      const venueClock = await readVenueClock(deps.db);
       const dayStartedAt = new Date(
         businessDayBounds(venueClock, businessDayAt(venueClock, reading)).startAt,
       );
       if (!queryAgain && dayStartedAt.getTime() <= queriedDayStart) return { nextDueAt: null };
       queryAgain = false;
       queriedDayStart = dayStartedAt.getTime();
-      await issueDue(dayStartedAt, top);
+      await issueDue(dayStartedAt, top, holds, signal);
       return { nextDueAt: null };
     },
   };

@@ -75,6 +75,10 @@ function hold() {
   seatHolds = true;
   holdsBegun++;
 }
+/** A hold only the fiscal gate sees: the job reads neither it nor a new count. */
+function gateHolds() {
+  seatHolds = true;
+}
 let jobSeesHold: () => boolean = () => seatHolds;
 let onLog: Logger = () => {};
 const logged: { event: string; fields: Record<string, unknown> | undefined }[] = [];
@@ -114,6 +118,26 @@ const HOUR = 3_600_000;
 
 type Selling = { mode: () => string; role: () => string; fenced: () => boolean };
 const primary: Selling = { mode: () => "primary", role: () => "primary", fenced: () => false };
+
+interface SellingSwitch {
+  mode: string;
+  role: string;
+  fenced: boolean;
+  stop: AbortController;
+  selling: Selling;
+}
+
+/** A selling primary whose standing, and the runner's signal, a test can change mid-pass. */
+function sellingSwitch(): SellingSwitch {
+  const state: SellingSwitch = {
+    mode: "primary",
+    role: "primary",
+    fenced: false,
+    stop: new AbortController(),
+    selling: { mode: () => state.mode, role: () => state.role, fenced: () => state.fenced },
+  };
+  return state;
+}
 
 function job(opts: { startMark?: number; selling?: Selling } = {}) {
   return closeOfDayJob({
@@ -279,7 +303,7 @@ describe("bills.close_of_day", () => {
       const definition = job();
       if (!jobSees) jobSeesHold = () => false;
       onLog = (_level, event) => {
-        if (event === "close_of_day.issued") hold();
+        if (event === "close_of_day.issued") (jobSees ? hold : gateHolds)();
       };
       try {
         at = day(11).startAt + HOUR;
@@ -328,7 +352,7 @@ describe("bills.close_of_day", () => {
     const definition = job();
     jobSeesHold = () => false;
     onLog = (_level, event) => {
-      if (event === "close_of_day.issue_failed") hold();
+      if (event === "close_of_day.issue_failed") gateHolds();
     };
     at = day(15).startAt + HOUR;
     try {
@@ -392,6 +416,161 @@ describe("bills.close_of_day", () => {
     at = day(19).endAt + 60_000;
     await look(definition);
     expect(issued(bill)).toBe(true);
+  });
+
+  it("takes no write turn on a look that has nothing to query", async () => {
+    const definition = job();
+    at = day(20).startAt + HOUR;
+    await look(definition);
+    const writeLock = vi.spyOn(venue.db, "withWriteLock");
+    try {
+      at += 60_000;
+      await look(definition);
+      expect(writeLock).not.toHaveBeenCalled();
+    } finally {
+      writeLock.mockRestore();
+    }
+  });
+
+  it("queries again in the same business day after its candidate query failed", async () => {
+    const bill = await billOpenedAt(day(21).startAt + HOUR);
+    const definition = job();
+    at = day(21).startAt + 2 * HOUR;
+    await look(definition);
+    const queryFailed = new Error("candidate query failed");
+    beforeNextTransaction.run = async () => {
+      throw queryFailed;
+    };
+    at = day(22).startAt + HOUR;
+    await expect(look(definition)).rejects.toBe(queryFailed);
+    expect(issued(bill)).toBe(false);
+    at += 5_000;
+    await look(definition);
+    expect(issued(bill)).toBe(true);
+  });
+
+  it("issues no further bill once the runner's signal stops the pass, and leaves the rest for the next look", async () => {
+    const first = await billOpenedAt(day(22).startAt + 3 * HOUR);
+    const second = await billOpenedAt(day(22).startAt + 4 * HOUR);
+    const definition = job();
+    const stop = new AbortController();
+    onLog = (_level, event) => {
+      if (event === "close_of_day.issued") stop.abort();
+    };
+    at = day(23).startAt + HOUR;
+    try {
+      await definition.pass({ now: new Date(at), signal: stop.signal });
+    } finally {
+      onLog = () => {};
+    }
+    expect(issued(first)).toBe(true);
+    expect(issued(second)).toBe(false);
+    expect(fiscalRecordCount(venue, second)).toBe(0);
+    at += 60_000;
+    await look(definition);
+    expect(issued(second)).toBe(true);
+  });
+
+  it("writes nothing when the runner signals a stepdown while the pass looks for bills", async () => {
+    const bill = await billOpenedAt(day(23).startAt + 2 * HOUR);
+    at = day(24).startAt + HOUR;
+    const runner = createJobRunner({ now: () => new Date(at), log: () => {} });
+    beforeNextTransaction.run = async () => {
+      runner.signalStepdown();
+    };
+    try {
+      runner.add(job());
+      await vi.waitFor(() => expect(runner.views()["bills.close_of_day"]?.state).toBe("stopped"));
+      expect(fiscalRecordCount(venue, bill)).toBe(0);
+    } finally {
+      await runner.stopJobs();
+    }
+    await look(job());
+    expect(issued(bill)).toBe(true);
+  });
+
+  it.each([
+    { what: "the runner's signal stops the pass", stops: (s: SellingSwitch) => s.stop.abort() },
+    { what: "the box becomes a mirror", stops: (s: SellingSwitch) => (s.mode = "mirror") },
+    { what: "the box is no longer primary", stops: (s: SellingSwitch) => (s.role = "secondary") },
+    { what: "the box is fenced", stops: (s: SellingSwitch) => (s.fenced = true) },
+  ])("writes nothing for a bill when $what just before its transaction", async ({ stops }) => {
+    const bill = await billOpenedAt(day(24).startAt + 2 * HOUR);
+    const state = sellingSwitch();
+    const definition = job({ selling: state.selling });
+    // The pass's first transaction looks for bills; the next is the bill's own.
+    beforeNextTransaction.run = async () => {
+      beforeNextTransaction.run = async () => {
+        stops(state);
+      };
+    };
+    at = day(25).startAt + HOUR;
+    await definition.pass({ now: new Date(at), signal: state.stop.signal });
+    expect(beforeNextTransaction.run).toBeUndefined();
+    expect(fiscalRecordCount(venue, bill)).toBe(0);
+    expect(issued(bill)).toBe(false);
+    await look(job());
+    expect(issued(bill)).toBe(true);
+  });
+
+  it.each([
+    { where: "while the pass looks for bills", hookAt: "query" },
+    { where: "just before a bill's transaction", hookAt: "bill" },
+  ])(
+    "issues nothing against the day's end read before a hold that began and ended $where",
+    async ({ hookAt }) => {
+      const bill = await billOpenedAt(day(25).startAt + 2 * HOUR);
+      const definition = job();
+      at = day(26).startAt + 60_000;
+      // The clock is corrected back to before the day's end while the look is under way.
+      const corrected = async () => {
+        hold();
+        at = day(26).startAt - 60_000;
+        seatHolds = false;
+      };
+      beforeNextTransaction.run =
+        hookAt === "query"
+          ? corrected
+          : async () => {
+              beforeNextTransaction.run = corrected;
+            };
+      await look(definition);
+      expect(beforeNextTransaction.run).toBeUndefined();
+      expect(fiscalRecordCount(venue, bill)).toBe(0);
+      at += 5_000;
+      await look(definition);
+      expect(fiscalRecordCount(venue, bill)).toBe(0);
+
+      at = day(26).startAt + 60_000;
+      await look(definition);
+      expect(issued(bill)).toBe(true);
+    },
+  );
+
+  it("after a hold seen inside a bill's transaction, treats bills opened during it as opened at the release", async () => {
+    const due = await billOpenedAt(day(27).startAt + 2 * HOUR);
+    const definition = job();
+    at = day(28).startAt + 3 * HOUR;
+    let seatedInHold = "";
+    beforeNextTransaction.run = async () => {
+      beforeNextTransaction.run = async () => {
+        hold();
+        // Seated while the box's clock reads a day behind.
+        seatedInHold = await billOpenedAt(day(27).startAt + 10 * HOUR);
+        seatHolds = false;
+      };
+    };
+    await look(definition);
+    expect(seatedInHold).not.toBe("");
+    expect(fiscalRecordCount(venue, due)).toBe(0);
+    at += 5_000;
+    await look(definition);
+    expect(issued(due)).toBe(true);
+    expect(fiscalRecordCount(venue, seatedInHold)).toBe(0);
+
+    at = day(28).endAt + 60_000;
+    await look(definition);
+    expect(issued(seatedInHold)).toBe(true);
   });
 
   it("applies only on a primary box that is neither a mirror nor fenced", () => {
