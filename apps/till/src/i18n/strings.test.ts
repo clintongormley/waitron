@@ -379,8 +379,8 @@ it("says why a till that cannot give cash back stops after opening a correction,
 
 it("says a receipt has no printer on this device, and what to do, in both languages", () => {
   expect([en["document.no_receipt_printer"], es["document.no_receipt_printer"]]).toEqual([
-    "This device has no receipt printer. Choose one in Equipment, then try again.",
-    "Este dispositivo no tiene impresora de tickets. Elige una en Equipo e inténtalo de nuevo.",
+    "This device has no receipt printer switched on. Choose one in Equipment, then try again.",
+    "Este dispositivo no tiene ninguna impresora de tickets activada. Elige una en Equipo e inténtalo de nuevo.",
   ]);
 });
 

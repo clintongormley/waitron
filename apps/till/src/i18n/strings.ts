@@ -429,7 +429,7 @@ export const en = {
   "document.printer_read_failed": "Could not read the receipt printers. Refresh to try again.",
   "document.no_printers": "No receipt printers are available. Refresh after changing Equipment.",
   "document.no_receipt_printer":
-    "This device has no receipt printer. Choose one in Equipment, then try again.",
+    "This device has no receipt printer switched on. Choose one in Equipment, then try again.",
   "action.reprint": "Reprint",
   "action.print_receipt": "Print receipt",
   "action.payment_slip": "Payment slip",
@@ -2560,7 +2560,7 @@ export const es: Record<StringKey, string> = {
   "document.no_printers":
     "No hay impresoras de recibos disponibles. Actualiza después de cambiar el equipo.",
   "document.no_receipt_printer":
-    "Este dispositivo no tiene impresora de tickets. Elige una en Equipo e inténtalo de nuevo.",
+    "Este dispositivo no tiene ninguna impresora de tickets activada. Elige una en Equipo e inténtalo de nuevo.",
   "action.reprint": "Reimprimir",
   "action.print_receipt": "Imprimir recibo",
   "action.payment_slip": "Justificante de pago",
