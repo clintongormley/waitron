@@ -513,7 +513,7 @@ export class TillSentOrders extends LitElement {
       (slice) =>
         sentSlicePortionKey(slice, this.lines, [
           allergyGuestId(this.allergy, { kind: "working", id: slice.row.lineId }),
-          this.#setMenuDishes.get(slice.row.lineId),
+          this.#setMenuDishes.get(slice.row.lineId)?.setMenuId,
         ]),
       (slice) => slice.row.lineNo,
     );

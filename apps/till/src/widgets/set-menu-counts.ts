@@ -32,6 +32,7 @@ export class TillSetMenuCounts extends LitElement {
   @property({ attribute: false }) bill: BillSetMenuState | null = null;
   @property({ attribute: false }) draft: readonly OrderLine[] = [];
   @property({ attribute: false }) onSale: readonly ServedSetMenuCopy[] = [];
+  /** Apply an accepted bill before resolving. A refusal returns the wording for this stepper. */
   @property({ attribute: false }) saveCount?: (
     id: string,
     count: number,
@@ -39,13 +40,15 @@ export class TillSetMenuCounts extends LitElement {
   @property({ type: Boolean }) busy = false;
   @state() private pending: { id: string; value: string } | null = null;
   @state() private errors = new Map<string, string>();
+  #counts = new Map<string, Count>();
 
   constructor() {
     super();
     new LocaleChangeController(this);
   }
 
-  override render() {
+  protected override willUpdate(changed: ReadonlyMap<PropertyKey, unknown>) {
+    if (!changed.has("bill") && !changed.has("onSale")) return;
     const counts = new Map<string, Count>();
     if (this.bill !== null) {
       for (const { menu, copy } of menusWithCopies(this.bill)) {
@@ -61,8 +64,16 @@ export class TillSetMenuCounts extends LitElement {
     for (const { menuId, name } of this.onSale) {
       if (!counts.has(menuId)) counts.set(menuId, { id: menuId, name, lineIds: [] });
     }
+    for (const id of this.errors.keys()) {
+      if (this.#counts.get(id)?.lineIds.length !== counts.get(id)?.lineIds.length)
+        this.errors.delete(id);
+    }
+    this.#counts = counts;
+  }
+
+  override render() {
     return html`${repeat(
-        counts.values(),
+        this.#counts.values(),
         ({ id }) => id,
         (menu) => html`
           <wt-number-stepper
@@ -116,7 +127,8 @@ export class TillSetMenuCounts extends LitElement {
     } catch {
       error = codeMessage("server.error");
     } finally {
-      this.errors = new Map(this.errors).set(menu.id, error);
+      if (this.#counts.get(menu.id)?.lineIds.length === previous)
+        this.errors = new Map(this.errors).set(menu.id, error);
       this.pending = null;
     }
   }

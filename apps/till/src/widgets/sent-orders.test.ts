@@ -1157,10 +1157,16 @@ it("combines covered soups of the same type but separates a surcharge and anothe
     ["daily-one", "daily"],
     ["daily-two", "daily"],
     ["special-one", "special"],
+    ["daily-three", "daily"],
+  ] as const;
+  const copies = [
+    ["daily-copy", "daily"],
+    ["special-copy", "special"],
+    ["daily-older-copy", "daily"],
   ] as const;
   const setMenus: BillSetMenuState = {
-    copies: ["daily", "special"].map((setMenuId) => ({
-      id: `${setMenuId}-copy`,
+    copies: copies.map(([id, setMenuId]) => ({
+      id,
       setMenuId,
       versionId: "lunch",
       name: setMenuId,
@@ -1172,14 +1178,14 @@ it("combines covered soups of the same type but separates a surcharge and anothe
     recorded: {},
     setMenus: types.map(([id, type], index) => ({
       lineId: id,
-      copyId: `${type}-copy`,
+      copyId: id === "daily-three" ? "daily-older-copy" : `${type}-copy`,
       lineNo: 10 + index,
     })),
     dishes: (
       [
         ["soup-one", "daily-one", 0],
         ["soup-two", "daily-two", 0],
-        ["sirloin", "daily-two", 500],
+        ["soup-surcharge", "daily-three", 500],
         ["soup-special", "special-one", 0],
       ] as const
     ).map(([lineId, setMenuLineId, priceCents]) => ({
@@ -1195,8 +1201,8 @@ it("combines covered soups of the same type but separates a surcharge and anothe
   };
   const lines = setMenus.dishes.map(({ lineId, priceCents }, index) => ({
     ...billLine(lineId, index + 1),
-    name: lineId === "sirloin" ? "Sirloin" : "Soup",
-    productId: lineId === "sirloin" ? "sirloin" : "soup",
+    name: "Soup",
+    productId: "soup",
     unitPriceGross: priceCents === 500 ? "5.00" : "0.00",
   }));
   const data = current(
@@ -1211,8 +1217,8 @@ it("combines covered soups of the same type but separates a surcharge and anothe
   );
   const el = await mount(data, { lines, setMenus });
   expect(shownLines(el, "data-fired-line")).toEqual([
-    ["sirloin", "Sirloin ×1 +€5.00", "€5.00"],
     ["soup-one", "Soup ×2 menu", "€0.00"],
     ["soup-special", "Soup ×1 menu", "€0.00"],
+    ["soup-surcharge", "Soup ×1 +€5.00", "€5.00"],
   ]);
 });

@@ -835,12 +835,7 @@ export class TillBasket extends LitElement {
       <div class="order-lines">
         ${shown.map(([line, index]) => {
           const listed = this.#listed(line, listing);
-          const setMenuPrice =
-            line.setMenuId === undefined
-              ? undefined
-              : line.workingOrderLineId === undefined
-                ? this.placedPrice?.(line)
-                : line.product.unitPrice;
+          const setMenuPrice = line.setMenuId === undefined ? undefined : this.placedPrice?.(line);
           const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);
           const ended = line.blocked === undefined ? line.endedPeriod : undefined;
           return html`

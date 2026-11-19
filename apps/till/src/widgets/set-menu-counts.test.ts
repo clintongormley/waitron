@@ -55,3 +55,38 @@ it("keeps the only set menu the unsent sea bass fits without sending a removal",
   expect(stepper!.value).toBe("1");
   expect(stepper!.error).toContain("Only Special menu has a place for Sea bass");
 });
+
+it("previews removing the latest empty menu if two copies of that type are on the bill", async () => {
+  const save = vi.fn(async () => undefined);
+  const first = bill.copies[0]!;
+  const later = { ...bill.copies[1]!, setMenuId: first.setMenuId };
+  const { el } = await mountWidget<TillSetMenuCounts>("till-set-menu-counts", {
+    bill: {
+      ...bill,
+      copies: [first, later],
+      setMenus: [bill.setMenus[0]!, { ...bill.setMenus[1]!, copyId: later.id }],
+      dishes: [],
+    },
+    draft: [seaBass],
+    saveCount: save,
+  });
+  const stepper = el.shadowRoot!.querySelector("wt-number-stepper")!;
+  expect(stepper.value).toBe("2");
+  await userEvent.click(stepper.shadowRoot!.querySelector('[data-step="-1"]')!);
+  expect(save).not.toHaveBeenCalled();
+  expect(stepper.error).toContain("Sea bass");
+});
+
+it("clears a refusal when a bill refresh changes the count it described", async () => {
+  const { el } = await mount(async () => "The bill changed before the count was saved.");
+  const stepper = el.shadowRoot!.querySelector("wt-number-stepper")!;
+  await userEvent.click(stepper.shadowRoot!.querySelector('[data-step="1"]')!);
+  await vi.waitFor(() => expect(stepper.error).toContain("The bill changed"));
+  el.bill = {
+    ...bill,
+    setMenus: [...bill.setMenus, { lineId: "daily-3", lineNo: 4, copyId: daily.key }],
+  };
+  await el.updateComplete;
+  expect(stepper.value).toBe("3");
+  expect(stepper.error).toBe("");
+});

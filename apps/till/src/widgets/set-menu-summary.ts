@@ -134,12 +134,12 @@ export class TillSetMenuSummary extends LitElement {
       .join(" · ");
     const disabled = this.busy || this.pending;
 
-    const moveOptions = (lineId: string) =>
+    const moveOptions = (dish: PlacedDish) =>
       rows.flatMap((row) =>
         row.places.flatMap(({ name, place, open }) => {
-          if (open <= 0) return [];
-          const move = { lineId, to: { setMenuLineId: row.id, place } };
-          const result = checkMoves(bill, [move], held);
+          if (open <= 0 || (row.id === dish.setMenuLineId && place === dish.place)) return [];
+          const move = { lineId: dish.lineId, to: { setMenuLineId: row.id, place } };
+          const result = checkMoves(bill, [move]);
           return result.kind === "ok"
             ? [
                 {
@@ -152,7 +152,7 @@ export class TillSetMenuSummary extends LitElement {
       );
 
     const sentDish = (dish: PlacedDish, menuId: string) => {
-      const options = this.moveDish === undefined || !dish.movable ? [] : moveOptions(dish.lineId);
+      const options = this.moveDish === undefined || !dish.movable ? [] : moveOptions(dish);
       return html`<li>
         ${this.dishNames.get(dish.lineId)}${setMenuTag(centsToDecimal(dish.priceCents))}
         ${

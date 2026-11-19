@@ -8,12 +8,15 @@ import { TillSetMenuSummary } from "./set-menu-summary.js";
 
 afterEach(cleanupWidgets);
 
-async function mount(removeMenu = vi.fn(), moveDish = vi.fn(), draft = [seaBass]) {
+async function mount(removeMenu = vi.fn(), moveDish = vi.fn(), draft = [seaBass], state = bill) {
   return mountWidget<TillSetMenuSummary>("till-set-menu-summary", {
-    bill,
+    bill: state,
     draft,
     courseNames: courses,
-    dishNames: new Map([["sent-sirloin", "Sirloin"]]),
+    dishNames: new Map([
+      ["sent-sirloin", "Sirloin"],
+      ["sent-soup", "Soup"],
+    ]),
     removeMenu,
     moveDish,
   });
@@ -79,4 +82,34 @@ it("offers only open compatible move targets and shows the destination price bef
     lineId: "sent-sirloin",
     to: { setMenuLineId: "special-1", place: 0 },
   });
+});
+
+it("omits the place a dish already occupies even when it has spare capacity", async () => {
+  const { el } = await mount(vi.fn(), vi.fn(), [], {
+    ...bill,
+    dishes: [
+      {
+        ...bill.dishes[0]!,
+        productId: "product-soup",
+        lineId: "sent-soup",
+        place: 0,
+        priceCents: 0,
+        countsAsCourseId: "starter",
+      },
+    ],
+  });
+  const root = el.shadowRoot!;
+  await userEvent.click(root.querySelector("summary")!);
+  const moveButton = Array.from(root.querySelectorAll("wt-button")).find((button) =>
+    button.textContent!.includes("Move"),
+  );
+  await userEvent.click(moveButton!);
+  const labels = Array.from(root.querySelectorAll("[data-move-options] wt-button"), (button) =>
+    button.textContent!.trim(),
+  );
+  expect(labels).toEqual([
+    "Daily menu 1 · Main or Starter · Included",
+    "Daily menu 2 · Starter · Included",
+    "Daily menu 2 · Main or Starter · Included",
+  ]);
 });
