@@ -596,8 +596,15 @@ const PENDING_REREAD_MS = 5_000;
 /** How long the full-invoice dialog waits for the delivery options before opening without them. */
 const INVOICE_OPTIONS_LIMIT_MS = 5_000;
 /** How long a sign-out waits for the request for the owed receipt before ending the server session,
- * which would refuse the request if it arrived first. */
+ * which would refuse the request if it arrived first; and how long the next sign-in then waits for
+ * the server's answer to that sign-out. */
 export const OWED_RECEIPT_WAIT_MS = 3_000;
+
+async function settledWithin(work: Promise<unknown>, ms: number): Promise<void> {
+  const limit = limited(ms);
+  await Promise.race([work, pause(limit.signal)]);
+  limit.done();
+}
 
 registerIcons({
   ...NUTRITION_ICONS,
@@ -22250,6 +22257,11 @@ export class TillApp extends LitElement {
     void flushed.then(() => (session !== this.#operatorSession ? undefined : this.#refreshFloor()));
   }
 
+  /** A sign-in waits for this before it asks the server: its new session replaces the cookie that
+   * names the session a sign-out is still to end. */
+  #serverSignOut: Promise<void> | undefined;
+  readonly #untilSignedOut = (): Promise<void> | undefined => this.#serverSignOut;
+
   /** Keeps the basket: it belongs to the till. */
   async #onLogout(endServerSession = true): Promise<void> {
     const owedReceipt = this.#askForOwedReceipt();
@@ -22307,27 +22319,26 @@ export class TillApp extends LitElement {
       sync?.drop();
       for (const each of own) each.drop();
     }
-    if (endServerSession && owedReceipt !== undefined) {
-      const limit = limited(OWED_RECEIPT_WAIT_MS);
-      await Promise.race([owedReceipt, pause(limit.signal)]);
-      limit.done();
+    const stale = () =>
+      signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api;
+    if (stale()) return;
+    if (endServerSession) {
+      let answered: Promise<void> = Promise.resolve();
+      const sent = (async () => {
+        if (owedReceipt !== undefined) await settledWithin(owedReceipt, OWED_RECEIPT_WAIT_MS);
+        if (stale()) return;
+        // A failure is not reported: the device is already locked locally.
+        answered = api.logout().catch(() => undefined);
+        await settledWithin(answered, OWED_RECEIPT_WAIT_MS);
+      })();
+      this.#serverSignOut = sent;
+      await sent;
+      if (this.#serverSignOut === sent) this.#serverSignOut = undefined;
+      await answered;
     }
-    if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
-    if (endServerSession)
-      try {
-        await api.logout();
-      } catch {
-        // The device is already locked locally.
-      }
     // After the round trip, so guarded: a detached till must not change a live sibling's module-global
     // locale.
-    if (
-      !this.isConnected ||
-      signIns !== this.#signIns ||
-      session !== this.#operatorSession ||
-      api !== this.api
-    )
-      return;
+    if (!this.isConnected || stale()) return;
     setLocale(this.#preLoginLocale());
   }
 
@@ -23825,6 +23836,7 @@ export class TillApp extends LitElement {
                         `${this.#lockLanguagePicks}:${this.#operatorSession}`,
                         html`<till-lock-screen
                           .api=${this.api}
+                          .untilSignedOut=${this.#untilSignedOut}
                           .live=${this.#live}
                           .deviceName=${this.deviceName}
                           .legalName=${this.issuer?.venueName ?? ""}

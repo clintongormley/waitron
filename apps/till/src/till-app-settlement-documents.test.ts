@@ -541,6 +541,31 @@ const signOutBy = {
   },
 };
 
+const signedInName = (el: TillApp) => (el as unknown as { operatorName: string }).operatorName;
+
+function samSigningInApi(overrides: Record<string, unknown>): TillApi {
+  // The screen remembers the last person to sign in, and would skip the roster.
+  localStorage.clear();
+  return closingApi({
+    listStaff: vi.fn().mockResolvedValue([
+      { personId: "p1", displayName: "Ana" },
+      { personId: "p2", displayName: "Sam" },
+    ]),
+    login: vi.fn().mockResolvedValue({ personId: "p2", permissions: [], locale: null }),
+    ...overrides,
+  });
+}
+
+async function keyInSam(el: TillApp): Promise<void> {
+  const signingIn = lock(el);
+  await signingIn.updateComplete;
+  signingIn.shadowRoot!.querySelector<HTMLElement>('[data-person="p2"]')!.click();
+  await signingIn.updateComplete;
+  emit(signingIn.shadowRoot!.querySelector("till-numeric-pad")!, "wt-change", { value: "5555" });
+  await signingIn.updateComplete;
+  signingIn.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
+}
+
 async function mountForSignOut(api: TillApi): Promise<TillApp> {
   const { el } = await mountWidget<TillApp>("till-app", {
     api,
@@ -608,6 +633,63 @@ describe.each(Object.keys(signOutBy) as (keyof typeof signOutBy)[])(
       }
       await flush(el);
       expect(api.logout).toHaveBeenCalledOnce();
+    });
+
+    it("open, with the next person signing in during the wait, ends the session before the new one starts", async () => {
+      let answerReceipt!: () => void;
+      let answerSignOut!: () => void;
+      const api = samSigningInApi({
+        getTill: vi.fn().mockResolvedValue(idle),
+        printReceipt: vi.fn(() => new Promise<void>((resolve) => (answerReceipt = resolve))),
+        logout: vi.fn(() => new Promise<void>((resolve) => (answerSignOut = resolve))),
+      });
+      const el = await mountForSignOut(api);
+      await payAtTable(el);
+      await signOutBy[way](el);
+      await keyInSam(el);
+      await flush(el);
+      expect(api.login).not.toHaveBeenCalled();
+      expect(api.logout).not.toHaveBeenCalled();
+
+      answerReceipt();
+      await flush(el);
+      expect(api.logout).toHaveBeenCalledOnce();
+      expect(api.login).not.toHaveBeenCalled();
+
+      answerSignOut();
+      await flush(el);
+      expect(api.login).toHaveBeenCalledExactlyOnceWith("p2", "5555");
+      expect(api.logout).toHaveBeenCalledOnce();
+      await vi.waitFor(() => expect(signedInName(el)).toBe("Sam"));
+      expect(api.logout).toHaveBeenCalledOnce();
+    });
+
+    it("open lets the next person sign in a few seconds after a sign-out the server does not answer", async () => {
+      const api = samSigningInApi({
+        getTill: vi.fn().mockResolvedValue(idle),
+        printReceipt: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn(() => new Promise<never>(() => {})),
+      });
+      const el = await mountForSignOut(api);
+      await payAtTable(el);
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      try {
+        if (way === "signing out") emit(shell(el), "logout");
+        else {
+          emit(el, "pointerdown");
+          await vi.advanceTimersByTimeAsync(300_000);
+        }
+        await vi.advanceTimersByTimeAsync(0);
+        expect(api.logout).toHaveBeenCalledOnce();
+        await keyInSam(el);
+        await vi.advanceTimersByTimeAsync(OWED_RECEIPT_WAIT_MS - 1);
+        expect(api.login).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(api.login).toHaveBeenCalledExactlyOnceWith("p2", "5555");
+      } finally {
+        vi.useRealTimers();
+      }
+      await vi.waitFor(() => expect(signedInName(el)).toBe("Sam"));
     });
 
     it("closed asks for nothing", async () => {
