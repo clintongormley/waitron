@@ -244,9 +244,9 @@ describe.each(["light", "dark"] as const)("special-day clash warning (%s)", (the
             code: "special_day.date_shared",
             date: "2027-03-26",
             specialDayId: "sd2",
-            specialDayName: "Feria".repeat(20),
+            specialDayName: "Feast".repeat(20),
             otherSpecialDayId: "sd1",
-            otherSpecialDayName: "Viernes Santo".repeat(10),
+            otherSpecialDayName: "Holy Thursday".repeat(10),
           },
         ];
         el.model = view;

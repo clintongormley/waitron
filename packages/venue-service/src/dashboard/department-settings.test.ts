@@ -1659,7 +1659,7 @@ it("follows a change another dashboard makes while the form is clean, and keeps 
   await toggleNeedsClearing(el, false);
   expect(save(el).disabled).toBe(false);
   const relisted = structuredClone(listed);
-  relisted.departments[0]!.tradingName = "Casa nueva";
+  relisted.departments[0]!.tradingName = "Casa renamed";
   el.model = relisted;
   await el.updateComplete;
   expect(needsClearing(el).checked).toBe(false);
@@ -1979,7 +1979,7 @@ it("follows a reminder another dashboard sets while the form is clean, and keeps
   await chooseReminder(el, "30");
   expect(save(el).disabled).toBe(false);
   const later = reminderView(5);
-  later.departments[0]!.tradingName = "Casa nueva";
+  later.departments[0]!.tradingName = "Casa renamed";
   el.model = later;
   await el.updateComplete;
   expect(reminder(el).value).toBe("30");

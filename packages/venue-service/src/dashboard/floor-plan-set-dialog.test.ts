@@ -189,18 +189,18 @@ it("speaks Spanish", async () => {
   await el.updateComplete;
   expect(field(el, "name")!.error).toBe("Otro conjunto de este departamento ya tiene este nombre.");
   el.mode = "rename";
-  el.set = { id: "dinner", name: "Cena" };
+  el.set = { id: "dinner", name: "Dinner" };
   el.open = false;
   await el.updateComplete;
   el.open = true;
   await el.updateComplete;
-  expect(heading(el)).toBe("Renombrar Cena");
+  expect(heading(el)).toBe("Renombrar Dinner");
   el.mode = "copy";
   el.open = false;
   await el.updateComplete;
   el.open = true;
   await el.updateComplete;
-  expect(heading(el)).toBe("Copiar Cena");
+  expect(heading(el)).toBe("Copiar Dinner");
 });
 
 it("reopens Copy quietly after Add was refused by its own checks", async () => {

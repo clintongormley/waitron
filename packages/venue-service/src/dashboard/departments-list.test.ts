@@ -224,13 +224,13 @@ describe("department list", () => {
         {
           code: "special_day.holiday_missing",
           specialDayId: "sd1",
-          holidayName: "Viernes Santo",
+          holidayName: "Good Friday",
           year: 2027,
         } as unknown as VenueServiceView["readiness"][number],
       ],
     });
     expect(el.shadowRoot!.querySelectorAll(".issue")).toHaveLength(0);
-    expect(el.shadowRoot!.textContent).not.toContain("Viernes Santo");
+    expect(el.shadowRoot!.textContent).not.toContain("Good Friday");
   });
   it.each([
     ["en", "Departments and zones"],
@@ -249,16 +249,16 @@ describe("department list", () => {
           code: "special_day.date_shared" as const,
           date: "2027-09-26",
           specialDayId: "sd2",
-          specialDayName: "Feria",
+          specialDayName: "Town fair",
           otherSpecialDayId: "sd1",
-          otherSpecialDayName: "Viernes Santo",
+          otherSpecialDayName: "Good Friday",
         },
       ],
     };
     const el = await setup(clash);
     const warning = find(el, '[data-test="date-shared"]')!;
     expect(warning.textContent!.trim()).toBe(
-      "Viernes Santo and Feria both fall on Sun, 26 Sept 2027. Feria applies; change one to choose.",
+      "Good Friday and Town fair both fall on Sun, 26 Sept 2027. Town fair applies; change one to choose.",
     );
     expect(
       warning.compareDocumentPosition(table(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -267,7 +267,7 @@ describe("department list", () => {
     setLocale("es");
     const es = await setup(clash);
     expect(find(es, '[data-test="date-shared"]')!.textContent!.trim()).toBe(
-      "Viernes Santo y Feria caen el dom, 26 sept 2027. Se aplica Feria; cambia uno para elegir.",
+      "Good Friday y Town fair caen el dom, 26 sept 2027. Se aplica Town fair; cambia uno para elegir.",
     );
   });
 
@@ -405,7 +405,7 @@ describe("department list", () => {
           departments: [
             {
               ...model.departments[0]!,
-              name: "Restaurante, terraza y barra de la planta principal",
+              name: "Restaurant, terrace and bar on the main ground floor",
             },
             model.departments[1]!,
           ],
@@ -463,11 +463,11 @@ it("retains the Spanish published-menu refusal in the owning department's name c
   setLocale("es");
   const el = await setup({
     ...model,
-    readiness: [{ code: "zone.menu_unpublished", zoneId: "z1", zoneName: "Terraza" }],
+    readiness: [{ code: "zone.menu_unpublished", zoneId: "z1", zoneName: "Terrace" }],
   });
   const cells = rows(el).map((row) => row.querySelectorAll("td")[0]!);
-  expect(cells[0]!.textContent).toContain("Terraza necesita una carta activa y publicada.");
-  expect(cells[1]!.textContent).not.toContain("Terraza");
+  expect(cells[0]!.textContent).toContain("Terrace necesita una carta activa y publicada.");
+  expect(cells[1]!.textContent).not.toContain("Terrace");
 });
 
 it("offers no column chooser", async () => {

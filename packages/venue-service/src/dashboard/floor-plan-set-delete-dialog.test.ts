@@ -185,12 +185,12 @@ it("closes on Cancel and stays while a delete is sent", async () => {
 
 it("speaks Spanish", async () => {
   setLocale("es");
-  const el = await mount(impactOf({ zonesShowing: [{ id: "inside", name: "Dentro" }] }));
+  const el = await mount(impactOf({ zonesShowing: [{ id: "inside", name: "Inside" }] }));
   expect(heading(el)).toBe("¿Eliminar Dinner?");
   expect(lines(el)).toEqual([
     "Usado por Dinner.",
     "Las mesas se quedan: son comunes a todos los conjuntos.",
-    "En sala, Dentro mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
+    "En sala, Inside mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
   ]);
   expect(picker(el)!.label).toBe("Sustituir por");
   expect(picker(el)!.options[0]).toEqual({
@@ -210,18 +210,18 @@ it("speaks Spanish", async () => {
   expect(lines(el)[0]).toBe("Ningún periodo lo usa.");
   el.impact = impactOf({
     periods: [
-      { id: "a", name: "Cena" },
+      { id: "a", name: "Supper" },
       { id: "b", name: "Brunch" },
     ],
     zonesShowing: [
-      { id: "inside", name: "Dentro" },
-      { id: "terrace", name: "Terraza" },
+      { id: "inside", name: "Inside" },
+      { id: "terrace", name: "Terrace" },
     ],
   });
   await el.updateComplete;
   expect(lines(el)).toEqual([
-    "Usado por Cena y Brunch.",
+    "Usado por Supper y Brunch.",
     "Las mesas se quedan: son comunes a todos los conjuntos.",
-    "En sala, Dentro y Terraza mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
+    "En sala, Inside y Terrace mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
   ]);
 });
