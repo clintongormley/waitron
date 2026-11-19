@@ -2294,6 +2294,40 @@ describe("a sale files in the receipt language saved on its order", () => {
       expect(await orderRow(venue, id)).toEqual(before);
     });
 
+    it("files in the chosen language when cash covers the rest while a reader payment is pending", async () => {
+      const venue = await barcelonaVenue();
+      const id = await placedTarta(venue);
+      const path = `/api/working-orders/${id}/payments`;
+      const part = { kind: "contribution", amount: "9.00", applied: "9.00", tip: "0.00" };
+      const release = venue.card.holdNextCollect();
+      const pending = send(venue.app, venue.cookie, "POST", path, {
+        ...part,
+        submissionId: randomUUID(),
+        method: "card",
+        entry: "reader",
+      });
+      try {
+        await expect.poll(() => venue.card.collectCalls.length).toBe(1);
+        const paid = await send(venue.app, venue.cookie2, "POST", path, {
+          ...part,
+          submissionId: randomUUID(),
+          method: "cash",
+          tendered: "9.00",
+          receiptLanguage: "es-ES",
+        });
+        expect(paid).toMatchObject({
+          status: 200,
+          json: { balance: { received: "9.00", reserved: "9.00" } },
+        });
+        expect(paid.json.invoice).toBeUndefined();
+      } finally {
+        release();
+        await pending;
+      }
+
+      expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+    });
+
     const placedCashRequests = [
       ["collect", (id: string) => [`/api/working-orders/${id}/collect`, { tender: CASH }] as const],
       [

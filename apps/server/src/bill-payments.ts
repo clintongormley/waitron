@@ -1404,10 +1404,11 @@ async function beginBillPayment(
       tip: decimal(req.tip),
     },
   );
-  // A reader may finish on recovery, so keep the final attempt's choice before asking it.
+  // A reserved card may finish on recovery, so save the language once the bill is covered.
   if (
+    req.receiptLanguage !== undefined &&
     !payable.invoiced &&
-    compareDecimal(addDecimal(funds.received, allocation.applied), total) === 0
+    compareDecimal(sumDecimals([funds.received, funds.reserved, allocation.applied]), total) === 0
   )
     await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);
 
