@@ -18,7 +18,9 @@ import { createHealthState } from "./health.js";
 import { createLogger } from "./logger.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountManagementApi } from "./management-api.js";
-import { runPass, DRAIN_DUTY } from "./pass.js";
+import { drainJob } from "./fiscal-jobs.js";
+import { DEFAULT_DUTY_TIMINGS } from "./config.js";
+import { DRAIN_DUTY } from "./pass.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const NOW = new Date("2026-07-26T09:00:00Z");
@@ -139,26 +141,20 @@ describe("promoted primary awaiting the fiscal certificate", () => {
     );
 
     // The real regime drain, which reads `fiscal.aeat` from the vault.
-    const report = await runPass(
-      {
-        drain: (now) =>
-          FISCAL_SLOT.drain(
-            { db, ring, environment: "production", skipRetryMs: 300_000, log },
-            now,
-          ),
-        reconcile: () =>
-          Promise.resolve({ ran: [], deferred: 0, beyondHorizon: 0, skipped: [], nextDueAt: null }),
-        awaitingCert,
-        monotonicMs: () => performance.now(),
-        log,
-      },
-      NOW,
-    );
+    const health = createHealthState(NOW);
+    const job = drainJob({
+      getRole: () => "primary",
+      health,
+      timings: DEFAULT_DUTY_TIMINGS,
+      drain: (now) =>
+        FISCAL_SLOT.drain({ db, ring, environment: "production", skipRetryMs: 300_000, log }, now),
+      awaitingCert,
+      log,
+    });
 
-    // A missing cert is a skip, not a failure.
-    const drainReport = report.duties.find((entry) => entry.duty === DRAIN_DUTY)!;
-    expect(drainReport.ok).toBe(true);
-    expect(drainReport.skipped).toBe(1);
+    const result = await job.pass({ now: NOW, signal: new AbortController().signal });
+    expect(result.degraded).toBe(true);
+    expect(health.duties[DRAIN_DUTY]?.skipped).toBe(1);
 
     expect(awaitingCert.current).toBe(true);
     expect(lines.filter((line) => line.includes("fiscal.awaiting_certificate"))).toHaveLength(1);

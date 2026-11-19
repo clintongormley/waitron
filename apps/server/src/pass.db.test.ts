@@ -10,12 +10,14 @@ import { drain } from "@waitron/fiscal-verifactu";
 import type Stripe from "stripe";
 import { createLogger } from "./logger.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
-import { runPass } from "./pass.js";
+import { drainJob, reconcileJob } from "./fiscal-jobs.js";
+import { createHealthState } from "./health.js";
+import { DEFAULT_DUTY_TIMINGS } from "./config.js";
 import { stripeAccountResolver } from "./stripe-account.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 /**
- * One composed scheduler pass, with the real drain and reconcile duties, against a real migrated
+ * The real drain and reconcile jobs against a real migrated
  * database. `pass.test.ts` beside it uses fake duties and no database.
  */
 const KEY_ENV = {
@@ -43,7 +45,7 @@ const emptyStripe = {
   },
 } as unknown as Stripe;
 
-describe("one composed pass against a migrated database", () => {
+describe("independent jobs against a migrated database", () => {
   it("reads credentials, sweeps reconcile and writes the ledger", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, (tx) =>
@@ -74,34 +76,42 @@ describe("one composed pass against a migrated database", () => {
     const duty = reconcilerAsDuty(reconciler);
     const lines: string[] = [];
 
-    const report = await runPass(
-      {
-        // No `envios` rows exist, so the drainer finds no work and never asks for a certificate.
-        drain: (now) =>
+    const health = createHealthState(NOW);
+    const deps = {
+      getRole: () => "primary" as const,
+      health,
+      timings: DEFAULT_DUTY_TIMINGS,
+      log: createLogger(
+        (line) => lines.push(line),
+        () => NOW,
+      ),
+    };
+    const ctx = { now: NOW, signal: new AbortController().signal };
+    const [filing, reconcile] = await Promise.all([
+      drainJob({
+        ...deps,
+        awaitingCert: { current: false },
+        drain: (now, signal) =>
           drain(
             {
               db: probe,
               resolveClient: () => Promise.reject(new Error("no due fiscal work in this suite")),
               skipRetryMs: DEFAULTS.skipRetryMs,
               environment: "production",
+              signal,
             },
             now,
           ),
+      }).pass(ctx),
+      reconcileJob({
+        ...deps,
         reconcile: (now) => runDue({ db: probe, duties: [duty], ...DEFAULTS }, now),
-        awaitingCert: { current: false },
-        monotonicMs: () => performance.now(),
-        log: createLogger(
-          (line) => lines.push(line),
-          () => NOW,
-        ),
-      },
-      NOW,
-    );
+      }).pass(ctx),
+    ]);
 
-    expect(report.duties.every((entry) => entry.ok)).toBe(true);
+    expect(filing.degraded).toBe(false);
+    expect(reconcile.degraded).toBe(false);
 
-    // `runDue` folds a duty's error into `TickResult.skipped` rather than throwing, so every `ok`
-    // above stays true through a failure; a warning line is how a broken duty shows from outside.
     const nonInfo = lines
       .map((line) => JSON.parse(line) as { level: string; event: string })
       .filter((entry) => entry.level !== "info");
@@ -114,9 +124,8 @@ describe("one composed pass against a migrated database", () => {
     );
     expect(Number(rows.rows[0]!.count)).toBeGreaterThan(0);
 
-    // A clean sweep folds in a future time; a deferred or skipped pair would report `now` instead.
-    expect(report.nextDueAt).not.toBeNull();
-    expect(report.nextDueAt!.getTime()).toBeGreaterThan(NOW.getTime());
+    expect(reconcile.nextDueAt).not.toBeNull();
+    expect(reconcile.nextDueAt!.getTime()).toBeGreaterThan(NOW.getTime());
   });
 
   it("does not enumerate a taxpayer provisioned for a different purpose", async () => {

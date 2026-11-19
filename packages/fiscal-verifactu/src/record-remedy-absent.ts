@@ -10,6 +10,7 @@ import { recordCaseEvent } from "./filing-cases.js";
 import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
 import type { RegistroRow } from "./registro-row.js";
 import { currentSif } from "./registro-sif.js";
+import { queueSubmission } from "./queue-submission.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -161,7 +162,7 @@ export async function applyAbsentOriginalCancellation(
     },
     { sif },
   );
-  await tx.insert(envios).values({ registroId: appended.id, proximoIntentoEn: reading.instant });
+  await queueSubmission(tx, { registroId: appended.id, proximoIntentoEn: reading.instant });
   const event = await recordCaseEvent(tx, {
     caseId,
     actionKey,

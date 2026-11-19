@@ -3,7 +3,7 @@ import { menus } from "./schema/menus.js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ResourceChange } from "@waitron/shared";
 import { installChangeFeed } from "./change-feed.js";
-import { subscribeToChanges } from "./change-log.js";
+import { noteChange, subscribeToChanges } from "./change-log.js";
 import { CORE_CHANGE_SOURCES } from "./classification.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { withTransaction } from "./tenancy.js";
@@ -58,6 +58,15 @@ describe("the change log", () => {
       }),
     ).rejects.toThrow("deliberate");
     expect(seen).toEqual([]);
+  });
+
+  it("publishes an explicit resource notice with its payload after commit", async () => {
+    const seen = collect();
+    await withTransaction(suite.db, async (tx) => {
+      await noteChange(tx, { resources: [{ type: "menu_released", id: "release-1" }] });
+      expect(seen).toEqual([]);
+    });
+    expect(seen).toEqual([{ resources: [{ type: "menu_released", id: "release-1" }] }]);
   });
 
   it("stops delivering to a listener that has unsubscribed", async () => {

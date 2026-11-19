@@ -40,9 +40,10 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { sealAdoptedStandbyKey } from "./testing/adopted-standby-key.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import { singletonPass } from "./singleton-pass.js";
+import { drainJob } from "./fiscal-jobs.js";
+import { emptyDrainResult } from "@waitron/fiscal";
+import { createHealthState } from "./health.js";
 import { tableSnapshot } from "./testing/table-snapshot.js";
-import { DRAIN_DUTY } from "./pass.js";
 import {
   commitMirrorPromotionTx,
   promoteLocalSecondaryToPrimary,
@@ -212,21 +213,25 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const { deps, nodeId } = await localSecondary();
     const d = deps(noopLog);
 
-    // The same pass, built once over the holder, must flip from empty to real with no restart.
-    const pass = singletonPass(
-      () => d.holders.singletonRole.current,
-      async () => ({
-        nextDueAt: null,
-        duties: [{ duty: DRAIN_DUTY, ok: true, nextDueAt: null, durationMs: 0 }],
-      }),
-    );
-    expect(await pass(new Date())).toEqual({ nextDueAt: null, duties: [] });
+    const ctx = { now: new Date(), signal: new AbortController().signal };
+    const health = createHealthState(ctx.now);
+    const job = drainJob({
+      getRole: () => d.holders.singletonRole.current,
+      drain: async () => emptyDrainResult(),
+      health,
+      awaitingCert: { current: false },
+      timings: { minTickMs: 5_000, maxTickMs: 3_600_000 },
+      log: noopLog,
+    });
+    expect(await job.pass(ctx)).toEqual({ nextDueAt: null });
+    expect(health.duties["fiscal.drain"]?.lastOkAt).toBeNull();
 
     const result = await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
     expect(result).toEqual({ alreadyPrimary: false });
     expect((await readNodeMode(suite.node, nodeId)).singletonRole).toBe("primary");
     expect(d.holders.singletonRole.current).toBe("primary");
-    expect((await pass(new Date())).duties.map((r) => r.duty)).toContain(DRAIN_DUTY);
+    await job.pass(ctx);
+    expect(health.duties["fiscal.drain"]?.lastOkAt).toEqual(ctx.now);
     expect(
       suite.node
         .all<{ detail: string }>(

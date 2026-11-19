@@ -31,7 +31,9 @@ import {
   type StepDownDeps,
 } from "./handover-stepdown.js";
 import { beginHandover } from "./handover-store.js";
-import { runLoop } from "./loop.js";
+import { emptyDrainResult } from "@waitron/fiscal";
+import { drainJob } from "./fiscal-jobs.js";
+import { createHealthState } from "./health.js";
 import { SHUTDOWN_DEADLINE_MS } from "./run-server.js";
 
 const SOURCE = "11111111-1111-4111-8111-111111111111";
@@ -47,13 +49,8 @@ const BINDING: HandoverBinding = {
   membership: { term: 3, digest: "a".repeat(64) },
 };
 
-const ABORTS = [
-  "controller",
-  "pendingCardController",
-  "tenderRefundController",
-  "jobRunner",
-] as const;
-const LOOPS = ["pendingCardLoop", "tenderRefundLoop", "loop"] as const;
+const ABORTS = ["pendingCardController", "tenderRefundController", "jobRunner"] as const;
+const LOOPS = ["pendingCardLoop", "tenderRefundLoop"] as const;
 const STOPPERS = [
   "certificateDiagnosis",
   "spareSettings",
@@ -112,6 +109,17 @@ function hold() {
   let release!: () => void;
   const wait = new Promise<void>((done) => (release = done));
   return { release, wait };
+}
+
+function testDrain(drain: Parameters<typeof drainJob>[0]["drain"]) {
+  return drainJob({
+    drain,
+    getRole: () => "primary",
+    health: createHealthState(new Date()),
+    awaitingCert: { current: false },
+    timings: { minTickMs: 1, maxTickMs: 60_000 },
+    log: () => {},
+  });
 }
 
 interface Rig {
@@ -329,35 +337,27 @@ describe("a stepdown", () => {
 
   it("no named duty starts a new pass after the stepdown began", async () => {
     await begin();
-    const controller = new AbortController();
     const passes: number[] = [];
     const sleeping = hold();
     let asleep = false;
-    const loop = runLoop({
-      pass: () => {
-        passes.push(Date.now());
-        return Promise.resolve({ nextDueAt: null } as never);
-      },
+    const runner = createJobRunner({
       now: () => new Date(),
-      // The first sleep ends when the test says; any later one ends at the abort.
-      sleep: async (_ms, signal) => {
-        if (!asleep) {
-          asleep = true;
-          await sleeping.wait;
-          return;
-        }
-        if (!signal.aborted) {
-          await new Promise((done) => signal.addEventListener("abort", done, { once: true }));
-        }
+      // The first sleep ends when the restriction's write begins.
+      delay: async () => {
+        asleep = true;
+        await sleeping.wait;
       },
-      signal: controller.signal,
-      minTickMs: 0,
-      maxTickMs: 0,
       log: () => {},
     });
+    runner.add(
+      testDrain(async (now) => {
+        passes.push(now.getTime());
+        return emptyDrainResult();
+      }),
+    );
     await vi.waitFor(() => expect(asleep).toBe(true));
     expect(passes).toHaveLength(1);
-    const duties = fakeDuties({ controller, loop });
+    const duties = fakeDuties({ jobRunner: runner });
     // The loop's sleep ends as the restriction's write begins, after the duties were told to stop.
     const node = hookedNode(suite.node, async () => {
       sleeping.release();
@@ -366,7 +366,7 @@ describe("a stepdown", () => {
     const r = rig(node, { duties });
     await r.app.request("/stepdown", { method: "POST" });
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
-    await loop;
+    await runner.stopJobs();
     expect(passes).toHaveLength(1);
   });
 
@@ -744,11 +744,22 @@ describe("a stepdown stops the background work before it writes", () => {
 
   it("a drain that would claim as the write begins sees its stop and claims nothing", async () => {
     await begin();
-    const duties = fakeDuties();
+    const claiming = hold();
+    const checked = hold();
     const claims: string[] = [];
-    const node = hookedNode(suite.node, () => {
-      // The drain checks its signal before each claim.
-      if (!duties.controllers.controller!.signal.aborted) claims.push("claimed");
+    const runner = createJobRunner({ now: () => new Date(), log: () => {} });
+    runner.add(
+      testDrain(async (_now, signal) => {
+        await claiming.wait;
+        if (!signal.aborted) claims.push("claimed");
+        checked.release();
+        return emptyDrainResult();
+      }),
+    );
+    const duties = fakeDuties({ jobRunner: runner });
+    const node = hookedNode(suite.node, async () => {
+      claiming.release();
+      await checked.wait;
     });
     const r = rig(node, { duties });
     const response = await r.app.request("/stepdown", { method: "POST" });
@@ -775,7 +786,7 @@ describe("a stepdown stops the background work before it writes", () => {
     });
     await r.app.request("/failing", { method: "POST" });
     expect(error).toBe(failure);
-    expect(r.controllers.controller!.signal.aborted).toBe(true);
+    expect(r.controllers.jobRunner!.signal.aborted).toBe(true);
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
     expect(await readHandoverRestriction(suite.node, SOURCE)).toBeNull();
     expect(await readHandoverOperation(suite.node, SOURCE, OP)).toEqual(before);

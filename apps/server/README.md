@@ -675,8 +675,14 @@ path. The service rechecks its applicability once a minute; `roleChanged()` has 
 caller. A1279 owns the immediate wiring and promotion test if that path gains a caller. When the duty table
 closes, runner jobs stop together first and services stop last, so the bucket copy can finish
 copying writes made during close.
-Job state is reported without error codes or alert codes and never changes the health status;
-`duties` and `lastPassAt` still decide it.
+A commit that queues a new local fiscal record wakes `fiscal.drain`. A manager's retry and the
+arrival of returned invoices wake the same job. Payment reconciliation runs as `payments.reconcile`,
+so filing can carry on during a slow payment check. The optional `fiscal.reconciliation` job checks
+the tax agency's copy on a filing primary.
+
+Job state omits error and alert codes. `duties` and `lastPassAt` decide the health status.
+`lastPassAt` records when the most recently completed filing pass began, including an empty
+pass on a secondary.
 
 `venueHolder` is read from `venue.holder.json`, the file a monitored venue holder
 keeps beside `venue.lock`. It gives the holder's kind, when it took the folder, its last heartbeat,
@@ -697,24 +703,12 @@ status code: the container's healthcheck reads it (`deploy/compose.yml`), and an
 waits for a healthy container (`deploy/waitron.sh`), so a bucket outage must not hold either. The
 dashboard's alerts report the bucket copy instead.
 
-**A `503` is the single most important signal this process can produce.** It means no pass has
-finished since this process started (`lastPassAt` is `null`), or a duty reads `stale: true`: it has
-not succeeded since this process started, or not within its budget. A duty goes stale in one of
-three ways, one visible in the body above, two that need the logs:
-
-- **`stale: true`, `consecutiveFailures` counting up** — a duty inside the pass is failing every
-  time it runs (a database blip, an unreachable AEAT endpoint), skipping work (`skipped` > 0) or
-  parking runs (`parked` > 0), both below. For a failure, check the logs (below) for the
-  `errorCode` on the most recent `duty.failed` line.
-- **`stale: true`, `consecutiveFailures` NOT counting up** — rarer, and the one that needs the logs
-  to tell apart from the case above: `pass.threw` fired instead, meaning something escaped `runPass`
-  itself rather than being contained per-duty. `onPass` (and therefore `recordPass`) never runs on
-  that cycle, so `consecutiveFailures` does not increment even though the pass produced nothing —
-  check `pass.threw`'s own `errorCode`, not `duty.failed`, which does not exist for this case.
-- **`stale: true`, `consecutiveFailures` NOT counting up, no `pass.threw`** — a pass has not
-  finished: neither `runPass` nor the loop sets a time limit on a pass (`src/loop.ts`,
-  `src/pass.ts`), so nothing is recorded until it does. Find the last `pass.complete` line and what
-  the running pass logged after it.
+A `503` means the filing job has yet to complete its first pass, or a duty reads
+`stale: true` because its last success was outside its budget or it has never succeeded. If the
+duty's `consecutiveFailures` is rising, check for a skipped or parked item and look for
+`duty.failed` and the matching code in the logs. If its job still shows `running`, the pass
+has yet to finish. Compare its last successful run with the most recent `drain.complete` or
+`reconcile.complete` line.
 
 **`skipped` > 0 is not a `503` by itself while the duty's last success is within its budget.** A
 duty that has skipped on every pass since this process started has no `lastOkAt`, so it reads stale
@@ -869,30 +863,17 @@ The ones worth grepping for:
   `Agent.close()` can only ever throw a socket-layer error, never one carrying a secret. Any other
   `Agent` the pass opened is still released concurrently, regardless of this one failing — it does not stop the
   sweep, does not stop the pass, and does not flip `/health`.
-- **`pass.complete`** (`info`) — one line per pass: both duties' `ok`/`errorCode`/`durationMs` (the
-  per-duty elapsed time, from an injected monotonic clock), the pass's OWN `durationMs` (the whole
-  pass, both duties included), and the folded `nextDueAt` the loop is about to sleep on.
 - **`payment.automatic_recovery`** (`info`) — `{ filed }`. Automatic captures completed through the
   existing till recovery path. `payment.automatic_recovery_failed` (`warn`) names a retained payment
   and its error, or a failure reading the recovery set. Captured payments stay available for retry.
 - **Attendance, mail and certificate-reminder job failures** log `job.failed` with `job`,
   `errorCode` and `consecutiveFailures`. Use the `job` field to distinguish `attendance.end_of_day`,
   `mail.send` and `fiscal.certificate_reminders` from other runner jobs.
-- **`loop.sleeping`** (`info`) — `{ sleepMs }`. The card loop's own scheduling and failure messages
-  additionally carry `loop: "pending_cards"`; the fiscal loop reports its duties through `pass.complete`.
-- **`pass.threw`** (`error`) — `{ errorCode }`. On the fiscal loop, something escaped `runPass` itself, rather than
-  being contained per-duty by `attempt` — genuinely unforeseen. `onPass` is never called for this
-  cycle (it sits inside the same `try` that just threw), so `consecutiveFailures` does **not**
-  increment on this line the way it does for a contained `duty.failed` — see
-  ["What `/health` means"](#what-health-means) above for how to tell the two apart from the body
-  alone. The fiscal loop retries on `DEFAULT_DUTY_TIMINGS.minTickMs`. With `loop: "pending_cards"`, this
-  message instead names an escaped card-pass failure; that loop retries on its five-second floor
-  and does not report a fiscal health result.
-- **`onPass.threw`** (`error`) — `{ errorCode }`. A bug in the health-recording side observer
-  itself, not the pass — the pass already succeeded and its real `nextDueAt` is unaffected.
-- **`sleep.threw`** (`error`) — `{ errorCode }`. The injected `sleep` rejected for something other
-  than the ordinary shutdown abort (`realSleep` narrows to just that case) — logged and the loop
-  goes around again rather than ending.
+- **`loop.sleeping`** (`info`) carries `sleepMs` for the card recovery loop.
+- **`pass.threw`** (`error`) carries the structured `errorCode` when a card recovery pass
+  throws. The loop retries on its minimum interval.
+- **`sleep.threw`** (`error`) carries the `errorCode` of a rejected card-loop timer. The
+  loop logs the failure and starts its next turn.
 - **`server.listening`** (`info`) — `{ port, environment }`, logged once the HTTP listener has
   actually bound (not merely been asked to). A spare's store listener logs
   `{ listener: spare_store, port }` instead.

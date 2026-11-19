@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { ResourceChange } from "@waitron/shared";
 import type { Transaction } from "./client.js";
+import { changeLog } from "./schema/change-log.js";
 
 /**
  * What changed, handed to this process's own listeners.
@@ -18,6 +19,11 @@ export function subscribeToChanges(fn: (change: ResourceChange) => void): () => 
   return () => {
     listeners.delete(fn);
   };
+}
+
+/** Queues a notice in the same transaction as the change it describes. */
+export async function noteChange(tx: Transaction, change: ResourceChange): Promise<void> {
+  await tx.insert(changeLog).values({ payload: change });
 }
 
 /**

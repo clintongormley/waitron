@@ -10,6 +10,7 @@ import { AppError, saleId as brandSaleId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { observeSubmissionChanges } from "../test/submission-changes.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
 import { appendToChain, readChainHead } from "./chain.js";
@@ -134,8 +135,10 @@ it("appends the explicit absent-original cancellation at the current head withou
     appendToChain(tx, node.nodeId, altaFor(node, laterSale, 2, 2, "preproduction")),
   );
   const before = await snapshot();
+  const changes = await observeSubmissionChanges(suite.db);
   const response = await send();
   expect(response.status).toBe(200);
+  expect(changes).toEqual(["fiscal_submission_queued"]);
   const result = (await response.json()) as { registroId: string; eventId: string };
   const after = await snapshot();
   expect(after.records.slice(0, 2)).toEqual(before.records);

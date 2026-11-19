@@ -103,6 +103,7 @@ import {
   updateProduct,
 } from "@waitron/menu";
 import { DEFAULT_MIGRATIONS_ROOT, MAX_UPLOAD_BYTES, type StartedServer } from "./boot.js";
+import * as fiscalJobs from "./fiscal-jobs.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ALL_MODULES } from "./modules.js";
@@ -713,13 +714,17 @@ describe("startServer, against a migrated venue directory", () => {
     }
   });
   it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads environment, runs a pass, serves /health and shuts down cleanly", async () => {
+    const makeDrainJob = vi.spyOn(fiscalJobs, "drainJob");
+    onTestFinished(() => {
+      makeDrainJob.mockRestore();
+    });
     const held = await retainHttpListener();
     retained.push(held);
     const port = held.port;
     const adoption = adoptRetainedListeners([held]);
     // Read back below to show the rotating file sink is wired into `startServer`.
     const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-logs-"));
-    const [server, sleeping, listening] = await withCapturedStdout(async (lines) => {
+    const [server, listening] = await withCapturedStdout(async (lines) => {
       const started = await startConfiguredServer(
         {
           ...KEY_ENV,
@@ -735,10 +740,8 @@ describe("startServer, against a migrated venue directory", () => {
           timings: { minTickMs: 1000, maxTickMs: 94327, skipRetryMs: 9000, settlementLagMs: 1000 },
         },
       );
-      // `loop.ts` logs `loop.sleeping` after `onPass` runs, so this also shows the first pass done.
-      const event = await waitForEvent(lines, "loop.sleeping");
       const listeningEvent = await waitForEvent(lines, "server.listening");
-      return [started, event, listeningEvent] as const;
+      return [started, listeningEvent] as const;
     }).catch(async (error: unknown) => {
       adoption.restore();
       if (held.server.listening) await held.close();
@@ -747,9 +750,14 @@ describe("startServer, against a migrated venue directory", () => {
 
     try {
       await adoption.bound;
-      // With nothing due, both duties report `nextDueAt: null`, for which `sleepMsFor` returns
-      // `maxTickMs` verbatim.
-      expect(sleeping.sleepMs).toBe(94327);
+      expect(makeDrainJob.mock.results[0]?.value).toMatchObject({
+        minSleepMs: 1000,
+        maxSleepMs: 94327,
+      });
+      await vi.waitFor(() =>
+        expect(server.health.readJobs?.()["fiscal.drain"]?.lastRunAt).not.toBeNull(),
+      );
+      expect(server.health.readJobs?.()["fiscal.drain"]?.nextDueAt).toBeNull();
 
       // Pins that `config.environment` reaches boot's runtime, not only `loadConfig`'s return value.
       expect(listening.environment).toBe("production");
@@ -2837,7 +2845,7 @@ describe("startServer, against a migrated venue directory", () => {
 
   // Pins which timing reaches the drain: a `timings.minTickMs` passed as `skipRetryMs` would pass
   // the typecheck and every unit test. A due `envios` row is seeded with no `fiscal.aeat` credential,
-  // and the loop's logged sleep is read back. That row would stay due forever in the shared directory,
+  // and the filing job's next due time is read back. The row would stay due in the shared directory,
   // where other tests assert `consecutiveFailures === 0`, so the `finally` deletes it.
   it("sleeps on the skip retry, not the minimum tick, for a taxpayer with due fiscal work and no fiscal.aeat credential", async () => {
     const port = await freePort();
@@ -2852,7 +2860,7 @@ describe("startServer, against a migrated venue directory", () => {
     });
 
     try {
-      const [server, sleeping, skipped] = await withCapturedStdout(async (lines) => {
+      const [server, skipped] = await withCapturedStdout(async (lines) => {
         const started = await startServer(
           {
             ...KEY_ENV,
@@ -2867,19 +2875,19 @@ describe("startServer, against a migrated venue directory", () => {
           { timings: { minTickMs: 1000, maxTickMs: 600000, skipRetryMs: 45678 } },
         );
         const skippedEvent = await waitForEvent(lines, "drain.tenant_skipped");
-        const event = await waitForEvent(lines, "loop.sleeping");
-        return [started, event, skippedEvent] as const;
+        return [started, skippedEvent] as const;
       });
 
       try {
         // The row was reached and skipped for its missing credential, not dropped some other way.
         expect(skipped.errorCode).toBe("credentials.missing");
 
-        // `timings.skipRetryMs` folds into `nextDueAt`, and 45678 sits inside both clamps. `sleepMsFor`
-        // subtracts a `now()` read after the pass ran, so the tolerance absorbs the pass's duration
-        // while staying far from `minTickMs` (1000), which a swapped field would report.
-        expect(sleeping.sleepMs).toBeLessThanOrEqual(45678);
-        expect(sleeping.sleepMs).toBeGreaterThan(45678 - 5000);
+        await vi.waitFor(() => {
+          const job = server.health.readJobs?.()["fiscal.drain"];
+          expect(job?.nextDueAt).toEqual(expect.any(String));
+          expect(job?.lastRunAt).toEqual(expect.any(String));
+          expect(Date.parse(job!.nextDueAt!) - Date.parse(job!.lastRunAt!)).toBe(45678);
+        });
       } finally {
         await server.close();
       }

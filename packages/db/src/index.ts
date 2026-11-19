@@ -336,10 +336,8 @@ export { refusalError, type Refusal, type RefusalError } from "./testing/refusal
 
 export { installChangeFeed, removeChangeFeed } from "./change-feed.js";
 export { CORE_CHANGE_SOURCES } from "./classification.js";
-// The in-process change feed. Only the subscribe half is public: draining the log and handing the
-// rows over are `withTransaction`'s own two steps, and a caller doing either itself would take the
-// changes away from the listeners or announce a change that has not committed.
-export { subscribeToChanges } from "./change-log.js";
+// withTransaction drains the log and delivers notices after commit.
+export { noteChange, subscribeToChanges } from "./change-log.js";
 export {
   a4FailureCodes,
   type A4FailureCode,

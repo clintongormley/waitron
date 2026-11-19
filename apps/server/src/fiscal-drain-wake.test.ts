@@ -5,8 +5,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "@waitron/fiscal-verifactu";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
-import { runLoop } from "./loop.js";
-import { runPass } from "./pass.js";
+import { drainJob } from "./fiscal-jobs.js";
+import { createHealthState } from "./health.js";
+import { createJobRunner } from "./job-runner.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const START = new Date("2026-07-21T00:01:00.000Z");
@@ -47,50 +48,44 @@ describe("the filing loop wakes for a failed batch's scheduled retry", () => {
             },
           }),
       };
-      const controller = new AbortController();
       const slept: number[] = [];
       const accepted: number[] = [];
-      let passes = 0;
+      let complete!: () => void;
+      const thirdPass = new Promise<void>((resolve) => {
+        complete = resolve;
+      });
+      const runner = createJobRunner({
+        now: () => new Date(clock),
+        delay: (ms) => {
+          slept.push(ms);
+          clock += ms;
+          return Promise.resolve();
+        },
+        monotonicMs: () => clock,
+        log,
+      });
       try {
-        await runLoop({
-          pass: async (at) => {
-            const report = await runPass(
-              {
-                drain: async (now) => {
-                  const result = await drain(deps, now);
-                  accepted.push(result.recordsAccepted);
-                  return result;
-                },
-                reconcile: () =>
-                  Promise.resolve({
-                    ran: [],
-                    deferred: 0,
-                    beyondHorizon: 0,
-                    skipped: [],
-                    nextDueAt: null,
-                  }),
-                awaitingCert: { current: false },
-                monotonicMs: () => clock,
-                log,
-              },
-              at,
-            );
-            if (++passes === 3) controller.abort();
-            return report;
-          },
-          now: () => new Date(clock),
-          sleep: (ms) => {
-            slept.push(ms);
-            clock += ms;
-            return Promise.resolve();
-          },
-          signal: controller.signal,
-          minTickMs: 5_000,
-          maxTickMs: 3_600_000,
-          log,
-        });
+        runner.add(
+          drainJob({
+            drain: async (now, signal) => {
+              const result = await drain({ ...deps, signal }, now);
+              accepted.push(result.recordsAccepted);
+              if (accepted.length === 3) {
+                runner.signalStepdown();
+                complete();
+              }
+              return result;
+            },
+            getRole: () => "primary",
+            awaitingCert: { current: false },
+            health: createHealthState(START),
+            timings: { minTickMs: 5_000, maxTickMs: 3_600_000 },
+            log,
+          }),
+        );
+        await thirdPass;
       } finally {
-        controller.abort();
+        await runner.stopJobs();
       }
 
       expect(slept).toEqual(sleeps);

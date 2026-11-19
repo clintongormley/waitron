@@ -43,9 +43,10 @@ export function alertSourcesFor(
 /** Apply the submission policy before the regime can construct a client or contact its endpoint. */
 export async function runFiscalDrain(
   policy: FiscalDrainPolicy,
-  drain: (now: Date) => Promise<DrainResult>,
+  drain: (now: Date, signal?: AbortSignal) => Promise<DrainResult>,
   now: Date,
+  signal?: AbortSignal,
 ): Promise<DrainResult> {
   if (!fiscalDrainEnabled(policy)) return emptyDrainResult();
-  return drain(now);
+  return drain(now, signal);
 }

@@ -18,13 +18,13 @@ export function resetBeforeFirstDrain({
   log,
 }: {
   reset: (now: Date) => Promise<void>;
-  drain: (now: Date) => Promise<DrainResult>;
+  drain: (now: Date, signal?: AbortSignal) => Promise<DrainResult>;
   skipRetryMs: number;
   log: Logger;
-}): (now: Date) => Promise<DrainResult> {
+}): (now: Date, signal?: AbortSignal) => Promise<DrainResult> {
   // Resolves to `null` once the reset succeeded, or to the failed attempt's error code.
   let resetDone: Promise<string | null> | undefined;
-  return async (now) => {
+  return async (now, signal) => {
     resetDone ??= Promise.resolve()
       .then(() => reset(now))
       .then(
@@ -37,7 +37,7 @@ export function resetBeforeFirstDrain({
         },
       );
     const failedCode = await resetDone;
-    if (failedCode === null) return drain(now);
+    if (failedCode === null) return drain(now, signal);
     const result = emptyDrainResult();
     result.skipped.push({ errorCode: failedCode });
     result.nextDueAt = new Date(now.getTime() + skipRetryMs);

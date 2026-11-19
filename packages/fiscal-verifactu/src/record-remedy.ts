@@ -9,6 +9,7 @@ import { appendToChain, type PendingRegistro } from "./chain.js";
 import { recordCaseEvent } from "./filing-cases.js";
 import { FISCAL_REMEDY } from "./permissions.js";
 import type { Entorno } from "./registro-row.js";
+import { queueSubmission } from "./queue-submission.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -221,7 +222,7 @@ export async function applyRecordCorrection(
     });
   }
   const appended = await appendToChain(tx, input.nodeId, request.pending, { history });
-  await tx.insert(envios).values({ registroId: appended.id, proximoIntentoEn: input.now });
+  await queueSubmission(tx, { registroId: appended.id, proximoIntentoEn: input.now });
   const event = await recordCaseEvent(tx, {
     caseId: request.caseId,
     actionKey: request.actionKey,

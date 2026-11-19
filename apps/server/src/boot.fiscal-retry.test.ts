@@ -12,6 +12,7 @@ import { emptyDrainResult } from "@waitron/fiscal";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
+import * as returnRecordsApi from "./return-records-api.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -267,6 +268,22 @@ describe("boot's Retry now wiring", () => {
       waiting: 0,
       awaitingCertificate: false,
     });
+  }, 60_000);
+
+  it("wakes the sleeping filing job when returned-invoice intake asks it to", async () => {
+    const mount = vi.spyOn(returnRecordsApi, "mountReturnRecordsApi");
+    onTestFinished(() => {
+      mount.mockRestore();
+    });
+    await boot({ modules: VERIFACTU, testSubmissions: true });
+    await vi.waitFor(() => {
+      expect(server?.health.readJobs?.()["fiscal.drain"]?.state).toBe("waiting");
+      expect(drain.calls).toHaveLength(1);
+    });
+
+    // return-records.real.test.ts checks that one signed return invokes this callback.
+    mount.mock.calls[0]![1].wake();
+    await vi.waitFor(() => expect(drain.calls).toHaveLength(2), { timeout: 5_000 });
   }, 60_000);
 
   it("while the box does not file, a press is refused, changes no row, and the read has no outbox", async () => {

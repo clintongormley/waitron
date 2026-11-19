@@ -80,6 +80,7 @@ describe("fiscalDrainEnabled", () => {
     };
     const drain = vi.fn(async () => expected);
     const now = new Date("2026-09-09T10:00:00Z");
+    const signal = new AbortController().signal;
     await expect(
       runFiscalDrain(
         {
@@ -89,9 +90,10 @@ describe("fiscalDrainEnabled", () => {
         },
         drain,
         now,
+        signal,
       ),
     ).resolves.toBe(expected);
-    expect(drain).toHaveBeenCalledWith(now);
+    expect(drain).toHaveBeenCalledWith(now, signal);
   });
 });
 
