@@ -177,8 +177,11 @@ fetch:
 - `apps/server/src/html-page-tokens.ts` (guide page; `scripts/guide-page-tokens.test.ts` compares it
     with `colors.css`)
 - `apps/server/src/connection-bootstrap-page.ts`
-- `apps/server/src/trust-page.ts` (its button colours) and `apps/server/src/trust-page-logo.ts` (the
-    whole logo; `scripts/trust-page-logo.test.ts` compares the drawing)
+- `apps/server/src/trust-page.ts` (its button, muted text, and its links and focus outline, which
+    are a separate hand-kept blue today and become `--wt-color-primary-text`'s values — Claude's
+    call, so the page does not show a teal button beside blue links) and
+    `apps/server/src/trust-page-logo.ts` (the whole logo, shown on the certificate page and the
+    connection page; `scripts/trust-page-logo.test.ts` compares the drawing)
 - `apps/till/vite.config.ts` reads the light primary for the till's `theme-color` and manifest;
     check it picks up the teal.
 
@@ -195,9 +198,10 @@ specs among them record what was true when written and stay as they are. The res
     engine against something independent of it. The builder check found all 56 cases change under
     the new defaults, and 3 change their warnings. **Do not regenerate them** (Claude's call):
     `reference-cases.test.ts` instead passes a frozen copy of today's colours in place of
-    `WAITRON_DEFAULTS`, kept beside the fixtures, so no fixture line changes and the test stays
-    independent. The new colours themselves are held to every readability rule by "Waitron's own
-    palette passes every rule" in `packages/ui-core/src/theme/contrast-rules.test.ts`.
+    `WAITRON_DEFAULTS`, kept beside the fixtures as JSON (a `.css` copy would let a root guard
+    accept any colour name it declares), so no fixture line changes and the test stays independent.
+    The new colours themselves are held to every readability rule by "Waitron's own palette passes
+    every rule" in `packages/ui-core/src/theme/contrast-rules.test.ts`.
 
 Tests that check the logo is painted from `--wt-color-primary` now check the opposite: the blues
 stay fixed when a venue's colour or the theme changes, and the near-black pieces follow the text
@@ -205,7 +209,14 @@ colour.
 
 Documents: `docs/developers/design-system.md` (the lockup's description and its painting, around its
 "Primitives" table and the graphics paragraph) and `packages/ui/brand/README.md`. No user guide
-mentions the cloche (checked with `git grep -l -i cloche -- '*.md'`).
+mentions the cloche (checked with `git grep -l -i cloche -- '*.md'`). The guides call Waitron's
+colour and the till's information line "blue"; that stays true of both the teal and the sky blue, so
+they are not changed.
+
+**The logo's size** (Claude's call): the new logo is about 8:1 wide to tall, against 5.85:1 today.
+Each place keeps the height the logo has today and lets it grow wider, so it reads as large as
+before. A place that no longer fits at phone width keeps its width instead, and the owner sees the
+screenshots.
 
 ## Checking it looks right
 
