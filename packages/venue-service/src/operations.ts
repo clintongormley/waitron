@@ -1366,10 +1366,12 @@ export async function lineContextColumns(
     throw new AppError("department.not_found", { departmentId: context.departmentId });
   }
   const byMenuItem = new Map(offers.offers.map((offer) => [offer.id, offer]));
+  const offerOf = (line: LineContextInput) =>
+    line.setMenuOffer?.offer ?? byMenuItem.get(line.menuItemId);
   const unitIds = [
     ...new Set(
       lines
-        .map((line) => line.unit?.id ?? byMenuItem.get(line.menuItemId)?.unit.id)
+        .map((line) => line.unit?.id ?? offerOf(line)?.unit.id)
         .filter((id): id is string => id !== undefined),
     ),
   ];
@@ -1390,7 +1392,7 @@ export async function lineContextColumns(
   };
   return new Map(
     lines.map((line) => {
-      const offer = byMenuItem.get(line.menuItemId);
+      const offer = offerOf(line);
       if (offer === undefined) {
         throw new AppError("service_zone.offer_not_allowed", {
           zoneId: context.zoneId,
@@ -1404,7 +1406,7 @@ export async function lineContextColumns(
         {
           menuItemId: offer.id,
           menuId: offer.menuId,
-          menuVersionId: versionOf(offer.menuId),
+          menuVersionId: line.setMenuOffer?.versionId ?? versionOf(offer.menuId),
           menuName: offer.menuName,
           offerDepartmentId: context.departmentId,
           departmentName: department.name,

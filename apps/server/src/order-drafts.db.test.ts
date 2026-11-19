@@ -61,6 +61,7 @@ import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
 import { listTablesWithState } from "./working-order.js";
 
@@ -4104,16 +4105,35 @@ describe("fresh drafts alongside existing bill families", () => {
   it("preserves a stored reservation when an existing draft line is saved again", async () => {
     const v = await setupVenue();
     const { partyId, tabId } = await seated(v);
-    const draft = await billDraft(v, partyId, tabId);
+    const menu = await inTx((tx) =>
+      setMenuOnFullMenu(tx, v.menuId, v.productId.beer, "Reserved drinks"),
+    );
+    const reservation = {
+      setMenuId: menu.menuId,
+      setMenuReservedLineId: randomUUID(),
+      setMenuReservedPlace: 1,
+    };
+    const dish = {
+      menuItemId: menu.menuItemId,
+      menuVersionId: menu.versionId,
+      quantity: "1",
+    };
+    const draft = await inTx((tx) =>
+      saveDraft(tx, v.cfg, partyId, ALEX, {
+        billId: tabId,
+        draftId: null,
+        revision: 0,
+        lines: [{ ...dish, ...reservation }],
+      }),
+    );
     const id = draft.lines[0]!.id;
-    const reservation = await seedDraftReservation(id);
 
     const saved = await inTx((tx) =>
       saveDraft(tx, v.cfg, partyId, ALEX, {
         billId: tabId,
         draftId: draft.id,
         revision: draft.revision,
-        lines: [{ ...item(v, "beer", { note: "Bring after the starter", slot: 1 }), id }],
+        lines: [{ ...dish, note: "Bring after the starter", slot: 1, id }],
       }),
     );
 

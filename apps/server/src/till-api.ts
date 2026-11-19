@@ -442,6 +442,8 @@ export async function resolveCardCollector(
 /** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
 export const STATUS: Record<string, ContentfulStatusCode> = {
   "settings.invalid": 500,
+  "set_menu.no_place": 409,
+  "set_menu.dish_sold_by_measure": 409,
   "set_menu.not_seated": 409,
   "set_menu.payment_not_ready": 409,
   "module.disabled": 409,
@@ -1613,9 +1615,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const device = await currentZoneDevice(tx, session);
         assertProfileAction(device, "take-orders");
         await checkZones(tx, { device }, [{ zoneId }]);
-        const { offers } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, { withDefault: false });
+        const { offers, setMenus } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
+          withDefault: false,
+        });
+        const listed = [...offers, ...setMenus.flatMap((menu) => menu.offers)];
         if (
-          !offers.some(
+          !listed.some(
             (offer) =>
               offer.productId === productId ||
               offer.variants.some((variant) => variant.id === productId) ||
@@ -1647,9 +1652,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const device = await currentZoneDevice(tx, session);
         assertProfileAction(device, "take-orders");
         await checkZones(tx, { device }, [{ zoneId }]);
-        const { offers } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, { withDefault: false });
+        const { offers, setMenus } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
+          withDefault: false,
+        });
+        const listed = [...offers, ...setMenus.flatMap((menu) => menu.offers)];
         if (
-          !offers.some((offer) =>
+          !listed.some((offer) =>
             offer.offeredModifiers.some(
               (modifier) =>
                 modifier.kind === "options" &&
@@ -3396,22 +3404,25 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const body = asObject(await readRawJsonBody<unknown>(c));
+      const lateSend = parseLateSend(body.lateSend);
       const command = { ...groupCommand(personId, body), ...allergyCommand(body) };
-      const fired = await withTransaction(deps.db, async (tx) => {
-        const current = await recheckFireSession(tx, session);
-        await checkZones(tx, current, [{ partyId }]);
-        return fireGroup(
-          tx,
-          requestCfg(deps.cfg, current),
-          partyId,
-          groupId,
-          command,
-          undefined,
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
-        );
-      });
+      const fired = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        withTransaction(deps.db, async (tx) => {
+          const current = await recheckFireSession(tx, session);
+          await checkZones(tx, current, [{ partyId }]);
+          return fireGroup(
+            tx,
+            requestCfg(deps.cfg, current),
+            partyId,
+            groupId,
+            { ...command, lateSend: late },
+            undefined,
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+          );
+        }),
+      );
       return c.json(fired);
     }),
   );
@@ -3572,32 +3583,35 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
+      const lateSend = parseLateSend(body.lateSend);
       const command = { ...groupCommand(session.personId, body), ...allergyCommand(body) };
       if (typeof body.lineId !== "string" || !isUuid(body.lineId)) throw invalid("lineId");
       const lineId = body.lineId.toLowerCase();
-      const answer = await withTransaction(deps.db, async (tx) => {
-        await assertStillSignedIn(tx, session);
-        const device = await assertDeviceStillProven(tx, {
-          device: session.device,
-          tokenHash: null,
-        });
-        assertProfileAction(device, "take-orders");
-        if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
-          throw new AppError("device_profile.not_admitted", {});
-        const current = { ...session, device };
-        const cfg = requestCfg(deps.cfg, current);
-        await checkZones(tx, current, [{ partyId }]);
-        return fireHeldLine(
-          tx,
-          cfg,
-          partyId,
-          lineId,
-          command,
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
-        );
-      });
+      const answer = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        withTransaction(deps.db, async (tx) => {
+          await assertStillSignedIn(tx, session);
+          const device = await assertDeviceStillProven(tx, {
+            device: session.device,
+            tokenHash: null,
+          });
+          assertProfileAction(device, "take-orders");
+          if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
+            throw new AppError("device_profile.not_admitted", {});
+          const current = { ...session, device };
+          const cfg = requestCfg(deps.cfg, current);
+          await checkZones(tx, current, [{ partyId }]);
+          return fireHeldLine(
+            tx,
+            cfg,
+            partyId,
+            lineId,
+            { ...command, lateSend: late },
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+          );
+        }),
+      );
       return c.json(answer);
     }),
   );

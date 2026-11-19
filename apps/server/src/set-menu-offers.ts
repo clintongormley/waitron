@@ -24,6 +24,7 @@ export async function setMenuOfferLookup(
   workingOrderId: string | null,
   lines: readonly SetMenuLineOffer[],
   zoneMenus: readonly Pick<ZoneMenu, "id" | "versionId">[],
+  stale: "refuse" | "hide" = "refuse",
 ): Promise<SetMenuOfferLookup> {
   const requests = new Map<string, { menuId: string; versionId: string }>();
   for (const { setMenuId, menuVersionId } of lines) {
@@ -45,14 +46,21 @@ export async function setMenuOfferLookup(
   );
   const live = new Map(zoneMenus.map(({ id, versionId }) => [id, versionId]));
   const changed = new Map<string, string | null>();
-  for (const { menuId, versionId } of requests.values()) {
+  for (const [key, { menuId, versionId }] of requests) {
     const fullMenuId = documents.get(versionId)?.menuId;
     if (fullMenuId === undefined) {
+      if (stale === "hide") {
+        requests.delete(key);
+        continue;
+      }
       throw new AppError("management.request_invalid", { field: "menuVersionId" });
     }
     const liveVersionId = live.get(fullMenuId) ?? null;
     const expected = recorded.get(menuId) ?? liveVersionId;
-    if (versionId !== expected) changed.set(fullMenuId, liveVersionId);
+    if (versionId !== expected) {
+      if (stale === "hide") requests.delete(key);
+      else changed.set(fullMenuId, liveVersionId);
+    }
   }
   if (changed.size > 0) {
     throw new AppError("menu.version_changed", {
@@ -98,4 +106,12 @@ export async function setMenuOfferLookup(
         : { offer, copy: entry.copy, fromRecordedCopy: entry.fromRecordedCopy };
     },
   };
+}
+
+export function assertSetMenuPortion(offer: ZoneMenuOffer, variantId: string | null): void {
+  const variant = offer.variants.find(({ id }) => id === variantId);
+  if ((variant?.unit ?? offer.unit).measure === true)
+    throw new AppError("set_menu.dish_sold_by_measure", {
+      productId: variant?.id ?? offer.productId,
+    });
 }
