@@ -7417,11 +7417,11 @@ describe("A1208 a retrieved counter order's portions", () => {
       async (method) => {
         let finish!: () => void;
         const payment = new Promise<void>((resolve) => (finish = resolve));
-        const recordSale = vi.fn(async () => {
+        const recordSale = vi.fn<TillApi["recordSale"]>(async () => {
           await payment;
           return saleResult;
         });
-        const pay = vi.fn(async () => {
+        const pay = vi.fn<TillApi["pay"]>(async () => {
           await payment;
           return { outcome: "captured", ticket: saleResult };
         });
@@ -7430,6 +7430,13 @@ describe("A1208 a retrieved counter order's portions", () => {
         if (method === "cash") emit(c, "confirm-payment", { method: "cash", amount: "10" });
         else emit(c, "collect-card", {});
         await vi.waitFor(() => expect(method === "cash" ? recordSale : pay).toHaveBeenCalledOnce());
+        const lines =
+          method === "cash" ? recordSale.mock.calls[0]![0] : pay.mock.calls[0]![0].lines;
+        expect(lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+          ["l1", "1"],
+          ["l2", "1"],
+          ["l3", "2"],
+        ]);
         await moveToOtherBasket(el, c);
 
         finish();

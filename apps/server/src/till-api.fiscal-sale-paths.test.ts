@@ -896,12 +896,12 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       .where(eq(workingOrderLines.workingOrderId, workingOrderId));
 
     // The edited basket doubles the quantity before collecting the cash.
-    const pay = (tendered = "5.00") =>
+    const pay = (tendered = "5.00", quantity = "2", submissionId = workingOrderId) =>
       app.request(`/api/working-orders/${workingOrderId}/payments`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({
-          submissionId: workingOrderId,
+          submissionId,
           dining: "eat_in",
           kind: "share",
           shareOf: 1,
@@ -910,7 +910,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
           basket: {
             label: held.label,
             revision: held.revision,
-            lines: [{ menuItemId: each.menuItemId, quantity: "2", workingOrderLineId: line!.id }],
+            lines: [{ menuItemId: each.menuItemId, quantity, workingOrderLineId: line!.id }],
           },
         }),
       });
@@ -919,11 +919,12 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     expect(await declined.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "tendered" } },
     });
-    const unchanged = await suite.db
-      .select({ quantity: workingOrderLines.quantity })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, workingOrderId));
-    expect(unchanged).toEqual([{ quantity: 1000 }]);
+    const storedLines = () =>
+      suite.db
+        .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+    expect(await storedLines()).toEqual([{ id: line!.id, quantity: 1000 }]);
     expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(0);
 
     const paid = await pay();
@@ -965,6 +966,12 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     expect(replayTicket.qr.length).toBeGreaterThan(0);
     expect(replayTicket.vatBreakdown).toEqual(ticket.vatBreakdown);
     expect(replayTicket.tender).toEqual({ method: "cash", change: "2.00" });
+
+    const paidLines = await storedLines();
+    const staleEdit = await pay("5.00", "3", randomUUID());
+    expect(staleEdit.status).toBe(409);
+    expect(await staleEdit.json()).toMatchObject({ error: { code: "working_order.not_open" } });
+    expect(await storedLines()).toEqual(paidLines);
 
     // Still exactly ONE record — the replay filed nothing.
     const stillOne = await withTransaction(suite.db, async (tx) => {

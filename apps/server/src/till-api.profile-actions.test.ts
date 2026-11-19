@@ -263,6 +263,21 @@ const ROUTES: readonly Row[] = [
   [
     "POST",
     `/api/working-orders/${id}/payments`,
+    "take-orders",
+    forbidden("take-orders"),
+    {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "1.00",
+      dining: "eat_in",
+      basket: { lines: [] },
+    },
+  ],
+  [
+    "POST",
+    `/api/working-orders/${id}/payments`,
     "take-cash",
     { status: 403, error: { code: "device.cash_not_allowed", params: {} } },
     billPayment("cash"),

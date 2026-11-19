@@ -219,7 +219,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/bills/:id/move                                | order; body table/zone | refuses POST /api/bills/:id/move (bill), (table), (counter) |
  * | GET  /api/working-orders/:id/payments                   | order                  | refuses GET /api/working-orders/:id/payments         |
  * | POST /api/working-orders/:id/payments/preview           | order                  | refuses POST .../payments/preview                    |
- * | POST /api/working-orders/:id/payments                   | order                  | refuses POST /api/working-orders/:id/payments        |
+ * | POST /api/working-orders/:id/payments                   | order; basket zone     | refuses POST …/payments and …/payments (basket zone)  |
  * | POST /api/working-orders/:id/payments/:paymentId/refunds| order                  | refuses POST .../payments/:paymentId/refunds         |
  * | POST /api/working-orders/:id/close-deferred          | order, inside the write | refuses POST .../close-deferred                  |
  * | GET  /api/working-orders/:id/deferred-closure           | order                  | refuses GET .../deferred-closure                     |
@@ -1371,6 +1371,21 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/payments`,
     () => ({}),
+    deliOrderZone,
+  ],
+  [
+    "POST /api/working-orders/:id/payments (basket zone)",
+    "POST",
+    () => `/api/working-orders/${randomUUID()}/payments`,
+    (x) => ({
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "10.00",
+      dining: "eat_in",
+      basket: { zoneId: x.deliCounter, lines: saleLines(x) },
+    }),
     deliOrderZone,
   ],
   [

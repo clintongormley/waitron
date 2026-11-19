@@ -508,7 +508,7 @@ describe("other ways a bill owing nothing is paid", () => {
     const held = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${id}`);
     const [portion] = held.json.lines as { workingOrderLineId: string }[];
     const drawerJobs = drawerJobCount();
-    const answer = await send(venue.app, venue.cookie, "POST", path, {
+    const close = {
       submissionId: randomUUID(),
       kind: "share",
       shareOf: 1,
@@ -519,14 +519,25 @@ describe("other ways a bill owing nothing is paid", () => {
         revision: held.json.revision,
         lines: [{ workingOrderLineId: portion!.workingOrderLineId, menuItemId, quantity: "1" }],
       },
-    });
+    };
+    const answer = await send(venue.app, venue.cookie, "POST", path, close);
     expect(answer).toMatchObject({
       status: 200,
       json: {
         outcome: "settled",
-        invoice: { total: "3.00" },
+        invoice: { invoiceNumber: expect.any(String), total: "3.00" },
         balance: { payments: [taken.json.payment] },
       },
+    });
+    expect(await send(venue.app, venue.cookie, "POST", path, close)).toMatchObject({
+      status: 409,
+      json: { code: "working_order.not_open" },
+    });
+    const receipt = await send(venue.app, venue.cookie, "GET", `/api/sales/${id}`);
+    const { invoiceNumber } = answer.json.invoice as { invoiceNumber: string };
+    expect(receipt).toMatchObject({
+      status: 200,
+      json: { invoiceNumber, total: "3.00" },
     });
     expect(fiscalRecordCount(venue, id)).toBe(1);
     expect(drawerJobCount()).toBe(drawerJobs);

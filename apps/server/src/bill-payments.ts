@@ -1496,6 +1496,8 @@ async function beginBillPayment(
       .where(eq(workingOrders.id, workingOrderId));
     counterStatus = order?.status;
     if (counterStatus === "settled") {
+      if (basket.revision !== undefined)
+        throw new AppError("working_order.not_open", { workingOrderId });
       return {
         settled: settledBill(
           await readBillBalance(tx, workingOrderId),
