@@ -489,6 +489,21 @@ export class TillTicketView extends LitElement {
                                   @click=${() => (designation === "original" ? this.#printReceipt() : this.#reprint())}
                                   >${t(designation === "original" ? "invoice.print_on" : "invoice.print_on_copy").replace("{printer}", () => destination?.name ?? t("equipment.none"))}</wt-button
                                 >
+                                ${
+                                  this.receiptEquipment?.resolved === null &&
+                                  !this.invoicePrinterLoading &&
+                                  !this.invoicePrinterReadFailed
+                                    ? html`<p role="status" data-test="receipt-no-printer">
+                                        ${
+                                          designation === "duplicate"
+                                            ? codeMessage("receipt.no_printer")
+                                            : this.result.invoiceType === "F1"
+                                              ? codeMessage("invoice_delivery.receipt_unavailable")
+                                              : t("document.no_receipt_printer")
+                                        }
+                                      </p>`
+                                    : nothing
+                                }
                               `
                           : this.renderInvoicePrint()
                       }

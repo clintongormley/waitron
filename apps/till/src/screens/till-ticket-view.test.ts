@@ -1,6 +1,7 @@
 import { equipmentItem, roleOf } from "../../test/pay-equipment-fixtures.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { codeMessage } from "../i18n/codes.js";
 import { qrSvg } from "../qr.js";
 import { t as uiText, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -1883,6 +1884,85 @@ describe("A790 recorded document then printer", () => {
     await el.updateComplete;
     expect(part(el, "print-receipt")!.hasAttribute("disabled")).toBe(true);
     expect(part(el, "document-back")).not.toBeNull();
+  });
+
+  const noPrinter = (el: TillTicketView) => part(el, "receipt-no-printer")?.textContent?.trim();
+  const done: OriginalReceiptPrint = { status: "done", jobId: "original", canRetry: false };
+
+  it.each([
+    ["an F2 copy", "F2", done, "reprint", codeMessage("receipt.no_printer")],
+    ["an F1 copy", "F1", done, "reprint", codeMessage("receipt.no_printer")],
+    [
+      "an F1 original",
+      "F1",
+      { status: "not_queued" },
+      "print-receipt",
+      codeMessage("invoice_delivery.receipt_unavailable"),
+    ],
+    [
+      "an F2 original",
+      "F2",
+      { status: "not_queued" },
+      "print-receipt",
+      uiText("document.no_receipt_printer"),
+    ],
+  ] as const)(
+    "says what to do beside %s's disabled button once the read finds no receipt printer",
+    async (_name, invoiceType, originalReceiptPrint, action, words) => {
+      const { el } = await mountChoice(
+        {
+          originalReceiptPrint,
+          originalReceiptAvailable: originalReceiptPrint.status === "not_queued",
+          receiptEquipment: roleOf("receipt", null, [bar]),
+        },
+        invoiceType,
+      );
+      await press(el, "document-print-toggle");
+      if (invoiceType === "F1") await press(el, "document-receipt");
+      expect(part(el, action)!.hasAttribute("disabled")).toBe(true);
+      expect(part(el, "receipt-no-printer")!.getAttribute("role")).toBe("status");
+      expect(noPrinter(el)).toBe(words);
+    },
+  );
+
+  it("says nothing about a missing printer while the read is out, after it fails, or with a printer", async () => {
+    const { el } = await mountChoice(
+      { originalReceiptAvailable: false, originalReceiptPrint: done, receiptEquipment: undefined },
+      "F2",
+    );
+    await press(el, "document-print-toggle");
+    expect(part(el, "reprint")!.hasAttribute("disabled")).toBe(true);
+    expect(noPrinter(el)).toBeUndefined();
+    el.receiptEquipment = roleOf("receipt", null, [bar]);
+    el.invoicePrinterLoading = true;
+    await el.updateComplete;
+    expect(noPrinter(el)).toBeUndefined();
+    el.invoicePrinterLoading = false;
+    el.invoicePrinterReadFailed = true;
+    await el.updateComplete;
+    expect(noPrinter(el)).toBeUndefined();
+    el.invoicePrinterReadFailed = false;
+    await el.updateComplete;
+    expect(noPrinter(el)).toBe(codeMessage("receipt.no_printer"));
+    el.receiptEquipment = roleOf("receipt", bar, [bar]);
+    await el.updateComplete;
+    expect(part(el, "reprint")!.hasAttribute("disabled")).toBe(false);
+    expect(noPrinter(el)).toBeUndefined();
+  });
+
+  it("does not call a switched-off receipt printer missing", async () => {
+    const off = equipmentItem("bar", "Bar", { kind: "receipt", available: false });
+    const { el } = await mountChoice(
+      {
+        originalReceiptAvailable: false,
+        originalReceiptPrint: done,
+        receiptEquipment: roleOf("receipt", off, [bar]),
+      },
+      "F2",
+    );
+    await press(el, "document-print-toggle");
+    expect(part(el, "reprint")!.hasAttribute("disabled")).toBe(true);
+    expect(noPrinter(el)).toBeUndefined();
   });
 
   it("asks before taking another device's Receipt printer and sends takeOver only after Take", async () => {
