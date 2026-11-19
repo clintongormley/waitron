@@ -37,6 +37,9 @@ reports/
 *.pem
 *.key
 certs/
+# Public halves only: boxes trust these to check signed releases.
+!deploy/box/release-keys/current.pem
+!deploy/box/release-keys/spare.pem
 
 # Editor / OS
 .DS_Store
