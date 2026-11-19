@@ -518,16 +518,22 @@ describe("the Staffing view's month", () => {
 
   it("keeps the count and full time on one line when a long role name wraps", async () => {
     await useViewport(390, 800);
+    const roleName = "Encargado de sala de fin de semana";
     const { api } = fakeApi(async (month) => {
       const read = staffingMonth(month);
+      read.areas = read.areas.map((entry, index) =>
+        index === 0 ? { ...entry, name: "Restaurant and the dining room" } : entry,
+      );
       const kitchen = read.days.find(({ date }) => date === "2026-12-03")!.areas[2]!;
-      kitchen.blocks[1]!.staffRoleName = "Encargado de sala de fin de semana";
+      kitchen.blocks[1]!.staffRoleName = roleName;
       return read;
     });
     const { el } = await mount({ api, width: "390px" });
     const box = await openBox(el, "2026-12-03");
     const kitchen = box.shadowRoot!.querySelectorAll("dd")[2]!;
     const visible = kitchen.querySelector('[aria-hidden="true"]')!;
+    expect(textRects(visible, roleName).length).toBeGreaterThan(1);
+    for (const word of roleName.split(" ")) expect(textRects(visible, word), word).toHaveLength(1);
     expect(textRects(visible, "×3\u00a017:00–\u206023:00")).toHaveLength(1);
   });
 
@@ -1078,7 +1084,7 @@ describe("the day box", () => {
       };
     };
     const kept = { left: true, right: true, top: true, bottom: true, clearOfTheDay: true };
-    // Placement follows the final size in a ResizeObserver before the browser paints.
+    // Measure after the resize observer places the box with its actions laid out.
     const afterLayout = () =>
       new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
 
@@ -1087,6 +1093,7 @@ describe("the day box", () => {
       const { el } = await mount({ api: manyAreas(), canWrite: true, canOpenRota: true });
       const box = await openBox(el, "2026-12-06");
       expect(boxButtons(el)).toEqual(["Edit Winter's standard week", "Rota for this week"]);
+      await afterLayout();
       expect(placement(box, dayButton(el, "2026-12-06")!)).toEqual(kept);
     });
 
