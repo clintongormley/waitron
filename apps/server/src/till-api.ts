@@ -442,6 +442,16 @@ export async function resolveCardCollector(
 /** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
 export const STATUS: Record<string, ContentfulStatusCode> = {
   "settings.invalid": 500,
+  "set_menu.not_seated": 409,
+  "set_menu.not_selling": 409,
+  "set_menu.holds_dishes": 409,
+  "set_menu.needed_by_draft": 409,
+  "set_menu.no_place": 409,
+  "set_menu.place_taken": 409,
+  "set_menu.no_place_on_target": 409,
+  "set_menu.dish_sold_by_measure": 409,
+  "set_menu.remove_from_summary": 409,
+  "set_menu.payment_not_ready": 409,
   "module.disabled": 409,
   "venue.time_zone_not_ready": 409,
   "print_job.not_found": 404,

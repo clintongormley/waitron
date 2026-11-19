@@ -118,6 +118,7 @@ import type { TillSaleDeps } from "./working-order.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import { storePrepayMadeHere } from "./made-here.js";
 import { assertStillSignedIn } from "./till-session.js";
+import { refuseSetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
 import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
@@ -1247,6 +1248,7 @@ async function beginBillPayment(
     expectedEdit: req.expectedEdit,
   });
   await assertBillHasNoUnsent(tx, workingOrderId);
+  await refuseSetMenuMoney(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
   // A part payment's card reserves its share, as on an open bill (design §5.2).

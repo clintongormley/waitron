@@ -135,6 +135,7 @@ import type { LateSendConfirmation } from "./late-send.js";
 import { offeredKey } from "@waitron/venue-service";
 import { venueMomentAt } from "@waitron/reporting";
 import type { RetainedCourseLine } from "./retained-course.js";
+import { refuseSetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
 import { rerouteHeldAtRelease, stillMovable } from "./station-move.js";
 import type { Rerouted } from "./station-move.js";
@@ -1148,11 +1149,13 @@ export async function readLockedLines(
 async function readLockedLinesForIssuance(
   tx: Transaction,
   workingOrderId: string,
+  refuseSetMenus: boolean,
 ): Promise<{ lines: (StoredOrderLine & { payable: boolean })[]; grouped: StoredOrderLine[] }> {
   const rows = await tx
     .select({
       ...storedLineColumns,
       ...portionColumns,
+      setMenuRole: workingOrderLines.setMenuRole,
       sentAt: workingOrderLines.sentAt,
       active: productActive,
     })
@@ -1162,6 +1165,7 @@ async function readLockedLinesForIssuance(
     .leftJoin(parentProducts, parentJoin)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
+  if (refuseSetMenus) await refuseSetMenuMoney(tx, workingOrderId, rows);
   const stored = toStoredLines(rows);
   return {
     lines: stored.map((line, i) => ({
@@ -1337,7 +1341,11 @@ export async function priceStoredOrderForIssuance(
   workingOrderId: string,
   options: { refuseUnsentUnavailable: boolean } = { refuseUnsentUnavailable: true },
 ): Promise<GrossOrder> {
-  const { lines, grouped } = await readLockedLinesForIssuance(tx, workingOrderId);
+  const { lines, grouped } = await readLockedLinesForIssuance(
+    tx,
+    workingOrderId,
+    options.refuseUnsentUnavailable,
+  );
   const unpayable = lines.find((line) => !line.payable);
   if (options.refuseUnsentUnavailable && unpayable !== undefined) {
     throw new AppError("product.unavailable", { productId: unpayable.identity.productId! });

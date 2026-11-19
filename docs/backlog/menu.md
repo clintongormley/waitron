@@ -997,6 +997,8 @@ The till's zone offers now include published set-menu copies. They identify the 
 and the server can read a bill's recorded copy after its full menu is republished.
 Shared ordering code calculates where a dish fits, what it costs there and which moves make room.
 Bill storage now holds set menus and their recorded copies, dish places and draft reservations.
+The server reads the recorded copies and dish places, and refuses new payments, comps,
+discounts and ticket issuance for these bills until set-menu billing is ready.
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
 The dashboard can open an existing set-menu draft, edit its name, price, VAT rates and inclusion
