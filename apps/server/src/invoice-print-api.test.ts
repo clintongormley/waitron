@@ -250,15 +250,10 @@ describe("invoice receipt API attempt boundary", () => {
     expect(await ctx.jobRow()).toMatchObject({
       claimedBy: ctx.agentId,
       claimTokenHash: createHash("sha256").update(invoiceClaim.token).digest("hex"),
+      claimedAt: ctx.now().toISOString(),
+      attempts: 0,
     });
-    expect(await ctx.row()).toMatchObject({
-      status: "sending",
-      attempts: 1,
-      claimTokenHash: null,
-      claimedAgentId: null,
-      claimedBy: null,
-      claimedAt: null,
-    });
+    expect(await ctx.row()).toMatchObject({ status: "sending" });
     expect(invoiceClaim).toEqual({ token: expect.any(String) });
     expect(
       await ctx.client.report("http://box.test", ctx.token, ctx.job.jobId, {
@@ -1428,9 +1423,12 @@ describe("invoice receipt printer deletion", () => {
       status: "failed",
       failureCode: "transport_failed",
       expiredAt: null,
+    });
+    expect(await ctx.jobRow()).toMatchObject({
+      ...DELETED_JOB,
+      claimedBy: null,
       claimTokenHash: null,
     });
-    expect(await ctx.jobRow()).toMatchObject({ ...DELETED_JOB, claimedBy: null });
     ctx.advance(1000);
     expect(await ctx.pull()).toEqual([]);
     expect(await ctx.row()).toMatchObject({ status: "failed" });

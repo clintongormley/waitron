@@ -13,7 +13,6 @@ import {
   tsString,
 } from "./columns.js";
 import { persons } from "./identity/persons.js";
-import { printAgents } from "./print-agents.js";
 import { printHoldCodes, printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
 import { sales } from "./sales.js";
@@ -61,7 +60,6 @@ export const invoiceDeliveries = table(
     designation: invoiceDeliveryDesignation("designation").notNull(),
     status: invoiceDeliveryStatus("status").notNull().default("queued"),
     generation: count("generation").notNull(),
-    attempts: count("attempts").notNull().default(0),
     recipient: label("recipient"),
     // A person's "send the email again" made this row: its request key replays only as that action.
     madeByRetry: flag("made_by_retry").notNull().default(false),
@@ -71,23 +69,12 @@ export const invoiceDeliveries = table(
     // Automatic receipts may lack an operator.
     personId: id("person_id").references(() => persons.id),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
-    nextAttemptAt: tsString("next_attempt_at").notNull().$defaultFn(nowIso),
     completedAt: tsString("completed_at"),
-    claimTokenHash: label("claim_token_hash"),
-    claimedBy: label("claimed_by"),
-    /* v8 ignore start */
-    claimedAgentId: id("claimed_agent_id").references(() => printAgents.id),
-    /* v8 ignore stop */
-    claimedAt: tsString("claimed_at"),
     expiredAt: tsString("expired_at"),
     failureCode: label("failure_code").$type<"transport_failed" | "restart" | A4FailureCode>(),
     reportedOutcome: label("reported_outcome").$type<"sent" | "failed" | "unknown">(),
     reportedAt: tsString("reported_at"),
     reportedFailureCode: label("reported_failure_code").$type<"transport_failed" | A4FailureCode>(),
-    // Only a renewal writes it, and a report or an expiry leaves it, so an ended attempt keeps its
-    // last hold; the server's `rowAttempt` shows it only on an A4 attempt that is sending or
-    // unknown.
-    printerHold: label("printer_hold").$type<A4HoldCode>(),
   },
   (t) => [
     foreignKey({
@@ -105,7 +92,6 @@ export const invoiceDeliveries = table(
     check("invoice_deliveries_designation_ck", enumCheck(t.designation)),
     check("invoice_deliveries_status_ck", enumCheck(t.status)),
     check("invoice_deliveries_generation_ck", sql`${t.generation} > 0`),
-    check("invoice_deliveries_attempts_ck", sql`${t.attempts} >= 0`),
     check(
       "invoice_deliveries_person_ck",
       sql`${t.personId} is not null or ${t.medium} = 'receipt'`,

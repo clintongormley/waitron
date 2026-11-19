@@ -127,7 +127,7 @@ export async function claimInvoiceReceipt(
     );
   const [delivery] = await tx
     .update(invoiceDeliveries)
-    .set({ status: "sending", attempts: sql`${invoiceDeliveries.attempts} + 1` })
+    .set({ status: "sending" })
     .where(
       and(
         eq(invoiceDeliveries.printJobId, printJobId),

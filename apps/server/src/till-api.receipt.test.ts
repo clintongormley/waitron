@@ -1,3 +1,4 @@
+import { claimA4ForTest } from "./testing/a4-print-job.js";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { payments, recordVoid } from "@waitron/payments";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -53,8 +54,8 @@ import { createPrinter, enqueuePrintJob, textGrid, updatePrinter } from "@waitro
 import { recordSale } from "@waitron/core";
 import { createOpenOrder } from "./working-order.js";
 import {
-  claimInvoiceDelivery,
-  reportInvoiceDelivery,
+  startInvoiceEmail,
+  settleInvoiceEmail,
   reserveInvoiceDelivery,
 } from "./invoice-delivery.js";
 import { departments, routingCells } from "@waitron/venue-service";
@@ -3320,8 +3321,8 @@ describe("explicit F1 receipt delivery enrollment", () => {
       const delivery = await email();
       if (status === "sent")
         await withTransaction(suite.db, async (tx) => {
-          const claim = await claimInvoiceDelivery(tx, delivery.id, "synthetic-worker");
-          await reportInvoiceDelivery(tx, claim!, { status: "sent" });
+          await startInvoiceEmail(tx, delivery.id);
+          await settleInvoiceEmail(tx, delivery, 1, { status: "sent" }, new Date());
         });
       const res = await post("receipt");
       expect(res.status).toBe(409);
@@ -3340,8 +3341,8 @@ describe("explicit F1 receipt delivery enrollment", () => {
     const { post, email, sale, supervisorId } = await issued();
     const original = await email();
     await withTransaction(suite.db, async (tx) => {
-      const claim = await claimInvoiceDelivery(tx, original.id, "synthetic-worker");
-      await reportInvoiceDelivery(tx, claim!, { status: "sent" });
+      await startInvoiceEmail(tx, original.id);
+      await settleInvoiceEmail(tx, original, 1, { status: "sent" }, new Date());
     });
     expect((await post("reprint")).status).toBe(200);
     const [job] = await suite.db.select().from(printJobs);
@@ -3376,8 +3377,8 @@ describe("explicit F1 receipt delivery enrollment", () => {
     const { cfg, printerId, email, sale, orderId, supervisorId } = await issued();
     const original = await email();
     await withTransaction(suite.db, async (tx) => {
-      const claim = await claimInvoiceDelivery(tx, original.id, "synthetic-worker");
-      await reportInvoiceDelivery(tx, claim!, { status: "sent" });
+      await startInvoiceEmail(tx, original.id);
+      await settleInvoiceEmail(tx, original, 1, { status: "sent" }, new Date());
     });
     const { jobId } = await withTransaction(suite.db, (tx) =>
       reprintOrderReceipt(tx, { backend, tradingContext: cfg }, orderId, printerId, supervisorId),
@@ -3409,17 +3410,11 @@ describe("explicit F1 receipt delivery enrollment", () => {
     expect(await suite.db.select().from(receiptReprints)).toEqual([]);
   });
 
-  it("expires a silent email attempt before reserving the requested paper original", async () => {
-    const { post, email, sale } = await issued();
-    const original = await email();
-    await withTransaction(suite.db, async (tx) => {
-      const claim = await claimInvoiceDelivery(tx, original.id, "synthetic-worker");
-      expect(claim).toBeDefined();
-      await tx
-        .update(invoiceDeliveries)
-        .set({ claimedAt: new Date(Date.now() - 61000).toISOString() })
-        .where(eq(invoiceDeliveries.id, original.id));
-    });
+  it("expires a silent A4 attempt before reserving the requested paper original", async () => {
+    const { post, sale, supervisorId } = await issued();
+    const original = await withTransaction(suite.db, (tx) =>
+      claimA4ForTest(tx, sale.saleId, supervisorId, new Date(Date.now() - 61_000)),
+    );
     expect((await post("receipt")).status).toBe(200);
     const deliveries = await suite.db.select().from(invoiceDeliveries);
     expect(deliveries).toHaveLength(2);

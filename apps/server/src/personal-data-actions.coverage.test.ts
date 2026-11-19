@@ -88,7 +88,6 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
 const NOT_A_PERSON: Record<string, string> = {
   "print_jobs.claimed_by": "the claiming print agent's id",
   "document_page_jobs.claimed_by": "the page-print transport claim holder, not its requester",
-  "invoice_deliveries.claimed_by": "the claiming print agent's id, or the node's for an email",
 };
 
 const COLUMNS: Record<string, { readonly in: string[]; readonly out: string[] }> = {

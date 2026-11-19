@@ -71,13 +71,13 @@ export function invoiceMail(deps: {
       if (delivery) {
         await settleInvoiceEmail(tx, delivery, attempt, invoiceOutcome(outcome), now);
       } else if (outcome.status === "unknown" && outcome.failureCode === "mail.claim_abandoned") {
-        await abandonInvoiceEmail(tx, mail.subjectId, attempt, now);
+        await abandonInvoiceEmail(tx, mail.subjectId, now);
       }
     },
     sweep: {
       due: invoicePrintDeadline,
       run: async (tx, now) => {
-        await expireInvoiceDeliveryClaims(tx, now, false, true);
+        await expireInvoiceDeliveryClaims(tx, now);
       },
     },
   };

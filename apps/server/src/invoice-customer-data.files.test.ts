@@ -13,9 +13,9 @@ import {
   type InvoiceCustomerFilesDeps,
 } from "./invoice-customer-data.js";
 import {
-  claimInvoiceDelivery,
-  expireInvoiceDeliveryClaims,
-  reportInvoiceEmailDelivery,
+  startInvoiceEmail,
+  abandonInvoiceEmail,
+  settleInvoiceEmail,
   reserveInvoiceDelivery,
 } from "./invoice-delivery.js";
 import type { Logger } from "./logger.js";
@@ -127,17 +127,19 @@ describe("buildInvoiceCustomerFiles", () => {
     const late = await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, p1, request("late@example.test")),
     );
-    const claim = await withTransaction(suite.db, (tx) =>
-      claimInvoiceDelivery(tx, late.id, "files-test", claimedAt),
-    );
-    await withTransaction(suite.db, (tx) => expireInvoiceDeliveryClaims(tx, expiredAt));
+    const newer = await withTransaction(suite.db, async (tx) => {
+      await startInvoiceEmail(tx, late.id);
+      await abandonInvoiceEmail(tx, late.id, expiredAt);
+      return reserveInvoiceDelivery(tx, p1, request("newer@example.test"));
+    });
     await withTransaction(suite.db, (tx) =>
-      reserveInvoiceDelivery(tx, p1, request("newer@example.test")),
+      settleInvoiceEmail(tx, late, 1, { status: "sent" }, reportedAt),
     );
-    const outcome = await withTransaction(suite.db, (tx) =>
-      reportInvoiceEmailDelivery(tx, claim!, { status: "sent" }, reportedAt),
-    );
-    expect(outcome.historical).toBe(true);
+    expect(
+      (
+        await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, newer.id))
+      )[0],
+    ).toEqual(newer);
     const [stored] = await suite.db
       .select()
       .from(invoiceDeliveries)

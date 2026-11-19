@@ -24,7 +24,7 @@ import { jobOrigin, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
-  claimInvoiceDelivery,
+  startInvoiceEmail,
   expireInvoiceDeliveryClaims,
   reserveInvoiceDelivery,
   tokenHash,
@@ -207,7 +207,6 @@ it("reserves a payload-free job and stores the office printer claim on it", asyn
       pagePrinterId: office,
     }),
   ).finally(() => clock.mockRestore());
-  expect(delivery.nextAttemptAt).toBe(delivery.createdAt);
   const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.saleId, saleId));
   expect(job).toMatchObject({
     id: delivery.printJobId,
@@ -232,15 +231,7 @@ it("reserves a payload-free job and stores the office printer claim on it", asyn
     .select()
     .from(invoiceDeliveries)
     .where(eq(invoiceDeliveries.id, delivery.id));
-  expect(stored).toMatchObject({
-    status: "sending",
-    attempts: 0,
-    claimedAt: null,
-    claimedBy: null,
-    claimedAgentId: null,
-    claimTokenHash: null,
-    printerHold: null,
-  });
+  expect(stored).toMatchObject({ status: "sending" });
 });
 
 it("refuses an office job in receipt resend", async () => {
@@ -454,13 +445,13 @@ describe("renewing an A4 claim", () => {
         recipient: "customer@example.test",
       }),
     );
-    await suite.db
-      .update(invoiceDeliveries)
-      .set({ nextAttemptAt: at(0).toISOString() })
-      .where(eq(invoiceDeliveries.id, emailed.id));
-    const held = await withTransaction(suite.db, (tx) =>
-      claimInvoiceDelivery(tx, emailed.id, v.agentOne, at(0)),
-    );
+    await withTransaction(suite.db, (tx) => startInvoiceEmail(tx, emailed.id));
+    const held = {
+      deliveryId: emailed.id,
+      generation: emailed.generation,
+      holder: v.agentOne,
+      token: randomUUID(),
+    };
     const before = await row(emailed.id);
 
     expect(await renew(held!, 10_000)).toBe("lost");

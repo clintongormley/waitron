@@ -79,7 +79,7 @@ import {
 } from "./invoice-page-print.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { departments } from "@waitron/venue-service";
-import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
+import { reserveInvoiceDelivery, startInvoiceEmail } from "./invoice-delivery.js";
 import { claimInvoiceReceipt } from "./invoice-print.js";
 import { invoiceMail } from "./invoice-mail.js";
 import { runMailPass } from "./mail-sender.js";
@@ -750,7 +750,7 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
       status: "queued",
       failureCode: null,
       requestedAt: row!.createdAt,
-      at: row!.nextAttemptAt,
+      at: row!.createdAt,
       personId: v.staffId,
       printerHold: null,
       lateSuccess: false,
@@ -1433,13 +1433,15 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/to-receipt (paper instead)"
       status: "queued",
     });
     const rows = await deliveryRows(saleId);
+    expect(
+      (await suite.db.select().from(printJobs).where(eq(printJobs.id, rows[0]!.printJobId!)))[0],
+    ).toMatchObject({ claimedAt: null });
     expect(rows).toEqual([
       expect.objectContaining({
         id: a4,
         medium: "a4",
         status: "failed",
         failureCode: "switched",
-        claimedAt: null,
       }),
       expect.objectContaining({
         medium: "receipt",
@@ -1769,7 +1771,7 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
       status: "queued",
       failureCode: null,
       requestedAt: row!.createdAt,
-      at: row!.nextAttemptAt,
+      at: row!.createdAt,
       personId: v.staffId,
       printerHold: null,
       lateSuccess: false,
@@ -2072,8 +2074,11 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/retry (email again)", () =>
         recipient: CUSTOMER_EMAIL,
         requestKey: key,
         personId: v.staffId,
-        attempts: 0,
         generation: 2,
+      });
+      expect(await readMail(suite.db, `invoice:${rows[1]!.id}`)).toMatchObject({
+        attempts: 0,
+        params: { attempt: 1 },
       });
       expect(answer.body).toMatchObject({
         medium: "email",
@@ -2251,7 +2256,7 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/to-receipt (paper instead o
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
     const email = (await emailIt(v, orderId)).body!.id as string;
-    await withTransaction(suite.db, (tx) => claimInvoiceDelivery(tx, email, "server-one"));
+    await withTransaction(suite.db, (tx) => startInvoiceEmail(tx, email));
     expect((await readStatus(v, orderId)).body).toMatchObject({
       current: { id: email, status: "sending" },
       actions: { receiptInstead: null },

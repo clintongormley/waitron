@@ -3132,7 +3132,7 @@ async function bootServer(
         await abandonMailClaims(tx, owners, now());
       }
       // Mail owns email claims, including a pending mail whose delivery is still sending.
-      await expireInvoiceDeliveryClaims(tx, now(), true, true);
+      await expireInvoiceDeliveryClaims(tx, now(), true);
     });
     jobRunner.add(
       mailSendJob({
