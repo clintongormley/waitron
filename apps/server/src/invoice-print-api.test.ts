@@ -166,10 +166,6 @@ async function setup(bluetooth = false) {
     }),
   );
   let now = new Date();
-  await suite.db
-    .update(invoiceDeliveries)
-    .set({ nextAttemptAt: now.toISOString() })
-    .where(eq(invoiceDeliveries.id, delivery.id));
   const app = new Hono();
   mountPrintApi(
     app,
@@ -276,9 +272,9 @@ describe("invoice receipt API attempt boundary", () => {
   it("keeps a future invoice receipt queued and leaves ordinary jobs available", async () => {
     const ctx = await setup();
     await suite.db
-      .update(invoiceDeliveries)
-      .set({ nextAttemptAt: new Date(ctx.now().getTime() + 60000).toISOString() })
-      .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+      .update(printJobs)
+      .set({ createdAt: new Date(ctx.now().getTime() + 60000).toISOString() })
+      .where(eq(printJobs.id, ctx.job.jobId));
     const ordinary = await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(tx, ctx.printer.id, new Uint8Array([1]), "drawer"),
     );
@@ -473,10 +469,6 @@ describe("invoice receipt API attempt boundary", () => {
           printJobId: retryJob.jobId,
         }),
       );
-      await suite.db
-        .update(invoiceDeliveries)
-        .set({ nextAttemptAt: ctx.now().toISOString() })
-        .where(eq(invoiceDeliveries.id, retry.id));
       let retryClaim: InvoicePrintClaim | undefined;
       if (stage !== "queued") {
         const jobs = await ctx.pull();

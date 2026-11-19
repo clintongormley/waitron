@@ -208,8 +208,14 @@ async function reserve(
   );
   await suite.db
     .update(invoiceDeliveries)
-    .set({ nextAttemptAt: START.toISOString() })
+    .set({ createdAt: START.toISOString(), nextAttemptAt: START.toISOString() })
     .where(eq(invoiceDeliveries.id, delivery.id));
+  if (medium === "email") {
+    await suite.db
+      .update(outgoingMail)
+      .set({ nextAttemptAt: START.toISOString() })
+      .where(eq(outgoingMail.subjectId, delivery.id));
+  }
   if (medium === "a4") await dateA4Job(suite.db, delivery.printJobId!, START);
   return (
     await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, delivery.id))
@@ -222,7 +228,7 @@ async function claim(v: Venue, delivery: InvoiceDelivery) {
     const printJobId = delivery.printJobId!;
     await suite.db
       .update(printJobs)
-      .set({ status: "printing", claimedBy: holder })
+      .set({ status: "printing", claimedBy: holder, createdAt: START.toISOString() })
       .where(eq(printJobs.id, printJobId));
     const claim = await withTransaction(suite.db, (tx) =>
       claimInvoiceReceipt(tx, printJobId, holder, START),
@@ -382,6 +388,38 @@ describe("readInvoiceDeliveries", () => {
               : null,
       },
       history: [current],
+    });
+  });
+
+  it("shows the queued email's next mail attempt", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    const delivery = await reserve(saleId, "email");
+    await suite.db
+      .update(outgoingMail)
+      .set({ nextAttemptAt: "2026-10-12T10:00:05.000Z" })
+      .where(eq(outgoingMail.subjectId, delivery.id));
+
+    expect((await read(saleId))?.current).toMatchObject({
+      id: delivery.id,
+      status: "queued",
+      at: "2026-10-12T10:00:05.000Z",
+    });
+  });
+
+  it("shows a queued A4's creation time", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    const delivery = await reserve(saleId, "a4", await pagePrinter());
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({ createdAt: "2026-10-12T09:59:55.000Z" })
+      .where(eq(invoiceDeliveries.id, delivery.id));
+
+    expect((await read(saleId))?.current).toMatchObject({
+      id: delivery.id,
+      status: "queued",
+      at: "2026-10-12T09:59:55.000Z",
     });
   });
 

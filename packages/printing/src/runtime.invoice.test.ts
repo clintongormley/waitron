@@ -17,7 +17,8 @@ import { enqueuePrintJob } from "./outbox.js";
 import { claimPrintJobs, reportPrintJob } from "./runtime.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-const now = "2026-12-01T00:00:00.000Z";
+const now = new Date().toISOString();
+const before = (ms: number) => new Date(Date.parse(now) - ms).toISOString();
 async function setup() {
   await seedVenue(suite.db, {
     name: "Bar",
@@ -62,6 +63,8 @@ async function setup() {
       receiptCopy: false,
     });
     const ordinary = await enqueuePrintJob(tx, printer.id, new Uint8Array([2]), "drawer");
+    await tx.update(printJobs).set({ createdAt: now }).where(eq(printJobs.id, managed.jobId));
+    await tx.update(printJobs).set({ createdAt: now }).where(eq(printJobs.id, ordinary.jobId));
     const [delivery] = await tx
       .insert(invoiceDeliveries)
       .values({
@@ -72,7 +75,6 @@ async function setup() {
         medium: "receipt",
         designation: "original",
         generation: 1,
-        nextAttemptAt: now,
       })
       .returning();
     return {
@@ -150,7 +152,7 @@ describe("generic print runtime's invoice boundary", () => {
   );
   it.each([
     [now, false],
-    ["2026-11-30T23:59:59.999Z", true],
+    [before(1), true],
   ] as const)(
     "gives the adapter a receipt queued further ahead than the bound it names, as after a backward step (ahead bound %s)",
     async (aheadAt, claimed) => {
@@ -158,7 +160,7 @@ describe("generic print runtime's invoice boundary", () => {
       const jobs = await withTransaction(suite.db, (tx) =>
         claimPrintJobs(tx, ctx.agentId, {
           visibleKeys: [],
-          invoiceReceiptsAt: "2026-11-30T23:00:00.000Z",
+          invoiceReceiptsAt: before(3_600_000),
           invoiceReceiptsAheadAt: aheadAt,
         }),
       );
@@ -170,7 +172,7 @@ describe("generic print runtime's invoice boundary", () => {
     const jobs = await withTransaction(suite.db, (tx) =>
       claimPrintJobs(tx, ctx.agentId, {
         visibleKeys: [],
-        invoiceReceiptsAt: "2026-11-30T23:59:59.999Z",
+        invoiceReceiptsAt: before(1),
       }),
     );
     expect(jobs.map((job) => job.id)).toEqual([ctx.ordinary]);
@@ -178,7 +180,7 @@ describe("generic print runtime's invoice boundary", () => {
       (await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.managed)))[0],
     ).toMatchObject({ status: "queued", claimedBy: null });
   });
-  it.each([undefined, now])(
+  it.each([undefined, before(3_600_000)])(
     "an ineligible failed invoice does not delay ordinary work (%s)",
     async (invoiceReceiptsAt) => {
       const ctx = await setup();
@@ -192,10 +194,6 @@ describe("generic print runtime's invoice boundary", () => {
             createdAt: new Date(queuedAt - 2000).toISOString(),
           })
           .where(eq(printJobs.id, ctx.managed));
-        await tx
-          .update(invoiceDeliveries)
-          .set({ nextAttemptAt: "2026-12-01T01:00:00.000Z" })
-          .where(eq(invoiceDeliveries.id, ctx.deliveryId));
         await tx
           .update(printJobs)
           .set({ createdAt: new Date(queuedAt - 1000).toISOString() })

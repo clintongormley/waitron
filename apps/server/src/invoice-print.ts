@@ -20,7 +20,7 @@ import {
 import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { deliversAsFullInvoice } from "./invoice-selection.js";
 import {
-  deliveryDue,
+  invoicePrintDue,
   expireInvoiceDeliveryClaims,
   latestNextAttempt,
   reportInvoiceDelivery,
@@ -122,6 +122,7 @@ export async function claimInvoiceReceipt(
         eq(printJobs.status, "printing"),
         eq(printJobs.claimedBy, agentId),
         isNull(printers.deletedAt),
+        invoicePrintDue(now),
       ),
     );
   const [delivery] = await tx
@@ -132,7 +133,6 @@ export async function claimInvoiceReceipt(
         eq(invoiceDeliveries.printJobId, printJobId),
         eq(invoiceDeliveries.medium, "receipt"),
         eq(invoiceDeliveries.status, "queued"),
-        deliveryDue(now),
         exists(claimedJob),
       ),
     )

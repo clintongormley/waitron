@@ -901,18 +901,19 @@ describe("receipt delivery reservation", () => {
   it("hands the receipt agent a queued copy whose next attempt lies 400 days ahead, as after a backward step", async () => {
     const sale = await issue();
     const job = await receiptJob(sale.saleId);
-    const delivery = await withTransaction(suite.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId)),
     );
     const [agent] = await suite.db
       .insert(printAgents)
       .values({ name: "Receipt agent", tokenHash: "scrypt$fixture" })
       .returning();
-    const pick = (nextAttemptAt: Date) =>
+    const pick = (createdAt: Date) =>
       withTransaction(suite.db, async (tx) => {
-        await tx.execute(
-          sql`update invoice_deliveries set next_attempt_at = ${nextAttemptAt.toISOString()} where id = ${delivery.id}`,
-        );
+        await tx
+          .update(printJobs)
+          .set({ createdAt: createdAt.toISOString() })
+          .where(eq(printJobs.id, job.jobId));
         return claimInvoicePrintJobs(tx, agent!.id, { visibleKeys: [] }, start);
       });
     expect(await pick(new Date(start.getTime() + 600_000))).toEqual([]);
@@ -1086,9 +1087,9 @@ describe("receipt delivery reservation", () => {
       reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId)),
     );
     await suite.db
-      .update(invoiceDeliveries)
-      .set({ nextAttemptAt: start.toISOString() })
-      .where(eq(invoiceDeliveries.id, delivery.id));
+      .update(printJobs)
+      .set({ createdAt: start.toISOString() })
+      .where(eq(printJobs.id, job.jobId));
     return { sale, job, delivery, agentId: agent!.id };
   }
   async function pulled(ctx: Awaited<ReturnType<typeof receiptClaimSetup>>) {
@@ -1147,15 +1148,11 @@ describe("receipt delivery reservation", () => {
 
   it("does not attach a receipt claim before its delivery is due", async () => {
     const ctx = await receiptClaimSetup();
-    await suite.db
-      .update(printJobs)
-      .set({ status: "printing", claimedBy: ctx.agentId })
-      .where(eq(printJobs.id, ctx.job.jobId));
     const dueAt = new Date(start.getTime() + 60_000);
     await suite.db
-      .update(invoiceDeliveries)
-      .set({ nextAttemptAt: dueAt.toISOString() })
-      .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+      .update(printJobs)
+      .set({ status: "printing", claimedBy: ctx.agentId, createdAt: dueAt.toISOString() })
+      .where(eq(printJobs.id, ctx.job.jobId));
     expect(await claimReceipt(ctx)).toBeUndefined();
     expect((await rows())[0]).toMatchObject({ status: "queued", attempts: 0 });
     expect((await suite.db.select().from(printJobs))[0]).toMatchObject({ claimTokenHash: null });

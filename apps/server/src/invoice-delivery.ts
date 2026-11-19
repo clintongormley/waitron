@@ -175,7 +175,11 @@ export async function reserveInvoiceDelivery(
               createdAt: a4CreatedAt,
               nextAttemptAt: a4CreatedAt,
             }
-          : { printJobId: input.printJobId, printerChosen: input.printerChosen }),
+          : {
+              printJobId: input.printJobId,
+              printerChosen: input.printerChosen,
+              createdAt: receiptJob?.createdAt,
+            }),
     })
     .returning();
   if (delivery!.medium === "email") {
@@ -252,15 +256,15 @@ export function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function dueA4Print(now: Date): SQL {
-  return and(
-    eq(printJobs.kind, "a4"),
-    eq(printJobs.status, "queued"),
-    or(
-      lte(printJobs.createdAt, now.toISOString()),
-      gt(printJobs.createdAt, latestNextAttempt(now)),
-    ),
+export function invoicePrintDue(now: Date): SQL {
+  return or(
+    lte(printJobs.createdAt, now.toISOString()),
+    gt(printJobs.createdAt, latestNextAttempt(now)),
   )!;
+}
+
+export function dueA4Print(now: Date): SQL {
+  return and(eq(printJobs.kind, "a4"), eq(printJobs.status, "queued"), invoicePrintDue(now))!;
 }
 
 export async function endA4PrintJobs(

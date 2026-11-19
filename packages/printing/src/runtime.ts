@@ -118,7 +118,7 @@ export async function claimPrintJobs(
     ctx.visibleKeys.length > 0
       ? sql`(p.transport in ('usb','bluetooth') and p.local_key in ${ctx.visibleKeys})`
       : sql`false`;
-  const invoiceDue = (jobId: SQL) => sql`(
+  const invoiceDue = (jobId: SQL, createdAt: SQL) => sql`(
     not exists (select 1 from invoice_deliveries d where d.print_job_id = ${jobId})
     or ${
       ctx.invoiceReceiptsAt === undefined
@@ -126,10 +126,10 @@ export async function claimPrintJobs(
         : sql`exists (
       select 1 from invoice_deliveries d where d.print_job_id = ${jobId}
         and d.status = 'queued'
-        and (d.next_attempt_at <= ${ctx.invoiceReceiptsAt}${
+        and (${createdAt} <= ${ctx.invoiceReceiptsAt}${
           ctx.invoiceReceiptsAheadAt === undefined
             ? sql``
-            : sql` or d.next_attempt_at > ${ctx.invoiceReceiptsAheadAt}`
+            : sql` or ${createdAt} > ${ctx.invoiceReceiptsAheadAt}`
         }))`
     }
   )`;
@@ -146,7 +146,7 @@ export async function claimPrintJobs(
           and (p.transport = 'network_tcp' or ${usbBt})
           ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
       )
-      and ${invoiceDue(sql`j.id`)}
+      and ${invoiceDue(sql`j.id`, sql`j.created_at`)}
       and (j.kind = 'document' or j.status = 'queued')
       and ${due}
       and (j.kind <> 'document' or not exists (
@@ -155,14 +155,14 @@ export async function claimPrintJobs(
           and w.attempts < ${MAX_DELIVERY_ATTEMPTS}
           and w.next_attempt_at > ${claimedAt} and w.next_attempt_at <= ${retryAhead}
           and (w.created_at < j.created_at or (w.created_at = j.created_at and w.rowid < j.rowid))
-          and ${invoiceDue(sql`w.id`)}
+          and ${invoiceDue(sql`w.id`, sql`w.created_at`)}
       ))`,
     order: sql`case when j.status = 'failed' or exists (
         select 1 from print_jobs f indexed by print_jobs_pull_idx
         where f.printer_id = j.printer_id and f.kind = 'document'
           and f.status = 'failed' and f.attempts < ${MAX_DELIVERY_ATTEMPTS}
           and (f.created_at < j.created_at or (f.created_at = j.created_at and f.rowid < j.rowid))
-          and ${invoiceDue(sql`f.id`)}
+          and ${invoiceDue(sql`f.id`, sql`f.created_at`)}
       ) then 1 else 0 end, j.created_at, j.rowid`,
     limit: 1,
     set: sql`status = 'printing', claimed_at = ${claimedAt}, claimed_by = ${agentId}`,
