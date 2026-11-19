@@ -4,6 +4,7 @@ import { generateKeyPairSync } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdtempSync,
   lstatSync,
@@ -402,6 +403,7 @@ stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
 stub(
   "flock",
   `[ "\${WT_UPGRADE_BUSY:-0}" != 1 ] || exit 1
+[ "$*" = "-n 9" ] && [ -n "\${WT_TRUST_AT_LOCK:-}" ] && ln -sfn "$WT_TRUST_AT_LOCK" "$WAITRON_HOST_DIR/release-trust"
 [ "\${WT_RECOVERY_UNIT}" = "1" ] && [ "$*" = "-n 9" ] && : > "\${WT_LOG}.locked"
 exit 0`,
 );
@@ -413,7 +415,7 @@ writeFileSync(
 printf 'host:%s\\n' "$*" >> "$WT_LOG"
 if [ "\${WT_HOST_ERROR:-0}" = 1 ]; then echo 'unreadable attempt' >&2; exit 1; fi
 case "$1" in
-  */verify-release.mjs) exec "$WT_REAL_NODE" "$@" ;;
+  -e|*/verify-release.mjs) exec "$WT_REAL_NODE" "$@" ;;
 esac
 case "$2" in
   apply)
@@ -1440,12 +1442,13 @@ function signedRelease(
   writeSignedRelease(asset, version, key, prerelease);
   const host = join(sb.root, "host");
   if (retain) {
-    const trust = join(host, "release-trust");
+    const trust = join(host, ".release-trust.seed");
     mkdirSync(join(trust, "upgrades"), { recursive: true });
     for (const file of readdirSync(source)) {
       const target = file === "contracts.mjs" ? join(trust, "upgrades", file) : join(trust, file);
       copyFileSync(join(source, file), target);
     }
+    symlinkSync(".release-trust.seed", join(host, "release-trust"));
     const runtime = join(host, "node-v26.7.0/bin");
     mkdirSync(runtime, { recursive: true });
     copyFileSync(HOST_NODE_STUB, join(runtime, "node"));
@@ -1498,16 +1501,98 @@ describe("waitron.sh install of a release", () => {
     3 * RUN_TIMEOUT_MS + 5_000,
   );
 
-  it.each(["missing", "invalid", "missing the signing key"])(
-    "leaves installed trust and the driver in place when the incoming keys are %s",
+  it.each(["present", "missing", "dangling"])(
+    "refuses a retired signing key on reset when the trust link is %s",
+    (linkState) => {
+      const sb = sandbox({ systemd: true });
+      installedBox(sb);
+      const release = signedRelease(sb);
+      writeFileSync(join(release.WT_RELEASE_TRUST_SOURCE, "current.pem"), releaseKey().publicKey);
+      const installed = run(sb, ["install", "v1.2.3"], {
+        ...release,
+        WT_INSTALLED_RELEASE_REF: "v1.2.2",
+      });
+      expect(installed.status, installed.stderr).toBe(0);
+      const trust = join(sb.root, "host/release-trust");
+      if (linkState !== "present") rmSync(trust);
+      if (linkState === "dangling") symlinkSync(".release-trust.missing", trust);
+      writeSignedRelease(release.WT_RELEASE_ASSET, "1.2.4", releaseKeys[0]);
+      writeFileSync(sb.log, "");
+      const reset = run(sb, ["--reset", "--yes", "install", "v1.2.4"], release);
+      expect(reset.status, reset.stderr).toBe(1);
+      expect(reset.stderr).toContain(
+        linkState === "present"
+          ? "Invalid release signature"
+          : "release verification is unavailable",
+      );
+      expect(existsSync(join(sb.root, "host/.release-trust.seed"))).toBe(false);
+      expect(loggedCalls(sb).some((call) => /^docker |\/deploy\//.test(call))).toBe(false);
+    },
+    2 * RUN_TIMEOUT_MS + 5_000,
+  );
+
+  it(
+    "reloads release trust through a checked main upgrade when the trust link is dangling",
+    () => {
+      const sb = sandbox({ systemd: true });
+      installedBox(sb);
+      const release = signedRelease(sb);
+      const trust = join(sb.root, "host/release-trust");
+      rmSync(trust);
+      symlinkSync(".release-trust.missing", trust);
+      const repaired = run(sb, ["install", "main"], {
+        ...release,
+        WT_REGISTRY_REVISION: signedSource,
+      });
+      expect(repaired.status, repaired.stderr).toBe(0);
+      const installed = run(sb, ["install", "v1.2.3"], {
+        ...release,
+        WT_INSTALLED_RELEASE_REF: "main",
+      });
+      expect(installed.status, installed.stderr).toBe(0);
+    },
+    2 * RUN_TIMEOUT_MS + 5_000,
+  );
+
+  it("rechecks the signature after taking the lock if another install rotated trust", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const release = signedRelease(sb);
+    const host = join(sb.root, "host");
+    const replacement = join(host, ".release-trust.rotated");
+    cpSync(join(host, "release-trust"), replacement, { recursive: true, dereference: true });
+    writeFileSync(join(replacement, "spare.pem"), releaseKey().publicKey);
+    const result = run(sb, ["install", "v1.2.3"], {
+      ...release,
+      WT_INSTALLED_RELEASE_REF: "v1.2.2",
+      WT_TRUST_AT_LOCK: replacement,
+    });
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain("release trust changed while preparing v1.2.3");
+    expect(loggedCalls(sb).some((call) => /^(install |host:.* apply )/.test(call))).toBe(false);
+  });
+
+  it.each(["missing keys", "invalid keys", "no signing key", "different image order"])(
+    "leaves installed trust and the driver in place after an incoming trust failure (%s)",
     (problem) => {
       const sb = sandbox({ systemd: true });
       installedBox(sb);
       const release = signedRelease(sb);
       const spare = join(release.WT_RELEASE_TRUST_SOURCE, "spare.pem");
-      if (problem === "missing") rmSync(spare);
-      if (problem === "invalid") writeFileSync(spare, "not a public key");
-      if (problem === "missing the signing key") writeFileSync(spare, releaseKey().publicKey);
+      if (problem === "missing keys") rmSync(spare);
+      if (problem === "invalid keys") writeFileSync(spare, "not a public key");
+      if (problem === "no signing key") writeFileSync(spare, releaseKey().publicKey);
+      const verifier = join(release.WT_RELEASE_TRUST_SOURCE, "verify-release.mjs");
+      const original = readFileSync(verifier, "utf8");
+      if (problem === "different image order") {
+        writeFileSync(
+          verifier,
+          `const log = console.log; console.log = (line) => {
+            const [sha, app, agent] = line.split(" ");
+            log([sha, agent, app].join(" "));
+          };\n${original}`,
+        );
+      }
       const result = run(sb, ["install", "v1.2.3"], {
         ...release,
         WT_INSTALLED_RELEASE_REF: "v1.2.2",
@@ -1516,6 +1601,7 @@ describe("waitron.sh install of a release", () => {
       expect(result.stderr).toContain("release trust");
       expect(loggedCalls(sb).some((call) => /^(install |host:.* apply )/.test(call))).toBe(false);
       writeFileSync(spare, releaseKeys[1].publicKey);
+      writeFileSync(verifier, original);
       const retried = run(sb, ["install", "v1.2.3"], {
         ...release,
         WT_INSTALLED_RELEASE_REF: "v1.2.2",

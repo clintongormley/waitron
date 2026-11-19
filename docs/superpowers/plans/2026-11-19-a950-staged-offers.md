@@ -16,14 +16,15 @@ publication decision and watcher clearance. [Parent plan](2026-11-09-a950-shorte
   the verifier and both keys from that commit. Recheck installed trust under
   the lock before replacing it.
   Activate the complete set under the existing host lock alongside the
-  retained driver, before Apply. Atomically move a pointer to the staged directory,
-  using the original trust directory as the initial fallback. A failed fetch or
-  validation leaves the previous set usable. Clean up unused stages under the lock.
+  retained driver, before Apply. Rename the `release-trust` symlink over its
+  previous link so the verifier and keys switch together. A failed fetch or
+  validation leaves the previous set usable. Remove old sets under the lock.
   Restore keeps the retained driver and its matching trust. Fresh and reset
   installs keep the existing trust set. A key change keeps one key in common and
   uses it to sign the release that carries the change. Introduce a new verifier
   file to the retained download list and recipe one release before importing it.
-  Keep both keys as they are in the release introducing the new file.
+  Keep both keys as they are in the release introducing the new file. Boxes must
+  take that release before trying one that needs the file.
 - Lane J adds `tunnel` beside `app` and `printAgent`. Publish the first signed
   release after that lands. Seed test boxes with the three-image verifier and
   driver using the documented main upgrade or box recipe. The shell rejects an
@@ -62,6 +63,8 @@ publication decision and watcher clearance. [Parent plan](2026-11-09-a950-shorte
   and digest for every accepted offer including `none`, and deciding what a
   missing or unreadable saved serial means. It rechecks before Apply. A fresh pause
   read prevents a new start and an attempt past the recheck finishes.
+  Until boxes take a release that expands the download list, offer them that
+  release before a later one that needs the new file.
 - Start with `release-offer.test.mjs` for the groups and eligibility. The verifier
   suite owns wrong-kind, replay after pause, wrong asset and prerelease checks.
   The signer and workflow suites own refusal before upload and publication admission.

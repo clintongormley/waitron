@@ -72,6 +72,7 @@ If a verifier needs another file, add it to the download list in `deploy/waitron
 and the recipe list in `deploy/box/build.sh` one release before the verifier uses it.
 The box uses its retained installer to download trust files, so it learns the expanded
 list on that first upgrade. Keep the same keys in the release that introduces the file.
+Upgrade through that release on any box whose installer still has the earlier list.
 
 ## 1. Make the release worktree
 

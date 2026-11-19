@@ -414,34 +414,20 @@ is_release_tag() {
     && [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 }
 
-release_trust_dir() {
-  local pointer="$WAITRON_HOST_DIR/release-trust.active" name
-  if [ ! -e "$pointer" ]; then
-    printf '%s\n' "$RELEASE_TRUST"
-    return
-  fi
-  read -r name < "$pointer" && [[ "$name" =~ ^\.release-trust\.[a-zA-Z0-9]+$ ]] \
-    || die 'could not read the active release trust directory'
-  printf '%s/%s/trust\n' "$WAITRON_HOST_DIR" "$name"
-}
-
-numbered_release_verifier() {
-  local trust
+require_numbered_release_verifier() {
   [ "${BASH_SOURCE[0]}" -ef "$WAITRON_HOST_DIR/waitron.sh" ] \
     || die "run numbered installs from $WAITRON_HOST_DIR/waitron.sh"
-  trust="$(release_trust_dir)"
-  [ -x "$HOST_NODE" ] && [ -r "$trust/verify-release.mjs" ] \
+  [ -x "$HOST_NODE" ] && [ -L "$RELEASE_TRUST" ] && [ -r "$RELEASE_TRUST/verify-release.mjs" ] \
     || die 'release verification is unavailable — use a published main image with the verifier and both release keys, then follow the checked upgrade instructions'
   command -v curl >/dev/null 2>&1 || die 'install curl to download the signed release file'
-  printf '%s/verify-release.mjs\n' "$trust"
 }
 
 verify_numbered_release() {
-  local ref="$1" file="$2" verifier="$3"
+  local ref="$1" file="$2"
   curl -q -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 15 \
     --max-time 60 --max-filesize 16384 \
     "https://github.com/clintongormley/waitron/releases/download/$ref/waitron-release.json" > "$file" \
-    && "$HOST_NODE" "$verifier" "$ref" < "$file" \
+    && "$HOST_NODE" "$RELEASE_TRUST/verify-release.mjs" "$ref" < "$file" \
     || die "could not verify signed release $ref — check that it was published and that the box has its release keys"
 }
 
@@ -460,12 +446,11 @@ installed_app_ref() (
 )
 
 require_current_or_newer_release() {
-  local current trust
+  local current
   current="$(installed_app_ref)" && [[ "$current" =~ ^[^[:space:]]+$ && "$current" != "<nil>" ]] \
     || die 'could not read the installed app version — keep the existing installation and check its app image'
   if is_release_tag "$current"; then
-    trust="$(release_trust_dir)"
-    "$HOST_NODE" "$trust/verify-release.mjs" --check-version "$1" "$current"
+    "$HOST_NODE" "$RELEASE_TRUST/verify-release.mjs" --check-version "$1" "$current"
   fi
 }
 
@@ -945,21 +930,19 @@ fetch_release_trust() {
 }
 
 install_release_trust() {
-  local stage="$1" pointer="$WAITRON_HOST_DIR/release-trust.active" active old
-  if [ ! -e "$pointer" ] && [ ! -e "$RELEASE_TRUST" ]; then
-    mv -- "$stage/release-trust" "$RELEASE_TRUST"
-  else
-    old="$(release_trust_dir)"
-    active="$(mktemp -d "$WAITRON_HOST_DIR/.release-trust.XXXXXX")"
-    # Publish a single pointer so readers never open a verifier and keys from different sets.
-    if ! { mv -- "$stage/release-trust" "$active/trust" \
-        && printf '%s\n' "${active##*/}" > "$stage/release-trust.active" \
-        && mv -f -- "$stage/release-trust.active" "$pointer"; }; then
-      rm -rf -- "$active"
-      die 'could not activate the new release trust'
-    fi
-    if [ "$old" != "$RELEASE_TRUST" ]; then rm -rf -- "${old%/trust}"; fi
+  local stage="$1" active old
+  active="$(mktemp -d "$WAITRON_HOST_DIR/.release-trust.XXXXXX")"
+  # Rename the link itself so the verifier and keys switch together.
+  if ! { mv -- "$stage/release-trust" "$active/trust" \
+      && ln -s -- "${active##*/}/trust" "$stage/release-trust.link" \
+      && "$HOST_NODE" -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' \
+        "$stage/release-trust.link" "$RELEASE_TRUST"; }; then
+    rm -rf -- "$active"
+    die 'could not activate the new release trust'
   fi
+  for old in "$WAITRON_HOST_DIR"/.release-trust.*; do
+    [ "$old" = "$active" ] || rm -rf -- "$old"
+  done
   echo 'waitron.sh: loaded the release verifier and both public keys' >&2
 }
 
@@ -1036,9 +1019,9 @@ cmd_manual_install() (
   flock -n 9 || die 'another host operation is running'
   refuse_pending_upgrade
   if [ -n "$signed_sha" ]; then
-    local trust checked
-    trust="$(release_trust_dir)"
-    checked="$("$HOST_NODE" "$trust/verify-release.mjs" "$ref" < "$release_file")" \
+    local checked
+    [ -L "$RELEASE_TRUST" ] \
+      && checked="$("$HOST_NODE" "$RELEASE_TRUST/verify-release.mjs" "$ref" < "$release_file")" \
       && [ "$checked" = "$signed_sha $*" ] || die "release trust changed while preparing $ref — try again"
     require_current_or_newer_release "$ref"
   fi
@@ -1120,11 +1103,11 @@ cmd_install() (
   local verified signed_sha="" app_digest="" agent_digest="" source_ref="$ref"
   refuse_pending_upgrade
   if is_release_tag "$ref"; then
-    local release_file verifier digest='sha256:[a-f0-9]{64}'
-    verifier="$(numbered_release_verifier)"
+    local release_file digest='sha256:[a-f0-9]{64}'
+    require_numbered_release_verifier
     release_file="$(mktemp)"
     trap 'rm -f -- "$release_file"' EXIT
-    verified="$(verify_numbered_release "$ref" "$release_file" "$verifier")"
+    verified="$(verify_numbered_release "$ref" "$release_file")"
     [[ "$verified" =~ ^[a-f0-9]{40}\ $digest\ $digest$ ]] || die "unexpected signed image inventory for $ref"
     read -r signed_sha app_digest agent_digest <<<"$verified"
     source_ref="$signed_sha"

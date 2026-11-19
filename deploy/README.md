@@ -475,12 +475,12 @@ venue data, the checked manual upgrade uses those images for the trial and for r
 can reinstall the same version or move forward. An install that keeps the data refuses an
 older release. A confirmed reset can install an older signed release because it wipes the data.
 Fresh and reset installs use the retained installer's steps and keep its verifier and keys.
-A checked upgrade to a numbered release loads the driver, verifier and keys from the signed
-commit. The old and new verifiers must both accept the same release file. If a new trust file
-is missing or the two verifiers disagree, the installer keeps the installed trust and stops
-before applying the upgrade. If the upgrade later holds for **Restore** or **Keep**, either
-choice keeps the verified driver and trust files. Restore returns your venue to the previous
-app and data.
+With the current installer, a checked upgrade to a numbered release loads the driver,
+verifier and keys from the signed commit. The old and new verifiers must both accept the same
+release file. If a new trust file is missing or the two verifiers disagree, the installer
+keeps the installed trust and stops before applying the upgrade. If the upgrade later holds for
+**Restore** or **Keep**, either choice keeps the verified driver and trust files. Restore
+returns your venue to the previous app and data.
 
 The USB recipe seeds release trust when built with both keys. On an existing development box,
 wait for a published main image that includes the verifier and keys. Download a new copy of
@@ -495,6 +495,10 @@ sudo bash ./waitron.sh install main
 
 On plain Debian, first [install main](#setting-up-a-box). Then run the checked upgrade to main
 as shown above. Use the retained installer for numbered releases after the upgrade.
+
+If `/opt/waitron-host/release-trust` is missing or its link is broken on a development box,
+repeat the checked main upgrade to reload the verifier and keys. If an early test image
+created a directory at that path, reinstall the test box with the current recipe.
 
 If verification fails, check that the release includes `waitron-release.json` and that the
 box has both public keys. A release may carry a database migration. Keep the installation on
