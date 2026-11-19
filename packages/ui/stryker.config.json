@@ -25,5 +25,6 @@
   "jsonReporter": {
     "fileName": "reports/mutation/mutation.json"
   },
-  "coverageAnalysis": "perTest"
+  "coverageAnalysis": "perTest",
+  "dryRunTimeoutMinutes": 15
 }

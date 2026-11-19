@@ -130,6 +130,8 @@ export default defineConfig({
     globals: true,
     clearMocks: false,
     exclude,
+    // An instance's own `setupFiles` is added after this list, not in place of it.
+    setupFiles: ["test/stryker-dry-run-settle.ts"],
     browser: {
       enabled: true,
       provider: playwright({}),
