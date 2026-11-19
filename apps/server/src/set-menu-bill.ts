@@ -232,9 +232,7 @@ export async function readBillsSetMenus(
               lineNo,
               copyId: servedByVersion.get(key({ menuId, versionId }))!.key,
             })),
-            dishes: dishes
-              .filter((dish) => dish.billId === billId)
-              .map(({ billId: _, ...dish }) => dish),
+            dishes: dishes.filter((dish) => dish.billId === billId).map(({ dish }) => dish),
           },
           setMenuCopies: [...copies.values()].map(({ copy }) => copy),
         },
@@ -291,14 +289,16 @@ async function placedSetMenuDishes(
     .filter(({ billId, id }) => !cancelled.has(key(billId, id)))
     .map((line) => ({
       billId: line.billId,
-      lineId: line.id,
-      productId: line.parentProductId ?? line.productId!,
-      variantId: line.parentProductId === null ? null : line.productId,
-      setMenuLineId: line.setMenuLineId!,
-      place: line.place!,
-      priceCents: line.priceCents,
-      countsAsCourseId: line.countsAsCourseId!,
-      movable: line.cancellationLineId === null && !fixed.has(key(line.billId, line.id)),
+      dish: {
+        lineId: line.id,
+        productId: line.parentProductId ?? line.productId!,
+        variantId: line.parentProductId === null ? null : line.productId,
+        setMenuLineId: line.setMenuLineId!,
+        place: line.place!,
+        priceCents: line.priceCents,
+        countsAsCourseId: line.countsAsCourseId!,
+        movable: line.cancellationLineId === null && !fixed.has(key(line.billId, line.id)),
+      },
     }));
 }
 
