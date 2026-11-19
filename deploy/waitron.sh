@@ -436,7 +436,7 @@ verify_numbered_release() {
     --max-time 60 --max-filesize 16384 \
     "https://github.com/clintongormley/waitron/releases/download/$ref/waitron-release.json" > "$file" \
     && "$HOST_NODE" "$RELEASE_TRUST/verify-release.mjs" "$ref" < "$file" \
-    || die "could not verify signed release $ref — check that it was published and that the box has its release keys"
+    || die "could not verify signed release $ref. Check that it was published and that the box has the current release verifier and keys."
 }
 
 installed_app_ref() (

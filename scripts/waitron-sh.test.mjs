@@ -1761,6 +1761,7 @@ describe("waitron.sh install of a release", () => {
       const r = run(sb, args, signedRelease(sb, { key: releaseKey() }));
       expect(r.status).toBe(1);
       expect(r.stderr).toContain("Invalid release signature");
+      expect(r.stderr).toContain("the current release verifier and keys");
       expect(r.stderr).not.toContain("needs confirmation");
       expect(loggedCalls(sb)).toEqual([
         "mktemp ",

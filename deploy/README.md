@@ -65,9 +65,9 @@ on anything else it says so and exits 2) and enables the daemon at boot. It then
 from the ref you are installing, replacing your local copy only after the download succeeds and
 printing a line to say so. It removes an old `.env.example` from the box and keeps `.env`.
 Read `deploy/.env.example` in the repository at the installed ref. The running image
-reports its own commit below. Finally it pulls the box's images, the two Waitron ones from GHCR and the
-mail catcher from Docker Hub, stopping with an error if any of them fails to download, and starts the
-containers.
+reports its own commit below. The installer pulls the app, print agent and tunnel images from
+GHCR, along with the practice inbox image from Docker Hub when enabled. It starts the box once
+the images are available.
 
 For a fresh development installation or a development `--reset install`, unless the copy you ran is inside a git checkout, `install` fetches
 `deploy/waitron.sh` itself from the ref you are installing and compares it with the copy you ran.
@@ -473,7 +473,8 @@ The installer checks the release file against the two public keys retained under
 identifies the app, print agent and tunnel by digest, a fingerprint of each exact image. If the box has
 venue data, the checked manual upgrade uses those images for the trial and for restart. You
 can reinstall the same version or move forward. An install that keeps the data refuses an
-older release. A confirmed reset can install an older signed release because it wipes the data.
+older release. A confirmed reset wipes the venue and can install an older signed release with
+all three image digests.
 Fresh and reset installs use the retained installer's steps and keep its verifier and keys.
 With the current installer, a checked upgrade to a numbered release loads the driver,
 verifier and keys from the signed commit. The old and new verifiers must both accept the same
@@ -510,8 +511,8 @@ CI does not publish an image for a pull request (only the nightly run, a manual 
 `v*` tags publish to GHCR), so there is no PR image to `pull`. Give `install` a ref — a branch name or a commit SHA —
 instead of relying on the default `main`, and it builds that ref's image on the box instead of
 pulling. A release tag such as `v1.2.3` is the exception: it pulls the published release (see
-Installing a release above). The script resolves the ref once through GitHub's commit API, then builds both Waitron
-images from that full commit. No checkout or `pnpm` is needed; a failed resolution stops the builds.
+Installing a release above). The script resolves the ref once through GitHub's commit API, then builds
+the app, print agent and tunnel from that commit. You can pass a branch or commit directly without a local checkout.
 
 ```bash
 sudo bash waitron.sh install <branch-or-ref>
