@@ -714,7 +714,8 @@ type OpenedDraft = { sync: DraftSync | undefined; read: boolean } | undefined;
  * Sale refusals a retry can never clear: the same basket meets the same refusal. `settlingErrorOf`,
  * `#onConfirmPayment` and `#collectCard` show `sale.refused`, because money may already have been
  * taken; `#onPlaceOrder` takes no tender and shows `place.refused`; `mealEndError` shows
- * `meal_end.cannot_file`, or `meal_end.unconfirmed` while the bill is uncertain.
+ * `meal_end.cannot_file`, except for `sale.number_reused`, a clash saving the sale here rather than
+ * anything the tax agency refused, or `meal_end.unconfirmed` while the bill is uncertain.
  */
 const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.record_invalid",
@@ -809,8 +810,10 @@ function mealEndError(error: unknown, uncertain: boolean): CounterError {
     const reading = clockReadingOf(refusal);
     return reading === undefined ? { code } : { clockUnusable: reading };
   }
-  if (isPermanentSaleRefusal(error))
-    return uncertain ? "meal_end.unconfirmed" : "meal_end.cannot_file";
+  if (isPermanentSaleRefusal(error)) {
+    if (uncertain) return "meal_end.unconfirmed";
+    return code === "sale.number_reused" ? "meal_end.refused" : "meal_end.cannot_file";
+  }
   const overLimit = overLimitOf(error);
   if (overLimit !== undefined) return overLimit;
   const said =

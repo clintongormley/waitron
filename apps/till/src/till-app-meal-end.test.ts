@@ -531,7 +531,19 @@ describe("till-app: Print the bill", () => {
     expect(banner(el)!.textContent).toContain(overLimitText("3000.00"));
   });
 
-  it.each(["fiscal.record_invalid", "fiscal.foreign_recipient_unsupported", "sale.number_reused"])(
+  it("says a sale number clash printed nothing, without blaming the tax agency", async () => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({ code: "sale.number_reused", status: 409 }),
+    });
+
+    await printBill(el);
+
+    const said = banner(el)!.textContent!;
+    expect(said).toContain(t("meal_end.refused"));
+    expect(said).not.toContain(t("meal_end.cannot_file"));
+  });
+
+  it.each(["fiscal.record_invalid", "fiscal.foreign_recipient_unsupported"])(
     "says %s cannot be filed, that nothing was issued and that trying again will not help",
     async (code) => {
       const { el } = await openBill({
@@ -888,6 +900,7 @@ describe("till-app: a refusal after a send that got no answer", () => {
   it.each([
     ["fiscal.record_invalid", "meal_end.cannot_file"],
     ["fiscal.foreign_recipient_unsupported", "meal_end.cannot_file"],
+    ["sale.number_reused", "meal_end.refused"],
   ] as const)("says %s in its own words for a resent press", async (code, words) => {
     const { el } = await pressLeftUnanswered(refusal(code));
 
