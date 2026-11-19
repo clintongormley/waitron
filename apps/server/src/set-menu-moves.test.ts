@@ -134,11 +134,12 @@ it("moves a placed dish and saves the destination's surcharge while keeping the 
 it("swaps two dishes in a single request", async () => {
   const tab = await bill();
   const otherDish = await inTx(fixture.venue, async (tx) => {
-    const { id: _id, ...dish } = await row(tab.dishId);
+    const dish = await row(tab.dishId);
     const [inserted] = await tx
       .insert(workingOrderLines)
       .values({
         ...dish,
+        id: crypto.randomUUID(),
         lineNo: 4,
         cohortId: null,
         cohortOrdinal: null,
@@ -183,10 +184,11 @@ it.each(["reserved", "unlisted", "taken", "stale", "payment", "invoice limit"] a
       );
     }
     if (kind === "taken") {
-      const { id: _id, ...dish } = await row(tab.dishId);
+      const dish = await row(tab.dishId);
       await inTx(fixture.venue, async (tx) => {
         await tx.insert(workingOrderLines).values({
           ...dish,
+          id: crypto.randomUUID(),
           lineNo: 4,
           cohortId: null,
           cohortOrdinal: null,
