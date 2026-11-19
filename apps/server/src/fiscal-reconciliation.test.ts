@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { startFiscalReconciliation } from "./fiscal-reconciliation.js";
+import { fiscalReconciliationJob } from "./fiscal-reconciliation.js";
+import { createJobRunner } from "./job-runner.js";
 
 const START = new Date("2026-07-21T00:00:00Z");
 function gate() {
@@ -16,25 +17,31 @@ function fixture(options: { enabled?: boolean; hold?: Promise<void>; fail?: bool
   const observed: string[] = [];
   const waits: { ms: number; signal: AbortSignal; release: () => void }[] = [];
   const log = vi.fn();
-  const duty = startFiscalReconciliation({
-    enabled: () => enabled.value,
+  const runner = createJobRunner({
     now: () => clock.now,
-    maxWaitMs: 60_000,
-    retryMs: 300_000,
+    monotonicMs: () => clock.now.getTime(),
     log,
-    pass: async (at) => {
-      observed.push(at.toISOString());
-      await options.hold;
-      if (options.fail) throw new Error("offline");
-      return { nextDueAt: new Date(at.getTime() + 86_400_000) };
-    },
-    sleep: (ms, signal) =>
+    delay: (ms, signal) =>
       new Promise<void>((resolve) => {
         waits.push({ ms, signal, release: resolve });
         signal.addEventListener("abort", () => resolve(), { once: true });
       }),
   });
-  return { duty, enabled, clock, observed, waits, log };
+  runner.add(
+    fiscalReconciliationJob({
+      enabled: () => enabled.value,
+      maxWaitMs: 60_000,
+      retryMs: 300_000,
+      log,
+      pass: async (at) => {
+        observed.push(at.toISOString());
+        await options.hold;
+        if (options.fail) throw new Error("offline");
+        return { nextDueAt: new Date(at.getTime() + 86_400_000) };
+      },
+    }),
+  );
+  return { runner, enabled, clock, observed, waits, log };
 }
 
 describe("the independent fiscal reconciliation duty", () => {
@@ -49,7 +56,7 @@ describe("the independent fiscal reconciliation duty", () => {
       await vi.waitFor(() => expect(f.waits).toHaveLength(2));
       expect(f.observed).toEqual(["2026-07-21T00:00:00.000Z", "2026-07-21T00:01:00.000Z"]);
     } finally {
-      await f.duty.stop();
+      await f.runner.stopJobs();
     }
     expect(f.waits[1]!.signal.aborted).toBe(true);
   });
@@ -68,7 +75,7 @@ describe("the independent fiscal reconciliation duty", () => {
       await vi.waitFor(() => expect(f.waits).toHaveLength(3));
       expect(f.observed).toHaveLength(1);
     } finally {
-      await f.duty.stop();
+      await f.runner.stopJobs();
     }
   });
 
@@ -84,7 +91,7 @@ describe("the independent fiscal reconciliation duty", () => {
       await vi.waitFor(() => expect(f.waits).toHaveLength(2));
       expect(f.observed).toHaveLength(2);
     } finally {
-      await f.duty.stop();
+      await f.runner.stopJobs();
     }
   });
 
@@ -93,7 +100,7 @@ describe("the independent fiscal reconciliation duty", () => {
     const f = fixture({ hold: held.promise });
     await vi.waitFor(() => expect(f.observed).toHaveLength(1));
     let stopped = false;
-    const stop = f.duty.stop().then(() => {
+    const stop = f.runner.stopJobs().then(() => {
       stopped = true;
     });
     try {
@@ -110,55 +117,25 @@ describe("the independent fiscal reconciliation duty", () => {
   });
 });
 
-it("keeps checking after an interrupted sleep fails for a reason other than shutdown", async () => {
-  const log = vi.fn();
-  let passes = 0,
-    sleeps = 0;
-  const duty = startFiscalReconciliation({
-    enabled: () => true,
-    now: () => START,
-    maxWaitMs: 60_000,
-    retryMs: 300_000,
-    log,
-    pass: async () => {
-      passes++;
-      return { nextDueAt: new Date("2026-07-21T00:00:00.025Z") };
-    },
-    sleep: async (ms, signal) => {
-      expect(ms).toBe(25);
-      if (++sleeps === 1) throw new Error("timer failed");
-      await new Promise<void>((resolve) =>
-        signal.addEventListener("abort", () => resolve(), { once: true }),
-      );
-    },
-  });
-  try {
-    await vi.waitFor(() => expect(passes).toBe(2));
-    expect(log).toHaveBeenCalledWith("warn", "fiscal.reconciliation_sleep_failed", {
-      errorCode: "unknown",
-    });
-  } finally {
-    await duty.stop();
-  }
-  expect(passes).toBe(2);
-});
-
 it("aborts the signal received by the running pass before joining it", async () => {
   const held = gate();
   let signal: AbortSignal | undefined;
-  const duty = startFiscalReconciliation({
-    enabled: () => true,
-    now: () => START,
-    maxWaitMs: 60_000,
-    retryMs: 300_000,
-    log: () => {},
-    pass: async (_now, received) => {
-      signal = received;
-      await held.promise;
-      return { nextDueAt: START };
-    },
-  });
-  const stop = duty.stop();
+  const runner = createJobRunner({ now: () => START, log: () => {} });
+  runner.add(
+    fiscalReconciliationJob({
+      enabled: () => true,
+      maxWaitMs: 60_000,
+      retryMs: 300_000,
+      log: () => {},
+      pass: async (_now, received) => {
+        signal = received;
+        await held.promise;
+        return { nextDueAt: START };
+      },
+    }),
+  );
+  runner.signalStepdown();
+  const stop = runner.stopJobs();
   try {
     expect(signal?.aborted).toBe(true);
   } finally {
