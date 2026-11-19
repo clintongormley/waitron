@@ -53,14 +53,15 @@ export function boundTable(seed: number, menus = 40, capped = false): SetMenuFit
   return { offers, setMenus, dishes, previous: null };
 }
 
-it("fits and refits the largest agreed table in under 500 ms each", () => {
-  for (let seed = 1; seed <= 10; seed++) {
+it.each(Array.from({ length: 10 }, (_, index) => index + 1))(
+  "fits and refits the largest agreed table in under 500 ms each (seed %i)",
+  (seed) => {
     const input = boundTable(seed);
     const start = performance.now();
     const fit = fitSetMenus(input);
     expect(performance.now() - start, `fit seed ${seed}`).toBeLessThan(500);
     expect(fit.kind).toBe("fitted");
-    if (fit.kind !== "fitted") continue;
+    if (fit.kind !== "fitted") return;
     const previous = {
       offerBySetMenu: new Map(fit.setMenus.map(({ id, offerId }) => [id, offerId])),
       placeByDish: new Map(fit.dishes.map(({ id, place }) => [id, place])),
@@ -74,8 +75,8 @@ it("fits and refits the largest agreed table in under 500 ms each", () => {
     const result = fitSetMenus(refit);
     expect(performance.now() - refitStart, `refit seed ${seed}`).toBeLessThan(500);
     expect(result).toEqual({ kind: "uncovered", setMenusNeeded: 41 });
-  }
-});
+  },
+);
 
 it("covers a bill that needs several more menus in under 500 ms", () => {
   const input = boundTable(1515);
