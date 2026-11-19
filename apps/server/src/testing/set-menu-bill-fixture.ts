@@ -14,6 +14,8 @@ import {
   readInvoiceLocales,
   requireMenuRoot,
 } from "@waitron/menu";
+import { saveDraftForTest } from "./draft-command-fixture.js";
+import { inTx, type PartyVenue } from "./party-venue.js";
 import { publishWorkingMenu } from "./publish-menu.js";
 
 export async function setMenuOnFullMenu(
@@ -80,4 +82,19 @@ export async function seedBillSetMenu(
     })
     .returning({ id: workingOrderLines.id });
   return id;
+}
+
+export function saveSetMenuDraft(
+  venue: PartyVenue,
+  { partyId, tabId }: { partyId: string; tabId: string },
+  ...lines: unknown[]
+) {
+  return inTx(venue, (tx) =>
+    saveDraftForTest(tx, venue.cfg, partyId, venue.operator.personId, {
+      billId: tabId,
+      draftId: null,
+      revision: 0,
+      lines,
+    }),
+  );
 }

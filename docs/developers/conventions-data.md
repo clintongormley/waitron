@@ -791,6 +791,12 @@ with no confirmer (`late_confirmed_by` null, `recordLateSendMarks`), and `readLa
 reports it as not agreed, so its ticket and station card read "After <period>" without "agreed". A dish parked on an earlier
 business day is judged by today's periods alone: placed before today's period selling its menu has
 ended, or on a day no period sells it, it is sent to its station unasked and unmarked.
+
+A table can order from its recorded set-menu copy after that menu's period ends. An immediate
+Send goes through without the late question or mark. If the waiter holds the dish, Send stores the
+period mark without a confirmer so Fire can release it without asking. Fire still asks about a
+set-menu dish held during the period and released after it ends.
+
 The till learns which menus ended from each menu's `endedPeriodName` on the zone-offers and
 menu-state reads, and marks such a dish; when its 15-second poll has not caught up, from a
 `menu_period.ended` refusal's params (`lateSendRefusalOf`, `apps/till/src/state/late-send.ts`).

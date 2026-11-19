@@ -21,6 +21,7 @@ export interface MergeableDraftLine {
   noMerge: boolean;
   /** Sold in a weight or measure (g, ml…), read from the product or offer; never from a request. */
   measured?: boolean;
+  setMenuId?: string;
 }
 
 /**
@@ -31,7 +32,12 @@ export interface MergeableDraftLine {
  */
 
 export function draftLineMergeKey(line: MergeableDraftLine): string | null {
-  if (line.noMerge || stringToThousandths(line.quantity) % 1000 !== 0) return null;
+  if (
+    line.noMerge ||
+    line.setMenuId !== undefined ||
+    stringToThousandths(line.quantity) % 1000 !== 0
+  )
+    return null;
   if (line.measured === true) return null;
   const options = [
     ...new Set(line.options.map(({ listId, labelId }) => JSON.stringify([listId, labelId]))),

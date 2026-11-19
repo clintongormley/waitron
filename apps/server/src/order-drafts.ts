@@ -16,7 +16,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/menu";
 import { persons } from "@waitron/identity";
-import type { AllergyPatch, ZoneMenuOffer } from "@waitron/module";
+import type { AllergyPatch, ZoneMenu, ZoneMenuOffer } from "@waitron/module";
 import {
   AppError,
   isUuid,
@@ -62,6 +62,12 @@ import {
   requireBillEditor,
   transferBillEditor,
 } from "./bill-editing.js";
+import { refuseUnlessSetMenuBill, SET_MENU_DRAFT_LINE } from "./set-menu-bill.js";
+import {
+  assertSetMenuPortion,
+  setMenuOfferLookup,
+  type SetMenuOfferLookup,
+} from "./set-menu-offers.js";
 import "./errors.js";
 import { orderTableLabel } from "./kitchen-print.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
@@ -248,7 +254,11 @@ export type FreshDraftLineInput = Omit<
   FreshDraftLine,
   "id" | "unavailable" | "course" | "source"
 > & { id?: string };
-export type DraftLineInput = FreshDraftLineInput;
+export type DraftLineInput = FreshDraftLineInput & {
+  setMenuId?: string;
+  setMenuReservedLineId?: string | null;
+  setMenuReservedPlace?: number | null;
+};
 
 export interface SaveDraftInput {
   expectedEdit: BillEditExpected;
@@ -284,7 +294,7 @@ export async function saveDraft(
   attendance?: AttendanceRecorder,
 ): Promise<BillDraftSnapshot> {
   const at = nowIso();
-  const lines = parseDraftLines(input.lines);
+  const parsed = parseDraftLines(input.lines);
   await requireOpenParty(tx, partyId);
   const billId = uuid(input.billId, "billId");
   const expected = parseBillEditExpected(input.expectedEdit);
@@ -301,27 +311,52 @@ export async function saveDraft(
   await requireBillOfParty(tx, partyId, billId);
   await refusePaymentInFlight(tx, [billId]);
   const edit = await requireBillEditor(tx, billId, operatorId, expected);
-  if (lines.length === 0 && edit.draftId === null) return { draft: null, edit };
+  if (parsed.length === 0 && edit.draftId === null) return { draft: null, edit };
   let previous: DraftLine[] = [];
   const draft = edit.draftId === null ? null : await requireDraft(tx, edit.draftId, partyId);
   if (draft !== null) previous = (await storedLines(tx, [draft.id])).map(({ line }) => line);
   const owned = new Map(previous.map((line) => [line.id, line]));
   const named = new Set<string>();
-  for (const [index, line] of lines.entries()) {
+  for (const [index, line] of parsed.entries()) {
     if (line.id === undefined) continue;
     if (!owned.has(line.id) || named.has(line.id)) throw invalid(`lines.${index}.id`);
     named.add(line.id);
   }
+  const lines = parsed.map((line) => {
+    const stored = line.id === undefined ? undefined : owned.get(line.id);
+    const setMenuId = line.setMenuId ?? stored?.setMenuId;
+    return {
+      ...line,
+      setMenuId,
+      allowStale:
+        setMenuId !== undefined &&
+        stored?.setMenuId === setMenuId &&
+        stored.menuItemId === line.menuItemId &&
+        stored.menuVersionId === line.menuVersionId &&
+        stored.variantId === line.variantId,
+      setMenuReservedLineId:
+        line.setMenuReservedLineId === undefined
+          ? stored?.setMenuReservedLineId
+          : line.setMenuReservedLineId,
+      setMenuReservedPlace:
+        line.setMenuReservedPlace === undefined
+          ? stored?.setMenuReservedPlace
+          : line.setMenuReservedPlace,
+    };
+  });
   await validateDraftPlaces(tx, partyId, lines);
   await requireCourses(tx, lines, previous);
-  const offers = await offersFor(
+  const zone = await offersFor(
     tx,
     partyId,
     lines.map((line) => line.menuItemId),
   );
+  const setMenuLines = lines.filter(hasSetMenu);
+  if (setMenuLines.length > 0) await refuseUnlessSetMenuBill(tx, billId);
+  const setMenus = await setMenuOfferLookup(tx, billId, setMenuLines, zone.menus);
   const outsideZone = lines
-    .map((line) => line.menuItemId)
-    .filter((menuItemId) => !offers.has(menuItemId));
+    .filter((line) => !hasSetMenu(line) && !zone.offers.has(line.menuItemId))
+    .map((line) => line.menuItemId);
   if (outsideZone.length > 0) {
     const rows = await tx
       .select({ id: menuItems.id })
@@ -331,14 +366,22 @@ export async function saveDraft(
       );
     const existing = new Set(rows.map((row) => row.id));
     const missing = lines.findIndex(
-      ({ menuItemId }) => !offers.has(menuItemId) && !existing.has(menuItemId),
+      (line) =>
+        !hasSetMenu(line) && !zone.offers.has(line.menuItemId) && !existing.has(line.menuItemId),
     );
     if (missing !== -1) throw invalid(`lines.${missing}.menuItemId`);
   }
-  for (const line of lines) {
-    const offer = offers.get(line.menuItemId);
-    if (offer?.ordering === "not_sold_separately") {
-      throw new AppError("product.not_sold_separately", { productId: offer.productId });
+  for (const [index, line] of lines.entries()) {
+    if (hasSetMenu(line)) {
+      if (stringToThousandths(line.quantity) !== 1000) throw invalid("quantity");
+      const selected = setMenus.offerFor(line);
+      if (selected !== undefined) assertSetMenuPortion(selected.offer, line.variantId);
+      else if (!line.allowStale) throw invalid(`lines.${index}.menuItemId`);
+    } else {
+      const offer = zone.offers.get(line.menuItemId);
+      if (offer?.ordering === "not_sold_separately") {
+        throw new AppError("product.not_sold_separately", { productId: offer.productId });
+      }
     }
   }
   let draftId: string;
@@ -389,17 +432,13 @@ export async function saveDraft(
     draftId,
     normaliseDraftLines(
       lines.map((line) => {
-        const stored = line.id === undefined ? undefined : owned.get(line.id);
         return {
           ...line,
           source: null,
           id: line.id ?? newId(),
           noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
           unavailable: false,
-          measured: soldMeasured(offers.get(line.menuItemId)),
-          setMenuId: stored?.setMenuId,
-          setMenuReservedLineId: stored?.setMenuReservedLineId,
-          setMenuReservedPlace: stored?.setMenuReservedPlace,
+          measured: soldMeasured(zone.offers.get(line.menuItemId)),
         };
       }),
     ),
@@ -421,7 +460,7 @@ export async function saveDraft(
     await captureDraft(tx, attendance, operatorId, draftId, draft!.revision + 1, "discard", at);
     return { draft: null, edit: released };
   }
-  const saved = await readOpenDraft(tx, partyId, draftId, offers);
+  const saved = await readOpenDraft(tx, partyId, draftId, zone, setMenus);
   await captureDraft(tx, attendance, operatorId, saved.id, saved.revision, "save", at);
   return { draft: saved, edit: await readBillEditState(tx, billId) };
 }
@@ -812,6 +851,7 @@ export async function submitDraft(
         partyId,
         lines.map((line) => line.menuItemId),
       );
+      const positionOf = new Map(lines.map(({ id }, position) => [id, position]));
       const freshGroups = groups.map(({ lineIds }) => {
         const selected = new Set(lineIds);
         return normaliseDraftLines(
@@ -821,7 +861,7 @@ export async function submitDraft(
             .map((line) => ({
               ...line,
               noMerge: assigned.has(line.id),
-              measured: soldMeasured(offers.get(line.menuItemId)),
+              measured: soldMeasured(offers.offers.get(line.menuItemId)),
               slot: 0,
               joinGroupId: null,
               afterGroupId: null,
@@ -838,7 +878,9 @@ export async function submitDraft(
               release,
               joinGroupId,
               afterGroupId,
-              lines: freshGroups[index]!.map(groupLine),
+              lines: freshGroups[index]!.map((line) =>
+                groupLine(line, positionOf.get(line.id)!, release === "hold"),
+              ),
             };
           }),
           joinGroupId,
@@ -1007,9 +1049,23 @@ function foldIfUuid(id: string): string {
 }
 
 /** A draft line as pricing takes a basket line, with each null field left out. */
-function groupLine(line: FreshDraftLine): GroupLine {
+function groupLine(line: DraftLine, position: number, held: boolean): GroupLine {
   return {
     [RETAINED_COURSE]: true,
+    ...(line.setMenuId === undefined
+      ? {}
+      : {
+          [SET_MENU_DRAFT_LINE]: {
+            draftLineId: line.id,
+            position,
+            held,
+            setMenuId: line.setMenuId,
+            reserved:
+              line.setMenuReservedLineId == null || line.setMenuReservedPlace == null
+                ? null
+                : { setMenuLineId: line.setMenuReservedLineId, place: line.setMenuReservedPlace },
+          },
+        }),
     menuItemId: line.menuItemId,
     quantity: line.quantity,
     options: line.options,
@@ -1053,8 +1109,19 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
     if (afterGroupId !== null && slot === 0) throw invalid(field("afterGroupId"));
     if (entry.sourceLineId !== undefined && entry.sourceLineId !== null)
       throw invalid(field("sourceLineId"));
+    const setMenuId = optionalId(entry.setMenuId, field("setMenuId"));
+    const reservedId = optionalId(entry.setMenuReservedLineId, field("setMenuReservedLineId"));
+    const place = entry.setMenuReservedPlace;
+    if (place != null && (typeof place !== "number" || !Number.isSafeInteger(place) || place < 0))
+      throw invalid(field("setMenuReservedPlace"));
+    if ((reservedId !== null) !== (place != null) || (reservedId !== null && setMenuId === null))
+      throw invalid(field("setMenuReservedLineId"));
     return {
       ...(entry.id === undefined ? {} : { id: uuid(entry.id, field("id")) }),
+      ...(setMenuId === null ? {} : { setMenuId }),
+      ...(entry.setMenuReservedLineId === undefined && place === undefined
+        ? {}
+        : { setMenuReservedLineId: reservedId, setMenuReservedPlace: place ?? null }),
       sourceLineId: null,
       menuItemId: uuid(entry.menuItemId, field("menuItemId")),
       variantId: optionalId(entry.variantId, field("variantId")),
@@ -1366,9 +1433,10 @@ async function readOpenDraft(
   tx: Transaction,
   partyId: string,
   draftId: string,
-  offers?: Map<string, ZoneMenuOffer>,
+  offers?: DraftOffers,
+  setMenus?: SetMenuOfferLookup,
 ): Promise<Draft> {
-  return (await readOpenDrafts(tx, partyId, draftId, offers))[0]!;
+  return (await readOpenDrafts(tx, partyId, draftId, offers, setMenus))[0]!;
 }
 
 /** `known` is the offers of every line the drafts hold, when the caller has already read them. */
@@ -1376,7 +1444,8 @@ async function readOpenDrafts(
   tx: Transaction,
   partyId: string,
   draftId?: string,
-  known?: Map<string, ZoneMenuOffer>,
+  known?: DraftOffers,
+  knownSetMenus?: SetMenuOfferLookup,
 ): Promise<Draft[]> {
   const drafts = await tx
     .select({
@@ -1413,18 +1482,36 @@ async function readOpenDrafts(
     tx,
     drafts.map((draft) => draft.id),
   );
-  return drafts.map((draft) => ({
-    ...draft,
-    billId: uuid(draft.billId, "billId"),
-    ownerName: draft.ownerName ?? "",
-    takenOverFrom: takenFrom.get(draft.id) ?? null,
-    lines: lines
+  const result: Draft[] = [];
+  for (const draft of drafts) {
+    const draftLines = lines
       .filter((stored) => stored.draftId === draft.id)
-      .map(({ line }) => ({
+      .map(({ line }) => line);
+    const setMenus =
+      knownSetMenus ??
+      (await setMenuOfferLookup(
+        tx,
+        draft.billId,
+        draftLines.filter(hasSetMenu),
+        offers.menus,
+        "hide",
+      ));
+    result.push({
+      ...draft,
+      billId: uuid(draft.billId, "billId"),
+      ownerName: draft.ownerName ?? "",
+      takenOverFrom: takenFrom.get(draft.id) ?? null,
+      lines: draftLines.map((line) => ({
         ...line,
-        unavailable: unavailable(line, offers.get(line.menuItemId)),
+        unavailable: unavailable(
+          line,
+          hasSetMenu(line) ? setMenus.offerFor(line)?.offer : offers.offers.get(line.menuItemId),
+          hasSetMenu(line),
+        ),
       })),
-  }));
+    });
+  }
+  return result;
 }
 
 /**
@@ -1459,24 +1546,41 @@ function soldMeasured(offer: ZoneMenuOffer | undefined): boolean {
   return offer !== undefined && !takesExtras(offer.unit);
 }
 
-/** The live offers for the menu items in the zone of {@link partyZone}; none when there is no zone. */
+type DraftOffers = {
+  offers: Map<string, ZoneMenuOffer>;
+  menus: readonly Pick<ZoneMenu, "id" | "versionId">[];
+};
+
+function hasSetMenu<T extends { setMenuId?: string }>(line: T): line is T & { setMenuId: string } {
+  return line.setMenuId !== undefined;
+}
+
+/** The live versions and ordinary offers in the party's zone. */
 async function offersFor(
   tx: Transaction,
   partyId: string,
   menuItemIds: readonly string[],
-): Promise<Map<string, ZoneMenuOffer>> {
-  if (menuItemIds.length === 0) return new Map();
+): Promise<DraftOffers> {
+  if (menuItemIds.length === 0) return { offers: new Map(), menus: [] };
   const zoneId = await partyZone(tx, partyId);
-  if (zoneId === null) return new Map();
-  const { offers } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
+  if (zoneId === null) return { offers: new Map(), menus: [] };
+  const { offers, menus } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
     menuItemIds: [...new Set(menuItemIds)],
     withDefault: false,
   });
-  return new Map(offers.map((offer) => [offer.id, offer]));
+  return { offers: new Map(offers.map((offer) => [offer.id, offer])), menus };
 }
 
-function unavailable(line: FreshDraftLine, offer: ZoneMenuOffer | undefined): boolean {
-  if (offer === undefined || !offer.available || offer.ordering === "not_sold_separately")
+function unavailable(
+  line: FreshDraftLine,
+  offer: ZoneMenuOffer | undefined,
+  setMenu: boolean,
+): boolean {
+  if (
+    offer === undefined ||
+    !offer.available ||
+    (!setMenu && offer.ordering === "not_sold_separately")
+  )
     return true;
   if (
     line.variantId !== null &&

@@ -17,7 +17,7 @@ their existing pieces.
 | 2 · 4 | DB schemas, core triggers, classification, baseline and the server's draft and carve writers. | Real DB inserts, deletes and updates enforce the role rules. Run the schema and fiscal guards named in Task 4. | 180 / 260 |
 | 3 · 5, 10 | Server `set-menu-bill` and `set-menu-offers`, working-order, payments and adjustments. Reuse `serveRecordedSetMenus`, existing issuance pricing and the party-venue fixture. Seed menu rows here for PRs 3–7. | Recorded copies survive republishing. A new payment or ticket is refused, and the path that records an existing capture still works. Reuse loaded line rows for the refusal where available. | 380 / 610 |
 | 4 · 12a–c | Server kitchen, pass, service, allergy and order readers. | Seed real set-menu and dish rows. Tickets and screens include dishes without treating the menu itself as one. | 270 / 460 |
-| 5 · 7a–c | Draft merge, server drafts, order groups, working-order and venue-service line context. Reuse the existing draft and send transactions. | Draft keeps each unit. Send places or rolls back the whole batch, and a recorded copy still works after its period ends. Skip placement reads on ordinary sends. PR 8 tests the race with the real removal route. | 470 / 530 |
+| 5 · 7a–c | Draft merge, server drafts, order groups, working-order and venue-service line context. Reuse the existing draft and send transactions. | Draft keeps each unit. Send places or rolls back the whole batch, and a recorded copy still works after its period ends. Skip placement reads on ordinary sends. | 470 / 530 |
 | 6 · 8–9 | Server `set-menu-moves`, till API, edits and cancels. Reuse `checkMoves` and the send placement step. | An explicit move writes the new price in one transaction. Editing keeps the first dish's place. Test that cancelling frees a place here and that removal then succeeds in PR 8. | 350 / 450 |
 | 7 · 11a–b | Server bill actions, move-bill, working-order, table and draft splits. | Moving a menu keeps its dishes and copy. A loose dish needs a place on the target, and splitting clears source reservations. | 400 / 490 |
 | 8 · 6 | Server `set-menu-count`, party reads and till routes. Reuse the party revision, session and zone checks. | Counts save on an eligible bill, preserve its recorded copy and refuse to leave a draft dish without a place. Test removal after cancellation. Menu creation follows the money, kitchen and move checks. | 390 / 650 |
@@ -38,3 +38,7 @@ Register each refusal when a caller can throw it. PR 3 registers `set_menu.not_s
 `set_menu.payment_not_ready`. PR 9 adds their till wording, and PR 12 connects the staff controls.
 Add `setMenuDishColumns` with the first placement writer in PR 5. The offer lookup takes the
 basket's line identities and the zone menu versions the caller already read.
+
+PR 5 review, 19 November 2026. A dish from an unrecorded copy takes the usual confirmation
+when its full-menu period has ended. Send still needs room on a set menu already on the bill.
+`setMenuDishColumns` takes the placement only. Add the landing copy when the billing task uses it.

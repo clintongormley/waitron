@@ -135,7 +135,16 @@ import type { LateSendConfirmation } from "./late-send.js";
 import { offeredKey } from "@waitron/venue-service";
 import { venueMomentAt } from "@waitron/reporting";
 import type { RetainedCourseLine } from "./retained-course.js";
-import { refuseSetMenuMoney } from "./set-menu-bill.js";
+import {
+  placeSetMenuRows,
+  refuseSetMenuMoney,
+  refuseUnlessSetMenuBill,
+  SET_MENU_DRAFT_LINE,
+  type SetMenuDraftLine,
+  type SetMenuPlacement,
+} from "./set-menu-bill.js";
+import { assertSetMenuPortion, setMenuOfferLookup } from "./set-menu-offers.js";
+import type { LineContextInput } from "@waitron/module";
 import "./errors.js";
 import { rerouteHeldAtRelease, stillMovable } from "./station-move.js";
 import type { Rerouted } from "./station-move.js";
@@ -545,15 +554,15 @@ async function readBasketOffers(
   tx: Transaction,
   workingOrderId: string,
   zoneId: string | undefined,
-  lines: readonly { menuVersionId?: unknown }[],
+  lines: readonly { menuVersionId?: unknown; [SET_MENU_DRAFT_LINE]?: SetMenuDraftLine }[],
   menuItemIds: readonly unknown[],
 ): Promise<ZoneOffers> {
   if (zoneId === undefined) {
     throw new AppError("order.service_context_missing", { workingOrderId });
   }
   const versionIds = new Set<string>();
-  for (const { menuVersionId } of lines) {
-    if (menuVersionId === undefined) continue;
+  for (const { menuVersionId, [SET_MENU_DRAFT_LINE]: draft } of lines) {
+    if (menuVersionId === undefined || draft !== undefined) continue;
     if (typeof menuVersionId !== "string" || !isUuid(menuVersionId)) {
       throw new AppError("management.request_invalid", { field: "menuVersionId" });
     }
@@ -620,6 +629,7 @@ export async function priceOrderLines(
     courseId?: string | null;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
+    [SET_MENU_DRAFT_LINE]?: SetMenuDraftLine;
     [FROZEN_OPTIONS]?: OptionSnapshot[];
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
@@ -639,13 +649,7 @@ export async function priceOrderLines(
   portionable: boolean[];
   gross: GrossLines;
   identities: OrderLineIdentity[];
-  lineContexts: {
-    workingOrderLineId: string;
-    menuItemId: string;
-    variantId?: string;
-    unit?: ExtraChild["unitContext"];
-    late?: { periodName: string; confirmedBy: string };
-  }[];
+  lineContexts: (LineContextInput & { placement?: Omit<SetMenuPlacement, "workingOrderLineId"> })[];
   /** The zone's offers the lines were priced from, for `lineContextColumns`. */
   offers: ZoneOffers;
 }> {
@@ -683,11 +687,30 @@ export async function priceOrderLines(
       requestedLines.map((line) => line.menuItemId),
     ));
   const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
+  const setMenuLines = requestedLines.flatMap((line) => {
+    const draft = line[SET_MENU_DRAFT_LINE];
+    return draft === undefined
+      ? []
+      : [{ ...line, setMenuId: draft.setMenuId, menuVersionId: line.menuVersionId ?? null }];
+  });
+  if (setMenuLines.length > 0) await refuseUnlessSetMenuBill(tx, workingOrderId);
+  const setMenus = await setMenuOfferLookup(tx, workingOrderId, setMenuLines, offers.menus);
+  const selectedSetMenu = (line: (typeof requestedLines)[number]) => {
+    const draft = line[SET_MENU_DRAFT_LINE];
+    return draft === undefined
+      ? undefined
+      : setMenus.offerFor({
+          setMenuId: draft.setMenuId,
+          menuItemId: line.menuItemId,
+          menuVersionId: line.menuVersionId ?? null,
+        });
+  };
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
   // New dishes, and extras added to sent ones, whose menu is not orderable but ended earlier today,
   // each with its period's name.
   const ended = new Map<(typeof requestedLines)[number], string>();
   let alsoSold: ReadonlySet<string> = new Set();
+  const marks = new Map<number, NonNullable<LineContextInput["late"]>>();
   const checked = (line: (typeof requestedLines)[number]) =>
     line[ADDED_EXTRAS_ONLY] !== true || line[ON_SENT_DISH] === true;
   if (periodCheck === "added" && requestedLines.some(checked)) {
@@ -701,7 +724,10 @@ export async function priceOrderLines(
     const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
     const items: { productId: string; variantId: string | null }[] = [];
     for (const line of requestedLines) {
-      const offer = offerById.get(line.menuItemId);
+      const selected = selectedSetMenu(line);
+      if (selected?.fromRecordedCopy === true) continue;
+      const offer =
+        line[SET_MENU_DRAFT_LINE] === undefined ? offerById.get(line.menuItemId) : selected?.offer;
       const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
       if (
         periodName === undefined ||
@@ -735,7 +761,9 @@ export async function priceOrderLines(
     ) {
       throw new AppError("management.request_invalid", { field: "lines" });
     }
-    const offer = offerById.get(line.menuItemId);
+    const setMenu = line[SET_MENU_DRAFT_LINE];
+    const selected = selectedSetMenu(line);
+    const offer = setMenu === undefined ? offerById.get(line.menuItemId) : selected?.offer;
     if (offer === undefined) {
       throw new AppError("service_zone.offer_not_allowed", {
         zoneId: zoneId!,
@@ -743,7 +771,17 @@ export async function priceOrderLines(
       });
     }
     const periodName = ended.get(line);
-    if (periodName !== undefined) {
+    if (
+      selected?.fromRecordedCopy === true &&
+      service !== null &&
+      !service.orderableMenuIds.includes(offer.menuId)
+    ) {
+      // A held dish carries the mark so Fire recognises the already permitted send.
+      if (setMenu?.held === true) {
+        const name = service.endedMenus.find(({ menuId }) => menuId === offer.menuId)?.periodName;
+        marks.set(index, { periodName: name ?? offer.menuName, confirmedBy: null });
+      }
+    } else if (periodName !== undefined) {
       if (!alsoSold.has(offeredKey(offer.productId, line.variantId ?? null))) {
         late.push({ index, menuItemId: offer.id, menuId: offer.menuId, periodName });
       }
@@ -759,6 +797,7 @@ export async function priceOrderLines(
     }
     // Every asserted version is live, so one naming another menu is not this line's.
     if (
+      setMenu === undefined &&
       line.menuVersionId !== undefined &&
       line.menuVersionId.toLowerCase() !== versionOf.get(offer.menuId)
     ) {
@@ -767,13 +806,18 @@ export async function priceOrderLines(
     if (!offer.available) {
       throw new AppError("product.unavailable", { productId: offer.productId });
     }
-    if (offer.ordering === "not_sold_separately" && line[ADDED_EXTRAS_ONLY] !== true) {
+    if (
+      setMenu === undefined &&
+      offer.ordering === "not_sold_separately" &&
+      line[ADDED_EXTRAS_ONLY] !== true
+    ) {
       throw new AppError("product.not_sold_separately", { productId: offer.productId });
     }
-    return { ...line, offer };
+    if (setMenu !== undefined) assertSetMenuPortion(offer, line.variantId ?? null);
+    const setMenuOffer =
+      selected === undefined ? undefined : { offer, versionId: selected.copy.versionId };
+    return { ...line, offer, setMenuOffer };
   });
-  // The mark each confirmed late dish's rows carry, by the dish's index in `lines`.
-  const marks = new Map<number, { periodName: string; confirmedBy: string }>();
   if (late.length > 0) {
     const confirmedBy = await confirmLateDishes(tx, service!.departmentId, late, lateSend);
     for (const { index, periodName } of late) marks.set(index, { periodName, confirmedBy });
@@ -818,7 +862,7 @@ export async function priceOrderLines(
     if (invalidStationId !== undefined)
       throw new AppError("route.station_inactive", { stationId: invalidStationId });
   }
-  type LineMeta =
+  type LineMeta = { setMenuOffer?: LineContextInput["setMenuOffer"] } & (
     | {
         kind: "parent";
         productId: string;
@@ -829,7 +873,8 @@ export async function priceOrderLines(
         makeAt: string | null;
         unit: ExtraChild["unitContext"];
         portionable: boolean;
-        late?: { periodName: string; confirmedBy: string };
+        placement?: Omit<SetMenuPlacement, "workingOrderLineId">;
+        late?: LineContextInput["late"];
         vatClass: VatClass;
         takeawayVatClass: VatClass;
       }
@@ -839,10 +884,11 @@ export async function priceOrderLines(
         menuItemId: string;
         extraListId: string;
         unit?: ExtraChild["unitContext"];
-        late?: { periodName: string; confirmedBy: string };
+        late?: LineContextInput["late"];
         vatClass: VatClass;
         takeawayVatClass: VatClass;
-      };
+      }
+  );
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   for (const [index, line] of lines.entries()) {
@@ -932,8 +978,15 @@ export async function priceOrderLines(
         unitPrecision: child.unitContext?.id === EACH_UNIT_ID ? undefined : child.unitPrecision,
       })),
     });
+    const draft = line[SET_MENU_DRAFT_LINE];
     lineMeta.push({
       kind: "parent",
+      setMenuOffer: line.setMenuOffer,
+      ...(draft === undefined
+        ? {}
+        : {
+            placement: { draft, productId: offer.productId, variantId: line.variantId ?? null },
+          }),
       productId: selection.productId,
       ...(line.variantId == null ? {} : { variantId: line.variantId }),
       menuItemId: line.menuItemId,
@@ -960,6 +1013,7 @@ export async function priceOrderLines(
     for (const child of extraChildren) {
       lineMeta.push({
         kind: "child",
+        setMenuOffer: line.setMenuOffer,
         productId: child.productId,
         menuItemId: line.menuItemId,
         extraListId: child.listId,
@@ -1058,6 +1112,10 @@ export async function priceOrderLines(
   const lineContexts = lineMeta.map((meta, index) => ({
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
+    ...(meta.setMenuOffer === undefined ? {} : { setMenuOffer: meta.setMenuOffer }),
+    ...(meta.kind !== "parent" || meta.placement === undefined
+      ? {}
+      : { placement: meta.placement }),
     ...(meta.kind === "parent" && meta.variantId !== undefined
       ? { variantId: meta.variantId }
       : {}),
@@ -1969,9 +2027,12 @@ export async function lateUnsentDishes(
  * {@link lateUnsentDishes} over several bills sent together: one refusal names the late lines of
  * every bill, and one confirmation marks them all.
  */
-async function lateUnsentDishesOf(
+export async function lateUnsentDishesOf(
   tx: Transaction,
-  bills: readonly { orderId: string; lines: readonly FireableLine[] }[],
+  bills: readonly {
+    orderId: string;
+    lines: readonly Pick<FireableLine, "id" | "parentLineId">[];
+  }[],
   mode: LateUnsentMode,
 ): Promise<void> {
   const byDepartment = new Map<string, LateUnsentDish[]>();
@@ -2013,7 +2074,7 @@ type LineContext = Awaited<ReturnType<typeof VENUE_SERVICE.listLineContexts>>[nu
 async function judgeLateUnsent(
   tx: Transaction,
   orderId: string,
-  lines: readonly FireableLine[],
+  lines: readonly Pick<FireableLine, "id" | "parentLineId">[],
 ): Promise<{ departmentId: string; late: LateUnsentDish[] } | null> {
   if (lines.length === 0) return null;
   const order = await VENUE_SERVICE.findOrderContext(tx, orderId);
@@ -3024,6 +3085,7 @@ export type TabRoundLine = {
   courseId?: string | null;
   extras?: ExtraSelection[];
   options?: OptionSelection[];
+  [SET_MENU_DRAFT_LINE]?: SetMenuDraftLine;
 } & LineExtras &
   RetainedCourseLine;
 
@@ -3101,7 +3163,11 @@ export async function insertTabRound(
     round.offers,
   );
   const withContexts = rows.map((row) => ({ ...row, ...contextByLine.get(row.id!) }));
-  for (const chunk of statementChunks(workingOrderLines, withContexts)) {
+  const placementOrder = round.lineContexts.flatMap(({ workingOrderLineId, placement }) =>
+    placement === undefined ? [] : [{ workingOrderLineId, ...placement }],
+  );
+  const placed = await placeSetMenuRows(tx, round.tabId, withContexts, placementOrder);
+  for (const chunk of statementChunks(workingOrderLines, placed)) {
     inserted.push(
       ...(await tx
         .insert(workingOrderLines)

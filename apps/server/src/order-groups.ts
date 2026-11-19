@@ -94,6 +94,7 @@ import {
   fireOrderLines,
   insertTabRound,
   isReleased,
+  lateUnsentDishesOf,
   priceTabRound,
   routingOnce,
   refusePaymentInFlight,
@@ -158,6 +159,7 @@ export interface PartyCommandArgs {
 
 export interface PartyFireArgs extends PartyCommandArgs {
   allergy?: AllergyPatch;
+  lateSend?: LateSendConfirmation;
 }
 
 /** Who fires a group: a person, or a kitchen display nobody is signed in on. */
@@ -477,6 +479,41 @@ export async function placeGroups(
   };
 }
 
+async function judgeHeldSetMenuDishes(
+  tx: Transaction,
+  lines: readonly {
+    id: string;
+    workingOrderId: string;
+    setMenuRole: "set_menu" | "dish" | null;
+    sentAt: string | null;
+  }[],
+  lateSend: LateSendConfirmation | undefined,
+): Promise<void> {
+  const dishes = lines.filter(({ setMenuRole }) => setMenuRole === "dish");
+  if (dishes.length === 0) return;
+  const kitchen = await dishKitchenItems(
+    tx,
+    dishes.map(({ id }) => id),
+  );
+  const bills = new Map<string, { id: string; parentLineId: null }[]>();
+  for (const { id, workingOrderId, sentAt } of dishes) {
+    const items = kitchen.get(id);
+    const held =
+      items === undefined
+        ? sentAt === null
+        : items.some(({ requestedAt, firedAt }) => requestedAt === null && firedAt === null);
+    if (!held) continue;
+    const bill = bills.get(workingOrderId) ?? [];
+    bill.push({ id, parentLineId: null });
+    bills.set(workingOrderId, bill);
+  }
+  await lateUnsentDishesOf(
+    tx,
+    [...bills].map(([orderId, lines]) => ({ orderId, lines })),
+    { ask: lateSend },
+  );
+}
+
 /**
  * Release a held group: its lines are released bill by bill, in the order the bills were opened,
  * as {@link fireOrderLines} releases them.
@@ -525,6 +562,8 @@ export async function fireGroup(
         attendance === undefined || "deviceId" in firer
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+        undefined,
+        { ask: args.lateSend },
       );
       return { revision };
     },
@@ -560,6 +599,8 @@ export async function fireHeldLine(
         .select({
           groupId: workingOrderLines.groupId,
           quantity: workingOrderLines.quantity,
+          setMenuRole: workingOrderLines.setMenuRole,
+          sentAt: workingOrderLines.sentAt,
           workingOrderId: workingOrderLines.workingOrderId,
           billStatus: workingOrders.status,
           departureId: unpaidDepartures.id,
@@ -594,6 +635,7 @@ export async function fireHeldLine(
         args.allergy,
         args.operatorId,
       );
+      await judgeHeldSetMenuDishes(tx, [{ id: lineId, ...line }], args.lateSend);
       const source = line.groupId!;
       const printed = (await printedHeldGroups(tx, [source])).get(source);
       const heldPaper = (await heldPaperStations(tx, [source])).get(source) ?? new Set<string>();
@@ -1009,6 +1051,8 @@ async function activeGroupLines(tx: Transaction, groupId: string) {
       id: workingOrderLines.id,
       workingOrderId: workingOrderLines.workingOrderId,
       quantity: workingOrderLines.quantity,
+      setMenuRole: workingOrderLines.setMenuRole,
+      sentAt: workingOrderLines.sentAt,
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
@@ -1113,10 +1157,12 @@ async function releaseGroup(
   routing = routingOnce(tx, new Date()),
   attendance?: { recorder: AttendanceRecorder; at: string },
   active?: Awaited<ReturnType<typeof activeGroupLines>>,
+  late?: { ask: LateSendConfirmation | undefined },
 ): Promise<void> {
   active ??= await activeGroupLines(tx, groupId);
   if (active.length === 0) throw new AppError("management.request_invalid", { field: "groupId" });
   await assertPartyAllergyAnswered(tx, partyId);
+  if (late !== undefined) await judgeHeldSetMenuDishes(tx, active, late.ask);
   const byOrder = new Map<string, string[]>();
   for (const line of active) {
     byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);

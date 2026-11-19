@@ -731,6 +731,8 @@ export interface PrintedDepartmentReceipt {
 export interface LineContextInput {
   workingOrderLineId: string;
   menuItemId: string;
+  /** A set-menu dish and its extras use the full-menu version that supplied the tapped offer. */
+  setMenuOffer?: { offer: ZoneMenuOffer; versionId: string };
   /**
    * The variant the line sells, as listed in its offer's `variants`: its VAT class, allergens
    * and diet are recorded in place of the dish's. A variant the offer does not list records the
@@ -743,8 +745,8 @@ export interface LineContextInput {
     precision: number;
     hardwareUnit: "kg" | "g" | "mg" | null;
   };
-  /** A dish sent after its period ended: that period's name and who confirmed the send. */
-  late?: { periodName: string; confirmedBy: string };
+  /** The period of a late dish, and who confirmed it when confirmation was required. */
+  late?: { periodName: string; confirmedBy: string | null };
 }
 
 export type LineContextColumns = Pick<

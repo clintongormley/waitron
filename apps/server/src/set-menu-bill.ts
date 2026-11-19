@@ -5,6 +5,8 @@ import {
   billPaymentLines,
   billPayments,
   billSetMenuCopies,
+  orderDraftLines,
+  orderDrafts,
   products,
   workingOrderLines,
   workingOrders,
@@ -13,8 +15,12 @@ import {
 import {
   AppError,
   contentLanguageCode,
+  placeInOrder,
   setMenuCopyOf,
   type BillSetMenuState,
+  type DishPlace,
+  type DishToPlace,
+  type PlacementResult,
   type ServedSetMenuCopy,
   type SetMenuCopy,
 } from "@waitron/shared";
@@ -189,4 +195,92 @@ export function setMenuLineDescriptions(
       terms.names[locale]?.trim() || terms.names[contentLanguageCode(locale)]?.trim() || name,
     ]),
   );
+}
+
+/** Only saved draft lines supply a placement order and reservation at Send. */
+export const SET_MENU_DRAFT_LINE = Symbol("setMenuDraftLine");
+
+export interface SetMenuDraftLine {
+  draftLineId: string;
+  position: number;
+  setMenuId: string;
+  held: boolean;
+  reserved: DishPlace | null;
+}
+
+type WorkingLine = typeof workingOrderLines.$inferInsert;
+export interface SetMenuPlacement {
+  workingOrderLineId: string;
+  draft: SetMenuDraftLine;
+  productId: string;
+  variantId: string | null;
+}
+
+export function setMenuDishColumns(result: PlacementResult) {
+  return {
+    setMenuLineId: result.setMenuLineId,
+    setMenuPlace: result.place,
+    setMenuCountsAsCourseId: result.countsAsCourseId,
+    unitPriceGross: result.priceCents,
+    lineTotal: result.priceCents,
+  };
+}
+
+export async function placeSetMenuRows(
+  tx: Transaction,
+  workingOrderId: string,
+  rows: readonly WorkingLine[],
+  order: readonly SetMenuPlacement[],
+): Promise<readonly WorkingLine[]> {
+  if (order.length === 0) return rows;
+  const state = await readBillSetMenus(tx, workingOrderId);
+  const sending = new Set(order.map(({ draft }) => draft.draftLineId));
+  const reservations = await tx
+    .select({
+      draftLineId: orderDraftLines.id,
+      setMenuLineId: orderDraftLines.setMenuReservedLineId,
+      place: orderDraftLines.setMenuReservedPlace,
+    })
+    .from(orderDraftLines)
+    .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
+    .where(
+      and(
+        eq(orderDrafts.billId, workingOrderId),
+        eq(orderDrafts.state, "open"),
+        isNotNull(orderDraftLines.setMenuReservedLineId),
+      ),
+    );
+  const held = reservations.flatMap(({ draftLineId, setMenuLineId, place }) =>
+    sending.has(draftLineId) || setMenuLineId === null || place === null
+      ? []
+      : [{ setMenuLineId, place }],
+  );
+  const dishes: DishToPlace[] = [...order]
+    .sort((a, b) => a.draft.position - b.draft.position)
+    .map(({ workingOrderLineId: id, draft, productId, variantId }) => ({
+      id,
+      productId,
+      variantId,
+      reserved: draft.reserved,
+    }));
+  const { placed, unplaced } = placeInOrder(state, dishes, held);
+  if (unplaced.length > 0)
+    throw new AppError("set_menu.no_place", {
+      dishName: rows.find((row) => row.id === unplaced[0])!.name,
+    });
+  const resultById = new Map(placed.map((place) => [place.id, place]));
+  const menuOfRow = new Map(
+    order.map(({ workingOrderLineId, draft }) => [workingOrderLineId, draft.setMenuId]),
+  );
+  return rows.map((row) => {
+    const placement = resultById.get(row.id!);
+    return placement === undefined
+      ? row
+      : {
+          ...row,
+          setMenuRole: "dish",
+          setMenuId: menuOfRow.get(placement.id)!,
+          ...setMenuDishColumns(placement),
+        };
+  });
 }
