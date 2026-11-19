@@ -1379,7 +1379,10 @@ each leave such callbacks, 22 of `src/tabbable.ts`'s mutants were static without
 it. Mutants in code that runs only when a module loads stay static. The cost: a callback that runs
 by the test's next frame and task is now credited to the test that left it, so a mutant whose
 effect only a LATER test checks is no longer run against that later test (a two-test probe turned
-two killed mutants into survivors).
+two killed mutants into survivors). The hold made the coverage run of shard 30 in hand-started run
+[44492844528](https://github.com/clintongormley/waitron/actions/runs/44492844528) exceed Stryker's
+5-minute default for that run (`Initial test run timed out!`), so `packages/ui/stryker.config.json`
+sets `dryRunTimeoutMinutes` to 15, as `packages/db` sets 20; the 50-minute job limit is unchanged.
 
 **Why (A1309).** The nightly run 41392057587 (2026-11-02) failed: `mutation-db (10)` was cancelled
 by its 25-minute job limit at 390 of 391 mutants. Two things lay behind it.
