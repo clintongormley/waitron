@@ -19,6 +19,24 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     this.printDocument = "receipt";
   }
 
+  #closingLine() {
+    if (this.receiptDesignation() !== "original") return nothing;
+    const printer = this.receiptEquipment?.resolved;
+    const [state, text] = !this.canPrintReceipt
+      ? ["not-allowed", t("settlement.closing_not_allowed")]
+      : this.receiptEquipment === undefined
+        ? [null, ""]
+        : printer == null
+          ? ["no-printer", t("settlement.closing_no_printer")]
+          : !printer.available
+            ? [
+                "switched-off",
+                t("settlement.closing_switched_off").replace("{printer}", () => printer.name),
+              ]
+            : ["prints", t("settlement.closing_prints")];
+    return state === null ? nothing : html`<p data-settlement-closing=${state}>${text}</p>`;
+  }
+
   #close(): void {
     this.dispatchEvent(new CustomEvent("settlement-close", { bubbles: true, composed: true }));
   }
@@ -110,13 +128,14 @@ export class TillSettlementDocumentDialog extends TillTicketView {
             ></till-invoice-email-dialog>`
           : nothing
       }
+      ${this.#closingLine()}
       <wt-form-actions slot="footer">
         <wt-button
-          data-settlement-none
+          data-settlement-done
           slot="cancel"
           variant="secondary"
           @click=${() => this.#close()}
-          >${t("settlement.none")}</wt-button
+          >${t("settlement.done")}</wt-button
         >
       </wt-form-actions>
     </wt-dialog>`;

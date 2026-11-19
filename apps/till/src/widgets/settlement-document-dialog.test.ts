@@ -14,7 +14,7 @@ afterEach(() => {
   setLocale(originalLocale);
 });
 
-it("selects Receipt without sending a print command, and None closes the choice", async () => {
+it("selects Receipt without sending a print command, and Done closes the choice", async () => {
   const { el } = await mountWidget<TillSettlementDocumentDialog>(
     "till-settlement-document-dialog",
     {
@@ -33,7 +33,10 @@ it("selects Receipt without sending a print command, and None closes the choice"
   expect((receipt as HTMLElementTagNameMap["wt-button"]).variant).toBe("primary");
   expect(printed).not.toHaveBeenCalled();
   expect(el.shadowRoot!.querySelector("[data-test=original-delivery]")).toBeNull();
-  el.shadowRoot!.querySelector<HTMLElement>("[data-settlement-none]")!.click();
+  expect(el.shadowRoot!.querySelector("[data-settlement-none]")).toBeNull();
+  const done = el.shadowRoot!.querySelector<HTMLElement>("[data-settlement-done]")!;
+  expect(done.textContent?.trim()).toBe("Done");
+  done.click();
   await el.updateComplete;
   expect(closed).toHaveBeenCalledOnce();
   expect(printed).not.toHaveBeenCalled();
@@ -397,4 +400,108 @@ describe("why the receipt Print button is greyed", () => {
     expect(lines(el)).toEqual([]);
     expect(el.shadowRoot!.textContent!.split(t("document.no_printers"))).toHaveLength(2);
   });
+});
+
+it("names the Done button Listo in Spanish", async () => {
+  setLocale("es-ES");
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    { result: invoiceOf("30.00") },
+  );
+  expect(el.shadowRoot!.querySelector("[data-settlement-done]")?.textContent?.trim()).toBe("Listo");
+});
+
+const closingLines = {
+  prints: {
+    en: "Closing prints the receipt unless you email it.",
+    es: "Al cerrar se imprime el recibo, salvo que lo envíes por correo electrónico.",
+  },
+  "switched-off": {
+    en: "Bar is switched off. The receipt will print when it is switched back on.",
+    es: "Bar está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
+  },
+  "no-printer": {
+    en: "This device has no receipt printer. Choose one above or email the receipt before closing.",
+    es: "Este dispositivo no tiene impresora de recibos. Elige una arriba o envía el recibo por correo antes de cerrar.",
+  },
+  "not-allowed": {
+    en: "This device may not print or email receipts. Print it from Find a bill on a till that can.",
+    es: "Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda.",
+  },
+} as const;
+type ClosingState = keyof typeof closingLines;
+
+function closingProps(state: ClosingState) {
+  const bar = equipmentItem("bar", "Bar", {
+    kind: "receipt",
+    available: state !== "switched-off",
+  });
+  return {
+    result: { ...invoiceOf("30.00"), invoiceType: "F2" as const },
+    invoicePrintersEnabled: true,
+    originalReceiptAvailable: true,
+    originalReceiptPrint: { status: "not_queued" as const },
+    canPrintReceipt: state !== "not-allowed",
+    receiptEquipment:
+      state === "no-printer" ? roleOf("receipt", null, [bar]) : roleOf("receipt", bar, [bar]),
+  };
+}
+
+for (const language of ["en", "es"] as const)
+  for (const state of Object.keys(closingLines) as ClosingState[])
+    it(`says what closing does when ${state}, in ${language}`, async () => {
+      setLocale(language === "en" ? "en-GB" : "es-ES");
+      const { el } = await mountWidget<TillSettlementDocumentDialog>(
+        "till-settlement-document-dialog",
+        closingProps(state),
+      );
+      const lines = [...el.shadowRoot!.querySelectorAll("[data-settlement-closing]")];
+      expect(lines.map((line) => line.getAttribute("data-settlement-closing"))).toEqual([state]);
+      expect(lines[0]!.textContent?.trim()).toBe(closingLines[state][language]);
+    });
+
+it.each<[string, Partial<TillSettlementDocumentDialog>]>([
+  ["queued", { originalReceiptPrint: { status: "queued", jobId: "original", canRetry: false } }],
+  ["failed", { originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true } }],
+  ["done", { originalReceiptPrint: { status: "done", jobId: "original", canRetry: false } }],
+  [
+    "emailed",
+    {
+      deliveries: {
+        current: {
+          id: "email-original",
+          medium: "email",
+          designation: "original",
+          status: "sending",
+          failureCode: null,
+          requestedAt: "2026-11-11T12:00:00.000Z",
+          at: null,
+          personId: "p1",
+          printerHold: null,
+          lateSuccess: false,
+        },
+        history: [],
+        originalCompleted: false,
+        originalPrinterId: null,
+        actions: { print: null, receiptInstead: null, retryOriginal: null, email: null },
+      },
+    },
+  ],
+])("says nothing about closing once the original is %s", async (_status, props) => {
+  for (const state of Object.keys(closingLines) as ClosingState[]) {
+    const { el } = await mountWidget<TillSettlementDocumentDialog>(
+      "till-settlement-document-dialog",
+      { ...closingProps(state), ...props },
+    );
+    expect(el.shadowRoot!.querySelector("[data-settlement-closing]")).toBeNull();
+    cleanupWidgets();
+  }
+});
+
+it("says nothing about closing until the receipt printer is known", async () => {
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    { ...closingProps("prints"), receiptEquipment: undefined },
+  );
+  expect(el.shadowRoot!.querySelector("[data-settlement-closing]")).toBeNull();
 });

@@ -421,7 +421,14 @@ export const en = {
   "document.print": "Print/Reprint",
   "settlement.document": "Customer document",
   "settlement.full_invoice": "Full invoice",
-  "settlement.none": "None",
+  "settlement.done": "Done",
+  "settlement.closing_prints": "Closing prints the receipt unless you email it.",
+  "settlement.closing_switched_off":
+    "{printer} is switched off. The receipt will print when it is switched back on.",
+  "settlement.closing_no_printer":
+    "This device has no receipt printer. Choose one above or email the receipt before closing.",
+  "settlement.closing_not_allowed":
+    "This device may not print or email receipts. Print it from Find a bill on a till that can.",
   "settlement.replacement_unavailable":
     "Full invoice replacement is not available yet. You can print the receipt.",
   "document.receipt": "Receipt",
@@ -2558,7 +2565,15 @@ export const es: Record<StringKey, string> = {
   "document.print": "Imprimir/Reimprimir",
   "settlement.document": "Documento para el cliente",
   "settlement.full_invoice": "Factura completa",
-  "settlement.none": "Ninguno",
+  "settlement.done": "Listo",
+  "settlement.closing_prints":
+    "Al cerrar se imprime el recibo, salvo que lo envíes por correo electrónico.",
+  "settlement.closing_switched_off":
+    "{printer} está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
+  "settlement.closing_no_printer":
+    "Este dispositivo no tiene impresora de recibos. Elige una arriba o envía el recibo por correo antes de cerrar.",
+  "settlement.closing_not_allowed":
+    "Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda.",
   "settlement.replacement_unavailable":
     "El cambio por una factura completa aún no está disponible. Puedes imprimir el recibo.",
   "document.receipt": "Recibo",
