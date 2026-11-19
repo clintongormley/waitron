@@ -63,8 +63,7 @@ separate step.
 
 The [courses and groups design](../../docs/superpowers/specs/2026-10-16-a773-courses-and-groups-design.md)
 and [one-editor-per-bill amendment](../../docs/superpowers/specs/2026-10-17-a773-one-editor-design.md)
-define the table workflow. The [implementation plan](../../docs/superpowers/plans/2026-10-16-a773-1-unsent-list.md)
-keeps the pass-coordination changes separate as A773-2.
+define the table workflow.
 
 ## The flow
 

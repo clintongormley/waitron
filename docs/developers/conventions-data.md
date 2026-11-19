@@ -685,8 +685,7 @@ Calendar with the Year view.)
 
 Core migration `0131_station_retention_and_dashboard_moves.sql` adds held-dish retention and
 permits a person-only move, refusing a move with neither person nor device. The populated upgrade
-walk passed on this branch; station-hours and fallback settings are deleted. The slice 4 plan
-requires a reset warning only if that walk reports a casualty.
+walk passed on this branch; station-hours and fallback settings are deleted.
 The earlier hours accounts below describe their dated implementations.
 
 ### Earlier A261 hours storage

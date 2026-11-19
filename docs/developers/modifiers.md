@@ -483,7 +483,7 @@ architecture §6), so the two kinds of answer land differently:
 - An extras pick is already its own CHILD line, and that line IS the record: the picked product's
   frozen name, its quantity, the price it sold at and its own VAT rate. Like the open order's child
   line it names the picked product in `product_id`, here as a plain value with no foreign key, and
-  its classification is the picked product's own (sales classification spec §3).
+  its classification is the picked product's own.
 
 **The frozen ANSWERS never reach the fiscal fingerprint. A line's AMOUNTS do.** Do not read the
 first half as the second. What `backend.recordSale` is handed is the sale as a whole — its till,

@@ -175,8 +175,8 @@ Both plans are complete (the
 [menus design](../superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) (§11 wins
 over §10, which wins over §1–§9; "category" in §1–§7 means SECTION) and
 [plan](../superpowers/plans/2026-09-25-menus-categories-home-layouts.md); the
-[classification design](../superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md)
-and [plan](../superpowers/plans/2026-09-25-sales-classification.md)). Several entries are overtaken by
+[classification design](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md)
+and [plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-09-25-sales-classification.md)). Several entries are overtaken by
 the 2026-09-30 folders design; what remains:
 
 - **Classification.** `Product.categoryId` and `primaryCategoryId` always hold the same value. A
@@ -188,8 +188,9 @@ the 2026-09-30 folders design; what remains:
   gross, and the Sales screen's category report shows every seeded line under Not recorded.
 - **The category sales report (#738).** `wt-button` disables only its inner `<button>`, so a
   scripted click on the host still reaches a click handler; the Sales screen's print handler checks
-  for itself, other screens relying on `?disabled` alone have not been checked. The spec (§6)
-  wanted the category analysis printable with the daily close, but no daily-close print exists.
+  for itself, other screens relying on `?disabled` alone have not been checked. The owner's
+  decision (menus design §10.6) asks for the category analysis to be printable with the daily
+  close, but no daily-close print exists.
 - **Photo-holding tables are named by hand in several places in `packages/media`** (the triggers,
   `listImageUsages`, `countUsages`, the live-query dependencies, the `before` lists in
   `module.ts`, the `ImageUsage` unions), and only a comment keeps `countUsages` and
@@ -580,6 +581,12 @@ original checks and their limits. The owner accepted its recommendations at 22:0
 retain the earlier scope and the six follow-ups.
 
 ## Decisions and deliberate limits
+
+- **Sales by category is its own report, never part of the daily close** (owner, 2026-09-25,
+  [menus design](../superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md)
+  §10.6). The daily close stays frozen and hash-chained; the category analysis is a separate report
+  for the same business day. The owner also wanted it printable alongside the close; no daily-close
+  print exists yet.
 
 - **"Patch live menu" is an emergency tool and stays plain** (owner, 2026-10-27, A1151). It
   corrects only the live version of one menu and puts the patch live at once: no scheduling, no

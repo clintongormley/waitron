@@ -627,9 +627,9 @@ describe("sales — immutability", () => {
   });
 
   it("records what was sold as plain ids, never as a live menu link", () => {
-    // These ids record what was sold and from which menu (sales classification spec §3). They are
-    // values: no foreign key may point any of them at the menu. `menu_version_id` is one of
-    // them too, but its name falls outside the pattern.
+    // These ids record what was sold and from which menu. They are values: no foreign key may
+    // point any of them at the menu. `menu_version_id` is one of them too, but its name falls
+    // outside the pattern.
     const menuShapedIds = columnsOf(suite.db, "sale_lines")
       .map((c) => c.name)
       .filter((n) => /(product|item|menu|catalog|menu|sku|variant)_id$/i.test(n));

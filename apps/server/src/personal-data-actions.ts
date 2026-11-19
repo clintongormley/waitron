@@ -13,9 +13,8 @@ import {
 import { jsonFile, type PersonalDataFile, type PersonalDataPart } from "@waitron/module";
 import { centsToDecimal } from "@waitron/shared";
 
-// Commented decision, departing from the seat's doc comment (decision 4 of
-// docs/superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md): `prepare` reads nothing,
-// and the build reads through the `Database` this part was built with, in short `withWriteLock`
+// Commented decision, departing from the seat's doc comment: `prepare` reads nothing, and the
+// build reads through the `Database` this part was built with, in short `withWriteLock`
 // turns of its own after the snapshot turn has closed: one turn for the person's voids and
 // refunds, one for their drawer openings, neither joining another table; then one turn per
 // `chunk` sale ids, by primary key; then one turn per `chunk` bill-payment ids, by primary key,

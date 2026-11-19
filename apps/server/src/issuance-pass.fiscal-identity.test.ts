@@ -25,9 +25,9 @@ import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-p
 import { offerProducts } from "./testing/zone-offers.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
-// Review Focus 5 of the sales classification plan: the issuance pass adds to the new `sale_lines`
-// columns and changes nothing that was filed before it. The same sale is filed in two fresh
-// databases provisioned identically, once with the pass bypassed and once through it.
+// The issuance pass adds to the `sale_lines` columns and changes nothing that was filed before
+// it. The same sale is filed in two fresh databases provisioned identically, once with the pass
+// bypassed and once through it.
 
 const bypass = vi.hoisted(() => ({ on: false }));
 vi.mock("./issuance-pass.js", async (importOriginal) => {

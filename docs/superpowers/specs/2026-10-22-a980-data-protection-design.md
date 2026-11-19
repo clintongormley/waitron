@@ -475,10 +475,10 @@ is only this node's location's (the S2b plan's decisions 2 and 6).
 
 2026-10-25: S2c writes `actions.json`, not `actions.csv`; it holds whole sales voided after they
 were recorded, refunds and cash-drawer openings, not line voids; the admin's action is **Download
-their data** in the person's row menu on **Users** (the S2c plan's decisions 3, 5 and 11).
+their data** in the person's row menu on **Users** (the [S2c plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md)'s decisions 3, 5 and 11).
 
 2026-10-26: S2d adds `adjustments.json`: the voids, comps and discounts the person made giving a
-reason, or approved (the S2d plan's decisions 2 and 4).
+reason, or approved (the [S2d plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-25-a980-s2d-line-voids.md)'s decisions 2 and 4).
 
 2026-10-26: S3 builds _Orders → Find a customer by tax number_. Instead of one line for every
 invoice, the export marks each invoice with whether the box keeps a tax record of it

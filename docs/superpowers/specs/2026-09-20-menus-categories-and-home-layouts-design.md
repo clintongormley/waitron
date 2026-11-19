@@ -409,7 +409,7 @@ separate relationships:
   parent's total is exactly the sum of its children. This is today's category model (a single
   parent, plus the product's primary category) with the rule made explicit. The rules for
   classifying a sale, and the category reports, are specified in
-  `2026-09-25-sales-classification-and-category-reports-design.md`.
+  [`2026-09-25-sales-classification-and-category-reports-design.md`](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md).
 - **Menu sections** are what §1–§7 call "categories": ordered, reusable, nestable lists that
   menus and home layouts are built from, with no cycles. **Read "category" in §1–§7 as "section".**
   Sections are menu arrangement only. Adding, moving or removing a product or section on a menu

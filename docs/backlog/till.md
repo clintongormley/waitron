@@ -2777,9 +2777,9 @@ them when it fires. Today's code gives Fryer nothing on this path either. Adding
 read after `fireLines` and reordering slips on a shared printer (B3's plan, "Review answers (H4)",
 Minor 3, option (c)).
 
-The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
-[ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) govern the landed
-Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
+A773-1 ([plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-16-a773-1-unsent-list.md)) built the Sent/New order and, under
+the [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md), per-bill
+ownership; that design governs the landed ownership behavior. Physical dragging and partial-serving trials remain
 separate backlog entries. A803 owns its pass/station presentation tail.
 
 What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the

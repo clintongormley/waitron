@@ -69,7 +69,7 @@ SQLite databases; real Chromium for the front-ends).
 **Spec:** `docs/superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md`. **Read
 §11 first** (the owner's decisions after the second outside review, 2026-09-25): it wins over
 everything earlier. Then §10, then §9, then §1–§8, **reading "category" in §1–§7 as "section"** (§10.1). The sales
-classification spec (`2026-09-25-sales-classification-and-category-reports-design.md`) is the other
+classification spec ([`2026-09-25-sales-classification-and-category-reports-design.md`](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md)) is the other
 half of §10's split, with its own plan; this plan only records the menu and version provenance it
 needs (Task 7). The
 service spec (`2026-09-20-service-ordering-and-billing-design.md`) is background only; its

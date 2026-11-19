@@ -164,8 +164,8 @@ come from the published menu, the order's way of selling picks one, and the rate
 The open order's line names what it sells in `working_order_lines.product_id`: the chosen variant,
 or the product itself when it has no Active variant. The filed `sale_lines` row keeps the frozen
 names, and records the same product in its own `product_id` and a variant's parent in
-`parent_product_id`, as plain values with no foreign key, so no menu edit reaches a filed line
-(sales classification spec §3). Neither table has a `variant_id` column.
+`parent_product_id`, as plain values with no foreign key, so no menu edit reaches a filed
+line. Neither table has a `variant_id` column.
 
 **A line's VAT classes are the ones its published menu froze, fixed when its price is; the rate of
 the one its order's way picks is the one in force on the day the invoice is issued.** Each published

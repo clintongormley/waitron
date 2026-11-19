@@ -70,7 +70,7 @@ its path, with a Change link that opens the category list as an indented tree
 
 Reports can use the classification recorded with each sale, or today's menu classification.
 Moving a product or renaming a category does not rewrite recorded sale lines. See
-[the two report modes](../superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md#5-the-two-report-modes).
+[the two report modes](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md#5-the-two-report-modes).
 
 The routing grid walks a product's category ancestors. After the product's own row, the first
 category row up the chain with a cell for the order's service zone, or for Every zone, decides, and
