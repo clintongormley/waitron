@@ -10,7 +10,7 @@ import { groupArrivingDishes } from "./order-groups.js";
 import { readPassCardRows } from "./pass-board.js";
 import { readRestOfOrder } from "./rest-of-order.js";
 import { readStepFacts } from "./service-step-signals.js";
-import { inTx, OPERATOR, revisionOf } from "./testing/party-venue.js";
+import { inTx, OPERATOR, revisionOf, seatWithNoAllergies } from "./testing/party-venue.js";
 import { seedBillSetMenu } from "./testing/set-menu-bill-fixture.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 
@@ -104,4 +104,20 @@ it("finishes service even if a settled bill's set-menu heading has no served qua
       .where(eq(workingOrderLines.id, dishId)),
   );
   expect(await readiness()).toEqual({ ready: true });
+});
+
+it("keeps a party open when its only unpaid item is a set menu", async () => {
+  const { venue, copy } = fixture;
+  const tableId = await venue.table(crypto.randomUUID());
+  const { partyId, tabId, revision } = await seatWithNoAllergies(venue, tableId);
+  const readiness = await inTx(venue, async (tx) => {
+    await seedBillSetMenu(tx, tabId, copy, 1);
+    return readPartyFinishReadiness(tx, {
+      partyId,
+      expectedPartyRevision: revision,
+      operatorId: OPERATOR,
+      expectedEdits: [await readBillEditState(tx, tabId)],
+    });
+  });
+  expect(readiness).toEqual({ ready: false, blockers: ["other_bills"] });
 });
