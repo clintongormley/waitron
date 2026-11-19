@@ -2709,6 +2709,7 @@ describe("mountPrintApi — management: recent jobs", () => {
         printerId,
         saleId,
         kind: "a4",
+        pageDocument: "invoice",
         status,
         createdAt: at,
         attempts: MAX_DELIVERY_ATTEMPTS,

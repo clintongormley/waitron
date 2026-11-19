@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4de3aa8c-72fd-4ee6-92b7-28bff63402c7",
+  "id": "6e8d61e2-67e2-461f-ad65-4b9fe526fea2",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5732,6 +5732,27 @@
           "notNull": false,
           "autoincrement": false
         },
+        "page_document": {
+          "name": "page_document",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "page_language": {
+          "name": "page_language",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "page_designation": {
+          "name": "page_designation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "handed_over_by": {
           "name": "handed_over_by",
           "type": "text",
@@ -5963,6 +5984,18 @@
         "print_jobs_a4_sale_ck": {
           "name": "print_jobs_a4_sale_ck",
           "value": "\"print_jobs\".\"kind\" <> 'a4' or \"print_jobs\".\"sale_id\" is not null"
+        },
+        "print_jobs_page_document_ck": {
+          "name": "print_jobs_page_document_ck",
+          "value": "\"print_jobs\".\"page_document\" in ('invoice', 'receipt')"
+        },
+        "print_jobs_page_designation_ck": {
+          "name": "print_jobs_page_designation_ck",
+          "value": "\"print_jobs\".\"page_designation\" in ('original', 'duplicate')"
+        },
+        "print_jobs_page_ck": {
+          "name": "print_jobs_page_ck",
+          "value": "(\"print_jobs\".\"kind\" = 'a4') = (\"print_jobs\".\"page_document\" is not null)\n        and (\"print_jobs\".\"page_document\" is 'receipt') = (\"print_jobs\".\"page_language\" is not null)\n        and (\"print_jobs\".\"page_document\" is 'receipt') = (\"print_jobs\".\"page_designation\" is not null)"
         },
         "print_jobs_printer_hold_ck": {
           "name": "print_jobs_printer_hold_ck",

@@ -57,6 +57,9 @@ export const printJobs = table(
     kind: label("kind").$type<"document" | "drawer" | "a4">().notNull().default("document"),
     // Null for other documents and drawer jobs; false for a receipt original, true for a copy.
     receiptCopy: flag("receipt_copy"),
+    pageDocument: enumType(["invoice", "receipt"])("page_document"),
+    pageLanguage: label("page_language"),
+    pageDesignation: enumType(["original", "duplicate"])("page_designation"),
     // Staff confirmation of customer handover, separate from the agent's delivered_at stamp.
     handedOverBy: id("handed_over_by").references(() => persons.id, { onDelete: "restrict" }),
     handedOverAt: tsString("handed_over_at"),
@@ -94,6 +97,14 @@ export const printJobs = table(
     check("print_jobs_status_ck", enumCheck(t.status)),
     check("print_jobs_payload_ck", sql`(${t.kind} = 'a4') = (${t.payload} is null)`),
     check("print_jobs_a4_sale_ck", sql`${t.kind} <> 'a4' or ${t.saleId} is not null`),
+    check("print_jobs_page_document_ck", enumCheck(t.pageDocument)),
+    check("print_jobs_page_designation_ck", enumCheck(t.pageDesignation)),
+    check(
+      "print_jobs_page_ck",
+      sql`(${t.kind} = 'a4') = (${t.pageDocument} is not null)
+        and (${t.pageDocument} is 'receipt') = (${t.pageLanguage} is not null)
+        and (${t.pageDocument} is 'receipt') = (${t.pageDesignation} is not null)`,
+    ),
     check("print_jobs_printer_hold_ck", enumCheck(t.printerHold)),
     check("print_jobs_a4_hold_ck", sql`${t.printerHold} is null or ${t.kind} = 'a4'`),
     check(

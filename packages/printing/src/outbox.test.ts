@@ -99,6 +99,7 @@ describe("enqueuePrintJob (never-block outbox)", () => {
           printerId: office,
           saleId,
           kind: "a4",
+          pageDocument: "invoice",
           payload: null,
           createdAt: at,
           status: "queued",

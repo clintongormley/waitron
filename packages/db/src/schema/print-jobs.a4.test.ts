@@ -33,9 +33,10 @@ function insert(
 ) {
   const printerId = kind === "a4" ? officeId : receiptId;
   return suite.db.execute(sql`
-    insert into print_jobs (id, printer_id, kind, payload, sale_id, created_at
+    insert into print_jobs (id, printer_id, kind, payload, sale_id, created_at, page_document
       ${hold === undefined ? sql`` : sql`, printer_hold`})
-    values (${randomUUID()}, ${printerId}, ${kind}, ${payload}, ${sale}, '2026-11-19T00:00:00.000Z'
+    values (${randomUUID()}, ${printerId}, ${kind}, ${payload}, ${sale}, '2026-11-19T00:00:00.000Z',
+      ${kind === "a4" ? "invoice" : null}
       ${hold === undefined ? sql`` : sql`, ${hold}`})
     returning kind, payload is null as payload_missing, sale_id
   `);
