@@ -160,8 +160,7 @@ else process.exit(4);
         GITHUB_RUN_ATTEMPT: "2",
         OFFER_INPUT: JSON.stringify({ ...pause, default: "1.4.0" }),
       });
-      const offered = existsSync(path) ? selectUpgradeOffer(readFileSync(path), keys, box) : null;
-      expect(offered).toBeNull();
+      expect(existsSync(path), rerun.stdout).toBe(false);
       expect(rerun.status).toBe(1);
       expect(rerun.stderr).toMatch(/dispatch a new run/i);
     } finally {

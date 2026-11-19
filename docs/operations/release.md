@@ -294,9 +294,9 @@ gh release download upgrade-offer --pattern waitron-offer.json --output - |
   node -p 'JSON.stringify(JSON.parse(Buffer.from(JSON.parse(require("node:fs").readFileSync(0)).payload, "base64url")), null, 2)'
 ```
 
-GitHub CLI removes the old asset before uploading its replacement. If upload
-fails and the asset is missing, dispatch a new run to get a new serial. Cancel outstanding
-publication runs before an emergency pause. Once those runs have stopped, remove
+GitHub CLI removes the old asset before uploading its replacement. If a run
+fails and the asset is missing, dispatch a new run to get a new serial. Cancel
+outstanding publication runs before an emergency pause. Once those runs have stopped, remove
 the asset and dispatch the empty offer with default `none`. Before retiring a
 signing key, publish the offer again with the key both releases trust so the next
 publisher can verify the file it is replacing. [GitHub CLI release upload](https://cli.github.com/manual/gh_release_upload)
