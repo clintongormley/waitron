@@ -3112,7 +3112,8 @@ export class TillApi {
   /**
    * Reprint a FILED sale's customer receipt → `POST /api/sales/:id/reprint`, by the till's own
    * working-order id. Paper only: it files NOTHING and ignores automatic receipt selection. An
-   * id naming no filed sale, or a till with no active printer, is a 200 no-op. The copy's fixed words
+   * id naming no filed sale is a 200 no-op; a till with no active receipt printer is refused with
+   * `receipt.no_printer` (409). The copy's fixed words
    * and formatting are in `language`, one of {@link TillInfo.receiptLanguages} or the sale's own,
    * or without one in the language the sale was filed in.
    */

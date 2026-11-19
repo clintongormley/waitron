@@ -410,8 +410,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Solo una factura completa se puede enviar así.",
   },
   "invoice_delivery.receipt_unavailable": {
-    en: "This till has no receipt printer to print the invoice on. Ask a manager.",
-    es: "Este TPV no tiene impresora de tickets para imprimir la factura. Avisa a un responsable.",
+    en: "This device has no receipt printer to print the invoice on. Choose one in Equipment, then try again.",
+    es: "Este dispositivo no tiene impresora de tickets para imprimir la factura. Elige una en Equipo e inténtalo de nuevo.",
   },
   "print_job.sale_payload_expired": {
     en: "Saved print data is removed after a week. Reprint this receipt or invoice from Orders in the dashboard.",
