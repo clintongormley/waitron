@@ -324,9 +324,16 @@ export async function saveDraft(
   }
   const lines = parsed.map((line) => {
     const stored = line.id === undefined ? undefined : owned.get(line.id);
+    const setMenuId = line.setMenuId ?? stored?.setMenuId;
     return {
       ...line,
-      setMenuId: line.setMenuId ?? stored?.setMenuId,
+      setMenuId,
+      allowStale:
+        setMenuId !== undefined &&
+        stored?.setMenuId === setMenuId &&
+        stored.menuItemId === line.menuItemId &&
+        stored.menuVersionId === line.menuVersionId &&
+        stored.variantId === line.variantId,
       setMenuReservedLineId:
         line.setMenuReservedLineId === undefined
           ? stored?.setMenuReservedLineId
@@ -368,8 +375,8 @@ export async function saveDraft(
     if (hasSetMenu(line)) {
       if (stringToThousandths(line.quantity) !== 1000) throw invalid("quantity");
       const selected = setMenus.offerFor(line);
-      if (selected === undefined) throw invalid(`lines.${index}.menuItemId`);
-      assertSetMenuPortion(selected.offer, line.variantId);
+      if (selected !== undefined) assertSetMenuPortion(selected.offer, line.variantId);
+      else if (!line.allowStale) throw invalid(`lines.${index}.menuItemId`);
     } else {
       const offer = zone.offers.get(line.menuItemId);
       if (offer?.ordering === "not_sold_separately") {

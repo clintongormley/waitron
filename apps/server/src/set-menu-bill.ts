@@ -215,7 +215,7 @@ export interface SetMenuPlacement {
   variantId: string | null;
 }
 
-export function setMenuDishColumns(result: PlacementResult, _copy: SetMenuCopy) {
+export function setMenuDishColumns(result: PlacementResult) {
   return {
     setMenuLineId: result.setMenuLineId,
     setMenuPlace: result.place,
@@ -268,10 +268,6 @@ export async function placeSetMenuRows(
       dishName: rows.find((row) => row.id === unplaced[0])!.name,
     });
   const resultById = new Map(placed.map((place) => [place.id, place]));
-  const copyById = new Map(state.copies.map((copy) => [copy.id, copy]));
-  const copyOfLine = new Map(
-    state.setMenus.map((line) => [line.lineId, copyById.get(line.copyId)!]),
-  );
   const menuOfRow = new Map(
     order.map(({ workingOrderLineId, draft }) => [workingOrderLineId, draft.setMenuId]),
   );
@@ -283,7 +279,7 @@ export async function placeSetMenuRows(
           ...row,
           setMenuRole: "dish",
           setMenuId: menuOfRow.get(placement.id)!,
-          ...setMenuDishColumns(placement, copyOfLine.get(placement.setMenuLineId)!),
+          ...setMenuDishColumns(placement),
         };
   });
 }

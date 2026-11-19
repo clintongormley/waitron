@@ -710,6 +710,7 @@ export async function priceOrderLines(
   // each with its period's name.
   const ended = new Map<(typeof requestedLines)[number], string>();
   let alsoSold: ReadonlySet<string> = new Set();
+  const marks = new Map<number, NonNullable<LineContextInput["late"]>>();
   const checked = (line: (typeof requestedLines)[number]) =>
     line[ADDED_EXTRAS_ONLY] !== true || line[ON_SENT_DISH] === true;
   if (periodCheck === "added" && requestedLines.some(checked)) {
@@ -723,8 +724,10 @@ export async function priceOrderLines(
     const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
     const items: { productId: string; variantId: string | null }[] = [];
     for (const line of requestedLines) {
-      if (line[SET_MENU_DRAFT_LINE] !== undefined) continue;
-      const offer = offerById.get(line.menuItemId);
+      const selected = selectedSetMenu(line);
+      if (selected?.fromRecordedCopy === true) continue;
+      const offer =
+        line[SET_MENU_DRAFT_LINE] === undefined ? offerById.get(line.menuItemId) : selected?.offer;
       const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
       if (
         periodName === undefined ||
@@ -768,14 +771,21 @@ export async function priceOrderLines(
       });
     }
     const periodName = ended.get(line);
-    if (periodName !== undefined) {
+    if (
+      selected?.fromRecordedCopy === true &&
+      service !== null &&
+      !service.orderableMenuIds.includes(offer.menuId)
+    ) {
+      // The recorded copy permits this send, even if the dish is held for later firing.
+      const name = service.endedMenus.find(({ menuId }) => menuId === offer.menuId)?.periodName;
+      marks.set(index, { periodName: name ?? offer.menuName, confirmedBy: null });
+    } else if (periodName !== undefined) {
       if (!alsoSold.has(offeredKey(offer.productId, line.variantId ?? null))) {
         late.push({ index, menuItemId: offer.id, menuId: offer.menuId, periodName });
       }
     } else if (
       service !== null &&
       line[ADDED_EXTRAS_ONLY] !== true &&
-      selected?.fromRecordedCopy !== true &&
       !service.orderableMenuIds.includes(offer.menuId)
     ) {
       throw new AppError("menu_period.not_running", {
@@ -806,8 +816,6 @@ export async function priceOrderLines(
       selected === undefined ? undefined : { offer, versionId: selected.copy.versionId };
     return { ...line, offer, setMenuOffer };
   });
-  // The mark each confirmed late dish's rows carry, by the dish's index in `lines`.
-  const marks = new Map<number, { periodName: string; confirmedBy: string }>();
   if (late.length > 0) {
     const confirmedBy = await confirmLateDishes(tx, service!.departmentId, late, lateSend);
     for (const { index, periodName } of late) marks.set(index, { periodName, confirmedBy });
@@ -864,7 +872,7 @@ export async function priceOrderLines(
         unit: ExtraChild["unitContext"];
         portionable: boolean;
         placement?: Omit<SetMenuPlacement, "workingOrderLineId">;
-        late?: { periodName: string; confirmedBy: string };
+        late?: LineContextInput["late"];
         vatClass: VatClass;
         takeawayVatClass: VatClass;
       }
@@ -874,7 +882,7 @@ export async function priceOrderLines(
         menuItemId: string;
         extraListId: string;
         unit?: ExtraChild["unitContext"];
-        late?: { periodName: string; confirmedBy: string };
+        late?: LineContextInput["late"];
         vatClass: VatClass;
         takeawayVatClass: VatClass;
       }

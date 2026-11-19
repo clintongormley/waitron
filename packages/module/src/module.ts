@@ -745,8 +745,8 @@ export interface LineContextInput {
     precision: number;
     hardwareUnit: "kg" | "g" | "mg" | null;
   };
-  /** A dish sent after its period ended: that period's name and who confirmed the send. */
-  late?: { periodName: string; confirmedBy: string };
+  /** The period of a late dish, and who confirmed it when confirmation was required. */
+  late?: { periodName: string; confirmedBy: string | null };
 }
 
 export type LineContextColumns = Pick<

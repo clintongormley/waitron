@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { workingOrders } from "@waitron/db";
 import { expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { menuDocumentHash, menuVersions, updateProduct } from "@waitron/menu";
+import { menuDocumentHash, menuVersions, updateMenuDetails, updateProduct } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readDrafts } from "./order-drafts.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
@@ -12,7 +12,12 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { seedBillSetMenu, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
+import {
+  saveSetMenuDraft,
+  seedBillSetMenu,
+  setMenuOnFullMenu,
+} from "./testing/set-menu-bill-fixture.js";
 
 let venue: PartyVenue;
 let daily: Awaited<ReturnType<typeof setMenuOnFullMenu>>;
@@ -35,16 +40,8 @@ const dessert = () => ({
   quantity: "1",
 });
 
-function save({ partyId, tabId }: { partyId: string; tabId: string }, ...lines: unknown[]) {
-  return inTx(venue, (tx) =>
-    saveDraftForTest(tx, venue.cfg, partyId, venue.operator.personId, {
-      billId: tabId,
-      draftId: null,
-      revision: 0,
-      lines,
-    }),
-  );
-}
+const save = (bill: { partyId: string; tabId: string }, ...lines: unknown[]) =>
+  saveSetMenuDraft(venue, bill, ...lines);
 
 it("saves a dish only the set menu offers and reads it back as available", async () => {
   const bill = await tableBill();
@@ -65,16 +62,6 @@ it("refuses a set-menu draft line with quantity two", async () => {
     code: "management.request_invalid",
     params: { field: "quantity" },
   });
-});
-
-it("saves a requested place and reads it back", async () => {
-  const bill = await tableBill();
-  const lineId = await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, daily, 1));
-  const reservation = { setMenuReservedLineId: lineId, setMenuReservedPlace: 0 };
-  const draft = await save(bill, { ...dessert(), ...reservation });
-  expect(draft.lines[0]).toMatchObject(reservation);
-  const [read] = await inTx(venue, (tx) => readDrafts(tx, bill.partyId));
-  expect(read!.lines[0]).toMatchObject(reservation);
 });
 
 it("reads a saved set-menu dish as unavailable after it sells out", async () => {
@@ -126,5 +113,29 @@ it("refuses a measured dish even when an existing copy lists it", async () => {
   await expect(save(bill, { ...dessert(), menuVersionId: copy.versionId })).rejects.toMatchObject({
     code: "set_menu.dish_sold_by_measure",
     params: { productId: daily.productId },
+  });
+});
+
+it("keeps an unavailable stale draft dish when saving a new ordinary dish", async () => {
+  const bill = await tableBill();
+  const draft = await save(bill, dessert());
+  await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, daily.menuId, { setPrice: "17.00" });
+    await publishWorkingMenu(tx, daily.fullMenuId);
+  });
+  const saved = await inTx(venue, (tx) =>
+    saveDraftForTest(tx, venue.cfg, bill.partyId, venue.operator.personId, {
+      billId: bill.tabId,
+      draftId: draft.id,
+      revision: draft.revision,
+      lines: [draft.lines[0]!, { menuItemId: venue.item("Water"), quantity: "1" }],
+    }),
+  );
+  expect(saved.lines).toMatchObject([
+    { id: draft.lines[0]!.id, menuVersionId: daily.versionId, unavailable: true },
+    { menuItemId: venue.item("Water"), unavailable: false },
+  ]);
+  await expect(save(await tableBill(), dessert())).rejects.toMatchObject({
+    code: "menu.version_changed",
   });
 });

@@ -10,6 +10,7 @@ interface SetMenuLineOffer {
   setMenuId: string;
   menuVersionId: string | null;
   menuItemId: string;
+  allowStale?: boolean;
 }
 
 export interface SetMenuOfferLookup {
@@ -26,14 +27,16 @@ export async function setMenuOfferLookup(
   zoneMenus: readonly Pick<ZoneMenu, "id" | "versionId">[],
   stale: "refuse" | "hide" = "refuse",
 ): Promise<SetMenuOfferLookup> {
-  const requests = new Map<string, { menuId: string; versionId: string }>();
-  for (const { setMenuId, menuVersionId } of lines) {
-    if (menuVersionId !== null) {
-      requests.set(`${menuVersionId}:${setMenuId}`, {
-        menuId: setMenuId,
-        versionId: menuVersionId,
-      });
-    }
+  const requests = new Map<string, { menuId: string; versionId: string; allowStale: boolean }>();
+  for (const { setMenuId, menuVersionId, allowStale } of lines) {
+    if (menuVersionId === null) continue;
+    const key = `${menuVersionId}:${setMenuId}`;
+    requests.set(key, {
+      menuId: setMenuId,
+      versionId: menuVersionId,
+      allowStale:
+        stale === "hide" || (allowStale === true && requests.get(key)?.allowStale !== false),
+    });
   }
   if (requests.size === 0) return { offerFor: () => undefined };
   const recorded =
@@ -46,10 +49,10 @@ export async function setMenuOfferLookup(
   );
   const live = new Map(zoneMenus.map(({ id, versionId }) => [id, versionId]));
   const changed = new Map<string, string | null>();
-  for (const [key, { menuId, versionId }] of requests) {
+  for (const [key, { menuId, versionId, allowStale }] of requests) {
     const fullMenuId = documents.get(versionId)?.menuId;
     if (fullMenuId === undefined) {
-      if (stale === "hide") {
+      if (allowStale) {
         requests.delete(key);
         continue;
       }
@@ -58,7 +61,7 @@ export async function setMenuOfferLookup(
     const liveVersionId = live.get(fullMenuId) ?? null;
     const expected = recorded.get(menuId) ?? liveVersionId;
     if (versionId !== expected) {
-      if (stale === "hide") requests.delete(key);
+      if (allowStale) requests.delete(key);
       else changed.set(fullMenuId, liveVersionId);
     }
   }

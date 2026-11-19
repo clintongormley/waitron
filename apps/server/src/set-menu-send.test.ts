@@ -13,7 +13,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { GroupRelease } from "./order-groups.js";
 import { readDrafts, submitDraft, type Draft } from "./order-drafts.js";
-import { expectedDraftEditForTest, saveDraftForTest } from "./testing/draft-command-fixture.js";
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import {
   commandFor,
   inTx,
@@ -23,7 +23,11 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { seedBillSetMenu, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
+import {
+  saveSetMenuDraft,
+  seedBillSetMenu,
+  setMenuOnFullMenu,
+} from "./testing/set-menu-bill-fixture.js";
 
 let venue: PartyVenue;
 let daily: Awaited<ReturnType<typeof setMenuOnFullMenu>>;
@@ -90,16 +94,8 @@ const dessert = () => ({
   options: [option],
 });
 
-function save({ partyId, tabId }: { partyId: string; tabId: string }, ...lines: unknown[]) {
-  return inTx(venue, (tx) =>
-    saveDraftForTest(tx, venue.cfg, partyId, venue.operator.personId, {
-      billId: tabId,
-      draftId: null,
-      revision: 0,
-      lines,
-    }),
-  );
-}
+const save = (bill: { partyId: string; tabId: string }, ...lines: unknown[]) =>
+  saveSetMenuDraft(venue, bill, ...lines);
 
 async function send(
   draft: Draft,
