@@ -3104,8 +3104,8 @@ export class MenusScreen extends LitElement {
    * `saved` closes, only while the menu it was asked in is still open; once another menu has been
    * opened, a refusal is named with the menu it was for, and a saved change clears nothing and
    * moves no focus there. `refused` shows a refusal in its confirm and says whether that confirm
-   * was still open; when it was not, the refusal is named with the menu too. `reread` can name a
-   * row to focus once the saved change is read back. */
+   * was still open; when it was not, the refusal is named with the menu too. For a move outside
+   * Select mode, `reread` supplies the row to focus in the refreshed structure. */
   async #sendSelected(change: {
     send: () => Promise<unknown>;
     refused: (message: string) => boolean;

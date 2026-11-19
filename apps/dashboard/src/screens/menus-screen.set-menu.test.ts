@@ -623,6 +623,8 @@ it("keeps the current selection when clicking a set menu in Select mode", async 
   await selected.click();
   await page.getByText("Daily menu", { exact: true }).click();
   expect(location.pathname).toBe("/menus/menu/lunch/view/structure");
+  await page.getByText("Set menu", { exact: true }).click();
+  expect(location.pathname).toBe("/menus/menu/lunch/view/structure");
   await expect.element(selected).toBeChecked();
 });
 
