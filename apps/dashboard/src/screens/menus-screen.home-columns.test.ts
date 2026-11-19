@@ -37,6 +37,7 @@ it.each(["en", "es-ES"])(
           members: [],
         },
         nodes: [],
+        placeableSetMenus: [],
         includable: [],
         includedBy: [],
       };

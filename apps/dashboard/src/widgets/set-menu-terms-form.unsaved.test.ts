@@ -22,9 +22,13 @@ const fixture = {
 
 class SetMenuLeaveHost extends LitElement {
   readonly leave = new LeaveController(this);
+  creating = false;
 
   override render() {
-    return html`<dashboard-set-menu-terms-form .value=${fixture}></dashboard-set-menu-terms-form>
+    return html`<dashboard-set-menu-terms-form
+        .creating=${this.creating}
+        .value=${this.creating ? null : fixture}
+      ></dashboard-set-menu-terms-form>
       <dashboard-set-menu-lines-form
         .lines=${lines}
         .courses=${courses}
@@ -65,3 +69,13 @@ it.each([
     expect(field!.value).toBe(value);
   },
 );
+
+it("keeps the new set menu's draft when Escape is followed by Keep editing", async () => {
+  await mountWidget<SetMenuLeaveHost>("set-menu-leave-test-host", { creating: true });
+  const name = page.getByRole("textbox", { name: /^Name/ }).first();
+  await name.fill("Daily menu");
+  await userEvent.keyboard("{Escape}");
+  await expect.element(page.getByRole("dialog", { name: "Unsaved changes" })).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing" }).click();
+  await expect.element(name).toHaveValue("Daily menu");
+});

@@ -15,6 +15,7 @@ export const GUIDE_LINKS = {
   "products.vat": { page: "products", section: "vat" },
   "products.course": { page: "products", section: "course" },
   "products.variants": { page: "products", section: "variants" },
+  "products.set-menus": { page: "products", section: "set-menus" },
   "products.patch-live-menu": { page: "products", section: "patch-live-menu" },
   "staff.own-data": { page: "staff", section: "own-data" },
   "box-status.free-space": { page: "box-status", section: "free-space" },

@@ -406,6 +406,7 @@ export interface MenuStructure {
   root: SectionDetails;
   nodes: MenuStructureNode[];
   includable: { id: string; name: string; rootSectionId: string }[];
+  placeableSetMenus: { id: string; name: string }[];
   includedBy: { id: string; name: string }[];
 }
 

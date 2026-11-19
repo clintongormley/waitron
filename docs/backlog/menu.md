@@ -1007,9 +1007,11 @@ The dashboard can open an existing set-menu draft, edit its name, price, VAT rat
 lines, and show what to fix before publishing. A full menu’s Preview links to its set menus with changes or publication problems.
 Managers can add and copy dishes in a set-menu draft, give a dish a course for that set menu, and
 edit surcharges and variant choices. The editor shows the inclusion lines added or removed by a
-dish change. Dashboard creation and placement, and selecting copy-only dishes in the live
-correction dialog, remain open. Till ordering and payment, bill documents, and the demo and guides
-also remain open. Release set menus to venues only once all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
+dish change. The dashboard piece lets managers create a set menu, place it in a full menu
+and publish its current version to the tills. The products guide covers setup in both languages.
+Selecting copy-only dishes in the live correction dialog remains open. Till ordering and payment,
+bill documents, and the demo are the remaining pieces. Release set menus to venues only once
+all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer
 (owner, 2026-11-18, question 4 of the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md);

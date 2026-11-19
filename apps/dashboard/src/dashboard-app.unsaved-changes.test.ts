@@ -944,6 +944,7 @@ it.each([
             members: [],
           },
           nodes: [],
+          placeableSetMenus: [],
           includable: [],
           includedBy: [{ id: "menu-two", name: "Dinner" }],
         }),

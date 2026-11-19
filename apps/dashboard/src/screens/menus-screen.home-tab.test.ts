@@ -141,6 +141,7 @@ function structureOf(id: string): MenuStructure {
       color: null,
       members: [],
     },
+    placeableSetMenus: [],
     includable: [],
     includedBy: [],
     nodes: lunch ? lunchNodes() : [],
