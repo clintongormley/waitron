@@ -128,7 +128,7 @@ writer)** here and where they first appear in a task.
    is placed on its own (spec §3); a second soup is a second tap, asked about on its own. The
    basket shows no quantity stepper on such a line.
 7. **A dish sold by measure is never a set-menu dish: piece 1's rule, with a backstop here**
-   (piece 1 decision 12, a plan writer's call on Fable P2, which the owner has not answered). A
+   (piece 1 decision 12, confirmed by the owner on 18 November 2026). A
    stored line's amount is unit price × quantity, so a flat surcharge on 0.300 kg would be filed as
    30% of itself (Fable F6, run). Piece 1's editor refuses such a product and its publish refuses a
    set menu whose dish's unit was changed to one. In case a copy still holds one, piece 2 applies
@@ -197,7 +197,7 @@ writer)** here and where they first appear in a task.
   `replaceMovedDishes`). This piece writes the dish offer's classes. Piece 4 assigns the set
   menu's classes to included dishes and drink supplements in the set menu.
 - **The one removal writer.** `removeSetMenuLines` (`apps/server/src/set-menu-count.ts`, Task 6) is
-  called by − and by Cancel. Piece 4 adds `set_menu.remove_paid` there.
+  called by − and by Cancel. Piece 4 refuses removal of a paid line with `bill.line_paid`.
 - **The money refusal.** `refuseSetMenuMoney` (`apps/server/src/set-menu-bill.ts`, Task 10), in
   `beginBillPayment`, `planAdjustment` and `priceStoredOrderForIssuance` only: it refuses starting
   a payment, never recording one already captured. Piece 4 removes every call and the function.
