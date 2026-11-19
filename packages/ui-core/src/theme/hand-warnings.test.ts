@@ -293,28 +293,28 @@ describe("the raised cards, the text on them and the number stepper's fill", () 
     expect(derive(withHand(grey, "light", { "surface-raised": "#eeeeee" })).warnings).toEqual([]);
   });
 
-  test("dark raised cards set by hand to #454545 warn on Waitron's buttons, and the secondary text moves until it reads on them", () => {
-    const theme = derive(withHand(WAITRON_CHOICES, "dark", { "surface-raised": "#454545" }));
+  test("dark raised cards set by hand to #6c6c6c warn on Waitron's buttons, and the secondary text moves until it reads on them", () => {
+    const theme = derive(withHand(WAITRON_CHOICES, "dark", { "surface-raised": "#6c6c6c" }));
     expect(theme.warnings).toEqual([
       {
         field: "handSet.dark.surface-raised",
         mode: "dark",
-        against: ["primary"],
-        fix: "#424242",
+        against: ["primary-disabled", "danger-disabled", "google-button-line", "primary"],
+        fix: "#454545",
         blockedBy: [],
       },
     ]);
-    expect(ratio(WAITRON_DEFAULTS.dark[P("text-muted")]!, "#454545")).toBe("3.97");
-    expect(theme.dark[P("text-muted")]).toBe("#acb2be");
-    expect(ratio("#acb2be", "#454545")).toBe("4.50");
+    expect(ratio(WAITRON_DEFAULTS.dark[P("text-muted")]!, "#6c6c6c")).toBe("2.17");
+    expect(theme.dark[P("text-muted")]).toBe("#e7eefb");
+    expect(ratio("#e7eefb", "#6c6c6c")).toBe("4.51");
   });
 
   test("light raised cards set by hand to #d4d4d4 move the secondary text until a card header reads at 4.5:1", () => {
     const theme = derive(withHand(WAITRON_CHOICES, "light", { "surface-raised": "#d4d4d4" }));
     expect(theme.warnings).toEqual([]);
-    expect(ratio(WAITRON_DEFAULTS.light[P("text-muted")]!, "#d4d4d4")).toBe("4.13");
-    expect(theme.light[P("text-muted")]).toBe("#565c68");
-    expect(ratio("#565c68", "#d4d4d4")).toBe("4.53");
+    expect(ratio(WAITRON_DEFAULTS.light[P("text-muted")]!, "#d4d4d4")).toBe("4.05");
+    expect(theme.light[P("text-muted")]).toBe("#5b5c5f");
+    expect(ratio("#5b5c5f", "#d4d4d4")).toBe("4.51");
   });
 
   test("Fix all on light raised cards set by hand to #c0c0c0 leaves every rule passing, the card header's text included", () => {
@@ -340,10 +340,10 @@ describe("the raised cards, the text on them and the number stepper's fill", () 
   });
 
   test.each([
-    ["light", "#012663"],
-    ["dark", "#013c9b"],
+    ["light", "#00232f"],
+    ["dark", "#08758d"],
   ] as const)(
-    "a %s stepper fill set by hand to the Main buttons' own blue warns, and its fix clears it",
+    "a %s stepper fill set by hand to the Main buttons' own colour warns, and its fix clears it",
     (mode, fix) => {
       const primary = WAITRON_DEFAULTS[mode][P("primary")]!;
       const choices = withHand(WAITRON_CHOICES, mode, { "stepper-button": primary });

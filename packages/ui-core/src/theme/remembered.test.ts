@@ -39,14 +39,14 @@ interface Changeable {
 
 const PALE_PAGE = {
   ...WAITRON_DEFAULTS,
-  light: { ...WAITRON_DEFAULTS.light, [P("bg")]: "#f0f0f0" },
+  light: { ...WAITRON_DEFAULTS.light, [P("bg")]: "#fafafa" },
 };
 
 describe("answers remembered between calls", () => {
   test("belong to the defaults they were worked out under", () => {
     const waitronPage = WAITRON_DEFAULTS.light[P("bg")];
     expect(deriveThemeFrom(WAITRON_DEFAULTS, WAITRON_CHOICES).light[P("bg")]).toBe(waitronPage);
-    expect(deriveThemeFrom(PALE_PAGE, WAITRON_CHOICES).light[P("bg")]).toBe("#f0f0f0");
+    expect(deriveThemeFrom(PALE_PAGE, WAITRON_CHOICES).light[P("bg")]).toBe("#fafafa");
     expect(deriveThemeFrom(WAITRON_DEFAULTS, WAITRON_CHOICES).light[P("bg")]).toBe(waitronPage);
   });
 
@@ -55,8 +55,8 @@ describe("answers remembered between calls", () => {
     expect(deriveThemeFrom(defaults, WAITRON_CHOICES).light[P("bg")]).toBe(
       WAITRON_DEFAULTS.light[P("bg")],
     );
-    defaults.light[P("bg")] = "#f0f0f0";
-    expect(deriveThemeFrom(defaults, WAITRON_CHOICES).light[P("bg")]).toBe("#f0f0f0");
+    defaults.light[P("bg")] = "#fafafa";
+    expect(deriveThemeFrom(defaults, WAITRON_CHOICES).light[P("bg")]).toBe("#fafafa");
   });
 
   test("are not changed by a caller changing what it was given", () => {

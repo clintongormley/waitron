@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import cases from "./__fixtures__/reference-cases.json";
 import paletteCases from "./__fixtures__/reference-palette-cases.json";
+// The fixtures' answers were worked out against these colours, not Waitron's current ones.
+import referenceDefaults from "./__fixtures__/reference-defaults.json";
 import { MODES, type WaitronDefaults } from "./defaults.js";
 import {
   canFixAll,
@@ -11,7 +13,6 @@ import {
   WAITRON_CHOICES,
 } from "./theme.js";
 import { colourToken, THEME_COLOURS } from "./tokens.js";
-import { WAITRON_DEFAULTS } from "./waitron.js";
 
 // Inputs that tell apart code shapes the hand-written cases do not; the expected values are the
 // output of the prototype named under "The reference" in
@@ -35,9 +36,9 @@ interface ReferenceCase {
 // Waitron's real palette failed, such as one between worked-out colours after a fix's settling.
 function holds(reference: ReferenceCase) {
   const defaults: WaitronDefaults = {
-    ...WAITRON_DEFAULTS,
-    light: { ...WAITRON_DEFAULTS.light, ...reference.overrides?.light },
-    dark: { ...WAITRON_DEFAULTS.dark, ...reference.overrides?.dark },
+    ...referenceDefaults,
+    light: { ...referenceDefaults.light, ...reference.overrides?.light },
+    dark: { ...referenceDefaults.dark, ...reference.overrides?.dark },
   };
   const choices: ThemeChoices = { ...WAITRON_CHOICES, ...reference.choices };
   const theme = deriveThemeFrom(defaults, choices);
