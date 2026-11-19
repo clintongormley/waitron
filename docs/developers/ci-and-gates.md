@@ -1012,7 +1012,7 @@ nothing notices is behaviour no test is checking. `thresholds.break` turns that 
 Four packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
 `packages/shared` since July 2026, `packages/fiscal` under the owner's 2026-09-19 decision that
 the target is 90 everywhere, and `packages/node-db` and `packages/handover` from their first commits. `packages/db`, `packages/ui` and `packages/ui-core` carry no `break` in
-their own configs, deliberately: CI splits each run into shards (thirteen for db, thirty for ui, four for
+their own configs, deliberately: CI splits each run into shards (thirteen for db, thirty-one for ui, four for
 ui-core), each passed its own `--mutate` list, so a `thresholds.break` there would gate one slice
 rather than the package. Their bars live in the `aggregate` job of `.github/workflows/mutation-sharded.yml`,
 called once per package by `mutation.yml`. It merges that package's shard reports and scores them once. ui held its bar in its own config from 2026-09-19 until A539 moved it to the
@@ -1025,7 +1025,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | --- | --- | --- |
 | `shared` | four `mutation-shared` shards and `mutation-shared-aggregate` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package, or a full run; ordinary main pushes skip shared mutation |
 | `ui-core` | `mutation-ui-core` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
-| `ui` | `mutation-ui` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
+| `ui` | `mutation-ui` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirty-one shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
 | `db` | `mutation-db` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirteen shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 | `node-db` | the unsharded `mutation-node-db` job in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it; a LOCAL `pnpm --filter @waitron/node-db mutation` fails below 90 too, because the bar is in its own config |
@@ -1322,7 +1322,7 @@ packed by `packages/ui/mutation-costs.json`: per file, the MEDIAN over the shard
 [43712380973](https://github.com/clintongormley/waitron/actions/runs/43712380973),
 [43808061319](https://github.com/clintongormley/waitron/actions/runs/43808061319) and 44021607120
 (which lacks shards 23 and 30) of the same per-file sum as ui-core's. These are ranking weights, not
-job predictions. Keep thirty shards and the 50-minute limit. Files no report holds (the re-exports
+job predictions. Keep the 50-minute limit. Files no report holds (the re-exports
 of ui-core, `index.ts`, `vite-env.d.ts`: they have no mutants) are left out and take the byte
 fallback. Do not regenerate this table with the db-calibrated `scripts/mutation-costs.mjs`. Refresh
 from several runs' reports, each downloaded with
@@ -1359,6 +1359,17 @@ const costs = Object.fromEntries(Object.keys(samples).sort()
   .map((path) => [path, Math.max(0.1, Math.round(median(samples[path]) * 10) / 10)]));
 writeFileSync("packages/ui/mutation-costs.json", JSON.stringify(costs, null, 2) + "\n");
 ```
+
+**ui, 19 November 2026.** Scheduled run [44462750256](https://github.com/clintongormley/waitron/actions/runs/44462750256)
+cancelled `mutation-ui` shard 26 at its 50-minute limit and left no shard 26 report. The same shard
+had taken 24m55s in run 44039833658, started by hand on 17 November, and 46m35s in scheduled run
+44241780388 on 18 November. Between those two runs' reports, `src/tabbable.ts` went from 811 s
+(summed, not elapsed) with none of its 61 mutants marked static to 4,986 s with 37 marked static,
+while the shard's other files went from about 3,400 to 3,700 s. Its table weight of 846 had packed
+it beside about 3,500 of other files' weight. Neither `tabbable.ts` nor its test file changed
+between the two runs' commits, so `tabbable.ts` is now a `HEAVY_FILES` entry in one range, a shard
+of its own, and has left the cost table. ui runs thirty-one shards, six of them for the packed
+files; the 50-minute limit is unchanged.
 
 The cost-table guards check each table's existence, positive weights and current mutation paths,
 not freshness or the weight formula.

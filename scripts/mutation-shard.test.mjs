@@ -294,6 +294,7 @@ describe("HEAVY_FILES", () => {
         "src/components/wt-data-table.ts": 12,
         "src/components/wt-dialog.ts": 6,
         "src/components/wt-floor-plan-canvas.ts": 2,
+        "src/tabbable.ts": 1,
       },
       "ui-core": {},
       shared: {},
@@ -371,7 +372,7 @@ describe("shardFiles", () => {
       JSON.stringify({ mutate: ["src/**/*.ts"] }),
     );
     const ranges = heavy.sort().flatMap((path) => splitRanges(path, 120, HEAVY_FILES.ui[path]));
-    expect(ranges).toHaveLength(24);
+    expect(ranges).toHaveLength(25);
     const total = ranges.length + 3;
     const shards = Array.from({ length: total }, (_, i) => shardFilesOf("ui", i + 1, total, dir));
     expect(shards).toEqual([
@@ -424,13 +425,13 @@ describe("shardFiles", () => {
       join(dir, "packages/ui/stryker.config.json"),
       JSON.stringify({ mutate: ["src/**/*.ts"] }),
     );
+    expect(() => shardFilesOf("ui", 1, 25, dir)).toThrow(
+      /25 shards cannot hold the 25 heavy ranges plus the other files/,
+    );
     expect(() => shardFilesOf("ui", 1, 24, dir)).toThrow(
-      /24 shards cannot hold the 24 heavy ranges plus the other files/,
+      /24 shards cannot hold the 25 heavy ranges/,
     );
-    expect(() => shardFilesOf("ui", 1, 23, dir)).toThrow(
-      /23 shards cannot hold the 24 heavy ranges/,
-    );
-    expect(shardFilesOf("ui", 25, 25, dir)).toEqual(["src/a.ts"]);
+    expect(shardFilesOf("ui", 26, 26, dir)).toEqual(["src/a.ts"]);
   });
 });
 
