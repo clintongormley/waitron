@@ -636,9 +636,14 @@ export class TillTenderPay extends LitElement {
     });
   }
 
+  @property({ type: Boolean }) hasSetMenus = false;
+
+  get #parkDisabled(): boolean {
+    return this.busy || (this.store.lineCount === 0 && !this.hasSetMenus);
+  }
+
   #startHolding(): void {
-    if (!this.isConnected || this.busy || this.store.lineCount === 0 || this.view !== "idle")
-      return;
+    if (!this.isConnected || this.#parkDisabled || this.view !== "idle") return;
     this.labelEntry = "";
     this.view = "holding";
     void this.updateComplete.then(async () => {
@@ -787,8 +792,7 @@ export class TillTenderPay extends LitElement {
   /** Reset BEFORE the dispatch, so even a synchronous listener that throws leaves the widget
    * idle. */
   #park(): void {
-    if (!this.isConnected || this.busy || this.store.lineCount === 0 || this.view !== "holding")
-      return;
+    if (!this.isConnected || this.#parkDisabled || this.view !== "holding") return;
     this.#finishEntry();
     const label = this.labelEntry.trim();
     this.view = "idle";
@@ -963,7 +967,10 @@ export class TillTenderPay extends LitElement {
 
   #tenderVariant(action: "cash" | "card" | "pay"): "primary" | "secondary" {
     if (this.busy && this.sendingTender !== action) return "secondary";
-    return this.payQuiet || this.held || (!this.busy && this.store.lineCount === 0)
+    return this.payQuiet ||
+      this.held ||
+      this.hasSetMenus ||
+      (!this.busy && this.store.lineCount === 0)
       ? "secondary"
       : "primary";
   }
@@ -1112,7 +1119,8 @@ export class TillTenderPay extends LitElement {
       ${this.#opensPaymentWindow() ? nothing : html`${this.#renderCardExtras()} ${this.#renderGuests()}`}
       ${this.#renderFormMessage()}
       <div class="actions">
-        ${this.#renderTenderButtons(disabled)} ${this.#renderReceiptLanguageButton(disabled)}
+        ${this.#renderTenderButtons(disabled || this.hasSetMenus)}
+        ${this.#renderReceiptLanguageButton(disabled)}
       </div>
     `;
   }
@@ -1123,7 +1131,7 @@ export class TillTenderPay extends LitElement {
       ${this.#opensPaymentWindow() ? nothing : html`${this.#renderCardExtras()} ${this.#renderGuests()}`}
       ${this.#renderFormMessage()}
       <div class="actions idle-actions">
-        ${this.#renderTenderButtons(disabled)}
+        ${this.#renderTenderButtons(disabled || this.hasSetMenus)}
         ${
           withPlace
             ? html`<wt-button
@@ -1137,7 +1145,7 @@ export class TillTenderPay extends LitElement {
               </wt-button>`
             : nothing
         }
-        ${this.#renderInvoiceButton(disabled)}
+        ${this.#renderInvoiceButton(disabled || this.hasSetMenus)}
         ${
           this.parks
             ? html`<span class="help-anchor"
@@ -1145,7 +1153,7 @@ export class TillTenderPay extends LitElement {
                   class="hold"
                   variant="secondary"
                   size="md"
-                  ?disabled=${disabled}
+                  ?disabled=${this.#parkDisabled}
                   @click=${() => this.#startHolding()}
                 >
                   ${t("action.hold")} </wt-button
@@ -1424,7 +1432,7 @@ export class TillTenderPay extends LitElement {
                     class="park"
                     variant="primary"
                     size="lg"
-                    ?disabled=${this.busy || this.store.lineCount === 0}
+                    ?disabled=${this.#parkDisabled}
                     @click=${() => this.#park()}
                   >
                     ${t("action.hold")}

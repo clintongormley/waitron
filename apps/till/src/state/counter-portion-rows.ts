@@ -27,7 +27,9 @@ export function foldRetrievedPortions(
       const dish = dishOf(line);
       // An unsent dish's station choice lives only on the basket line: the listing reads its
       // station from the kitchen record, which an unsent dish does not have yet.
-      return dish === undefined ? null : tabLinePortionKey(dish, listed.lines, line.makeAt ?? null);
+      return dish === undefined || line.setMenuId !== undefined
+        ? null
+        : tabLinePortionKey(dish, listed.lines, line.makeAt ?? null);
     },
     (line) => dishOf(line)?.lineNo ?? 0,
   );

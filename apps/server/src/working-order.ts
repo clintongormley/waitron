@@ -125,6 +125,8 @@ import type {
   OptionSnapshot,
   SaleLineClassification,
   TableSignal,
+  BillSetMenuState,
+  ServedSetMenuCopy,
 } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
 import { placementOf } from "./floor-today-store.js";
@@ -138,6 +140,8 @@ import type { RetainedCourseLine } from "./retained-course.js";
 import {
   carryBillSetMenuCopies,
   placeSetMenuRows,
+  readBillSetMenus,
+  readBillsSetMenus,
   refuseSetMenuMoney,
   refuseDraftLosingSetMenuPlace,
   refuseUnlessSetMenuBill,
@@ -145,6 +149,7 @@ import {
   type SetMenuDraftLine,
   type SetMenuPlacement,
 } from "./set-menu-bill.js";
+import { setSetMenuCount } from "./set-menu-count.js";
 import { replaceMovedDishes } from "./set-menu-moves.js";
 import {
   assertSetMenuPortion,
@@ -191,6 +196,7 @@ import {
   billPartyTables,
   billPaymentRefunds,
   billPayments,
+  billSetMenuCopies,
   devices,
   diningTables,
   tableMerges,
@@ -1481,11 +1487,14 @@ export interface ParkOrderRequest {
   operatorId?: string;
   lateSend?: LateSendConfirmation;
   dining?: Dining;
+  firstSetMenu?: { menuId: string; personId: string };
 }
 
 export interface ParkOrderResult {
   id: string;
   orderNumber: number;
+  revision?: number;
+  setMenus?: BillSetMenuState;
 }
 
 /**
@@ -1670,7 +1679,7 @@ export async function parkOrder(
   req: ParkOrderRequest,
   attendance?: OrderAttendance,
 ): Promise<ParkOrderResult> {
-  if (req.lines.length === 0) {
+  if (req.lines.length === 0 && req.firstSetMenu === undefined) {
     throw new AppError("sale.empty_basket", {});
   }
 
@@ -1684,7 +1693,10 @@ export async function parkOrder(
         dining: req.dining,
       });
       await captureOrderEdit(tx, attendance, req.id, req.operatorId, 0, "park");
-      return { id: req.id, orderNumber };
+      if (req.firstSetMenu === undefined) return { id: req.id, orderNumber };
+      const { menuId, personId } = req.firstSetMenu;
+      const setMenus = await setSetMenuCount(tx, cfg, req.id, menuId, 1, personId);
+      return { id: req.id, orderNumber, revision: await readOrderRevision(tx, req.id), setMenus };
     });
   } catch (error) {
     if (!isUniqueViolation(error)) {
@@ -1694,14 +1706,17 @@ export async function parkOrder(
     // venue file at a time, so that row is readable in a fresh transaction: replay its number.
     return withTransaction(deps.db, async (tx) => {
       const [existing] = await tx
-        .select({ orderNumber: workingOrders.orderNumber })
+        .select({ orderNumber: workingOrders.orderNumber, revision: workingOrders.revision })
         .from(workingOrders)
         .where(and(eq(workingOrders.id, req.id), eq(workingOrders.status, "open")));
       // The colliding id is not `open`: an id reuse, not a retry.
       if (existing === undefined) {
         throw error;
       }
-      return { id: req.id, orderNumber: existing.orderNumber };
+      const reply = { id: req.id, orderNumber: existing.orderNumber };
+      return req.firstSetMenu === undefined
+        ? reply
+        : { ...reply, revision: existing.revision, setMenus: await readBillSetMenus(tx, req.id) };
     });
   }
 }
@@ -5286,6 +5301,8 @@ export interface HeldOrder {
   /** The order's own way of selling, whatever its department now says. */
   dining: Dining;
   diningChoice: DiningChoice;
+  setMenus?: BillSetMenuState;
+  setMenuCopies?: ServedSetMenuCopy[];
   /**
    * PARENT rows only, each dish's child lines nested as `extras`.
    */
@@ -5294,6 +5311,8 @@ export interface HeldOrder {
     optionSnapshots?: OptionSnapshot[];
     workingOrderLineId?: string;
     menuItemId?: string;
+    menuVersionId?: string;
+    setMenuId?: string;
     /** The dish: on a line sold as a variant, the variant's parent. */
     productId: string | null;
     /** The variant the line was sold as, absent when it names none. */
@@ -5442,6 +5461,12 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         receiptLocale: workingOrders.receiptLocale,
         invoiceType: workingOrders.invoiceType,
         partyId: workingOrders.partyId,
+        hasSetMenus: exists(
+          tx
+            .select({ id: billSetMenuCopies.workingOrderId })
+            .from(billSetMenuCopies)
+            .where(eq(billSetMenuCopies.workingOrderId, id)),
+        ).mapWith(Boolean),
       })
       .from(workingOrders)
       .where(and(eq(workingOrders.id, id), which));
@@ -5467,6 +5492,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         extraListId: workingOrderLines.extraListId,
         note: workingOrderLines.note,
         productParentId: products.parentId,
+        setMenuId: workingOrderLines.setMenuId,
         variantName: workingOrderLines.variantName,
         variantKitchenName: workingOrderLines.variantKitchenName,
         kitchenName: workingOrderLines.kitchenName,
@@ -5474,7 +5500,12 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       })
       .from(workingOrderLines)
       .leftJoin(products, eq(products.id, workingOrderLines.productId))
-      .where(eq(workingOrderLines.workingOrderId, id))
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, id),
+          or(isNull(workingOrderLines.setMenuRole), ne(workingOrderLines.setMenuRole, "set_menu")),
+        ),
+      )
       .orderBy(workingOrderLines.lineNo);
     const declarations = await readProductDeclarations(
       tx,
@@ -5548,6 +5579,12 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
           workingOrderLineId: line.id,
           optionSnapshots: line.optionSnapshots,
           menuItemId: context.menuItemId,
+          ...(line.setMenuId === null
+            ? {}
+            : {
+                setMenuId: line.setMenuId,
+                ...(context.menuVersionId === null ? {} : { menuVersionId: context.menuVersionId }),
+              }),
           productId: line.productId,
           quantity: line.quantity,
           makeAt: line.makeAt,
@@ -5604,6 +5641,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       ...(order.receiptLocale === null ? {} : { receiptLanguage: order.receiptLocale }),
       invoiceType: order.invoiceType,
       ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
+      ...(order.hasSetMenus ? (await readBillsSetMenus(tx, [id])).get(id)! : {}),
       lines,
     };
   });
@@ -5622,6 +5660,7 @@ export interface UpdateHeldOrderRequest {
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
+    [SET_MENU_DRAFT_LINE]?: SetMenuDraftLine;
   } & LineExtras)[];
   label?: string;
   revision: number;
@@ -5996,13 +6035,17 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
       menuItemId: menuItemByLine.get(line.id),
       children: lines.filter((child) => child.parentLineId === line.id),
     }));
+  const partyId = await partyOfOrder(tx, orderId);
   return {
-    partyId: await partyOfOrder(tx, orderId),
+    partyId,
     lines,
     parents,
     maxLineNo: Math.max(0, ...lines.map((line) => line.lineNo)),
     newWork: rows.some(
-      (line) => line.sentAt !== null && (!line.madeHere || line.groupState !== "held"),
+      (line) =>
+        (partyId !== null || line.setMenuRole !== "set_menu") &&
+        line.sentAt !== null &&
+        (!line.madeHere || line.groupState !== "held"),
     )
       ? "fire"
       : lines.some((line) => line.ticket !== null || line.groupId !== null)
@@ -6835,7 +6878,10 @@ async function applyLineEdits(
     }
     for (const [rowIndex, row] of group.rows.entries()) {
       const origin = as.origin;
-      if (row.parentLineId === null && origin?.setMenuId != null) {
+      const placement = group.contexts[rowIndex]!.placement;
+      if (placement !== undefined) {
+        setMenuPlacements.push({ workingOrderLineId: row.id!, ...placement });
+      } else if (row.parentLineId === null && origin?.setMenuId != null) {
         setMenuPlacements.push({
           workingOrderLineId: row.id!,
           draft: {
@@ -7286,11 +7332,9 @@ export async function saveHeldOrderIn(
     operatorId: req.operatorId,
     expectedEdit: req.expectedEdit,
   });
-  // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
-  if (req.lines.length === 0) {
-    throw new AppError("sale.empty_basket", {});
-  }
   const order = await readEditableOrder(tx, id);
+  if (req.lines.length === 0 && !order.lines.some((line) => line.setMenuRole === "set_menu"))
+    throw new AppError("sale.empty_basket", {});
   const byId = new Map(order.parents.map((parent) => [parent.id, parent]));
   const claimed = new Set<string>();
   const edits: { parent: EditableParent; intent: LineIntent }[] = [];
@@ -7515,7 +7559,13 @@ export async function abandonHeldOrder(
     await refuseBillHoldingMoney(tx, [id]);
     await assertBillHasNoUnsent(tx, id);
     const lines = await readEditableOrder(tx, id);
-    if (lines.lines.some((line) => line.sentAt !== null || line.ticket !== null))
+    if (
+      lines.lines.some(
+        (line) =>
+          line.ticket !== null ||
+          (line.sentAt !== null && (locked.partyId !== null || line.setMenuRole !== "set_menu")),
+      )
+    )
       throw new AppError("ticket.already_fired", { workingOrderId: id });
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     if (locked.partyId !== null && (await ensureFamilyBill(tx, cfg, locked.partyId))) {

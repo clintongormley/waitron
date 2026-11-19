@@ -453,7 +453,7 @@ with **Send all** above them while you have dishes to send. After you send every
 stays on the table until you tap **Floor**. On a screen 720 px wide or more, such as a tablet's, the
 menu and the order sit side by side.
 
-## Set menus at a table {#set-menus}
+## Set menus {#set-menus}
 
 Set the number of each set menu on the bill. Open its folder from the grid or type its name
 in **Search** and tap the result. Then choose the dishes.
@@ -468,6 +468,10 @@ bill or cancel an empty set menu.
 To move a set menu to another bill, open **Move dishes** and select the set menu. Its
 dishes move with it. If you choose a dish by itself, check its price on the other bill
 before confirming.
+
+At the **Counter**, choose **Take away**, set the number, then open the set-menu folder
+and choose the dishes. You can **Park** a takeaway before adding any dishes. To add
+dishes later, find the bill in **Parked orders** and choose **Retrieve**.
 
 ## Give a table a short name {#short-names}
 

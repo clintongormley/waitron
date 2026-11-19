@@ -1033,21 +1033,30 @@ function isPartyOutOfDate(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "party.out_of_date";
 }
 
+function setMenuRefusal(error: unknown): CounterError | undefined {
+  const refusal = error as
+    | {
+        code?: unknown;
+        setMenuName?: unknown;
+        dishName?: unknown;
+        dishNames?: unknown;
+      }
+    | null
+    | undefined;
+  if (typeof refusal?.code !== "string" || !refusal.code.startsWith("set_menu.")) return undefined;
+  const { code, setMenuName, dishName, dishNames } = refusal;
+  return { code, setMenuName, dishName, dishNames };
+}
+
 function tableWriteError(error: unknown): CounterError {
   const recovery = recoveryRefusalOf(error);
   if (recovery !== undefined) return recovery;
   const period = periodRefusal(error);
   if (period !== undefined) return period;
+  const setMenu = setMenuRefusal(error);
+  if (setMenu !== undefined) return setMenu;
   const refused = error as { code?: string; tableId?: unknown } | undefined;
   const code = refused?.code;
-  if (typeof code === "string" && code.startsWith("set_menu.")) {
-    const { setMenuName, dishName, dishNames } = error as {
-      setMenuName?: unknown;
-      dishName?: unknown;
-      dishNames?: unknown;
-    };
-    return { code, setMenuName, dishName, dishNames };
-  }
   if (code === undefined || !TABLE_REFUSALS.has(code)) return "table.error";
   return code === "table.needs_moving" && typeof refused!.tableId === "string"
     ? { code, tableId: refused!.tableId }
@@ -1336,6 +1345,8 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   const period = periodRefusal(error);
   if (period !== undefined) return period;
   if (isPaymentsReceived(error)) return "bill.pay_with_bill_payments";
+  const setMenu = setMenuRefusal(error);
+  if (setMenu !== undefined) return setMenu;
   const overLimit = overLimitOf(error);
   if (overLimit !== undefined) return overLimit;
   const code = (error as { code?: string } | undefined)?.code;
@@ -2175,11 +2186,11 @@ class ZoneOfferIndex {
     return this.live.map((offer) => menuOfferToTillProduct(offer, this.versions.get(offer.menuId)));
   }
 
-  ordering(bill: PartyBill): readonly OrderingCopy[] {
+  ordering(bill: Parameters<typeof orderingCopies>[0]): readonly OrderingCopy[] {
     return orderingCopies(bill, this.setMenus, this.#sellingVersions);
   }
 
-  setMenuLookup(bill?: PartyBill): SetMenuOfferLookup {
+  setMenuLookup(bill?: Parameters<typeof orderingCopies>[0]): SetMenuOfferLookup {
     const copies = new Map(
       orderingCopies(bill, this.setMenus, this.#sellingVersions).map((row) => [
         row.copy.menuId,
@@ -3491,6 +3502,22 @@ export class TillApp extends LitElement {
   @state() private tableDepartmentName = "";
   /** Live offers drive refusal and refresh checks; a boundary's grid waits for an empty order. */
   readonly #counterOffers = new ZoneOfferIndex();
+  #counterSetMenuBill?: Pick<HeldOrder, "id" | "setMenus" | "setMenuCopies">;
+  @state() private counterSetMenuSaving = false;
+
+  get #currentCounterSetMenuBill() {
+    return this.#counterSetMenuBill?.id === this.#store.id ? this.#counterSetMenuBill : undefined;
+  }
+
+  get #counterHasItems(): boolean {
+    return (
+      this.#store.lineCount > 0 || !!this.#currentCounterSetMenuBill?.setMenus?.setMenus.length
+    );
+  }
+
+  #counterSetMenuLookup(): SetMenuOfferLookup {
+    return this.#counterOffers.setMenuLookup(this.#currentCounterSetMenuBill);
+  }
   readonly #counterGridOffers = new ZoneOfferIndex();
   readonly #tableOffers = new ZoneOfferIndex();
   readonly #tableGridOffers = new ZoneOfferIndex();
@@ -6377,7 +6404,7 @@ export class TillApp extends LitElement {
     this.deviceZoneSelection = null;
     this.deviceZonesUnread = false;
     let offerLoadFailed: CounterError | false = false;
-    const retainedZone = this.#store.lines.length > 0 ? this.counterServiceZoneId : undefined;
+    const retainedZone = this.#counterHasItems ? this.counterServiceZoneId : undefined;
     try {
       if (this.#choosesZones()) {
         if (this.formFactor === "till") {
@@ -6839,7 +6866,7 @@ export class TillApp extends LitElement {
 
   async #onCounterZoneSelected(event: Event): Promise<void> {
     const { zoneId } = (event as CustomEvent<{ zoneId: string }>).detail;
-    if (this.#store.lines.length > 0 || this.#counterOrderInFlight()) {
+    if (this.#counterHasItems || this.#counterOrderInFlight()) {
       // The zone the counter is already on changes no service area, so it acts as the Counter tab.
       if (zoneId === this.counterServiceZoneId) {
         if (this.errorKey === "service_zone.basket_active") this.errorKey = undefined;
@@ -6866,7 +6893,7 @@ export class TillApp extends LitElement {
       if (
         request !== this.#counterOfferRequest ||
         session !== this.#operatorSession ||
-        this.#store.lines.length > 0 ||
+        this.#counterHasItems ||
         this.#counterOrderInFlight() ||
         (this.formFactor === "till" && !this.#deviceNavigation()?.counterZoneIds.includes(zoneId))
       )
@@ -6905,12 +6932,34 @@ export class TillApp extends LitElement {
           this.counterService?.periodOccurrenceKey !== zoneOffers.service.periodOccurrenceKey)) &&
       (this.#store.lines.length > 0 || this.#requestsOut());
     this.#counterOffers.load(zoneOffers, loaded);
-    this.#store.canSelectProduct = (product) =>
-      this.#deviceZoneAllows(this.counterServiceZoneId) &&
-      this.#counterOffers.selectable.has(product.menuId ?? "") &&
-      (this.#pendingCounterMenus === undefined ||
-        (this.#counterOffers.byId.has(product.menuItemId ?? "") &&
-          this.#counterOffers.versions.get(product.menuId ?? "") === product.menuVersionId));
+    this.#store.canSelectProduct = (product, setMenuId) => {
+      if (!this.#deviceZoneAllows(this.counterServiceZoneId)) return false;
+      if (setMenuId !== undefined) {
+        if (this.#store.dining !== "takeaway") return false;
+        return this.#counterOffers
+          .ordering(this.#currentCounterSetMenuBill)
+          .some(
+            ({ copy, versionId }) =>
+              copy.menuId === setMenuId &&
+              versionId === product.menuVersionId &&
+              copy.offers.some(
+                ({ id, available, variants }) =>
+                  id === product.menuItemId &&
+                  available &&
+                  (product.variantId === undefined ||
+                    variants.some(
+                      (variant) => variant.id === product.variantId && variant.available,
+                    )),
+              ),
+          );
+      }
+      return (
+        this.#counterOffers.selectable.has(product.menuId ?? "") &&
+        (this.#pendingCounterMenus === undefined ||
+          (this.#counterOffers.byId.has(product.menuItemId ?? "") &&
+            this.#counterOffers.versions.get(product.menuId ?? "") === product.menuVersionId))
+      );
+    };
     if (deferGrid) {
       this.#pendingCounterMenus = zoneOffers.menus;
       this.menus = this.menus.map((menu) => {
@@ -7103,13 +7152,16 @@ export class TillApp extends LitElement {
    * and works out whether Pay is held. */
   #evaluateBasket(notify = true): void {
     const versions = this.#counterOffers.versions;
-    this.#store.setBlocked(this.#counterOffers.blocks(this.#store.lines), notify);
+    const lookup = this.#counterSetMenuLookup();
+    this.#store.setBlocked(this.#counterOffers.blocks(this.#store.lines, lookup), notify);
     this.#store.setEndedPeriods(this.#counterOffers.endedPeriods(this.#store.lines), notify);
     const unsaved = this.#store.lines.filter((line) => line.workingOrderLineId === undefined);
     this.basketStale = unsaved.some(
-      (line) => line.blocked === undefined && isStale(line, versions),
+      (line) => line.blocked === undefined && isStale(line, versions, lookup),
     );
-    this.basketHeld = unsaved.some((line) => line.blocked !== undefined || isStale(line, versions));
+    this.basketHeld = unsaved.some(
+      (line) => line.blocked !== undefined || isStale(line, versions, lookup),
+    );
   }
 
   #onMenuState(zoneId: string, state: MenuStateAnswer): void {
@@ -7443,7 +7495,8 @@ export class TillApp extends LitElement {
     store: WorkingOrderStore = this.#store,
     offers: ZoneOfferIndex = this.#counterOffers,
   ): "adopted" | "confirming" {
-    const setMenuOffer = offers === this.#tableOffers ? this.#tableSetMenuLookup() : undefined;
+    const setMenuOffer =
+      offers === this.#tableOffers ? this.#tableSetMenuLookup() : this.#counterSetMenuLookup();
     const outcome = refreshBasket(store.lines, offers.live, offers.versions, setMenuOffer);
     if (outcome.changed.length === 0 && outcome.blocked.length === 0) {
       if (outcome.adopted.size > 0) store.adoptLines(outcome.adopted);
@@ -7988,6 +8041,13 @@ export class TillApp extends LitElement {
       };
       if (line.workingOrderLineId !== undefined) {
         saleLine.workingOrderLineId = line.workingOrderLineId;
+      }
+      if (line.setMenuId !== undefined) {
+        saleLine.setMenuId = line.setMenuId;
+        if (line.setMenuReserved != null) {
+          saleLine.setMenuReservedLineId = line.setMenuReserved.setMenuLineId;
+          saleLine.setMenuReservedPlace = line.setMenuReserved.place;
+        }
       }
       return saleLine;
     });
@@ -10110,8 +10170,83 @@ export class TillApp extends LitElement {
     this.#pushDrill({ kind: "expo" });
   }
 
+  #saveCounterSetMenuCount = (menuId: string, count: number) =>
+    this.#changeCounterSetMenu({ menuId, count });
+
+  #moveCounterSetMenuDishes = (moves: Extract<SetMenuChange, { moves: unknown }>["moves"]) =>
+    this.#changeCounterSetMenu({ moves });
+
+  async #changeCounterSetMenu(
+    change: Exclude<SetMenuChange, { remove: string }>,
+  ): Promise<string | undefined> {
+    const store = this.#store;
+    const zoneId = this.counterServiceZoneId;
+    if (
+      zoneId === "" ||
+      store.dining !== "takeaway" ||
+      store.editsLocked ||
+      store.sending ||
+      this.#counterOrderInFlight() ||
+      this.#diningSwitching
+    )
+      return codeMessage("server.internal");
+    const id = store.id;
+    const visit = store.loadGeneration;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const current = () =>
+      visit === store.loadGeneration && session === this.#operatorSession && api === this.api;
+    const copies = this.#counterOffers.ordering(this.#currentCounterSetMenuBill);
+    const apply = (revision: number, setMenus: NonNullable<HeldOrder["setMenus"]>) => {
+      const keys = new Set(setMenus.copies.map(({ id }) => id));
+      this.#counterSetMenuBill = {
+        id,
+        setMenus,
+        setMenuCopies: copies.map(({ copy }) => copy).filter(({ key }) => keys.has(key)),
+      };
+      store.markSaved(revision);
+    };
+    const unlock = store.lockEdits();
+    this.counterSetMenuSaving = true;
+    try {
+      if (!store.persisted) {
+        if (!("count" in change) || change.count === 0) return codeMessage("server.internal");
+        const { revision, setMenus } = await api.parkOrder({
+          id,
+          zoneId,
+          dining: "takeaway",
+          lines: [],
+          firstSetMenuId: change.menuId,
+        });
+        if (!current()) return;
+        if (revision === undefined || setMenus === undefined) return codeMessage("server.internal");
+        store.markPersisted(true);
+        this.counterDiningChoice = {
+          orderId: id,
+          choice: store.diningStart?.policy === "till_choice" ? "open" : "none",
+        };
+        apply(revision, setMenus);
+        if (change.count === 1) return;
+      }
+      const edit = this.#counterExpectedEdit(id);
+      const reply = await ("count" in change
+        ? api.setSetMenuCount(id, change.menuId, change.count, store.revision, edit)
+        : api.moveSetMenuDishes(id, change.moves, store.revision, edit));
+      if (current()) apply(reply.partyRevision, reply.setMenus);
+    } catch (error) {
+      if (!current()) return;
+      const params = error as ({ code?: string } & Parameters<typeof codeMessage>[2]) | null;
+      return codeMessage(params?.code ?? "server.internal", undefined, params ?? undefined);
+    } finally {
+      unlock();
+      this.counterSetMenuSaving = false;
+      await this.updateComplete;
+      await this.renderRoot.querySelector("till-counter-screen")?.updateComplete;
+    }
+  }
+
   async #onParkOrder(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
-    if (this.parking) return;
+    if (this.parking || this.counterSetMenuSaving) return;
     const retry = (confirmed: LateSend) => this.#onParkOrder(event, false, confirmed);
     if (this.#askLateSendAtCounter(lateSend, retry, "save")) return;
     this.parking = true;
@@ -10333,6 +10468,10 @@ export class TillApp extends LitElement {
       this.#dismissStationChoices();
       this.#counterMoveSubmitting = null;
     }
+    this.#counterSetMenuBill =
+      order.setMenus === undefined
+        ? undefined
+        : { id: order.id, setMenus: order.setMenus, setMenuCopies: order.setMenuCopies };
     const { lines, banner } = this.#basketLinesOf(order, listed, offered);
     if (banner !== undefined) this.errorKey = banner;
     this.#store.loadFrom(
@@ -10387,16 +10526,31 @@ export class TillApp extends LitElement {
         .filter((row) => row.sentAt !== null || row.firedAt !== null)
         .map((row) => row.id),
     );
+    const setMenuOffer = this.#counterOffers.setMenuLookup(order);
     for (const line of order.lines) {
-      // The snapshot keeps the order's names and price; the offered lists are today's live offer's,
-      // as the till would offer them on that dish now, which is what an edit has to answer against.
-      const live = line.menuItemId === undefined ? undefined : liveByMenuItem.get(line.menuItemId);
+      // Edits to a set-menu dish answer the recorded offer's lists, even after a republish.
+      const recorded =
+        line.setMenuId === undefined
+          ? undefined
+          : setMenuOffer({
+              setMenuId: line.setMenuId,
+              menuItemId: line.menuItemId ?? "",
+              menuVersionId: line.menuVersionId ?? null,
+            });
+      const live =
+        line.setMenuId !== undefined
+          ? recorded && menuOfferToTillProduct(recorded.offer, recorded.versionId)
+          : line.menuItemId === undefined
+            ? undefined
+            : liveByMenuItem.get(line.menuItemId);
       const stored = line.product;
       const product =
         stored === undefined
           ? live
           : {
               ...stored,
+              ...(recorded === undefined ? {} : { unit: recorded.offer.unit }),
+              ...(line.menuVersionId === undefined ? {} : { menuVersionId: line.menuVersionId }),
               ...(live === undefined ? {} : { offeredModifiers: offeredListsOf(live) }),
             };
       if (product === undefined) {
@@ -10415,6 +10569,7 @@ export class TillApp extends LitElement {
       if (answers.unanswered.length > unmatched && !sent) mustChooseAgain = true;
       lines.push({
         product,
+        ...(line.setMenuId === undefined ? {} : { setMenuId: line.setMenuId }),
         quantity: displayQuantity(product, line.quantity),
         ...(line.workingOrderLineId === undefined
           ? {}
@@ -11312,7 +11467,7 @@ export class TillApp extends LitElement {
     input: Pick<DeviceZoneSelectionInput, "selectedZoneIds"> &
       Partial<Pick<DeviceZoneSelection, "zones">>,
   ): "counter" | "table" | undefined {
-    if (this.#store.lines.length > 0 && !input.selectedZoneIds.includes(this.counterServiceZoneId))
+    if (this.#counterHasItems && !input.selectedZoneIds.includes(this.counterServiceZoneId))
       return "counter";
     return this.#tableHoldsZone(input) ? "table" : undefined;
   }
@@ -11717,7 +11872,7 @@ export class TillApp extends LitElement {
       this.profileOpen = false;
       return;
     }
-    if (this.#store.lines.length > 0 || this.#partylessDraft.lines.length > 0) {
+    if (this.#counterHasItems || this.#partylessDraft.lines.length > 0) {
       this.profileNotice = "order_open";
       return;
     }
@@ -11744,7 +11899,7 @@ export class TillApp extends LitElement {
 
   async #switchProfile(profileId: string): Promise<void> {
     if (this.profileBusy) return;
-    if (this.#store.lines.length > 0 || this.#partylessDraft.lines.length > 0) {
+    if (this.#counterHasItems || this.#partylessDraft.lines.length > 0) {
       this.profileNotice = "order_open";
       return;
     }
@@ -23282,7 +23437,7 @@ export class TillApp extends LitElement {
   }
 
   #counterOrderInFlight(): boolean {
-    return this.submitting || this.placing || this.parking;
+    return this.submitting || this.placing || this.parking || this.counterSetMenuSaving;
   }
 
   /** A placed order is not open, so it offers no adjustment. */
@@ -23308,7 +23463,14 @@ export class TillApp extends LitElement {
 
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
     if (tab === "counter") {
+      const bill = this.#currentCounterSetMenuBill;
+      const copies = this.#counterOffers.ordering(bill);
       return html`<till-counter-screen
+        .setMenuBill=${bill?.setMenus}
+        .setMenuCopies=${copies}
+        .setMenuCourses=${copies.length === 0 ? {} : Object.fromEntries(this.courses.map(({ id, name }) => [id, name]))}
+        .saveSetMenuCount=${this.#saveCounterSetMenuCount}
+        .moveSetMenuDishes=${this.#moveCounterSetMenuDishes}
         .changeAvailability=${this.#availabilityFor(this.counterServiceZoneId)}
         .changeOptionAvailability=${this.#optionAvailabilityFor(this.counterServiceZoneId)}
         .api=${this.api}
@@ -23340,7 +23502,7 @@ export class TillApp extends LitElement {
         .orderFlow=${this.#basketFlow()}
         .stage=${this.stage}
         .paymentWindow=${this.counterWaiting.some((row) => row.id === this.#store.id && row.invoiceNumber === undefined)}
-        .busy=${this.submitting || this.placing || this.invoiceRecipientReading}
+        .busy=${this.submitting || this.placing || this.invoiceRecipientReading || this.counterSetMenuSaving}
         .sendingTender=${this.sendingTender}
         .payHeld=${this.basketHeld}
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}

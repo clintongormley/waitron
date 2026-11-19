@@ -563,6 +563,9 @@ export interface SaleLine {
   /** The menu version an unsaved line was priced against. The server refuses the request
    * `menu.version_changed` when it is not the live one; absent means the live one. */
   menuVersionId?: string;
+  setMenuId?: string;
+  setMenuReservedLineId?: string;
+  setMenuReservedPlace?: number;
   quantity: string;
   extras?: ExtraSelection[];
   options?: OptionSelection[];
@@ -1496,6 +1499,8 @@ export interface HeldOrder {
   /** The order's own way, whatever its department now says. */
   dining: Dining;
   diningChoice: DiningChoice;
+  setMenus?: BillSetMenuState;
+  setMenuCopies?: ServedSetMenuCopy[];
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
     /**
@@ -3441,11 +3446,14 @@ export class TillApi {
     label?: string;
     kitchenNote?: string | null;
     lateSend?: LateSend;
+    firstSetMenuId?: string;
   }): Promise<{
     id: string;
     orderNumber: number;
+    revision?: number;
+    setMenus?: BillSetMenuState;
   }> {
-    return this.#request<{ id: string; orderNumber: number }>("/api/working-orders", "POST", {
+    return this.#request("/api/working-orders", "POST", {
       ...req,
       zoneId: req.zoneId ?? this.#serviceZoneId,
     });

@@ -410,6 +410,21 @@ describe("till-tender-pay", () => {
       expect(query(el, "[data-full-invoice]")).toBeNull();
     });
 
+    it("can choose a receipt language while a placed set-menu order cannot be paid", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(coffee, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        mode: "ticket_then_pay",
+        stage: "collect",
+        hasSetMenus: true,
+        receiptLanguages: ["es-ES", "ca-ES"],
+        receiptLanguage: "es-ES",
+      });
+      expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true);
+      expect(languageButton(el)!.hasAttribute("disabled")).toBe(false);
+    });
+
     it("disables the language button with Full invoice while the basket is empty", async () => {
       const store = new WorkingOrderStore();
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {

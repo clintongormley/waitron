@@ -476,9 +476,9 @@ export class WorkingOrderStore {
   }
 
   /** No `"changed"` notification: not a rendering concern. */
-  markPersisted(): void {
+  markPersisted(keepUnsaved = false): void {
     this.#persisted = true;
-    this.#dirty = false;
+    if (!keepUnsaved) this.#dirty = false;
   }
 
   /** After a save of this copy landed, at the revision the server answered. */

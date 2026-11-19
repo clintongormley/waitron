@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
-import { persons, workingOrderLines } from "@waitron/db";
+import { floorZones, persons, ticketItems, workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin } from "@waitron/identity";
 import { updateMenuDetails } from "@waitron/menu";
@@ -283,4 +283,261 @@ it("returns each bill's recorded copy in full with one lookup, even after republ
   } finally {
     serve.mockRestore();
   }
+});
+
+async function counterTakeaway() {
+  const { venue, copy } = fixture;
+  const id = crypto.randomUUID();
+  const zoneId = venue.counter.zoneId;
+  await inTx(venue, async (tx) => {
+    const [zone] = await tx
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, zoneId));
+    await venueService.setDepartmentSalePolicyField(
+      tx,
+      zone!.departmentId,
+      "dining",
+      "till_choice",
+    );
+  });
+  return { id, zoneId, dining: "takeaway", lines: [], firstSetMenuId: copy.menuId };
+}
+
+it("starts a counter takeaway with one set menu and replays the same order number", async () => {
+  const { venue } = fixture;
+  const body = await counterTakeaway();
+  const { id } = body;
+  const opened = await request("POST", "/api/working-orders", body);
+  expect(opened.status).toBe(200);
+  const answer = await opened.json();
+  expect(answer).toMatchObject({
+    id,
+    orderNumber: expect.any(Number),
+    revision: 1,
+    setMenus: { setMenus: [{ lineNo: 1 }], dishes: [] },
+  });
+  const retried = await request("POST", "/api/working-orders", body);
+  expect(retried.status).toBe(200);
+  expect(await retried.json()).toEqual(answer);
+  expect(
+    await venue.db
+      .select({ id: workingOrders.id, dining: workingOrders.dining })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id)),
+  ).toEqual([{ id, dining: "takeaway" }]);
+  expect(
+    await venue.db
+      .select({ role: workingOrderLines.setMenuRole })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id)),
+  ).toEqual([{ role: "set_menu" }]);
+});
+
+it("requires the shown counter zone before opening a bill for a set menu", async () => {
+  const { venue, copy } = fixture;
+  const id = crypto.randomUUID();
+  const response = await request("POST", "/api/working-orders", {
+    id,
+    dining: "takeaway",
+    lines: [],
+    firstSetMenuId: copy.menuId,
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "zoneId" } },
+  });
+  expect(
+    await venue.db
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id)),
+  ).toEqual([]);
+});
+
+it("reopens a counter takeaway with the original menu's price and dishes after republishing", async () => {
+  const { venue, copy } = fixture;
+  const original = await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, copy.menuId, { setPrice: "14.00" });
+    return publishWorkingMenu(tx, copy.fullMenuId);
+  });
+  const body = await counterTakeaway();
+  expect((await request("POST", "/api/working-orders", body)).status).toBe(200);
+  await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, copy.menuId, { setPrice: "15.00" });
+    await publishWorkingMenu(tx, copy.fullMenuId);
+  });
+  const reopened = await request("GET", `/api/working-orders/${body.id}`);
+  expect(reopened.status).toBe(200);
+  expect(await reopened.json()).toMatchObject({
+    dining: "takeaway",
+    lines: [],
+    setMenus: { recorded: { [copy.menuId]: original }, setMenus: [{ lineNo: 1 }] },
+    setMenuCopies: [
+      { menuId: copy.menuId, terms: { price: "14.00" }, offers: [{ id: copy.menuItemId }] },
+    ],
+  });
+  const parked = await request("GET", "/api/working-orders");
+  expect(parked.status).toBe(200);
+  expect(await parked.json()).toContainEqual(
+    expect.objectContaining({
+      id: body.id,
+      items: [],
+      total: "14.00",
+    }),
+  );
+});
+
+it("saves a dish at its recorded set-menu price without sending it to the kitchen", async () => {
+  const { venue, copy } = fixture;
+  const body = await counterTakeaway();
+  const opened = await request("POST", "/api/working-orders", body);
+  expect(opened.status).toBe(200);
+  const { revision, setMenus } = await opened.json();
+  const path = `/api/working-orders/${body.id}`;
+  const response = await request("PUT", path, {
+    dining: body.dining,
+    expectedEdit: null,
+    revision,
+    lines: [
+      {
+        menuItemId: copy.menuItemId,
+        menuVersionId: setMenus.recorded[copy.menuId],
+        setMenuId: copy.menuId,
+        quantity: "1",
+        setMenuReservedLineId: setMenus.setMenus[0].lineId,
+        setMenuReservedPlace: 0,
+      },
+    ],
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ revision: revision + 1 });
+  expect(
+    await venue.db
+      .select({
+        role: workingOrderLines.setMenuRole,
+        price: workingOrderLines.unitPriceGross,
+        reservedMenu: workingOrderLines.setMenuLineId,
+        place: workingOrderLines.setMenuPlace,
+        sentAt: workingOrderLines.sentAt,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, body.id))
+      .orderBy(workingOrderLines.lineNo),
+  ).toMatchObject([
+    { role: "set_menu", sentAt: expect.any(String) },
+    { role: "dish", price: 0, reservedMenu: setMenus.setMenus[0].lineId, place: 0, sentAt: null },
+  ]);
+  const reopened = await request("GET", path);
+  expect(reopened.status).toBe(200);
+  const saved = await reopened.json();
+  expect(saved).toMatchObject({
+    lines: [
+      {
+        menuItemId: copy.menuItemId,
+        menuVersionId: setMenus.recorded[copy.menuId],
+        setMenuId: copy.menuId,
+        product: { unitPrice: "0.00" },
+      },
+    ],
+    setMenus: { dishes: [{ setMenuLineId: setMenus.setMenus[0].lineId, place: 0 }] },
+  });
+  const fresh = { menuItemId: copy.menuItemId, setMenuId: copy.menuId, quantity: "1" };
+  const kept = {
+    ...fresh,
+    menuVersionId: setMenus.recorded[copy.menuId],
+    workingOrderLineId: saved.lines[0].workingOrderLineId,
+  };
+  const update = { dining: body.dining, expectedEdit: null, revision: saved.revision };
+  const missingVersion = await request("PUT", path, { ...update, lines: [kept, fresh] });
+  expect(missingVersion.status).toBe(400);
+  expect(await missingVersion.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "lines[1].menuVersionId" } },
+  });
+  const noPlace = await request("PUT", path, {
+    ...update,
+    lines: [kept, { ...fresh, menuVersionId: kept.menuVersionId }],
+  });
+  expect(noPlace.status).toBe(409);
+  expect(await noPlace.json()).toMatchObject({ error: { code: "set_menu.no_place" } });
+  expect(await (await request("GET", path)).json()).toEqual(saved);
+  const placed = await request("POST", `${path}/place`, { expectedEdit: null });
+  expect(placed.status).toBe(200);
+  expect(await placed.json()).toMatchObject({ id: body.id, status: "placed" });
+  expect(
+    await venue.db
+      .select({ lineId: ticketItems.workingOrderLineId })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, saved.lines[0].workingOrderLineId)),
+  ).toEqual([{ lineId: saved.lines[0].workingOrderLineId }]);
+});
+
+it("refuses Eat in on a counter bill with a set menu using the set-menu refusal", async () => {
+  const body = await counterTakeaway();
+  const path = `/api/working-orders/${body.id}`;
+  const opened = await request("POST", "/api/working-orders", body);
+  expect(opened.status).toBe(200);
+  const { revision } = await opened.json();
+  const switched = await request("PUT", `${path}/dining`, {
+    dining: "eat_in",
+    revision,
+    expectedEdit: null,
+  });
+  expect(switched.status).toBe(409);
+  expect(await switched.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+  expect(await (await request("GET", path)).json()).toMatchObject({ dining: "takeaway", revision });
+});
+
+it("discards a parked counter order whose only line is a set-menu charge", async () => {
+  const body = await counterTakeaway();
+  const path = `/api/working-orders/${body.id}`;
+  const opened = await request("POST", "/api/working-orders", body);
+  expect(opened.status).toBe(200);
+  const { revision, setMenus } = await opened.json();
+  const saved = await request("PUT", path, {
+    dining: "takeaway",
+    revision,
+    expectedEdit: null,
+    lines: [],
+  });
+  expect(saved.status).toBe(200);
+  expect(await (await request("GET", path)).json()).toMatchObject({ setMenus, lines: [] });
+  expect((await request("DELETE", path, { expectedEdit: null })).status).toBe(200);
+  const [order] = await fixture.venue.db
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, body.id));
+  expect(order?.status).toBe("abandoned");
+});
+
+it("keeps sending from the held-order edit on a seated bill that has started service", async () => {
+  const { venue, copy } = fixture;
+  const { tabId } = await seated();
+  await inTx(venue, (tx) => seedBillSetMenu(tx, tabId, copy, 1));
+  const path = `/api/working-orders/${tabId}`;
+  const order = await (await request("GET", path)).json();
+  const saved = await request("PUT", path, {
+    dining: order.dining,
+    expectedEdit: order.expectedEdit,
+    revision: order.revision,
+    lines: [{ menuItemId: venue.item("Flan"), quantity: "1" }],
+  });
+  expect(saved.status).toBe(200);
+  const lines = await venue.db
+    .select({ role: workingOrderLines.setMenuRole, sentAt: workingOrderLines.sentAt })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId))
+    .orderBy(workingOrderLines.lineNo);
+  expect(lines).toEqual([
+    { role: "set_menu", sentAt: expect.any(String) },
+    { role: null, sentAt: expect.any(String) },
+  ]);
+});
+
+it("refuses a first set-menu count on Eat in and leaves no counter order behind", async () => {
+  const body = await counterTakeaway();
+  const refused = await request("POST", "/api/working-orders", { ...body, dining: "eat_in" });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+  expect((await request("GET", `/api/working-orders/${body.id}`)).status).toBe(404);
 });
