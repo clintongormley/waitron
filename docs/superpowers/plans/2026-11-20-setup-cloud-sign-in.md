@@ -1,65 +1,66 @@
 # Sign in to Waitron Cloud during setup
 
-When you start a new venue, you can sign up or sign in to Waitron Cloud before entering its details.
-On return, address lookup and account email can use the basic services Cloud makes available to you.
-You can also continue local setup. Choose a Connected service later to register the box and opt into
-a free trial. Cloud sign-in by itself never starts a trial.
+When you start a new venue, Waitron offers Cloud sign-up or sign-in. A successful sign-in gives the
+box access to basic services. You can continue local setup and sign in later from Cloud services.
+A free trial starts only when you choose a Connected service and explicitly accept the trial.
 
-## What each level offers
+## Decide when Cloud registers the venue
 
-- **Registered.** Account email and address lookup. Cloud's billing design also places automatic
-  upgrades and SMS codes here. This work adds neither an updater nor SMS delivery. Cloud must settle
-  how its per-venue SMS allowance will work without Connected registration.
-- **Connected.** Remote staff access, Cloud backups and recovery, translation, the rota solver and
-  eligibility for Cloud failover, under their existing service rules. Hosted remains its own choice.
-  I recommend Connected for public guest menu publishing because Cloud publishes for a specific
-  venue, with a venue URL and owner takedown. Cloud's current publisher requires a paired
-  installation but no Connected trial. The watcher needs to settle this tier before changing it.
-  Local preview and print stay available without Cloud.
+The owner's 19 November 18:58 request puts box registration at the point you ask for Connected.
+I recommend following that order. A Cloud account can authorise a box for basic use before Cloud
+creates a venue. Claude proposed silently registering the box when setup completes. That reuses
+the current installation credential and lets Billing start the trial directly, but creates the Cloud
+venue before a Connected service is requested and leaves address lookup unavailable in the initial
+venue form. The watcher needs to settle this choice before either route is built.
 
-## 1. Get the basic services through setup
+Registered covers account email, address lookup, automatic upgrades and SMS codes in Cloud's billing
+design. This item wires the sign-in and existing services. The updater and SMS gateway have their
+own work, and SMS's existing per-venue counting design still assumes registration. Connected covers
+remote access, Cloud backups and recovery, translation, the rota solver and Cloud failover eligibility.
+Hosted has its own opt-in. I recommend keeping guest menu publishing at its current access level:
+it requires a registered venue today, with no trial check. Settle where that registration belongs
+under the deferred approach before changing who can publish. Local preview and printing stay local.
 
-- In `apps/setup/src/setup-app.ts`, `api/client.ts` and a
-  `screens/cloud-sign-in-screen.ts` with EN/ES strings, offer **Sign in to Waitron Cloud** on the
-  new-venue path before the venue form. Open the configured Cloud origin for its existing sign-up,
-  sign-in and verification. Show the result on the box with **Continue without Cloud** and **Try again**
-  as applicable. Restore, join and resumed first-fiscal setup keep their current entrances.
-- In `apps/server/src/{boot,setup-api,setup-first-fiscal-api}.ts` and a small `cloud-basic-services.ts`,
-  use an expiring, browser-bound setup attempt over the box's secure same-origin setup page. The box
-  generates the signing key locally. Cloud issues a revocable basic-services grant bound to that
-  public key and the verified account, and the box retrieves it directly from the configured Cloud
-  origin. Cloud and Waitron must agree on the exchange before build. The browser gets only the sign-in
-  link and setup status. Use the staged grant for the setup browser's address lookup and retain the
-  successful setup's credential under the local `cloud/` state directory using `writeFileDurable`.
-  Preserve manual addresses, existing email configuration and local provisioning when Cloud is skipped
-  or unavailable.
-- Connect the existing address provider in `apps/setup/src/screens/venue-screen.ts`. In
-  `apps/server/src/{boot,cloud-email}.ts` reuse the account-mail sender through the basic grant once
-  Cloud supports it, retaining existing delivery failure behaviour and paired-box support. Invoice
-  email continues through its own settings.
-- Test first. `apps/setup/src/setup-app-cloud-sign-in.test.ts` owns the new-venue sign-in, return and
-  continue-offline paths. `apps/server/src/setup-api.cloud-sign-in.test.ts` owns the setup-attempt
-  boundary, refusal of a different browser's result, and adoption by both new-venue completion paths.
-  Extend the existing first-setup restart fixture to show the saved grant reaches the trading start.
-  `apps/server/src/cloud-email.test.ts` owns actual account-mail request and response handling.
-  Estimate 350–510 production lines and 160–240 test lines.
+## 1. Get access to basic services
 
-## 2. Register only when requesting a Connected service
+- If registration is deferred, Lane K owns the Cloud exchange and its authority over basic requests.
+  Reuse Cloud's account verification. The box creates a signing key and retrieves a revocable grant
+  tied to that key and account directly from the configured Cloud origin. Agree how the same key can
+  acquire installation authority later, which account may attach the venue and how revocation and
+  allowances work at each level. Retain the relay's origin and consent checks. Current email,
+  address lookup and the trial route are limited to test Cloud paths. First qualify there.
+- In `apps/setup/src/setup-app.ts`, `api/client.ts`, a Cloud sign-in screen and EN/ES strings, offer the
+  link on the new-venue path. A refusal offers retry and continue locally. In the dashboard's
+  `cloud-services-screen.ts`, offer basic sign-in later to a local administrator. Restore and join
+  can use that existing dashboard entrance after setup.
+- With the agreed contract, add the setup endpoints in `apps/server/src/{boot,setup-api,setup-first-fiscal-api}.ts`
+  and a basic Cloud client. Keep the attempt on the secure setup origin and tied to its browser.
+  Give that browser only the link and status. Persist the successful setup's credential with
+  `writeFileDurable` in local `cloud/` state. In `cloud-email.ts`, reuse account message and response
+  handling with the agreed request signing. Keep existing local mail choices and invoice email.
+  The A1171 provider bridge remains a separate qualified slice. For the setup venue form it must
+  supply the existing address field with suggestions, attribution, confirmation, allowance feedback
+  and region mapping. Add the guide and privacy wording for each form when that form uses it.
+- Test first in `setup-app-cloud-sign-in.test.ts`, `setup-api.cloud-sign-in.test.ts` and
+  `cloud-email.test.ts`. Prove sign-in and skip, browser binding, grant adoption at both provision
+  paths, persistence on trading restart and a real relay request with the agreed signing. For A1171,
+  use the venue screen's address test and a joint test of suggestion and confirmation. Budget the
+  Waitron sign-in and email slice at 350–510 code lines and 160–240 test lines, excluding A1171.
 
-- In `apps/dashboard/src/screens/cloud-services-screen.ts` and `apps/server/src/cloud-api.ts`, take a
-  primary administrator who chooses a Connected service through lane K's one-click pairing. Reuse
-  the Open Cloud link, business choice and approval in force when that slice lands. The existing
-  Cloud Billing trial requires a venue ID, so finish registration then offer **Start free trial** for
-  that venue through Cloud. Cloud must confirm an active trial or existing entitlement before the
-  requested service opens. Declining the trial leaves basic services available.
-- Test first in `apps/dashboard/src/screens/cloud-services-screen.test.ts` and `apps/server/src/cloud-api.test.ts`.
-  The screen owns the offered action and return status. The server owns primary and manager admission. Lane C owns the pairing-link change in
-  `cloud-client.ts`.
-  After both Cloud changes land, prove on a disposable box that sign-in enables one basic service,
-  remote access remains closed until trial consent, and the registered box can then use it. Verify
-  EN/ES in both themes at phone and desktop widths. Update the EN/ES Servers and Email guides and
-  narrow A1186 in `docs/backlog/setup.md`. Estimate 75–150 production lines and 65–110 test lines.
+## 2. Enable a Connected service
 
-Sources from Cloud main `a7fdc97feb`: billing design §2, `venue-service-rules.ts`,
+Reuse Lane K's one-click pairing and Lane C's box link from `cloud-services-screen.ts` and
+`cloud-api.ts`. Keep the confirmation in force when pairing lands. Once Cloud returns a venue ID,
+take the administrator to that venue's existing **Start free trial** action. Cloud owns trial
+eligibility. Remove A1186's proposed completion-screen trial invitation. Update the EN/ES Servers
+and Email guides. Budget 75–150 code lines and 65–110 test lines for the Waitron part after pairing.
+
+Test the screen and administrator admission in the existing dashboard and server Cloud API suites.
+On a disposable test box prove a basic service before the trial, refusal of remote access before
+consent, and remote access after the trial starts. Check EN/ES in both themes and at phone and
+desktop widths. Cloud's tunnel-provision suite already exercises the plan refusal.
+
+Sources from Cloud main `a7fdc97feb` include billing design §2, `venue-service-rules.ts`,
 `address-lookup.ts`, `relay-grants.ts`, `guest-menu.ts` and `billing-account.ts`.
-Pairing plan: `2026-11-19-cloud-one-click-pairing.md` on lane K's `a116601879`.
+The watcher cleared Lane K's pairing slice with both approvals on 19 November at 23:42 in its
+questions.md. The updated Cloud pairing plan is on `7e15a5445`.
