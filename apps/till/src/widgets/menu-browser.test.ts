@@ -374,7 +374,10 @@ describe("set-menu folders", () => {
     expect(add).toHaveBeenCalledExactlyOnceWith(special.menuId);
   });
 
-  it("keeps the promised new place when the dish requires a variant", async () => {
+  it.each([
+    ["Grilled", true],
+    ["Baked", false],
+  ] as const)("checks the promised new place for the %s variant", async (variant, fits) => {
     const bass = special.offers[1]!;
     const grilled = {
       ...bass,
@@ -383,17 +386,24 @@ describe("set-menu folders", () => {
       menuPrice: null,
       pricingUnit: "each" as const,
     };
-    const offer = { ...bass, variants: [grilled], variantCountsAs: { grilled: "main" } };
-    const copy = { ...special, offers: [offer] };
+    const baked = { ...grilled, id: "baked", name: "Baked" };
+    const offer = {
+      ...bass,
+      variants: [grilled, baked],
+      variantCountsAs: { grilled: "main", baked: "main" },
+    };
+    const source = { ...daily, offers: [...daily.offers, offer] };
+    const target = { ...special, offers: [{ ...offer, variants: [grilled] }] };
     const withSpecial = {
       ...setMenuBill,
-      copies: [setMenuBill.copies[0]!, setMenuCopyOf(copy, "lunch")],
+      copies: [setMenuCopyOf(source, "lunch"), setMenuCopyOf(target, "lunch")],
+      setMenus: setMenuBill.setMenus.filter(({ lineId }) => lineId !== "daily-2"),
     };
     const { el, store } = await mount({
       menu: lunch({
-        structure: { members: [{ kind: "set_menu", menuId: copy.menuId, name: copy.name }] },
+        structure: { members: [{ kind: "set_menu", menuId: source.menuId, name: source.name }] },
       }),
-      setMenuCopies: [{ copy, versionId: "lunch" }],
+      setMenuCopies: [source, target].map((copy) => ({ copy, versionId: "lunch" })),
       setMenuBill: {
         ...withSpecial,
         setMenus: withSpecial.setMenus.filter(({ lineId }) => lineId !== "special-1"),
@@ -404,7 +414,7 @@ describe("set-menu folders", () => {
       await el.updateComplete;
       return undefined;
     };
-    await tap(el, entry(el, "structure", copy.name));
+    await tap(el, entry(el, "structure", source.name));
     const folder = root(el).querySelector("till-set-menu-folder")!;
     await userEvent.click(page.elementLocator(folder).getByRole("button", { name: /Sea bass/ }));
     const modal = root(el).querySelector("[data-set-menu-place]")!;
@@ -413,17 +423,27 @@ describe("set-menu folders", () => {
     );
 
     const picker = root(el).querySelector("till-modifier-picker")!;
+    const chosen = variant === "Grilled" ? grilled : baked;
     const detail: ModifierConfirmDetail = {
-      product: { ...picker.product, variantId: grilled.id, variantName: grilled.name },
+      product: { ...picker.product, variantId: chosen.id, variantName: chosen.name },
       extras: [],
     };
     picker.dispatchEvent(new CustomEvent("wt-modifier-confirm", { detail }));
-    expect(store.lines).toMatchObject([
-      {
-        setMenuReserved: { setMenuLineId: "special-1", place: 0 },
-        product: { variantId: "grilled" },
-      },
-    ]);
+    await el.updateComplete;
+    if (fits) {
+      expect(store.lines).toMatchObject([
+        {
+          setMenuReserved: { setMenuLineId: "special-1", place: 0 },
+          product: { variantId: "grilled" },
+        },
+      ]);
+    } else {
+      expect(store.lines).toEqual([]);
+      const reopened =
+        root(el).querySelector<import("@waitron/ui").WtDialog>("[data-set-menu-place]")!;
+      await reopened.updateComplete;
+      expect(reopened.shadowRoot!.querySelector("dialog")?.open).toBe(true);
+    }
   });
 
   it("keeps the set-menu dish when replacing it à la carte is refused", async () => {

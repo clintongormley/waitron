@@ -39,7 +39,7 @@ async function request(method: string, path: string, body: unknown) {
   );
 }
 
-async function draft(seeded: boolean) {
+async function draft(seeded: boolean, dishes = 1) {
   const table = await inTx(venue, (tx) =>
     createTable(tx, venue.cfg, { zoneId: venue.zoneId, label: crypto.randomUUID() }),
   );
@@ -55,14 +55,12 @@ async function draft(seeded: boolean) {
     billId: tabId,
     draftId: null,
     revision: 0,
-    lines: [
-      {
-        setMenuId: daily.menuId,
-        menuVersionId: daily.versionId,
-        menuItemId: daily.menuItemId,
-        quantity: "1",
-      },
-    ],
+    lines: Array.from({ length: dishes }, () => ({
+      setMenuId: daily.menuId,
+      menuVersionId: daily.versionId,
+      menuItemId: daily.menuItemId,
+      quantity: "1",
+    })),
   });
   expect(saved.status).toBe(200);
   const value = saved.json.draft as { id: string; revision: number; lines: { id: string }[] };
@@ -74,7 +72,7 @@ async function draft(seeded: boolean) {
       draftRevision: value.revision,
       expectedPartyRevision: revision,
       allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-      groups: [{ lineIds: [value.lines[0]!.id], release: "fire" }],
+      groups: [{ lineIds: value.lines.map(({ id }) => id), release: "fire" }],
     },
   };
 }
@@ -93,6 +91,16 @@ it("answers 409 when a set-menu dish has no place", async () => {
   expect(result.json).toMatchObject({
     code: "set_menu.no_place",
     params: { dishName: "Soup", draftLineId: body.groups[0]!.lineIds[0] },
+  });
+});
+
+it("names the second draft line when the first takes the only place", async () => {
+  const { path, body } = await draft(true, 2);
+  const result = await request("POST", path, body);
+  expect(result.status).toBe(409);
+  expect(result.json).toMatchObject({
+    code: "set_menu.no_place",
+    params: { dishName: "Soup", draftLineId: body.groups[0]!.lineIds[1] },
   });
 });
 
