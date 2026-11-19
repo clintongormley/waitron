@@ -1,7 +1,7 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, type Decimal } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
@@ -35,6 +35,8 @@ export class TillTotal extends LitElement {
   /** Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
 
+  @property({ attribute: false }) previewTotal?: Decimal;
+
   constructor() {
     super();
     new StoreChangeController(this, () => this.store);
@@ -43,7 +45,9 @@ export class TillTotal extends LitElement {
   override render() {
     return html`
       <span class="label">${t("label.total")}</span>
-      <span class="amount">${formatMoney(this.store.total, currentLocale())}</span>
+      <span class="amount"
+        >${formatMoney(this.previewTotal ?? this.store.total, currentLocale())}</span
+      >
     `;
   }
 }

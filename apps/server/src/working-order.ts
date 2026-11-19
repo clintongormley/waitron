@@ -5311,6 +5311,8 @@ export interface HeldOrder {
     optionSnapshots?: OptionSnapshot[];
     workingOrderLineId?: string;
     menuItemId?: string;
+    menuVersionId?: string;
+    setMenuId?: string;
     /** The dish: on a line sold as a variant, the variant's parent. */
     productId: string | null;
     /** The variant the line was sold as, absent when it names none. */
@@ -5490,6 +5492,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         extraListId: workingOrderLines.extraListId,
         note: workingOrderLines.note,
         productParentId: products.parentId,
+        setMenuId: workingOrderLines.setMenuId,
         variantName: workingOrderLines.variantName,
         variantKitchenName: workingOrderLines.variantKitchenName,
         kitchenName: workingOrderLines.kitchenName,
@@ -5576,6 +5579,12 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
           workingOrderLineId: line.id,
           optionSnapshots: line.optionSnapshots,
           menuItemId: context.menuItemId,
+          ...(line.setMenuId === null
+            ? {}
+            : {
+                setMenuId: line.setMenuId,
+                ...(context.menuVersionId === null ? {} : { menuVersionId: context.menuVersionId }),
+              }),
           productId: line.productId,
           quantity: line.quantity,
           makeAt: line.makeAt,

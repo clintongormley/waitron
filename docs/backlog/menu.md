@@ -1032,8 +1032,8 @@ after a full menu is republished. It refuses to remove or move a set menu when a
 dish on its original bill would lose its only place. The till restores saved set-menu dishes
 from the bill's copy, follows sold-out changes and explains refusals in English and Spanish.
 At a seated table the till can set counts, order from the bill's folders, handle a dish
-with no place, and move a set menu with its dishes. Standalone counter takeaway ordering
-still needs its own write and held-order read in the ordering plan's next slice.
+with no place, and move a set menu with its dishes. At the Counter, staff can start a
+takeaway with a set menu, park it and retrieve the recorded menu and its prices.
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
 The dashboard can open an existing set-menu draft, edit its name, price, VAT rates and inclusion
@@ -1042,7 +1042,7 @@ Managers can add and copy dishes in a set-menu draft, give a dish a course for t
 edit surcharges and variant choices. The editor shows the inclusion lines added or removed by a
 dish change. The dashboard piece lets managers create a set menu, place it in a full menu
 and publish its current version to the tills. The products guide covers setup in both languages.
-Selecting copy-only dishes in the live correction dialog remains open. Standalone counter ordering, set-menu payments, bill documents and the demo remain. Release set menus to venues only once
+Selecting copy-only dishes in the live correction dialog remains open. Set-menu payments, bill documents and the demo remain. Release set menus to venues only once
 all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer

@@ -176,7 +176,9 @@ it("saves the counter's first set-menu count and keeps a drafted dish until Park
     setMenus: saved,
     setMenuCopies: [daily],
   }));
+  const switchDining = vi.fn().mockRejectedValue({ code: "set_menu.not_seated" });
   const api = counterApi({
+    switchDining,
     listDefaultZoneOffers: vi.fn(async () => zone),
     listZoneOffers: vi.fn(async () => zone),
     parkOrder,
@@ -225,6 +227,16 @@ it("saves the counter's first set-menu count and keeps a drafted dish until Park
   expect(counter.store.dirty).toBe(true);
   expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Cola"]);
   expect(updateWorkingOrder).not.toHaveBeenCalled();
+  const dining = counter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+    "wt-segmented-control.dining",
+  )!;
+  expect(dining).not.toBeNull();
+  await userEvent.click(page.elementLocator(dining).getByText("Eat here", { exact: true }));
+  await vi.waitFor(() => {
+    expect(switchDining).toHaveBeenCalledExactlyOnceWith(counter.store.id, "eat_in", 7, null);
+    expect(el.shadowRoot!.textContent).toContain("Set menus are available at a seated table");
+    expect(dining.value).toBe("takeaway");
+  });
 
   const id = counter.store.id;
   const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
@@ -243,4 +255,102 @@ it("saves the counter's first set-menu count and keeps a drafted dish until Park
       lines: [expect.objectContaining({ menuItemId: "cola-offer", quantity: "1" })],
     }),
   );
+});
+
+it("parks a set-menu-only takeaway and orders from its original folder after republishing", async () => {
+  resetBillPayDrafts();
+  const state = {
+    copies: [setMenuCopyOf(daily, "v1")],
+    recorded: { [daily.menuId]: "v1" },
+    setMenus: [bill.setMenus[0]!],
+    dishes: [],
+  };
+  const republished = { ...daily, key: "new-copy", terms: { ...daily.terms, price: "15.00" } };
+  const zone = {
+    ...offers,
+    context: { ...offers.context, dining: { policy: "till_choice", startsAs: "eat_in" } },
+    setMenus: [{ ...republished, versionIds: ["v2"], orderable: true, newestOnSale: true }],
+  };
+  const retrieveWorkingOrder = vi.fn(async (id: string) => ({
+    id,
+    orderNumber: 10,
+    revision: 9,
+    zoneId: offers.context.zoneId,
+    label: null,
+    expectedEdit: null,
+    invoiceType: "F2",
+    dining: "takeaway",
+    diningChoice: "locked",
+    kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+    lines: [],
+    setMenus: state,
+    setMenuCopies: [daily],
+  }));
+  const updateWorkingOrder = vi
+    .fn()
+    .mockRejectedValue({ code: "set_menu.no_place", dishName: "Sirloin" });
+  const api = counterApi({
+    listDefaultZoneOffers: vi.fn(async () => zone),
+    listZoneOffers: vi.fn(async () => zone),
+    retrieveWorkingOrder,
+    updateWorkingOrder,
+    getTabLines: vi.fn(async () => ({ lines: [], revision: 9 })),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flushCounter(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flushCounter(el);
+  const counter = el.shadowRoot!.querySelector("till-counter-screen")!;
+  expect(counter.shadowRoot!.querySelector("till-set-menu-counts")).toBeNull();
+
+  async function reopen() {
+    emit(counter, "retrieve-order", { id: "counter-takeaway" });
+    await vi.waitFor(() => expect(counter.store.id).toBe("counter-takeaway"));
+    await flushCounter(el);
+  }
+
+  const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
+  async function park() {
+    await userEvent.click(
+      page.elementLocator(tender).getByRole("button", { name: "Park", exact: true }),
+    );
+    await vi.waitFor(() => expect(tender.shadowRoot!.querySelector(".park")).not.toBeNull());
+    await userEvent.click(tender.shadowRoot!.querySelector(".park")!);
+  }
+
+  await reopen();
+  const total = counter.shadowRoot!.querySelector("till-total")!;
+  expect(total.shadowRoot!.textContent).toContain("€14.00");
+  await park();
+  await vi.waitFor(() => expect(counter.store.id).not.toBe("counter-takeaway"));
+  expect(updateWorkingOrder).not.toHaveBeenCalled();
+
+  await reopen();
+  const browser = counter.shadowRoot!.querySelector("till-menu-browser")!;
+  await userEvent.click(page.elementLocator(browser).getByRole("button", { name: "Set menus" }));
+  await userEvent.click(page.elementLocator(browser).getByRole("button", { name: /Daily menu/ }));
+  const folder = browser.shadowRoot!.querySelector("till-set-menu-folder")!;
+  expect(folder.copy?.terms.price).toBe("14.00");
+  await userEvent.click(page.elementLocator(folder).getByRole("button", { name: /Sirloin/ }));
+  expect(total.shadowRoot!.textContent).toContain("€19.00");
+  await park();
+
+  await vi.waitFor(() => {
+    expect(updateWorkingOrder).toHaveBeenCalledExactlyOnceWith(
+      "counter-takeaway",
+      expect.objectContaining({
+        revision: 9,
+        lines: [
+          expect.objectContaining({
+            menuItemId: "sirloin",
+            menuVersionId: "v1",
+            setMenuId: daily.menuId,
+            quantity: "1",
+          }),
+        ],
+      }),
+    );
+    expect(el.shadowRoot!.textContent).toContain("Sirloin");
+  });
+  expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Sirloin"]);
 });

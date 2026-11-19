@@ -1,5 +1,3 @@
-import type { BillSetMenuState } from "@waitron/shared";
-import type { OrderingCopy } from "../state/set-menus.js";
 import "../widgets/set-menu-counts.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/product-info.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
@@ -16,7 +14,23 @@ import {
   memoVisibleProducts,
   shownMenu,
 } from "../menu-filter.js";
-import { formatMoney } from "@waitron/shared";
+import {
+  centsToDecimal,
+  formatMoney,
+  sumDecimals,
+  type BillSetMenuState,
+  type DishMove,
+} from "@waitron/shared";
+import {
+  NO_ORDERING_COPIES,
+  draftPlacementId,
+  draftPlacements,
+  menusWithCopies,
+  sentMenuDishes,
+  type OrderingCopy,
+} from "../state/set-menus.js";
+import { lineGross } from "../state/order-line.js";
+import { lineProductName } from "../widgets/product-name.js";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import "../widgets/menu-browser.js";
 import "../widgets/basket.js";
@@ -261,11 +275,24 @@ export class TillCounterScreen extends LitElement {
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
   @property({ attribute: false }) setMenuBill?: BillSetMenuState;
-  @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = [];
+  @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = NO_ORDERING_COPIES;
+  @property({ attribute: false }) setMenuCourses: Readonly<Record<string, string>> = {};
   @property({ attribute: false }) saveSetMenuCount?: (
     menuId: string,
     count: number,
   ) => Promise<string | undefined>;
+
+  @property({ attribute: false }) moveSetMenuDishes?: (
+    moves: readonly DishMove[],
+  ) => Promise<string | undefined>;
+
+  #addSetMenu = (menuId: string): Promise<string | undefined> => {
+    const count =
+      this.setMenuBill === undefined
+        ? 0
+        : menusWithCopies(this.setMenuBill).filter(({ copy }) => copy.setMenuId === menuId).length;
+    return this.saveSetMenuCount?.(menuId, count + 1) ?? Promise.resolve(undefined);
+  };
 
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
@@ -292,11 +319,17 @@ export class TillCounterScreen extends LitElement {
   }
 
   #menu(): TemplateResult | typeof nothing {
-    if (this.service?.open !== true || !this.service.zoneOpen) return nothing;
-    const menu = this.menuSelectionRequired
-      ? this.menus.find((menu) => menu.id === this.selectedMenuId && menu.orderable)
-      : shownMenu(this.menus, this.selectedMenuId);
-    if (menu === undefined) return nothing;
+    const open = this.service?.open === true && this.service.zoneOpen;
+    const menu = !open
+      ? undefined
+      : this.menuSelectionRequired
+        ? this.menus.find((menu) => menu.id === this.selectedMenuId && menu.orderable)
+        : shownMenu(this.menus, this.selectedMenuId);
+    const copies =
+      this.stage === "order" && this.store.dining === "takeaway" && open
+        ? this.setMenuCopies
+        : NO_ORDERING_COPIES;
+    if (menu === undefined && copies.length === 0) return nothing;
     const served = this.products.filter((product) =>
       this.menus.some((each) => each.id === product.menuId && each.orderable),
     );
@@ -304,9 +337,21 @@ export class TillCounterScreen extends LitElement {
       .changeAvailability=${this.changeAvailability}
       .changeOptionAvailability=${this.changeOptionAvailability}
       .menu=${menu}
+      .setMenuBill=${copies.length === 0 ? undefined : this.setMenuBill}
+      .setMenuCopies=${copies}
+      .setMenuCourses=${this.setMenuCourses}
+      .addSetMenu=${this.#addSetMenu}
+      .moveSetMenuDishes=${this.moveSetMenuDishes}
+      .setMenuDishNames=${new Map(
+        this.store.lines.flatMap((line) =>
+          line.setMenuId === undefined || line.workingOrderLineId === undefined
+            ? []
+            : [[line.workingOrderLineId, lineProductName(line.product)]],
+        ),
+      )}
       .filters=${this.selectedFilters}
-      .products=${this.#browserProducts(this.products, menu.id, this.selectedFilters)}
-      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu.id, EMPTY_MENU_FILTERS)}
+      .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedFilters)}
+      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", EMPTY_MENU_FILTERS)}
       .menus=${this.menus}
       .servedProducts=${this.#searchProducts(served, "", this.selectedFilters)}
       .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", EMPTY_MENU_FILTERS)}
@@ -318,6 +363,41 @@ export class TillCounterScreen extends LitElement {
         @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) => this.#pickFilters(e.detail.filters)}
       ></till-diet-filter
     ></till-menu-browser>`;
+  }
+
+  #setMenuPrices() {
+    const bill = this.setMenuBill;
+    if (!bill?.setMenus.length) return {};
+    const lines = this.store.lines;
+    const saved = sentMenuDishes(bill);
+    const draft = new Map(
+      draftPlacements(bill, lines).placed.map(({ id, priceCents }) => [
+        id,
+        centsToDecimal(priceCents),
+      ]),
+    );
+    const byLine = new Map(
+      lines.map((line, index) => [
+        line,
+        line.workingOrderLineId === undefined
+          ? draft.get(draftPlacementId(line, index))
+          : saved.get(line.workingOrderLineId)?.price,
+      ]),
+    );
+    return {
+      placedPrice: (line: (typeof lines)[number]) => byLine.get(line),
+      total: sumDecimals([
+        ...menusWithCopies(bill).map(({ copy }) => centsToDecimal(copy.priceCents)),
+        ...lines.map((line) => {
+          const price = byLine.get(line);
+          return lineGross(
+            price === undefined
+              ? line
+              : { ...line, product: { ...line.product, unitPrice: price } },
+          );
+        }),
+      ]),
+    };
   }
 
   #lists(): TemplateResult | typeof nothing {
@@ -349,6 +429,7 @@ export class TillCounterScreen extends LitElement {
   }
 
   #gridBody(): TemplateResult {
+    const { placedPrice, total } = this.#setMenuPrices();
     return html`<div class="body grid-body">
       ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId, this.zoneName, this.receiptEquipment)}
       <div class="sale-grid">
@@ -389,6 +470,7 @@ export class TillCounterScreen extends LitElement {
           <till-basket
             stacked
             .store=${this.store}
+            .placedPrice=${placedPrice}
             .lineDetails=${true}
             .revealAdded=${true}
             .allowPickRemoval=${true}
@@ -401,12 +483,15 @@ export class TillCounterScreen extends LitElement {
             .orderInFlight=${this.orderInFlight}
           ></till-basket>
         </div>
-        <div class="total-cell"><till-total .store=${this.store}></till-total></div>
+        <div class="total-cell">
+          <till-total .store=${this.store} .previewTotal=${total}></till-total>
+        </div>
         <div class="payment-cell">
           ${this.payRest === null ? nothing : this.#takeRest(this.payRest)}<till-tender-pay
             .filters=${this.selectedFilters}
             .paymentWindow=${this.stage === "order" || this.paymentWindow}
             .store=${this.store}
+            .hasSetMenus=${(this.setMenuBill?.setMenus.length ?? 0) > 0}
             .sendingTender=${this.sendingTender}
             .busy=${this.busy || this.payHeld}
             .held=${this.payHeld && !this.busy}

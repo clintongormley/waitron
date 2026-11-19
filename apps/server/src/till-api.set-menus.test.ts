@@ -432,7 +432,14 @@ it("saves a dish at its recorded set-menu price without sending it to the kitche
   expect(reopened.status).toBe(200);
   const saved = await reopened.json();
   expect(saved).toMatchObject({
-    lines: [{ menuItemId: copy.menuItemId, product: { unitPrice: "0.00" } }],
+    lines: [
+      {
+        menuItemId: copy.menuItemId,
+        menuVersionId: setMenus.recorded[copy.menuId],
+        setMenuId: copy.menuId,
+        product: { unitPrice: "0.00" },
+      },
+    ],
     setMenus: { dishes: [{ setMenuLineId: setMenus.setMenus[0].lineId, place: 0 }] },
   });
   const placed = await request("POST", `${path}/place`, { expectedEdit: null });
@@ -444,4 +451,20 @@ it("saves a dish at its recorded set-menu price without sending it to the kitche
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, saved.lines[0].workingOrderLineId)),
   ).toEqual([{ lineId: saved.lines[0].workingOrderLineId }]);
+});
+
+it("refuses Eat in on a counter bill with a set menu using the set-menu refusal", async () => {
+  const body = await counterTakeaway();
+  const path = `/api/working-orders/${body.id}`;
+  const opened = await request("POST", "/api/working-orders", body);
+  expect(opened.status).toBe(200);
+  const { revision } = await opened.json();
+  const switched = await request("PUT", `${path}/dining`, {
+    dining: "eat_in",
+    revision,
+    expectedEdit: null,
+  });
+  expect(switched.status).toBe(409);
+  expect(await switched.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+  expect(await (await request("GET", path)).json()).toMatchObject({ dining: "takeaway", revision });
 });

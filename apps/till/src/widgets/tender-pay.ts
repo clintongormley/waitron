@@ -636,9 +636,14 @@ export class TillTenderPay extends LitElement {
     });
   }
 
+  @property({ type: Boolean }) hasSetMenus = false;
+
+  get #parkDisabled(): boolean {
+    return this.busy || (this.store.lineCount === 0 && !this.hasSetMenus);
+  }
+
   #startHolding(): void {
-    if (!this.isConnected || this.busy || this.store.lineCount === 0 || this.view !== "idle")
-      return;
+    if (!this.isConnected || this.#parkDisabled || this.view !== "idle") return;
     this.labelEntry = "";
     this.view = "holding";
     void this.updateComplete.then(async () => {
@@ -787,8 +792,7 @@ export class TillTenderPay extends LitElement {
   /** Reset BEFORE the dispatch, so even a synchronous listener that throws leaves the widget
    * idle. */
   #park(): void {
-    if (!this.isConnected || this.busy || this.store.lineCount === 0 || this.view !== "holding")
-      return;
+    if (!this.isConnected || this.#parkDisabled || this.view !== "holding") return;
     this.#finishEntry();
     const label = this.labelEntry.trim();
     this.view = "idle";
@@ -1145,7 +1149,7 @@ export class TillTenderPay extends LitElement {
                   class="hold"
                   variant="secondary"
                   size="md"
-                  ?disabled=${disabled}
+                  ?disabled=${this.#parkDisabled}
                   @click=${() => this.#startHolding()}
                 >
                   ${t("action.hold")} </wt-button
@@ -1424,7 +1428,7 @@ export class TillTenderPay extends LitElement {
                     class="park"
                     variant="primary"
                     size="lg"
-                    ?disabled=${this.busy || this.store.lineCount === 0}
+                    ?disabled=${this.#parkDisabled}
                     @click=${() => this.#park()}
                   >
                     ${t("action.hold")}

@@ -563,6 +563,9 @@ export interface SaleLine {
   /** The menu version an unsaved line was priced against. The server refuses the request
    * `menu.version_changed` when it is not the live one; absent means the live one. */
   menuVersionId?: string;
+  setMenuId?: string;
+  setMenuReservedLineId?: string;
+  setMenuReservedPlace?: number;
   quantity: string;
   extras?: ExtraSelection[];
   options?: OptionSelection[];

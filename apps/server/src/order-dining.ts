@@ -9,6 +9,7 @@ import { AppError, DININGS, type Dining } from "@waitron/shared";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { captureOrderEdit, type OrderAttendance } from "./working-order.js";
+import { hasBillSetMenuLines } from "./set-menu-bill.js";
 import "./errors.js";
 
 /** `dining` from a request body; absent, null or unknown, `management.request_invalid` names it. */
@@ -103,6 +104,8 @@ export async function switchOrderDining(
   const [order] = await tx
     .select({
       status: workingOrders.status,
+      partyId: workingOrders.partyId,
+      serviceMode: workingOrders.serviceMode,
       revision: workingOrders.revision,
       dining: workingOrders.dining,
     })
@@ -118,6 +121,12 @@ export async function switchOrderDining(
   if (!switchable.has(workingOrderId)) {
     throw new AppError("order.dining_fixed", { dining: order.dining });
   }
+  if (
+    dining === "eat_in" &&
+    (order.partyId === null || order.serviceMode !== "table_tab") &&
+    (await hasBillSetMenuLines(tx, workingOrderId))
+  )
+    throw new AppError("set_menu.not_seated", {});
   const locked = await orderDiningLocked(tx, workingOrderId);
   if (locked !== null) throw new AppError("order.dining_locked", { reason: locked });
   await tx
