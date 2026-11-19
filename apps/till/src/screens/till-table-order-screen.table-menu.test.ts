@@ -612,6 +612,24 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       ]);
     });
 
+    it("a presented bill with no invoice number still offers Full invoice", async () => {
+      const unnumbered = partyBill("wo-2", 2, "54.00", {
+        status: "placed",
+        receiptAvailable: true,
+      });
+      const el = await mountScreen({ bills: [unnumbered] });
+
+      expect(groups(el)[0]!.items).toEqual([
+        "Name this bill",
+        "Move this bill",
+        "Record unpaid departure",
+        "Full invoice",
+        "Print the bill",
+        "Receipt copy",
+        "Cancel and credit",
+      ]);
+    });
+
     it("an open bill holding a payment keeps Move dishes…", async () => {
       const el = await mountScreen({
         bills: [partyBill("wo-2", 2, "40.00", { total: "54.00", hasPayments: true })],
