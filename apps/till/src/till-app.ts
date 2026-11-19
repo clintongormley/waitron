@@ -10838,13 +10838,15 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (this.#ticketIsCurrent(target, session, visit)) {
         const code = (error as { code?: string } | undefined)?.code;
-        // The code's own text speaks of a copy; this is the original.
+        // The code's own text speaks of a copy; this is the original, worded as the panel words it.
         this.errorKey =
           code === "storage.disk_full"
             ? { code }
-            : code === "receipt.no_printer"
-              ? "document.no_receipt_printer"
-              : "receipt.error";
+            : code !== "receipt.no_printer"
+              ? "receipt.error"
+              : full
+                ? { code: "invoice_delivery.receipt_unavailable" }
+                : "document.no_receipt_printer";
       }
     } finally {
       if (this.#ticketIsCurrent(target, session, visit)) this.originalReceiptBusy = false;

@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { TillSettlementDocumentDialog } from "./settlement-document-dialog.js";
 import { invoiceOf } from "../../test/bill-pay-app.js";
 import "./settlement-document-dialog.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
+import type { RoleEquipment } from "../api/client.js";
 import { equipmentItem, roleOf } from "../../test/pay-equipment-fixtures.js";
 
 const originalLocale = currentLocale();
@@ -317,3 +318,72 @@ it.each(["queued", "failed"] as const)(
       expect(el.shadowRoot!.querySelector("[data-test=retry-receipt]")).not.toBeNull();
   },
 );
+
+describe("why the receipt Print button is greyed", () => {
+  const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
+  const off = equipmentItem("bar", "Bar", { kind: "receipt", available: false });
+  const patio = equipmentItem("patio", "Patio", { kind: "receipt" });
+  const mount = (receiptEquipment: RoleEquipment) =>
+    mountWidget<TillSettlementDocumentDialog>("till-settlement-document-dialog", {
+      result: { ...invoiceOf("30.00"), invoiceType: "F2" },
+      invoicePrintersEnabled: true,
+      originalReceiptAvailable: true,
+      originalReceiptPrint: { status: "not_queued" },
+      receiptEquipment,
+    });
+  const line = (el: TillSettlementDocumentDialog, key: string) =>
+    el.shadowRoot!.querySelector(`[data-test=${key}]`)?.textContent?.trim();
+  const lines = (el: TillSettlementDocumentDialog) =>
+    ["receipt-no-printer", "receipt-printer-off", "receipt-no-printers"].flatMap((key) => {
+      const words = line(el, key);
+      return words === undefined ? [] : [[key, words]];
+    });
+  const disabled = (el: TillSettlementDocumentDialog) =>
+    el.shadowRoot!.querySelector("[data-test=print-receipt]")!.hasAttribute("disabled");
+
+  it.each([
+    [
+      "no printer set",
+      roleOf("receipt", null, [bar]),
+      "receipt-no-printer",
+      () => t("document.no_receipt_printer"),
+    ],
+    [
+      "a switched-off printer",
+      roleOf("receipt", off, [patio]),
+      "receipt-printer-off",
+      () => t("pay_equipment.printer_switched_off").replace("{item}", "Bar"),
+    ],
+    [
+      "no receipt printer listed",
+      roleOf("receipt", null, []),
+      "receipt-no-printers",
+      () => t("document.no_printers"),
+    ],
+  ] as const)("says why with %s", async (_name, receiptEquipment, key, words) => {
+    const { el } = await mount(receiptEquipment);
+    expect(disabled(el)).toBe(true);
+    expect(lines(el)).toEqual([[key, words()]]);
+    el.invoicePrinterLoading = true;
+    await el.updateComplete;
+    expect(lines(el)).toEqual([]);
+    el.invoicePrinterLoading = false;
+    el.invoicePrinterReadFailed = true;
+    await el.updateComplete;
+    expect(lines(el)).toEqual([]);
+  });
+
+  it("says nothing with a printer that is switched on", async () => {
+    const { el } = await mount(roleOf("receipt", bar, [bar]));
+    expect(disabled(el)).toBe(false);
+    expect(lines(el)).toEqual([]);
+  });
+
+  it("leaves the empty list's line to the printer list while it is open", async () => {
+    const { el } = await mount(roleOf("receipt", null, []));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=invoice-printer-toggle]")!.click();
+    await el.updateComplete;
+    expect(lines(el)).toEqual([]);
+    expect(el.shadowRoot!.textContent!.split(t("document.no_printers"))).toHaveLength(2);
+  });
+});

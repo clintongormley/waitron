@@ -6865,6 +6865,27 @@ describe("till-app", () => {
     expect(banner!.textContent).not.toContain(codeMessage("receipt.no_printer"));
   });
 
+  it("print receipt: a full invoice's original with no receipt printer uses the invoice wording", async () => {
+    const printReceipt = vi.fn().mockRejectedValue({ code: "receipt.no_printer", status: 409 });
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+      printReceipt,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(coffee, "2");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    emit(ticket(el)!, "print-receipt");
+    await flush(el);
+    expect(printReceipt).toHaveBeenCalledOnce();
+    const banner = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(banner!.textContent).toContain(codeMessage("invoice_delivery.receipt_unavailable"));
+    expect(banner!.textContent).not.toContain(t("document.no_receipt_printer"));
+  });
+
   it("confirm-payment: a CARD tender forwards intact (method, amount, externalRef) with the store's stable id", async () => {
     // `#onConfirmPayment` forwards whichever tender the widget emits without branching — this pins that
     // a CARD tender reaches recordSale UNCHANGED (method still "card", externalRef still present, never

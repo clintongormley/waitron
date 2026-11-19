@@ -1987,7 +1987,13 @@ describe("A790 recorded document then printer", () => {
       expect(text(el)).toContain(uiText("document.no_printers"));
       expect(noPrinter(el)).toBeUndefined();
       expect(printerOff(el)).toBeUndefined();
+      expect(part(el, "receipt-no-printers")).toBeNull();
     }
+    await press(el, "invoice-printer-toggle");
+    expect(part(el, "receipt-no-printers")!.textContent!.trim()).toBe(
+      uiText("document.no_printers"),
+    );
+    expect(text(el).split(uiText("document.no_printers"))).toHaveLength(2);
   });
 
   it("asks before taking another device's Receipt printer and sends takeOver only after Take", async () => {
