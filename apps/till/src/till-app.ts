@@ -4380,6 +4380,9 @@ export class TillApp extends LitElement {
    * new submission id, cannot find it. Kept across visits, since what the bill may hold does not
    * change with who is looking at it. */
   #mealEndUnanswered = new Set<string>();
+  /** Print the bill's answers that arrived while another bill was on screen, by the bill each is
+   * about; see {@link #sayMealEnd}. */
+  #mealEndKept = new Map<string, { asked: BillComposition; show: () => void }>();
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
   @state() private departureApprovers?: StaffMember[];
@@ -5162,6 +5165,7 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (changed.has("activeTabId")) this.#showKeptMealEndAnswer();
     if (this.#splitReadParty !== undefined && this.#splitReadParty !== this.orderParty?.id) {
       this.#leaveSplitRead();
       this.#splitReadParty = undefined;
@@ -20237,6 +20241,7 @@ export class TillApp extends LitElement {
     } else if (!confirmsTicket(outcome.answer, workingOrderId)) this.#onMealEndUnconfirmed(asked);
     else {
       this.#mealEndUnanswered.delete(workingOrderId);
+      this.#mealEndKept.delete(workingOrderId);
       if (live()) await this.#onMealEnded(asked);
     }
   }
@@ -20258,32 +20263,55 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** The pressed bill is on screen, in the visit it was pressed in. Words about it appear only then:
-   * under another bill or a later visit they would describe the wrong thing. */
+  /** The pressed bill is on screen, in the visit it was pressed in. */
   #onPressedBill(asked: BillComposition): boolean {
-    return (
-      this.#mealEndPartyCurrent(asked) &&
-      this.#orderVisit === asked.visit &&
-      this.activeTabId === asked.billId
-    );
+    return this.#mealEndAnswerable(asked) && this.activeTabId === asked.billId;
+  }
+
+  #mealEndAnswerable(asked: BillComposition): boolean {
+    return this.#mealEndPartyCurrent(asked) && this.#orderVisit === asked.visit;
+  }
+
+  /** An answer about the pressed bill is shown while that bill is on screen. Under another bill it
+   * would describe the wrong thing, so it waits for its own bill, and it is dropped once the visit
+   * it was pressed in has ended. */
+  #sayMealEnd(asked: BillComposition, show: () => void): void {
+    if (!this.#mealEndAnswerable(asked)) return;
+    if (this.activeTabId === asked.billId) show();
+    else this.#mealEndKept.set(asked.billId, { asked, show });
+  }
+
+  #showKeptMealEndAnswer(): void {
+    for (const [billId, kept] of this.#mealEndKept) {
+      if (!this.#mealEndAnswerable(kept.asked)) this.#mealEndKept.delete(billId);
+      else if (billId === this.activeTabId) {
+        this.#mealEndKept.delete(billId);
+        kept.show();
+      }
+    }
   }
 
   /** The warning and the released controls come first: the read after them may never answer. */
   #onMealEndUnconfirmed(asked: BillComposition): void {
     this.#mealEndUnanswered.add(asked.billId);
     if (!this.#mealEndPartyCurrent(asked)) return;
-    if (this.#onPressedBill(asked)) this.errorKey = "meal_end.unconfirmed";
+    this.#sayMealEnd(asked, () => {
+      this.errorKey = "meal_end.unconfirmed";
+    });
     void this.#rereadBillsAfterPrint(asked, "meal_end.unconfirmed");
   }
 
   /** The bills are read again, and kept if the read fails, since a print that got no answer often
    * means the box cannot be reached. A read that finds the bill gone moves the screen to another,
-   * and `said`, being about the pressed bill, does not stay on it. */
+   * and `said`, being about the pressed bill, goes back to waiting for it. */
   async #rereadBillsAfterPrint(asked: BillComposition, said: CounterError): Promise<void> {
     const shown = this.activeTabId;
     await this.#loadPartyBills(undefined, true, false, false, true);
-    if (shown === asked.billId && this.activeTabId !== shown && this.errorKey === said)
-      this.errorKey = undefined;
+    if (shown !== asked.billId || this.activeTabId === shown || this.errorKey !== said) return;
+    this.errorKey = undefined;
+    this.#sayMealEnd(asked, () => {
+      this.errorKey = said;
+    });
   }
 
   /** Not served lists the dishes; a changed party reloads the table and a closed one is said, as
@@ -20303,26 +20331,31 @@ export class TillApp extends LitElement {
     else if (refusal?.code === "meal_end.already_issued")
       this.#mealEndUnanswered.delete(request.billId);
     if (!this.#mealEndPartyCurrent(asked)) return;
-    const stillOnBill = () => this.#onPressedBill(asked);
+    const sayError = (message: CounterError) =>
+      this.#sayMealEnd(asked, () => {
+        this.errorKey = message;
+      });
     if (refusal?.code === "meal_end.unserved_dishes" && Array.isArray(refusal.dishes)) {
-      if (asked.visit !== this.#orderVisit) return;
-      this.mealEnd = {
-        partyId: asked.partyId,
-        workingOrderId: request.billId,
-        unserved: refusal.dishes as MealEndUnservedDish[],
-        revision: request.expectedPartyRevision,
-      };
+      const unserved = refusal.dishes as MealEndUnservedDish[];
+      this.#sayMealEnd(asked, () => {
+        this.mealEnd = {
+          partyId: asked.partyId,
+          workingOrderId: request.billId,
+          unserved,
+          revision: request.expectedPartyRevision,
+        };
+      });
       return;
     }
     if (isPartyOutOfDate(error)) {
-      await this.#onPartyOutOfDate(error, stillOnBill);
+      await this.#onPartyOutOfDate(error, undefined, sayError);
       return;
     }
     if (refusal?.code === "party.not_open") {
-      if (stillOnBill()) this.errorKey = tableWriteError(error);
+      sayError(tableWriteError(error));
       return;
     }
-    if (stillOnBill()) this.errorKey = said;
+    sayError(said);
     await this.#rereadBillsAfterPrint(asked, said);
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
