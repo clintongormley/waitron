@@ -171,6 +171,8 @@ writer)** here and where they first appear in a task.
     merely moves to another set menu of the same type does not block the removal. The till makes
     the same check from its own draft (`draftPlacements`) before sending the tap, so a dish not yet
     saved is covered too; the server's check covers saved drafts from every till at the table.
+    PR 8 also calls this check when a move would take a set menu away from a bill whose draft
+    stays behind (watcher, 19 November at 10:18).
 
 ## What this piece stores, for piece 4
 
