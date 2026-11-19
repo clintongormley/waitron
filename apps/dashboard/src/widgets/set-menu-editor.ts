@@ -62,6 +62,9 @@ export class SetMenuEditor extends LitElement {
 
   #dishesSaved(event: CustomEvent<SetMenuDishesSaved>): void {
     const { details, addedLines = [], removedLines = [] } = event.detail;
+    this.renderRoot
+      .querySelector("dashboard-set-menu-lines-form")
+      ?.applyDishLineChanges(details.lines, addedLines, removedLines);
     this.#read++;
     this.details = details;
     this.failed = false;

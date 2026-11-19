@@ -167,6 +167,7 @@ export class SetMenuDishes extends LitElement {
 
   #changeCourse(event: CustomEvent<{ value: string }>, dish: Dish): void {
     event.stopPropagation();
+    const control = event.currentTarget as HTMLElement;
     const id = dish.menuItemId;
     const courseId = event.detail.value || null;
     if (this.changingCourse.has(id) || courseId === dish.courseOverrideId) return;
@@ -175,8 +176,12 @@ export class SetMenuDishes extends LitElement {
     this.courseErrors.delete(id);
     this.#writes.run(this.details.id, async () => {
       this.actionError = "";
+      let restoreFocus = false;
       try {
-        this.#saved(await this.api.saveSetMenuDishCourse(this.details.id, id, courseId));
+        const result = await this.api.saveSetMenuDishCourse(this.details.id, id, courseId);
+        const moved = result.details.dishes.find(({ menuItemId }) => menuItemId === id);
+        restoreFocus = moved?.courseId !== dish.courseId && control.matches(":focus-within");
+        this.#saved(result);
       } catch (error) {
         const field = fieldOf(error);
         const message = codeMessage(codeOf(error), undefined, { field });
@@ -186,7 +191,21 @@ export class SetMenuDishes extends LitElement {
         this.changingCourse = new Set(this.changingCourse);
         this.changingCourse.delete(id);
       }
+      if (restoreFocus) await this.#focusMovedCourse(id);
     });
+  }
+
+  async #focusMovedCourse(id: string): Promise<void> {
+    await this.updateComplete;
+    for (const table of this.renderRoot.querySelectorAll("wt-data-table")) {
+      await table.updateComplete;
+      const course = table.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        `wt-combobox[data-item="${CSS.escape(id)}"]`,
+      );
+      if (!course) continue;
+      if (this.ownerDocument.activeElement === this.ownerDocument.body) course.focus();
+      return;
+    }
   }
 
   #remove(dish: Dish): void {
@@ -224,6 +243,7 @@ export class SetMenuDishes extends LitElement {
     return html`<wt-combobox
       part="dish-course"
       name="course"
+      data-item=${dish.menuItemId}
       show-empty-option
       hide-label
       label=${fill("menus.set_menu_course_for", { name: dish.name })}

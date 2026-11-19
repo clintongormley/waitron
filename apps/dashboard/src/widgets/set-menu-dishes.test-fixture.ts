@@ -58,6 +58,7 @@ type DishesApi = Record<
   | "saveSetMenuVariantChoices"
   | "updateMenuItem"
   | "saveSetMenuDishCourse"
+  | "saveSetMenuLines"
   | "getMenuStructure"
   | "removeSectionMember",
   Mock
@@ -106,6 +107,7 @@ export async function mountDishes(initial = details, theme?: "light" | "dark") {
     saveSetMenuVariantChoices: vi.fn(),
     updateMenuItem: vi.fn().mockResolvedValue(undefined),
     saveSetMenuDishCourse: vi.fn(),
+    saveSetMenuLines: vi.fn(),
     getMenuStructure: vi.fn().mockResolvedValue({
       rootSectionId: "daily-root",
       root: { members: [{ id: "hake-member", ref: { kind: "product", productId: "hake" } }] },

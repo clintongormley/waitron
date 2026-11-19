@@ -76,6 +76,10 @@ it("moves Bravas to Starters and explains both line changes, then restores its p
   expect(api.saveSetMenuDishCourse).toHaveBeenNthCalledWith(1, "daily", "bravas-item", "starters");
   await expect.element(page.getByText("Added a line: 1 × Starters")).toBeVisible();
   await expect.element(page.getByText("Removed a line: 1 × Sharing plates")).toBeVisible();
+  await vi.waitFor(() => {
+    const course = page.getByRole("combobox", { name: /^Course for Bravas/ }).element();
+    expect((course.getRootNode() as ShadowRoot).activeElement === course).toBe(true);
+  });
   await choose("Sharing plates (from the product)");
   await expect
     .element(
@@ -203,6 +207,56 @@ it("announces a line added by a dish", async () => {
   await expect.element(page.getByText("Added a line: 1 × Drinks")).toBeVisible();
 });
 
+it("keeps the line added by a dish when saving an already edited inclusion count", async () => {
+  const { el, api } = await mountDishes(wineDetails);
+  const withDrinks = { ...wineDetails, lines: [sharingLine, drinkLine] };
+  api.addSetMenuDishes.mockResolvedValue({ details: withDrinks, addedLines: [drinkLine] });
+  api.saveSetMenuLines.mockResolvedValue({ lines: withDrinks.lines });
+  const lineForm = page.elementLocator(
+    el.shadowRoot!.querySelector("dashboard-set-menu-lines-form")!,
+  );
+  await lineForm.getByRole("spinbutton", { name: "Number of dishes" }).fill("2");
+
+  await openAdd();
+  await page.getByRole("checkbox", { name: "Coffee" }).click();
+  await page.getByRole("button", { name: "Add selected" }).click();
+  await expect.element(page.getByText("Added a line: 1 × Drinks")).toBeVisible();
+
+  await lineForm.getByRole("button", { name: "Save" }).click();
+  await vi.waitFor(() =>
+    expect(api.saveSetMenuLines).toHaveBeenCalledExactlyOnceWith("daily", [
+      { count: 2, courseIds: ["sharing"] },
+      { count: 1, courseIds: ["drinks"] },
+    ]),
+  );
+});
+
+it("does not put an automatically removed line back when saving another count", async () => {
+  const { el, api } = await mountDishes({ ...details, lines: [sharingLine, starterLine] });
+  const moved = { ...bravas, courseId: starters.id, courseOverrideId: starters.id };
+  api.saveSetMenuDishCourse.mockResolvedValue({
+    details: { ...details, dishes: [hake, moved, soup], lines: [starterLine] },
+    addedLines: [],
+    removedLines: [sharingLine],
+  });
+  api.saveSetMenuLines.mockResolvedValue({ lines: [starterLine] });
+  const lineForm = page.elementLocator(
+    el.shadowRoot!.querySelector("dashboard-set-menu-lines-form")!,
+  );
+  await lineForm.getByRole("spinbutton", { name: "Number of dishes" }).nth(1).fill("2");
+
+  await page.getByRole("combobox", { name: /^Course for Bravas/ }).click();
+  await page.getByRole("option", { name: "Starters", exact: true }).click();
+  await expect.element(page.getByText("Removed a line: 1 × Sharing plates")).toBeVisible();
+
+  await lineForm.getByRole("button", { name: "Save" }).click();
+  await vi.waitFor(() =>
+    expect(api.saveSetMenuLines).toHaveBeenCalledExactlyOnceWith("daily", [
+      { count: 2, courseIds: ["starters"] },
+    ]),
+  );
+});
+
 it("keeps the add dialog open and names a dish the server refuses for its unit", async () => {
   const { api } = await mountDishes();
   api.addSetMenuDishes.mockRejectedValue({
@@ -294,4 +348,24 @@ it("copies from another set menu and shows the returned dishes and kept surcharg
         .getByRole("cell", { name: "Soup", exact: true }),
     )
     .toBeVisible();
+});
+
+it("names the measured dish when a copy is refused and leaves the source selected", async () => {
+  const { api } = await mountDishes(wineDetails);
+  api.copySetMenuDishes.mockRejectedValue({
+    code: "set_menu.dish_sold_by_measure",
+    params: { productId: "turbot" },
+  });
+  await page.getByRole("button", { name: "Copy dishes from another set menu" }).click();
+  await page.getByRole("combobox", { name: /^Set menu/ }).click();
+  await page.getByRole("option", { name: "Special menu" }).click();
+  const copy = page.getByRole("button", { name: "Copy dishes", exact: true });
+  await copy.click();
+  await expect
+    .element(page.getByText("Turbot is sold by weight or measure", { exact: false }))
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("combobox", { name: /^Set menu.*Special menu/ }))
+    .toBeVisible();
+  await expect.element(copy).toBeEnabled();
 });
