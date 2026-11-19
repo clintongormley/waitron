@@ -71,12 +71,12 @@ export function payPrinterOf(equipment: DeviceEquipment | null): PayPrinter {
   return named ? { kind: "unset" } : { kind: "none_listed" };
 }
 
-/** Whether the receipt would not print, which opens the folded row by itself. */
+/** Whether the receipt would not print now, which opens the folded row by itself. */
 export function printerWantsRowOpen(printer: PayPrinter): boolean {
   return printer.kind === "switched_off" || printer.kind === "unset";
 }
 
-/** Whether the folded row opens by itself: the payment has no reader, or its receipt would not print. */
+/** Whether the folded row opens by itself: the payment has no reader, or its receipt would not print now. */
 export function rowStartsOpen(reader: PayReader, printer: PayPrinter): boolean {
   return reader.kind !== "ready" || printerWantsRowOpen(printer);
 }

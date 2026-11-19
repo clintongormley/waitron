@@ -1074,7 +1074,7 @@ The owner chose to keep counter full invoices through the shared Pay window as m
 "keep what works, fix the printer choice". The Full invoice choice, with an Email or A4 original,
 is saved before Pay and the invoice is issued on the last payment; paper is printed after payment,
 from **Print on {printer}** in the window that follows it (from 19 November 2026, ADVISER-NO-NONE,
-closing that window also prints the receipt unless it was emailed). Direct `POST /api/sales`, `POST /api/pay`, unissued
+closing that window also prints the receipt unless an original was emailed or sent to an A4 printer). Direct `POST /api/sales`, `POST /api/pay`, unissued
 `/collect`, closing a counter bill by transfer and zero-total counter bills still refuse F1 with
 `sale.full_invoice_unavailable`. Pinned by the full-invoice cases in
 `apps/server/src/counter-bill-payments.test.ts`. Relayed by the watcher in lane L's

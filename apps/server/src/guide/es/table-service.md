@@ -81,7 +81,7 @@ dirección.
 
 Pulsa **Listo** o cierra la ventana para continuar. Salvo que lo hayas enviado por correo
 electrónico, el recibo se imprime al cerrar. Si la impresora está desactivada o no funciona, se
-imprime sola cuando vuelva a funcionar; si al día siguiente no se ha impreso, imprímelo desde la
+imprime por sí solo cuando vuelva a funcionar; si al día siguiente no se ha impreso, imprímelo desde la
 venta. Si el dispositivo no tiene impresora de tickets, no se imprime nada: elige una o envía el
 correo antes de cerrar. Cierras la mesa por separado.
 Si necesitas un documento más tarde, abre la venta y elige **Imprimir/Reimprimir**.

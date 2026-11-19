@@ -114,9 +114,9 @@ impresora. El aviso desaparece cuando la impresora imprime algo que se le envió
 comanda. Si el servidor dejó de intentar enviar alguna comanda, las cajas muestran entonces
 **Impresora «Cocina» no pudo imprimir un ticket · Vuelve a imprimirlo** en ámbar hasta que se
 imprima una reimpresión (una comanda desde la mesa, un recibo desde su venta) o un reenvío desde
-**Impresoras**. Un recibo también se vuelve a intentar solo cada pocos minutos durante un día, así
-que para imprimirlo ya, abre su venta y pulsa **Reintentar original** en lugar de imprimir una
-copia.
+**Impresoras**. Un recibo original que no se imprimió también se vuelve a intentar por sí solo cada
+10 minutos aproximadamente durante un día después de la venta, así que para imprimirlo ya, abre su
+venta y pulsa **Reintentar original** en lugar de imprimir una copia.
 
 **El servidor necesita atención · Consulta Estado del servidor en el panel** es un aviso para el que este terminal no tiene
 texto, quizá de una versión más reciente del servidor.
