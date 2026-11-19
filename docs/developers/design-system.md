@@ -179,9 +179,9 @@ styles.
 
 This works whether or not `#app` also carries `data-theme` — see "Themes" above.
 
-Overriding `--wt-color-primary` leaves every token that holds Waitron's blue as its own value at
-that blue — among them `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-focus`,
-`--wt-color-field-label-focus`, `--wt-color-primary-disabled` and `--wt-color-table-calm-edge` — and
+Overriding `--wt-color-primary` leaves every token that holds Waitron's brand colour, or a shade of it, as
+its own value at that value — among them `--wt-color-primary-text`, `--wt-color-primary-hover`,
+`--wt-color-focus`, `--wt-color-field-label-focus` and `--wt-color-primary-disabled` — and
 overriding `--wt-color-danger` leaves `--wt-color-danger-hover`, `--wt-color-danger-disabled`,
 `--wt-color-danger-pulse-dim` and `--wt-color-tab-danger-tint` at Waitron's red (and overriding
 `--wt-color-warning` leaves `--wt-color-warning-pulse-dim` and `--wt-color-tab-warning-tint` at
@@ -300,7 +300,7 @@ the icons and spinners its `GRAPHIC_USES` list names by file and selector
 
 One use of the button colour it cannot see was checked by hand on 2026-10-21 and stays, being a
 graphic: the floor map's drag line, `stroke: var(--wt-color-primary)` in
-`packages/ui/src/components/wt-floor-map.ts:375`. The one text site of that kind found then, the
+`packages/ui/src/components/wt-floor-map.ts:374`. The one text site of that kind found then, the
 printer name's redeclared `--wt-color-text` (`apps/dashboard/src/screens/printers-screen.ts:218`),
 moved to `--wt-color-primary-text`, and a case in `printers-screen.test.ts` sets the two tokens to
 different values and checks the name takes the text one.
@@ -478,8 +478,7 @@ in both themes, that the edge is 2:1 or more on `--wt-color-surface` and 1.4:1 o
 `--wt-color-border`, and 15 or more by CIEDE2000 from `--wt-color-primary`; that each dim colour is
 15 or more by CIEDE2000 from its full colour and no more than 10 CIELAB lightness below it; and
 that the `prefers-color-scheme` blocks give the same values. A further case holds that each light
-dim colour is its full colour at 30% over `--wt-color-surface`, and another that the light calm
-edge is `--wt-color-primary-disabled`.
+dim colour is its full colour at 30% over `--wt-color-surface`.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when some open alert is a warning and none is an error. Text on it uses `--wt-color-on-warning`.
@@ -1451,7 +1450,7 @@ Redo, for one. It replaces the button's own padding and border radius; it does n
 
 A disabled `primary` or `danger` `wt-button` paints its own disabled colour pair
 (`--wt-color-primary-disabled` and `--wt-color-on-primary-disabled`, and the danger twins; see
-Tokens → Colour): in dark a dim fill close to the surface, so it stays the blue or red button
+Tokens → Colour): in dark a dim fill close to the surface, so it stays the brand-coloured or red button
 without looking pressable; in light, within one step per colour channel of what the old half fade
 gave over a white surface. A `loading` one keeps its colour, faded. A primary or danger button
 switched off with `?disabled=${busy}` while its own request is sent is not `loading`, so it takes
@@ -3290,9 +3289,9 @@ and the staffing grid's block editor in the A761 entry):
   a dish after a refused edit; the dead-ends dialog's Continue; the extras picker's Add when adding a
   dish (when editing one it is a save); and Cash and Card on the pay card, while the basket or bill has no
   lines, or while the basket's pay controls are held for a line not yet saved that cannot be sold
-  as it stands or is stale, or for a part-paid order, keeping blue through a payment being sent,
+  as it stands or is stale, or for a part-paid order, keeping the brand colour through a payment being sent,
   through an order being placed from the counter tab, and when only an invalid tip disables Card
-  (in dark, while switched off in those cases, the dim disabled blue, A535).
+  (in dark, while switched off in those cases, the dim disabled fill, A535).
   On the table screen, Send all waits for at least one sendable dish,
   Fire for a selected sendable dish, and Move to… for a selection. Those actions are quiet while
   disabled and use their primary colour when available. The allergy question and dish assignments
@@ -4222,7 +4221,7 @@ remain reachable by Tab.
 
 When the session may see alerts, the alerts bell (`dashboard-alerts-bell`, a `wt-row-actions` with
 the `bell` icon and a `wt-count-badge` in its `badge` slot) sits immediately before the help switch.
-The badge is red when any open alert is an error, amber when any is a warning, and blue (`--wt-color-primary`) when every open alert is a notice; each listed alert's leading edge takes its own level's colour. While there are open alerts,
+The badge is red when any open alert is an error, amber when any is a warning, and the brand colour (`--wt-color-primary`) when every open alert is a notice; each listed alert's leading edge takes its own level's colour. While there are open alerts,
 the trigger's accessible name includes the count, because the badge has no name of its own. The
 panel lists at most five alerts and, below the drawer breakpoint (`48rem`), spans the screen's width
 less a small gutter. When new alerts arrive while the page is open, a `wt-toast` appears at the trailing edge just
@@ -4487,7 +4486,7 @@ radius. From Google's rules it takes the gradient
 through `--wt-color-google-button-fill`, `--wt-color-google-button-line` and
 `--wt-color-google-button-text`, and Google Sans Medium, bundled
 (`apps/dashboard/src/assets/google-sans-medium-latin.woff2`, registered on `document.fonts`). The
-Google screen has no blue button, because Google's button must carry its "G" on a light, dark or
+Google screen has no primary button, because Google's button must carry its "G" on a light, dark or
 neutral fill (A228). The email screen offers **Continue with Google** when the venue has Google
 set up, because starting a Google sign-in takes no email; whether it shows depends on the venue's
 settings alone, so every visitor sees the same choices there. **I've forgotten my password** is a

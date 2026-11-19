@@ -61,8 +61,8 @@ const ROOT_TAG = /^<svg\b[^>]*>/;
 const RE_COPY =
   `The logo in apps/server/src/trust-page-logo.ts no longer draws the same picture as ` +
   `packages/ui/brand/waitron-lockup.svg. Re-copy the lockup's markup into that constant and ` +
-  `re-apply only the three deliberate differences: the inline <style> block, class= in place of ` +
-  `fill= on the ink group, and role/aria-label plus width/height on the root <svg>.`;
+  `re-apply only the three deliberate differences: the inline <style> block, no fill= on the ink ` +
+  `group (the <style> paints it), and role/aria-label plus width/height on the root <svg>.`;
 
 /** The svg element out of a file that may be TypeScript wrapping it in a template literal. */
 function inlineSvg(source: string, path: string): string {

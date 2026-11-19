@@ -1,6 +1,7 @@
 # The new Waitron brand on every screen — design
 
-Status: for the owner's approval, 2026-11-19. The owner chose the colour roles (option 2 of three
+Status: approved. The owner answered "go" in conversation on 2026-11-19, as the session that wrote this
+spec recorded in its ledger. The owner chose the colour roles (option 2 of three
 mock-ups), approach B and keeping seated tables blue, in conversation on 2026-11-19.
 
 ## Why

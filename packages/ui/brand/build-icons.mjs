@@ -23,7 +23,7 @@ const darkToken = (name) => {
   return value;
 };
 const INK_DARK = darkToken("text");
-// The icon canvas's side is the mark's long axis times this, leaving the margin the old icons had.
+// The icon canvas's side is the mark's long axis times this.
 const ICON_MARGIN = 136 / 124;
 
 /**

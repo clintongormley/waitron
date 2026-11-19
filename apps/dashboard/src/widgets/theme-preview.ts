@@ -87,8 +87,8 @@ export class ThemePreview extends LitElement {
       .strip:has(> .lockup) {
         align-items: baseline;
       }
-      /* As wide as the drawing is at --wt-space-5 tall, giving way, in a narrow panel, down to the
-         width the earlier logo had at that height, so the legal name keeps its room. */
+      /* As wide as the drawing is at --wt-space-5 tall; it shrinks in a narrow panel so the legal
+         name keeps its room. */
       .lockup {
         flex: 0 1 auto;
         width: calc(var(--wt-space-5) * 8);

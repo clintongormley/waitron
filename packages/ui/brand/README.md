@@ -10,8 +10,8 @@ The two source drawings are kept by hand, cut from the designer's `Waitron Line.
 `Waitron IconCol.svg` to a tight `viewBox` around the drawing (the origin is not `0 0`). Each holds,
 in this order: `<g class="ink" fill="#231f20">` with every near-black piece, one element
 `class="sky" fill="#71cfeb"` and one element `class="teal" fill="#007392"`. No other fills, no
-`<style>`, no `id`s. `wt-waitron-lockup` (`packages/ui/src/components/wt-waitron-lockup.ts`) finds
-the pieces by those class names.
+`<style>`, no `id`s. `wt-waitron-lockup` (`packages/ui/src/components/wt-waitron-lockup.ts`) paints
+the `ink` group by its class, and its browser tests find all three pieces by class.
 
 `build-icons.mjs` writes the derived files from the two sources and one dark colour token. The
 derived files are committed, so run it whenever you change a source drawing or that token.

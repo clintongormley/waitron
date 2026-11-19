@@ -16,7 +16,7 @@ describe("contrastRatio", () => {
     expect(contrastRatio("#ffffff", "#000000")).toBe(21);
   });
 
-  test("matches the reference for the brand blue on two pale surfaces", () => {
+  test("matches the reference for the old brand blue on two pale surfaces", () => {
     expect(contrastRatio("#1f6feb", "#f7f7f8").toFixed(2)).toBe("4.33");
     expect(contrastRatio("#1f6feb", "#ffffff").toFixed(2)).toBe("4.63");
   });
