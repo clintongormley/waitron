@@ -732,7 +732,17 @@ export class TillTenderPay extends LitElement {
       KEEP_CARD_REASONS.has(this.cardOutcome.failureReason ?? "")
     )
       return;
-    this.#collectCard(this.cardRetryDetail ?? this.#lastCollectDetail);
+    const retry = () => this.#collectCard(this.cardRetryDetail ?? this.#lastCollectDetail);
+    // A timeout is still pending (`BillPaymentResult`, apps/server/src/bill-payments.ts), so its
+    // retry stays as it was; after any other outcome nothing was charged and a retry is a fresh
+    // payment.
+    if (this.cardOutcome?.outcome === "timeout") {
+      retry();
+      return;
+    }
+    this.#checkBeforeTender(() => {
+      if (this.view === "card_outcome" && orderId === this.store.id) retry();
+    });
   }
 
   #onTipChange(event: Event): void {

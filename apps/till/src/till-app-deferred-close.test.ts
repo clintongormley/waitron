@@ -30,6 +30,7 @@ import type {
   CurrentOrderRow,
   CurrentOrders,
   PartyBill,
+  StaffNotice,
   TillSaleResult,
 } from "./api/client.js";
 import type { CloseDeferredResult } from "./api/deferred-close-types.js";
@@ -46,6 +47,14 @@ afterEach(() => {
   cleanupWidgets();
   setLocale(originalLocale);
 });
+
+const CLOCK_WAITING: StaffNotice = {
+  owner: "box-clock",
+  key: "clock.unconfirmed",
+  code: "clock.unconfirmed",
+  severity: "error",
+  params: { agreed: 1, cause: "start" },
+};
 
 const noOrders: CurrentOrders = {
   revision: 3,
@@ -629,6 +638,30 @@ it("Cancel on a presented bill's close returns to the presented bill's Pay windo
   expect(presentedPay(el)).not.toBeNull();
   expect(payDialog(el)).toBeNull();
   expect(api.closeDeferred).not.toHaveBeenCalled();
+});
+
+it("Cancel on a presented bill's close shows that payments are paused, not the Pay window, once they wait for the time", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [] });
+    const api = deferredApi({
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+      getDeviceEquipment,
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await openPresentedClosing(el);
+    getDeviceEquipment.mockResolvedValue({ roles: [], notices: [CLOCK_WAITING] });
+    vi.advanceTimersByTime(15_000);
+    await flush(el, 8);
+    closing(el)!.shadowRoot!.querySelector<HTMLElement>("[data-deferred-close-cancel]")!.click();
+    await flush(el, 8);
+    expect(closing(el)).toBeNull();
+    expect(presentedPay(el)).toBeNull();
+    expect(payDialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-payments-paused-dialog")).not.toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 const unservedDish: CurrentOrderRow = {
