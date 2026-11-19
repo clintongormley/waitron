@@ -4402,6 +4402,8 @@ export class TillApp extends LitElement {
   /** Bills with a send that got no confirmed answer, so a ticket may exist. Kept across visits and
    * sign-ins, since what the bill may hold does not change with who is looking at it. */
   #mealEndUnanswered = new Map<string, UnansweredPrint[]>();
+  /** Each bill's latest press acted on, for {@link #sayMealEnd}; only this visit's are kept. */
+  #mealEndLatestPress = new Map<string, MealEndPress>();
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
   @state() private departureApprovers?: StaffMember[];
@@ -20187,6 +20189,8 @@ export class TillApp extends LitElement {
       const { api, orderParty: pressed } = this;
       const session = this.#operatorSession;
       const visit = this.#orderVisit;
+      // Taken before the wait: a press made during it is the newer one.
+      const press = pressed === null ? null : this.#mealEndPressOf(pressed.id, workingOrderId);
       if (!(await this.#switchToBill(workingOrderId))) return;
       await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
       const sameTable = () =>
@@ -20198,8 +20202,8 @@ export class TillApp extends LitElement {
       // Issuing a ticket cannot be undone: a table that moved on is not the one the press saw, and
       // the revision read now would pass the server's stale check.
       if (pressed?.revision !== this.orderParty?.revision) {
-        if (pressed !== null)
-          this.#sayMealEnd(this.#mealEndPressOf(pressed.id, workingOrderId), {
+        if (press !== null)
+          this.#sayMealEnd(press, {
             error: this.#mealEndUnanswered.has(workingOrderId)
               ? "meal_end.unconfirmed"
               : "meal_end.table_moved",
@@ -20239,6 +20243,7 @@ export class TillApp extends LitElement {
     const asked = this.#billComposition(this.partyBills.map((row) => row.workingOrderId));
     if (asked === null || !this.#billCompositionCurrent(asked) || this.#orderVisit !== asked.visit)
       return;
+    this.#noteMealEndPress(asked);
     if (!asked.expectedEdits.every((edit) => this.#billChoiceCurrent(edit))) {
       this.#sayMealEnd(asked, { error: { code: "draft.out_of_date" } });
       return;
@@ -20319,13 +20324,21 @@ export class TillApp extends LitElement {
   }
 
   #mealEndPressOf(partyId: string, billId: string): MealEndPress {
-    return {
+    const press = {
       api: this.api,
       session: this.#operatorSession,
       sent: this.#sentNow(),
       partyId,
       billId,
     };
+    this.#noteMealEndPress(press);
+    return press;
+  }
+
+  #noteMealEndPress(press: MealEndPress): void {
+    for (const [billId, { sent }] of this.#mealEndLatestPress)
+      if (sent.opens !== this.#tableOfferRequest) this.#mealEndLatestPress.delete(billId);
+    this.#mealEndLatestPress.set(press.billId, press);
   }
 
   /** Still the visit the press was made in: the same sign-in, server and party, with no table opened
@@ -20349,12 +20362,14 @@ export class TillApp extends LitElement {
 
   /** Every answer to a press belongs to the pressed bill and the visit it was pressed in. It waits
    * here until that bill is on screen, replacing only that bill's earlier answer, and is dropped
-   * with the visit. */
+   * with the visit. An answer from any press but the bill's latest is dropped: Print is released
+   * while a changed table reloads, so a newer press can already have been answered. */
   #sayMealEnd(press: MealEndPress, said: MealEndSaid): void {
     const answers = new Map(
       [...this.mealEndAnswers].filter(([, answer]) => this.#mealEndLive(answer.press)),
     );
-    if (this.#mealEndLive(press)) answers.set(press.billId, { press, said, seen: false });
+    if (this.#mealEndLive(press) && this.#mealEndLatestPress.get(press.billId) === press)
+      answers.set(press.billId, { press, said, seen: false });
     this.mealEndAnswers = answers;
   }
 

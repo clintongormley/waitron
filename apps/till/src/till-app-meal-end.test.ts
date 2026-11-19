@@ -1732,6 +1732,58 @@ describe("till-app: a print's answer arriving after staff moved on", () => {
     expect(banner(el)).toBeNull();
   });
 
+  it("keeps Bill issued when an earlier press's table refresh finishes after it", async () => {
+    const read = heldAnswer<ReturnType<typeof heldTable>[]>();
+    let holding = false;
+    const endMeal = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1", revision: 5 })
+      .mockResolvedValue(ended);
+    const { el } = await openBill({
+      endMeal,
+      getTablesState: vi.fn(() => (holding ? read.promise : Promise.resolve([heldTable()]))),
+    });
+    holding = true;
+    await printBill(el);
+    expect(banner(el)).toBeNull();
+
+    await printBill(el);
+    expect(endMeal).toHaveBeenCalledTimes(2);
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+
+    read.resolve([heldTable({ revision: 5 })]);
+    await flush(el, 6);
+
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+    expect(banner(el)).toBeNull();
+  });
+
+  it("keeps Bill issued when an earlier press from Finish table then finds the table moved", async () => {
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    const endMeal = vi.fn(async () => ({ ...ended, workingOrderId: "wo-9" }));
+    const { el } = await openBill({
+      endMeal,
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines,
+    });
+    await pressPrintFromFinishRefusal(el);
+    expect(tableOrder(el).orderId).toBe("wo-9");
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+
+    emit(tableOrder(el), "end-meal", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    expect(endMeal).toHaveBeenCalledOnce();
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+
+    release();
+    await flush(el, 6);
+
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+    expect(banner(el)).toBeNull();
+  });
+
   it("reloads a table that changed elsewhere without saying so under the second bill", async () => {
     let moved = false;
     const answer = heldAnswer<EndedMeal>();
