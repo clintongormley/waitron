@@ -12,11 +12,12 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql, isNull } from "drizzle-orm";
+import { and, eq, sql, isNull } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   devices,
   drawerOpens,
+  printAgents,
   printers,
   printJobs,
   sales,
@@ -50,7 +51,13 @@ import { createPinThrottle, hashPin, persons, startManagementSession } from "@wa
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { createPrinter, enqueuePrintJob, textGrid, updatePrinter } from "@waitron/printing";
+import {
+  claimPrintJobs,
+  createPrinter,
+  enqueuePrintJob,
+  textGrid,
+  updatePrinter,
+} from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { createOpenOrder } from "./working-order.js";
 import {
@@ -2393,6 +2400,125 @@ describe("original receipt and payment slip actions", () => {
       expect(await res.json()).toMatchObject({ error: { code: "working_order.not_found" } });
     }
   });
+});
+
+describe("POST /api/sales/:id/receipt with ifOwed (the print when the window closes)", () => {
+  async function owedSetup(printerId?: string) {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt({ printerId: printerId ?? (await makePrinter()) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
+    const [sale] = await suite.db
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, orderId));
+    const post = (body?: unknown) =>
+      app.request(`/api/sales/${orderId}/receipt`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    return { cfg, operatorId, saleId: sale!.id, post };
+  }
+  const originals = (saleId: string) =>
+    suite.db
+      .select({ printerId: printJobs.printerId, status: printJobs.status })
+      .from(printJobs)
+      .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)));
+
+  it("queues the original once, even for two requests sent together", async () => {
+    const { saleId, post } = await owedSetup();
+    const answers = await Promise.all([post({ ifOwed: true }), post({ ifOwed: true })]);
+    expect(answers.map((res) => res.status)).toEqual([200, 200]);
+    expect((await post({ ifOwed: true })).status).toBe(200);
+    expect(await originals(saleId)).toHaveLength(1);
+    expect(await fiscalRecordCount()).toBe(1);
+  });
+
+  it("queues nothing once the original email was sent, where a plain print queues a copy", async () => {
+    const { operatorId, saleId, post } = await owedSetup();
+    await withTransaction(suite.db, async (tx) => {
+      const email = await reserveInvoiceDelivery(tx, saleId, {
+        requestKey: randomUUID(),
+        personId: operatorId,
+        medium: "email",
+        recipient: "synthetic@example.test",
+      });
+      await tx
+        .update(invoiceDeliveries)
+        .set({ status: "sent" })
+        .where(eq(invoiceDeliveries.id, email.id));
+    });
+    expect((await post({ ifOwed: true })).status).toBe(200);
+    expect(await suite.db.select().from(printJobs).where(eq(printJobs.saleId, saleId))).toEqual([]);
+    expect((await post()).status).toBe(200);
+    expect(
+      await suite.db
+        .select({ receiptCopy: printJobs.receiptCopy })
+        .from(printJobs)
+        .where(eq(printJobs.saleId, saleId)),
+    ).toEqual([{ receiptCopy: true }]);
+  });
+
+  it("does nothing while an email is queued, where a plain print is refused", async () => {
+    const { operatorId, saleId, post } = await owedSetup();
+    await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, saleId, {
+        requestKey: randomUUID(),
+        personId: operatorId,
+        medium: "email",
+        recipient: "synthetic@example.test",
+      }),
+    );
+    expect((await post({ ifOwed: true })).status).toBe(200);
+    expect(await suite.db.select().from(printJobs).where(eq(printJobs.saleId, saleId))).toEqual([]);
+    const plain = await post();
+    expect(await plain.json()).toMatchObject({ error: { code: "invoice_delivery.active" } });
+  });
+
+  it("queues to a switched-off receipt printer, which prints it once switched on", async () => {
+    const printerId = await withTransaction(suite.db, async (tx) => {
+      const { id } = await createPrinter(tx, {
+        name: "Recibos",
+        transport: "network_tcp",
+        host: `recibos-${randomUUID()}.test`,
+      });
+      await updatePrinter(tx, id, { active: false });
+      return id;
+    });
+    const { saleId, post } = await owedSetup(printerId);
+    expect((await post({ ifOwed: true })).status).toBe(200);
+    expect(await originals(saleId)).toEqual([{ printerId, status: "queued" }]);
+    await suite.db.insert(printAgents).values({ id: "agent-one", name: "Agent", tokenHash: "x" });
+    const claim = () =>
+      withTransaction(suite.db, (tx) => claimPrintJobs(tx, "agent-one", { visibleKeys: [] }));
+    expect(await claim()).toEqual([]);
+    await withTransaction(suite.db, (tx) => updatePrinter(tx, printerId, { active: true }));
+    expect((await claim()).map((job) => job.printer_id)).toEqual([printerId]);
+  });
+
+  it("leaves a switched-off printer alone for a plain print, as before", async () => {
+    const printerId = await makePrinter();
+    await withTransaction(suite.db, (tx) => updatePrinter(tx, printerId, { active: false }));
+    const { saleId, post } = await owedSetup(printerId);
+    expect((await post()).status).toBe(200);
+    expect(await originals(saleId)).toEqual([]);
+  });
+
+  it.each([["yes"], [1], [null]])(
+    "refuses ifOwed %j with management.request_invalid, queuing nothing",
+    async (ifOwed) => {
+      const { saleId, post } = await owedSetup();
+      const res = await post({ ifOwed });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "ifOwed" } },
+      });
+      expect(await originals(saleId)).toEqual([]);
+    },
+  );
 });
 
 describe("payment slip persisted capture facts", () => {

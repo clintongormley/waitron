@@ -132,6 +132,7 @@ import {
   enqueueSaleReceipt,
   printerLookup,
 } from "./receipt-print.js";
+import { owesOriginal } from "./owed-receipts.js";
 import { saleReceiptFacts, type GuestCountChoice } from "./receipt-guests.js";
 
 export interface TillMoneyOperator {
@@ -1029,7 +1030,11 @@ export async function readSettledTicket(
   };
 }
 
-/** The action determines original versus duplicate; both only enqueue paper for an existing sale. */
+/**
+ * The action determines original versus duplicate; both only enqueue paper for an existing sale.
+ * `ifOwed` queues the original only while {@link owesOriginal} holds and no original job exists,
+ * on the device's receipt printer even when it is switched off, and otherwise does nothing.
+ */
 export async function printSaleReceipt(
   deps: { db: Database; backend: FiscalBackend },
   cfg: OriginConfig,
@@ -1037,6 +1042,7 @@ export async function printSaleReceipt(
   duplicate: boolean,
   language?: string,
   personId?: string,
+  ifOwed = false,
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
     const [existing] = await tx
@@ -1052,7 +1058,15 @@ export async function printSaleReceipt(
     }
     // No filed sale → nothing to print. This keeps `readSettledTicket`'s "no sale" throw unreachable.
     if (existing === undefined) return;
+    if (ifOwed && !(await owesOriginal(tx, existing.id))) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
+    if (ifOwed) {
+      await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, {
+        personId,
+        printers: printerLookup(tx, cfg.origin, { includeSwitchedOff: true }),
+      });
+      return;
+    }
     if (duplicate) {
       await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);
       return;

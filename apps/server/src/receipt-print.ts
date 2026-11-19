@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   receiptRollColumns,
   deviceProfiles,
@@ -57,11 +57,18 @@ export interface DevicePrinter extends EscSetting {
 
 export type PrinterLookup = (role: ProfilePrinterRole) => Promise<DevicePrinter | undefined>;
 
-/** Do not reuse after changing the device's equipment: its role map is cached. */
-export function printerLookup(tx: Transaction, origin: Origin): PrinterLookup {
+/**
+ * Do not reuse after changing the device's equipment: its role map is cached. `includeSwitchedOff`
+ * also resolves a printer that is switched off, though never a deleted one.
+ */
+export function printerLookup(
+  tx: Transaction,
+  origin: Origin,
+  options: { includeSwitchedOff?: boolean } = {},
+): PrinterLookup {
   let read: Promise<Map<ProfilePrinterRole, DevicePrinter>> | undefined;
   return async (role) => {
-    read ??= readDevicePrinters(tx, origin);
+    read ??= readDevicePrinters(tx, origin, options);
     return (await read).get(role);
   };
 }
@@ -131,6 +138,7 @@ export async function resolveInvoicePrinter(
 async function readDevicePrinters(
   tx: Transaction,
   origin: Origin,
+  { includeSwitchedOff = false }: { includeSwitchedOff?: boolean },
 ): Promise<Map<ProfilePrinterRole, DevicePrinter>> {
   if (origin.source !== "device") return new Map();
   const roles = await readPrinterRoles(tx, origin.deviceId);
@@ -148,7 +156,11 @@ async function readDevicePrinters(
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .innerJoin(
       printers,
-      and(isReceiptPrinter(), inArray(printers.id, ids), eq(printers.active, true)),
+      and(
+        isReceiptPrinter(),
+        inArray(printers.id, ids),
+        includeSwitchedOff ? isNull(printers.deletedAt) : eq(printers.active, true),
+      ),
     )
     .where(eq(devices.id, origin.deviceId));
   const byId = new Map(
