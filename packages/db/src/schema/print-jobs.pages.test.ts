@@ -55,6 +55,8 @@ it("stores a receipt page with its language and designation", async () => {
 it.each([
   [null, null, null, "a4"],
   ["invoice", null, null, "document"],
+  [null, "es", null, "document"],
+  [null, null, "duplicate", "document"],
   ["invoice", "es", null, "a4"],
   ["invoice", null, "original", "a4"],
   ["receipt", null, "original", "a4"],

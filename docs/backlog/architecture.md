@@ -815,8 +815,9 @@ also qualifies the historical operation-description references in this section.
   from time to time, not per slice (owner, 2026-11-10;
   [when](../developers/testing-guide.md#when-the-bench-runs)). Next is
   [the build order](../superpowers/plans/2026-11-08-a1308-build-order.md).
-  A790's page jobs share the print queue and the copy audit still has its own table.
-  **Open:** later slices still need to cover the other tables A790, A802 and A739 added. 246 tables become 145, or 144 once A1323 removes
+  A790's page jobs share the print queue. Its copy audit and its three routing journals keep their
+  own tables. **Open:** later slices still need to cover the tables A802 and A739 added.
+  246 tables become 145, or 144 once A1323 removes
   `recovery_packs`, in eight migration sets instead of sixteen. The job runner is built with scheduled
   menu activation, scheduled archives, the sealed-key copy and public `/health` reports. Scheduled
   archives copy the venue database on a worker thread. You can choose an eligible test connection
