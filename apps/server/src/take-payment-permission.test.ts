@@ -8,6 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceProfiles, devices, workingOrders } from "@waitron/db";
 import { payments } from "@waitron/payments";
 import { AppError } from "@waitron/shared";
+import { readBillEditState } from "./bill-editing.js";
 import { parkOrder } from "./working-order.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
@@ -15,6 +16,7 @@ import {
   paymentRows,
   provisionBillVenue,
   fiscalRecordCount,
+  seatedWith,
   send,
   statusOf,
   tabWith,
@@ -280,6 +282,64 @@ describe("POST /api/working-orders/:id/collect needs payment.take", () => {
     expectAsked();
     expect(await statusOf(venue, id)).toBe("settled");
     expect(fiscalRecordCount(venue, id)).toBe(1);
+  });
+});
+
+describe("POST /api/parties/:id/end-meal needs payment.take", () => {
+  async function printBill(party: Awaited<ReturnType<typeof seatedWith>>) {
+    const { editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
+      readBillEditState(tx, party.tabId),
+    );
+    const [row] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${party.partyId}`,
+    );
+    return send(venue.app, venue.cookie, "POST", `/api/parties/${party.partyId}/end-meal`, {
+      billId: party.tabId,
+      expectedPartyRevision: row!.revision,
+      expectedEdits: [{ billId: party.tabId, editorVersion, draftId, draftRevision }],
+      submissionId: randomUUID(),
+      printAnyway: true,
+    });
+  }
+
+  it("refuses and leaves the bill open, with no invoice", async () => {
+    const party = await seatedWith(venue, "Tarta");
+    gate.deny = true;
+
+    expectRefused(await printBill(party));
+
+    expectAsked();
+    expect(await statusOf(venue, party.tabId)).toBe("open");
+    expect(salesCount(party.tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
+  });
+
+  it("refuses inside the write when the permission is gone after the check before the queue", async () => {
+    const party = await seatedWith(venue, "Tarta");
+    gate.deny = true;
+    gate.allowFirst = 1;
+
+    expectRefused(await printBill(party));
+
+    expect(gate.calls.filter(({ permission }) => permission === "payment.take")).toEqual([
+      { sessionId, permission: "payment.take" },
+      { sessionId, permission: "payment.take" },
+    ]);
+    expect(await statusOf(venue, party.tabId)).toBe("open");
+    expect(salesCount(party.tabId)).toBe(0);
+    expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
+  });
+
+  it("passes the permission when it is held, reaching the till's own print-receipt check", async () => {
+    const party = await seatedWith(venue, "Tarta");
+
+    const answer = await printBill(party);
+
+    expectAsked();
+    expect(answer).toEqual({
+      status: 403,
+      json: { code: "device.forbidden_action", params: { action: "receipt" } },
+    });
   });
 });
 

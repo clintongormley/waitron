@@ -196,6 +196,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/parties/:id/drafts/:did/discard | party | own refusing row below; allowed: draft-discard.test.ts |
  * | POST /api/parties/:id/drafts/:did/take-over, /submit, /split | party                  | refuses POST /api/parties/:id/drafts/:did/<verb>     |
  * | POST /api/parties/:id/unpaid-departure                  | party                  | refuses POST /api/parties/:id/unpaid-departure       |
+ * | POST /api/parties/:id/end-meal                          | party                  | refuses POST /api/parties/:id/end-meal               |
  * | POST /api/dead-ends/draft                               | body party             | refuses POST /api/dead-ends/draft                    |
  * | POST /api/dead-ends/order                               | body order; body zone  | refuses POST /api/dead-ends/order (order), (zone)    |
  * | PUT  /api/working-orders/:id/make-at                    | order                  | refuses PUT .../make-at                              |
@@ -1173,6 +1174,18 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/parties/${x.deliParty}/unpaid-departure`,
     (x) => ({ billId: x.deliTab, expectedPartyRevision: 0, reason: "Left" }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/parties/:id/end-meal",
+    "POST",
+    (x) => `/api/parties/${x.deliParty}/end-meal`,
+    (x) => ({
+      billId: x.deliTab,
+      expectedPartyRevision: 0,
+      expectedEdits: [],
+      submissionId: randomUUID(),
+    }),
     deliTableZone,
   ],
   [

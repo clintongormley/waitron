@@ -209,7 +209,7 @@ describe("handing over a counter order sent without payment", () => {
 
     expect(refused).toEqual({
       status: 409,
-      json: { code: "working_order.not_open", params: { workingOrderId: id } },
+      json: { code: "invoice.choice_locked", params: {} },
     });
     expect(await orderRow(id)).toEqual(before);
     expect(saleCount(id)).toBe(1);

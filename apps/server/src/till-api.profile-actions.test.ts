@@ -383,6 +383,7 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/parties/${id}/drafts/${id}/submit`),
   ordering("POST", `/api/parties/${id}/drafts/${id}/discard`),
   ordering("POST", `/api/parties/${id}/unpaid-departure`),
+  ordering("POST", `/api/parties/${id}/end-meal`),
   ordering("POST", `/api/bills/${id}/merge`),
   ordering("POST", `/api/bills/${id}/move-dishes`),
   ordering("GET", `/api/bills/${id}/set-menus`),
@@ -563,6 +564,13 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
     basis:
       'File now files the corrective for money its refunds already gave back; it moves no money and opens no drawer. print-receipt never refuses: the corrective\'s receipt is queued only when the profile allows print-receipt; invoice-correction-api.test.ts: "File now files the corrective but prints nothing on a till that cannot print receipts"; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, writing nothing, and files and closes once the zone is its own"',
     routes: ["POST /api/invoice-corrections/:id/file"],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["print-receipt"],
+    basis:
+      'Only when the bill needs paper: a full invoice staged for A4 or email prints nothing and is not refused; meal-end-api.test.ts: "refuses a till whose profile may not print receipts, issuing nothing, when the bill needs paper" and "issues a full invoice staged for email on a till whose profile may not print receipts"',
+    routes: ["POST /api/parties/:id/end-meal"],
   },
   {
     proof: "device cookie (source)",

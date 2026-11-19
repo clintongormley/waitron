@@ -123,6 +123,59 @@ describe("Find a bill list routes", () => {
       },
     });
   });
+  it("lists a part-paid bill left unpaid as part-paid, with its invoice and no collection", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "5.00",
+        method: "cash",
+        tendered: "5.00",
+        applied: "5.00",
+        tip: "0.00",
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const [{ revision }] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${party.partyId}`,
+    );
+    const departed = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/unpaid-departure`,
+      {
+        billId: party.tabId,
+        expectedPartyRevision: revision,
+        reason: "Se marcharon",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+    expect(departed.status, JSON.stringify(departed.json)).toBe(200);
+
+    const listed = await get("/api/bills");
+    const selected = await get(`/api/bills/${party.tabId}`);
+
+    const expected = {
+      workingOrderId: party.tabId,
+      orderStatus: "placed",
+      state: "part-paid",
+      stillOwed: "25.00",
+      collectionStatus: null,
+      invoiceNumber: expect.stringMatching(/\/\d+$/),
+    };
+    expect(
+      (listed.json.rows as unknown[]).find(
+        (row) => (row as { workingOrderId: string }).workingOrderId === party.tabId,
+      ),
+    ).toMatchObject(expected);
+    expect(selected).toMatchObject({ status: 200, json: expected });
+  });
   it("serves authenticated pages and fresh selection while the legacy lookup remains static", async () => {
     const id = await parked(venue, "Caña");
     const result = await get("/api/bills");

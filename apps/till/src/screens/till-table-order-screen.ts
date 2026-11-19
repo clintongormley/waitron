@@ -118,6 +118,7 @@ import {
   owing,
   paidInPart,
   shownBills,
+  stillOwed,
 } from "../state/bill-state.js";
 import { receiptLanguageLabel, shownReceiptLanguage } from "../widgets/receipt-language.js";
 import { helpBadge } from "../widgets/help-badge.js";
@@ -5137,7 +5138,8 @@ export class TillTableOrderScreen extends LitElement {
       .disabled=${this.busy}
       @click=${() => {
         if (this.#payQuietTap("sheet")) return;
-        if (shown?.status === "placed")
+        // A printed bill takes part payments; the presented sheet takes the whole amount only.
+        if (shown?.status === "placed" && shown.invoiceNumber === undefined)
           this.#dispatch("pay-presented", { workingOrderId: shown.workingOrderId });
         else this.#payPart("whole");
       }}
@@ -6685,7 +6687,7 @@ export class TillTableOrderScreen extends LitElement {
               this.#compBill(),
               owing(shown) &&
               !shown.leftUnpaid &&
-              compareDecimal(decimal(shown.amountDue ?? shown.outstanding), decimal("0")) > 0
+              compareDecimal(decimal(stillOwed(shown)), decimal("0")) > 0
                 ? action("left-unpaid", "departure.record", () =>
                     this.#dispatch("record-unpaid-departure", {
                       workingOrderId: shown.workingOrderId,

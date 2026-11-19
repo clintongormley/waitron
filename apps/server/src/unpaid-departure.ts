@@ -28,19 +28,18 @@ import { parseBillEditExpecteds, requireBillEditors } from "./bill-editing.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readPartyFinishReadiness } from "./finish-party-service.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { billsHoldingMoney } from "./bill-payments.js";
+import { stillOwedOnIssuedBill } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
 import { pinnedAt } from "./issue-moment.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { refusePlacedPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
+import { refuseBillPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
 import {
   issueUnpaidInvoice,
   markOrderPlaced,
   ordersWithUnfiredDish,
   priceForIssuance,
   readInvoiceNumbers,
-  refusePaymentInFlight,
 } from "./working-order.js";
 import "./errors.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
@@ -106,14 +105,9 @@ export async function recordUnpaidDeparture(
   );
   await assertBillHasNoUnsent(tx, req.billId);
   const issued = (await readIssuedSales(tx, [req.billId])).get(req.billId);
-  if (issued === undefined) {
-    if ((await ordersWithUnfiredDish(tx, [req.billId])).has(req.billId))
-      throw new AppError("unpaid_departure.unfired_dishes", { workingOrderId: req.billId });
-    if ((await billsHoldingMoney(tx, [req.billId])).has(req.billId))
-      throw new AppError("unpaid_departure.bill_holds_payment", { workingOrderId: req.billId });
-  }
-  if (bill.status === "open") await refusePaymentInFlight(tx, [req.billId]);
-  else await refusePlacedPaymentInFlight(deps.db, tx, [req.billId]);
+  if (issued === undefined && (await ordersWithUnfiredDish(tx, [req.billId])).has(req.billId))
+    throw new AppError("unpaid_departure.unfired_dishes", { workingOrderId: req.billId });
+  await refuseBillPaymentInFlight(deps.db, tx, req.billId, bill.status);
 
   let saleId = issued?.saleId;
   let due = issued?.amountDue;
@@ -139,10 +133,13 @@ export async function recordUnpaidDeparture(
     if (bill.status === "open")
       await markOrderPlaced(tx, deps.clock, cfg, req.billId, operator.personId, deps.attendance);
   }
+  const owed = await stillOwedOnIssuedBill(tx, req.billId, due!);
+  if (decimalToCents(due!) !== 0 && decimalToCents(owed) <= 0)
+    throw new AppError("unpaid_departure.nothing_outstanding", { partyId });
   const departures =
     decimalToCents(due!) === 0
       ? []
-      : await insertDeparture(tx, req.billId, saleId!, due!, {
+      : await insertDeparture(tx, req.billId, saleId!, owed, {
           partyId,
           reason: req.reason,
           recordedBy: operator.personId,

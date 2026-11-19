@@ -79,7 +79,10 @@ import {
   refuseUnavailableFullInvoice,
   readInvoiceNumber,
   readStoredOrder,
+  refuseOrderPaymentMarked,
   refusePaymentInFlight,
+  refusePendingPartPayment,
+  refuseRefundInProgress,
   toVatBreakdown,
   unsentDishLines,
   lateUnsentDishes,
@@ -89,6 +92,7 @@ import type {
   LineExtras,
   OrderLineIdentity,
   TillSaleDeps as BaseTillSaleDeps,
+  WorkingOrderStatus,
 } from "./working-order.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import type { LateSendConfirmation } from "./late-send.js";
@@ -1700,6 +1704,22 @@ export async function refusePlacedPaymentInFlight(
   if (inFlight !== undefined) {
     throw new AppError("order.payment_in_flight", { workingOrderId: inFlight });
   }
+}
+
+/**
+ * Refuse while money for this bill is still moving: on an open bill, a payment or refund in flight;
+ * on a presented one, a pending refund, a pending part payment, or a card of the whole bill.
+ */
+export async function refuseBillPaymentInFlight(
+  db: Database,
+  tx: Transaction,
+  billId: string,
+  status: WorkingOrderStatus,
+): Promise<void> {
+  await refuseRefundInProgress(tx, [billId]);
+  await refusePendingPartPayment(tx, [billId], "any");
+  if (status === "open") await refuseOrderPaymentMarked(tx, [billId]);
+  else await refusePlacedPaymentInFlight(db, tx, [billId]);
 }
 
 export interface UnfiledPaymentOptions {

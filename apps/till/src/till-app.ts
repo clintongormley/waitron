@@ -348,6 +348,7 @@ import {
   owing,
   paidInPart,
   shownBills,
+  stillOwed,
   stillToPay,
 } from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
@@ -1355,6 +1356,11 @@ interface PayingOrder {
   surface: "table" | "counter";
   billId: string;
   visit: number;
+  /** The bill's receipt was issued before the window opened, so the payment settling it issues none. */
+  printed?: boolean;
+  /** A bill Find bill pays without loading it into a screen: the edit state its row was read with,
+   * sent in place of the basket's; undefined when the row carried none. */
+  found?: { expectedEdit: BillEditExpected | null | undefined };
 }
 
 /** The presented bill's sheet, open on `billId`. */
@@ -1430,6 +1436,18 @@ interface DeferredClosing {
   reread: boolean;
   /** Every submission id this window has sent. */
   sent: string[];
+}
+
+/** The edit state a Find bill row was read with, as a write on it expects: null for a bill at no
+ * table, undefined for a table bill whose row carried none. */
+function foundBillEdit(row: {
+  partyId: string | null;
+  edit?: BillEditState | null;
+}): BillEditExpected | null | undefined {
+  if (row.partyId === null) return null;
+  if (row.edit === undefined || row.edit === null) return undefined;
+  const { billId, editorVersion, draftId, draftRevision } = row.edit;
+  return { billId, editorVersion, draftId, draftRevision };
 }
 
 /** A deferred close's refusal: its code, the server's reason, and the sentence for both. */
@@ -8676,17 +8694,7 @@ export class TillApp extends LitElement {
           billId: row.workingOrderId,
           api,
           session,
-          expectedEdit:
-            row.partyId === null
-              ? null
-              : row.edit === undefined || row.edit === null
-                ? undefined
-                : {
-                    billId: row.edit.billId,
-                    editorVersion: row.edit.editorVersion,
-                    draftId: row.edit.draftId,
-                    draftRevision: row.edit.draftRevision,
-                  },
+          expectedEdit: foundBillEdit(row),
         };
         this.collectionBill = pending?.bill ?? {
           workingOrderId: row.workingOrderId,
@@ -8702,6 +8710,22 @@ export class TillApp extends LitElement {
         };
         this.findBillError = pending === undefined ? undefined : "sale.unconfirmed";
         this.findingBill = true;
+        return;
+      }
+      // Its table may be finished, so a printed table bill holding a payment is paid from here.
+      if (
+        row.partyId !== null &&
+        row.orderStatus === "placed" &&
+        row.invoiceNumber !== null &&
+        row.state === "part-paid"
+      ) {
+        await this.#openBillPaying("contribution", [], row.stillOwed, {
+          surface: "counter",
+          billId: row.workingOrderId,
+          visit: session,
+          printed: true,
+          found: { expectedEdit: foundBillEdit(row) },
+        });
         return;
       }
       if (row.partyId !== null) {
@@ -19612,7 +19636,7 @@ export class TillApp extends LitElement {
       bill === undefined ||
       bill.leftUnpaid ||
       !owing(bill) ||
-      compareDecimal(decimal(bill.amountDue ?? bill.outstanding), decimal("0")) <= 0 ||
+      compareDecimal(decimal(stillOwed(bill)), decimal("0")) <= 0 ||
       this.activeTabId !== workingOrderId
     )
       return;
@@ -19623,7 +19647,7 @@ export class TillApp extends LitElement {
       bill: {
         workingOrderId,
         name: billName(party.displayName, bill),
-        outstanding: bill.amountDue ?? bill.outstanding,
+        outstanding: stillOwed(bill),
       },
       id: ++this.#departings,
       partyId: party.id,
@@ -21011,6 +21035,11 @@ export class TillApp extends LitElement {
     const open: BillPaying = {
       id: ++this.#billPays,
       ...order,
+      printed:
+        order.printed ??
+        (order.surface === "table" &&
+          this.partyBills.find((bill) => bill.workingOrderId === billId)?.invoiceNumber !==
+            undefined),
       way,
       amount: amount ?? "",
       lines,
@@ -21250,9 +21279,10 @@ export class TillApp extends LitElement {
         this.api === api &&
         this.#operatorSession === session &&
         this.billPaying === null &&
-        (open.surface === "counter"
-          ? !this.#hasLeftCounterOrder(billId, open.visit)
-          : !this.#hasLeftOrder(billId, open.visit));
+        (open.found !== undefined ||
+          (open.surface === "counter"
+            ? !this.#hasLeftCounterOrder(billId, open.visit)
+            : !this.#hasLeftOrder(billId, open.visit)));
       try {
         const ticket = await api.getFiledTicket(billId);
         if (current()) await this.#showPaidTicket(open, ticket, payment.change);
@@ -21358,9 +21388,11 @@ export class TillApp extends LitElement {
         return;
       }
       const expectedEdit =
-        open.surface === "counter"
-          ? this.#counterExpectedEdit(open.billId)
-          : this.#draftSync?.expectedEditFor(open.billId);
+        open.found !== undefined
+          ? open.found.expectedEdit
+          : open.surface === "counter"
+            ? this.#counterExpectedEdit(open.billId)
+            : this.#draftSync?.expectedEditFor(open.billId);
       if (expectedEdit === undefined || (open.surface === "table" && expectedEdit === null))
         throw { code: "draft.out_of_date" };
       const api = this.api;
@@ -21614,7 +21646,7 @@ export class TillApp extends LitElement {
     this.#releaseFoundCounterBill(open);
     this.result = invoice;
     // A counter order is no bill of the party a handheld may still hold.
-    this.#showTicket(open.billId, true, { surface: open.surface, cashChange });
+    this.#showTicket(open.billId, open.printed !== true, { surface: open.surface, cashChange });
     // The paid order drops off the held list.
     if (open.surface === "counter")
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");

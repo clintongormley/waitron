@@ -93,8 +93,8 @@ export interface PartyBill {
   leftUnpaid?: boolean;
   total: string;
   /**
-   * What is still to pay: the total of an open or placed bill less the money received against it
-   * before its invoice, and nothing on a settled or abandoned one.
+   * What is still to pay: the total of an open or placed bill less the money received against it,
+   * and nothing on a settled or abandoned one.
    */
   outstanding: string;
   /** A payment is pending or received on the bill, one given back in full included. */

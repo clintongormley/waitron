@@ -257,7 +257,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A445. A free item on a bill with mixed VAT rates should take a share of the price paid.** Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a445-a-free-item-on-a-bill-with-mixed-vat-rates-should-take-a-share-of-the-price-paid).
 
-- **A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows — NOT SCHEDULED: it stays on the backlog for the foreseeable future (owner, 2026-11-17: "the printed pre-bill, leave it on the backlog for the foreseeable future").** A table's ticket is to be issued when staff print the bill instead (decision D1, MEAL-END-TICKET, #3704 and #3724, not landed). The design stays A803 §3.9, kept as written. The owner's answer (owner, 2026-11-18, question 2 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): no pre-bill is needed, and a bill changed after it is issued takes a corrective or a cancellation; the adviser is still to confirm the details.
+- **A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows — NOT SCHEDULED: it stays on the backlog for the foreseeable future (owner, 2026-11-17: "the printed pre-bill, leave it on the backlog for the foreseeable future").** A table's ticket is to be issued when staff print the bill instead (decision D1, MEAL-END-TICKET: the route that issues it is #3704; the till's Print the bill button is #3724, not landed). The design stays A803 §3.9, kept as written. The owner's answer (owner, 2026-11-18, question 2 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): no pre-bill is needed, and a bill changed after it is issued takes a corrective or a cancellation; the adviser is still to confirm the details.
   [Detail](backlog/fiscal.md#a446-build-the-pre-bill-each-printed-pre-bill-is-stored-as-printed-and-linked-to-the-invoice-that-follows).
 
 - **A447. Money paid before a meal's ticket is an advance; an open bill is issued when the trading day ends.** Owner, 2026-11-18 (question 1 of the
@@ -294,7 +294,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A231/A948. Full invoices at the till** — table bill payments, per-bill unpaid departures and, since #2725, Counter bills paid through the shared Pay window issue F1; direct `POST /api/sales`, `POST /api/pay`, unissued collection, closing a counter bill by transfer and zero-total counter bills still refuse it.
   **Next action:** complete physical paper/QR qualification, the asesor's manual-remedy confirmation and current business-invoice delivery qualification as separate work. The owner removed these as switch prerequisites on 2026-10-27.
-  An unpaid departure that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A deferred-payment close (`closeBillDeferredTx`, `apps/server/src/deferred-close.ts`) now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
+  An unpaid departure or Print the bill that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A deferred-payment close (`closeBillDeferredTx`, `apps/server/src/deferred-close.ts`) now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
   [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)
 
 - **Decide whether any screen shows an invoice email's address** (bundle of 1, size S, needs the owner). Holds A554. [Detail](backlog/fiscal.md#bundle-decide-whether-any-screen-shows-an-invoice-emails-address)
@@ -810,8 +810,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 
 - **Loose ends left by service Task 17 (#991, a bill left unpaid).**
-  Collecting PART of the debt later is not built. Collecting it in full uses
-  `POST /api/working-orders/:id/collect`.
+  A dish the kitchen is not making blocks the departure; the table screen reads a credited
+  presented bill at its full amount; a presented bill keeps its old label when it is invoiced.
   [Detail](backlog/till.md#task-17-991-a-bill-left-unpaid)
 
 - **Add a device: loose ends from A268** (bundle of 1, size S). [Detail](backlog/till.md#bundle-add-a-device-loose-ends-from-a268)

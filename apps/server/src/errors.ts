@@ -720,11 +720,27 @@ declare module "@waitron/shared" {
      * cancel it first.
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };
+    /** Print the bill found the bill already has its ticket. */
+    "meal_end.already_issued": { workingOrderId: string };
     /**
-     * Record unpaid departure found a bill it would invoice, open or presented, still holding money
-     * from a payment: one pending, or one received whose money or tip was not all given back.
+     * Print the bill found the bill needs paper (a simplified invoice, or a full invoice not staged
+     * for A4 or email) and this device's receipts resolve to no printer.
      */
-    "unpaid_departure.bill_holds_payment": { workingOrderId: string };
+    "meal_end.no_printer": { workingOrderId: string };
+    /**
+     * Print the bill found the full invoice staged for A4 or email could not be handed to that
+     * destination (an A4 printer switched off since it was chosen, or the delivery not queued), so
+     * nothing was issued. Staff choose another destination and print again.
+     */
+    "meal_end.delivery_unavailable": { workingOrderId: string; medium: "a4" | "email" };
+    /**
+     * Print the bill found dishes on the bill neither served in full nor cancelled, and was not told
+     * to print anyway. `released` says whether the kitchen has the dish.
+     */
+    "meal_end.unserved_dishes": {
+      workingOrderId: string;
+      dishes: { lineId: string; dishName: string; quantity: string; released: boolean }[];
+    };
     /**
      * A submission id already recorded in this scope arrived with another command kind or other
      * arguments. The id is the device's own, made fresh for each person's action.
@@ -848,7 +864,10 @@ declare module "@waitron/shared" {
      * it or while one of its extras is held.
      */
     "group.line_held": { tabId: string; lineNo: number };
-    /** A payment was asked of a bill with nothing left to pay and no card pending on it. */
+    /**
+     * A payment was asked of a bill with nothing left to pay and no card pending on it, or Print
+     * the bill of a bill its payments already cover, that has no dishes, or that was cancelled.
+     */
     "bill.nothing_outstanding": { workingOrderId: string };
     "bill.unsent_dishes": { billId: string };
     /**

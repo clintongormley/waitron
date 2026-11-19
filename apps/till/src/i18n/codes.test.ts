@@ -482,10 +482,6 @@ it("says what to do about each refusal of an unpaid departure, in both languages
       en: "This bill holds items the station is not making: not sent, on hold, or waiting for the pass and not fully served. Cancel them first, then record the departure again",
       es: "Esta cuenta tiene artículos que la estación no está preparando: sin enviar, en espera, o esperando al pase y sin servir del todo. Cancélalos primero y vuelve a registrar la salida",
     },
-    "unpaid_departure.bill_holds_payment": {
-      en: "This bill holds a payment that has not been refunded in full, so it cannot be left unpaid. Take the rest of that bill as a payment first",
-      es: "Esta cuenta tiene un pago que no se ha devuelto del todo, así que no se puede dejar sin pagar. Cobra primero lo que queda de esa cuenta",
-    },
     "unpaid_departure.nothing_outstanding": {
       en: "There is nothing to record as unpaid for this bill. Check that you chose the right bill",
       es: "No hay nada que registrar sin pagar en esta cuenta. Comprueba que has elegido la cuenta correcta",

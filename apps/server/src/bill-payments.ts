@@ -494,6 +494,20 @@ export async function refuseBillHoldingMoney(
   }
 }
 
+/** What an issued bill still owes: its amount due less the money its payments have kept. */
+export async function stillOwedOnIssuedBill(
+  tx: Transaction,
+  workingOrderId: string,
+  amountDue: Decimal,
+): Promise<Decimal> {
+  const { received } = fundsOf(
+    workingOrderId,
+    amountDue,
+    await readPaymentMoney(tx, [workingOrderId]),
+  );
+  return outstandingOf(amountDue, received);
+}
+
 /** Those of these bills that hold money: a pending payment, or received money not given back. */
 export async function billsHoldingMoney(
   tx: Transaction,
@@ -1084,21 +1098,17 @@ async function requirePayableBill(
   if (order?.status === "placed") {
     const invoiced = await hasInvoice(tx, workingOrderId);
     if (order.partyId === null && !invoiced) return { payable: "placed" };
-    // With its invoice issued, only a received payment still holding money leaves a rest to take
-    // here; a bill left unpaid after its payments were given back is collected whole.
     if (invoiced) {
-      const held = await readPaymentMoney(tx, [workingOrderId]);
-      if (held.some(receivedHoldsMoney)) return { payable: "placed", held };
-    } else {
-      const [part] = await tx
-        .select({ id: billPayments.id })
-        .from(billPayments)
-        .where(
-          and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")),
-        )
-        .limit(1);
-      if (part !== undefined) return { payable: "placed" };
+      return { payable: "placed", held: await readPaymentMoney(tx, [workingOrderId]) };
     }
+    const [part] = await tx
+      .select({ id: billPayments.id })
+      .from(billPayments)
+      .where(
+        and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")),
+      )
+      .limit(1);
+    if (part !== undefined) return { payable: "placed" };
   }
   await requireOpenBill(tx, workingOrderId);
   return { payable: "open" };

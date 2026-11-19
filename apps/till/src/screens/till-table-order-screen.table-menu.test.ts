@@ -134,6 +134,15 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
   it.each([
     partyBill("wo-2", 2, "0.00"),
     partyBill("wo-2", 2, "18.00", { status: "placed", amountDue: "0.00" }),
+    partyBill("wo-2", 2, "10.00", {
+      status: "placed",
+      total: "30.00",
+      hasPayments: true,
+      holdsMoney: true,
+      invoiceNumber: "A/1",
+      creditNotes: ["R/1"],
+      amountDue: "17.90",
+    }),
   ])("keeps a zero-due bill out of unpaid departure and leaves Pay available", async (zero) => {
     const el = await mountScreen({ bills: [zero] });
     expect(item(el, "[data-record-departure]")).toBeNull();

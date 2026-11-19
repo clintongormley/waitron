@@ -8,15 +8,19 @@ import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { devices } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { loginWithPin } from "@waitron/identity";
+import { createPrinter } from "@waitron/printing";
 import { seedNode, seedZone } from "@waitron/db/testing/seed.js";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { writePartyAllergy } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { createTable } from "./testing/live-table.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 import type { TradingContext } from "./trading-context.js";
 import { mountTillApi } from "./till-api.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -685,6 +689,52 @@ describe("an unpaid departure", () => {
     expect(written()).toEqual(before);
     expect(orderRow(tabId)!.status).toBe("open");
     expect(count("unpaid_departures")).toBe(0);
+  });
+});
+
+/** A shift session on a till allowed every action, with a receipt printer of its own. */
+async function printingTillCookie(): Promise<string> {
+  const deviceId = await seedSessionDevice(venue.db);
+  const printer = await inTx(venue, (tx) =>
+    createPrinter(tx, {
+      name: "Barra",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+      hasCashDrawer: false,
+    }),
+  );
+  await inTx(venue, (tx) =>
+    tx.update(devices).set({ receiptPrinterId: printer.id }).where(eq(devices.id, deviceId)),
+  );
+  const session = await inTx(venue, (tx) =>
+    loginWithPin(tx, { deviceId, personId: venue.operatorId, pin: "5555" }),
+  );
+  return sessionCookieForTest(venue.db, session.token);
+}
+
+describe("Print the bill", () => {
+  it("is refused when the bill is over the simplified-invoice limit, leaving the bill open and unissued", async () => {
+    const { partyId, tabId } = await seated(venue.app, { Lote: 1, Céntimo: 1 });
+    const revision = partyRevision(partyId);
+    const before = written();
+    const answer = await send(
+      limited,
+      await printingTillCookie(),
+      "POST",
+      `/api/parties/${partyId}/end-meal`,
+      {
+        billId: tabId,
+        expectedEdits: await closingEditsForTest(venue.db, partyId),
+        expectedPartyRevision: revision,
+        submissionId: randomUUID(),
+        printAnyway: true,
+      },
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(409);
+    expect(answer.json).toEqual({ ...REFUSED, params: { total: "3000.01", limit: "3000.00" } });
+    expect(written()).toEqual(before);
+    expect(orderRow(tabId)!.status).toBe("open");
+    expect(partyRevision(partyId)).toBe(revision);
   });
 });
 

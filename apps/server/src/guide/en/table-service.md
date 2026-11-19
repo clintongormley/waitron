@@ -517,9 +517,10 @@ till stays on your screen, marked **Paid**.
 
 Below the order, the foot shows this bill's **Total**, then **Still to pay at this table** for all
 the table's bills, and **Pay**. The bill's **Full invoice** choice and receipt language sit beside
-it when offered. A partly paid bill also shows what has been received and what remains. The foot
-has no **Park**: a table's bill already waits at its table. On a handheld, when a bill is paid with
-a simplified invoice and others are not, **Back to the table** opens the first unpaid bill.
+it when offered. A partly paid bill whose invoice is not yet issued also shows what has been
+received and what remains. The foot has no **Park**: a table's bill already waits at its table. On a
+handheld, when a bill is paid with a simplified invoice and others are not, **Back to the table**
+opens the first unpaid bill.
 
 Waitron takes no payment for a bill with dishes not yet sent. While the bill on screen has dishes in
 your **New order**, or another person's unsent dishes for it are shown with their **Take over
@@ -539,10 +540,11 @@ If a guest leaves without paying, select their bill, open **⋮**, then choose *
 departure** under that bill. Check its amount and give a reason. If approval is needed, choose a
 supervisor or manager and ask them to enter their PIN.
 
-Only that bill’s unserved food is stopped, with cancellation slips for the station. The other
-bills keep their food, so you can still serve a paid guest’s dessert. The bill remains owed in full.
-The table stays open while another bill needs closing or paid food still needs serving. Serve the
-remaining food, then choose **Finish table** when everyone has finished.
+Only that bill’s unserved food is stopped, with cancellation slips for the station. The other bills
+keep their food, so you can still serve a paid guest’s dessert. What is still owed on the bill is
+recorded as unpaid; any amount already paid is kept. The table stays open while another bill needs
+closing or paid food still needs serving. Serve the remaining food, then choose **Finish table**
+when everyone has finished.
 
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
 **Check again** to continue the same payment before taking another. If it was not recorded, this
@@ -786,7 +788,7 @@ and **Still to pay**. Start with what is still to pay, rather than the bill's or
 Choose **An amount** for a contribution, **Split equally** for one equal share, or **Items** for
 particular dishes. For an equal share, enter how many people are still to pay, including this
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
-A bill already presented for collection offers the whole amount only.
+A bill presented for collection offers the whole amount only, until its invoice is issued.
 
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.

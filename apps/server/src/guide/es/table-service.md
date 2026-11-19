@@ -556,9 +556,9 @@ pedido**. Una cuenta cobrada en otra caja sigue en tu pantalla, marcada como **P
 
 Debajo del pedido, el pie muestra el **Total** de esta cuenta, después **Pendiente de pago en la
 mesa** para todas las cuentas, y **Cobrar**. La elección de **Factura completa** y el idioma del
-ticket aparecen a su lado cuando se ofrecen. Una cuenta cobrada en parte también muestra cuánto
-se ha recibido y cuánto queda. El pie no tiene **Aparcar**: la cuenta ya espera en su mesa. En un
-terminal de camarero, si se cobra una cuenta con factura simplificada y quedan otras,
+ticket aparecen a su lado cuando se ofrecen. Una cuenta cobrada en parte cuya factura aún no se ha
+emitido también muestra cuánto se ha recibido y cuánto queda. El pie no tiene **Aparcar**: la
+cuenta ya espera en su mesa. En un terminal de camarero, si se cobra una cuenta con factura simplificada y quedan otras,
 **Volver a la mesa** abre la primera cuenta pendiente.
 
 Waitron no cobra una cuenta con platos sin enviar. Mientras la cuenta en pantalla tiene platos en tu
@@ -580,10 +580,10 @@ pagar** bajo esa cuenta. Comprueba el importe e indica el motivo. Si hace falta 
 elige un responsable o encargado y pídele que introduzca su PIN.
 
 Solo se detiene la comida pendiente de servir de esa cuenta, con tiques de cancelación para la
-la estación. Las demás cuentas conservan su comida, así que puedes servir el postre de quien ya ha
-pagado. La cuenta sigue pendiente por el importe completo. La mesa sigue abierta mientras quede
-otra cuenta por cerrar o comida pagada por servir. Sirve lo que queda y elige **Cerrar mesa**
-cuando todos hayan terminado.
+estación. Las demás cuentas conservan su comida, así que puedes servir el postre de quien ya ha
+pagado. Se registra como pendiente lo que aún se debe de la cuenta; lo ya pagado se conserva. La
+mesa sigue abierta mientras quede otra cuenta por cerrar o comida pagada por servir. Sirve lo que
+queda y elige **Cerrar mesa** cuando todos hayan terminado.
 
 Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,
 elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba
@@ -845,7 +845,8 @@ total original de la cuenta.
 queda. Elige **Una cantidad** para aportar un importe, **Dividir a partes iguales** para cobrar
 una parte igual o **Artículos** para platos concretos. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
-si solo se pagan algunos. Una cuenta ya presentada para su cobro solo permite el importe completo.
+si solo se pagan algunos. Una cuenta presentada para su cobro solo permite el importe completo
+hasta que se emita su factura.
 
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.

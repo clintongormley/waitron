@@ -7,6 +7,7 @@ import {
   billName,
   billToShow,
   shownBills,
+  stillOwed,
   stillToPay,
 } from "./bill-state.js";
 
@@ -183,5 +184,59 @@ describe("stillToPay", () => {
 
   it("reads an open bill's zero by value, whichever way it is written", () => {
     expect(stillToPay(bill({ status: "open", outstanding: "0" }))).toBe(false);
+  });
+});
+
+describe("stillOwed", () => {
+  it("a printed €30 bill holding €5 owes 25.00", () => {
+    expect(
+      stillOwed(
+        bill({
+          status: "placed",
+          total: "30.00",
+          outstanding: "25.00",
+          hasPayments: true,
+          invoiceNumber: "A/7",
+          amountDue: "30.00",
+        }),
+      ),
+    ).toBe("25.00");
+  });
+
+  it("a credited presented bill with nothing received owes its amount due", () => {
+    expect(
+      stillOwed(
+        bill({
+          status: "placed",
+          total: "18.00",
+          outstanding: "18.00",
+          invoiceNumber: "A/7",
+          creditNotes: ["R/1"],
+          amountDue: "15.58",
+        }),
+      ),
+    ).toBe("15.58");
+  });
+
+  it("a credited presented bill holding a part payment owes its amount due less what it received", () => {
+    expect(
+      stillOwed(
+        bill({
+          status: "placed",
+          total: "23.00",
+          outstanding: "18.00",
+          hasPayments: true,
+          invoiceNumber: "A/7",
+          creditNotes: ["R/1"],
+          amountDue: "18.00",
+        }),
+      ),
+    ).toBe("13.00");
+  });
+
+  it("an unprinted bill owes its outstanding", () => {
+    expect(stillOwed(bill({ total: "30.00", outstanding: "25.00", hasPayments: true }))).toBe(
+      "25.00",
+    );
   });
 });

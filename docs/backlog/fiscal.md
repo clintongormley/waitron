@@ -32,7 +32,7 @@ Fiscal: the owner lands it.
 
 **Owner, 2026-11-17: not scheduled.** Asked whether to build the printed pre-bill or decision D1
 first, the owner chose "Drop it; queue D1", and then: "the printed pre-bill, leave it on the backlog
-for the foreseeable future". A table's ticket is issued when staff close the table instead (D1,
+for the foreseeable future". A table's ticket is to be issued when staff print the bill instead (D1,
 [adviser answers B1](../compliance/2026-11-15-adviser-answers.md#b1-a-tables-ticket-waits-until-the-bill-is-fully-paid)).
 The design (A803 §3.9) and what the plans say about the pre-bill are kept as written. The rest of
 this entry is the 4 November decision, which this one sets aside.
@@ -78,8 +78,8 @@ its deduction on the final ticket and record, and issuing, when the trading day 
 was neither printed nor fully paid. Today a payment that leaves a bill part-paid issues no invoice
 (`apps/server/src/bill-payments-api.test.ts:771`, "leaves €70.00 outstanding on a €120.00 bill …
 and issues no invoice"). Printing the bill, which issues the ticket before payment, is lane L's
-MEAL-END-TICKET (#3704 and #3724, not landed); a payment after that is not an advance but a
-payment slip (question 2). An advance taken at the till is issued by Waitron when the payment is
+MEAL-END-TICKET (the route that issues it is #3704; the till's Print the bill button is #3724,
+not landed); a payment after that is not an advance but a payment slip (question 2). An advance taken at the till is issued by Waitron when the payment is
 taken, as one line «Pago a cuenta — consumo en mesa 7» ("payment on account for the meal at
 table 7") at the venue's eat-in rate (owner, 2026-11-18). Waitron also issues an advance paid before the
 day, such as a company's €1,000 for its staff dinner: staff record the transfer against the

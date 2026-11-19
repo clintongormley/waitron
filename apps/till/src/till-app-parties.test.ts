@@ -10759,6 +10759,30 @@ describe("till-app: recording an unpaid departure", () => {
     );
   });
 
+  it("shows a credited presented bill holding a part payment at what it still owes", async () => {
+    const { el } = await openDeparture({
+      getPartyBills: vi.fn().mockResolvedValue([
+        {
+          ...creditedBill("wo-4", "18.00"),
+          total: "23.00",
+          outstanding: "18.00",
+          hasPayments: true,
+          holdsMoney: true,
+        },
+        checkBill,
+      ]),
+    });
+
+    expect(dialog(el)!.bill).toEqual({
+      workingOrderId: "wo-4",
+      name: "4 · Bill 1",
+      outstanding: "13.00",
+    });
+    expect(confirmText(el)).toBe(
+      t("departure.confirm").replace("{amount}", formatMoney("13.00", "en")),
+    );
+  });
+
   it("refuses an empty reason without sending anything", async () => {
     const { el } = await openDeparture();
 
@@ -10835,7 +10859,7 @@ describe("till-app: recording an unpaid departure", () => {
     expect(tableOrder(el)).not.toBeNull();
   });
 
-  it.each(["unpaid_departure.unfired_dishes", "unpaid_departure.bill_holds_payment"])(
+  it.each(["unpaid_departure.unfired_dishes"])(
     "keeps the dialog open with %s's own sentence, and reads the bills again",
     async (code) => {
       const { el } = await openDeparture({

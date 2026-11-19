@@ -1,4 +1,4 @@
-import { compareDecimal, decimal } from "@waitron/shared";
+import { MONEY_SCALE, compareDecimal, decimal, subtractDecimal, toScale } from "@waitron/shared";
 import type { PartyBill } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 
@@ -20,6 +20,16 @@ export function stillToPay(
     (bill.status === "placed" ||
       (bill.status === "open" && compareDecimal(decimal(bill.outstanding), decimal("0")) !== 0))
   );
+}
+
+/**
+ * What a bill still owes: for a bill whose ticket is issued, its amount due (credit notes counted)
+ * less what it has received (`total − outstanding`); else its outstanding.
+ */
+export function stillOwed(bill: Pick<PartyBill, "total" | "outstanding" | "amountDue">): string {
+  if (bill.amountDue === undefined) return bill.outstanding;
+  const received = subtractDecimal(decimal(bill.total), decimal(bill.outstanding));
+  return toScale(subtractDecimal(decimal(bill.amountDue), received), MONEY_SCALE);
 }
 
 /**
