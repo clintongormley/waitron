@@ -2421,6 +2421,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchActions();
     this.#followStoredGuests();
     this.#countMoveDestination();
+    // A revision belongs to its bill, so a different destination starts with no answer.
     if ((changed as PropertyValues).has("moveDishesTo")) this.moveTargetRead = undefined;
     void this.#readMoveTarget();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
@@ -3344,7 +3345,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #sentFallback(): TemplateResult | typeof nothing {
-    const { groups } = this.#dishGroupsFor(this.#dishSources());
+    const { groups } = this.#dishGroupsFor({ ...this.#dishSources(), setMenus: undefined });
     if (groups.length === 0) return nothing;
     // Bill lines lack partial serving quantities, so this fallback offers no actions.
     return html`<section class="sent-fallback" data-sent-fallback>
@@ -7045,14 +7046,12 @@ export class TillTableOrderScreen extends LitElement {
     return fill(t(key), names);
   }
 
-  #dishSources(forMove = false): DishSources {
+  #dishSources(): DishSources {
     return {
       lines: this.lines,
       balance: this.#balanceShown(),
       allergy: this.#allergy()?.snapshot ?? null,
-      setMenus: forMove
-        ? this.bills.find((bill) => bill.workingOrderId === this.orderId)?.setMenus
-        : undefined,
+      setMenus: this.bills.find((bill) => bill.workingOrderId === this.orderId)?.setMenus,
     };
   }
 
@@ -7075,7 +7074,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #moveDishesRows(
     picks: Picks = this.moveDishesPicks,
-    sources: DishSources = this.#dishSources(true),
+    sources: DishSources = this.#dishSources(),
   ): PickRow[] {
     return pickRows(this.#dishGroupsFor(sources), picks);
   }
@@ -7084,7 +7083,7 @@ export class TillTableOrderScreen extends LitElement {
     const drawn = this.#moveDishesDrawn;
     if (this.actionStep !== "move-dishes" || drawn === undefined || this.moveDishesPicks.size === 0)
       return;
-    const sources = this.#dishSources(true);
+    const sources = this.#dishSources();
     if (sameSources(drawn, sources)) return;
     const next = tidyPicks(drawn.rows, this.#dishGroupsFor(sources), this.moveDishesPicks);
     if (samePicks(next, this.moveDishesPicks)) return;
@@ -7133,7 +7132,7 @@ export class TillTableOrderScreen extends LitElement {
     if (
       target === undefined ||
       this.#moveTargetResult(target) !== undefined ||
-      this.#looseMenuDishes(this.#dishSources(true).setMenus, this.moveDishesPicks).length === 0
+      this.#looseMenuDishes(this.#dishSources().setMenus, this.moveDishesPicks).length === 0
     )
       return;
     const read = {
@@ -7162,7 +7161,8 @@ export class TillTableOrderScreen extends LitElement {
       return { blocked: false };
     const cancelled = this.lines.find(
       (line) =>
-        line.cancelledQuantity !== undefined && loose.some(({ lineId }) => lineId === line.id),
+        compareDecimal(decimal(line.cancelledQuantity ?? "0"), decimal("0")) > 0 &&
+        loose.some(({ lineId }) => lineId === line.id),
     );
     if (cancelled !== undefined)
       return {
@@ -7231,7 +7231,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #moveDishesStep(): TemplateResult {
-    const sources = this.#dishSources(true);
+    const sources = this.#dishSources();
     const rows = this.#moveDishesRows(this.moveDishesPicks, sources);
     this.#moveDishesDrawn = { ...sources, rows };
     const lineIds = pickedLineIds(rows, this.moveDishesPicks);

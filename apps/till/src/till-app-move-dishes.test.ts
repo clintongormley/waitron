@@ -240,7 +240,17 @@ describe("set menus in Move dishes", () => {
   });
 
   it("shows a loose dish's target surcharge before submitting the move", async () => {
-    const move = await openSetMenuMove();
+    const move = await openSetMenuMove({
+      getPartyBills: vi.fn().mockResolvedValue([
+        bill("wo-4", 1, {
+          setMenus: {
+            ...sourceMenus,
+            dishes: sourceMenus.dishes.map((dish) => ({ ...dish, movable: false })),
+          },
+        }),
+        bill("bill-1", 2, { setMenus: targetMenus }),
+      ]),
+    });
     await move.pick("sent-sirloin");
     await move.chooseBill("bill-1");
 
