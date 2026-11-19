@@ -211,8 +211,8 @@ it.each(["F1", "F2"] as const)(
   "says an earlier %s attempt was delivered after all, beneath a newer failure",
   async (invoiceType) => {
     const earlier = {
-      id: "email-first",
-      medium: "email" as const,
+      id: "a4-first",
+      medium: "a4" as const,
       designation: "original" as const,
       status: "unknown" as const,
       failureCode: null,
@@ -225,6 +225,7 @@ it.each(["F1", "F2"] as const)(
     const current = {
       ...earlier,
       id: "email-second",
+      medium: "email" as const,
       status: "failed" as const,
       requestedAt: "2026-11-11T12:06:00.000Z",
       lateSuccess: false,
