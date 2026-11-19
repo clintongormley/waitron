@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { DishMove } from "@waitron/shared";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { bill, courses, seaBass } from "../../test/set-menu-widgets.js";
 
@@ -120,4 +121,17 @@ it("omits the place a dish already occupies even when it has spare capacity", as
     "Daily menu 2 · Starter · Included",
     "Daily menu 2 · Main or Starter · Included",
   ]);
+});
+
+it("uses the Spanish fixed-price count and the included dish tag", async () => {
+  const originalLocale = currentLocale();
+  try {
+    setLocale("es-ES");
+    const { el } = await mount();
+    const root = el.shadowRoot!;
+    expect(root.querySelector("summary")?.textContent).toContain("3 cartas a precio fijo");
+    expect(root.querySelectorAll("article")[2]?.textContent).toContain("Sea bass incluido");
+  } finally {
+    setLocale(originalLocale);
+  }
 });
