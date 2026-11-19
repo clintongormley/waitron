@@ -40,7 +40,7 @@ const daily: MenuSummary = {
 const details: SetMenuDetails = {
   id: "daily",
   name: "Daily menu",
-  names: { en: "Today's menu", es: "Menú del día" },
+  names: { en: "Today's menu", es: "Daily lunch for guests" },
   price: "14.00",
   vatClass: "reduced",
   takeawayVatClass: null,
