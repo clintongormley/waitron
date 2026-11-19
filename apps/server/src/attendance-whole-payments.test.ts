@@ -109,13 +109,12 @@ describe("accepted whole-order payment attendance", () => {
           lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
         },
       );
-      expect(paid).toMatchObject({
-        invoice: { total: "12.00" },
-        payment:
-          method === "cash"
-            ? { method: "cash", change: "8.00" }
-            : { method: "card", applied: "12.00", tip: "0.00", externalRef: "hand keyed" },
-      });
+      expect(paid.invoice?.total).toBe("12.00");
+      expect(paid.invoice?.tender).toEqual(
+        method === "cash"
+          ? { method: "cash", change: "8.00" }
+          : { method: "card", charged: "12.00", tip: "0.00", reference: "hand keyed" },
+      );
       expect(await operations()).toMatchObject([evidence()]);
     },
   );

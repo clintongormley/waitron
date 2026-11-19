@@ -530,7 +530,7 @@ describe("the day is the invoice's own, read once", () => {
     });
   });
 
-  it("prices and dates the invoice from one reading, even when the clock crosses midnight during the request", async () => {
+  it("uses the invoice day's rate when payment crosses midnight", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v, v.products.beer));
     at(new Date(Date.parse(MIDNIGHT) - 1).toISOString());

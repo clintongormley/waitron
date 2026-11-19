@@ -8,12 +8,10 @@ import { createPinThrottle } from "@waitron/identity";
 import { insertCapturedPayment } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { decimal } from "@waitron/shared";
-import { fingerprint } from "./parties.js";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { closeBillDeferredTx } from "./deferred-close.js";
 import { recordUnpaidDeparture } from "./unpaid-departure.js";
-import { issueIfFullyPaid, retryShapeOf } from "./bill-payments.js";
-import { settleFromProviderRow } from "./bill-payments-loop.js";
+import { completeBillPayment, issueIfFullyPaid } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
 import { priceStoredOrderForIssuance, readOrderRevision } from "./working-order.js";
 import { takeBillPayment, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
@@ -31,6 +29,7 @@ import {
 } from "./testing/party-venue.js";
 import { seedBillSetMenu, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
 import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 
@@ -172,6 +171,33 @@ it("refuses collecting an already placed order", async () => {
   ).rejects.toMatchObject({ code: "set_menu.payment_not_ready" });
 });
 
+it("records a capture the reader already made without asking it to collect again", async () => {
+  const id = await bill();
+  const provider = new FakePaymentProvider(venue.db);
+  await inTx(venue, (tx) =>
+    insertCapturedPayment(tx, {
+      origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
+      provider: "fake",
+      workingOrderId: id,
+      paymentRef: crypto.randomUUID(),
+      amount: decimal("26.00"),
+      settledAt: venue.clock.now().instant,
+    }),
+  );
+  const outcome = await payWorkingOrderIntegratedOrchestration(
+    { ...deps(), provider },
+    venue.cfg,
+    { id, expectedEdit: null, lines: [] },
+    venue.operator.personId,
+  );
+  expect(outcome).toMatchObject({ outcome: "captured", ticket: { total: "26.00" } });
+  expect(provider.collectCalls).toHaveLength(0);
+  expect(
+    await venue.db.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
+  ).toHaveLength(1);
+});
+
 it("refuses recording an unpaid departure on a new set-menu bill", async () => {
   const id = await bill();
   const { partyId } = await billRow(venue, id);
@@ -305,25 +331,17 @@ it("keeps the cancellation when the remaining set-menu bill matches cash already
   ).toEqual([]);
 });
 
-it("recovers a captured bill payment that covers the set-menu bill without charging again", async () => {
+it("records a captured bill payment that covers the whole set-menu bill", async () => {
   const id = await bill();
-  const provider = new FakePaymentProvider(venue.db);
-  const request = {
-    ...wholePayment(),
-    expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
-    method: "card",
-    entry: "reader",
-  } as const;
   const receivedAt = venue.clock.now().instant;
   const paymentId = await inTx(venue, async (tx) => {
     const [{ id: paymentId }] = await tx
       .insert(billPayments)
       .values({
         workingOrderId: id,
-        submissionId: request.submissionId,
-        fingerprint: fingerprint(retryShapeOf(request)),
-        kind: "share",
-        shareOf: 1,
+        submissionId: crypto.randomUUID(),
+        fingerprint: "pending-card-payment",
+        kind: "contribution",
         method: "card",
         applied: 2600,
         state: "pending",
@@ -344,27 +362,9 @@ it("recovers a captured bill payment that covers the set-menu bill without charg
     });
     return paymentId;
   });
-  const result = await takeReaderBillPayment(
-    {
-      ...deps(),
-      provider,
-      settleCapturedReplay: async (tx, id, now, guestCount) => {
-        const settled = await settleFromProviderRow(
-          tx,
-          { ...deps(), cfg: venue.cfg },
-          id,
-          now,
-          guestCount,
-        );
-        return settled.settled === "received" ? settled.invoice : null;
-      },
-    },
-    venue.cfg,
-    id,
-    request,
-    venue.operator,
+  const result = await inTx(venue, (tx) =>
+    completeBillPayment(tx, deps(), venue.cfg, paymentId, receivedAt),
   );
-  expect(provider.collectCalls).toHaveLength(0);
   expect(result).toMatchObject({
     payment: { id: paymentId, state: "received" },
     invoice: { total: "26.00" },

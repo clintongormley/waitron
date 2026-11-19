@@ -137,6 +137,7 @@ export async function paySavedBillInCash(
   operator: Parameters<typeof take>[4],
   id: string,
   tendered: string,
+  guestCount?: number | null,
 ) {
   const { outstanding } = await getBillBalance(deps, id);
   const result = await takeBillPayment(
@@ -151,6 +152,7 @@ export async function paySavedBillInCash(
       tendered,
       applied: outstanding,
       tip: "0.00",
+      ...(guestCount === undefined ? {} : { guestCount }),
     },
     operator,
   );

@@ -33,7 +33,7 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import type { VenueResult } from "@waitron/provisioning";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { splitBill } from "./bill-action-fixture.js";
-import { getBillBalance, takeBillPayment } from "./bill-payment-fixture.js";
+import { paySavedBillInCash, takeBillPayment } from "./bill-payment-fixture.js";
 import { deploymentEnvironment } from "../config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 
@@ -347,28 +347,17 @@ export async function openingBillOfParty(v: HasDb, partyId: string): Promise<str
 export async function pay(
   v: PartyVenue,
   billId: string,
-  amount: string,
+  tendered: string,
   ...guestCount: [] | [number | null]
 ): Promise<void> {
-  const deps = { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock };
-  const balance = await getBillBalance(deps, billId);
-  const result = await takeBillPayment(
-    deps,
+  await paySavedBillInCash(
+    { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
     v.cfg,
-    billId,
-    {
-      submissionId: randomUUID(),
-      kind: "share",
-      shareOf: 1,
-      method: "cash",
-      tendered: amount,
-      applied: balance.outstanding,
-      tip: "0.00",
-      ...(guestCount.length === 0 ? {} : { guestCount: guestCount[0] }),
-    },
     v.operator,
+    billId,
+    tendered,
+    ...guestCount,
   );
-  if (result.invoice === undefined) throw new Error(`pay: bill ${billId} has no invoice`);
 }
 
 /**
