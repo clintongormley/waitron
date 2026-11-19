@@ -524,7 +524,6 @@ export function undeliveredInvoice(
   if (current.status === "failed" || current.status === "unknown") {
     const since = current.at ?? current.requestedAt;
     if (current.status === "failed") {
-      // A late success does not complete the original, but the customer may have the document.
       const mayHaveArrived = status.history.some((attempt) => attempt.lateSuccess);
       return { kind: mayHaveArrived ? "uncertain" : "failed", since };
     }

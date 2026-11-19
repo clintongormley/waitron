@@ -296,7 +296,6 @@ export class OrderDetailDialog extends LitElement {
 
   #renderDeliveries(status: OrderDeliveries, downloads: OrderDetailDto["invoicePdfDownloads"]) {
     const lateAttempt = status.history.some((attempt) => attempt.lateSuccess);
-    // A late success does not complete the original, but the customer may have the document.
     const mayHaveArrived = lateAttempt && !status.originalCompleted;
     const currentStatus = status.current?.status;
     const askToCheck =

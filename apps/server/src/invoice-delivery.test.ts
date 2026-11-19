@@ -45,13 +45,24 @@ import {
 } from "./invoice-print.js";
 import { venueModuleConfig } from "./provision.js";
 import { invoiceMail } from "./invoice-mail.js";
-import { abandonMailClaims, runMailPass, type MailSenderDeps } from "./mail-sender.js";
-import { readInvoiceEmailPrivacy, type InvoiceEmailPrivacy } from "./invoice-email.js";
+import {
+  abandonMailClaims,
+  runMailPass,
+  type MailSenderDeps,
+  type MailTransport,
+} from "./mail-sender.js";
+import {
+  composeInvoiceEmail,
+  readInvoiceEmailPrivacy,
+  type InvoiceEmailPrivacy,
+} from "./invoice-email.js";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as documentFixture } from "./testing/full-invoice-fixture.js";
 import type { InvoiceDeliveryOutcome } from "./invoice-delivery.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import {
+  abandonInvoiceEmail,
   reserveInvoiceDelivery,
   startInvoiceEmail,
   claimInvoiceDelivery,
@@ -1840,11 +1851,12 @@ function runInvoiceMailPass(
       recipient: string;
       document: ReceiptDocumentInput;
       privacy?: InvoiceEmailPrivacy;
+      sent: Parameters<MailTransport>[1];
     }): Promise<InvoiceDeliveryOutcome>;
     signal?: AbortSignal;
   },
 ) {
-  let content!: Omit<Parameters<typeof deps.send>[0], "recipient">;
+  let content!: Omit<Parameters<typeof deps.send>[0], "recipient" | "sent">;
   const options: MailSenderDeps = {
     ...deps,
     signal: deps.signal ?? new AbortController().signal,
@@ -1853,7 +1865,9 @@ function runInvoiceMailPass(
         ...deps,
         render: async (message) => {
           content = message;
-          return { subject: "Invoice", text: "Invoice attached" };
+          return deps.render === undefined
+            ? { subject: "Invoice", text: "Invoice attached" }
+            : deps.render(message);
         },
       }),
     ],
@@ -1864,7 +1878,7 @@ function runInvoiceMailPass(
       smtp: { url: "smtp://mail.example.test", from: "sender@example.test" },
     }),
     send: async (_smtp, message) => {
-      const outcome = await deps.send({ ...content, recipient: String(message.to) });
+      const outcome = await deps.send({ ...content, recipient: String(message.to), sent: message });
       if (outcome.status === "sent") return outcome;
       if (outcome.status === "failed") {
         return { status: "rejected", reason: "email.test_refused", serverRefused: true };
@@ -2071,17 +2085,20 @@ describe("invoice mail pass", () => {
       reserveInvoiceDelivery(tx, sale.saleId, email()),
     );
     await dueAtStart(copy.id);
-    let duplicate: boolean | undefined;
+    let sent: Parameters<MailTransport>[1] | undefined;
     await runInvoiceMailPass({
       db: suite.db,
       now: () => start,
       readDocument: documentFor,
+      render: composeInvoiceEmail,
       send: async (message) => {
-        duplicate = message.document.duplicate;
+        sent = message.sent;
         return { status: "sent" };
       },
     });
-    expect(duplicate).toBe(true);
+    expect(String(sent!.text).split("\n")[0]).toBe("Factura FF/1 — DUPLICADO");
+    const [attachment] = sent!.attachments as { content: Uint8Array }[];
+    expect(await pdfText(attachment!.content)).toContain("DUPLICADO");
     expect((await rows())[1]).toMatchObject({
       id: copy.id,
       status: "sent",
@@ -2551,12 +2568,15 @@ describe("invoice mail pass", () => {
         await work;
       }
       const [abandoned, ...newer] = await rows();
+      const countedLate = sameToken && outcome === "sent";
       expect(abandoned).toMatchObject({
-        status: "unknown",
-        failure_code: "timeout",
+        status: countedLate ? "sent" : "unknown",
+        failure_code: countedLate ? null : "timeout",
         reported_outcome: sameToken ? outcome : null,
       });
-      expect(newer).toEqual(withRetry ? [nextBefore] : []);
+      expect(newer).toEqual(
+        withRetry ? [countedLate ? { ...nextBefore, designation: "duplicate" } : nextBefore] : [],
+      );
       expect(await readMail(suite.db, `invoice:${delivery.id}`)).toMatchObject({
         status: "unknown",
         failureCode: "mail.claim_abandoned",
@@ -2640,4 +2660,135 @@ it("does not join the write queue while invoice email has no due work", async ()
     await writer;
     await pass;
   }
+});
+
+async function pdfText(bytes: Uint8Array): Promise<string> {
+  const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
+  try {
+    const page = await (await loading.promise).getPage(1);
+    const content = await page.getTextContent();
+    return content.items.flatMap((item) => ("str" in item ? [item.str] : [])).join(" ");
+  } finally {
+    await loading.destroy();
+  }
+}
+
+describe("an invoice email whose success is reported after it was given up", () => {
+  /** The first email's claim lapsed while sending, then staff asked for another original by email. */
+  async function lapsedThenRetried() {
+    const { sale, delivery } = await queued();
+    await claimMailAt(delivery.id, start.toISOString());
+    await withTransaction(suite.db, (tx) => abandonInvoiceEmail(tx, delivery.id, expired));
+    const retry = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, email()),
+    );
+    await dueAtStart(retry.id);
+    expect(retry).toMatchObject({ designation: "original", generation: 2 });
+    return { first: delivery, retry };
+  }
+  const reportLate = (
+    delivery: { id: string; generation: number },
+    outcome: InvoiceDeliveryOutcome,
+  ) => withTransaction(suite.db, (tx) => settleInvoiceEmail(tx, delivery, 1, outcome, expired));
+
+  it("counts the first email as the original and sends the queued retry as a duplicate", async () => {
+    const { first, retry } = await lapsedThenRetried();
+
+    await reportLate(first, { status: "sent" });
+
+    expect(await rows()).toMatchObject([
+      {
+        id: first.id,
+        status: "sent",
+        completed_at: expired.toISOString(),
+        failure_code: null,
+        reported_outcome: "sent",
+      },
+      { id: retry.id, status: "queued", designation: "duplicate" },
+    ]);
+    let sent: Parameters<MailTransport>[1] | undefined;
+    await runInvoiceMailPass({
+      db: suite.db,
+      now: () => start,
+      readDocument: documentFor,
+      render: composeInvoiceEmail,
+      send: async (message) => {
+        sent = message.sent;
+        return { status: "sent" };
+      },
+    });
+    expect(String(sent!.text).split("\n")[0]).toBe("Factura FF/1 — DUPLICADO");
+    const [attachment] = sent!.attachments as { content: Uint8Array }[];
+    expect(await pdfText(attachment!.content)).toContain("DUPLICADO");
+    expect((await rows())[1]).toMatchObject({
+      id: retry.id,
+      status: "sent",
+      designation: "duplicate",
+    });
+  });
+
+  it.each(["sending", "sent"] as const)(
+    "counts the first email as the original and leaves a retry already %s an original",
+    async (retryState) => {
+      const { first, retry } = await lapsedThenRetried();
+      if (retryState === "sending") await claimMailAt(retry.id, start.toISOString());
+      else await sendInvoice(start, { status: "sent" });
+      expect((await rows())[1]).toMatchObject({ status: retryState });
+
+      await reportLate(first, { status: "sent" });
+
+      expect(await rows()).toMatchObject([
+        { id: first.id, status: "sent", completed_at: expired.toISOString() },
+        { id: retry.id, status: retryState, designation: "original" },
+      ]);
+    },
+  );
+
+  it("retries a refused retry, already being sent when the first email was counted, as a duplicate", async () => {
+    const { first, retry } = await lapsedThenRetried();
+    await claimMailAt(retry.id, start.toISOString());
+    await reportLate(first, { status: "sent" });
+
+    await reportLate(retry, { status: "failed", failureCode: "transport_failed" });
+
+    expect(await rows()).toMatchObject([
+      { id: first.id, status: "sent" },
+      { id: retry.id, status: "failed", designation: "original" },
+      { status: "queued", designation: "duplicate", generation: 3 },
+    ]);
+  });
+});
+
+it("retries a refused email as a duplicate once the sale's receipt original has printed", async () => {
+  const { sale, delivery } = await queued();
+  expect(delivery.designation).toBe("original");
+  await claimMailAt(delivery.id, start.toISOString());
+  // Seeded directly rather than printed through an agent.
+  await withTransaction(suite.db, async (tx) => {
+    const printer = await createPrinter(tx, {
+      name: "Receipt",
+      transport: "network_tcp",
+      host: "printer.test",
+    });
+    const job = await enqueuePrintJob(tx, printer.id, new Uint8Array([27, 64]), "document", {
+      saleId: sale.saleId,
+      receiptCopy: false,
+    });
+    await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, job.jobId));
+  });
+
+  await withTransaction(suite.db, (tx) =>
+    settleInvoiceEmail(
+      tx,
+      delivery,
+      1,
+      { status: "failed", failureCode: "transport_failed" },
+      start,
+    ),
+  );
+
+  expect(await rows()).toMatchObject([
+    { id: delivery.id, status: "failed", designation: "original" },
+    { status: "queued", designation: "duplicate", generation: 2 },
+  ]);
 });

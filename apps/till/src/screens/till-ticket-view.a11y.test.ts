@@ -198,7 +198,7 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
     false,
   ],
   [
-    "email failed, an earlier attempt delivered after all",
+    "email failed, an earlier A4 attempt delivered after all",
     {
       current: attempt({ id: "d2", medium: "email", status: "failed" }),
       originalCompleted: false,
@@ -206,7 +206,7 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
       actions: { ...none, retryOriginal: { medium: "email" }, email: { designation: "original" } },
       history: [
         attempt({ id: "d2", medium: "email", status: "failed" }),
-        attempt({ medium: "email", status: "unknown", lateSuccess: true }),
+        attempt({ medium: "a4", status: "unknown", lateSuccess: true }),
       ],
     },
     false,

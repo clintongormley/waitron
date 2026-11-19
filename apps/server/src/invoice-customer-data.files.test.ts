@@ -155,8 +155,8 @@ describe("buildInvoiceCustomerFiles", () => {
     expect(file.invoices[0]!.emails.find((email) => email.to === "late@example.test")).toEqual({
       to: "late@example.test",
       requestedAt: stored!.createdAt,
-      status: "unknown",
-      sentAt: null,
+      status: "sent",
+      sentAt: reportedAt.toISOString(),
       reportedOutcome: "sent",
       reportedAt: reportedAt.toISOString(),
     });

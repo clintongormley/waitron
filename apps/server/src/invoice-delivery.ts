@@ -117,16 +117,7 @@ export async function reserveInvoiceDelivery(
       ),
     );
   if (active !== undefined) throw new AppError("invoice_delivery.active", {});
-  const receiptJobs = await tx
-    .select({ id: printJobs.id, status: printJobs.status, attempts: printJobs.attempts })
-    .from(printJobs)
-    .where(
-      and(
-        eq(printJobs.saleId, saleId),
-        eq(printJobs.kind, "document"),
-        eq(printJobs.receiptCopy, false),
-      ),
-    );
+  const receiptJobs = await receiptOriginalJobs(tx, saleId);
   if (
     receiptJobs.some(
       (job) =>
@@ -143,11 +134,7 @@ export async function reserveInvoiceDelivery(
     .from(invoiceDeliveries)
     .where(eq(invoiceDeliveries.saleId, saleId))
     .orderBy(desc(invoiceDeliveries.generation));
-  const designation =
-    receiptJobs.some((job) => job.status === "done") ||
-    history.some((row) => row.designation === "original" && row.status === "sent")
-      ? "duplicate"
-      : "original";
+  const designation = originalCompleted(receiptJobs, history) ? "duplicate" : "original";
   if (receiptJob !== undefined && receiptJob.receiptCopy !== (designation === "duplicate")) {
     throw new AppError("invoice_delivery.receipt_invalid", {});
   }
@@ -185,6 +172,39 @@ export async function reserveInvoiceDelivery(
     await queueInvoiceEmail(tx, delivery!.id, new Date(delivery!.createdAt), 1);
   }
   return delivery!;
+}
+
+/** Whether the sale's original went out: a printed receipt original or a sent original delivery. */
+function originalCompleted(
+  receiptJobs: readonly { status: string }[],
+  deliveries: readonly { designation: string; status: string }[],
+): boolean {
+  return (
+    receiptJobs.some((job) => job.status === "done") ||
+    deliveries.some((row) => row.designation === "original" && row.status === "sent")
+  );
+}
+
+function receiptOriginalJobs(tx: Transaction, saleId: string) {
+  return tx
+    .select({ id: printJobs.id, status: printJobs.status, attempts: printJobs.attempts })
+    .from(printJobs)
+    .where(
+      and(
+        eq(printJobs.saleId, saleId),
+        eq(printJobs.kind, "document"),
+        eq(printJobs.receiptCopy, false),
+      ),
+    );
+}
+
+async function saleOriginalCompleted(tx: Transaction, saleId: string): Promise<boolean> {
+  const receiptJobs = await receiptOriginalJobs(tx, saleId);
+  const deliveries = await tx
+    .select({ designation: invoiceDeliveries.designation, status: invoiceDeliveries.status })
+    .from(invoiceDeliveries)
+    .where(eq(invoiceDeliveries.saleId, saleId));
+  return originalCompleted(receiptJobs, deliveries);
 }
 
 function queueInvoiceEmail(
@@ -471,7 +491,9 @@ async function recordDeliveryReport(
       ),
     )
     .limit(1);
-  const historical = newer !== undefined;
+  // A late email success always completes its attempt: SMTP acceptance is completion for email.
+  const historical =
+    newer !== undefined && !(delivery.medium === "email" && outcome.status === "sent");
   if (delivery.printJobId !== null) {
     const [live] = await tx
       .select({ id: printJobs.id })
@@ -509,6 +531,21 @@ async function recordDeliveryReport(
           }),
     })
     .where(eq(invoiceDeliveries.id, delivery.id));
+  if (newer !== undefined && !historical) {
+    // Queued attempts read their designation only when they go out; one already out keeps it.
+    await tx
+      .update(invoiceDeliveries)
+      .set({ designation: "duplicate" })
+      .where(
+        and(
+          eq(invoiceDeliveries.saleId, delivery.saleId),
+          gt(invoiceDeliveries.generation, delivery.generation),
+          eq(invoiceDeliveries.status, "queued"),
+          eq(invoiceDeliveries.designation, "original"),
+          inArray(invoiceDeliveries.medium, ["email", "a4"]),
+        ),
+      );
+  }
   if (!historical && delivery.printJobId !== null && holder !== undefined) {
     await tx
       .update(printJobs)
@@ -556,13 +593,14 @@ async function retryInvoiceEmail(
 ) {
   const delay = RETRY_DELAYS_MS[attempt - 1];
   if (delay === undefined) return;
+  const completed = await saleOriginalCompleted(tx, delivery.saleId);
   const [retry] = await tx
     .insert(invoiceDeliveries)
     .values({
       saleId: delivery.saleId,
       requestKey: randomUUID(),
       medium: "email",
-      designation: delivery.designation,
+      designation: completed ? "duplicate" : delivery.designation,
       generation: delivery.generation + 1,
       recipient: delivery.recipient,
       personId: delivery.personId,

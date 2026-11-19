@@ -1426,12 +1426,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       const fact = (el: TillTicketView) => button(el, "delivery-late-success");
       const check = (el: TillTicketView) => button(el, "delivery-late-check");
       const words = (line: HTMLElement | null) => line?.textContent?.trim();
-      const delivered = attempt({
-        id: "d1",
-        medium: "email",
-        status: "unknown",
-        lateSuccess: true,
-      });
+      const delivered = attempt({ id: "d1", medium: "a4", status: "unknown", lateSuccess: true });
       const failedAgain = attempt({ id: "d2", medium: "email", status: "failed" });
       const behind = (
         current: InvoiceDeliveryAttempt,
@@ -1603,10 +1598,9 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
         expect(check(el)).toBeNull();
       });
 
-      it("gives the same two lines for a late A4 attempt, whose page is at the printer", async () => {
-        const page = attempt({ id: "d1", medium: "a4", status: "unknown", lateSuccess: true });
+      it("gives the same two lines behind a newer A4 failure", async () => {
         const { el } = await mountF1({
-          deliveries: behind(attempt({ id: "d2", medium: "a4", status: "failed" }), page),
+          deliveries: behind(attempt({ id: "d2", medium: "a4", status: "failed" })),
         });
         expect(words(fact(el))).toBe(FACT);
         expect(words(check(el))).toBe(CHECK);
