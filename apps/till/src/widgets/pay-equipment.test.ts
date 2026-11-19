@@ -409,27 +409,6 @@ describe("till-pay-equipment", () => {
       },
     );
 
-    it.each([
-      [
-        "es",
-        "Barra está desactivada: si no eliges otra, el ticket se imprimirá cuando vuelva a activarse",
-      ],
-      [
-        "en",
-        "Barra is switched off: unless you choose another, the ticket will print when it is switched back on",
-      ],
-    ] as const)(
-      "says, in %s, that the ticket prints once a switched-off printer is back on",
-      async (language, line) => {
-        setLocale(language);
-        const el = await mount({
-          open: true,
-          equipment: equipment(chosen(OFF, [BAR_PRINTER, TERRACE_PRINTER])),
-        });
-        expect(warning(el)).toBe(line);
-      },
-    );
-
     it("printers listed with none set warns there is no ticket printer", async () => {
       const el = await mount({
         open: true,

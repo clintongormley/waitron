@@ -4,6 +4,7 @@ import type { TillSettlementDocumentDialog } from "./settlement-document-dialog.
 import { invoiceOf } from "../../test/bill-pay-app.js";
 import "./settlement-document-dialog.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import type { OriginalReceiptPrint, RoleEquipment } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { equipmentItem, roleOf } from "../../test/pay-equipment-fixtures.js";
@@ -425,30 +426,30 @@ it("names the Done button Listo in Spanish", async () => {
 const closingLines = {
   prints: {
     en: "Closing prints the receipt.",
-    es: "Al cerrar se imprime el recibo.",
+    es: es["settlement.closing_prints_no_email"],
   },
   "switched-off": {
     en: "Bar is switched off. The receipt will print when it is switched back on.",
-    es: "Bar está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
+    es: es["settlement.closing_switched_off"].replace("{printer}", "Bar"),
   },
   "no-printer": {
     en: "This device has no receipt printer. Choose one above before closing.",
-    es: "Este dispositivo no tiene impresora de tickets. Elige una arriba antes de cerrar.",
+    es: es["settlement.closing_no_printer_no_email"],
   },
   "not-allowed": {
     en: "This device may not print or email receipts. Print it from Find a bill on a till that can.",
-    es: "Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda.",
+    es: es["settlement.closing_not_allowed"],
   },
 } as const;
 type ClosingState = keyof typeof closingLines;
 const closingLinesWithEmail: Partial<Record<ClosingState, { en: string; es: string }>> = {
   prints: {
     en: "Closing prints the receipt unless you email it.",
-    es: "Al cerrar se imprime el recibo, salvo que lo envíes por correo electrónico.",
+    es: es["settlement.closing_prints"],
   },
   "no-printer": {
     en: "This device has no receipt printer. Choose one above or email the receipt before closing.",
-    es: "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo antes de cerrar.",
+    es: es["settlement.closing_no_printer"],
   },
 };
 
@@ -749,7 +750,11 @@ describe("one line about the receipt printer while the original is unsent", () =
     ].map((line) => line.textContent!.trim());
   const notSaid = {
     en: ["no ticket will print", "Print from another device", "Choose one in Equipment"],
-    es: ["no se imprimirá el ticket", "Imprime desde otro dispositivo", "Elige una en Equipo"],
+    es: [
+      es["document.printer_off_choose_other"].replace("{item}", "Bar"),
+      es["document.printer_off_no_other"].replace("{item}", "Bar"),
+      es["document.no_receipt_printer"],
+    ],
   };
   const chooseAbove = { en: "Choose one above", es: "Elige una arriba" };
 

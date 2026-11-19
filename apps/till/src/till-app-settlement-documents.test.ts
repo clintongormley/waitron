@@ -393,7 +393,7 @@ it.each([
 
 const coffee: TillProduct = {
   id: "cafe",
-  name: "Café",
+  name: "Coffee",
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
