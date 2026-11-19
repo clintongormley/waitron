@@ -119,8 +119,8 @@ Agreed with the owner on 2 November 2026 and amended in their review of 4 Novemb
   `drawer.opened`), `subject_kind`, `subject_id`, `person_id`, `device_id`, `data` (JSON), indexed
   on `(subject_kind, subject_id)`, `(kind, at)`, `(at)` and `(person_id, at)`. The last two serve a
   dashboard history screen, a separate item the owner wants, and the personal-data export. It holds
-  no hot path. The order dialog shows reprints and PDF downloads, so `activity_log` must be a live
-  update source, or that dialog refreshes after those two actions (`apps/dashboard/src/api/live-queries.ts:269, :273`).
+  no hot path. Orders uses its own
+  [receipt-copy and PDF-download history tables](tables-ordersales.md#3-history).
 - **`outgoing_mail`** (`venue.db`, core, `state`): the one mail queue, drafted in `jobs.md` §2.
 - The Veri\*Factu module keeps **its own** append-only history (`verifactu_history`), not `activity_log`.
 - The box's own facts are one `box` row in `node.db` (§4).

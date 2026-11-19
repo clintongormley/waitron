@@ -350,6 +350,8 @@ No product route writes it yet: `recordVoid`'s only caller is the test helper
 | sale_substitutions | core | ledger | yes | ≈0–1,800 |
 | unpaid_departures | core | ledger | yes | ≈0–50 |
 | invoice_deliveries | core | state | no | ≈700–7,000 |
+| receipt_reprints | core | ledger | yes | ≈1,800–7,300 |
+| invoice_pdf_downloads | core | ledger | yes | ≈0–3,700 |
 | department_transfer_destinations | core | state | no | 0–6 |
 | department_transfer_requests | core | state | no | ≈0–7,000 |
 | line_service_cancellations | core | state | no | a few a day at most; not measured |
@@ -372,19 +374,10 @@ None. No current table in this area is a switch, number, time or text. The one c
 
 ## 3. History
 
-**To `activity_log`** (for people to read; product logic never decides from it):
-
-| kind | subject_kind / subject_id | person_id / device_id | data | from | ≈/day |
-|---|---|---|---|---|---|
-| `sale.copy_printed` | sale / sale id | requester | print_job_id | receipt_reprints | 5–20 |
-| `sale.invoice_pdf_downloaded` | sale / sale id | requester | — | invoice_pdf_downloads | 0–10 |
-
-That is ≈5–30 rows/day, ≈1,800–11,000/year. The dashboard's order dialog shows both to a person
-(`readOrderDetail`, `apps/server/src/orders-list.ts:658-685`; `readReprints`, `:1103-1118`;
-`readPdfDownloads`, `:736-749`), so `activity_log` needs its `(subject_kind, subject_id)`
-index for them. `readReprints` joins `print_jobs` for the printer's name and keeps only copies of a
-receipt (`:1112-1115`), so after the move it joins on `data.print_job_id`. The rows have four writers:
-`orders-api.ts:332`, `orders-reprint.ts:40`, `tender-refund-api.ts:220`, `transaction-receipt-api.ts:79`.
+**Orders history.** On 19 November 2026 the owner chose to keep both append-only history tables
+for good. Orders uses `receipt_reprints` for receipt copies and `invoice_pdf_downloads` for
+PDF downloads, with a live subscription to each table. The
+[os9 amendment](../../plans/2026-11-18-a1308-os9-sale-activity-amendment.md) records the decision.
 
 **Typed histories that remain:** `order_events` (§1.23; README U3). Attendance reads the group and
 draft kinds by day (`apps/server/src/attendance-facts.ts:22-30`, `attendance-discovery.ts:129-140`;
@@ -418,9 +411,9 @@ attendance). Ledger rows that are history by nature and read back by product cod
 | order_drafts | keep | real thing |
 | order_draft_recalled_lines | merge into order_draft_lines | same thing (a line in a draft), same lifetime, same slot columns |
 | line_service_cancellations | keep | its facts change on a frozen line (§1.22) |
-| receipt_reprints | → activity_log | who asked for a copy; the order dialog shows it to a person, nothing decides from it; sale and time already on print_jobs |
+| receipt_reprints | keep | shows who asked for a receipt copy in Orders |
 | sale_receipt_guests | merge into sales | fixed in the same transaction as the sale |
-| invoice_pdf_downloads | → activity_log | who downloaded the PDF; the order dialog shows it to a person, nothing decides from it |
+| invoice_pdf_downloads | keep | shows who downloaded the PDF in Orders |
 | working_order_counters | delete | `max(order_number)+1` under the write lock plus a unique index (§8 M1) |
 | bill_payment_lines | keep | child rows of an item payment |
 | bill_payment_refunds | merge into refunds | same real thing as tender_refunds |
@@ -504,9 +497,8 @@ and draft indexes. The kind, actor and destination CHECKs become the per-family 
 the portion FK becomes the plain `line_id` (§1.23). Gained: person keys (README U11) and the
 `(actor_id, at)` index. CF: none of the three is a live-update source.
 
-**receipt_reprints** → activity_log: AO kept; dropped FKs sale/print_job and unique print_job_id. A
-duplicate row shows one copy twice, and nothing decides from it. **invoice_pdf_downloads** →
-activity_log: AO kept; FK dropped.
+**receipt_reprints and invoice_pdf_downloads.** Keep their existing keys, indexes, append-only
+triggers and change-feed triggers.
 
 **order_amendments, order_groups, order_group_hold_stations, order_drafts, service_commands,
 bill_payments, bill_payment_lines, sale_lines, sale_settlements, sale_substitutions, tenders,
@@ -553,8 +545,8 @@ fiscal series (`packages/db/src/allocate-order-number.ts:13-16`), so losing that
 row did.
 
 **Guards that change:** `scripts/append-only-triggers.test.ts` EXPECTED loses order_portions,
-order_portion_events, order_group_events, order_draft_events, receipt_reprints, sale_receipt_guests,
-invoice_pdf_downloads, sale_receipt_headers, bill_number_allocations and sale_line_portions, and gains
+order_portion_events, order_group_events, order_draft_events, sale_receipt_guests,
+sale_receipt_headers, bill_number_allocations and sale_line_portions, and gains
 sale_line_dishes and order_events; `scripts/behavioural-triggers.test.ts`;
 `scripts/live-subscriptions.test.ts` (dashboard subscriptions are named after tables, so removed table
 names leave the subscription lists).
@@ -581,8 +573,7 @@ names leave the subscription lists).
    obviously equal (the line leaves the unit name out for an "Each" unit, `working-order.ts:951-952`;
    the context always has one, `operations.ts:1376`). One home if M3 shows equality; else both,
    named apart.
-6. **Who asked for a receipt copy** — `receipt_reprints.sale_id` / `requested_at` duplicate
-   `print_jobs.sale_id` / `created_at`. One home: print_jobs for the job, activity_log for the person.
+6. **Receipt copy history** stays in `receipt_reprints` under the owner's 19 November decision (§3).
 7. **Two location columns** — `working_orders.location_id`, `order_service_contexts.location_id`,
    `tender_refunds.location_id`: removed (R10).
 8. **Two refund tables with ~20 shared columns** — one home `refunds`.
@@ -613,7 +604,7 @@ e.g. `till-sale.ts:1050-1056`) vs `sale_settlements` ("the sale is fully paid", 
   move (`working-order.ts:4197-4200`) — a duplicate in their area that this area's lines are the source
   for. `kitchen_print_job_lines` FK working_order_lines.
 - **menu**: FKs from lines to `menu_items`, `menu_versions` and `products`, all in core under U1.
-- **devices**: `print_jobs` (invoice_deliveries FK; the `sale.copy_printed` row names print_job_id; A4
+- **devices**: `print_jobs` (keys from `invoice_deliveries` and `receipt_reprints`; A4
   pages now go through it), `devices`, `device_profiles`, `printers` (page printers merge in),
   `print_agents`. `drawer_opens` moves to `activity_log`; §1.11's `refunds.drawer_opened_at` replaces its
   refund-once read, and its key to `tender_refunds` goes with it.
@@ -626,10 +617,6 @@ e.g. `till-sale.ts:1050-1056`) vs `sale_settlements` ("the sale is fully paid", 
   `sale_voids` stays with it (§1.24).
 - **people**: attendance reads `order_amendments`, `bill_payments`, `order_events` and `refunds` directly,
   and asks for a time index on each (`tables-people.md`).
-- **central**: `activity_log` needs its `(subject_kind, subject_id)` index for §3's two kinds. The order
-  dialog subscribes to `receipt_reprints` and `invoice_pdf_downloads` by name
-  (`apps/dashboard/src/api/live-queries.ts:269, 273`), so either `activity_log` becomes a live-update
-  source, or the dialog refreshes after those two actions.
 - **A803**: §3.1 and §3.9 change: the line is the dish's identity, and a pre-bill records lines (§1.2).
   A803 is mid-build in lane C (slice 4b), so time the change around it.
 

@@ -85,7 +85,7 @@ added lines for the entire slice, including the return fix and its test.
 | --- | --- |
 | `sales.fiscal_*`, `invoice_series`, the void's fiscal path | fiscal (owner lands) |
 | `tenders` and `sale_settlements` | unchanged; `tenders` person columns (none today) |
-| `receipt_reprints`, `invoice_pdf_downloads` | os9 |
+| `receipt_reprints`, `invoice_pdf_downloads` | Kept under the [os9 amendment](2026-11-18-a1308-os9-sale-activity-amendment.md) |
 
 ## Files
 

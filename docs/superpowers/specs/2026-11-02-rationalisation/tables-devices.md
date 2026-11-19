@@ -665,7 +665,7 @@ printer list (§1).
     to a printer disabled after staging is recorded failed with no job
     (`apps/server/src/invoice-delivery.ts:70-83`), and the replay check and the alert read the printer
     from it. Its claim, lease and hold columns move to `print_jobs` (§1.7) or `outgoing_mail`.
-  - `receipt_reprints` moves to `activity_log` and names a print job there.
+  - `receipt_reprints` keeps its key to `print_jobs` for Orders history.
   - `refunds` gains `drawer_opened_at` and the set-once clause in its merged trigger (§3).
     `drawer_opens` no longer holds a key into `refunds`.
 - **fiscal:** `registros_facturacion.device_id` (`verifactu_records` in the target) and
