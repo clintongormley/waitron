@@ -23602,6 +23602,9 @@ export class TillApp extends LitElement {
         @finish-table=${() => void this.#onFinishTable()}
         @record-unpaid-departure=${(event: Event) => this.#onRecordUnpaidDeparture(event)}
         @end-meal=${(event: Event) => void this.#onEndMeal(event)}
+        @meal-end-declined=${() => {
+          this.mealEnd = null;
+        }}
         @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event)}
         @request-bill=${(event: Event) => void this.#onRequestBill(event)}
         @take-payment=${(event: Event) => void this.#onSwitchBill(event)}

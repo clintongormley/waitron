@@ -1079,6 +1079,28 @@ describe("till-app: Print the bill with dishes not served", () => {
     expect(warning(el)!.querySelector("[data-mark-served]")).toBeNull();
   });
 
+  it("Cancel takes the list down and sends nothing; Print the bill then asks again without printing anyway", async () => {
+    const endMeal = vi.fn().mockRejectedValue(unservedRefusal);
+    const { el } = await openBill({ endMeal });
+    await printBill(el);
+
+    warning(el)!.querySelector<HTMLElement>("[data-meal-end-cancel]")!.click();
+    await flush(el, 6);
+
+    expect(warning(el)).toBeNull();
+    expect(endMeal).toHaveBeenCalledOnce();
+
+    emit(tableOrder(el), "end-meal", { workingOrderId: "wo-4", printAnyway: true });
+    await flush(el, 6);
+    expect(endMeal).toHaveBeenCalledOnce();
+
+    await printBill(el);
+
+    expect(endMeal).toHaveBeenCalledTimes(2);
+    expect(sentBodies(endMeal)[1]!.printAnyway).toBeUndefined();
+    expect(warning(el)).not.toBeNull();
+  });
+
   it("Print anyway sends the same bill with printAnyway under a new submission id, and prints", async () => {
     const endMeal = vi.fn().mockRejectedValueOnce(unservedRefusal).mockResolvedValue(ended);
     const { el } = await openBill({ endMeal });

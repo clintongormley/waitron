@@ -5332,7 +5332,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Print the bill's answer: printed, or the dishes not yet served, with Mark served for those
-   * the kitchen has and Print anyway. */
+   * the kitchen has, Cancel, which issues nothing, and Print anyway. */
   #mealEndOutcome(): TemplateResult | typeof nothing {
     const shown = this.mealEnd;
     if (shown === null) return nothing;
@@ -5369,6 +5369,14 @@ export class TillTableOrderScreen extends LitElement {
                 ${t("meal_end.mark_served")}
               </wt-button>`
         }
+        <wt-button
+          size="sm"
+          variant="secondary"
+          data-meal-end-cancel
+          @click=${() => this.#dispatch("meal-end-declined", {})}
+        >
+          ${t("action.cancel")}
+        </wt-button>
         <wt-button
           size="sm"
           variant="primary"

@@ -669,7 +669,7 @@ describe("till-table-order-screen: Print the bill's outcome", () => {
     expect(said.textContent!.trim()).toBe(t("bill.issued"));
   });
 
-  it("lists the dishes not served by name, says what each choice does, and offers Mark served and Print anyway", async () => {
+  it("lists the dishes not served by name, says what each choice does, and offers Mark served, Cancel and Print anyway", async () => {
     const el = await mountScreen({ mealEnd: unserved, canMarkServed: true });
 
     const block = warning(el)!;
@@ -686,7 +686,21 @@ describe("till-table-order-screen: Print the bill's outcome", () => {
       [...block.querySelectorAll<HTMLElement>("wt-button")].map((button) =>
         button.textContent!.trim(),
       ),
-    ).toEqual([t("meal_end.mark_served"), t("meal_end.print_anyway")]);
+    ).toEqual([t("meal_end.mark_served"), t("action.cancel"), t("meal_end.print_anyway")]);
+  });
+
+  it("Cancel is quiet, stays usable while a print is out, and asks the till to drop the list", async () => {
+    const el = await mountScreen({ mealEnd: unserved, billPrintPending: true, busy: true });
+    const declined = capture(el, "meal-end-declined");
+    const cancel = warning(el)!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-meal-end-cancel]",
+    )!;
+
+    expect(cancel.getAttribute("variant")).toBe("secondary");
+    expect(cancel.disabled).toBe(false);
+    cancel.click();
+
+    expect(declined).toHaveLength(1);
   });
 
   it("Mark served serves only the dishes the kitchen has", async () => {

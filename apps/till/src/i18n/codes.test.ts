@@ -1149,10 +1149,10 @@ it("names the set menu whose removal depends on the dishes", () => {
 
 it("words Print the bill's not-served refusal as a choice for the whole list, in both languages", () => {
   expect(codeMessage("meal_end.unserved_dishes", "en")).toBe(
-    "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway.",
+    "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Correct invoice.",
   );
   expect(codeMessage("meal_end.unserved_dishes", "es")).toBe(
-    "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente.",
+    "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
   );
 });
 
