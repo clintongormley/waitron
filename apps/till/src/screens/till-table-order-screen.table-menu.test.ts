@@ -232,6 +232,36 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(groups(el)[0]!.items).toContain("Full invoice");
   });
 
+  it("a presented full invoice naming a customer offers no Cancel and credit, which the server would refuse", async () => {
+    const named = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      receiptAvailable: true,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345678",
+        legalName: "Acme SL",
+        address: "Calle 1",
+        countryCode: "ES",
+      },
+    });
+    const el = await mountScreen({ bills: [named] });
+
+    expect(item(el, "[data-bill-receipt]")).not.toBeNull();
+    expect(item(el, "[data-cancel-credit]")).toBeNull();
+  });
+
+  it("a presented full invoice naming no customer still offers Cancel and credit", async () => {
+    const unnamed = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      receiptAvailable: true,
+      invoiceType: "F1",
+      recipient: null,
+    });
+    const el = await mountScreen({ bills: [unnamed] });
+
+    expect(item(el, "[data-cancel-credit]")).not.toBeNull();
+  });
+
   it("a presented bill with an invoice number offers no Full invoice", async () => {
     const issued = partyBill("wo-2", 2, "54.00", {
       status: "placed",

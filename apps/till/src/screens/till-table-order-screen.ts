@@ -473,6 +473,12 @@ export interface ServeLinesDetail {
   items: { lineId: string; quantity: string }[];
 }
 
+/** A recipient becomes the sale's customer tax number, and the server refuses to correct a sale that
+ * has one (`sale.correction_unsupported`). */
+function namesCustomer(bill: PartyBill): boolean {
+  return (bill.recipient ?? null) !== null;
+}
+
 /** Print the bill's answer for one bill: printed, or refused for the dishes not yet served. */
 export type MealEndShown =
   | { workingOrderId: string; printed: true }
@@ -5340,10 +5346,9 @@ export class TillTableOrderScreen extends LitElement {
       return html`<p class="bill-printed" role="status" data-bill-printed>${t("bill.issued")}</p>`;
     const servable = this.canMarkServed ? shown.unserved.filter((dish) => dish.released) : [];
     const bill = this.bills.find((row) => row.workingOrderId === shown.workingOrderId);
-    // A recipient becomes the sale's customer tax number, and the server refuses to correct a sale
-    // that has one, so the usual "refunded with Correct invoice" would be untrue.
+    // The usual "refunded with Correct invoice" would be untrue.
     const notice =
-      (bill?.recipient ?? null) !== null
+      bill !== undefined && namesCustomer(bill)
         ? t("meal_end.unserved_full_invoice")
         : servable.length === 0
           ? t("meal_end.unserved_no_mark")
@@ -6894,7 +6899,7 @@ export class TillTableOrderScreen extends LitElement {
             ${t("table.bill_receipt")}
           </wt-button>`
         : nothing,
-      bill.status === "placed" && bill.receiptAvailable && !bill.hasPayments
+      bill.status === "placed" && bill.receiptAvailable && !bill.hasPayments && !namesCustomer(bill)
         ? html`<wt-button
             data-cancel-credit
             @click=${() => this.#dispatch("cancel-credit-bill", target)}
