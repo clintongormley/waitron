@@ -2706,6 +2706,27 @@ test("the dialog above one put back keeps where its long body was scrolled to", 
   expect(body.scrollTop).toBe(200);
 });
 
+test("an open dialog put back keeps where its long body was scrolled to", async () => {
+  const el = (await mount(
+    '<wt-dialog heading="Edit"><input aria-label="Name" /><div style="height: 3000px"></div></wt-dialog>',
+  )) as WtDialog;
+  el.open = true;
+  await el.updateComplete;
+  el.querySelector("input")!.focus();
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  const scrolled = new Promise<Event>((resolve) =>
+    body.addEventListener("scroll", resolve, { once: true }),
+  );
+  body.scrollTop = 200;
+  await scrolled;
+  expect(body.scrollTop).toBe(200);
+
+  takeOut(el)();
+  await el.updateComplete;
+  expect(nativeOf(el).matches(":modal")).toBe(true);
+  expect(body.scrollTop).toBe(200);
+});
+
 test("Escape goes to the dialog above one put back, and focus then lands in the one underneath", async () => {
   const { parent, child, inParent } = await stacked("beside");
   const parentCloses = vi.fn();

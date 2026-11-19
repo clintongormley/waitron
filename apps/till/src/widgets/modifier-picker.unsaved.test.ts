@@ -292,6 +292,9 @@ it.each(["Escape", "navigation"])(
     await userEvent.fill(quantity.shadowRoot!.querySelector("input")!, "3");
     await step(form, "inc");
     await note(form, "No onion");
+    const noteField = form.shadowRoot!.querySelector("wt-textarea")!.shadowRoot!;
+    const editing = noteField.querySelector("textarea")!;
+    expect(noteField.activeElement).toBe(editing);
     expect(modal(form).shadowRoot!.querySelector("dialog")!.matches(":modal")).toBe(true);
     form.remove();
     app.shadowRoot!.prepend(form);
@@ -303,6 +306,7 @@ it.each(["Escape", "navigation"])(
       modal(form).shadowRoot!.querySelector("dialog")!.matches(":modal"),
       "reconnected editor is visibly modal",
     ).toBe(true);
+    expect(noteField.activeElement, "the note field keeps focus after reconnect").toBe(editing);
     const values = () => ({
       quantity: form.shadowRoot!.querySelector("wt-input")!.value,
       note: form.shadowRoot!.querySelector("wt-textarea")!.value,

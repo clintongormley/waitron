@@ -1,7 +1,6 @@
 import { ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { keyed } from "lit/directives/keyed.js";
 import { trackDialog } from "./track-dialog.js";
 import {
   baseStyles,
@@ -365,7 +364,7 @@ export class TillModifierPicker extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    // Keep the draft across reconnects while creating a fresh native modal opening.
+    // An Add note action started before reconnect must not steal focus when it finishes.
     if (this.hasUpdated) this.#connection++;
     this.requestUpdate();
   }
@@ -1037,7 +1036,7 @@ export class TillModifierPicker extends LitElement {
       }
     </div>`;
     if (this.inline) return fields;
-    const modal = html`<wt-modal
+    return html`<wt-modal
       ${trackDialog()}
       size="standard"
       .open=${this.active}
@@ -1072,7 +1071,6 @@ export class TillModifierPicker extends LitElement {
         }
       </wt-form-actions>
     </wt-modal>`;
-    return keyed(this.#connection, modal);
   }
 
   get #editsQuantity(): boolean {
