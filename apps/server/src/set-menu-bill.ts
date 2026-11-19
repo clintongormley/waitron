@@ -167,7 +167,10 @@ export async function readBillSetMenus(
   const fixed = new Set(payments.map(({ lineId }) => lineId));
   const cancelled = new Set<string>();
   for (const { lineId, action, chargeKept, reducedLineId } of actions) {
-    if (action === "cancel" && !chargeKept && lineId !== null) cancelled.add(lineId);
+    if (action === "cancel" && lineId !== null) {
+      if (chargeKept) fixed.add(lineId);
+      else cancelled.add(lineId);
+    }
     if (reducedLineId !== null) fixed.add(reducedLineId);
   }
   const dishes = placed

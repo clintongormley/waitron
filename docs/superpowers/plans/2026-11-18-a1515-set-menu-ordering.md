@@ -155,12 +155,13 @@ writer)** here and where they first appear in a task.
     re-order; the refusal says so.
 11. **The table-service guide section and the help bubble on the count land here** (kept; CLAUDE.md
     §3: a screen change updates its guide).
-12. **A cancelled dish no longer fills its place** (**my call (plan writer)**). A dish cancelled
-    after the kitchen started it keeps its row, with a `cancel` adjustment taking its charge off
-    (`apps/server/src/line-cancel.ts:225-300`: the row is removed only when nothing was started).
-    Such a dish does not fill its place, does not count as "holds dishes" for − or Cancel, is never
-    moved, and its link to the set-menu line is cleared by the link's `on delete set null` when
-    that set menu is removed. A cancel that keeps the charge leaves the dish in its place.
+12. **Cancelling a dish without its charge frees its place.** The existing cancel paths delete the
+    working dish row on full cancellation. When preparation started, the adjustment records that
+    fact and that the charge was removed. The started-cancellation case in
+    `apps/server/src/set-menu-moves.test.ts` checks the row, the adjustment and the freed place
+    (watcher, 2026-11-19 09:10). A cancel that keeps the charge leaves the dish in its place at the recorded price.
+    If a cancelled row without a charge is retained, the placement reader ignores it and the
+    foreign key clears its link when the set-menu line is deleted.
 13. **− and Cancel are refused while an unsent dish is counting on that set menu** (**owner**,
     18 November: "refuse the -", chosen over allowing it and then asking about the dish). A dish
     counts on a set menu when it has a place with that set menu in the bill's set menus and would
@@ -842,9 +843,11 @@ export function setMenuOfferLookup(
 - Test: `apps/server/src/set-menu-moves.test.ts`
 
 **Interfaces:**
-- `POST /api/bills/:id/set-menu-moves` body `{ moves: DishMove[]; expectedPartyRevision: number }`,
-  checked and bumped as Task 6's routes, answering `{ setMenus: BillSetMenuState; partyRevision }`.
-  It serves the suggested move (decision 5) and the summary's **Move** (decision 10).
+- `POST /api/bills/:id/set-menu-moves` takes `moves: DishMove[]` and `expectedPartyRevision: number`,
+  and answers `{ setMenus: BillSetMenuState; partyRevision }`. For a party bill it also takes
+  `expectedEdit: BillEditExpected` and checks it through `requireOrderBillEditor` (watcher,
+  2026-11-19 09:18). A takeaway without a party uses its bill revision in both revision fields.
+  The route serves the suggested move (decision 5) and the summary's **Move** (decision 10).
 - `moveSetMenuDishes(tx, workingOrderId, moves)` first calls `refusePaymentInFlight`, then runs
   `checkMoves` (Task 3) on the bill's state and open-draft reservations in the transaction;
   `place_taken` →
@@ -880,8 +883,8 @@ export function setMenuOfferLookup(
   placed by `placeSetMenuRows` (Task 7b) before they are inserted, in the order of the edit, and
   the dish already placed keeps its place (decision 8). A new unit with no place →
   `set_menu.no_place`, and the edit writes nothing.
-- A cancel that keeps the row (started work, a `cancel` adjustment) frees the dish's place
-  (decision 12); one that deletes the row frees it too.
+- A full cancel taking off the charge deletes the dish row and frees the place. If work started,
+  the adjustment keeps that fact (decision 12).
 - Cancelling a set-menu dish (its one unit) through either cancel route removes or cancels the
   line as today; its place is open again, and nothing else on the bill changes.
 - Both cancel routes refuse a set-menu line itself with `set_menu.remove_from_summary`; Cancel on a

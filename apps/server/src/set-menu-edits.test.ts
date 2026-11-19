@@ -2,12 +2,23 @@ import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createOptionList, createUnit, writeProductModifiers } from "@waitron/menu";
+import {
+  createExtraList,
+  createOptionList,
+  createUnit,
+  writeProductModifiers,
+} from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
+import { cancelItem } from "./line-cancel.js";
 import { submitDraft } from "./order-drafts.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
-import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
+import {
+  cancelItemForTest,
+  cancelLine,
+  cancelReasonId,
+  observedCancelItem,
+} from "./testing/cancel-line.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import {
   commandFor,
@@ -33,6 +44,7 @@ import {
 let venue: PartyVenue;
 let daily: Awaited<ReturnType<typeof setMenuOnFullMenu>>;
 let decimalUnitMenu: typeof daily;
+let extra: { listId: string; picks: { productId: string; quantity: number }[] };
 let options: { listId: string; labelId: string }[];
 
 useVenueDb({
@@ -56,7 +68,22 @@ useVenueDb({
         venue.cfg.locale,
       );
       options = spoon.labels.map(({ id }) => ({ listId: spoon.id, labelId: id }));
-      await writeProductModifiers(tx, flan, [{ kind: "options", id: spoon.id }]);
+      const productId = venue.productId("Burger");
+      const sides = await createExtraList(
+        tx,
+        {
+          name: "Side",
+          minPicks: 0,
+          maxPicks: 1,
+          items: [{ productId, maxQuantity: 1, price: "1.50" }],
+        },
+        venue.cfg.locale,
+      );
+      extra = { listId: sides.id, picks: [{ productId, quantity: 1 }] };
+      await writeProductModifiers(tx, flan, [
+        { kind: "options", id: spoon.id },
+        { kind: "extras", id: sides.id },
+      ]);
       daily = await setMenuOnFullMenu(tx, venue.tables.menuId, flan);
       const tarta = venue.productId("Tarta");
       const unit = await createUnit(
@@ -139,7 +166,10 @@ it("edits an option from the recorded offer without moving or repricing the dish
     await edit(tab, { options: [options[1]!] });
   } finally {
     await inTx(venue, (tx) =>
-      writeProductModifiers(tx, daily.productId, [{ kind: "options", id: options[0]!.listId }]),
+      writeProductModifiers(tx, daily.productId, [
+        { kind: "options", id: options[0]!.listId },
+        { kind: "extras", id: extra.listId },
+      ]),
     );
   }
   const [, after] = await rows(tab.tabId);
@@ -249,5 +279,63 @@ it.each([
   await expect(inTx(venue, (tx) => cancel(tx, venue.cfg, tab.tabId, 1))).rejects.toMatchObject({
     code: "set_menu.remove_from_summary",
   });
+  expect(await rows(tab.tabId)).toEqual(before);
+});
+
+it("prices an added extra from the recorded menu and preserves the placed dish", async () => {
+  const tab = await bill();
+  const [menu, dish] = await rows(tab.tabId);
+  await edit(tab, { extras: [extra] });
+  expect(await rows(tab.tabId)).toMatchObject([
+    { id: menu!.id, lineTotal: 1400 },
+    { id: dish!.id, setMenuLineId: menu!.id, lineTotal: 0 },
+    { parentLineId: dish!.id, lineTotal: 150, productId: extra.picks[0]!.productId },
+  ]);
+});
+
+it("refuses a fractional increase in a whole-bill set-menu edit", async () => {
+  const tab = await bill(2, decimalUnitMenu);
+  const before = await rows(tab.tabId);
+  const observed = await inTx(venue, async (tx) => ({
+    expectedEdit: await readBillEditState(tx, tab.tabId),
+    revision: await readOrderRevision(tx, tab.tabId),
+  }));
+  await expect(
+    updateHeldOrder({ db: venue.db, admission: testTradingAdmission() }, venue.cfg, tab.tabId, {
+      ...observed,
+      operatorId: venue.operator.personId,
+      lines: [
+        {
+          workingOrderLineId: before[2]!.id,
+          menuItemId: decimalUnitMenu.menuItemId,
+          quantity: "1.5",
+        },
+      ],
+    }),
+  ).rejects.toMatchObject({ code: "quantity.invalid", params: { reason: "precision" } });
+  expect(await rows(tab.tabId)).toEqual(before);
+});
+
+it("refuses a request to cancel a set-menu heading while keeping its charge", async () => {
+  const tab = await bill();
+  const before = await rows(tab.tabId);
+  await expect(
+    inTx(venue, async (tx) => {
+      const { target, lineId, body } = await observedCancelItem(tx, tab.tabId, 1);
+      await cancelItem(
+        tx,
+        venue.cfg,
+        target,
+        lineId,
+        {
+          ...body,
+          outcome: "keep_charge",
+          admission: testTradingAdmission(),
+          reasonId: await cancelReasonId(tx),
+        },
+        venue.operator.personId,
+      );
+    }),
+  ).rejects.toMatchObject({ code: "set_menu.remove_from_summary" });
   expect(await rows(tab.tabId)).toEqual(before);
 });

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { kitchenCourses, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
@@ -9,12 +9,14 @@ import { decimal } from "@waitron/shared";
 import { menuItems, saveSetMenuDishCourse } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { DishMove } from "@waitron/shared";
+import { readBillEditState } from "./bill-editing.js";
+import { cancelItem } from "./line-cancel.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
 import { advanceTicketItem } from "./working-order.js";
-import { cancelItemForTest } from "./testing/cancel-line.js";
+import { cancelItemForTest, cancelReasonId, observedCancelItem } from "./testing/cancel-line.js";
 import { mountTillApi } from "./till-api.js";
 import { send } from "./testing/bill-venue.js";
-import { inTx, revisionOf } from "./testing/party-venue.js";
+import { counterOrder, inTx, revisionOf } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import {
@@ -27,6 +29,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 
 const app = new Hono();
 let cookie: string;
+let personId: string;
 let fixture: Awaited<ReturnType<typeof setupSetMenuReaders>>;
 let special: typeof fixture.copy;
 let other: typeof fixture.copy;
@@ -38,8 +41,9 @@ useVenueDb({
     fixture = await setupSetMenuReaders(db);
     const { venue, copy } = fixture;
     const [owner] = await db.select().from(persons).where(eq(persons.email, "owner@example.test"));
+    personId = owner!.id;
     const { token } = await inTx(venue, (tx) =>
-      loginWithPin(tx, { deviceId: venue.cfg.origin.deviceId, personId: owner!.id, pin: "1234" }),
+      loginWithPin(tx, { deviceId: venue.cfg.origin.deviceId, personId, pin: "1234" }),
     );
     cookie = await sessionCookieForTest(db, token);
     mountTillApi(
@@ -88,6 +92,7 @@ async function move(tab: Awaited<ReturnType<typeof bill>>, moves: DishMove[], re
   return send(app, cookie, "POST", `/api/bills/${tab.billId}/set-menu-moves`, {
     moves,
     expectedPartyRevision: revision ?? (await revisionOf(fixture.venue, tab.partyId)),
+    expectedEdit: await inTx(fixture.venue, (tx) => readBillEditState(tx, tab.billId)),
   });
 }
 
@@ -165,7 +170,7 @@ it.each(["reserved", "unlisted", "taken", "stale", "payment", "invoice limit"] a
     );
     if (kind === "reserved") {
       await saveSetMenuDraft(
-        fixture.venue,
+        { ...fixture.venue, operator: { ...fixture.venue.operator, personId } },
         { ...tab, tabId: tab.billId },
         {
           menuItemId: special.menuItemId,
@@ -231,6 +236,7 @@ it("frees a started dish's place on cancellation and refuses a later move of tha
     await advanceTicketItem(tx, ticket!.id, "preparing");
     await cancelItemForTest(tx, fixture.venue.cfg, tab.billId, 2);
   });
+  expect(await row(tab.dishId)).toBeUndefined();
   const adjustmentsOnBill = await fixture.venue.db
     .select()
     .from(adjustments)
@@ -246,4 +252,101 @@ it("frees a started dish's place on cancellation and refuses a later move of tha
   expect(await inTx(fixture.venue, (tx) => readBillSetMenus(tx, tab.billId))).toMatchObject({
     dishes: [],
   });
+});
+
+it("checks the bill revision for a takeaway order without a party", async () => {
+  const { venue, copy } = fixture;
+  const billId = await counterOrder(venue, "Flan");
+  const { dishId, destinationId, revision } = await inTx(venue, async (tx) => {
+    const [savedBill] = await tx
+      .update(workingOrders)
+      .set({ dining: "takeaway" })
+      .where(eq(workingOrders.id, billId))
+      .returning({ revision: workingOrders.revision });
+    const menuLineId = await seedBillSetMenu(tx, billId, copy, 2);
+    const destinationId = await seedBillSetMenu(tx, billId, special, 3);
+    const [dish] = await tx
+      .update(workingOrderLines)
+      .set({
+        setMenuRole: "dish",
+        setMenuId: copy.menuId,
+        setMenuLineId: menuLineId,
+        setMenuPlace: 0,
+        setMenuCountsAsCourseId: copy.courseId,
+        unitPriceGross: 0,
+        lineTotal: 0,
+      })
+      .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, 1)))
+      .returning({ id: workingOrderLines.id });
+    return { dishId: dish!.id, destinationId, revision: savedBill!.revision };
+  });
+  const request = (expectedPartyRevision: number) =>
+    send(app, cookie, "POST", `/api/bills/${billId}/set-menu-moves`, {
+      expectedPartyRevision,
+      moves: [to(dishId, destinationId)],
+    });
+  expect(await request(revision + 1)).toMatchObject({
+    status: 409,
+    json: { code: "working_order.out_of_date" },
+  });
+  expect(await request(revision)).toMatchObject({
+    status: 200,
+    json: { partyRevision: revision + 1 },
+  });
+  expect(await row(dishId)).toMatchObject({ setMenuLineId: destinationId, lineTotal: 500 });
+});
+
+it("refuses a move while another waiter holds the bill", async () => {
+  const tab = await bill();
+  const { venue, copy } = fixture;
+  await saveSetMenuDraft(
+    venue,
+    { partyId: tab.partyId, tabId: tab.billId },
+    {
+      menuItemId: copy.menuItemId,
+      menuVersionId: copy.versionId,
+      setMenuId: copy.menuId,
+      quantity: "1",
+    },
+  );
+  const before = await row(tab.dishId);
+  const revision = await revisionOf(venue, tab.partyId);
+  expect(await move(tab, [to(tab.dishId, tab.destinationId)], revision)).toMatchObject({
+    status: 409,
+    json: { code: "draft.taken_over" },
+  });
+  expect(await row(tab.dishId)).toEqual(before);
+  expect(await revisionOf(venue, tab.partyId)).toBe(revision);
+});
+
+it("keeps a cancelled dish's place and price when its charge was kept", async () => {
+  const tab = await bill(special, true);
+  const { venue } = fixture;
+  await inTx(venue, async (tx) => {
+    const [ticket] = await tx
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, tab.dishId));
+    await advanceTicketItem(tx, ticket!.id, "preparing");
+    const { target, lineId, body } = await observedCancelItem(tx, tab.billId, 2);
+    await cancelItem(
+      tx,
+      venue.cfg,
+      target,
+      lineId,
+      {
+        ...body,
+        outcome: "keep_charge",
+        admission: testTradingAdmission(),
+        reasonId: await cancelReasonId(tx),
+      },
+      venue.operator.personId,
+    );
+  });
+  const before = await row(tab.dishId);
+  expect(await move(tab, [to(tab.dishId, tab.destinationId)])).toMatchObject({
+    status: 409,
+    json: { code: "set_menu.place_taken" },
+  });
+  expect(await row(tab.dishId)).toEqual(before);
 });

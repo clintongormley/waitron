@@ -1041,7 +1041,6 @@ function selectionId(value: unknown): string {
   return requireBodyUuid(value, "selection").toLowerCase();
 }
 
-/** A list of line ids: a non-UUID is the request's fault, not a line the bill lacks. */
 function requireSetMenuMoves(value: unknown): DishMove[] {
   if (!Array.isArray(value) || value.length === 0) throw invalid("moves");
   return value.map((entry: unknown) => {
@@ -1055,6 +1054,7 @@ function requireSetMenuMoves(value: unknown): DishMove[] {
   });
 }
 
+/** A list of line ids: a non-UUID is the request's fault, not a line the bill lacks. */
 function requireLineIds(value: unknown): string[] {
   if (!Array.isArray(value)) throw invalid("lineIds");
   return value.map((id) => requireBodyUuid(id, "lineIds").toLowerCase());
@@ -4288,6 +4288,11 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const revision = await assertTabOpen(tx, billId);
         await refuseUnlessSetMenuBill(tx, billId);
         const partyId = await partyOfOrder(tx, billId);
+        await requireOrderBillEditor(tx, billId, {
+          operatorId: session.personId,
+          expectedEdit: body.expectedEdit as BillEditExpected | null,
+        });
+        // A takeaway without a party uses its bill revision in the same request field.
         if (partyId === null && revision !== expected)
           throw new AppError("working_order.out_of_date", { workingOrderId: billId, revision });
         const partyRevision =

@@ -826,7 +826,7 @@ export async function priceOrderLines(
     if (isSetMenu) assertSetMenuPortion(offer, line.variantId ?? null);
     const setMenuOffer =
       selected === undefined ? undefined : { offer, versionId: selected.copy.versionId };
-    return { ...line, offer, setMenuOffer, isSetMenu };
+    return { ...line, offer, setMenuOffer };
   });
   if (late.length > 0) {
     const confirmedBy = await confirmLateDishes(tx, service!.departmentId, late, lateSend);
@@ -1003,7 +1003,7 @@ export async function priceOrderLines(
       courseId: line.courseId ?? product.courseId ?? null,
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
-      portionable: line.isSetMenu || takesExtras(selection.unit),
+      portionable: takesExtras(selection.unit),
       ...classes,
       ...(mark === undefined ? {} : { late: mark }),
       unit: {
@@ -6354,14 +6354,14 @@ async function applyLineEdits(
               joins: parent,
               origin: parent,
               inheritMakeAt,
-              expand: portion !== undefined || parent.setMenuId !== null,
+              expand: portion !== undefined,
             }
           : {
               kind: "line",
               kitchen: "fire",
               origin: parent,
               inheritMakeAt,
-              expand: portion !== undefined || parent.setMenuId !== null,
+              expand: portion !== undefined,
             },
       );
     }
@@ -6764,7 +6764,11 @@ async function applyLineEdits(
     if (as.kind !== "line") return;
     let group: { rows: WorkingOrderLineInsert[]; contexts: typeof priced.contexts } = priced;
     if (as.expand === true) {
-      const out = expandPortionRows(priced.rows, priced.contexts, priced.portionable, 0);
+      const portionable =
+        as.origin?.setMenuId == null
+          ? priced.portionable
+          : priced.rows.map((row) => row.parentLineId === null);
+      const out = expandPortionRows(priced.rows, priced.contexts, portionable, 0);
       group = { rows: out.rows, contexts: out.lineContexts };
     }
     const groupId = as.joins === undefined ? (newGroups.get(as.kitchen) ?? null) : as.joins.groupId;
