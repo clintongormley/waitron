@@ -80,13 +80,16 @@ it("previews removing the latest empty menu if two copies of that type are on th
 it.each(["before", "after"] as const)(
   "keeps a refreshed count clear of a refusal arriving %s the refresh",
   async (arrival) => {
-    const refusal = Promise.withResolvers<string>();
-    const { el } = await mount(() => refusal.promise);
+    let refuse!: (message: string) => void;
+    const refusal = new Promise<string>((resolve) => {
+      refuse = resolve;
+    });
+    const { el } = await mount(() => refusal);
     const stepper = el.shadowRoot!.querySelector("wt-number-stepper")!;
     await userEvent.click(stepper.shadowRoot!.querySelector('[data-step="1"]')!);
     const message = "The bill changed before the count was saved.";
     if (arrival === "before") {
-      refusal.resolve(message);
+      refuse(message);
       await vi.waitFor(() => expect(stepper.error).toBe(message));
     }
     el.bill = {
@@ -96,7 +99,7 @@ it.each(["before", "after"] as const)(
     await el.updateComplete;
     if (arrival === "after") {
       expect(stepper.disabled).toBe(true);
-      refusal.resolve(message);
+      refuse(message);
       await vi.waitFor(() => expect(stepper.disabled).toBe(false));
     }
     expect(stepper.value).toBe("3");
