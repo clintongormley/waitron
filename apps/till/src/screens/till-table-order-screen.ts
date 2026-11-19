@@ -6872,7 +6872,9 @@ export class TillTableOrderScreen extends LitElement {
           </wt-button>`
         : nothing,
       printBill,
-      (bill.status === "settled" || bill.status === "placed") && bill.receiptAvailable
+      this.canPrintReceipts &&
+      (bill.status === "settled" || bill.status === "placed") &&
+      bill.receiptAvailable
         ? html`<wt-button data-bill-receipt @click=${() => this.#dispatch("reprint-bill", target)}>
             ${t("table.bill_receipt")}
           </wt-button>`

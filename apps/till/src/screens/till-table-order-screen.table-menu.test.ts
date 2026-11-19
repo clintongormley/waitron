@@ -462,6 +462,29 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(reprint).toEqual([{ workingOrderId: "wo-2" }]);
   });
 
+  it.each([
+    [
+      "printed and not yet paid",
+      partyBill("wo-2", 2, "54.00", {
+        status: "placed",
+        invoiceNumber: "F-0007",
+        receiptAvailable: true,
+      }),
+    ],
+    [
+      "paid",
+      partyBill("wo-2", 2, "0.00", { status: "settled", total: "54.00", receiptAvailable: true }),
+    ],
+  ])("offers no Receipt copy of a bill %s where receipts may not print", async (_name, bill) => {
+    const el = await mountScreen({ bills: [bill] });
+    expect(item(el, "[data-bill-receipt]")).not.toBeNull();
+
+    el.canPrintReceipts = false;
+    await el.updateComplete;
+
+    expect(item(el, "[data-bill-receipt]")).toBeNull();
+  });
+
   it("an open bill with no receipt offers no Receipt copy", async () => {
     const el = await mountScreen();
 
