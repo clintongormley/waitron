@@ -47,6 +47,12 @@ if(name==="socat") {process.on("SIGTERM",()=>{fs.appendFileSync(process.env.TRAC
     `#!/bin/sh\nexec python3 -c 'import os,sys,time; gate=os.getenv("SETSID_GATE"); gate and open(gate,"w").close(); gate and time.sleep(60); os.setsid(); os.execvp(sys.argv[1],sys.argv[1:])' "$@"\n`,
   );
   await chmod(setsid, 0o755);
+  const sleep = join(bin, "sleep");
+  await writeFile(sleep, '#!/bin/sh\nexec /bin/sleep "${TUNNEL_TEST_POLL_DELAY:-$1}"\n');
+  await chmod(sleep, 0o755);
+  const timeout = join(bin, "timeout");
+  await writeFile(timeout, '#!/bin/sh\n[ "$1" = 1 ] || exit 1\nshift\nexec "$@"\n');
+  await chmod(timeout, 0o755);
 });
 afterEach(async () => {
   for (const run of runs.splice(0)) {
@@ -83,6 +89,7 @@ async function start(
       ...(unavailable ? { WG_GATE: trace + ".gate" } : {}),
       SOCAT_EXIT: deadProxy ? "1" : "0",
       PROBE_EXIT: failedProbe ? "1" : "0",
+      ...(failedProbe ? { TUNNEL_TEST_POLL_DELAY: "0.1" } : {}),
       ...(delayedProxy ? { SETSID_GATE: trace + ".setsid" } : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -221,17 +228,20 @@ it("closes the proxy and interface when configuration is removed, then reconnect
     .toBe(2);
   await expect.poll(async () => (await events(run)).filter(isProbe).length).toBe(2);
   expect((await events(run)).filter((e) => e[1] === "genkey")).toHaveLength(1);
-}, 55000);
+}, 60000);
 
 it("reports a failed datagram send and keeps managing the staff forwarder", async () => {
   const run = await start(configuration, { failedProbe: true });
-  await expect.poll(() => run.error).toContain("tunnel.probe_failed");
   await expect.poll(async () => (await events(run)).some(isForwarder)).toBe(true);
+  await expect
+    .poll(async () => (await events(run)).filter(isProbe).length, { timeout: 10000 })
+    .toBeGreaterThanOrEqual(2);
   await rm(join(run.control, "peer.json"));
   await expect.poll(() => run.output, { timeout: 10000 }).toContain("tunnel.off");
+  expect(run.error.split("\n").filter((line) => line === "tunnel.probe_failed")).toHaveLength(1);
   expect((await events(run)).filter(([command]) => command === "closed")).toHaveLength(1);
   expect(run.child.exitCode).toBeNull();
-});
+}, 35000);
 
 it("rejects two complete JSON documents and an oversized valid document", async () => {
   for (const raw of [

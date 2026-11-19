@@ -126,7 +126,7 @@ docker exec "$name-gateway" ip link del wg-cloud
 configure_gateway
 [ "$(gateway_handshake)" = 0 ]
 # Reading tunnel state keeps the peer idle until it starts a new handshake.
-while [ "$(gateway_handshake)" = 0 ]; do
+until [ "$(gateway_handshake)" -gt 0 ] 2>/dev/null; do
   if [ "$(($(date +%s) - replaced_at))" -ge 90 ]; then
     docker logs "$name-peer" >&2
     printf '%s\n' 'FAIL no new handshake after 90 seconds with the peer idle' >&2
