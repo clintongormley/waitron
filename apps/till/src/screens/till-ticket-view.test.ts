@@ -1920,7 +1920,6 @@ describe("A790 recorded document then printer", () => {
       await press(el, "document-print-toggle");
       if (invoiceType === "F1") await press(el, "document-receipt");
       expect(part(el, action)!.hasAttribute("disabled")).toBe(true);
-      expect(part(el, "receipt-no-printer")!.getAttribute("role")).toBe("status");
       expect(noPrinter(el)).toBe(words);
     },
   );
@@ -1950,19 +1949,45 @@ describe("A790 recorded document then printer", () => {
     expect(noPrinter(el)).toBeUndefined();
   });
 
-  it("does not call a switched-off receipt printer missing", async () => {
+  const printerOff = (el: TillTicketView) => part(el, "receipt-printer-off")?.textContent?.trim();
+
+  it("says a switched-off receipt printer is switched off, not missing, while another can be chosen", async () => {
     const off = equipmentItem("bar", "Bar", { kind: "receipt", available: false });
+    const patio = equipmentItem("patio", "Patio", { kind: "receipt" });
     const { el } = await mountChoice(
       {
         originalReceiptAvailable: false,
         originalReceiptPrint: done,
-        receiptEquipment: roleOf("receipt", off, [bar]),
+        receiptEquipment: roleOf("receipt", off, [patio]),
       },
       "F2",
     );
     await press(el, "document-print-toggle");
     expect(part(el, "reprint")!.hasAttribute("disabled")).toBe(true);
     expect(noPrinter(el)).toBeUndefined();
+    expect(printerOff(el)).toBe(
+      uiText("pay_equipment.printer_switched_off").replace("{item}", "Bar"),
+    );
+    el.invoicePrinterLoading = true;
+    await el.updateComplete;
+    expect(printerOff(el)).toBeUndefined();
+  });
+
+  it("adds nothing to the empty list's own line when the profile lists no receipt printer", async () => {
+    const off = equipmentItem("bar", "Bar", { kind: "receipt", available: false });
+    const { el } = await mountChoice(
+      { originalReceiptAvailable: false, originalReceiptPrint: done },
+      "F2",
+    );
+    for (const receiptEquipment of [roleOf("receipt", null, []), roleOf("receipt", off, [])]) {
+      el.receiptEquipment = receiptEquipment;
+      await el.updateComplete;
+      if (part(el, "reprint") === null) await press(el, "document-print-toggle");
+      expect(part(el, "reprint")!.hasAttribute("disabled")).toBe(true);
+      expect(text(el)).toContain(uiText("document.no_printers"));
+      expect(noPrinter(el)).toBeUndefined();
+      expect(printerOff(el)).toBeUndefined();
+    }
   });
 
   it("asks before taking another device's Receipt printer and sends takeOver only after Take", async () => {

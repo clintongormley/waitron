@@ -490,19 +490,28 @@ export class TillTicketView extends LitElement {
                                   >${t(designation === "original" ? "invoice.print_on" : "invoice.print_on_copy").replace("{printer}", () => destination?.name ?? t("equipment.none"))}</wt-button
                                 >
                                 ${
-                                  this.receiptEquipment?.resolved === null &&
-                                  !this.invoicePrinterLoading &&
-                                  !this.invoicePrinterReadFailed
-                                    ? html`<p role="status" data-test="receipt-no-printer">
-                                        ${
-                                          designation === "duplicate"
-                                            ? codeMessage("receipt.no_printer")
-                                            : this.result.invoiceType === "F1"
-                                              ? codeMessage("invoice_delivery.receipt_unavailable")
-                                              : t("document.no_receipt_printer")
-                                        }
-                                      </p>`
-                                    : nothing
+                                  // An empty list already has its own line, and nothing to choose.
+                                  !this.receiptEquipment?.choices.length ||
+                                  this.invoicePrinterLoading ||
+                                  this.invoicePrinterReadFailed
+                                    ? nothing
+                                    : destination === null
+                                      ? html`<p data-test="receipt-no-printer">
+                                          ${
+                                            designation === "duplicate"
+                                              ? codeMessage("receipt.no_printer")
+                                              : this.result.invoiceType === "F1"
+                                                ? codeMessage(
+                                                    "invoice_delivery.receipt_unavailable",
+                                                  )
+                                                : t("document.no_receipt_printer")
+                                          }
+                                        </p>`
+                                      : destination?.available === false
+                                        ? html`<p data-test="receipt-printer-off">
+                                            ${t("pay_equipment.printer_switched_off").replace("{item}", () => destination.name)}
+                                          </p>`
+                                        : nothing
                                 }
                               `
                           : this.renderInvoicePrint()
