@@ -14,7 +14,7 @@ import type { BillEditExpected, DiningChoice, LineNutrition, ZoneDining } from "
 import "../widgets/order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "../widgets/order-kitchen-note.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
-import type { MenuState, TillApi } from "../api/client.js";
+import type { MealEndUnservedDish, MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import {
   ContentLanguageController,
@@ -117,6 +117,7 @@ import {
   billNumberLabel,
   owing,
   paidInPart,
+  printBillOffered,
   shownBills,
   stillOwed,
 } from "../state/bill-state.js";
@@ -471,6 +472,17 @@ export interface SplitGroupLineDetail {
 export interface ServeLinesDetail {
   items: { lineId: string; quantity: string }[];
 }
+
+/** A recipient becomes the sale's customer tax number, and the server refuses to correct a sale that
+ * has one (`sale.correction_unsupported`). */
+function namesCustomer(bill: PartyBill): boolean {
+  return (bill.recipient ?? null) !== null;
+}
+
+/** Print the bill's answer for one bill: printed, or refused for the dishes not yet served. */
+export type MealEndShown =
+  | { workingOrderId: string; printed: true }
+  | { workingOrderId: string; unserved: MealEndUnservedDish[] };
 
 /** `serve-group`: every row of a fired group, marked served. */
 export interface ServeGroupDetail {
@@ -926,6 +938,15 @@ export class TillTableOrderScreen extends LitElement {
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-danger);
         border-radius: var(--wt-radius-md);
+      }
+
+      .meal-end-unserved ul {
+        margin: 0;
+        padding-inline-start: var(--wt-space-4);
+      }
+
+      .bill-printed {
+        margin: var(--wt-space-2) 0 0;
       }
 
       .finish-refusal-actions {
@@ -1411,6 +1432,10 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) billPaymentHeld = false;
   /** `false` hides the pay section. */
   @property({ type: Boolean }) canSettle = true;
+  /** The signed-in person may take payment, which Print the bill needs; `false` hides it. */
+  @property({ type: Boolean }) takesPayment = true;
+  /** This device may print receipts; `false` hides what would need one. */
+  @property({ type: Boolean }) canPrintReceipt = true;
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
   /** Mounted inside a card host, which supplies the header. */
@@ -1440,6 +1465,11 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) billBalance: BillBalance | null = null;
   /** Finish table was refused because a bill is unpaid. */
   @property({ type: Boolean }) finishRefused = false;
+  @property({ attribute: false }) mealEnd: MealEndShown | null = null;
+  /** This sign-in's Print the bill request has no answer yet, for any bill: it sends one at a time. */
+  @property({ type: Boolean }) billPrintPending = false;
+  /** This device's profile hands over orders, which marking a dish served needs. */
+  @property({ type: Boolean }) canMarkServed = false;
   /** The app's answer to a name the server refused: the name sent, and why, shown beside the field. */
   @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
   /** The app's answer to a bill name the server refused: the bill, the name sent, and why. */
@@ -2390,7 +2420,10 @@ export class TillTableOrderScreen extends LitElement {
       this.revealOtherDrafts !== changed.get("revealOtherDrafts")
     )
       void this.#revealTakeOver();
-    if (changed.has("finishRefused") && this.finishRefused) void this.#revealFinishRefusal();
+    if (changed.has("finishRefused") && this.finishRefused)
+      void this.#revealFootNotice("[data-finish-refusal]");
+    if (changed.has("mealEnd") && this.mealEnd !== null && "unserved" in this.mealEnd)
+      void this.#revealFootNotice("[data-meal-end-unserved]");
     if (changed.has("nameRefusal") && this.nameRefusal !== null) {
       this.naming = { value: this.nameRefusal.name, refusal: this.nameRefusal.message };
     }
@@ -2538,13 +2571,14 @@ export class TillTableOrderScreen extends LitElement {
     if (panel.isConnected) panel.scrollIntoView({ block: "nearest" });
   }
 
-  /** Finish table is tapped in the ⋮ at the top, and its refusal is drawn above the foot, which can
-   * be below the window, and on a narrow screen is on Order, hidden on Menu. */
-  async #revealFinishRefusal(): Promise<void> {
+  /** Finish table's refusal and Print the bill's not-served list are asked for from the ⋮ at the
+   * top or another notice, and are drawn above the foot, which can be below the window, and on a
+   * narrow screen is on Order, hidden on Menu. */
+  async #revealFootNotice(selector: string): Promise<void> {
     if (!this.wide && this.view !== "order" && this.#draftStore !== null) await this.#showOrder();
     await this.updateComplete;
-    const refusal = this.renderRoot.querySelector<HTMLElement>("[data-finish-refusal]");
-    if (refusal !== null) await this.#scrollIntoViewOnceDrawn(refusal);
+    const notice = this.renderRoot.querySelector<HTMLElement>(selector);
+    if (notice !== null) await this.#scrollIntoViewOnceDrawn(notice);
   }
 
   #drawnStep: ActionStep = "closed";
@@ -3131,12 +3165,12 @@ export class TillTableOrderScreen extends LitElement {
 
   #orderSummary(draft: WorkingOrderStore | null): TemplateResult {
     if (!this.#footFixed())
-      return html`${this.#finishRefusal()} ${this.#totals(draft)}
+      return html`${this.#finishRefusal()} ${this.#mealEndOutcome()} ${this.#totals(draft)}
         <div data-bill-actions>
           ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
         </div>`;
     const pays = this.canSettle && this.#chargeable();
-    return html`${this.#finishRefusal()}
+    return html`${this.#finishRefusal()} ${this.#mealEndOutcome()}
       <div data-bill-actions>${pays ? this.#payHeadSection(this.#shownBill) : nothing}</div>`;
   }
 
@@ -5269,8 +5303,102 @@ export class TillTableOrderScreen extends LitElement {
                 >
                   ${t("table.take_payment")}
                 </wt-button>
+                ${
+                  this.#printBillOffered(firstUnpaid)
+                    ? html`<wt-button
+                        size="sm"
+                        data-print-bill
+                        .disabled=${this.busy || this.billPrintPending}
+                        @click=${() =>
+                          this.#dispatch("end-meal", {
+                            workingOrderId: firstUnpaid.workingOrderId,
+                            showFirst: true,
+                          })}
+                      >
+                        ${t("bill.print")}
+                      </wt-button>`
+                    : nothing
+                }
                 <span>${t("departure.finish_hint")}</span>`
         }
+      </div>
+    </div>`;
+  }
+
+  /** The till reads the dishes and the payments awaiting an answer of the bill on screen only. */
+  #printBillOffered(bill: PartyBill): boolean {
+    const onScreen = bill.workingOrderId === this.orderId;
+    return printBillOffered(bill, {
+      dishes: onScreen ? this.lines.length : undefined,
+      paymentUnanswered:
+        onScreen && (this.paymentConfirmation !== undefined || this.billPaymentHeld),
+      printsReceipts: this.canPrintReceipt,
+      takesPayment: this.takesPayment,
+    });
+  }
+
+  /** Print the bill's answer: printed, or the dishes not yet served, with Mark served for those
+   * the kitchen has, Cancel, which issues nothing, and Print anyway. */
+  #mealEndOutcome(): TemplateResult | typeof nothing {
+    const shown = this.mealEnd;
+    if (shown === null) return nothing;
+    if ("printed" in shown)
+      return html`<p class="bill-printed" role="status" data-bill-printed>${t("bill.issued")}</p>`;
+    const servable = this.canMarkServed ? shown.unserved.filter((dish) => dish.released) : [];
+    const bill = this.bills.find((row) => row.workingOrderId === shown.workingOrderId);
+    // The usual "refunded with Correct invoice" would be untrue.
+    const notice =
+      bill !== undefined && namesCustomer(bill)
+        ? t("meal_end.unserved_full_invoice")
+        : servable.length === 0
+          ? t("meal_end.unserved_no_mark")
+          : codeMessage("meal_end.unserved_dishes");
+    return html`<div class="finish-refusal meal-end-unserved" role="alert" data-meal-end-unserved>
+      <span>${notice}</span>
+      <span>${t("meal_end.unserved_heading")}</span>
+      <ul>
+        ${shown.unserved.map(
+          (dish) =>
+            html`<li data-unserved-dish>
+              ${
+                compareDecimal(decimal(dish.quantity), decimal("1")) === 0
+                  ? dish.dishName
+                  : `${quantityText(dish.quantity)} × ${dish.dishName}`
+              }
+            </li>`,
+        )}
+      </ul>
+      <div class="finish-refusal-actions">
+        ${
+          servable.length === 0
+            ? nothing
+            : html`<wt-button
+                size="sm"
+                data-mark-served
+                .disabled=${this.busy || this.groupCommandBusy || this.currentOrdersUnread}
+                @click=${() => this.#markListedServed(servable)}
+              >
+                ${t("meal_end.mark_served")}
+              </wt-button>`
+        }
+        <wt-button
+          size="sm"
+          variant="secondary"
+          data-meal-end-cancel
+          @click=${() => this.#dispatch("meal-end-declined", {})}
+        >
+          ${t("action.cancel")}
+        </wt-button>
+        <wt-button
+          size="sm"
+          variant="primary"
+          data-print-anyway
+          .disabled=${this.busy || this.billPrintPending}
+          @click=${() =>
+            this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId, printAnyway: true })}
+        >
+          ${t("meal_end.print_anyway")}
+        </wt-button>
       </div>
     </div>`;
   }
@@ -5350,7 +5478,7 @@ export class TillTableOrderScreen extends LitElement {
   /** More than one whole unit, a grouped row's portions included, asks how many; anything else, a
    * weighed dish included, goes whole. */
   #requestServe(row: CurrentOrderRow, undo: boolean, members?: readonly CurrentOrderRow[]): void {
-    if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
+    if (this.#serveRefused()) return;
     if (undo && !this.#sentBillOpen(row)) return;
     this.#takeServeAuthority();
     const most =
@@ -5365,6 +5493,19 @@ export class TillTableOrderScreen extends LitElement {
       return;
     }
     this.#sendServe(row, undo, most);
+  }
+
+  /** No serve is sent while another command is out or the dishes on the table are unread. */
+  #serveRefused(): boolean {
+    return !this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread;
+  }
+
+  /** Mark served in Print the bill's not-served list: the listed dishes the kitchen has, as listed. */
+  #markListedServed(dishes: readonly MealEndUnservedDish[]): void {
+    if (this.#serveRefused()) return;
+    this.#dispatch("serve-lines", {
+      items: dishes.map((dish) => ({ lineId: dish.lineId, quantity: trimQuantity(dish.quantity) })),
+    } satisfies ServeLinesDetail);
   }
 
   /** Remembers what the count dialog's answer may act on: this api, party, bill and visit. */
@@ -6651,10 +6792,11 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #tableMenu(): TemplateResult {
-    const action = (name: string, key: StringKey, choose: () => void) =>
+    const action = (name: string, key: StringKey, choose: () => void, disabled = false) =>
       html`<wt-button
         data-action=${name}
         data-record-departure=${name === "left-unpaid" ? "" : nothing}
+        .disabled=${disabled}
         @click=${(event: Event) => this.#fromMenu(event, choose)}
       >
         ${t(key)}
@@ -6694,7 +6836,17 @@ export class TillTableOrderScreen extends LitElement {
                     }),
                   )
                 : nothing,
-              ...this.#billDocumentItems(shown),
+              ...this.#billDocumentItems(
+                shown,
+                this.#printBillOffered(shown)
+                  ? action(
+                      "print-bill",
+                      "bill.print",
+                      () => this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId }),
+                      this.busy || this.billPrintPending,
+                    )
+                  : nothing,
+              ),
             ],
       tableItems: [
         action("allergy", "allergy.title", () => {
@@ -6719,10 +6871,11 @@ export class TillTableOrderScreen extends LitElement {
     });
   }
 
-  /** Full invoice for a bill owing with no sale filed, and, as on the payment step, not while a
-   * whole payment's answer is unknown; Receipt copy and Cancel and credit as the bills list offers
-   * them. */
-  #billDocumentItems(bill: PartyBill): (TemplateResult | typeof nothing)[] {
+  /** Print the bill follows Full invoice, which has to be chosen before the bill is printed. */
+  #billDocumentItems(
+    bill: PartyBill,
+    printBill: TemplateResult | typeof nothing,
+  ): (TemplateResult | typeof nothing)[] {
     const target = { workingOrderId: bill.workingOrderId };
     return [
       this.fullInvoices &&
@@ -6738,12 +6891,15 @@ export class TillTableOrderScreen extends LitElement {
             ${t("invoice.full")}
           </wt-button>`
         : nothing,
-      bill.status === "settled" && bill.receiptAvailable
+      printBill,
+      this.canPrintReceipt &&
+      (bill.status === "settled" || bill.status === "placed") &&
+      bill.receiptAvailable
         ? html`<wt-button data-bill-receipt @click=${() => this.#dispatch("reprint-bill", target)}>
             ${t("table.bill_receipt")}
           </wt-button>`
         : nothing,
-      bill.status === "placed" && bill.receiptAvailable && !bill.hasPayments
+      bill.status === "placed" && bill.receiptAvailable && !bill.hasPayments && !namesCustomer(bill)
         ? html`<wt-button
             data-cancel-credit
             @click=${() => this.#dispatch("cancel-credit-bill", target)}

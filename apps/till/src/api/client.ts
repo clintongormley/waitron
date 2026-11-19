@@ -1291,6 +1291,35 @@ export interface UnpaidDepartureResult {
   }[];
 }
 
+/** `POST /api/parties/:id/end-meal`: Print the bill, issuing one bill's ticket before payment.
+ * `printAnyway` absent means false: dishes not yet served refuse `meal_end.unserved_dishes`. */
+export interface EndMealRequest {
+  billId: string;
+  expectedPartyRevision: number;
+  expectedEdits: BillEditExpected[];
+  submissionId: string;
+  printAnyway?: boolean;
+}
+
+/** A dish `meal_end.unserved_dishes` lists: `released` says the kitchen has it, so it can be
+ * marked served. */
+export interface MealEndUnservedDish {
+  lineId: string;
+  dishName: string;
+  quantity: string;
+  released: boolean;
+}
+
+/** The bill's ticket, for its whole total, and what it still owes. */
+export interface EndedMeal {
+  revision: number;
+  workingOrderId: string;
+  saleId: string;
+  invoiceNumber: string;
+  total: string;
+  owed: string;
+}
+
 export interface InvoiceLookupRow {
   workingOrderId: string;
   invoiceNumber: string;
@@ -3965,6 +3994,10 @@ export class TillApi {
       request,
       options.signal,
     );
+  }
+
+  endMeal(partyId: string, request: EndMealRequest, options: ReadOptions = {}): Promise<EndedMeal> {
+    return this.#request(`/api/parties/${partyId}/end-meal`, "POST", request, options.signal);
   }
 
   /** Who may approve an unpaid departure → `GET /api/unpaid-departure-authorizers`. */

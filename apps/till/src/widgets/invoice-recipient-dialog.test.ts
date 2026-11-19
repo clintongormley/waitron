@@ -269,8 +269,8 @@ describe("till-invoice-recipient-dialog delivery choice", () => {
   });
 
   it.each([
-    ["en", "Receipt printer: print after paying", "A4 on Office HP", "Delivery"],
-    ["es-ES", "Impresora de tickets: imprimir tras cobrar", "A4 en Office HP", "Entrega"],
+    ["en", "Receipt printer", "A4 on Office HP", "Delivery"],
+    ["es-ES", "Impresora de tickets", "A4 en Office HP", "Entrega"],
   ])(
     "offers the receipt printer first and A4 on the invoice printer in %s",
     async (locale, receipt, a4, label) => {
@@ -337,7 +337,7 @@ describe("till-invoice-recipient-dialog delivery choice", () => {
     });
     const sent = confirmations(el);
     expect(deliveryField(el)!.options.map((option) => [option.value, option.label])).toEqual([
-      ["receipt", "Receipt printer: print after paying"],
+      ["receipt", "Receipt printer"],
     ]);
     expect(deliveryField(el)!.value).toBe("receipt");
     const save =
@@ -403,7 +403,7 @@ describe("till-invoice-recipient-dialog keeps a saved delivery it does not offer
       );
       const sent = confirmations(el);
       expect(optionValues(el)).toEqual([
-        ["receipt", t("invoice.delivery_receipt_after_payment")],
+        ["receipt", t("invoice.delivery_receipt")],
         ["saved", label],
       ]);
       expect(deliveryField(el)!.value).toBe("saved");
@@ -419,7 +419,7 @@ describe("till-invoice-recipient-dialog keeps a saved delivery it does not offer
     });
     const sent = confirmations(el);
     expect(optionValues(el)).toEqual([
-      ["receipt", "Receipt printer: print after paying"],
+      ["receipt", "Receipt printer"],
       ["a4", "A4 on Office HP"],
       ["saved", "Saved choice: email"],
     ]);
@@ -446,13 +446,13 @@ describe("till-invoice-recipient-dialog keeps a saved delivery it does not offer
     await el.updateComplete;
     expect(deliveryField(el)!.value).toBe("a4");
     expect(optionValues(el)).toEqual([
-      ["receipt", "Receipt printer: print after paying"],
+      ["receipt", "Receipt printer"],
       ["a4", "A4 on New HP"],
     ]);
     el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
     el.deliveryOptions = { invoicePrinter: null, emailAvailable: false };
     await el.updateComplete;
-    expect(optionValues(el)).toEqual([["receipt", "Receipt printer: print after paying"]]);
+    expect(optionValues(el)).toEqual([["receipt", "Receipt printer"]]);
     expect(deliveryField(el)!.value).toBe("receipt");
     el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
     expect(sent.map((detail) => detail.delivery)).toEqual([
@@ -507,7 +507,7 @@ describe("till-invoice-recipient-dialog email delivery", () => {
       setLocale(locale);
       const el = await mountWithPrinter({ deliveryOptions: withEmail });
       expect(deliveryField(el)!.options.map((entry) => [entry.value, entry.label])).toEqual([
-        ["receipt", t("invoice.delivery_receipt_after_payment")],
+        ["receipt", t("invoice.delivery_receipt")],
         ["a4", t("invoice.delivery_a4_on").replace("{printer}", "Office HP")],
         ["email", option],
       ]);

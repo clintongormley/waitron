@@ -66,8 +66,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "allergy.invalid": { en: en["allergy.invalid"], es: es["allergy.invalid"] },
 
   "bill.unsent_dishes": {
-    en: "Send or remove the unsent dishes before paying.",
-    es: "Envía o quita los platos sin enviar antes de cobrar.",
+    en: "Send or remove the unsent dishes first.",
+    es: "Envía o quita primero los platos sin enviar.",
   },
   "tab.cancel_context_changed": {
     en: "The dish changed. Check its current station state and choose again.",
@@ -463,7 +463,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "invoice.choice_locked": {
     en: "This bill's invoice type can no longer change: its receipt has been issued, or it is set to a full invoice and has already taken a payment.",
-    es: "El tipo de factura de esta cuenta ya no se puede cambiar: ya se emitió su tique, o tiene factura completa y ya se ha cobrado un pago.",
+    es: "El tipo de factura de esta cuenta ya no se puede cambiar: ya se emitió su ticket, o tiene factura completa y ya se ha cobrado un pago.",
   },
   "invoice_correction.not_settled": {
     en: "This bill is not fully paid, so its invoice cannot be corrected yet.",
@@ -546,8 +546,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es una factura completa a nombre de un cliente y la caja no puede presentar una factura rectificativa para ella.",
   },
   "bill.presented": {
-    en: "This bill has been presented, so it cannot be changed",
-    es: "Esta cuenta ya se ha presentado, así que no se puede cambiar",
+    en: "This bill is ready for payment, so it cannot be changed.",
+    es: "Esta cuenta ya está lista para cobrar, así que no se puede cambiar.",
   },
   "working_order.not_open": {
     en: "This bill is no longer open: it has been presented, paid or discarded",
@@ -584,6 +584,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "bill.received_exceeds_total": {
     en: "The bill would owe less than has already been paid on it. Take less off the bill, or refund the difference first",
     es: "La cuenta quedaría por debajo de lo que ya se ha pagado. Quita menos de la cuenta o devuelve antes la diferencia",
+  },
+  "meal_end.unserved_dishes": {
+    en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Correct invoice.",
+    es: "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+  },
+  "meal_end.already_issued": {
+    en: "This bill already has its receipt. Take payment, or print a receipt copy.",
+    es: "Esta cuenta ya tiene su ticket. Cóbrala o imprime una copia del ticket.",
+  },
+  "meal_end.no_printer": {
+    en: "This device has no receipt printer. Choose one in Equipment, then print the bill.",
+    es: "Este dispositivo no tiene impresora de tickets. Elige una en Equipo y luego imprime la cuenta.",
+  },
+  "meal_end.delivery_unavailable": {
+    en: "This full invoice cannot go where it was chosen to go. Choose another printer or email, then print the bill.",
+    es: "Esta factura completa no puede ir adonde se eligió. Elige otra impresora u otro correo y luego imprime la cuenta.",
   },
   "bill.nothing_outstanding": {
     en: "Nothing is left to pay on this bill",
@@ -999,7 +1015,7 @@ const FIGURES_UNCHECKED = {
 const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
   replaced: {
     en: "This receipt was replaced by a full invoice, so it cannot be corrected.",
-    es: "Este tique se sustituyó por una factura completa, así que no se puede rectificar.",
+    es: "Este ticket se sustituyó por una factura completa, así que no se puede rectificar.",
   },
   unsupported: {
     en: "Invoices cannot be corrected at this venue.",

@@ -569,7 +569,7 @@ export const en = {
   "invoice.save_choice": "Use full invoice",
   "invoice.simplified_instead": "Simplified invoice instead",
   "invoice.delivery": "Delivery",
-  "invoice.delivery_receipt_after_payment": "Receipt printer: print after paying",
+  "invoice.delivery_receipt": "Receipt printer",
   "invoice.delivery_a4_on": "A4 on {printer}",
   "invoice.delivery_saved_a4": "Saved choice: A4",
   "invoice.delivery_saved_email": "Saved choice: email",
@@ -1579,6 +1579,9 @@ export const en = {
   "table.draft_taken_over_unsent": "{name} has taken over this order, so nothing was sent.",
   "table.draft_taken_over_unsent_unnamed":
     "Someone else has taken over this order, so nothing was sent.",
+  "table.print_taken_over": "{name} has taken over this order, so the bill was not printed.",
+  "table.print_taken_over_unnamed":
+    "Someone else has taken over this order, so the bill was not printed.",
   "table.taking_over": "Taking over the order…",
   "table.take_over_sent": "This order has just been sent. Here is the table as it is now.",
   "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
@@ -1747,6 +1750,26 @@ export const en = {
   "sale.over_simplified_limit":
     "This would take the order over {amount}, the limit for a simplified invoice. Choose Full invoice, or remove items.",
   "bill.take_rest": "Take the rest",
+  "bill.print": "Print the bill",
+  "bill.issued": "Bill issued",
+  "meal_end.unserved_heading": "Not served yet:",
+  "meal_end.mark_served": "Mark served",
+  "meal_end.print_anyway": "Print anyway",
+  "meal_end.not_admitted":
+    "This device's profile no longer lets you work on it, so it cannot print the bill for you. Log in on a device whose profile allows it.",
+  "meal_end.unserved_no_mark":
+    "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
+  "meal_end.unconfirmed":
+    "Print the bill got no answer, so the bill may have been printed. Check this bill before trying again.",
+  "meal_end.refused":
+    "The bill was not printed and no ticket was issued. Nothing on the bill has changed.",
+  "meal_end.ticket_found": "This bill already has its receipt.",
+  "meal_end.table_moved":
+    "This table changed while the bill was opening, so nothing was printed. Check the bill, then choose Print the bill again.",
+  "meal_end.cannot_file":
+    "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help. If this bill has a full invoice, check its customer's details.",
+  "meal_end.unserved_full_invoice":
+    "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot file a correction for it, so take off any dish that may not come before you print.",
   // The confirmation before closing a whole bill as a deferred payment.
   "deferred_close.title": "Close as deferred payment",
   "deferred_close.bill": "Bill",
@@ -2725,7 +2748,7 @@ export const es: Record<StringKey, string> = {
   "invoice.save_choice": "Usar factura completa",
   "invoice.simplified_instead": "Factura simplificada en su lugar",
   "invoice.delivery": "Entrega",
-  "invoice.delivery_receipt_after_payment": "Impresora de tickets: imprimir tras cobrar",
+  "invoice.delivery_receipt": "Impresora de tickets",
   "invoice.delivery_a4_on": "A4 en {printer}",
   "invoice.delivery_saved_a4": "Opción guardada: A4",
   "invoice.delivery_saved_email": "Opción guardada: correo electrónico",
@@ -3706,6 +3729,9 @@ export const es: Record<StringKey, string> = {
   "table.draft_taken_over_unsent": "{name} ha tomado este pedido, así que no se ha enviado nada.",
   "table.draft_taken_over_unsent_unnamed":
     "Otra persona ha tomado este pedido, así que no se ha enviado nada.",
+  "table.print_taken_over": "{name} ha tomado este pedido, así que la cuenta no se imprimió.",
+  "table.print_taken_over_unnamed":
+    "Otra persona ha tomado este pedido, así que la cuenta no se imprimió.",
   "table.taking_over": "Tomando el pedido…",
   "table.take_over_sent": "Este pedido se acaba de enviar. Así está ahora la mesa.",
   "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",
@@ -3863,6 +3889,26 @@ export const es: Record<StringKey, string> = {
   "sale.over_simplified_limit":
     "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa o quita artículos.",
   "bill.take_rest": "Cobrar el resto",
+  "bill.print": "Imprimir la cuenta",
+  "bill.issued": "Cuenta emitida",
+  "meal_end.unserved_heading": "Aún sin servir:",
+  "meal_end.mark_served": "Marcar como servidos",
+  "meal_end.print_anyway": "Imprimir igualmente",
+  "meal_end.not_admitted":
+    "El perfil de este dispositivo ya no te deja trabajar en él, así que no puede imprimir la cuenta por ti. Inicia sesión en un dispositivo cuyo perfil te admita.",
+  "meal_end.unserved_no_mark":
+    "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+  "meal_end.unconfirmed":
+    "Imprimir la cuenta no obtuvo respuesta, así que puede que se haya impreso. Revisa esta cuenta antes de volver a intentarlo.",
+  "meal_end.refused":
+    "La cuenta no se ha impreso y no se ha emitido ningún ticket. La cuenta no ha cambiado.",
+  "meal_end.ticket_found": "Esta cuenta ya tiene su ticket.",
+  "meal_end.table_moved":
+    "Esta mesa ha cambiado mientras se abría la cuenta, así que no se ha impreso nada. Revisa la cuenta y vuelve a elegir Imprimir la cuenta.",
+  "meal_end.cannot_file":
+    "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada. Si esta cuenta lleva factura completa, revisa los datos del cliente.",
+  "meal_end.unserved_full_invoice":
+    "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede presentar una rectificación para ella, así que quita antes de imprimir los platos que puedan no llegar.",
   "deferred_close.title": "Cerrar como pago aplazado",
   "deferred_close.bill": "Cuenta",
   "deferred_close.invoice": "Factura",

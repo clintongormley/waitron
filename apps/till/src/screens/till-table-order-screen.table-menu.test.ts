@@ -65,13 +65,16 @@ async function mountScreen(
     fullInvoices?: boolean;
     requested?: boolean;
     busy?: boolean;
+    billPrintPending?: boolean;
     groupCommandBusy?: boolean;
+    lines?: TabLine[];
+    takesPayment?: boolean;
   } = {},
 ) {
   const party = over.party === undefined ? twoTables : over.party;
   const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products: [],
-    lines: [line],
+    lines: over.lines ?? [line],
     orderId: "orderId" in over ? over.orderId : "wo-2",
     party,
     bills: over.bills ?? bills,
@@ -79,7 +82,9 @@ async function mountScreen(
     tables:
       party === null ? [] : party.tableIds.map((id) => table(id, party, over.requested ?? false)),
     busy: over.busy ?? false,
+    billPrintPending: over.billPrintPending ?? false,
     groupCommandBusy: over.groupCommandBusy ?? false,
+    ...(over.takesPayment === undefined ? {} : { takesPayment: over.takesPayment }),
   });
   return el;
 }
@@ -174,6 +179,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
           "Comp the bill",
           "Record unpaid departure",
           "Full invoice",
+          "Print the bill",
         ],
       },
       {
@@ -224,6 +230,36 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(groups(el)[0]!.items).toContain("Cancel and credit");
     expect(item(el, "[data-cancel-credit]")).not.toBeNull();
     expect(groups(el)[0]!.items).toContain("Full invoice");
+  });
+
+  it("a presented full invoice naming a customer offers no Cancel and credit, which the server would refuse", async () => {
+    const named = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      receiptAvailable: true,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345678",
+        legalName: "Acme SL",
+        address: "Calle 1",
+        countryCode: "ES",
+      },
+    });
+    const el = await mountScreen({ bills: [named] });
+
+    expect(item(el, "[data-bill-receipt]")).not.toBeNull();
+    expect(item(el, "[data-cancel-credit]")).toBeNull();
+  });
+
+  it("a presented full invoice naming no customer still offers Cancel and credit", async () => {
+    const unnamed = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      receiptAvailable: true,
+      invoiceType: "F1",
+      recipient: null,
+    });
+    const el = await mountScreen({ bills: [unnamed] });
+
+    expect(item(el, "[data-cancel-credit]")).not.toBeNull();
   });
 
   it("a presented bill with an invoice number offers no Full invoice", async () => {
@@ -315,6 +351,176 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(credit).toEqual([{ workingOrderId: "wo-2" }]);
   });
 
+  it("Print the bill sends end-meal for the bill on screen", async () => {
+    const el = await mountScreen();
+    const printed = capture(el, "end-meal");
+
+    item(el, '[data-action="print-bill"]')!.click();
+
+    expect(printed).toEqual([{ workingOrderId: "wo-2" }]);
+  });
+
+  it("Print the bill sends nothing while the screen is busy", async () => {
+    const el = await mountScreen({ busy: true });
+    const printed = capture(el, "end-meal");
+
+    item(el, '[data-action="print-bill"]')!.click();
+
+    expect(printed).toEqual([]);
+  });
+
+  it("shows Print the bill unavailable while another bill's print has no answer yet", async () => {
+    const el = await mountScreen({ billPrintPending: true });
+
+    const print = item(el, '[data-action="print-bill"]') as HTMLElement & { disabled: boolean };
+
+    expect(print.disabled).toBe(true);
+    expect((item(el, '[data-action="name-bill"]') as typeof print).disabled).toBe(false);
+  });
+
+  it("offers no Print the bill while a payment's answer is unknown", async () => {
+    const el = await mountScreen();
+    el.paymentConfirmation = {
+      tender: { method: "cash", amount: "12.00" },
+      outstanding: "10.00",
+      guestCount: 3,
+    };
+    await el.updateComplete;
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
+  });
+
+  it("offers no Print the bill while a part payment on the bill is held", async () => {
+    const el = await mountScreen();
+    el.billPaymentHeld = true;
+    await el.updateComplete;
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
+  });
+
+  it("offers no Print the bill on a new bill with no dishes, which the server says owes nothing", async () => {
+    const empty = partyBill("wo-2", 2, "0.00");
+    const el = await mountScreen({ bills: [empty], lines: [] });
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
+  });
+
+  it("offers Print the bill on a bill whose dishes were all given away, which prints at 0.00", async () => {
+    const given = partyBill("wo-2", 2, "0.00");
+    const el = await mountScreen({ bills: [given] });
+
+    expect(item(el, '[data-action="print-bill"]')).not.toBeNull();
+  });
+
+  it("offers no Print the bill to a person who may not take payment", async () => {
+    const el = await mountScreen({ takesPayment: false });
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
+  });
+
+  it("offers no Print the bill for a bill that needs paper where receipts may not print", async () => {
+    const el = await mountScreen();
+    el.canPrintReceipt = false;
+    await el.updateComplete;
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
+  });
+
+  it.each([
+    ["A4", { medium: "a4", pagePrinterId: "printer-1" }],
+    ["email", { medium: "email", recipient: "guest@example.test" }],
+  ] as const)(
+    "offers Print the bill for a full invoice going to %s where receipts may not print",
+    async (_medium, invoiceDelivery) => {
+      const el = await mountScreen({
+        bills: [partyBill("wo-2", 2, "54.00", { invoiceType: "F1", invoiceDelivery })],
+      });
+      el.canPrintReceipt = false;
+      await el.updateComplete;
+
+      expect(item(el, '[data-action="print-bill"]')).not.toBeNull();
+    },
+  );
+
+  it("offers Print the bill on a presented bill with no invoice number", async () => {
+    const presented = partyBill("wo-2", 2, "54.00", { status: "placed" });
+    const el = await mountScreen({ bills: [presented] });
+
+    expect(groups(el)[0]!.items).toContain("Print the bill");
+  });
+
+  it("names Print the bill in Spanish", async () => {
+    setLocale("es");
+    const el = await mountScreen();
+
+    expect(groups(el)[0]!.items).toContain("Imprimir la cuenta");
+  });
+
+  it.each([
+    [
+      "a printed bill",
+      partyBill("wo-2", 2, "54.00", {
+        status: "placed",
+        invoiceNumber: "F-0007",
+        receiptAvailable: true,
+      }),
+    ],
+    ["a bill left unpaid", partyBill("wo-2", 2, "54.00", { status: "placed", leftUnpaid: true })],
+    [
+      "a paid bill",
+      partyBill("wo-2", 2, "0.00", { status: "settled", total: "54.00", receiptAvailable: true }),
+    ],
+    ["an abandoned bill", partyBill("wo-2", 2, "0.00", { status: "abandoned" })],
+  ])("offers no Print the bill on %s", async (_name, bill) => {
+    const el = await mountScreen({ bills: [bill] });
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
+  });
+
+  it("a printed bill not yet paid offers Receipt copy, sent for the bill on screen", async () => {
+    const printed = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      invoiceNumber: "F-0007",
+      receiptAvailable: true,
+    });
+    const el = await mountScreen({ bills: [printed] });
+    const reprint = capture(el, "reprint-bill");
+
+    expect(groups(el)[0]!.items).toContain("Receipt copy");
+    item(el, "[data-bill-receipt]")!.click();
+
+    expect(reprint).toEqual([{ workingOrderId: "wo-2" }]);
+  });
+
+  it.each([
+    [
+      "printed and not yet paid",
+      partyBill("wo-2", 2, "54.00", {
+        status: "placed",
+        invoiceNumber: "F-0007",
+        receiptAvailable: true,
+      }),
+    ],
+    [
+      "paid",
+      partyBill("wo-2", 2, "0.00", { status: "settled", total: "54.00", receiptAvailable: true }),
+    ],
+  ])("offers no Receipt copy of a bill %s where receipts may not print", async (_name, bill) => {
+    const el = await mountScreen({ bills: [bill] });
+    expect(item(el, "[data-bill-receipt]")).not.toBeNull();
+
+    el.canPrintReceipt = false;
+    await el.updateComplete;
+
+    expect(item(el, "[data-bill-receipt]")).toBeNull();
+  });
+
+  it("an open bill with no receipt offers no Receipt copy", async () => {
+    const el = await mountScreen();
+
+    expect(item(el, "[data-bill-receipt]")).toBeNull();
+  });
+
   it("choosing Merge bills shows its picker beside the order, and Back closes it", async () => {
     const el = await mountScreen();
     await userEvent.click(menu(el));
@@ -345,7 +551,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         const popup = menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
         await userEvent.click(trigger);
 
-        expect(groups(el).flatMap((group) => group.items)).toHaveLength(15);
+        expect(groups(el).flatMap((group) => group.items)).toHaveLength(16);
         const box = popup.getBoundingClientRect();
         const anchor = trigger.getBoundingClientRect();
         expect(box.top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);
@@ -396,7 +602,11 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       receiptAvailable: true,
       hasPayments: true,
     });
-    const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
+    const presented = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      receiptAvailable: true,
+      invoiceNumber: "F-0007",
+    });
     const billItem = (el: TillTableOrderScreen, selector: string) =>
       menu(el).querySelector<HTMLElement>(`[data-table-menu-bill] ${selector}`);
 
@@ -420,14 +630,32 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       expect(groups(el)[0]!.items).toEqual(["Name this bill", "Receipt copy"]);
     });
 
-    it("a presented bill keeps Name this bill, Move this bill, Full invoice and Cancel and credit", async () => {
+    it("a presented bill keeps Name this bill, Move this bill, Record unpaid departure, Receipt copy and Cancel and credit", async () => {
       const el = await mountScreen({ bills: [presented] });
 
       expect(groups(el)[0]!.items).toEqual([
         "Name this bill",
         "Move this bill",
         "Record unpaid departure",
+        "Receipt copy",
+        "Cancel and credit",
+      ]);
+    });
+
+    it("a presented bill with no invoice number still offers Full invoice", async () => {
+      const unnumbered = partyBill("wo-2", 2, "54.00", {
+        status: "placed",
+        receiptAvailable: true,
+      });
+      const el = await mountScreen({ bills: [unnumbered] });
+
+      expect(groups(el)[0]!.items).toEqual([
+        "Name this bill",
+        "Move this bill",
+        "Record unpaid departure",
         "Full invoice",
+        "Print the bill",
+        "Receipt copy",
         "Cancel and credit",
       ]);
     });

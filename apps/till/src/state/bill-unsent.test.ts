@@ -75,11 +75,9 @@ describe("unsent-dish refusal details", () => {
   });
 
   it("has the approved actionable fallback for a code-only refusal", () => {
-    expect(codeMessage("bill.unsent_dishes", "en")).toBe(
-      "Send or remove the unsent dishes before paying.",
-    );
+    expect(codeMessage("bill.unsent_dishes", "en")).toBe("Send or remove the unsent dishes first.");
     expect(codeMessage("bill.unsent_dishes", "es")).toBe(
-      "Envía o quita los platos sin enviar antes de cobrar.",
+      "Envía o quita primero los platos sin enviar.",
     );
   });
 });

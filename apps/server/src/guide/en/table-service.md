@@ -90,9 +90,10 @@ customer to pay a second time.
 ## Issue a full invoice {#full-invoice}
 
 When a table customer needs an invoice in their name, choose **Full invoice** for the bill and
-enter their identifier, legal name and complete address before its final payment. The
+enter their identifier, legal name and complete address before the bill is printed or takes its final payment. The
 saved choice lets the bill grow above the simplified-invoice limit. Paying the table bill in full
-issues the invoice; recording an unpaid departure also issues it, leaving the amount unpaid.
+or printing it with **Print the bill** issues the invoice; recording an unpaid departure also issues
+it, leaving the amount unpaid.
 
 **Full invoice** is in the bill's payment area below the order, and in the **⋮** menu under the
 bill's name; both open the same form for the bill on screen. Neither is offered once the bill is
@@ -102,7 +103,7 @@ their name and identifier show under the payment area's **Full invoice**. Mergin
 moving every dish to another bill, asks before a full invoice's customer would change.
 
 Saved a full invoice by mistake? Open **Full invoice** again and choose **Simplified invoice
-instead**. Once the bill has taken a payment, it stays a full invoice.
+instead**. Once the bill is printed or has taken a payment, it stays a full invoice.
 
 Choose **Spanish tax ID** for a NIF, NIE or CIF. For a passport or another accepted document,
 choose its actual **Identifier type**, **Issuing country** and **Document number**. Enter the
@@ -120,8 +121,8 @@ At the counter, choose **Full invoice** before **Pay**. Paying the order in full
 invoice. Placing a counter order alone does not issue an invoice.
 
 When the form shows **Delivery**, **A4 on {printer}** or **Email** sends the original by itself
-once the invoice is issued. With **Receipt printer: print after paying**, the receipt prints when
-you close the window after payment.
+once the invoice is issued. With **Receipt printer**, the invoice prints when you choose **Print
+the bill**; otherwise it prints when you close the window after payment.
 
 ## Choose a document and printer {#invoice-printer}
 
@@ -304,7 +305,7 @@ You can close the window and start a new refund later.
 
 When a paid bill charged too much, correct its invoice: the guest gets the difference back and
 Waitron files a corrective invoice for it. On a past receipt, choose **Correct invoice**, beside
-**Refund a payment**.
+**Refund a payment**. The till cannot correct a full invoice naming a customer.
 
 If the overcharge was on particular dishes, tick them under **Dishes to correct (optional)**;
 otherwise leave them all unticked. Enter the **Money back, VAT included**, and check the VAT shown
@@ -500,12 +501,13 @@ Enter to show it. Home and End reach the first and last choices. Escape closes t
 
 Everything else you do at the table is in the **⋮** menu beside the switcher, in two parts. The
 first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
-this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Full
-invoice**, **Receipt copy** and **Cancel and credit**, each when it applies to the bill. The second, **Whole table**, acts on everyone at the table: **Allergies**, **Name the party**,
-**Guests**, **Mark bill requested for …** with the party's name (once requested, **Cancel the bill
-request for …**), **Split a table** (when the party sits at more than one table), **Join a table**,
-**Move guests** and **Finish table**. An action that needs a choice, such as which bill to merge
-with, opens beside the order, and **Back** closes it.
+this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Record
+unpaid departure**, **Full invoice**, **Print the bill**, **Receipt copy** and **Cancel and
+credit**, each when it applies. The second, **Whole table**, acts on everyone at the
+table: **Allergies**, **Name the party**, **Guests**, **Mark bill requested for …** with the party's
+name (once requested, **Cancel the bill request for …**), **Split a table** (when the party sits at
+more than one table), **Join a table**, **Move guests** and **Finish table**. An action that needs a
+choice, such as which bill to merge with, opens beside the order, and **Back** closes it.
 
 Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
 receiving party's next numbers. To put two bills together, open the bill that should receive the
@@ -541,7 +543,8 @@ are unsent.
 
 If you choose **Finish table** while a bill is still unpaid, the till says **A bill for this table
 is still unpaid. Take payment before finishing the table** above the foot. **Take payment** puts an
-unpaid bill on screen so you can take its payment.
+unpaid bill on screen so you can take its payment. **Print the bill**, when offered, puts that bill on
+screen and prints it, or lists dishes not yet served.
 
 If a guest leaves without paying, select their bill, open **⋮**, then choose **Record unpaid
 departure** under that bill. Check its amount and give a reason. If approval is needed, choose a
@@ -549,9 +552,10 @@ supervisor or manager and ask them to enter their PIN.
 
 Only that bill’s unserved food is stopped, with cancellation slips for the station. The other bills
 keep their food, so you can still serve a paid guest’s dessert. What is still owed on the bill is
-recorded as unpaid; any amount already paid is kept. The table stays open while another bill needs
-closing or paid food still needs serving. Serve the remaining food, then choose **Finish table**
-when everyone has finished.
+recorded as unpaid; any amount already paid is kept. When the guest comes back to pay, open the bill
+from **Find a bill** and take the rest there. The table stays open while another bill needs closing
+or paid food still needs serving. Serve the remaining food, then choose **Finish table** when
+everyone has finished.
 
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
 **Check again** to continue the same payment before taking another. If it was not recorded, this
@@ -566,6 +570,26 @@ If that check fails, follow [A card-payment check failed](table-service.md#card-
 
 If the reader took a different amount, compare the requested and taken figures in the warning.
 Check the bill balance before taking another payment, so you collect only what is still owed.
+
+## Print the bill {#print-bill}
+
+When guests ask for their bill, put it on screen, open **⋮** and choose **Print the bill**. Its
+receipt is issued now and prints on this device's receipt printer, and the till says **Bill
+issued**. A full invoice set for A4 or email goes there instead. Each bill at the table is printed
+on its own, so another bill's guests can carry on eating.
+
+Choose **Full invoice** before printing: once the bill is printed, its invoice type cannot change.
+
+Send or take off any dishes not yet sent first. If dishes on the bill are not marked served,
+nothing prints yet: the till lists them under **Not served yet:**. If the guests have had them,
+choose **Mark served** where it shows, then **Print the bill** again. Otherwise choose **Print
+anyway**: a dish that then never comes is refunded after payment with
+[Correct an invoice](table-service.md#correct-invoice). The till cannot correct a full invoice naming
+a customer, so on one of those take off any dish that may not come before you print.
+
+A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
+
+Take payment with **Pay** as usual, in one go or in parts.
 
 ## A card-payment check failed {#card-check-failed}
 
@@ -795,7 +819,8 @@ and **Still to pay**. Start with what is still to pay, rather than the bill's or
 Choose **An amount** for a contribution, **Split equally** for one equal share, or **Items** for
 particular dishes. For an equal share, enter how many people are still to pay, including this
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
-A bill presented for collection offers the whole amount only, until its invoice is issued.
+A printed bill offers the same choices for what it still owes. A bill presented for collection
+before it is printed offers the whole amount only.
 
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.
@@ -850,7 +875,7 @@ know has already been charged. If the check fails, follow
 ## Close a bill as a deferred payment {#deferred-payment}
 
 Use this when the customer will pay the whole bill later, outside Waitron. Open **Pay** on the bill
-and choose **Close as deferred payment** (on a bill not yet presented, choose **Whole bill** first).
+and choose **Close as deferred payment** (where **Whole bill** is offered, choose it first).
 Check the bill, the invoice and the total, then confirm. Waitron issues the invoice if it has not been issued yet and closes the bill for good. It
 records no payment for the bill, now or later, and the bill shows **Deferred payment** from then on.
 

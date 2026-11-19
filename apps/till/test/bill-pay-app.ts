@@ -387,9 +387,13 @@ export const balanceShows = (
   outstanding: money(outstanding),
 });
 
-export async function openTable(el: TillApp): Promise<TillTableOrderScreen> {
+export async function openTable(
+  el: TillApp,
+  permissions: string[] = [],
+  personId = "p1",
+): Promise<TillTableOrderScreen> {
   await flush(el);
-  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+  emit(lock(el), "logged-in", { personId, displayName: "Ana", permissions });
   await flush(el);
   emit(shell(el), "screen-select", { screen: "floor" });
   await flush(el);

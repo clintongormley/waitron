@@ -97,10 +97,10 @@ cobró la tarjeta, no pidas al cliente que pague otra vez.
 ## Emitir una factura completa {#full-invoice}
 
 Cuando un cliente de una mesa necesita una factura a su nombre, elige **Factura completa** para
-la cuenta e introduce su identificador, su razón social y su dirección completa antes del último
-pago. La elección guardada permite superar el límite de factura simplificada. Al cobrar toda
-la cuenta se emite la factura; al registrar que se han ido sin pagar también se emite y queda
-pendiente de pago.
+la cuenta e introduce su identificador, su razón social y su dirección completa antes de imprimir
+la cuenta o de su último pago. La elección guardada permite superar el límite de factura simplificada. Al cobrar toda
+la cuenta o al imprimirla con **Imprimir la cuenta** se emite la factura; al registrar que se han
+ido sin pagar también se emite y queda pendiente de pago.
 
 **Factura completa** está en la zona de cobro de la cuenta, debajo del pedido, y en el menú **⋮**,
 bajo el nombre de la cuenta; las dos abren el mismo formulario para la cuenta en pantalla. Ninguna
@@ -111,15 +111,15 @@ corrección. Cuando ya has elegido un cliente, su nombre y su identificador apar
 cuenta, la caja pregunta antes de cambiar el cliente de una factura completa.
 
 ¿Has guardado una factura completa por error? Vuelve a abrir **Factura completa** y elige
-**Factura simplificada en su lugar**. Cuando la cuenta ya tiene un pago, sigue siendo factura
-completa.
+**Factura simplificada en su lugar**. Cuando la cuenta ya está impresa o tiene un pago, sigue
+siendo factura completa.
 
 En el mostrador, elige **Factura completa** antes de **Cobrar**. Al cobrar todo el pedido se
 emite la factura. Tramitar un pedido de mostrador por sí solo no emite una factura.
 
 Cuando el formulario muestra **Entrega**, **A4 en {printer}** o **Correo electrónico** envía el
-original por sí solo al emitirse la factura. Con **Impresora de tickets: imprimir tras cobrar**,
-el recibo se imprime al cerrar la ventana posterior al cobro.
+original por sí solo al emitirse la factura. Con **Impresora de tickets**, la factura se imprime al
+elegir **Imprimir la cuenta**; si no, se imprime al cerrar la ventana posterior al cobro.
 
 Elige **NIF español** para un NIF, NIE o CIF. Para un pasaporte u otro documento aceptado,
 elige su **Tipo de identificador**, **País emisor** y **Número de documento**. Introduce el número
@@ -323,7 +323,8 @@ Puedes cerrar la ventana e iniciar una nueva devolución más tarde.
 
 Cuando a una cuenta pagada se le cobró de más, rectifica su factura: el cliente recibe la
 diferencia y Waitron presenta una factura rectificativa por ella. En un recibo anterior, elige
-**Rectificar factura**, junto a **Devolver un pago**.
+**Rectificar factura**, junto a **Devolver un pago**. La caja no puede rectificar una factura
+completa a nombre de un cliente.
 
 Si el cobro de más fue en platos concretos, márcalos en **Platos que se rectifican (opcional)**; si
 no, déjalos todos sin marcar. Escribe el **Dinero a devolver, IVA incluido** y revisa el IVA que se
@@ -539,13 +540,14 @@ Escape cierra la lista.
 Todo lo demás que haces en la mesa está en el menú **⋮**, junto al selector, en dos partes. La
 primera, con el nombre de la cuenta en pantalla como título, por ejemplo **Cuenta 2 · Clint**, actúa
 solo sobre esa cuenta: **Poner nombre a esta cuenta**, **Mover platos…**, **Juntar cuentas**,
-**Mover esta cuenta**, **Descuento en la cuenta**, **Factura completa**, **Copia del ticket** y
-**Cancelar y abonar**, cada una cuando corresponde a la cuenta.
-La segunda, **Toda la mesa**, actúa sobre todos los de la mesa: **Alergias**, **Poner nombre a los
-clientes**, **Comensales**, **Marcar cuenta pedida para …** con el nombre del grupo (una vez pedida,
-**Anular la petición de cuenta de …**), **Separar una mesa** (cuando el grupo ocupa más de una
-mesa), **Unir una mesa**, **Mover clientes** y **Cerrar mesa**. Una acción que necesita una
-elección, como con qué cuenta juntar, se abre junto al pedido, y **Atrás** la cierra.
+**Mover esta cuenta**, **Descuento en la cuenta**, **Registrar salida sin pagar**, **Factura
+completa**, **Imprimir la cuenta**, **Copia del ticket** y **Cancelar y abonar**, cada una cuando
+corresponde. La segunda, **Toda la mesa**, actúa sobre todos los de la mesa:
+**Alergias**, **Poner nombre a los clientes**, **Comensales**, **Marcar cuenta pedida para …** con
+el nombre del grupo (una vez pedida, **Anular la petición de cuenta de …**), **Separar una mesa**
+(cuando el grupo ocupa más de una mesa), **Unir una mesa**, **Mover clientes** y **Cerrar mesa**.
+Una acción que necesita una elección, como con qué cuenta juntar, se abre junto al pedido, y
+**Atrás** la cierra.
 
 Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que llegan toman los
 siguientes números del grupo que las recibe. Para juntar dos cuentas, abre la cuenta que debe
@@ -581,15 +583,17 @@ completó; esa ventana no acepta un cobro nuevo mientras haya platos sin enviar.
 
 Si eliges **Cerrar mesa** con una cuenta aún sin pagar, la caja indica **Hay una cuenta de esta mesa
 sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuenta** pone en pantalla
-una cuenta sin pagar para que la cobres.
+una cuenta sin pagar para que la cobres. **Imprimir la cuenta**, cuando aparece, pone esa cuenta
+en pantalla y la imprime, o muestra los platos aún sin servir.
 
 Si un cliente se va sin pagar, selecciona su cuenta, abre **⋮** y elige **Registrar salida sin
 pagar** bajo esa cuenta. Comprueba el importe e indica el motivo. Si hace falta autorización,
 elige un responsable o encargado y pídele que introduzca su PIN.
 
-Solo se detiene la comida pendiente de servir de esa cuenta, con tiques de cancelación para la
+Solo se detiene la comida pendiente de servir de esa cuenta, con tickets de cancelación para la
 estación. Las demás cuentas conservan su comida, así que puedes servir el postre de quien ya ha
-pagado. Se registra como pendiente lo que aún se debe de la cuenta; lo ya pagado se conserva. La
+pagado. Se registra como pendiente lo que aún se debe de la cuenta; lo ya pagado se conserva. Cuando
+el cliente vuelva a pagar, abre la cuenta desde **Buscar cuenta** y cobra allí lo que falta. La
 mesa sigue abierta mientras quede otra cuenta por cerrar o comida pagada por servir. Sirve lo que
 queda y elige **Cerrar mesa** cuando todos hayan terminado.
 
@@ -606,6 +610,29 @@ Si falla esa comprobación, sigue [Falló la comprobación de un cobro con tarje
 
 Si el lector ha cobrado otro importe, compara en el aviso lo que se pidió y lo que se cobró.
 Comprueba el saldo de la cuenta antes de cobrar otro pago, para cobrar solo lo que quede pendiente.
+
+## Imprimir la cuenta {#print-bill}
+
+Cuando los clientes pidan la cuenta, ponla en pantalla, abre **⋮** y elige **Imprimir la cuenta**.
+Su ticket se emite en ese momento y se imprime en la impresora de tickets de este dispositivo, y la
+caja indica **Cuenta emitida**. Una factura completa preparada para A4 o correo electrónico va allí.
+Cada cuenta de la mesa se imprime por separado, así que los clientes de otra cuenta pueden seguir
+comiendo.
+
+Elige **Factura completa** antes de imprimir: una vez impresa la cuenta, su tipo de factura no puede
+cambiar.
+
+Primero envía o quita los platos que aún no se han enviado. Si hay platos de la cuenta sin marcar
+como servidos, todavía no se imprime nada: la caja los muestra bajo **Aún sin servir:**. Si los
+clientes ya los han tomado, elige **Marcar como servidos** donde aparezca y vuelve a elegir
+**Imprimir la cuenta**. Si no, elige **Imprimir igualmente**: un plato que al final no llegue se devuelve después
+del cobro con [Rectificar una factura](table-service.md#correct-invoice). La caja no puede rectificar una factura completa a nombre de
+un cliente, así que en esas cuentas quita antes de imprimir los platos que puedan no llegar.
+
+Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo en **+ Cuenta
+nueva**.
+
+Cobra con **Cobrar** como siempre, de una vez o por partes.
 
 ## Falló la comprobación de un cobro con tarjeta {#card-check-failed}
 
@@ -853,8 +880,8 @@ total original de la cuenta.
 queda. Elige **Una cantidad** para aportar un importe, **Dividir a partes iguales** para cobrar
 una parte igual o **Artículos** para platos concretos. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
-si solo se pagan algunos. Una cuenta presentada para su cobro solo permite el importe completo
-hasta que se emita su factura.
+si solo se pagan algunos. Una cuenta impresa ofrece las mismas opciones para lo que aún debe. Una
+cuenta presentada para su cobro antes de imprimirse solo permite el importe completo.
 
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.
@@ -912,8 +939,8 @@ a cobrar una tarjeta que sabes que ya se ha cobrado. Si falla la comprobación, 
 ## Cerrar una cuenta como pago aplazado {#deferred-payment}
 
 Úsalo cuando el cliente vaya a pagar toda la cuenta más tarde, fuera de Waitron. Abre **Cobrar** en
-la cuenta y elige **Cerrar como pago aplazado** (en una cuenta aún no presentada, elige antes **Toda
-la cuenta**). Comprueba la cuenta, la factura y el total, y confirma. Waitron emite la factura si aún no se ha emitido y cierra la cuenta
+la cuenta y elige **Cerrar como pago aplazado** (donde se ofrezca **Toda la cuenta**, elígela
+antes). Comprueba la cuenta, la factura y el total, y confirma. Waitron emite la factura si aún no se ha emitido y cierra la cuenta
 definitivamente. No registra ningún pago de la cuenta, ni ahora ni después, y la cuenta muestra
 **Pago aplazado** desde entonces.
 

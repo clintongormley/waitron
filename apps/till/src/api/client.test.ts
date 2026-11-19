@@ -27,6 +27,8 @@ import {
   type TableState,
   type TillMenuOffer,
   type ZoneOffers,
+  type EndMealRequest,
+  type EndedMeal,
   type UnpaidDepartureRequest,
   type UnpaidDepartureResult,
 } from "./client.js";
@@ -4106,6 +4108,60 @@ describe("TillApi: a seated party", () => {
         reason: "Gone",
       }),
     ).rejects.toMatchObject({ code: "unpaid_departure.unfired_dishes", status: 409 });
+  });
+
+  it("endMeal POSTs the bill, revision, edits, submission and printAnyway to the party's /end-meal route", async () => {
+    const request: EndMealRequest = {
+      billId: "wo-1",
+      expectedPartyRevision: 4,
+      expectedEdits: [],
+      submissionId: "11111111-1111-4111-8111-111111111111",
+      printAnyway: true,
+    };
+    const answer: EndedMeal = {
+      revision: 5,
+      workingOrderId: "wo-1",
+      saleId: "s-1",
+      invoiceNumber: "F-0007",
+      total: "30.00",
+      owed: "30.00",
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const signal = new AbortController().signal;
+
+    await expect(new TillApi("", fetchStub).endMeal("v1", request, { signal })).resolves.toEqual(
+      answer,
+    );
+    expect(fetchStub).toHaveBeenCalledWith("/api/parties/v1/end-meal", post(request));
+    expect(fetchStub.mock.calls[0]![1]).toMatchObject({ signal });
+  });
+
+  it("endMeal surfaces a refusal as { code } with its params spread beside it", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "meal_end.unserved_dishes",
+            params: { workingOrderId: "wo-1", dishes: [] },
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(
+      new TillApi("", fetchStub).endMeal("v1", {
+        billId: "wo-1",
+        expectedPartyRevision: 4,
+        expectedEdits: [],
+        submissionId: "11111111-1111-4111-8111-111111111111",
+      }),
+    ).rejects.toMatchObject({
+      code: "meal_end.unserved_dishes",
+      status: 409,
+      workingOrderId: "wo-1",
+      dishes: [],
+    });
   });
 
   it("listUnpaidDepartureAuthorizers GETs who may approve an unpaid departure", async () => {

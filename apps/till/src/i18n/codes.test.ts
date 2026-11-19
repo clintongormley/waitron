@@ -328,10 +328,10 @@ it("explains each refusal about a table's party, in both languages", () => {
 
 it("words the presented, paid and other-party refusals of an order sent to a bill it cannot go on, in both languages", () => {
   expect(codeMessage("bill.presented", "en")).toBe(
-    "This bill has been presented, so it cannot be changed",
+    "This bill is ready for payment, so it cannot be changed.",
   );
   expect(codeMessage("bill.presented", "es")).toBe(
-    "Esta cuenta ya se ha presentado, así que no se puede cambiar",
+    "Esta cuenta ya está lista para cobrar, así que no se puede cambiar.",
   );
   expect(codeMessage("bill.paid", "en")).toBe("This bill is closed");
   expect(codeMessage("bill.paid", "es")).toBe("Esta cuenta ya está cerrada");
@@ -1145,4 +1145,78 @@ it("names the set menu whose removal depends on the dishes", () => {
   const params = { setMenuName: "Daily", dishNames: ["Hake"] };
   expect(codeMessage("set_menu.needed_by_draft", "en", params)).toContain("Daily");
   expect(codeMessage("set_menu.holds_dishes", "es", params)).toContain("Daily");
+});
+
+it("words Print the bill's not-served refusal as a choice for the whole list, in both languages", () => {
+  expect(codeMessage("meal_end.unserved_dishes", "en")).toBe(
+    "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Correct invoice.",
+  );
+  expect(codeMessage("meal_end.unserved_dishes", "es")).toBe(
+    "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+  );
+});
+
+it("words Print the bill's other refusals, in both languages", () => {
+  expect(codeMessage("meal_end.already_issued", "en")).toBe(
+    "This bill already has its receipt. Take payment, or print a receipt copy.",
+  );
+  expect(codeMessage("meal_end.already_issued", "es")).toBe(
+    "Esta cuenta ya tiene su ticket. Cóbrala o imprime una copia del ticket.",
+  );
+  expect(codeMessage("meal_end.no_printer", "en")).toBe(
+    "This device has no receipt printer. Choose one in Equipment, then print the bill.",
+  );
+  expect(codeMessage("meal_end.no_printer", "es")).toBe(
+    "Este dispositivo no tiene impresora de tickets. Elige una en Equipo y luego imprime la cuenta.",
+  );
+  expect(codeMessage("meal_end.delivery_unavailable", "en")).toBe(
+    "This full invoice cannot go where it was chosen to go. Choose another printer or email, then print the bill.",
+  );
+  expect(codeMessage("meal_end.delivery_unavailable", "es")).toBe(
+    "Esta factura completa no puede ir adonde se eligió. Elige otra impresora u otro correo y luego imprime la cuenta.",
+  );
+});
+
+it("words the table refusals Print the bill shows in their own words, in both languages", () => {
+  const pins: [string, string, string][] = [
+    [
+      "draft.out_of_date",
+      "This order has changed since you opened it. Reload it and make your change again",
+      "Este pedido ha cambiado desde que lo abriste. Vuelve a cargarlo y repite el cambio",
+    ],
+    [
+      "invoice.recipient_invalid",
+      "Check the customer's invoice details and try again",
+      "Revisa los datos de facturación del cliente e inténtalo de nuevo",
+    ],
+    [
+      "fiscal.taxpayer_domicile_missing",
+      "The venue's legal address is missing. Ask a manager before issuing a full invoice",
+      "Falta el domicilio fiscal del local. Avisa a un responsable antes de emitir una factura completa",
+    ],
+    [
+      "session.required",
+      "Your shift session has ended — please log in again",
+      "Tu sesión ha terminado. Vuelve a iniciar sesión",
+    ],
+    [
+      "till.origin_refused",
+      "This page cannot change the till. Open the till from the venue's address and try again.",
+      "Esta página no puede hacer cambios en el TPV. Abre el TPV desde la dirección del local e inténtalo de nuevo.",
+    ],
+    [
+      "submission.id_reused",
+      "This request could not be matched to what was sent before. Reload and try again",
+      "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",
+    ],
+    [
+      "clock.unusable",
+      "Can't be recorded: the server's clock is wrong. It can be set in the dashboard, under Box status.",
+      "No se puede registrar: la hora del servidor es incorrecta. Se puede poner en hora en el panel, en Estado del servidor.",
+    ],
+  ];
+  for (const [code, en, es] of pins) {
+    expect(codeMessage(code, "en")).toBe(en);
+    expect(codeMessage(code, "es")).toBe(es);
+  }
 });

@@ -478,3 +478,79 @@ it("says whether a switched-off receipt printer still gets the ticket, in both l
     ],
   ]);
 });
+
+describe("Print the bill's own sentences", () => {
+  it.each([
+    ["en-GB", "Bill issued"],
+    ["es-ES", "Cuenta emitida"],
+  ])("says the bill was issued, not that paper came out, in %s", (locale, message) => {
+    expect(catalogues[locale]?.["bill.issued"]).toBe(message);
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
+    ],
+    [
+      "es-ES",
+      "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+    ],
+  ])("offers no Mark served where none is drawn, in %s", (locale, message) => {
+    expect(catalogues[locale]?.["meal_end.unserved_no_mark"]).toBe(message);
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "This device's profile no longer lets you work on it, so it cannot print the bill for you. Log in on a device whose profile allows it.",
+    ],
+    [
+      "es-ES",
+      "El perfil de este dispositivo ya no te deja trabajar en él, así que no puede imprimir la cuenta por ti. Inicia sesión en un dispositivo cuyo perfil te admita.",
+    ],
+  ])("says the profile no longer admits the person, in %s", (locale, message) => {
+    expect(catalogues[locale]?.["meal_end.not_admitted"]).toBe(message);
+  });
+});
+
+describe("Print the bill's refused wording", () => {
+  it.each([
+    [
+      "en-GB",
+      "The bill was not printed and no ticket was issued. Nothing on the bill has changed.",
+    ],
+    [
+      "es-ES",
+      "La cuenta no se ha impreso y no se ha emitido ningún ticket. La cuenta no ha cambiado.",
+    ],
+  ])("says in %s that nothing happened", (locale, message) => {
+    expect(catalogues[locale]?.["meal_end.refused"]).toBe(message);
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help. If this bill has a full invoice, check its customer's details.",
+    ],
+    [
+      "es-ES",
+      "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada. Si esta cuenta lleva factura completa, revisa los datos del cliente.",
+    ],
+  ])("says in %s that a bill's ticket cannot be filed", (locale, message) => {
+    expect(catalogues[locale]?.["meal_end.cannot_file"]).toBe(message);
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot file a correction for it, so take off any dish that may not come before you print.",
+    ],
+    [
+      "es-ES",
+      "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede presentar una rectificación para ella, así que quita antes de imprimir los platos que puedan no llegar.",
+    ],
+  ])("says in %s that a full invoice naming a customer cannot be corrected", (locale, message) => {
+    expect(catalogues[locale]?.["meal_end.unserved_full_invoice"]).toBe(message);
+  });
+});

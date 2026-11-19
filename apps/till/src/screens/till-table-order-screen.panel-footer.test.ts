@@ -529,6 +529,30 @@ describe("A803 pay scope", () => {
     expect(q(el, "[data-pay-sheet]")).not.toBeNull();
   });
 
+  it("keeps Pay for a printed bill not yet paid, whose ⋮ offers Receipt copy and not Print the bill", async () => {
+    const printed = {
+      ...footerBill,
+      status: "placed" as const,
+      invoiceNumber: "F-0001",
+      receiptAvailable: true,
+    };
+    const { el } = await mountFooter({ ...twoBills, bills: [printed, twoBills.bills[1]!] });
+    await resized(el);
+
+    expect(q(el, "[data-pay-sheet]")).not.toBeNull();
+    expect(q(el, "[data-table-menu] [data-bill-receipt]")).not.toBeNull();
+    expect(q(el, '[data-table-menu] [data-action="print-bill"]')).toBeNull();
+    expect(q(el, "[data-bill-receipt]:not([data-table-menu] *)")).toBeNull();
+  });
+
+  it("offers Print the bill in the ⋮ of an open owing bill, never in its foot", async () => {
+    const { el } = await mountFooter(twoBills);
+    await resized(el);
+
+    expect(q(el, '[data-table-menu] [data-action="print-bill"]')).not.toBeNull();
+    expect(q(el, '[data-action="print-bill"]:not([data-table-menu] *)')).toBeNull();
+  });
+
   describe("quiet Pay while this bill has unsent dishes", () => {
     const sentence = "Bill 1. Send or remove the unsent dishes before paying.";
     const othersDraft = (lines = withUnsent().lines) => ({
