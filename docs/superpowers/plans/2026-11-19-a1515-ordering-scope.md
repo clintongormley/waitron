@@ -13,7 +13,7 @@ their existing pieces.
 
 | PR and tasks | Files and existing code to reuse | What the focused checks show | Est. code / tests |
 | --- | --- | --- | --- |
-| 1 · 1–3 | Shared `set-menu-bill`, export and tests. Convert served copies and reuse `fitSetMenus` for suggested moves. | Course and price come from the landing copy. Placement honours reservations and order, and moves keep other dishes fixed. | 350 / 500 |
+| 1 · 1–3 | Shared `set-menu-bill`, export and tests. Convert served copies and reuse `fitSetMenus` for suggested moves. | Course and price come from the landing copy. Placement honours reservations and order. Suggested moves pick the cheapest arrangement, then the fewest moves if prices match. Move checks leave draft holds and dishes that cannot move in place. | 350 / 500 |
 | 2 · 4 | DB schemas, core triggers, classification, baseline and the server's draft and carve writers. | Real DB inserts, deletes and updates enforce the role rules. Run the schema and fiscal guards named in Task 4. | 180 / 260 |
 | 3 · 5, 10 | Server `set-menu-bill` and `set-menu-offers`, working-order, payments and adjustments. Reuse `serveRecordedSetMenus`, existing issuance pricing and the party-venue fixture. Seed menu rows here for PRs 3–7. | Recorded copies survive republishing. A new payment or ticket is refused, and the path that records an existing capture still works. Reuse loaded line rows for the refusal where available. | 380 / 610 |
 | 4 · 12a–c | Server kitchen, pass, service, allergy and order readers. | Seed real set-menu and dish rows. Tickets and screens include dishes without treating the menu itself as one. | 270 / 460 |

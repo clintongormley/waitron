@@ -596,3 +596,22 @@ export {
   type SetMenuOnBill,
   type SetMenuPlace,
 } from "./set-menu-fit.js";
+
+export {
+  checkMoves,
+  copiesListing,
+  placeInOrder,
+  setMenuCopyOf,
+  setMenuOfferOf,
+  suggestMove,
+  withPlacements,
+  type BillSetMenu,
+  type BillSetMenuState,
+  type DishMove,
+  type DishPlace,
+  type DishToPlace,
+  type MoveSuggestion,
+  type PlacedDish,
+  type PlacementResult,
+  type SetMenuCopy,
+} from "./set-menu-bill.js";

@@ -33,8 +33,9 @@ at `33be7eaaf3` before those two landed, is in the owner's checkout at
   `SetMenuOfferDish` gains `countsAsCourseId`; `SetMenuDish` loses it. **Only the till calls
   `fitSetMenus`** (Task 3's `suggestMove`, run by Task 16a). No server path calls it: the server
   places dishes with `placeInOrder` and checks a chosen move with `checkMoves`, neither of which
-  calls the fit, so `set_menu.fit_invalid_input` never reaches a server answer and needs no
-  `STATUS` entry or server wording. The till catches it in `suggestMove` and offers no move.
+  calls the fit, so `set_menu.fit_invalid_input` needs no server status or wording.
+  `suggestMove` offers no move for an invalid amount. It surfaces other fit errors for the till's
+  existing error handling.
 - **Piece 1** ([2026-11-18-a1515-set-menu-dashboard.md](2026-11-18-a1515-set-menu-dashboard.md),
   decisions 4, 9, 10 and 12, Tasks 4b, 6a and 6b, as amended on 18 November). Piece 1 is the
   producer; this plan uses its names:
@@ -459,13 +460,13 @@ export interface MoveSuggestion {
  * `drafted` (earlier draft dishes, at their previewed places) are never moved. Null when none. */
 export function suggestMove(
   state: BillSetMenuState,
-  drafted: readonly PlacementResult[],
+  drafted: readonly (PlacementResult & Pick<DishToPlace, "productId" | "variantId">)[],
   dish: Omit<DishToPlace, "reserved">,
 ): MoveSuggestion | null;
 /** Checks moves taken together; answers each moved dish's new place, or the first dish whose
  * target is not open to it. */
 export function checkMoves(
-  state: BillSetMenuState, moves: readonly DishMove[],
+  state: BillSetMenuState, moves: readonly DishMove[], heldFor?: readonly DishPlace[],
 ):
   | { kind: "ok"; results: PlacementResult[] }
   | { kind: "place_taken"; lineId: string }
@@ -474,14 +475,16 @@ export function checkMoves(
 
 - `suggestMove` calls `fitSetMenus` with one offer per copy on the bill (each `SetMenuCopy` is one, `id` its key), every
   set-menu line fixed to its copy, the bill's placed dishes unpinned when `movable` and pinned
-  otherwise, `drafted` pinned at their places, and `dish` free; `previous` is today's places. When
+  otherwise, `drafted` pinned at their places, and `dish` free; `previous` is today's places. Pass each
+  draft dish's product and variant with its place so the fit checks that exact listing. When
   it answers `fitted`, the moves are the placed dishes whose place differs (spec §3). It answers
-  null on `uncovered` and `too_large`, and when the fit throws `set_menu.fit_invalid_input` (an
-  amount above `MAX_SET_MENU_AMOUNT_CENTS`, `set-menu-fit.ts:10`) (**my call (plan writer)**: the
+  null on `uncovered` and `too_large`, and when the fit throws `set_menu.fit_invalid_input`
+  with reason `invalid_amount` (for example, an amount above `MAX_SET_MENU_AMOUNT_CENTS`, `set-menu-fit.ts:10`) (**my call (plan writer)**: the
   waiter still gets Add, à la carte and Cancel).
 - `checkMoves` applies the moves together and checks every moved dish's target as an open place
-  (Task 2's rule, ignoring the tie-break). A move naming a line that is not one of the state's
-  placed dishes (a cancelled dish is not, decision 12) answers `not_placed`.
+  (Task 2's rule, ignoring the tie-break) and keeps places held for draft dishes unavailable.
+  A move naming a line absent from the state (such as a cancelled dish, decision 12) answers
+  `not_placed`. A move naming a dish twice, or moving a dish that cannot move, answers `place_taken`.
 
 - [ ] **Step 1: Write the failing tests**, on Task 2's fixture:
   - `"moving the Sirloin to the Daily makes room for the Sea bass"` (the spec's example): one Daily
@@ -843,7 +846,8 @@ export function setMenuOfferLookup(
   checked and bumped as Task 6's routes, answering `{ setMenus: BillSetMenuState; partyRevision }`.
   It serves the suggested move (decision 5) and the summary's **Move** (decision 10).
 - `moveSetMenuDishes(tx, workingOrderId, moves)` first calls `refusePaymentInFlight`, then runs
-  `checkMoves` (Task 3) on the bill's state in the transaction; `place_taken` →
+  `checkMoves` (Task 3) on the bill's state and open-draft reservations in the transaction;
+  `place_taken` →
   `set_menu.place_taken`; `not_placed` (a cancelled dish, decision 12, or another line) →
   `management.request_invalid` `{ field: "moves" }`; a dish
   that is not `movable` → `set_menu.place_taken` (none exists until piece 4). It writes each moved
@@ -852,6 +856,7 @@ export function setMenuOfferLookup(
 
 - [ ] **Step 1: Write the failing tests:** `"moving the Sirloin to the Daily stores +5.00 and
   frees the Special's main"`; `"a move into a place taken since is refused and writes nothing"`;
+  `"a move into a place held for an open draft is refused and writes nothing"`;
   `"a move to a set menu that does not list the dish is refused"`; `"two dishes swap places in one
   request"`; `"a stale revision is refused"`; `"a cancelled dish cannot be moved"`; `"a move is
   refused while a payment is in progress"`.

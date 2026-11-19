@@ -995,6 +995,7 @@ modifier corrections also reach matching dishes and modifiers in the copies. A d
 by a set menu can be corrected through the API. Extras usage and routing include set-menu dishes.
 The till's zone offers now include published set-menu copies. They identify the newest copy on sale,
 and the server can read a bill's recorded copy after its full menu is republished.
+Shared ordering code calculates where a dish fits, what it costs there and which moves make room.
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
 The dashboard editor and placement controls, the Preview editor link and draft problems on screen,
