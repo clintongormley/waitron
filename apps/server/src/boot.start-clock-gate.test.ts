@@ -302,7 +302,7 @@ describe("the start clock gate as boot wires it", () => {
     expect(seen).toEqual({ waiting: null, confirmed: expect.any(String) });
   });
 
-  it("gives a bill opened while a clock set was with the host its trusted opening time as soon as the set ends", async () => {
+  it("gives a bill opened while a clock set was with the host its trusted opening time as soon as the set ends, and never an earlier hold's end", async () => {
     let reached!: () => void;
     const asked = new Promise<void>((resolve) => (reached = resolve));
     let release!: () => void;
@@ -329,13 +329,23 @@ describe("the start clock gate as boot wires it", () => {
       venue.db.all<{ at: string | null }>(
         sql`select trusted_opened_at as at from working_orders where id = ${id}`,
       )[0]!.at;
+    const openedAt = (id: string) =>
+      venue.db.all<{ at: string }>(
+        sql`select opened_at as at from working_orders where id = ${id}`,
+      )[0]!.at;
 
     const seen = await serving(host, async () => {
       const correction = built.correction!;
       // Once this bill is stamped, the pass the confirmation woke has run.
       const waited = openBill();
+      const confirming = new Date().toISOString();
       built.start!.confirm("by_devices", {});
+      const confirmed = new Date().toISOString();
+      // The woken pass cannot run until this turn ends, so it reads the clock at least 20 ms on.
+      const until = Date.now() + 20;
+      while (Date.now() < until);
       await vi.waitFor(() => expect(trusted(waited)).not.toBeNull(), { timeout: 10_000 });
+      const atConfirmation = trusted(waited)!;
       const set = correction.set({
         reason: "start",
         source: "staff",
@@ -352,10 +362,20 @@ describe("the start clock gate as boot wires it", () => {
       const held = trusted(billId);
       // The job's own next look is a minute away.
       await vi.waitFor(() => expect(trusted(billId)).not.toBeNull(), { timeout: 10_000 });
-      return { status: built.start!.status, held, ended: trusted(billId) };
+      return {
+        status: built.start!.status,
+        held,
+        confirmationStamp: atConfirmation >= confirming && atConfirmation <= confirmed,
+        setStampNotBeforeOpening: trusted(billId)! >= openedAt(billId),
+      };
     });
 
-    expect(seen).toEqual({ status: "by_devices", held: null, ended: expect.any(String) });
+    expect(seen).toEqual({
+      status: "by_devices",
+      held: null,
+      confirmationStamp: true,
+      setStampNotBeforeOpening: true,
+    });
   });
 
   it("hands the box-health routes the start check it builds", async () => {

@@ -229,6 +229,7 @@ it("leaves bills from before a Veri*Factu restore for staff, whether or not thei
     selling: { mode: () => "primary", role: () => "primary", fenced: () => false },
     clockUnconfirmed: () => false,
     clockHoldsBegun: () => 1,
+    clockReleasedAt: () => null,
   });
   const look = () => definition.pass({ now: new Date(at), signal: new AbortController().signal });
   await look();

@@ -14,11 +14,14 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError, businessDayAt, businessDayBounds, type BusinessDayClock } from "@waitron/shared";
-import { closeOfDayJob } from "./close-of-day.js";
+import type { ClockServiceStatus } from "./box-host-client.js";
+import { clockCorrection } from "./clock-correction.js";
+import { closeOfDayJob, type CloseOfDayJobDeps } from "./close-of-day.js";
 import { createJobRunner } from "./job-runner.js";
 import { runRestoreHooks } from "./restore.js";
 import type { Logger } from "./logger.js";
-import { gateSeatOnStartClock } from "./start-clock-gate.js";
+import { startClockState } from "./start-clock-check.js";
+import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
 import { systemClock } from "./till-backend.js";
 import {
   fiscalRecordCount,
@@ -80,6 +83,8 @@ function gateHolds() {
   seatHolds = true;
 }
 let jobSeesHold: () => boolean = () => seatHolds;
+/** The gate the till's routes read when opening a bill. */
+let seatGate: () => boolean = () => seatHolds;
 let onLog: Logger = () => {};
 const logged: { event: string; fields: Record<string, unknown> | undefined }[] = [];
 
@@ -94,7 +99,7 @@ const suite = useVenueDb({
     );
     venueClock = await inTx(venue, (tx) => readVenueClock(tx));
     today = businessDayAt(venueClock, new Date());
-    seatingApp = venue.appWith({ clockUnconfirmed: () => seatHolds });
+    seatingApp = venue.appWith({ clockUnconfirmed: () => seatGate() });
   },
 });
 
@@ -140,7 +145,12 @@ function sellingSwitch(): SellingSwitch {
   return state;
 }
 
-function job(opts: { selling?: Selling } = {}) {
+type ClockDeps = Pick<
+  CloseOfDayJobDeps,
+  "clockUnconfirmed" | "clockHoldsBegun" | "clockReleasedAt"
+>;
+
+function job(opts: { selling?: Selling; clock?: ClockDeps } = {}) {
   return closeOfDayJob({
     admission: testTradingAdmission(),
     db: venue.db,
@@ -154,6 +164,8 @@ function job(opts: { selling?: Selling } = {}) {
     selling: opts.selling ?? primary,
     clockUnconfirmed: () => jobSeesHold(),
     clockHoldsBegun: () => holdsBegun,
+    clockReleasedAt: () => null,
+    ...opts.clock,
   });
 }
 
@@ -757,6 +769,130 @@ describe("a bill opened while the box's time is unconfirmed", () => {
     await look(job());
     expect(issued(bill)).toBe(true);
   });
+
+  it.each([
+    { what: "1 ms before the day's end", offset: 45, endsBeforeMs: 1, lateRefresh: false },
+    {
+      what: "30 s before the day's end, with a clock refresh still under way after it",
+      offset: 47,
+      endsBeforeMs: 30_000,
+      lateRefresh: true,
+    },
+  ])(
+    "issues a bill seated while a clock set was with the host at the end of the day the set ended in, when it ended $what",
+    async ({ offset, endsBeforeMs, lateRefresh }) => {
+      const clock = await inTx(venue, (tx) => readVenueClock(tx));
+      const endOf = (n: number) => Date.parse(businessDayBounds(clock, addDays(today, n)).endAt);
+      const endAt = endOf(offset);
+      at = endAt - 2 * HOUR;
+      const runner = createJobRunner({ now: () => new Date(at), log: () => {} });
+      let releasedAt: Date | null = null;
+      let asked = () => {};
+      const hostAsked = new Promise<void>((resolve) => (asked = resolve));
+      let answer = () => {};
+      const hostAnswers = new Promise<void>((resolve) => (answer = resolve));
+      let refreshStarted = () => {};
+      const refreshing = new Promise<void>((resolve) => (refreshStarted = resolve));
+      let finishRefresh = () => {};
+      const refreshed = new Promise<void>((resolve) => (finishRefresh = resolve));
+      const start = startClockState();
+      start.confirm("by_devices", {});
+      const unsynchronised: ClockServiceStatus = {
+        available: true,
+        service: "on",
+        unit: "chrony.service",
+        synchronised: false,
+        lastSyncAt: null,
+      };
+      const correction = clockCorrection({
+        host: {
+          clockStatus: async () => unsynchronised,
+          setClock: async ({ targetMs }) => {
+            asked();
+            await hostAnswers;
+            const beforeMs = at;
+            at = targetMs;
+            return { available: true, beforeMs, afterMs: at };
+          },
+        },
+        backend: { assertRecordableAt: () => {} },
+        store: { clear: () => {} },
+        clock: trustedClock(),
+        wall: () => at,
+        monotonic: () => 0,
+        boot: { readBoot: () => ({ ms: 0, id: "boot-1" }) },
+        read: (fn) => venue.db.withWriteLock(() => fn(venue.db)),
+        transaction: (fn) => withTransaction(venue.db, fn),
+        onSetEnded: (at_) => {
+          releasedAt = at_ ?? null;
+          // The woken pass reads the clock a moment after the end.
+          at += 2;
+          runner.wake("bills.close_of_day");
+        },
+        nodeId: venue.cfg.nodeId,
+        log: () => {},
+        start: { state: start, heads: async () => ({}) },
+      });
+      if (lateRefresh)
+        correction.addAnchor({
+          reanchor: async () => {
+            refreshStarted();
+            await refreshed;
+          },
+        });
+      const holds = startClockGateHolds(
+        start,
+        () => true,
+        () => correction.unwrittenStep() === "setting",
+      );
+      seatGate = holds;
+      runner.add(
+        job({
+          clock: {
+            clockUnconfirmed: holds,
+            clockHoldsBegun: () => start.waitsBegun() + correction.steps(),
+            clockReleasedAt: () => releasedAt,
+          },
+        }),
+      );
+      let bill: string;
+      try {
+        await vi.waitFor(() => expect(runner.views()["bills.close_of_day"]?.state).toBeDefined());
+        const setting = correction.set({
+          reason: "start",
+          source: "admin",
+          offsetMs: endAt - endsBeforeMs - at,
+          measuredAt: { wallMs: at, monoMs: 0 },
+          stepsSeen: correction.steps(),
+          witnesses: [],
+          requester: {},
+        });
+        await hostAsked;
+        bill = await billOpenedAt(endAt - 14 * HOUR);
+        expect(openings(bill)!.trustedOpenedAt).toBeNull();
+        answer();
+        if (lateRefresh) {
+          await refreshing;
+          at = endAt + 30_000;
+          finishRefresh();
+        }
+        expect(await setting).toMatchObject({ set: true });
+        await vi.waitFor(() => expect(openings(bill)!.trustedOpenedAt).not.toBeNull());
+      } finally {
+        await runner.stopJobs();
+        seatGate = () => seatHolds;
+      }
+
+      const closes: number[] = [];
+      at = endAt + 60_000;
+      await look(job());
+      closes.push(fiscalRecordCount(venue, bill));
+      at = endOf(offset + 1) + 60_000;
+      await look(job());
+      closes.push(fiscalRecordCount(venue, bill));
+      expect(closes).toEqual([1, 1]);
+    },
+  );
 
   // Last in the file: it retires the venue's series, which leaves every bill opened before it alone.
   it("leaves a bill from before a restore whose hook hands the host new series for staff, whether or not its time was confirmed", async () => {

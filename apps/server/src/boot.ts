@@ -2529,10 +2529,17 @@ async function bootServer(
   const declarationsSeat = enabledFiscal.declarations;
   if (declarationsSeat !== undefined)
     keptDeclarations = keptDeclarationsReader(db, declarationsSeat);
+  const tillClock = systemClock();
   // Bound once the job runner is built below. The close-of-day job stamps bills opened while the
   // clock held, so a stop soon after the hold ends does not lose its moment.
   let wakeOnClockReleased = () => {};
-  const startClock = startClockState(() => wakeOnClockReleased());
+  // Every end of a hold sets it, so the job never stamps a bill with an earlier hold's end.
+  let clockReleasedAt: Date | null = null;
+  const clockReleased = (at: Date | null) => {
+    clockReleasedAt = at;
+    wakeOnClockReleased();
+  };
+  const startClock = startClockState(() => clockReleased(tillClock.now().instant));
   // Bound once the clock correction is built below; until then no set can be with the host.
   let clockSetting = () => false;
   const startClockHolds = startClockGateHolds(startClock, filesRecords, () => clockSetting());
@@ -2877,7 +2884,6 @@ async function bootServer(
       incidents: recordIncidentOnce,
       captureAlerts: { raise: recordIncidentOnce, handle: markIncidentHandled },
     });
-  const tillClock = systemClock();
   const localHostRequests = seams.boxHostRequests ?? boxHostRequests();
   const clockService = sharedClockServiceReading(boxHost, now);
   const readClockService = clockService.read;
@@ -2893,7 +2899,7 @@ async function bootServer(
     transaction: (fn) => withTransaction(db, fn),
     // Called only once a set has run, after the email duty below has started.
     onCorrected: (incident) => boxEmails.remember(incident),
-    onSetEnded: () => wakeOnClockReleased(),
+    onSetEnded: clockReleased,
     nodeId: tradingContext.nodeId,
     log,
     start: { state: startClock, heads: recordHeads },
@@ -4527,6 +4533,7 @@ async function bootServer(
       clockUnconfirmed: startClockHolds,
       // A set with the host holds from its step on (`clockCorrection`'s `steps`).
       clockHoldsBegun: () => startClock.waitsBegun() + correction.steps(),
+      clockReleasedAt: () => clockReleasedAt,
     }),
   );
 

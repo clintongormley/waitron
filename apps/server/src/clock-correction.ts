@@ -98,8 +98,9 @@ export function clockCorrection(deps: {
   transaction: <T>(fn: (tx: Transaction) => Promise<T>) => Promise<T>;
   /** The email duty's `remember`. */
   onCorrected?: (incident: EmailedIncident) => void;
-  /** Runs each time a set that was with the host ends, its hold over. */
-  onSetEnded?: () => void;
+  /** Runs as each set that was with the host ends its hold, before the anchors are told, with the
+   * clock's reading just before the hold ended; null when that reading failed. */
+  onSetEnded?: (releasedAt: Date | null) => void;
   nodeId: string;
   log: Logger;
   /** The start's clock check, which admits a set at reason `start` until it is confirmed by the
@@ -232,6 +233,14 @@ export function clockCorrection(deps: {
     }
   }
 
+  function setEnded(releasedAt: Date | null): void {
+    try {
+      deps.onSetEnded?.(releasedAt);
+    } catch (error) {
+      deps.log("warn", "clock_correction.set_ended_failed", { errorCode: codeOf(error) });
+    }
+  }
+
   async function setInTurn(input: ClockSetInput): Promise<ClockSetAnswer> {
     // The latest step is read by the order rows were written, so a later step's row written
     // before an earlier one's would leave the earlier step read as the latest.
@@ -286,6 +295,7 @@ export function clockCorrection(deps: {
       if (!verified && moved) unverifiedStep(stepMs);
 
       unwritten = verified || moved ? { confirmedAt: after.instant.toISOString(), stepMs } : null;
+      setEnded(after.instant);
       const anchored = await reanchorAll();
       if (!verified && !moved) {
         deps.log("warn", "clock_correction.set_refused", {
@@ -328,8 +338,10 @@ export function clockCorrection(deps: {
         ? { set: true, confirmationId, stepMs, confirmedAt: after.instant.toISOString() }
         : { set: false, reason: "unverified" };
     } finally {
-      if (unwritten === "setting") unwritten = unwrittenBefore;
-      deps.onSetEnded?.();
+      if (unwritten === "setting") {
+        unwritten = unwrittenBefore;
+        setEnded(null);
+      }
     }
   }
 

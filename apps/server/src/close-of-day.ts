@@ -223,7 +223,7 @@ function untrustedAbove(db: Database, nodeId: string, afterRow: number) {
 }
 
 /** Gives this node's open bills that were opened while the time was unconfirmed `releasedAt`, the
- * trusted clock's reading once it was confirmed, as their trusted opening time. */
+ * trusted clock's reading when the hold ended, as their trusted opening time. */
 async function stampReleasedBills(tx: Transaction, nodeId: string, releasedAt: Date) {
   await tx
     .update(workingOrders)
@@ -238,6 +238,9 @@ export interface CloseOfDayJobDeps extends CloseOfDayDeps {
   clockUnconfirmed: () => boolean;
   /** Grows each time a hold `clockUnconfirmed` covers begins, so a hold between two looks is seen. */
   clockHoldsBegun: () => number;
+  /** The trusted clock's reading when the latest hold ended, set as the gate opens; null when
+   * unknown, and the pass's own reading stands in. */
+  clockReleasedAt: () => Date | null;
 }
 
 const LOOK_MS = 60_000;
@@ -358,10 +361,11 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
       const scan = untrustedAbove(deps.db, cfg.nodeId, scannedUpTo);
       if (scan.pending) {
         // Checked again under the write lock: a hold begun since the count was read may have
-        // opened bills after `reading`, so the stamp waits for that hold's release.
+        // opened bills after the release read here, so the stamp waits for that hold's own.
         const stop = await withTransaction(deps.db, async (tx) => {
           const before = stopBeforeBill(holds, signal);
-          if (before === undefined) await stampReleasedBills(tx, cfg.nodeId, reading);
+          if (before === undefined)
+            await stampReleasedBills(tx, cfg.nodeId, deps.clockReleasedAt() ?? reading);
           return before;
         });
         if (stop === "hold") held = true;
