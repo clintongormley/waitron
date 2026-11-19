@@ -1174,7 +1174,7 @@ describe("an original receipt whose printer was deleted", () => {
     expect(facts).not.toHaveProperty("failureCode");
   });
 
-  it("leaves the device with no receipt printer, as if none were set: a new sale queues no paper and a reprint answers as with none", async () => {
+  it("leaves the device with no receipt printer, as if none were set: a new sale queues no paper and a reprint refuses as with none", async () => {
     const { app, cookie, printerId, menuItemId } = await open();
     await deleteVia(printerId);
     const jobsBefore = await suite.db.select().from(printJobs);
@@ -1188,6 +1188,10 @@ describe("an original receipt whose printer was deleted", () => {
       body: "{}",
     });
     const deletedAnswer = [deletedReprint.status, await deletedReprint.text()];
+    expect(deletedReprint.status).toBe(409);
+    expect(JSON.parse(deletedAnswer[1] as string)).toMatchObject({
+      error: { code: "receipt.no_printer" },
+    });
     expect(await suite.db.select().from(printJobs)).toEqual(jobsBefore);
 
     await configureReceipt({ printerId: null });
@@ -1473,7 +1477,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(await printJobsFor(cfg)).toEqual([]);
   });
 
-  it("is a 200 no-op when the device has no receipt printer set (nothing to print to)", async () => {
+  it("refuses with receipt.no_printer (409) when the device has no receipt printer set", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     // A real filed sale, but no printer on the device.
     await configureReceipt({ printerId: null });
@@ -1487,9 +1491,13 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       method: "POST",
       headers: { cookie },
     });
-    expect(res.status).toBe(200);
-    expect(await printJobsFor(cfg)).toEqual([]); // no printer → nothing enqueued
-    expect(await fiscalRecordCount()).toBe(1); // and still no re-file
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "receipt.no_printer" },
+    });
+    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await suite.db.select().from(receiptReprints)).toEqual([]);
+    expect(await fiscalRecordCount()).toBe(1);
   });
 
   it("refuses a malformed id with working_order.not_found (404) before any query", async () => {

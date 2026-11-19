@@ -233,7 +233,7 @@ export function mountTenderRefundApi(
         )
           throw new AppError("management.request_invalid", { field: "language" });
         const printer = await resolveReceiptPrinter(tx, cfg.origin);
-        if (printer === undefined) return;
+        if (printer === undefined) throw new AppError("receipt.no_printer", {});
         const payload = formatTenderRefundAcknowledgment(
           acknowledgment,
           language ?? sale!.locale,

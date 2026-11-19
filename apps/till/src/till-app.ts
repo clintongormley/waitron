@@ -2041,6 +2041,11 @@ function profileRefusalOf(
     : undefined;
 }
 
+function reprintErrorKey(error: unknown): CounterError {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code === "storage.disk_full" || code === "receipt.no_printer" ? { code } : "reprint.error";
+}
+
 function isPermanentSaleRefusal(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
@@ -10266,10 +10271,7 @@ export class TillApp extends LitElement {
           this.historicalReceipt === receipt &&
           session === this.#operatorSession)
       )
-        this.errorKey =
-          (error as { code?: string } | undefined)?.code === "storage.disk_full"
-            ? { code: "storage.disk_full" }
-            : "reprint.error";
+        this.errorKey = reprintErrorKey(error);
     }
   }
 
@@ -10310,11 +10312,7 @@ export class TillApp extends LitElement {
     try {
       await api.reprintTenderRefund(refundId, language);
     } catch (error) {
-      if (current())
-        this.errorKey =
-          (error as { code?: string } | undefined)?.code === "storage.disk_full"
-            ? { code: "storage.disk_full" }
-            : "reprint.error";
+      if (current()) this.errorKey = reprintErrorKey(error);
     } finally {
       if (current()) this.refundPrintBusy = false;
     }

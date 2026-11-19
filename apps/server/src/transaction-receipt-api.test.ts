@@ -790,13 +790,13 @@ it("accepts an invoice's own disabled language and prints frozen-name fallback a
   expect(text).toContain("Nombre de cliente congelado");
   expect(await snapshot()).toEqual(before);
 });
-it("a device with no receipt printer answers without adding an audit or drawer job", async () => {
+it("a device with no receipt printer refuses with receipt.no_printer without adding an audit or drawer job", async () => {
   const id = await billlessSale(venue);
   await inTx(venue, (tx) =>
     tx.update(devices).set({ receiptPrinterId: null }).where(eq(devices.id, venue.deviceId)),
   );
   const before = await jobs();
-  expect((await reprint(id)).status).toBe(200);
+  expect(await reprint(id)).toMatchObject({ status: 409, json: { code: "receipt.no_printer" } });
   expect(await jobs()).toEqual(before);
 });
 it("preserves frozen extras, option answers, unit quantities and F1 list prices", async () => {

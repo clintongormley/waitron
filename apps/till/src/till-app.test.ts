@@ -6830,6 +6830,23 @@ describe("till-app", () => {
     expect(ticket(el)).not.toBeNull();
   });
 
+  it("reprint: a device with no receipt printer says so instead of the generic reprint error", async () => {
+    const { el } = await mountApp({
+      reprint: vi.fn().mockRejectedValue({ code: "receipt.no_printer", status: 409 }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(coffee, "2");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    emit(ticket(el)!, "reprint");
+    await flush(el);
+    const banner = el.shadowRoot!.querySelector('[role="alert"]');
+    expect(banner!.textContent).toContain(codeMessage("receipt.no_printer"));
+    expect(banner!.textContent).not.toContain(t("reprint.error"));
+  });
+
   it("confirm-payment: a CARD tender forwards intact (method, amount, externalRef) with the store's stable id", async () => {
     // `#onConfirmPayment` forwards whichever tender the widget emits without branching — this pins that
     // a CARD tender reaches recordSale UNCHANGED (method still "card", externalRef still present, never
@@ -25034,6 +25051,23 @@ describe("A737 Find a bill page", () => {
     expect(el.shadowRoot!.textContent).toContain(codeMessage("storage.disk_full"));
     expect(refundView(el)).toBe(receipt);
     expect(receipt.busy).toBe(false);
+  });
+
+  it("a device with no receipt printer says so when asked for an acknowledgment copy", async () => {
+    const { el, view } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES"] }),
+      getTenderRefundAcknowledgment: vi.fn().mockResolvedValue(acknowledgment),
+      reprintTenderRefund: vi.fn().mockRejectedValue({ code: "receipt.no_printer", status: 409 }),
+    });
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    const receipt = refundView(el)!;
+
+    emit(receipt, "reprint");
+    await flush(el);
+
+    expect(el.shadowRoot!.textContent).toContain(codeMessage("receipt.no_printer"));
+    expect(el.shadowRoot!.textContent).not.toContain(t("reprint.error"));
   });
 
   it("Bill gate opens only the first transaction while its receipt is loading", async () => {

@@ -377,6 +377,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The original has not finished printing. Check its status before confirming handover",
     es: "El original aún no ha terminado de imprimirse. Comprueba su estado antes de confirmar la entrega",
   },
+  "receipt.no_printer": {
+    en: "This device has no receipt printer. Choose one in Equipment, or print the copy from another device.",
+    es: "Este dispositivo no tiene impresora de tickets. Elige una en Equipo o imprime la copia desde otro dispositivo.",
+  },
   "fiscal.taxpayer_domicile_missing": {
     en: "The venue's legal address is missing. Ask a manager before issuing a full invoice",
     es: "Falta el domicilio fiscal del local. Avisa a un responsable antes de emitir una factura completa",

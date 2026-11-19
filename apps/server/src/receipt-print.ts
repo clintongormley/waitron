@@ -312,7 +312,7 @@ export async function enqueueReceiptReprint(
   personId?: string,
 ): Promise<void> {
   const printer = await resolveReceiptPrinter(tx, cfg.origin);
-  if (printer === undefined) return;
+  if (printer === undefined) throw new AppError("receipt.no_printer", {});
   await enqueueReceiptCopy(tx, cfg, ticket, saleId, printer, language, personId);
 }
 
