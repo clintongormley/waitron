@@ -355,6 +355,27 @@ describe("startFreshRounds", () => {
     await leftAlone(saleId);
   });
 
+  it("leaves an original on a switched-off printer until it is switched back on", async () => {
+    const { saleId, printerId } = await issued();
+    await receiptJob(saleId, printerId, givenUpAt(11));
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, printerId));
+    await leftAlone(saleId);
+    await suite.db.update(printers).set({ active: true }).where(eq(printers.id, printerId));
+    expect(await run()).toHaveLength(1);
+    expect(await jobsOf(saleId)).toHaveLength(2);
+  });
+
+  it("stops resending once the runner asks it to stop", async () => {
+    const { saleId, printerId } = await issued();
+    await receiptJob(saleId, printerId, givenUpAt(11));
+    const stopped = new AbortController();
+    stopped.abort();
+    expect(await startFreshRounds(suite.db, NOW, log, stopped.signal)).toEqual([]);
+    const job = owedReceiptJob({ db: suite.db, isPrimary: () => true, log });
+    expect(await job.pass({ now: NOW, signal: stopped.signal })).toEqual({ nextDueAt: null });
+    expect(await jobsOf(saleId)).toHaveLength(1);
+  });
+
   it("leaves a sale that no longer owes its original", async () => {
     const { saleId, printerId } = await issued();
     await receiptJob(saleId, printerId, givenUpAt(11));
@@ -378,6 +399,26 @@ describe("startFreshRounds", () => {
       resendOf: first,
       status: "queued",
     });
+  });
+
+  it("takes the last original made as the newest, even after the clock stepped back", async () => {
+    const { saleId, printerId } = await issued();
+    const elsewhere = await withTransaction(suite.db, async (tx) =>
+      createPrinter(tx, { name: "Terrace", transport: "network_tcp", host: "terrace.test" }),
+    );
+    const first = await receiptJob(saleId, printerId, {
+      ...givenUpAt(30),
+      createdAt: minutesAgo(40),
+    });
+    await receiptJob(saleId, elsewhere.id, {
+      ...givenUpAt(20),
+      resendOf: first,
+      createdAt: minutesAgo(90),
+    });
+    const [resent] = await run();
+    const jobs = await jobsOf(saleId);
+    expect(jobs).toHaveLength(3);
+    expect(jobs.find((job) => job.id === resent)).toMatchObject({ printerId: elsewhere.id });
   });
 
   it("logs a resend that fails and carries on with the next sale", async () => {

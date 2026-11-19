@@ -70,7 +70,12 @@ const ROUND_EVERY_MS = 60_000;
 const ENDED_NOT_FAILED = [PRINTER_DELETED, PRINTER_UNPAIRED, PRINT_JOB_MOVED];
 
 /** Resends, as the till's Retry original does, each owed original that gave up a while ago. */
-export async function startFreshRounds(db: Database, now: Date, log: Logger): Promise<string[]> {
+export async function startFreshRounds(
+  db: Database,
+  now: Date,
+  log: Logger,
+  signal?: AbortSignal,
+): Promise<string[]> {
   const later = sql.raw("later");
   const candidates = await db
     .select({ id: printJobs.id, saleId: sales.id })
@@ -86,17 +91,19 @@ export async function startFreshRounds(db: Database, now: Date, log: Logger): Pr
         gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
         or(isNull(printJobs.lastError), sql`${printJobs.lastError} not in ${ENDED_NOT_FAILED}`),
         lt(printJobs.claimedAt, new Date(now.getTime() - ROUND_AFTER_MS).toISOString()),
-        isNull(printers.deletedAt),
+        // `printers_deleted_ck` makes a deleted printer inactive too.
+        eq(printers.active, true),
+        // Newest by insert order: print jobs are never deleted, and `created_at` follows the clock,
+        // which can step back.
         sql`not exists (
           select 1 from ${printJobs} as ${later}
           where ${later}.sale_id = ${printJobs.saleId} and ${later}.kind = 'document'
-            and ${later}.receipt_copy = 0
-            and (${later}.created_at > ${printJobs.createdAt}
-              or (${later}.created_at = ${printJobs.createdAt} and ${later}.rowid > ${printJobs}.rowid)))`,
+            and ${later}.receipt_copy = 0 and ${later}.rowid > ${printJobs}.rowid)`,
       ),
     );
   const resent: string[] = [];
   for (const { id, saleId } of candidates) {
+    if (signal?.aborted) break;
     try {
       const retry = await withTransaction(db, async (tx) =>
         (await owesOriginal(tx, saleId)) ? resendInvoicePrintJob(tx, id, null, now) : undefined,
@@ -120,8 +127,8 @@ export function owedReceiptJob(deps: {
     minSleepMs: ROUND_EVERY_MS,
     maxSleepMs: ROUND_EVERY_MS,
     backoff: { firstMs: ROUND_EVERY_MS, maxMs: ROUND_EVERY_MS },
-    async pass({ now }) {
-      for (const jobId of await startFreshRounds(deps.db, now, deps.log))
+    async pass({ now, signal }) {
+      for (const jobId of await startFreshRounds(deps.db, now, deps.log, signal))
         deps.log("info", "receipt.fresh_round", { jobId });
       return { nextDueAt: null };
     },
