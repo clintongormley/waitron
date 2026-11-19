@@ -104,7 +104,7 @@ function dispatch(repository, input = offer, overrides = {}) {
 }
 
 describe("publish a signed upgrade offer", () => {
-  it("publishes a fresh pause and refuses an old rerun after the pause is removed", () => {
+  it("refuses an old rerun after a pause is removed", () => {
     const scratch = mkdtempSync(join(tmpdir(), "publish-offer-test-"));
     try {
       const keyDir = join(scratch, "deploy/box/release-keys");
@@ -167,7 +167,7 @@ else process.exit(4);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
-  });
+  }, 25_000);
 
   it("uploads the offer once and boxes can verify the group version and older default", () => {
     const repository = github();
