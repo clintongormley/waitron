@@ -29,6 +29,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanupWidgets();
+  localStorage.removeItem("waitron.lastOperator.till-dev");
   setLocale(originalLocale);
 });
 
