@@ -33,8 +33,9 @@ at `33be7eaaf3` before those two landed, is in the owner's checkout at
   `SetMenuOfferDish` gains `countsAsCourseId`; `SetMenuDish` loses it. **Only the till calls
   `fitSetMenus`** (Task 3's `suggestMove`, run by Task 16a). No server path calls it: the server
   places dishes with `placeInOrder` and checks a chosen move with `checkMoves`, neither of which
-  calls the fit, so `set_menu.fit_invalid_input` never reaches a server answer and needs no
-  `STATUS` entry or server wording. The till catches it in `suggestMove` and offers no move.
+  calls the fit, so `set_menu.fit_invalid_input` needs no server status or wording.
+  `suggestMove` offers no move for an invalid amount. It surfaces other fit errors for the till's
+  existing error handling.
 - **Piece 1** ([2026-11-18-a1515-set-menu-dashboard.md](2026-11-18-a1515-set-menu-dashboard.md),
   decisions 4, 9, 10 and 12, Tasks 4b, 6a and 6b, as amended on 18 November). Piece 1 is the
   producer; this plan uses its names:
@@ -855,6 +856,7 @@ export function setMenuOfferLookup(
 
 - [ ] **Step 1: Write the failing tests:** `"moving the Sirloin to the Daily stores +5.00 and
   frees the Special's main"`; `"a move into a place taken since is refused and writes nothing"`;
+  `"a move into a place held for an open draft is refused and writes nothing"`;
   `"a move to a set menu that does not list the dish is refused"`; `"two dishes swap places in one
   request"`; `"a stale revision is refused"`; `"a cancelled dish cannot be moved"`; `"a move is
   refused while a payment is in progress"`.
