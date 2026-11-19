@@ -174,10 +174,9 @@ function toTotal(node: Node, depth: number): CategoryTotal {
 }
 
 /**
- * Sales by reporting category over a closed business-day range, in one of two modes (spec
- * `2026-09-25-sales-classification-and-category-reports-design.md` §5). A line's amount is added at
- * every node of its path, and a node is keyed by the whole path from the root, never by its own id
- * alone: a category moved in the period appears under each parent it had.
+ * Sales by reporting category over a closed business-day range, in one of two modes. A line's
+ * amount is added at every node of its path, and a node is keyed by the whole path from the root,
+ * never by its own id alone: a category moved in the period appears under each parent it had.
  *
  * Inclusion is the other reports' (`issuedSalesClause`, `reversedSalesClause`): a void in the range
  * of a sale issued outside it subtracts, at time of sale under the voided line's own recorded

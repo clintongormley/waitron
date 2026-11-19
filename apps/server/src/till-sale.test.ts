@@ -1814,8 +1814,8 @@ describe("ordering extras and options — parent + child lines", () => {
       optionSnapshots: [],
     });
 
-    // `sale_lines` may name the picked product, as a value (sales classification spec §3), but no
-    // foreign key ties a filed line to the menu, and it has no column for the offer or the list.
+    // `sale_lines` may name the picked product, as a value, but no foreign key ties a filed line
+    // to the menu, and it has no column for the offer or the list.
     const { columns, keys } = await withTransaction(suite.db, async (tx) => {
       // An unknown table yields no rows, so `toContain("option_snapshots")` keeps the
       // `not.toContain` assertions from passing on an empty answer.

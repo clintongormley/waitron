@@ -12,6 +12,10 @@ and no promotion).
 evidence; this note is the product.
 **2026-09-23:** slice 2's five measurements are appended under [Slice 2 measurements](#slice-2-measurements).
 **2026-11-03:** S2 re-run with A1018's return batch, appended under [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03): its new Parts F and G pass and their three controls fail; the row is still FAIL on Part D and Part E's second half. **Later the same day:** the owner reads S2's gate from Parts F and G, Parts D and E's second half became controls of the retired design, and S2 reads PASS — see [S2 reads PASS](#s2-reads-pass-the-owners-reading-2026-11-03).
+**2026-11-19:** the prototype's design and plan, which "the prototype spec" and "the plan" above
+[Slice 2 measurements](#slice-2-measurements) refer to, were deleted that day; pinned copies:
+[2026-09-16-sqlite-failover-prototype-design.md](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/specs/2026-09-16-sqlite-failover-prototype-design.md),
+[2026-09-16-sqlite-failover-prototype.md](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-09-16-sqlite-failover-prototype.md).
 
 ---
 

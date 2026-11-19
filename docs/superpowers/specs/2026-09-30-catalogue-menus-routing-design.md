@@ -10,7 +10,7 @@
 > below are historical. Stations use daily closure destinations and the active default;
 > Opening hours shows their worked-out times without a station-hours editor. See
 > [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
-> and [the slice 4 plan](../plans/2026-10-08-a366-slice-4-prep-stations.md).
+> and [the slice 4 plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md).
 
 > **2026-10-07 — A366:** §5.7 and §5.9 are replaced by [Service times, departments, zones and prep stations](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md).
 
@@ -29,7 +29,7 @@ three slices (§6), each with its own plan and pull request.
   sections and the Sections screen (§1–§3, §10.1), labels (§10.1), the kitchen-routing outline
   (§10.5), and publishing's rule that drops a shortcut tile whose target has gone (plan decision
   D13).
-- [The sales classification design](2026-09-25-sales-classification-and-category-reports-design.md):
+- [The sales classification design](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md):
   everything about labels, and translated category names.
 
 Facts about today's code were read from `main` on 2026-09-30. They are readings, not measurements.

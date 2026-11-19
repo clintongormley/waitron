@@ -21,7 +21,7 @@ the README's language. The module files are JSON, not the design's `rota.csv` an
 who decided them (S2b decision 11), and a swap's shift times wait for the owner (S2b
 decision 8). S2b also adds workforce migration 0010: three indexes for the download's
 by-person reads, with no table rebuilt. 2026-10-25: S2c is built
-([its plan](2026-10-25-a980-s2c-actions-admin-download.md)): the download holds `actions.json`
+([its plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md)): the download holds `actions.json`
 (counts, and the invoice numbers of the whole sales already recorded whose void the person
 authorised, of the refunds they asked for, authorised or recorded the outcome of, and of the
 cash-drawer openings they made or authorised), read in short turns of its own after the first
@@ -29,7 +29,7 @@ turn, and an admin downloads another person's data under `personal_data.export`,
 in that person's language, else the venue's. No product path records a whole-sale void yet, so the
 voids list is empty on every box until one does. Line voids, comps and discounts are S2d, next; the
 rest of who did what waits (S2c decisions 2 and 3). 2026-10-26: S2d is built
-([its plan](2026-10-25-a980-s2d-line-voids.md)): the download holds `adjustments.json` (the voids,
+([its plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-25-a980-s2d-line-voids.md)): the download holds `adjustments.json` (the voids,
 comps and discounts the person made giving a reason, or approved, from the adjustments module's own
 part), read in the snapshot turn through two new indexes, adjustments migration 0009
 (`0009_personal_data_person_indexes`), with no table rebuilt. Core's

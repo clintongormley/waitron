@@ -138,7 +138,7 @@ by the answers):
   per invoice. Repeat the S3 plan's decision 7 measurements on a box, against its stop rules, with
   the ZIP's size and the whole download's time.
 - **Reduce the first snapshot turn's cost for a person heavy in two histories.** The
-  [S2d plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md#decisions-this-plan-makes-that-the-spec-does-not),
+  [S2d plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-25-a980-s2d-line-voids.md#decisions-this-plan-makes-that-the-spec-does-not),
   decision 13, sets a 250 ms median stop rule for its Mac fixture with heavy working-time and
   adjustments histories.
   Options: give a module's part write-lock turns of its own, as the actions part has, or narrow the
@@ -234,7 +234,7 @@ by the answers):
   The owner approved building it, as A1404.
 - **A980 S2c, decision 3:** no product path records a whole-sale void yet, so the voids list is
   empty on every box until one does. See the
-  [S2c plan](../superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md).
+  [S2c plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-25-a980-s2c-actions-admin-download.md).
 
 - **A664, 2026-10-17:** you adopted the revised retention proposal for specialist review.
   Six years remains the discussion baseline. Q48 is yours to send; all product/report code
@@ -256,7 +256,7 @@ by the answers):
   with **Remove** before its preparation started is not in the file: no row records who removed
   the line (an `order_group_events` row names the person only when the removal empties a held
   group, and that column is not in the download yet). See the
-  [S2d plan](../superpowers/plans/2026-10-25-a980-s2d-line-voids.md)'s decisions 4 and 14.
+  [S2d plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-25-a980-s2d-line-voids.md)'s decisions 4 and 14.
 - **A980 S2d follow-up, 2026-10-26:** the owner chose to keep each adjustment's reason in
   `adjustments.json` as the venue named it on the Voids and comps page, even though a reason's
   name can name someone (the question's example: a reason "Ana's mistake" appears in the copies of

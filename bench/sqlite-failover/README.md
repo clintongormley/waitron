@@ -16,9 +16,10 @@ It stands up a **minimal model** of the fiscal ledger in SQLite (`src/model.ts`)
 `packages/fiscal-verifactu`. Every model table names the real table it stands in for. A result here is
 evidence about the loop's mechanism, never about the real ledger's code.
 
-See `docs/superpowers/specs/2026-09-16-sqlite-failover-prototype-design.md` for what it proves and
-what it deliberately does not, and `docs/superpowers/plans/2026-09-16-sqlite-failover-prototype.md`
-for the scenarios.
+"spec §" and "plan Task" numbers below and in `src/` (such as "spec §4" and "plan Task 8"; a bare
+"Task 10" is the plan's too) refer to the prototype's design, [2026-09-16-sqlite-failover-prototype-design.md](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/specs/2026-09-16-sqlite-failover-prototype-design.md),
+and plan, [2026-09-16-sqlite-failover-prototype.md](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-09-16-sqlite-failover-prototype.md),
+deleted 2026-11-19.
 
 ## Running it
 

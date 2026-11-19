@@ -515,7 +515,7 @@ This remains an unsigned, disposable development image, with no theft-protection
 claim. Signed boot/Secure Boot, parent experiments (b) and (i), failure/recovery screens, key sheets,
 update resealing and real stick/box/Android checks remain release gates. B3 remains 0/6 parent slices
 complete. A1187 part 3 and A950 cuts 4+ can reassess their startup dependency once this cut lands;
-other prerequisites still apply. [Startup plan](../superpowers/plans/2026-11-10-b3-15-retained-key-startup.md).
+other prerequisites still apply. [Startup plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-11-10-b3-15-retained-key-startup.md).
 
 The [11 November firmware measurement](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-b3-17-existing-stick.md#measured-on-11-november-2026)
 observed one guest-requested restart into an exact target EFI entry, with the USB attached and

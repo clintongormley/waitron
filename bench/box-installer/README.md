@@ -131,8 +131,8 @@ writes stay in memory. The writer takes no device argument. It requires the rig�
 non-source disk, the target’s virtio serial, no mounts or holders and an all-zero disk.
 It writes EFI and boot partitions, then a marked LUKS2 container holding btrfs with separate root,
 images, volumes, logs and host-state areas. The startup image attempts the chip once and extends register 15 before any empty-password
-bootstrap fallback. The first-start service accepts only the three states in the
-[B3-15 plan](../../docs/superpowers/plans/2026-11-10-b3-15-retained-key-startup.md).
+bootstrap fallback. The first-start service accepts only the three states `diskStartupAction` in
+`scripts/box/disk-start.mjs` names.
 A separate read-only gate holds both Docker’s service and socket until the empty password is gone.
 Startup also checks the mounted filesystem and its encrypted backing before Compose. Disk boots
 use the shipped kernel, startup image and boot arguments. The rig adds observation commands to

@@ -2677,7 +2677,6 @@ export async function reprintOrderTickets(
  * prints once, on its fired part, and lists dishes at stations on neither part. It prints when a
  * station of the fired part shows it, or a station of the held part does and no held station there
  * has fired work.
- * Decisions 3 and 5 of docs/superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md.
  */
 function joinedPapers(
   firedStations: ReadonlySet<string>,

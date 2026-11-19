@@ -25,7 +25,7 @@ floor-plan editing remain separate.
 > retired. A closed station follows today's destination, then the active default; a disabled
 > station uses the active default. Closing or disabling with unfinished dishes requires their
 > disposition. See [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
-> and [the slice 4 plan](2026-10-08-a366-slice-4-prep-stations.md#part-b--no-station-hours-or-fallbacks-worked-out-times-second-pull-request).
+> and [the slice 4 plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md#part-b--no-station-hours-or-fallbacks-worked-out-times-second-pull-request).
 
 > Update, 2026-10-09 (A435-1): the product Disable/Enable behavior described here is historical.
 > Products and variants now archive permanently. See [the current product guide](../../../apps/server/src/guide/en/products.md)
