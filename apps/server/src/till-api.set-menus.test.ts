@@ -146,6 +146,37 @@ it.each(["PUT", "DELETE"] as const)(
   },
 );
 
+it("requires the observed editor state on a party bill even with a current party revision", async () => {
+  const { venue, copy } = fixture;
+  const { tabId, partyId } = await seated();
+  const lineId = await inTx(venue, (tx) => seedBillSetMenu(tx, tabId, copy, 1));
+  const expectedPartyRevision = await inTx(venue, (tx) => partyRevision(tx, partyId));
+  const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, tabId));
+
+  const stale = await request("PUT", `/api/bills/${tabId}/set-menus/${copy.menuId}`, {
+    count: 2,
+    expectedPartyRevision,
+    expectedEdit: { ...expectedEdit, editorVersion: expectedEdit.editorVersion + 1 },
+  });
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({ error: { code: "draft.out_of_date" } });
+  const missing = await request("DELETE", `/api/bills/${tabId}/set-menu-lines/${lineId}`, {
+    expectedPartyRevision,
+  });
+  expect(missing.status).toBe(400);
+  expect(await missing.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "expectedEdit" } },
+  });
+
+  expect(await inTx(venue, (tx) => partyRevision(tx, partyId))).toBe(expectedPartyRevision);
+  expect(
+    await venue.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId)),
+  ).toEqual([{ id: lineId }]);
+});
+
 it("uses the named set menu and line when their ids are uppercase", async () => {
   const { venue, copy } = fixture;
   const { tabId, partyId } = await seated();
