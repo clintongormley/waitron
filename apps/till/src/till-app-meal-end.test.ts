@@ -3,7 +3,8 @@ import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { clockUnusableText, overLimitText, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
-import type { EndedMeal, PartyBill, TabLine, TillApi } from "./api/client.js";
+import { TillApi } from "./api/client.js";
+import type { EndedMeal, EndMealRequest, PartyBill, TabLine } from "./api/client.js";
 import type { CapabilityFlag } from "./layout.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import {
@@ -633,6 +634,142 @@ describe("till-app: Print the bill", () => {
     await printBill(el);
     expect(endMeal).toHaveBeenCalledTimes(2);
     expect(sentBodies(endMeal)[1]!.expectedPartyRevision).toBe(5);
+  });
+});
+
+describe("till-app: what counts as the server's answer to Print the bill", () => {
+  it.each([
+    ["an empty answer", undefined],
+    ["an answer for another bill", { ...ended, workingOrderId: "wo-9" }],
+    ["an answer with no invoice number", { ...ended, invoiceNumber: undefined }],
+    ["an answer with an empty invoice number", { ...ended, invoiceNumber: "" }],
+  ])("does not say Bill issued after %s, and warns instead", async (_case, answer) => {
+    const { el } = await openBill({ endMeal: async () => answer });
+
+    await printBill(el);
+
+    expect(printedNotice(el)).toBeNull();
+    expect(banner(el)!.textContent).toContain(t("meal_end.unconfirmed"));
+  });
+
+  const throughRealClient = (response: () => Response) => {
+    const real = new TillApi("", vi.fn(async () => response()) as unknown as typeof fetch);
+    return (partyId: unknown, request: unknown, options: unknown) =>
+      real.endMeal(partyId as string, request as EndMealRequest, options as { signal: AbortSignal });
+  };
+
+  it("does not say Bill issued when the real client gets an empty success", async () => {
+    const { el } = await openBill({
+      endMeal: throughRealClient(() => new Response(null, { status: 204 })),
+    });
+
+    await printBill(el);
+
+    expect(printedNotice(el)).toBeNull();
+    expect(banner(el)!.textContent).toContain(t("meal_end.unconfirmed"));
+  });
+
+  it("says Bill issued when the real client gets the server's answer", async () => {
+    const { el } = await openBill({
+      endMeal: throughRealClient(() => Response.json(ended)),
+    });
+
+    await printBill(el);
+
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+    expect(banner(el)).toBeNull();
+  });
+});
+
+describe("till-app: the bills read after a print's answer", () => {
+  const printInMenu = (el: TillApp) =>
+    shadow(el).querySelector<HTMLElement & { disabled: boolean }>(
+      '[data-table-menu] [data-action="print-bill"]',
+    )!;
+
+  /** Bills reads answer at once until `hold` is called; the next one then waits for the test. */
+  function billsReadHeldOnDemand(bills: () => PartyBill[] = () => [billOf()]) {
+    const read = heldAnswer<PartyBill[]>();
+    let holding = false;
+    const getPartyBills = vi.fn(() => (holding ? read.promise : Promise.resolve(bills())));
+    return { getPartyBills, read, hold: () => (holding = true) };
+  }
+
+  it("warns and frees the print controls while the read after an unanswered print is held", async () => {
+    const deadlines = deadlinesByHand();
+    const { getPartyBills, read, hold } = billsReadHeldOnDemand();
+    const { el } = await openBill({ endMeal: unansweredUntilDeadline, getPartyBills });
+    await printBill(el);
+    expect(tableOrder(el).billPrintPending).toBe(true);
+    hold();
+    const reads = getPartyBills.mock.calls.length;
+
+    deadlines.expire();
+    await flush(el, 6);
+
+    expect(getPartyBills.mock.calls.length).toBeGreaterThan(reads);
+    expect(banner(el)!.textContent).toContain(t("meal_end.unconfirmed"));
+    expect(tableOrder(el).billPrintPending).toBe(false);
+    expect(tableOrder(el).busy).toBe(false);
+    expect(printInMenu(el).disabled).toBe(false);
+
+    read.resolve([billOf()]);
+    await flush(el, 6);
+    expect(banner(el)!.textContent).toContain(t("meal_end.unconfirmed"));
+  });
+
+  it("keeps the warning and the bills when that read fails", async () => {
+    const deadlines = deadlinesByHand();
+    const { getPartyBills, read, hold } = billsReadHeldOnDemand();
+    const { el } = await openBill({ endMeal: unansweredUntilDeadline, getPartyBills });
+    await printBill(el);
+    hold();
+
+    deadlines.expire();
+    await flush(el, 6);
+    read.reject(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+
+    expect(banner(el)!.textContent).toContain(t("meal_end.unconfirmed"));
+    expect(tableOrder(el).bills.map((bill) => bill.workingOrderId)).toEqual(["wo-4"]);
+  });
+
+  it("frees the print controls while the read after a refusal is held", async () => {
+    const { getPartyBills, hold } = billsReadHeldOnDemand();
+    const { el } = await openBill({
+      endMeal: vi.fn(async () => {
+        hold();
+        throw { code: "meal_end.no_printer", status: 409 };
+      }),
+      getPartyBills,
+    });
+
+    await printBill(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("meal_end.no_printer"));
+    expect(tableOrder(el).billPrintPending).toBe(false);
+    expect(printInMenu(el).disabled).toBe(false);
+  });
+
+  it("does not leave the warning under the bill the screen moves to when that read finds the bill gone", async () => {
+    const deadlines = deadlinesByHand();
+    let gone = false;
+    const { el } = await openBill({
+      endMeal: unansweredUntilDeadline,
+      getPartyBills: vi.fn(async () =>
+        gone
+          ? [billOf({ workingOrderId: "wo-9", billNumber: 2 })]
+          : [billOf(), billOf({ workingOrderId: "wo-9", billNumber: 2 })],
+      ),
+    });
+    await printBill(el);
+    gone = true;
+
+    deadlines.expire();
+    await flush(el, 6);
+
+    expect(tableOrder(el).orderId).toBe("wo-9");
+    expect(banner(el)).toBeNull();
   });
 });
 
