@@ -20436,6 +20436,23 @@ export class TillApp extends LitElement {
     await this.#refreshFloor();
   }
 
+  #askForOwedReceipt(): void {
+    const owed = this.ticketWorkingOrderId;
+    if (
+      this.settlementDocument === null ||
+      owed === undefined ||
+      (this.deviceId !== undefined && !this.capabilities.includes("print-receipt"))
+    )
+      return;
+    this.api.printReceipt(owed, { ifOwed: true }).catch((error: unknown) =>
+      diag.record("warn", "receipt.owed_request_failed", {
+        error:
+          (error as { code?: unknown } | undefined)?.code ??
+          (error instanceof Error ? error.name : "Unknown"),
+      }),
+    );
+  }
+
   #endOperatorSession(): void {
     this.shadowRoot?.querySelector<TillProblemReport>("till-problem-report")?.close();
     this.#counterRefreshRequest++;
@@ -22230,6 +22247,7 @@ export class TillApp extends LitElement {
 
   /** Keeps the basket: it belongs to the till. */
   async #onLogout(endServerSession = true): Promise<void> {
+    this.#askForOwedReceipt();
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
     this.#tableToResume =
@@ -23467,12 +23485,7 @@ export class TillApp extends LitElement {
                 }}
                 @settlement-close=${() => {
                   const close = () => {
-                    const owed = this.ticketWorkingOrderId;
-                    if (
-                      owed !== undefined &&
-                      (this.deviceId === undefined || this.capabilities.includes("print-receipt"))
-                    )
-                      this.api.printReceipt(owed, { ifOwed: true }).catch(() => undefined);
+                    this.#askForOwedReceipt();
                     if (this.settlementDocument?.surface === "table") void this.#onBackToTable();
                     else {
                       this.settlementDocument = null;

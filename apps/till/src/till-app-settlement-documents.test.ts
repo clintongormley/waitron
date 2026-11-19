@@ -19,6 +19,8 @@ import {
 import { transactionRow } from "../test/find-bill-fixtures.js";
 import type { InvoiceDeliveryStatus, TillApi, TillProduct } from "./api/client.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
+import { SessionActivity } from "./session-activity.js";
+import { diag } from "./diagnostics.js";
 
 const originalLocale = currentLocale();
 beforeEach(() => {
@@ -469,10 +471,15 @@ describe.each(surfaces)("closing the documents window after %s", (_surface, pay)
     });
     const { el } = await mountWidget<TillApp>("till-app", { api });
     const id = await pay(el, api);
+    const record = vi.spyOn(diag, "record");
     closeBy.Done(el);
     await flush(el);
     expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith(id, { ifOwed: true });
     expect(documents(el)).toBeNull();
+    expect(record).toHaveBeenCalledWith("warn", "receipt.owed_request_failed", {
+      error: "TypeError",
+    });
+    record.mockRestore();
   });
 
   it("asks for nothing on a device that may not print receipts", async () => {
@@ -513,3 +520,69 @@ it("sends nothing and keeps the window when staff keep the basket, and sends onc
   expect(documents(el)).toBeNull();
   expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith(id, { ifOwed: true });
 });
+
+const signOutBy = {
+  "signing out": async (el: TillApp) => {
+    emit(shell(el), "logout");
+    await flush(el);
+  },
+  "the idle time passing": async (el: TillApp) => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    try {
+      emit(el, "pointerdown");
+      await vi.advanceTimersByTimeAsync(300_000);
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush(el);
+  },
+};
+
+async function mountForSignOut(api: TillApi): Promise<TillApp> {
+  const { el } = await mountWidget<TillApp>("till-app", {
+    api,
+    sessionActivity: new SessionActivity(),
+  });
+  return el;
+}
+
+describe.each(Object.keys(signOutBy) as (keyof typeof signOutBy)[])(
+  "%s with the documents window",
+  (way) => {
+    const idle = { ...till, inactivityTimeoutSeconds: 300 };
+
+    it("open asks once for the original if it is still owed, before ending the session", async () => {
+      const api = closingApi({ getTill: vi.fn().mockResolvedValue(idle) });
+      const el = await mountForSignOut(api);
+      await payAtTable(el);
+      await signOutBy[way](el);
+      expect(lock(el)).not.toBeNull();
+      expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith("wo-4", { ifOwed: true });
+      expect(vi.mocked(api.printReceipt).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(api.logout).mock.invocationCallOrder[0]!,
+      );
+    });
+
+    it("closed asks for nothing", async () => {
+      const api = closingApi({ getTill: vi.fn().mockResolvedValue(idle) });
+      const el = await mountForSignOut(api);
+      await openTable(el);
+      await signOutBy[way](el);
+      expect(lock(el)).not.toBeNull();
+      expect(api.logout).toHaveBeenCalled();
+      expect(api.printReceipt).not.toHaveBeenCalled();
+    });
+
+    it("open asks for nothing on a device that may not print receipts", async () => {
+      const api = closingApi({
+        getTill: vi.fn().mockResolvedValue({ ...idle, capabilities: ["take-cash"] }),
+      });
+      const el = await mountForSignOut(api);
+      await payAtTable(el);
+      await signOutBy[way](el);
+      expect(lock(el)).not.toBeNull();
+      expect(api.logout).toHaveBeenCalled();
+      expect(api.printReceipt).not.toHaveBeenCalled();
+    });
+  },
+);
