@@ -414,9 +414,16 @@ is_release_tag() {
     && [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 }
 
+refuse_legacy_release_trust() {
+  if [ -d "$RELEASE_TRUST" ] && [ ! -L "$RELEASE_TRUST" ]; then
+    die 'this release trust directory is from an early test image — reinstall the test box with the current recipe'
+  fi
+}
+
 require_numbered_release_verifier() {
   [ "${BASH_SOURCE[0]}" -ef "$WAITRON_HOST_DIR/waitron.sh" ] \
     || die "run numbered installs from $WAITRON_HOST_DIR/waitron.sh"
+  refuse_legacy_release_trust
   [ -x "$HOST_NODE" ] && [ -L "$RELEASE_TRUST" ] && [ -r "$RELEASE_TRUST/verify-release.mjs" ] \
     || die 'release verification is unavailable — use a published main image with the verifier and both release keys, then follow the checked upgrade instructions'
   command -v curl >/dev/null 2>&1 || die 'install curl to download the signed release file'
@@ -1025,6 +1032,7 @@ cmd_manual_install() (
       && [ "$checked" = "$signed_sha $*" ] || die "release trust changed while preparing $ref — try again"
     require_current_or_newer_release "$ref"
   fi
+  if [ "$trust_ready" -eq 1 ]; then refuse_legacy_release_trust; fi
   install_upgrade_driver "$stage"
   if [ "$trust_ready" -eq 1 ]; then
     install_release_trust "$stage"

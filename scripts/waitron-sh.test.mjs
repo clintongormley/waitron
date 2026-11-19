@@ -1723,6 +1723,24 @@ describe("waitron.sh install of a release", () => {
     expect(loggedCalls(sb)).toEqual([""]);
   });
 
+  it.each(["main", "v1.2.3"])(
+    "explains how to reinstall an early test box before changing its driver (%s)",
+    (ref) => {
+      const sb = sandbox({ systemd: true });
+      installedBox(sb);
+      const release = signedRelease(sb);
+      const host = join(sb.root, "host");
+      const trust = join(host, "release-trust");
+      rmSync(trust);
+      cpSync(join(host, ".release-trust.seed"), trust, { recursive: true });
+      writeFileSync(sb.log, "");
+      const result = run(sb, ["install", ref], { ...release, WT_REGISTRY_REVISION: signedSource });
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stderr).toContain("reinstall the test box with the current recipe");
+      expect(loggedCalls(sb).some((call) => /^(install |host:.* apply )/.test(call))).toBe(false);
+    },
+  );
+
   it("checks a release on a provisioned development box and passes the signed digests into its upgrade", () => {
     const sb = sandbox({ systemd: true });
     installedBox(sb);
