@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { cleanup, mount } from "../test-helpers.js";
 import type { WtRelativeTime } from "./wt-relative-time.js";
 import "./wt-relative-time.js";
@@ -11,6 +11,9 @@ afterEach(cleanup);
 // is sticky, and once a real click or keypress sets it the browser's own Escape handling closes the
 // popover first, so the component's handler goes unexercised.
 test("Escape on an exact time shown without a real click closes it and leaves an enclosing dialog open", async () => {
+  // An earlier file can leave the pointer where the wt-relative-time appears; a late pointerenter
+  // on it would reopen the tip after Escape.
+  await commands.parkPointer();
   expect(navigator.userActivation.hasBeenActive).toBe(false);
   const dialogHost = await mount(
     '<wt-dialog open heading="Devices"><wt-relative-time datetime="2026-10-05T11:49:00.000Z" locale="en-GB"></wt-relative-time></wt-dialog>',
