@@ -281,7 +281,7 @@ describe("boot's Retry now wiring", () => {
       expect(drain.calls).toHaveLength(1);
     });
 
-    // The return-route suite drives the signed request and checks that it calls this callback.
+    // return-records.real.test.ts checks that one signed return invokes this callback.
     mount.mock.calls[0]![1].wake();
     await vi.waitFor(() => expect(drain.calls).toHaveLength(2), { timeout: 5_000 });
   }, 60_000);
