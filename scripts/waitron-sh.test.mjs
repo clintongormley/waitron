@@ -413,7 +413,7 @@ writeFileSync(
 printf 'host:%s\\n' "$*" >> "$WT_LOG"
 if [ "\${WT_HOST_ERROR:-0}" = 1 ]; then echo 'unreadable attempt' >&2; exit 1; fi
 case "$1" in
-  */release-trust/verify-release.mjs) exec "$WT_REAL_NODE" "$@" ;;
+  */verify-release.mjs) exec "$WT_REAL_NODE" "$@" ;;
 esac
 case "$2" in
   apply)
@@ -1403,6 +1403,24 @@ const releaseKey = () =>
   });
 const releaseKeys = [releaseKey(), releaseKey()];
 
+function writeSignedRelease(asset, version, key, prerelease = false) {
+  writeFileSync(
+    asset,
+    signReleaseList(
+      {
+        format: 1,
+        kind: "release",
+        sourceSha: signedSource,
+        platform: "linux/amd64",
+        version,
+        prerelease,
+        images: { app: appDigest, printAgent: agentDigest },
+      },
+      key.privateKey,
+    ),
+  );
+}
+
 function signedRelease(
   sb,
   { version = "1.2.3", key = releaseKeys[1], retain = true, prerelease = false } = {},
@@ -1419,21 +1437,7 @@ function signedRelease(
   writeFileSync(join(source, "current.pem"), releaseKeys[0].publicKey);
   writeFileSync(join(source, "spare.pem"), releaseKeys[1].publicKey);
   const asset = join(sb.root, "waitron-release.json");
-  writeFileSync(
-    asset,
-    signReleaseList(
-      {
-        format: 1,
-        kind: "release",
-        sourceSha: signedSource,
-        platform: "linux/amd64",
-        version,
-        prerelease,
-        images: { app: appDigest, printAgent: agentDigest },
-      },
-      key.privateKey,
-    ),
-  );
+  writeSignedRelease(asset, version, key, prerelease);
   const host = join(sb.root, "host");
   if (retain) {
     const trust = join(host, "release-trust");
@@ -1457,6 +1461,93 @@ function signedRelease(
 }
 
 describe("waitron.sh install of a release", () => {
+  it.each(["committed", "restored"])(
+    "accepts the rotated key and uses the refreshed verifier after a %s upgrade",
+    (outcome) => {
+      const sb = sandbox({ systemd: true });
+      installedBox(sb);
+      const release = signedRelease(sb);
+      const next = releaseKey();
+      writeFileSync(join(release.WT_RELEASE_TRUST_SOURCE, "current.pem"), next.publicKey);
+      const verifier = join(release.WT_RELEASE_TRUST_SOURCE, "verify-release.mjs");
+      writeFileSync(
+        verifier,
+        `console.error('refreshed release verifier');\n${readFileSync(verifier, "utf8")}`,
+      );
+      const installed = run(sb, ["install", "v1.2.3"], {
+        ...release,
+        WT_INSTALLED_RELEASE_REF: "v1.2.2",
+        WT_UPGRADE_HELD: outcome === "restored" ? "1" : "0",
+      });
+      if (outcome === "restored") {
+        expect(installed.status, installed.stderr).toBe(1);
+        expect(installed.stderr).toContain("upgrade held");
+        const restored = run(sb, ["restore"]);
+        expect(restored.status, restored.stderr).toBe(0);
+      } else {
+        expect(installed.status, installed.stderr).toBe(0);
+      }
+      writeSignedRelease(release.WT_RELEASE_ASSET, "1.2.4", next);
+      const upgraded = run(sb, ["install", "v1.2.4"], {
+        ...release,
+        WT_INSTALLED_RELEASE_REF: outcome === "restored" ? "v1.2.2" : "v1.2.3",
+      });
+      expect(upgraded.status, upgraded.stderr).toBe(0);
+      expect(upgraded.stderr).toContain("refreshed release verifier");
+    },
+    3 * RUN_TIMEOUT_MS + 5_000,
+  );
+
+  it.each(["missing", "invalid", "missing the signing key"])(
+    "leaves installed trust and the driver in place when the incoming keys are %s",
+    (problem) => {
+      const sb = sandbox({ systemd: true });
+      installedBox(sb);
+      const release = signedRelease(sb);
+      const spare = join(release.WT_RELEASE_TRUST_SOURCE, "spare.pem");
+      if (problem === "missing") rmSync(spare);
+      if (problem === "invalid") writeFileSync(spare, "not a public key");
+      if (problem === "missing the signing key") writeFileSync(spare, releaseKey().publicKey);
+      const result = run(sb, ["install", "v1.2.3"], {
+        ...release,
+        WT_INSTALLED_RELEASE_REF: "v1.2.2",
+      });
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stderr).toContain("release trust");
+      expect(loggedCalls(sb).some((call) => /^(install |host:.* apply )/.test(call))).toBe(false);
+      writeFileSync(spare, releaseKeys[1].publicKey);
+      const retried = run(sb, ["install", "v1.2.3"], {
+        ...release,
+        WT_INSTALLED_RELEASE_REF: "v1.2.2",
+      });
+      expect(retried.status, retried.stderr).toBe(0);
+    },
+    2 * RUN_TIMEOUT_MS + 5_000,
+  );
+
+  it.each([
+    ["missing", 'line.split(" ").slice(0, -1).join(" ")'],
+    ["extra", 'line + " sha256:" + "c".repeat(64)'],
+  ])(
+    "refuses a verifier result with a %s image digest before fetching source files",
+    (_, output) => {
+      const sb = sandbox();
+      const release = signedRelease(sb);
+      const verifier = join(sb.root, "host/release-trust/verify-release.mjs");
+      writeFileSync(
+        verifier,
+        `const log = console.log; console.log = (line) => log(${output});\n${readFileSync(verifier, "utf8")}`,
+      );
+      const result = run(sb, ["install", "v1.2.3"], {
+        ...release,
+        WT_STATE_VOLUME_ABSENT: "1",
+      });
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stderr).toContain("unexpected signed image inventory");
+      expect(loggedCalls(sb).some((call) => /\/deploy\/|\/scripts\/box\//.test(call))).toBe(false);
+    },
+  );
+
   it.each(["1.2.3", `1.2.${"1".repeat(46)}`])(
     "uses both signed %s digests in the environment file and during Compose pull and startup",
     (version) => {
@@ -1511,16 +1602,14 @@ describe("waitron.sh install of a release", () => {
       expect(r.status).toBe(1);
       expect(r.stderr).toContain("Invalid release signature");
       expect(r.stderr).not.toContain("needs confirmation");
-      const calls = loggedCalls(sb);
-      expect(calls).toHaveLength(2);
-      expect(calls).toContainEqual(
+      expect(loggedCalls(sb)).toEqual([
+        "mktemp ",
         expect.stringMatching(
           /^curl .*--max-time 60 --max-filesize 16384 .*\/v1\.2\.3\/waitron-release\.json/,
         ),
-      );
-      expect(calls).toContainEqual(
         expect.stringMatching(/^host:.*\/release-trust\/verify-release\.mjs v1\.2\.3$/),
-      );
+        expect.stringMatching(/^rm -f -- .*\/tmp\./),
+      ]);
     },
   );
 

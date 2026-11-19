@@ -468,14 +468,19 @@ installer already on the box.
 sudo bash /opt/waitron-host/waitron.sh install v1.2.3
 ```
 
-The installer checks the release file against the two public keys in
-`/opt/waitron-host/release-trust` before downloading the release's files. The file names the
+The installer checks the release file against the two public keys retained under
+`/opt/waitron-host` before downloading the release's files. The file names the
 commit and identifies both images by digest, a fingerprint of the exact image. If the box has
 venue data, the checked manual upgrade uses those images for the trial and for restart. You
 can reinstall the same version or move forward. An install that keeps the data refuses an
 older release. A confirmed reset can install an older signed release because it wipes the data.
-Fresh and reset installs use the retained installer's steps. A checked upgrade to a numbered
-release loads the upgrade driver from the signed commit.
+Fresh and reset installs use the retained installer's steps and keep its verifier and keys.
+A checked upgrade to a numbered release loads the driver, verifier and keys from the signed
+commit. The old and new verifiers must both accept the same release file. If a new trust file
+is missing or the two verifiers disagree, the installer keeps the installed trust and stops
+before applying the upgrade. If the upgrade later holds for **Restore** or **Keep**, either
+choice keeps the verified driver and trust files. Restore returns your venue to the previous
+app and data.
 
 The USB recipe seeds release trust when built with both keys. On an existing development box,
 wait for a published main image that includes the verifier and keys. Download a new copy of

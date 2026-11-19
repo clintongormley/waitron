@@ -1284,9 +1284,9 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 - **A950, step 1b (watcher, 2026-11-18 22:47, open to the owner).** A numbered install that
   keeps venue data refuses an older release. A confirmed reset may choose an older signed
-  release because the wipe discards that data. Boxes taking only numbered releases keep
-  the verifier and keys originally loaded onto the box. The offer-file slice must deliver
-  updated keys and verifier code to those boxes. In `scripts/waitron-sh.test.mjs`, “uses both
+  release because the wipe discards that data. Fresh and reset installs keep their retained
+  verifier and keys. A checked numbered upgrade refreshes both before Apply. A release
+  that rotates one key must be signed by a key in both sets. In `scripts/waitron-sh.test.mjs`, “uses both
   signed %s digests in the environment file and during Compose pull and startup” checks the
   two Compose image variables. “checks a release on a provisioned development box and passes
   the signed digests into its upgrade” covers the two arguments used by the checked upgrade.

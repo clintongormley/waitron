@@ -414,17 +414,34 @@ is_release_tag() {
     && [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 }
 
-verify_numbered_release() {
-  local ref="$1"
+release_trust_dir() {
+  local pointer="$WAITRON_HOST_DIR/release-trust.active" name
+  if [ ! -e "$pointer" ]; then
+    printf '%s\n' "$RELEASE_TRUST"
+    return
+  fi
+  read -r name < "$pointer" && [[ "$name" =~ ^\.release-trust\.[a-zA-Z0-9]+$ ]] \
+    || die 'could not read the active release trust directory'
+  printf '%s/%s/trust\n' "$WAITRON_HOST_DIR" "$name"
+}
+
+numbered_release_verifier() {
+  local trust
   [ "${BASH_SOURCE[0]}" -ef "$WAITRON_HOST_DIR/waitron.sh" ] \
     || die "run numbered installs from $WAITRON_HOST_DIR/waitron.sh"
-  [ -x "$HOST_NODE" ] && [ -r "$RELEASE_TRUST/verify-release.mjs" ] \
+  trust="$(release_trust_dir)"
+  [ -x "$HOST_NODE" ] && [ -r "$trust/verify-release.mjs" ] \
     || die 'release verification is unavailable — use a published main image with the verifier and both release keys, then follow the checked upgrade instructions'
   command -v curl >/dev/null 2>&1 || die 'install curl to download the signed release file'
+  printf '%s/verify-release.mjs\n' "$trust"
+}
+
+verify_numbered_release() {
+  local ref="$1" file="$2" verifier="$3"
   curl -q -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 15 \
     --max-time 60 --max-filesize 16384 \
-    "https://github.com/clintongormley/waitron/releases/download/$ref/waitron-release.json" \
-    | "$HOST_NODE" "$RELEASE_TRUST/verify-release.mjs" "$ref" \
+    "https://github.com/clintongormley/waitron/releases/download/$ref/waitron-release.json" > "$file" \
+    && "$HOST_NODE" "$verifier" "$ref" < "$file" \
     || die "could not verify signed release $ref — check that it was published and that the box has its release keys"
 }
 
@@ -443,11 +460,12 @@ installed_app_ref() (
 )
 
 require_current_or_newer_release() {
-  local current
+  local current trust
   current="$(installed_app_ref)" && [[ "$current" =~ ^[^[:space:]]+$ && "$current" != "<nil>" ]] \
     || die 'could not read the installed app version — keep the existing installation and check its app image'
   if is_release_tag "$current"; then
-    "$HOST_NODE" "$RELEASE_TRUST/verify-release.mjs" --check-version "$1" "$current"
+    trust="$(release_trust_dir)"
+    "$HOST_NODE" "$trust/verify-release.mjs" --check-version "$1" "$current"
   fi
 }
 
@@ -926,6 +944,25 @@ fetch_release_trust() {
     && fetch "$RAW_BASE/$sha/scripts/box/upgrades/contracts.mjs" "$stage/upgrades/contracts.mjs"
 }
 
+install_release_trust() {
+  local stage="$1" pointer="$WAITRON_HOST_DIR/release-trust.active" active old
+  if [ ! -e "$pointer" ] && [ ! -e "$RELEASE_TRUST" ]; then
+    mv -- "$stage/release-trust" "$RELEASE_TRUST"
+  else
+    old="$(release_trust_dir)"
+    active="$(mktemp -d "$WAITRON_HOST_DIR/.release-trust.XXXXXX")"
+    # Publish a single pointer so readers never open a verifier and keys from different sets.
+    if ! { mv -- "$stage/release-trust" "$active/trust" \
+        && printf '%s\n' "${active##*/}" > "$stage/release-trust.active" \
+        && mv -f -- "$stage/release-trust.active" "$pointer"; }; then
+      rm -rf -- "$active"
+      die 'could not activate the new release trust'
+    fi
+    if [ "$old" != "$RELEASE_TRUST" ]; then rm -rf -- "${old%/trust}"; fi
+  fi
+  echo 'waitron.sh: loaded the release verifier and both public keys' >&2
+}
+
 install_upgrade_driver() {
   local stage="$1" file
   mkdir -p "$WAITRON_HOST_DIR/box/upgrades"
@@ -960,8 +997,9 @@ ensure_host_node_libraries() {
 }
 
 cmd_manual_install() (
-  local ref="$1" signed_sha="$2" metadata sha preferred="" source="resolved Git SHA" stage result
-  shift 2
+  local ref="$1" release_file="${2:-}" signed_sha="${3:-}" metadata sha preferred="" source="resolved Git SHA" stage result
+  shift
+  if [ -n "$signed_sha" ]; then shift 2; fi
   local trust_ready=0
   [ -d "$SYSTEMD_RUN_DIR" ] || die 'safe manual upgrades require a Linux host running systemd'
   metadata="$(resolve_source_metadata "${signed_sha:-$ref}")"
@@ -983,17 +1021,30 @@ cmd_manual_install() (
     if fetch_release_trust "$sha" "$stage/release-trust" 2>/dev/null; then trust_ready=1; fi
   else
     fetch_upgrade_driver "$sha" "$stage" || die 'could not download one complete upgrade driver'
+    if [ -n "$signed_sha" ]; then
+      local staged
+      fetch_release_trust "$sha" "$stage/release-trust" || die "could not download release trust for $ref"
+      staged="$("$HOST_NODE" "$stage/release-trust/verify-release.mjs" "$ref" < "$release_file")" \
+        && [ "$staged" = "$signed_sha $*" ] \
+        || die "the new release trust could not verify $ref with the same image inventory"
+      trust_ready=1
+    fi
   fi
   ensure_host_node_libraries
   bash "$stage/bootstrap.sh" "$WAITRON_HOST_DIR" "$WAITRON_DIR"
   exec 9>"${WAITRON_DIR}.upgrade.lock"
   flock -n 9 || die 'another host operation is running'
   refuse_pending_upgrade
-  if [ -n "$signed_sha" ]; then require_current_or_newer_release "$ref"; fi
+  if [ -n "$signed_sha" ]; then
+    local trust checked
+    trust="$(release_trust_dir)"
+    checked="$("$HOST_NODE" "$trust/verify-release.mjs" "$ref" < "$release_file")" \
+      && [ "$checked" = "$signed_sha $*" ] || die "release trust changed while preparing $ref — try again"
+    require_current_or_newer_release "$ref"
+  fi
   install_upgrade_driver "$stage"
   if [ "$trust_ready" -eq 1 ]; then
-    cp -R "$stage/release-trust" "$WAITRON_HOST_DIR/"
-    echo 'waitron.sh: loaded the release verifier and both public keys' >&2
+    install_release_trust "$stage"
   elif [ "$ref" = main ]; then
     echo 'waitron.sh: could not load release trust files — use a published main image with both release keys and check that the files can be downloaded' >&2
   fi
@@ -1064,12 +1115,17 @@ box_started() {
   [ -n "$state_volumes" ]
 }
 
-cmd_install() {
+cmd_install() (
   local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL" fresh=0 docker_ready=0
   local verified signed_sha="" app_digest="" agent_digest="" source_ref="$ref"
   refuse_pending_upgrade
   if is_release_tag "$ref"; then
-    verified="$(verify_numbered_release "$ref")"
+    local release_file verifier digest='sha256:[a-f0-9]{64}'
+    verifier="$(numbered_release_verifier)"
+    release_file="$(mktemp)"
+    trap 'rm -f -- "$release_file"' EXIT
+    verified="$(verify_numbered_release "$ref" "$release_file" "$verifier")"
+    [[ "$verified" =~ ^[a-f0-9]{40}\ $digest\ $digest$ ]] || die "unexpected signed image inventory for $ref"
     read -r signed_sha app_digest agent_digest <<<"$verified"
     source_ref="$signed_sha"
     unset WAITRON_IMAGE WAITRON_PRINT_AGENT_IMAGE
@@ -1079,9 +1135,9 @@ cmd_install() {
     docker_ready=1
     if box_started; then
       if [ -n "$signed_sha" ]; then
-        cmd_manual_install "$ref" "$signed_sha" "$app_digest" "$agent_digest"
+        cmd_manual_install "$ref" "$release_file" "$signed_sha" "$app_digest" "$agent_digest"
       else
-        cmd_manual_install "$ref" ""
+        cmd_manual_install "$ref"
       fi
       return
     fi
@@ -1133,7 +1189,7 @@ cmd_install() {
   fi
   docker compose up -d --remove-orphans
   if wait_healthy; then delete_previous_images "$before"; announce_ready; else report_unhealthy; fi
-}
+)
 
 # Remove a named volume only if it exists; a removal that FAILS aborts the whole reset (see the loop
 # below) rather than silently continuing. A volume that is already absent is a no-op, not a failure.

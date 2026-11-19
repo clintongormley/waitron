@@ -11,22 +11,24 @@ publication decision and watcher clearance. [Parent plan](2026-11-09-a950-shorte
 
 - In `deploy/waitron.sh`, verify the numbered release with installed trust before
   fetching anything from its signed commit. Run from the 1c installer or newer.
-  Keep the downloaded file so both verifiers can check the same bytes. Reuse
-  `fetch_release_trust` to stage the verifier and both keys from that commit.
+  Keep the downloaded file so both verifiers can check the same bytes and
+  agree on the commit and image digests. Reuse `fetch_release_trust` to stage
+  the verifier and both keys from that commit. Recheck installed trust under
+  the lock before replacing it.
   Activate the complete set under the existing host lock alongside the
   retained driver, before Apply. Atomically move a pointer to the staged directory,
   using the original trust directory as the initial fallback. A failed fetch or
   validation leaves the previous set usable. Clean up unused stages under the lock.
-  Restore keeps the retained driver and its matching trust. A key change keeps one key in common and uses it
-  to sign the release that carries the change.
-- Main currently signs `app` and `printAgent`. Lane J owns adding `tunnel` to the
-  signer, verifier and shell. Coordinate the three field names through Lane J's
-  questions.md. `gh release list` showed no releases when planning. Before the
-  first signed release, seed boxes with the three-image verifier and matching
-  driver using the documented main upgrade or box recipe. If a two-image release
-  ships first, ship a two-image bridge that installs a verifier and shell able to
-  read both inventories before publishing three images. Use the same bridge for a
-  fourth role. The shell must reject an incomplete or unexpected digest inventory.
+  Restore keeps the retained driver and its matching trust. Fresh and reset
+  installs keep the existing trust set. A key change keeps one key in common and
+  uses it to sign the release that carries the change. Introduce a new verifier
+  file to the retained download list and recipe one release before importing it.
+  Keep both keys as they are in the release introducing the new file.
+- Lane J adds `tunnel` beside `app` and `printAgent`. Publish the first signed
+  release after that lands. Seed test boxes with the three-image verifier and
+  driver using the documented main upgrade or box recipe. The shell rejects an
+  incomplete or unexpected digest inventory. After go-live, adding a fourth
+  role needs a transition release that understands both inventories.
 - Start with failing `scripts/waitron-sh.test.mjs` cases for trust rotation and for
   a failed fetch and Restore after failed Apply, with real signed files. The
   release-list and shell suites own the image inventory and mapping to Compose. Update `deploy/README.md`
@@ -52,14 +54,14 @@ publication decision and watcher clearance. [Parent plan](2026-11-09-a950-shorte
   only `waitron-offer.json`, then reads it back and compares bytes. Pause with
   `none` from the newest eligible tag and confirm the published serial and rule.
   In an emergency remove the asset to stop fresh reads, then publish signed `none`.
-- Reuse bounded shell downloads in `deploy/waitron.sh`. The installed
-  `verify-release.mjs` checks the proof, rules and strictly newer stable version,
-  deferring for unknown input, setup or a development image. Remember the highest
-  signed offer serial and its digest in the host directory, including `none`.
-  Reject an older serial or different bytes at the same serial. Bind the selected
-  release to its signed asset before returning the three image choices. Tests call
-  the selector directly until step 5 connects it and rechecks before Apply. Then
-  a fresh pause read prevents a new start and an attempt past the recheck finishes.
+- The selector takes the offer and release file, keys, box id, installed version,
+  and last-seen offer number and digest. It checks the rules and requires a newer
+  stable version. It rejects older serials and different bytes at the same serial,
+  binds the selected release to its signed asset, and returns the image choices.
+  Step 5 owns downloading the files, reading the box id, saving the highest serial
+  and digest for every accepted offer including `none`, and deciding what a
+  missing or unreadable saved serial means. It rechecks before Apply. A fresh pause
+  read prevents a new start and an attempt past the recheck finishes.
 - Start with `release-offer.test.mjs` for the groups and eligibility. The verifier
   suite owns wrong-kind, replay after pause, wrong asset and prerelease checks.
   The signer and workflow suites own refusal before upload and publication admission.
