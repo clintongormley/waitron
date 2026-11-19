@@ -1705,7 +1705,6 @@ export class TillTableOrderScreen extends LitElement {
   /** {@link moveDishesTo} while it is offered, as unsaved work last counted it. */
   #moveDishesCounted: string | null | undefined;
   @state() private moveTargetRead?: {
-    billId: string;
     revision: number;
     api: TillApi;
     result: BillSetMenuState | "loading" | "failed";
@@ -2422,6 +2421,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchActions();
     this.#followStoredGuests();
     this.#countMoveDestination();
+    if ((changed as PropertyValues).has("moveDishesTo")) this.moveTargetRead = undefined;
     void this.#readMoveTarget();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
     if (changed.has("busy")) this.#followBusyFocus();
@@ -5894,7 +5894,6 @@ export class TillTableOrderScreen extends LitElement {
     if (verb === "move-dishes") {
       this.moveDishesPicks = new Set();
       this.moveDishesTo = undefined;
-      this.moveTargetRead = undefined;
       const opening = ++this.#actionOpening;
       const ready = () => {
         if (!this.isConnected || opening !== this.#actionOpening || this.actionVerb !== verb)
@@ -7046,12 +7045,14 @@ export class TillTableOrderScreen extends LitElement {
     return fill(t(key), names);
   }
 
-  #dishSources(): DishSources {
+  #dishSources(forMove = false): DishSources {
     return {
       lines: this.lines,
       balance: this.#balanceShown(),
       allergy: this.#allergy()?.snapshot ?? null,
-      setMenus: this.bills.find((bill) => bill.workingOrderId === this.orderId)?.setMenus,
+      setMenus: forMove
+        ? this.bills.find((bill) => bill.workingOrderId === this.orderId)?.setMenus
+        : undefined,
     };
   }
 
@@ -7074,7 +7075,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #moveDishesRows(
     picks: Picks = this.moveDishesPicks,
-    sources: DishSources = this.#dishSources(),
+    sources: DishSources = this.#dishSources(true),
   ): PickRow[] {
     return pickRows(this.#dishGroupsFor(sources), picks);
   }
@@ -7083,7 +7084,7 @@ export class TillTableOrderScreen extends LitElement {
     const drawn = this.#moveDishesDrawn;
     if (this.actionStep !== "move-dishes" || drawn === undefined || this.moveDishesPicks.size === 0)
       return;
-    const sources = this.#dishSources();
+    const sources = this.#dishSources(true);
     if (sameSources(drawn, sources)) return;
     const next = tidyPicks(drawn.rows, this.#dishGroupsFor(sources), this.moveDishesPicks);
     if (samePicks(next, this.moveDishesPicks)) return;
@@ -7122,11 +7123,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #moveTargetResult(target: PartyBill) {
     const read = this.moveTargetRead;
-    return read?.billId === target.workingOrderId &&
-      read.revision === target.revision &&
-      read.api === this.api
-      ? read.result
-      : undefined;
+    return read?.revision === target.revision && read.api === this.api ? read.result : undefined;
   }
 
   async #readMoveTarget(): Promise<void> {
@@ -7136,11 +7133,10 @@ export class TillTableOrderScreen extends LitElement {
     if (
       target === undefined ||
       this.#moveTargetResult(target) !== undefined ||
-      this.#looseMenuDishes(this.#dishSources().setMenus, this.moveDishesPicks).length === 0
+      this.#looseMenuDishes(this.#dishSources(true).setMenus, this.moveDishesPicks).length === 0
     )
       return;
     const read = {
-      billId: target.workingOrderId,
       revision: target.revision,
       api,
       result: "loading",
@@ -7148,7 +7144,7 @@ export class TillTableOrderScreen extends LitElement {
     this.moveTargetRead = read;
     let result: BillSetMenuState | "failed";
     try {
-      result = (await api.readBillSetMenus(read.billId)).setMenus;
+      result = (await api.readBillSetMenus(target.workingOrderId)).setMenus;
     } catch {
       result = "failed";
     }
@@ -7164,6 +7160,15 @@ export class TillTableOrderScreen extends LitElement {
     const loose = this.#looseMenuDishes(source, picks);
     if (source === undefined || chosen === undefined || loose.length === 0)
       return { blocked: false };
+    const cancelled = this.lines.find(
+      (line) =>
+        line.cancelledQuantity !== undefined && loose.some(({ lineId }) => lineId === line.id),
+    );
+    if (cancelled !== undefined)
+      return {
+        blocked: true,
+        message: fill(t("table.move_dishes_cancelled"), { dish: this.#nameForLine(cancelled) }),
+      };
     const target = this.#moveTargetBill();
     const result = target === undefined ? undefined : this.#moveTargetResult(target);
     if (result === "loading" || (chosen !== null && result === undefined))
@@ -7226,7 +7231,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #moveDishesStep(): TemplateResult {
-    const sources = this.#dishSources();
+    const sources = this.#dishSources(true);
     const rows = this.#moveDishesRows(this.moveDishesPicks, sources);
     this.#moveDishesDrawn = { ...sources, rows };
     const lineIds = pickedLineIds(rows, this.moveDishesPicks);
@@ -7253,8 +7258,7 @@ export class TillTableOrderScreen extends LitElement {
         aria-pressed=${chosen === to}
         @click=${(event: Event) => {
           if (!this.#actionControlCurrent(event)) return;
-          if (this.moveDishesTo !== to || this.moveTargetRead?.result === "failed")
-            this.moveTargetRead = undefined;
+          if (this.moveTargetRead?.result === "failed") this.moveTargetRead = undefined;
           this.moveDishesTo = to;
           this.#actionScope?.changed();
         }}
@@ -7309,15 +7313,11 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #confirmMoveDishes(event: Event): void {
-    if (!this.#actionControlCurrent(event)) return;
+    const button = event.currentTarget as HTMLElementTagNameMap["wt-button"];
+    if (!this.#actionControlCurrent(event) || button.disabled) return;
     const lineIds = pickedLineIds(this.#moveDishesRows(), this.moveDishesPicks);
     const toBillId = this.#moveDishesChosen();
-    if (
-      lineIds.length === 0 ||
-      toBillId === undefined ||
-      this.#moveDishPrices(toBillId, this.#dishSources().setMenus, lineIds).blocked
-    )
-      return;
+    if (lineIds.length === 0 || toBillId === undefined) return;
     this.#retireActions();
     this.#dispatch("move-dishes", { lineIds, toBillId });
     this.#closeActions();

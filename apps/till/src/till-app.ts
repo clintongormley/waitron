@@ -19323,7 +19323,7 @@ export class TillApp extends LitElement {
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
-  /** The move carries each selected set menu’s dishes and each selected dish’s extras. */
+  /** Whether the move empties the bill. A selected set menu carries its dishes as well. */
   #movesEveryDish(lineIds: readonly string[]): boolean {
     const dishes = this.tabLines.filter((line) => line.parentLineNo == null);
     const moved = new Set(lineIds);

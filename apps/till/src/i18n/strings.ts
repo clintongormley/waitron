@@ -1613,6 +1613,7 @@ export const en = {
   "table.move_dishes_to": "Move to",
   "table.move_dishes_confirm": "Move",
   "table.move_dishes_includes": "Moves with {dishes}",
+  "table.move_dishes_cancelled": "Move {dish} with its set menu to keep the charge.",
   "table.move_dishes_target_price": "{dish} on the other bill · {amount}",
   "table.move_dishes_read_failed": "Could not check places on that bill. Choose it again to retry.",
   // Errors
@@ -3776,6 +3777,7 @@ export const es: Record<StringKey, string> = {
   "table.move_dishes_to": "Mover a",
   "table.move_dishes_confirm": "Mover",
   "table.move_dishes_includes": "Se mueve con {dishes}",
+  "table.move_dishes_cancelled": "Mueve {dish} con su carta a precio fijo para conservar el cargo.",
   "table.move_dishes_target_price": "{dish} en la otra cuenta · {amount}",
   "table.move_dishes_read_failed":
     "No se pudo comprobar si hay sitio en esa cuenta. Vuelve a elegirla.",
