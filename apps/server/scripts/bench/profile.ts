@@ -20,8 +20,7 @@ export const BENCH_PROFILE = {
   heldRoundShare: 1 / 3,
   /**
    * The share of all bills that ask for a full invoice, which the receipt printed at payment
-   * carries. Only bills paid through `/payments` do: `/api/pay` refuses one
-   * (`sale.full_invoice_unavailable`).
+   * carries. `planDay` assigns these to the two `payments-*` groups.
    */
   invoiceShare: 1 / 25,
   tills: 4,

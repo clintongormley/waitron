@@ -1262,6 +1262,22 @@ type WholeBillTender = Omit<
   "kind" | "shareOf" | "lines" | "amount" | "choice" | "submissionId" | "applied" | "tip"
 >;
 
+type CounterPaymentEdit = { revision: number; label?: string };
+type CounterPaymentBasket = Partial<CounterPaymentEdit> & {
+  lines: SaleLine[];
+  zoneId?: string;
+  kitchenNote?: string | null;
+  invoiceType?: "F1" | "F2";
+  recipient?: unknown;
+  lateSend?: LateSend;
+};
+type CounterPaymentRequest = WholeBillTender & {
+  kind: "share";
+  shareOf: 1;
+  submissionId: string;
+  basket: CounterPaymentBasket;
+};
+
 type WholeBillResult =
   BillPaymentResult | { outcome: "settled"; balance: BillBalance; invoice: TillSaleResult };
 
@@ -2717,7 +2733,11 @@ export class TillApi {
   #madeHereListener?: (items: MadeHereItem[]) => void;
   readonly #unansweredWholeBills = new Map<
     string,
-    { person: SessionPerson | null; key: string; request: BillPaymentRequest }
+    {
+      person: SessionPerson | null;
+      key: string;
+      request: BillPaymentRequest | CounterPaymentRequest;
+    }
   >();
 
   onMadeHere(listener: (items: MadeHereItem[]) => void): void {
@@ -3118,29 +3138,31 @@ export class TillApi {
     expectedEdit: BillEditExpected | null,
     dining: Dining,
     lateSend?: LateSend,
+    edit?: CounterPaymentEdit,
   ): Promise<TillSaleResult> {
-    // The table's whole-payment caller sends its observed bill and no basket.
-    if (lines.length === 0 && expectedEdit !== null) {
-      return this.#collectWholeBill(workingOrderId, "open", tender, {
+    const basket =
+      lines.length === 0 && expectedEdit !== null
+        ? undefined
+        : {
+            lines,
+            zoneId: zoneId ?? this.#serviceZoneId,
+            ...invoice,
+            kitchenNote,
+            lateSend,
+            ...edit,
+          };
+    return this.#collectWholeBill(
+      workingOrderId,
+      "open",
+      tender,
+      {
         expectedEdit,
         dining,
         receiptLanguage,
         guestCount,
-      });
-    }
-    return this.#request<TillSaleResult>("/api/sales", "POST", {
-      lines,
-      tender,
-      workingOrderId,
-      zoneId: zoneId ?? this.#serviceZoneId,
-      ...invoice,
-      receiptLanguage,
-      kitchenNote,
-      ...(guestCount === undefined ? {} : { guestCount }),
-      expectedEdit,
-      dining,
-      ...(lateSend === undefined ? {} : { lateSend }),
-    });
+      },
+      basket,
+    );
   }
 
   /** Pay by reader. A placed order pays for the stored bill. A decline is an outcome. */
@@ -3168,43 +3190,62 @@ export class TillApi {
     kitchenNote?: string | null;
     guestCount?: number | null;
     lateSend?: LateSend;
+    edit?: CounterPaymentEdit;
   }): Promise<PayOutcome> {
-    if (req.lines.length === 0) {
-      return this.#payWholeBill(req.id, "placed", {
+    const {
+      id,
+      lines,
+      zoneId,
+      kitchenNote,
+      invoiceType,
+      recipient,
+      lateSend,
+      edit,
+      tip,
+      ...payment
+    } = req;
+    const basket =
+      lines.length === 0
+        ? undefined
+        : {
+            lines,
+            zoneId: zoneId ?? this.#serviceZoneId,
+            kitchenNote,
+            invoiceType,
+            recipient,
+            lateSend,
+            ...edit,
+          };
+    return this.#payWholeBill(
+      id,
+      basket === undefined ? "placed" : "open",
+      {
+        ...payment,
         method: "card",
         entry: "reader",
-        expectedEdit: req.expectedEdit,
-        dining: req.dining,
-        addedTip: req.tip,
-        printCardSlip: req.printCardSlip,
-        simulationOutcome: req.simulationOutcome,
-        readerId: req.readerId,
-        receiptLanguage: req.receiptLanguage,
-        guestCount: req.guestCount,
-      }).then((result): PayOutcome => {
-        const captureWarning = result.balance.captureWarning;
-        const facts = captureWarning === undefined ? {} : { captureWarning };
-        if (result.outcome === "settled")
-          return { ...facts, outcome: "captured", ticket: result.invoice };
-        const print = result.slipPrintFailed === true ? { slipPrintFailed: true as const } : {};
-        if (result.invoice !== undefined)
-          return { ...facts, ...print, outcome: "captured", ticket: result.invoice };
-        if (result.outcome === "received")
-          return { ...facts, ...print, outcome: "partial", balance: result.balance };
-        if (result.outcome === "pending" || result.outcome === "timeout")
-          return { ...facts, outcome: "timeout" };
-        if (result.outcome === "network_unavailable")
-          return { ...facts, outcome: "network_unavailable" };
-        return {
-          ...facts,
-          outcome: "declined",
-          ...(result.failureReason === undefined ? {} : { failureReason: result.failureReason }),
-        };
-      });
-    }
-    return this.#request<PayOutcome>("/api/pay", "POST", {
-      ...req,
-      zoneId: req.zoneId ?? this.#serviceZoneId,
+        addedTip: tip,
+      },
+      undefined,
+      basket,
+    ).then((result): PayOutcome => {
+      const captureWarning = result.balance.captureWarning;
+      const facts = captureWarning === undefined ? {} : { captureWarning };
+      if (result.outcome === "settled")
+        return { ...facts, outcome: "captured", ticket: result.invoice };
+      const print = result.slipPrintFailed === true ? { slipPrintFailed: true as const } : {};
+      if (result.invoice !== undefined)
+        return { ...facts, ...print, outcome: "captured", ticket: result.invoice };
+      if (result.outcome === "received")
+        return { ...facts, ...print, outcome: "partial", balance: result.balance };
+      if (result.outcome === "pending" || result.outcome === "timeout")
+        return { ...facts, outcome: "timeout" };
+      if (result.outcome === "network_unavailable")
+        return { ...facts, outcome: "network_unavailable" };
+      return {
+        ...facts,
+        outcome: "declined",
+        ...(result.failureReason === undefined ? {} : { failureReason: result.failureReason }),
+      };
     });
   }
 
@@ -3627,6 +3668,7 @@ export class TillApi {
     status: "open" | "placed",
     tender: Tender,
     bill: Pick<WholeBillTender, "expectedEdit" | "receiptLanguage" | "guestCount" | "dining">,
+    basket?: CounterPaymentBasket,
   ): Promise<TillSaleResult> {
     const { amount, ...details } = tender;
     const ask: WholeBillTender =
@@ -3637,7 +3679,8 @@ export class TillApi {
       id,
       status,
       ask,
-      tender.method === "card" ? amount : undefined,
+      tender.method === "card" && basket === undefined ? amount : undefined,
+      basket,
     );
     if (result.invoice === undefined) throw { code: "bill.payments_received", workingOrderId: id };
     return result.invoice;
@@ -3648,8 +3691,10 @@ export class TillApi {
     status: "open" | "placed",
     tender: WholeBillTender,
     manualAmount?: string,
+    basket?: CounterPaymentBasket,
   ): Promise<WholeBillResult> {
     const person = this.#personSource?.() ?? null;
+    const { lateSend, ...basketFields } = basket ?? {};
     const key = JSON.stringify([
       status,
       tender.method,
@@ -3664,10 +3709,20 @@ export class TillApi {
       tender.simulationOutcome,
       tender.dining,
       tender.receiptLanguage,
+      basket === undefined ? null : [basketFields, lateSend?.menuIds],
     ]);
     const pending = this.#unansweredWholeBills.get(id);
     const earlier = pending?.person === person && pending.key === key ? pending.request : undefined;
     let request = earlier;
+    if (request === undefined && basket !== undefined) {
+      request = structuredClone({
+        ...tender,
+        kind: "share",
+        shareOf: 1,
+        submissionId: crypto.randomUUID(),
+        basket,
+      });
+    }
     if (request === undefined) {
       const balance = await this.getBillBalance(id);
       if (person !== (this.#personSource?.() ?? null)) throw { code: SESSION_PERSON_REFUSAL };
@@ -3711,11 +3766,17 @@ export class TillApi {
         this.#unansweredWholeBills.set(id, sent);
         throw new TypeError("The payment response could not be read", { cause: error });
       }
-      const refusal = error as { code?: string; status?: number };
+      const refusal = error as { code?: string; status?: number; field?: string };
       if (isNetworkFailure(error) || (refusal.status ?? 0) >= 500)
         this.#unansweredWholeBills.set(id, sent);
       else if (refusal.code !== "handover.stepping_down" || earlier === undefined)
         this.#unansweredWholeBills.delete(id);
+      if (
+        basket !== undefined &&
+        refusal.code === "management.request_invalid" &&
+        refusal.field === "tendered"
+      )
+        throw { code: "sale.tender_shortfall", workingOrderId: id };
       throw error;
     }
   }

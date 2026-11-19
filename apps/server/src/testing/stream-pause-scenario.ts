@@ -14,6 +14,7 @@ import { seedModuleSettings } from "../../test/module-settings.js";
 // `stream-pause.e2e.test.ts` runs it against versitygw; `aws-stream-pause.aws-rehearsal.test.ts`
 // against Amazon S3, by opt-in only.
 import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -439,22 +440,27 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
 
     const walPath = join(venueDir, "venue.db-wal");
     const sell = async (walBefore: number): Promise<TimedSale> => {
+      const id = randomUUID();
       const started = performance.now();
-      const response = await fetch(`${base}/api/sales`, {
+      const response = await fetch(`${base}/api/working-orders/${id}/payments`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie: cookies },
         body: JSON.stringify({
           dining: "eat_in",
-          lines: [{ menuItemId: box.offer, quantity: "1" }],
-          tender: { method: "cash", amount: "2.00" },
+          submissionId: id,
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "2.00",
+          basket: { lines: [{ menuItemId: box.offer, quantity: "1" }] },
         }),
         dispatcher,
       } as RequestInit);
       const ms = performance.now() - started;
-      const ticket = (await response.json()) as { invoiceNumber?: string };
-      expect(response.status, JSON.stringify(ticket)).toBe(200);
+      const paid = (await response.json()) as { invoice?: { invoiceNumber: string } };
+      expect(response.status, JSON.stringify(paid)).toBe(200);
       return {
-        invoiceNumber: ticket.invoiceNumber!,
+        invoiceNumber: paid.invoice!.invoiceNumber,
         ms,
         walBefore,
         walAfter: await fileBytes(walPath),

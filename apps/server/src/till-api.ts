@@ -349,7 +349,7 @@ export interface TillApiDeps {
   attendanceResponsesEnabled?: boolean;
 }
 
-async function resolveHttpOrderZone(
+export async function resolveHttpOrderZone(
   deps: TillApiDeps,
   session: { device: { deviceProfileId: string } },
   lineCount: number,

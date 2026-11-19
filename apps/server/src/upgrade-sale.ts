@@ -235,15 +235,24 @@ export async function checkUpgradeSale(
       true,
     );
     await call("/api/session", { personId: fixture.personId, pin: fixture.pin });
-    ticket = await call<{ total: string; invoiceNumber: string }>("/api/sales", {
-      workingOrderId: orderId,
-      zoneId: fixture.zoneId,
-      lines: [{ menuItemId: fixture.menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "1.00" },
-      dining: "eat_in",
-    });
+    const paid = await call<{ invoice: { total: string; invoiceNumber: string } }>(
+      `/api/working-orders/${orderId}/payments`,
+      {
+        submissionId: orderId,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "1.00",
+        dining: "eat_in",
+        basket: {
+          zoneId: fixture.zoneId,
+          lines: [{ menuItemId: fixture.menuItemId, quantity: "1" }],
+        },
+      },
+    );
+    ticket = paid?.invoice;
     if (
-      ticket.total !== "1.00" ||
+      ticket?.total !== "1.00" ||
       typeof ticket.invoiceNumber !== "string" ||
       ticket.invoiceNumber.length === 0
     )

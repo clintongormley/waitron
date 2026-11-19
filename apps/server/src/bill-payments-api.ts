@@ -4,7 +4,7 @@ import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
 import { AppError, compareDecimal, decimal } from "@waitron/shared";
-import { readRawJsonBody, requireString } from "@waitron/server-kit";
+import { readRawJsonBody, requireString, requireUuidParam } from "@waitron/server-kit";
 import { requireDining } from "./order-dining.js";
 import { invalid, MONEY, ZERO } from "./bill-allocation.js";
 import {
@@ -14,19 +14,25 @@ import {
   takeBillPayment,
   takeReaderBillPayment,
 } from "./bill-payments.js";
-import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
+import type { BillPaymentAsk, BillPaymentRequest, CounterPaymentBasket } from "./bill-payments.js";
 import { settleFromProviderRow } from "./bill-payments-loop.js";
 import { refundBillPayment, refundProvidersOf, refundTender } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
 import { printBillPaymentSlip } from "./payment-slip-print.js";
-import { assertDeviceCapability, assertTakesTender } from "./device-session.js";
+import {
+  assertDeviceCapability,
+  assertProfileAction,
+  assertTakesTender,
+} from "./device-session.js";
 import { readGuestCountChoice } from "./receipt-guests.js";
 import type { Logger } from "./logger.js";
 import {
   overridePinAttempts,
   parseOverrideField,
   parseReason,
+  requireRevision,
   resolveCardCollector,
+  resolveHttpOrderZone,
   runBodyIds,
 } from "./till-api.js";
 import type { Run, TillApiDeps } from "./till-api.js";
@@ -34,6 +40,7 @@ import { sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
 import { assertRequestDevice, isUuid, requireSession } from "./till-session.js";
 import "./errors.js";
+import { parseLateSend, withLateSendCheck } from "./late-send.js";
 import { gateZones } from "./zone-access.js";
 
 function moneyField(value: unknown, field: string): string {
@@ -117,12 +124,18 @@ export function submissionIdOf(body: Record<string, unknown>): string {
 }
 
 function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
+  const counter = body.basket !== undefined;
   const request: BillPaymentRequest = {
     ...parseAsk(body),
     submissionId: submissionIdOf(body),
-    applied: moneyField(body.applied, "applied"),
-    tip: moneyField(body.tip, "tip"),
+    applied: counter ? ZERO : moneyField(body.applied, "applied"),
+    tip: counter ? ZERO : moneyField(body.tip, "tip"),
   };
+  if (
+    counter &&
+    (request.kind !== "share" || request.shareOf !== 1 || request.choice !== undefined)
+  )
+    throw invalid("kind");
   if (body.receiptLanguage !== undefined)
     request.receiptLanguage = requireString(body.receiptLanguage, "receiptLanguage");
   const guestCount = readGuestCountChoice(body.guestCount);
@@ -205,6 +218,7 @@ export function mountBillPaymentsApi(
   pinThrottle: PinThrottle,
 ): void {
   const runBodyLines = runBodyIds("tab.line_not_found");
+  const runPayment = runBodyIds("tab.line_not_found", "course.not_found");
   const fiscal = {
     db: deps.db,
     cfg: deps.cfg,
@@ -236,7 +250,7 @@ export function mountBillPaymentsApi(
   );
 
   app.post("/api/working-orders/:id/payments", (c) =>
-    runBodyLines(c, log, async () => {
+    runPayment(c, log, async () => {
       const session = await requireSession(deps, c, { permission: "payment.take" });
       await assertRequestDevice(deps, c, session);
       const { personId, sessionId } = session;
@@ -263,6 +277,38 @@ export function mountBillPaymentsApi(
         throw invalid("simulationOutcome");
       }
       const saleCfg = sendingCfg(cfg, c, device);
+      const operator = { personId, sessionId };
+      let basket: CounterPaymentBasket | undefined;
+      let lateSend: ReturnType<typeof parseLateSend>;
+      if (body.basket !== undefined) {
+        assertProfileAction(device, "take-orders");
+        const draft = asObject(body.basket);
+        if (!Array.isArray(draft.lines)) throw invalid("lines");
+        const zoneId = await resolveHttpOrderZone(
+          deps,
+          session,
+          draft.lines.length,
+          draft.zoneId === undefined
+            ? undefined
+            : requireUuidParam(requireString(draft.zoneId, "zoneId"), "ServiceZoneId"),
+        );
+        if (zoneId !== undefined) await gateZones(deps, session, [{ zoneId }]);
+        if (draft.kitchenNote != null && typeof draft.kitchenNote !== "string")
+          throw invalid("kitchenNote");
+        const revision = draft.revision === undefined ? undefined : requireRevision(draft.revision);
+        if (draft.label !== undefined && typeof draft.label !== "string") throw invalid("label");
+        request.dining = requireDining(body.dining);
+        lateSend = parseLateSend(draft.lateSend);
+        basket = {
+          lines: draft.lines,
+          revision,
+          label: draft.label,
+          zoneId,
+          kitchenNote: draft.kitchenNote as string | null | undefined,
+          invoiceType: draft.invoiceType,
+          recipient: draft.recipient,
+        };
+      }
       if (request.kind === "contribution" && compareDecimal(decimal(request.amount!), ZERO) === 0) {
         return c.json(
           await closeZeroBill({ ...fiscal, disk: deps.disk }, saleCfg, id, request, {
@@ -273,37 +319,48 @@ export function mountBillPaymentsApi(
       }
       if (request.entry !== "reader") {
         return c.json(
-          await takeBillPayment({ ...fiscal, disk: deps.disk }, saleCfg, id, request, {
-            personId,
-            sessionId,
-          }),
+          await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+            takeBillPayment(
+              { ...fiscal, disk: deps.disk },
+              saleCfg,
+              id,
+              request,
+              operator,
+              basket === undefined ? undefined : { ...basket, lateSend: late },
+            ),
+          ),
         );
       }
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
       return c.json(
-        await takeReaderBillPayment(
-          {
-            ...fiscal,
-            provider,
-            settleCapturedReplay: async (tx, paymentId, now, guestCount) => {
-              const settled = await settleFromProviderRow(
-                tx,
-                { ...fiscal, cfg: saleCfg },
-                paymentId,
-                now,
-                guestCount,
-              );
-              return settled.settled === "received" ? settled.invoice : null;
+        await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+          takeReaderBillPayment(
+            {
+              ...fiscal,
+              provider,
+              settleCapturedReplay: async (tx, paymentId, now, guestCount) => {
+                const settled = await settleFromProviderRow(
+                  tx,
+                  { ...fiscal, cfg: saleCfg },
+                  paymentId,
+                  now,
+                  guestCount,
+                );
+                return settled.settled === "received" ? settled.invoice : null;
+              },
+              ...(reader === undefined
+                ? {}
+                : { readerRef: reader.providerRef, readerId: reader.id }),
+              deviceProfileId: device.deviceProfileId,
+              ...(deps.disk === undefined ? {} : { disk: deps.disk }),
+              sayCardChargedNotRecorded: true,
             },
-            ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
-            deviceProfileId: device.deviceProfileId,
-            ...(deps.disk === undefined ? {} : { disk: deps.disk }),
-            sayCardChargedNotRecorded: true,
-          },
-          saleCfg,
-          id,
-          request,
-          { personId, sessionId },
+            saleCfg,
+            id,
+            request,
+            operator,
+            basket === undefined ? undefined : { ...basket, lateSend: late },
+          ),
         ),
       );
     }),
