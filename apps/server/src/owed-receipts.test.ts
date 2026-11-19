@@ -29,6 +29,7 @@ import {
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
+import type { Transaction } from "@waitron/db";
 import type { Logger } from "./logger.js";
 import { owedReceiptJob, owesOriginal, startFreshRounds } from "./owed-receipts.js";
 
@@ -293,7 +294,7 @@ describe("startFreshRounds", () => {
   };
   const run = async (at = NOW) => {
     warnings = [];
-    return startFreshRounds(suite.db, at, log);
+    return (await startFreshRounds(suite.db, at, log)).resent;
   };
   // Each refusal below is the round's own filter, not a resend that threw and was logged.
   const leftAlone = async (saleId: string, at = NOW) => {
@@ -370,10 +371,144 @@ describe("startFreshRounds", () => {
     await receiptJob(saleId, printerId, givenUpAt(11));
     const stopped = new AbortController();
     stopped.abort();
-    expect(await startFreshRounds(suite.db, NOW, log, stopped.signal)).toEqual([]);
+    expect(await startFreshRounds(suite.db, NOW, log, stopped.signal)).toEqual({
+      resent: [],
+      nextDueAt: null,
+    });
     const job = owedReceiptJob({ db: suite.db, isPrimary: () => true, log });
     expect(await job.pass({ now: NOW, signal: stopped.signal })).toEqual({ nextDueAt: null });
     expect(await jobsOf(saleId)).toHaveLength(1);
+  });
+
+  /** The suite's database, calling `onWriteLock` each time a transaction asks for the write lock. */
+  const watching = (onWriteLock: () => void) =>
+    new Proxy(suite.db, {
+      get(target, key) {
+        if (key === "withWriteLock")
+          return (fn: () => Promise<unknown>) => {
+            onWriteLock();
+            return target.withWriteLock(fn);
+          };
+        const value: unknown = Reflect.get(target, key, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+  /**
+   * Holds the write lock until the round has read its candidates and asked for the lock, then runs
+   * `meanwhile` inside the held transaction before letting the round in.
+   */
+  async function raceTheRound(
+    meanwhile: (tx: Transaction) => Promise<void>,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    let holding!: () => void;
+    const holds = new Promise<void>((resolve) => (holding = resolve));
+    let asked!: () => void;
+    const asking = new Promise<void>((resolve) => (asked = resolve));
+    const holder = withTransaction(suite.db, async (tx) => {
+      holding();
+      await asking;
+      await meanwhile(tx);
+    });
+    await holds;
+    warnings = [];
+    const round = startFreshRounds(watching(asked), NOW, log, signal);
+    await holder;
+    return (await round).resent;
+  }
+
+  it("resends nothing once stopped while it waited for the write lock", async () => {
+    const { saleId, printerId } = await issued();
+    await receiptJob(saleId, printerId, givenUpAt(11));
+    const stop = new AbortController();
+    expect(await raceTheRound(async () => stop.abort(), stop.signal)).toEqual([]);
+    expect(warnings).toEqual([]);
+    expect(await jobsOf(saleId)).toHaveLength(1);
+  });
+
+  it("leaves a candidate that a newer original replaced while it waited for the write lock", async () => {
+    const { saleId, printerId } = await issued();
+    const first = await receiptJob(saleId, printerId, givenUpAt(11));
+    expect(
+      await raceTheRound(async (tx) => {
+        const { jobId } = await enqueuePrintJob(
+          tx,
+          printerId,
+          new Uint8Array([27, 64]),
+          "document",
+          {
+            saleId,
+            receiptCopy: false,
+          },
+        );
+        await tx
+          .update(printJobs)
+          .set({ ...givenUpAt(1), resendOf: first })
+          .where(eq(printJobs.id, jobId));
+      }),
+    ).toEqual([]);
+    expect(warnings).toEqual([]);
+    expect(await jobsOf(saleId)).toHaveLength(2);
+  });
+
+  it.each([
+    [
+      "its original was then emailed",
+      async (saleId: string) => delivery(saleId, { medium: "email", status: "sent" }),
+    ],
+    [
+      "its party then left without paying",
+      async (saleId: string, billId: string, partyId: string) => {
+        const [sale] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+        await suite.db.insert(unpaidDepartures).values({
+          partyId,
+          workingOrderId: billId,
+          saleId,
+          amount: sale!.total,
+          reason: "Left without paying",
+          recordedBy: STAFF,
+          authorizedBy: STAFF,
+          source: "device",
+          deviceId: sale!.deviceId,
+        });
+      },
+    ],
+  ] as const)(
+    "takes no write lock for a given-up original whose sale no longer owes it: %s",
+    async (_, settle) => {
+      const { saleId, billId, partyId, printerId } = await issued();
+      await receiptJob(saleId, printerId, givenUpAt(11));
+      await settle(saleId, billId, partyId);
+      let locks = 0;
+      expect(
+        await startFreshRounds(
+          watching(() => locks++),
+          NOW,
+          log,
+        ),
+      ).toEqual({
+        resent: [],
+        nextDueAt: null,
+      });
+      expect(locks).toBe(0);
+    },
+  );
+
+  it("says when the next given-up original falls due, and nothing when none waits", async () => {
+    const { saleId, printerId } = await issued();
+    expect(await startFreshRounds(suite.db, NOW, log)).toEqual({ resent: [], nextDueAt: null });
+    await receiptJob(saleId, printerId, givenUpAt(7));
+    expect(await startFreshRounds(suite.db, NOW, log)).toEqual({
+      resent: [],
+      nextDueAt: new Date(NOW.getTime() + 3 * 60_000),
+    });
+  });
+
+  it("looks again in a minute after a resend that failed", async () => {
+    const { saleId, printerId } = await issued();
+    await receiptJob(saleId, printerId, { ...givenUpAt(11), payload: new Uint8Array() });
+    expect(await startFreshRounds(suite.db, NOW, log)).toEqual({ resent: [], nextDueAt: NOW });
   });
 
   it("leaves a sale that no longer owes its original", async () => {
@@ -468,10 +603,15 @@ describe("startFreshRounds", () => {
 });
 
 describe("owedReceiptJob", () => {
-  it("runs every minute on the primary only", async () => {
+  it("runs on the primary only, at most once a minute, woken by what can make a receipt owed", async () => {
     let primary = false;
     const job = owedReceiptJob({ db: suite.db, isPrimary: () => primary, log: () => {} });
-    expect(job).toMatchObject({ name: "receipt.owed", minSleepMs: 60_000, maxSleepMs: 60_000 });
+    expect(job).toMatchObject({
+      name: "receipt.owed",
+      minSleepMs: 60_000,
+      maxSleepMs: 60 * 60_000,
+      wakeOn: ["print_jobs", "printers", "invoice_deliveries"],
+    });
     expect(job.applies()).toBe(false);
     primary = true;
     expect(job.applies()).toBe(true);

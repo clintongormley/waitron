@@ -1,6 +1,8 @@
 // Keeps errors.ts's codes reachable from the throwing file (scripts/errors-reachable.test.ts).
 import "./errors.js";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import type { SQL, SQLWrapper } from "drizzle-orm";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { AppError } from "@waitron/shared";
 import { printJobs, isA4Printer, isReceiptPrinter, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -142,6 +144,21 @@ export async function endMovedPrintJob(tx: Transaction, jobId: string): Promise<
   return ended.rows.length > 0;
 }
 
+/** A sale's original print, as `jobs` (default `print_jobs`), that printed or is still trying to. */
+export function originalPrintDoneOrTrying(
+  saleId: string | SQLWrapper,
+  jobs: Record<"saleId" | "receiptCopy" | "status" | "attempts", SQLiteColumn> = printJobs,
+): SQL {
+  return and(
+    eq(jobs.saleId, saleId),
+    eq(jobs.receiptCopy, false),
+    or(
+      inArray(jobs.status, ["queued", "printing", "done"]),
+      and(eq(jobs.status, "failed"), lt(jobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+    ),
+  )!;
+}
+
 /**
  * Resend the opaque document to its original printer, or `to` another with the bytes given,
  * preserving delivery history. The
@@ -166,18 +183,7 @@ export async function resendPrintJob(
     const [reserved] = await tx
       .select({ id: printJobs.id })
       .from(printJobs)
-      .where(
-        and(
-          eq(printJobs.saleId, job.saleId),
-          eq(printJobs.receiptCopy, false),
-          or(
-            eq(printJobs.status, "done"),
-            eq(printJobs.status, "queued"),
-            eq(printJobs.status, "printing"),
-            and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
-          ),
-        ),
-      )
+      .where(originalPrintDoneOrTrying(job.saleId))
       .limit(1);
     if (reserved !== undefined) throw new AppError("print_job.not_resendable", { id: jobId });
   }
