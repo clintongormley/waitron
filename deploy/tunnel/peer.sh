@@ -70,6 +70,8 @@ while :; do
       endpoint=$(printf '%s' "$next" | jq -r .endpoint)
       active=$next
       if configure; then
+        probe_ticks=0
+        probe_failed=
         printf '%s\n' tunnel.configured
       else
         stop
@@ -83,5 +85,16 @@ while :; do
   fi
   reported=yes
   if [ -n "$proxy" ] && ! kill -0 "$proxy" 2>/dev/null; then exit 1; fi
+  if [ -n "$active" ]; then
+    # A data packet starts WireGuard's missing-reply timer when a gateway loses its session.
+    if [ "$probe_ticks" -eq 0 ]; then
+      if ! printf x | timeout 1 socat -u - "UDP4-SENDTO:$gateway:9,bind=$address" 2>/dev/null &&
+        [ -z "$probe_failed" ]; then
+        printf '%s\n' tunnel.probe_failed >&2
+        probe_failed=yes
+      fi
+    fi
+    probe_ticks=$(((probe_ticks + 1) % 10))
+  fi
   sleep 2 & wait $! || :
 done

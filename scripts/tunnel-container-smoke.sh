@@ -90,13 +90,16 @@ docker exec --user 10001:10001 "$name-peer" rm /control/app-write-probe
 if docker exec "$name-peer" ip link show wg-cloud 2>/dev/null; then exit 1; fi
 [ "$(docker exec "$name-peer" stat -c %a /keys/private-key)" = 600 ]
 docker exec "$name-peer" sh -c 'test "$(ls /control)" = public-key'
-docker exec "$name-gateway" sh -c '
+configure_gateway() {
+  docker exec "$name-gateway" sh -ec '
   ip link add wg-cloud type wireguard
   ip address add 10.77.17.1/32 dev wg-cloud
   wg set wg-cloud private-key /keys/gateway.key listen-port 51820 peer "$1" allowed-ips 10.77.17.2/32
   ip link set wg-cloud up
   ip route add 10.77.17.2/32 dev wg-cloud
 ' sh "$peer_key"
+}
+configure_gateway
 printf '{"address":"10.77.17.2","gatewayPublicKey":"%s","endpoint":"%s:51820"}\n' "$gateway_key" "$gateway_ip" > "$scratch/peer.json"
 sed "s/$gateway_ip:51820/unresolvable.invalid:51820/" "$scratch/peer.json" > "$scratch/unavailable.json"
 docker cp "$scratch/unavailable.json" "$name-peer:/control/peer.json" >/dev/null
@@ -109,6 +112,33 @@ request() { docker exec "$name-gateway" sh -c 'printf staff-only | timeout 3 soc
 connected() { [ "$(request)" = staff-only ]; }
 wait_for connected
 printf '%s\n' 'PASS gateway TCP stream reaches only staff upstream'
+gateway_handshake() {
+  docker exec "$name-gateway" wg show wg-cloud latest-handshakes | awk '{print $2}'
+}
+peer_ifindex=$(docker exec "$name-peer" cat /sys/class/net/wg-cloud/ifindex)
+handshake=$(gateway_handshake)
+replaced_at=$(date +%s)
+[ "$handshake" -gt 0 ] && [ "$((replaced_at - handshake))" -le 30 ] || {
+  printf '%s\n' "Expected a recent handshake before gateway replacement, got $handshake" >&2
+  exit 1
+}
+docker exec "$name-gateway" ip link del wg-cloud
+configure_gateway
+[ "$(gateway_handshake)" = 0 ]
+# Reading tunnel state keeps the peer idle until it starts a new handshake.
+until [ "$(gateway_handshake)" -gt 0 ] 2>/dev/null; do
+  if [ "$(($(date +%s) - replaced_at))" -ge 90 ]; then
+    docker logs "$name-peer" >&2
+    printf '%s\n' 'FAIL no new handshake after 90 seconds with the peer idle' >&2
+    exit 1
+  fi
+  sleep 1
+done
+connected
+elapsed=$(($(date +%s) - replaced_at))
+[ "$elapsed" -le 90 ]
+[ "$(docker exec "$name-peer" cat /sys/class/net/wg-cloud/ifindex)" = "$peer_ifindex" ]
+printf '%s\n' "PASS idle peer recovered the staff stream in ${elapsed}s with the original interface"
 docker exec "$name-gateway" ip address add 10.77.17.3/32 dev wg-cloud
 if docker exec "$name-gateway" sh -c 'printf denied | timeout 3 socat - TCP4:10.77.17.2:443,bind=10.77.17.3,connect-timeout=1'; then exit 1; fi
 docker exec -d "$name-peer" socat TCP4-LISTEN:8443,bind=10.77.17.2,reuseaddr,fork 'SYSTEM:printf forbidden-port'
