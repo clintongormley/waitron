@@ -335,19 +335,26 @@ disable_bluetooth_autopair() {
 # 2d. Every start of a box that files invoices takes no payment until its clock is confirmed, so install
 # asks the host to keep its clock right where it can.
 enable_time_sync() {
-  local limit
+  local limit was_local
   limit="$(command -v gtimeout || command -v timeout)" || limit=""
+  was_local="$(as_root ${limit:+"$limit" 60} timedatectl show -p LocalRTC --value 2>/dev/null)" || was_local=""
+  # Before set-ntp, which may start systemd-timesyncd: it reads this setting only when it starts,
+  # and while it reads local time it stops the kernel copying the system time into the hardware
+  # clock, so one already running under local time is restarted.
+  if as_root ${limit:+"$limit" 60} timedatectl set-local-rtc 0 >/dev/null 2>&1; then
+    echo "waitron.sh: configured the system to keep the hardware clock in UTC, so the kernel copies the time into it while the system clock is synchronised (timedatectl set-local-rtc 0)"
+    if [ "$was_local" = yes ] \
+      && as_root ${limit:+"$limit" 60} systemctl is-active --quiet systemd-timesyncd \
+      && ! as_root ${limit:+"$limit" 60} systemctl try-restart systemd-timesyncd >/dev/null 2>&1; then
+      echo "waitron.sh: could not restart systemd-timesyncd after switching the hardware clock from local time to UTC; if it is running, it leaves the hardware clock alone until it restarts — run 'systemctl restart systemd-timesyncd' as root" >&2
+    fi
+  else
+    echo "waitron.sh: could not set the hardware clock to keep UTC ('timedatectl set-local-rtc 0' failed, or this system has no timedatectl). If it keeps local time, systemd-timesyncd leaves it alone, and a box that starts without a correction after a summer/winter change can be an hour out — run 'timedatectl set-local-rtc 0' as root" >&2
+  fi
   if as_root ${limit:+"$limit" 60} timedatectl set-ntp true >/dev/null 2>&1; then
     echo "waitron.sh: asked the system to keep its clock in step with internet time (timedatectl set-ntp true)"
   else
     echo "waitron.sh: could not switch on the system's time synchronisation ('timedatectl set-ntp true' failed, or this system has no timedatectl). Unless another time service runs on this machine, nothing keeps its clock right, and every start of a box that files invoices takes no payment until the system reports its clock in step with internet time, two tills or handhelds that are switched on and connected agree with its clock, or someone confirms it — check the clock, and install and enable a time service such as systemd-timesyncd if there is none" >&2
-  fi
-  # A hardware clock kept in local time is never corrected by the kernel, and is an hour out after
-  # a power cut across a summer/winter change.
-  if as_root ${limit:+"$limit" 60} timedatectl set-local-rtc 0 >/dev/null 2>&1; then
-    echo "waitron.sh: set the hardware clock to keep UTC, so the system keeps it correct (timedatectl set-local-rtc 0)"
-  else
-    echo "waitron.sh: could not set the hardware clock to keep UTC ('timedatectl set-local-rtc 0' failed, or this system has no timedatectl). If it keeps local time, nothing corrects it, and after a power cut the box may start with its clock wrong — run 'timedatectl set-local-rtc 0' as root" >&2
   fi
 }
 

@@ -339,8 +339,8 @@ unconfirmed (watcher, 2026-11-16 12:48, Lane J questions).
   confirmed, so the image should also keep time through a power cut (hardware with a battery-backed clock), and set
   it as soon as it is online. Since A798-B slice 10, `waitron.sh install` runs `timedatectl
   set-ntp true` and says so, or says that unless another time service runs nothing keeps the clock
-  right, and the running server asks the host to switch it back on whenever it reads it switched
-  off, waiting from a minute up to an hour after failed tries
+  right; since A1420-HANDS-ON-FIXES it also sets the hardware clock to keep UTC (`timedatectl set-local-rtc 0`); and the
+  running server asks the host to switch it back on whenever it reads it switched off, waiting from a minute up to an hour after failed tries
   (`apps/server/src/time-service-kept-on.ts`); the image makes it standing.
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
