@@ -20192,15 +20192,15 @@ export class TillApp extends LitElement {
       if (isNetworkFailure(outcome.error)) this.#onMealEndUnconfirmed(asked);
       else await this.#onMealEndRefused(asked, request, outcome.error, earlierSendUnanswered);
     } else if (!confirmsTicket(outcome.answer, workingOrderId)) this.#onMealEndUnconfirmed(asked);
-    else if (live()) await this.#onMealEnded(party.id, workingOrderId, asked.visit, asked.sent);
+    else if (live()) await this.#onMealEnded(asked);
   }
 
-  async #onMealEnded(partyId: string, workingOrderId: string, visit: number, sent: Sent) {
-    if (this.#hasLeftParty(partyId, sent)) return;
-    this.finishRefused = false;
-    this.mealEnd = { partyId, workingOrderId, printed: true };
+  async #onMealEnded(asked: BillComposition): Promise<void> {
+    if (this.#hasLeftParty(asked.partyId, asked.sent)) return;
+    if (this.#onPressedBill(asked)) this.finishRefused = false;
+    this.mealEnd = { partyId: asked.partyId, workingOrderId: asked.billId, printed: true };
     const billId = this.activeTabId;
-    if (billId !== undefined) await this.#rereadAmounts(billId, visit);
+    if (billId !== undefined) await this.#rereadAmounts(billId, asked.visit);
   }
 
   /** The sign-in, server and party a press was sent under are still the current ones. */

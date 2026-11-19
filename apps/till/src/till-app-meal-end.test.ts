@@ -890,6 +890,37 @@ describe("till-app: a print's answer arriving after staff moved on", () => {
     expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
   });
 
+  it("leaves a Finish table refusal on the second bill when the first bill's print succeeds late", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const { el } = await pressThenSwitchToBillTwo({
+      endMeal: () => answer.promise,
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+    });
+    emit(tableOrder(el), "finish-table", {});
+    await flush(el);
+    expect(shadow(el).querySelector("[data-finish-refusal]")).not.toBeNull();
+
+    answer.resolve(ended);
+    await flush(el, 6);
+
+    expect(shadow(el).querySelector("[data-finish-refusal]")).not.toBeNull();
+    expect(printedNotice(el)).toBeNull();
+  });
+
+  it("takes a Finish table refusal down when the bill on screen is the one printed", async () => {
+    const { el } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+    });
+    emit(tableOrder(el), "finish-table", {});
+    await flush(el);
+    expect(shadow(el).querySelector("[data-finish-refusal]")).not.toBeNull();
+
+    await printBill(el);
+
+    expect(shadow(el).querySelector("[data-finish-refusal]")).toBeNull();
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+  });
+
   it("reloads a table that changed elsewhere without saying so under the second bill", async () => {
     let moved = false;
     const answer = heldAnswer<EndedMeal>();
