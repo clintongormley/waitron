@@ -642,6 +642,85 @@ it.each([
   },
 );
 
+describe("an original emailed or sent on A4 that may have arrived", () => {
+  const attempt = (
+    id: string,
+    medium: "email" | "a4",
+    status: "unknown" | "failed",
+    printerHold: string | null = null,
+  ) => ({
+    id,
+    medium,
+    designation: "original" as const,
+    status,
+    failureCode: null,
+    requestedAt: "2026-11-11T12:00:00.000Z",
+    at: null,
+    personId: "p1",
+    printerHold,
+    lateSuccess: false,
+  });
+  const withAttempts = (
+    state: ClosingState,
+    invoiceType: "F1" | "F2",
+    history: ReturnType<typeof attempt>[],
+  ) => ({
+    ...closingProps(state, true),
+    result: { ...invoiceOf("30.00"), invoiceType },
+    deliveries: {
+      ...closingProps(state, true).deliveries,
+      current: history[0]!,
+      history,
+    },
+  });
+
+  for (const invoiceType of ["F2", "F1"] as const)
+    it.each([
+      ["emailed", [attempt("email-1", "email", "unknown")], "May not have been delivered."],
+      ["sent on A4", [attempt("a4-1", "a4", "unknown")], "May not have been delivered."],
+      [
+        "held at the office printer",
+        [attempt("a4-1", "a4", "unknown", "printer.offline")],
+        "May still print: check the printer first.",
+      ],
+      [
+        "sent on A4 before a later email failed",
+        [attempt("email-2", "email", "failed"), attempt("a4-1", "a4", "unknown")],
+        "Not delivered.",
+      ],
+    ])(
+      `promises no print on a ${invoiceType} %s, and keeps the delivery's own line`,
+      async (_case, history, statusLine) => {
+        for (const state of Object.keys(closingLines) as ClosingState[]) {
+          const { el } = await mountWidget<TillSettlementDocumentDialog>(
+            "till-settlement-document-dialog",
+            withAttempts(state, invoiceType, history),
+          );
+          expect(el.shadowRoot!.querySelector("[data-settlement-closing]")).toBeNull();
+          expect(
+            el.shadowRoot!.querySelector("[data-test=delivery-status]")?.textContent?.trim(),
+          ).toBe(statusLine);
+          cleanupWidgets();
+        }
+      },
+    );
+
+  it("still says closing prints when every original emailed or sent on A4 failed", async () => {
+    const { el } = await mountWidget<TillSettlementDocumentDialog>(
+      "till-settlement-document-dialog",
+      withAttempts("prints", "F2", [
+        attempt("email-2", "email", "failed"),
+        attempt("a4-1", "a4", "failed"),
+      ]),
+    );
+    expect(
+      el
+        .shadowRoot!.querySelector("[data-settlement-closing]")
+        ?.getAttribute("data-settlement-closing"),
+    ).toBe("prints");
+  });
+});
+
 it("tells a full invoice with nothing sent that closing prints its receipt", async () => {
   const { el } = await mountWidget<TillSettlementDocumentDialog>(
     "till-settlement-document-dialog",

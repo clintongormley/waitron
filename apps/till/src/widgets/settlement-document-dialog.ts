@@ -19,8 +19,18 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     this.printDocument = "receipt";
   }
 
+  // The server's `owesOriginal` (apps/server/src/owed-receipts.ts) prints nothing at close beside
+  // any original attempt that may have arrived.
+  #originalMayHaveArrived(): boolean {
+    return (
+      this.deliveries?.history.some(
+        (attempt) => attempt.designation === "original" && attempt.status !== "failed",
+      ) === true
+    );
+  }
+
   #closingState(): "prints" | "switched-off" | "no-printer" | "not-allowed" | null {
-    if (this.receiptDesignation() !== "original") return null;
+    if (this.receiptDesignation() !== "original" || this.#originalMayHaveArrived()) return null;
     if (!this.canPrintReceipt) return "not-allowed";
     if (this.receiptEquipment === undefined) return null;
     const { resolved: printer, choices } = this.receiptEquipment;
