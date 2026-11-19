@@ -443,7 +443,7 @@ Los nombres internos y de estación, las cartas, los departamentos y las estacio
 el inglés o español usado para preparar la demostración.
 Cambiar después el idioma de las pantallas no cambia esos nombres. Los textos para
 el cliente conservan el catalán, valenciano o gallego de la región, además del español
-y el inglés. En Cataluña los tiques salen en catalán; en las demostraciones de Baleares,
+y el inglés. En Cataluña los tickets salen en catalán; en las demostraciones de Baleares,
 Valencia y Galicia salen en español por defecto.
 
 Durante la preparación, el nombre sugerido sigue el código postal o la provincia hasta que lo editas.

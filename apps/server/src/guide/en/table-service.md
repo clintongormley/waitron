@@ -79,8 +79,6 @@ Press **Done** or close the window to carry on. Unless you emailed it, the recei
 close. If the printer is switched off or not working, it prints by itself when it is back; if it has
 not printed by the next day, print it from the sale. If the device has no receipt printer, nothing
 prints: choose one or send the email before closing. You close the table separately.
-After the last payment of a bill printed with **Print the bill**, the window offers a copy instead
-of the original.
 For a document later, open the sale and choose **Print/Reprint**.
 
 ## Check a card before cancelling {#cancel-pending-card}
@@ -123,8 +121,8 @@ At the counter, choose **Full invoice** before **Pay**. Paying the order in full
 invoice. Placing a counter order alone does not issue an invoice.
 
 When the form shows **Delivery**, **A4 on {printer}** or **Email** sends the original by itself
-once the invoice is issued. With **Receipt printer: print after paying**, the receipt prints when
-you close the window after payment.
+once the invoice is issued. With **Receipt printer**, the invoice prints when you choose **Print
+the bill**; otherwise it prints when you close the window after payment.
 
 ## Choose a document and printer {#invoice-printer}
 
@@ -590,8 +588,7 @@ anyway**: a dish that then never comes is refunded after payment with
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 
-Take payment with **Pay** as usual, in one go or in parts. Anything already paid on the bill counts,
-so **Still to pay** shows only the rest.
+Take payment with **Pay** as usual, in one go or in parts.
 
 ## A card-payment check failed {#card-check-failed}
 
@@ -877,7 +874,7 @@ know has already been charged. If the check fails, follow
 ## Close a bill as a deferred payment {#deferred-payment}
 
 Use this when the customer will pay the whole bill later, outside Waitron. Open **Pay** on the bill
-and choose **Close as deferred payment** (on a bill not yet presented, choose **Whole bill** first).
+and choose **Close as deferred payment** (where **Whole bill** is offered, choose it first).
 Check the bill, the invoice and the total, then confirm. Waitron issues the invoice if it has not been issued yet and closes the bill for good. It
 records no payment for the bill, now or later, and the bill shows **Deferred payment** from then on.
 

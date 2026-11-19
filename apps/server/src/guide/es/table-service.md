@@ -86,8 +86,6 @@ electrónico, el recibo se imprime al cerrar. Si la impresora está desactivada 
 imprime por sí solo cuando vuelva a funcionar; si al día siguiente no se ha impreso, imprímelo desde la
 venta. Si el dispositivo no tiene impresora de tickets, no se imprime nada: elige una o envía el
 correo antes de cerrar. Cierras la mesa por separado.
-Después del último pago de una cuenta impresa con **Imprimir la cuenta**, la ventana ofrece una
-copia en lugar del original.
 Si necesitas un documento más tarde, abre la venta y elige **Imprimir/Reimprimir**.
 
 ## Comprobar un pago con tarjeta antes de cancelar {#cancel-pending-card}
@@ -120,8 +118,8 @@ En el mostrador, elige **Factura completa** antes de **Cobrar**. Al cobrar todo 
 emite la factura. Tramitar un pedido de mostrador por sí solo no emite una factura.
 
 Cuando el formulario muestra **Entrega**, **A4 en {printer}** o **Correo electrónico** envía el
-original por sí solo al emitirse la factura. Con **Impresora de tickets: imprimir tras cobrar**,
-el recibo se imprime al cerrar la ventana posterior al cobro.
+original por sí solo al emitirse la factura. Con **Impresora de tickets**, la factura se imprime al
+elegir **Imprimir la cuenta**; si no, se imprime al cerrar la ventana posterior al cobro.
 
 Elige **NIF español** para un NIF, NIE o CIF. Para un pasaporte u otro documento aceptado,
 elige su **Tipo de identificador**, **País emisor** y **Número de documento**. Introduce el número
@@ -591,7 +589,7 @@ Si un cliente se va sin pagar, selecciona su cuenta, abre **⋮** y elige **Regi
 pagar** bajo esa cuenta. Comprueba el importe e indica el motivo. Si hace falta autorización,
 elige un responsable o encargado y pídele que introduzca su PIN.
 
-Solo se detiene la comida pendiente de servir de esa cuenta, con tiques de cancelación para la
+Solo se detiene la comida pendiente de servir de esa cuenta, con tickets de cancelación para la
 estación. Las demás cuentas conservan su comida, así que puedes servir el postre de quien ya ha
 pagado. Se registra como pendiente lo que aún se debe de la cuenta; lo ya pagado se conserva. Cuando
 el cliente vuelva a pagar, abre la cuenta desde **Buscar cuenta** y cobra allí lo que falta. La
@@ -632,8 +630,7 @@ del cobro con [Rectificar una factura](table-service.md#correct-invoice).
 Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo en **+ Cuenta
 nueva**.
 
-Cobra con **Cobrar** como siempre, de una vez o por partes. Lo ya pagado de la cuenta se descuenta,
-así que **Queda por pagar** muestra solo el resto.
+Cobra con **Cobrar** como siempre, de una vez o por partes.
 
 ## Falló la comprobación de un cobro con tarjeta {#card-check-failed}
 
@@ -940,8 +937,8 @@ a cobrar una tarjeta que sabes que ya se ha cobrado. Si falla la comprobación, 
 ## Cerrar una cuenta como pago aplazado {#deferred-payment}
 
 Úsalo cuando el cliente vaya a pagar toda la cuenta más tarde, fuera de Waitron. Abre **Cobrar** en
-la cuenta y elige **Cerrar como pago aplazado** (en una cuenta aún no presentada, elige antes **Toda
-la cuenta**). Comprueba la cuenta, la factura y el total, y confirma. Waitron emite la factura si aún no se ha emitido y cierra la cuenta
+la cuenta y elige **Cerrar como pago aplazado** (donde se ofrezca **Toda la cuenta**, elígela
+antes). Comprueba la cuenta, la factura y el total, y confirma. Waitron emite la factura si aún no se ha emitido y cierra la cuenta
 definitivamente. No registra ningún pago de la cuenta, ni ahora ni después, y la cuenta muestra
 **Pago aplazado** desde entonces.
 
