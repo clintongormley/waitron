@@ -459,7 +459,7 @@ export interface MoveSuggestion {
  * `drafted` (earlier draft dishes, at their previewed places) are never moved. Null when none. */
 export function suggestMove(
   state: BillSetMenuState,
-  drafted: readonly PlacementResult[],
+  drafted: readonly (PlacementResult & Pick<DishToPlace, "productId" | "variantId">)[],
   dish: Omit<DishToPlace, "reserved">,
 ): MoveSuggestion | null;
 /** Checks moves taken together; answers each moved dish's new place, or the first dish whose
@@ -474,7 +474,8 @@ export function checkMoves(
 
 - `suggestMove` calls `fitSetMenus` with one offer per copy on the bill (each `SetMenuCopy` is one, `id` its key), every
   set-menu line fixed to its copy, the bill's placed dishes unpinned when `movable` and pinned
-  otherwise, `drafted` pinned at their places, and `dish` free; `previous` is today's places. When
+  otherwise, `drafted` pinned at their places, and `dish` free; `previous` is today's places. Pass each
+  draft dish's product and variant with its place so the fit checks that exact listing. When
   it answers `fitted`, the moves are the placed dishes whose place differs (spec §3). It answers
   null on `uncovered` and `too_large`, and when the fit throws `set_menu.fit_invalid_input` (an
   amount above `MAX_SET_MENU_AMOUNT_CENTS`, `set-menu-fit.ts:10`) (**my call (plan writer)**: the
