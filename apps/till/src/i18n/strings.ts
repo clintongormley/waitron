@@ -2575,9 +2575,9 @@ export const es: Record<StringKey, string> = {
   "settlement.closing_switched_off":
     "{printer} está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
   "settlement.closing_no_printer":
-    "Este dispositivo no tiene impresora de recibos. Elige una arriba o envía el recibo por correo antes de cerrar.",
+    "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo antes de cerrar.",
   "settlement.closing_no_printer_no_email":
-    "Este dispositivo no tiene impresora de recibos. Elige una arriba antes de cerrar.",
+    "Este dispositivo no tiene impresora de tickets. Elige una arriba antes de cerrar.",
   "settlement.closing_not_allowed":
     "Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda.",
   "settlement.replacement_unavailable":

@@ -433,7 +433,7 @@ const closingLines = {
   },
   "no-printer": {
     en: "This device has no receipt printer. Choose one above before closing.",
-    es: "Este dispositivo no tiene impresora de recibos. Elige una arriba antes de cerrar.",
+    es: "Este dispositivo no tiene impresora de tickets. Elige una arriba antes de cerrar.",
   },
   "not-allowed": {
     en: "This device may not print or email receipts. Print it from Find a bill on a till that can.",
@@ -448,7 +448,7 @@ const closingLinesWithEmail: Partial<Record<ClosingState, { en: string; es: stri
   },
   "no-printer": {
     en: "This device has no receipt printer. Choose one above or email the receipt before closing.",
-    es: "Este dispositivo no tiene impresora de recibos. Elige una arriba o envía el recibo por correo antes de cerrar.",
+    es: "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo antes de cerrar.",
   },
 };
 
