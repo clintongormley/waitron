@@ -276,3 +276,19 @@ describe("table panel amount (A773)", () => {
     expect(panelTotal("20.00", [])).toBe("20.00");
   });
 });
+
+describe("set-menu amounts in the order panel", () => {
+  it("does not charge an unplaced draft dish at the folder's advertised surcharge", () => {
+    const hake = line("hake", undefined, undefined, { setMenuId: "daily" });
+    expect(panelTotal("28.00", [hake])).toBe("28.00");
+  });
+
+  it("charges the landing place's surcharge and keeps the dish's paid extras", () => {
+    const sirloin = line("sirloin", undefined, undefined, {
+      setMenuId: "daily",
+      extras: [{ listId: "extras", productId: "sauce", name: "Sauce", quantity: 1, price: "0.25" }],
+    });
+    expect(panelTotal("28.00", [sirloin], () => "5.00")).toBe("33.25");
+    expect(panelTotal("28.00", [sirloin], () => "0.00")).toBe("28.25");
+  });
+});

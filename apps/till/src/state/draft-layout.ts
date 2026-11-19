@@ -178,6 +178,15 @@ export function fireGroups(
   return indexes.length === 0 ? [] : [{ release: "fire", indexes }];
 }
 
-export function panelTotal(storedTotal: string, ownLines: readonly OrderLine[]): string {
-  return toScale(sumDecimals([decimal(storedTotal), ...ownLines.map(lineGross)]), MONEY_SCALE);
+export function panelTotal(
+  storedTotal: string,
+  ownLines: readonly OrderLine[],
+  placedPrice?: (line: OrderLine) => string | undefined,
+): string {
+  const drafts = ownLines.map((line) => {
+    if (line.setMenuId === undefined) return lineGross(line);
+    const unitPrice = placedPrice?.(line) ?? "0.00";
+    return lineGross({ ...line, product: { ...line.product, unitPrice } });
+  });
+  return toScale(sumDecimals([decimal(storedTotal), ...drafts]), MONEY_SCALE);
 }

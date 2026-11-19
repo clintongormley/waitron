@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
+import type { BillSetMenuState } from "@waitron/shared";
 import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders, TabLine } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
@@ -16,6 +17,7 @@ type Panel = LitElement & {
   now: number;
   billLabels: ReadonlyMap<string, string>;
   lines: readonly TabLine[];
+  setMenus: BillSetMenuState | null;
 };
 const now = Date.parse("2026-10-18T12:00:00Z");
 const at = (minute: number) => `2026-10-18T11:${String(minute).padStart(2, "0")}:00Z`;
@@ -1148,4 +1150,78 @@ describe("A773 at the pass", () => {
       find(el, "[data-fired-line=burger] .status").textContent!.replace(/\s+/g, " ").trim(),
     ).toBe("Fired");
   });
+});
+
+it("combines covered soups of the same type but separates a surcharge and another menu type", async () => {
+  const types = [
+    ["daily-one", "daily"],
+    ["daily-two", "daily"],
+    ["special-one", "special"],
+    ["daily-three", "daily-older"],
+    ["daily-four", "daily-later"],
+  ] as const;
+  const copies = [
+    ["daily-copy", "daily"],
+    ["special-copy", "special"],
+    ["daily-older-copy", "daily"],
+    ["daily-later-copy", "daily"],
+  ] as const;
+  const setMenus: BillSetMenuState = {
+    copies: copies.map(([id, setMenuId]) => ({
+      id,
+      setMenuId,
+      versionId: id,
+      name: setMenuId,
+      priceCents: 1400,
+      terms: { vatClass: "reduced", takeawayVatClass: "reduced" },
+      lines: [],
+      dishes: [],
+    })),
+    recorded: {},
+    setMenus: types.map(([id, type], index) => ({
+      lineId: id,
+      copyId: `${type}-copy`,
+      lineNo: 10 + index,
+    })),
+    dishes: (
+      [
+        ["soup-one", "daily-one", 0],
+        ["soup-two", "daily-two", 0],
+        ["soup-three", "daily-four", 0],
+        ["soup-surcharge", "daily-three", 500],
+        ["soup-special", "special-one", 0],
+      ] as const
+    ).map(([lineId, setMenuLineId, priceCents]) => ({
+      lineId,
+      setMenuLineId,
+      priceCents,
+      productId: "soup",
+      variantId: null,
+      place: 0,
+      countsAsCourseId: "starter",
+      movable: true,
+    })),
+  };
+  const lines = setMenus.dishes.map(({ lineId, priceCents }, index) => ({
+    ...billLine(lineId, index + 1),
+    name: "Soup",
+    productId: "soup",
+    unitPriceGross: priceCents === 500 ? "5.00" : "0.00",
+  }));
+  const data = current(
+    lines.map((line) =>
+      row(line.id, {
+        lineNo: line.lineNo,
+        name: line.name,
+        netAmount: line.unitPriceGross,
+        readyAt: at(50),
+      }),
+    ),
+  );
+  const el = await mount(data, { lines, setMenus });
+  expect(shownLines(el, "data-fired-line")).toEqual([
+    ["soup-one", "Soup ×3 menu", "€0.00"],
+    ["soup-special", "Soup ×1 menu", "€0.00"],
+    ["soup-surcharge", "Soup ×1 +€5.00", "€5.00"],
+  ]);
 });

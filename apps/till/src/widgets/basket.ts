@@ -15,6 +15,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { type Decimal, decimal, formatMoney, grossOf, multiplyDecimal } from "@waitron/shared";
 import { currentLocale, fill, t } from "../i18n/t.js";
+import { setMenuTag, setMenuTagStyles } from "./set-menu-presentation.js";
 import { nutritionIcons, nutritionIconStyles, nutritionDietLabels } from "./nutrition-icons.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { dishGross, extraGross, needsModifierPicker, quantityLabel } from "../state/order-line.js";
@@ -109,6 +110,7 @@ export class TillBasket extends LitElement {
   static override styles = [
     baseStyles,
     nutritionIconStyles,
+    setMenuTagStyles,
     dietBadgeStyles,
     lineExtrasEditorStyles,
     priceWasStyles,
@@ -438,6 +440,7 @@ export class TillBasket extends LitElement {
 
   /** The order this basket shows and mutates. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
+  @property({ attribute: false }) placedPrice?: (line: OrderLine) => string | undefined;
 
   /**
    * The lines shown, by their place in {@link store}; unset shows every line. Each shown line has three
@@ -832,6 +835,7 @@ export class TillBasket extends LitElement {
       <div class="order-lines">
         ${shown.map(([line, index]) => {
           const listed = this.#listed(line, listing);
+          const setMenuPrice = line.setMenuId === undefined ? undefined : this.placedPrice?.(line);
           const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);
           const ended = line.blocked === undefined ? line.endedPeriod : undefined;
           return html`
@@ -874,7 +878,7 @@ export class TillBasket extends LitElement {
                       ><span class="product-name" lang=${currentContentLanguages().defaultLanguage}
                         >${this.#lineName(line)}</span
                       ></slot
-                    >${this.#nutrition(line)}${
+                    >${setMenuTag(setMenuPrice)}${this.#nutrition(line)}${
                       line.notOffered ? notOfferedMarker() : nothing
                     }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
                       ended === undefined ? nothing : periodEndedMarker(ended.periodName)
@@ -886,7 +890,8 @@ export class TillBasket extends LitElement {
                         : nothing
                     }</span
                   >
-                  ${this.#quantityCell(line, index, sent)} ${this.#dishTotal(line, listed)}
+                  ${this.#quantityCell(line, index, sent)}
+                  ${this.#dishTotal(line, listed, line.setMenuId === undefined ? undefined : (setMenuPrice ?? "0.00"))}
                   ${
                     this.lineDetails
                       ? html`<wt-button
@@ -1149,7 +1154,8 @@ export class TillBasket extends LitElement {
   /** `−` is disabled at 1: removing a line is the × control's job, never the stepper's. A dish the
    * kitchen has has no `−`: less of it leaves only through Cancel. */
   #quantityCell(line: OrderLine, index: number, sent: boolean) {
-    if (this.readOnly) return html`<span class="qty">${quantityLabel(line)}</span>`;
+    if (this.readOnly || line.setMenuId !== undefined)
+      return html`<span class="qty">${quantityLabel(line)}</span>`;
     const unit = productUnit(line.product);
     if (unit.hardwareUnit !== null || unit.precision > 0) {
       return html`<span class="qty">${quantityLabel(line)}</span>`;
@@ -1205,8 +1211,8 @@ export class TillBasket extends LitElement {
   }
 
   /** The dish's total, and before it the total at its listed price when an adjustment changed it. */
-  #dishTotal(line: OrderLine, listed: TabLine | undefined) {
-    const now = dishGross(line);
+  #dishTotal(line: OrderLine, listed: TabLine | undefined, placedPrice?: string) {
+    const now = placedPrice === undefined ? dishGross(line) : grossOf(placedPrice, line.quantity);
     const unit = listed?.listUnitPriceGross;
     return lineTotal(unit === undefined ? now : grossOf(unit, line.quantity), now);
   }

@@ -6,12 +6,22 @@ import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, formatDecimalInput, Gestures } from "@waitron/ui";
 import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
-import { MONEY_SCALE, decimal, formatMoney, sumDecimals, toScale } from "@waitron/shared";
+import {
+  MONEY_SCALE,
+  centsToDecimal,
+  decimal,
+  formatMoney,
+  sumDecimals,
+  toScale,
+  type BillSetMenuState,
+} from "@waitron/shared";
 import type { CurrentOrderRow, CurrentOrders, TabLine } from "../api/client.js";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { sentItemCount, sentPanel, type SentPanel, type SentSlice } from "../state/sent-panel.js";
 import { portionGroups, sentSlicePortionKey } from "../state/portion-groups.js";
+import { menusWithCopies } from "../state/set-menus.js";
+import { setMenuTag, setMenuTagStyles } from "./set-menu-presentation.js";
 import { reminderDueAt } from "../state/release-reminder.js";
 import { trimQuantity } from "./dish-format.js";
 import { groupName } from "./group-name.js";
@@ -48,10 +58,13 @@ export class TillSentOrders extends LitElement {
   @property({ attribute: false }) allergy: PartyAllergySnapshot | null = null;
   /** The bill's lines, which say which rows are identical portions; none known groups none. */
   @property({ attribute: false }) lines: readonly TabLine[] = [];
+  @property({ attribute: false }) setMenus: BillSetMenuState | null = null;
+  #setMenuDishes = new Map<string, { setMenuId: string; price: string }>();
 
   static override styles = [
     baseStyles,
     nutritionIconStyles,
+    setMenuTagStyles,
     allergyMarkStyles,
     css`
       :host {
@@ -301,7 +314,21 @@ export class TillSentOrders extends LitElement {
     clearTimeout(this.#ageTimer);
     super.disconnectedCallback();
   }
-  protected override willUpdate(): void {
+  protected override willUpdate(changed: ReadonlyMap<PropertyKey, unknown>): void {
+    if (changed.has("setMenus")) {
+      this.#setMenuDishes.clear();
+      if (this.setMenus !== null) {
+        const ids = new Map(
+          menusWithCopies(this.setMenus).map(({ menu, copy }) => [menu.lineId, copy.setMenuId]),
+        );
+        for (const dish of this.setMenus.dishes) {
+          this.#setMenuDishes.set(dish.lineId, {
+            setMenuId: ids.get(dish.setMenuLineId)!,
+            price: centsToDecimal(dish.priceCents),
+          });
+        }
+      }
+    }
     const opening = JSON.stringify([this.scope, this.billId]);
     if (opening !== this.#opening) {
       this.#opening = opening;
@@ -484,18 +511,17 @@ export class TillSentOrders extends LitElement {
     return portionGroups(
       slices,
       (slice) =>
-        sentSlicePortionKey(
-          slice,
-          this.lines,
+        sentSlicePortionKey(slice, this.lines, [
           allergyGuestId(this.allergy, { kind: "working", id: slice.row.lineId }),
-        ),
+          this.#setMenuDishes.get(slice.row.lineId)?.setMenuId,
+        ]),
       (slice) => slice.row.lineNo,
     );
   }
   #what(row: CurrentOrderRow, quantity: string): TemplateResult {
     return html`<span class="what"
       >${row.name}${nutritionIcons(row.nutrition?.allergens, nutritionDietLabels(undefined, row.nutrition?.dietaryDeclarations))}
-      ×${this.#quantity(quantity)}${allergyMark(this.allergy, { kind: "working", id: row.lineId })}
+      ×${this.#quantity(quantity)}${setMenuTag(this.#setMenuDishes.get(row.lineId)?.price)}${allergyMark(this.allergy, { kind: "working", id: row.lineId })}
       ${row.extras.map((extra) => html`<span class="extra">${extra.name} ×${this.#quantity(extra.quantity)}</span>`)}
       ${row.note === null ? nothing : html`<span class="note">${t("line.note.label")}: ${row.note}</span>`}
     </span>`;

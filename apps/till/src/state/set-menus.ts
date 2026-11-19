@@ -6,6 +6,7 @@ import {
   type ServedSetMenuCopy,
 } from "@waitron/shared";
 import type { FreshDraftLine, PartyBill, TillMenuOffer } from "../api/client.js";
+import { lineProductName } from "../widgets/product-name.js";
 import type { OrderLine } from "./working-order.js";
 
 type OrderingCopy = { copy: ServedSetMenuCopy; versionId: string };
@@ -50,7 +51,7 @@ export function draftPlacements(bill: BillSetMenuState, draft: readonly OrderLin
       ? []
       : [
           {
-            id: line.draftLineId ?? String(index),
+            id: draftPlacementId(line, index),
             productId: line.product.productId ?? line.product.id,
             variantId: line.product.variantId ?? null,
             reserved: line.setMenuReserved ?? null,
@@ -58,4 +59,27 @@ export function draftPlacements(bill: BillSetMenuState, draft: readonly OrderLin
         ],
   );
   return placeInOrder(bill, dishes);
+}
+
+export function draftPlacementId(line: OrderLine, index: number): string {
+  return line.draftLineId ?? String(index);
+}
+
+export function menusWithCopies(bill: BillSetMenuState) {
+  const copies = new Map(bill.copies.map((copy) => [copy.id, copy]));
+  return bill.setMenus.map((menu) => ({ menu, copy: copies.get(menu.copyId)! }));
+}
+
+export function draftNamesLosingPlace(
+  bill: BillSetMenuState,
+  draft: readonly OrderLine[],
+  removed: readonly string[],
+): string[] {
+  const before = draftPlacements(bill, draft).placed;
+  const remaining = bill.setMenus.filter(({ lineId }) => !removed.includes(lineId));
+  const unplaced = new Set(draftPlacements({ ...bill, setMenus: remaining }, draft).unplaced);
+  const names = new Map(
+    draft.map((line, index) => [draftPlacementId(line, index), lineProductName(line.product)]),
+  );
+  return [...new Set(before.filter(({ id }) => unplaced.has(id)).map(({ id }) => names.get(id)!))];
 }
