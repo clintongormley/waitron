@@ -114,10 +114,11 @@ import {
   storedOrderTotal,
   toVatBreakdown,
 } from "./working-order.js";
-import type { TillSaleDeps } from "./working-order.js";
+import type { GrossOrder, TillSaleDeps } from "./working-order.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import { storePrepayMadeHere } from "./made-here.js";
 import { assertStillSignedIn } from "./till-session.js";
+import { refuseSetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
 import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
@@ -781,9 +782,18 @@ async function issueWhenFullyPaid(
   }
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
-  const stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
-    refuseUnsentUnavailable: options.moneyMoved !== true,
-  });
+  let stored: GrossOrder;
+  try {
+    stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
+      refuseUnsentUnavailable: options.moneyMoved !== true,
+    });
+  } catch (error) {
+    // Automatic issuance must leave an edit intact while set-menu billing is unavailable.
+    if (isAppError(error) && error.code === "set_menu.payment_not_ready") {
+      return { invoice: null, total };
+    }
+    throw error;
+  }
   const { priced, clock, gross } = issueMoment(
     await prepareIssueClock(tx, cfg, deps.clock),
     await issuancePass(tx, workingOrderId, stored),
@@ -1247,6 +1257,7 @@ async function beginBillPayment(
     expectedEdit: req.expectedEdit,
   });
   await assertBillHasNoUnsent(tx, workingOrderId);
+  await refuseSetMenuMoney(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
   // A part payment's card reserves its share, as on an open bill (design §5.2).

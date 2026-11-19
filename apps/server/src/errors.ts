@@ -25,6 +25,8 @@ import type { UnservedDish } from "./finish-party-service.js";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "set_menu.not_seated": Record<string, never>;
+    "set_menu.payment_not_ready": Record<string, never>;
     "module.not_prepared": { module: string };
     "module.providers_enabled": Record<string, never>;
     "module.disabled": { module: string };

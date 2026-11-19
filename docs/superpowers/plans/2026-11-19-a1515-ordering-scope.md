@@ -32,3 +32,9 @@ PR's focused tests and required CI. PR 12 first shows the ordering controls. Fro
 cannot be paid until piece 4 (Lane L's A1515-SET-MENU-BILL) lands.
 Where a row moves a test, it takes precedence over the task text, and each implementation
 brief quotes its PR's row.
+
+PR 3 review, 19 November 2026. The payment refusal and the recorded-copy readers land together.
+Register each refusal when a caller can throw it. PR 3 registers `set_menu.not_seated` and
+`set_menu.payment_not_ready`. PR 9 adds their till wording, and PR 12 connects the staff controls.
+Add `setMenuDishColumns` with the first placement writer in PR 5. The offer lookup takes the
+basket's line identities and the zone menu versions the caller already read.
