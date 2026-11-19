@@ -6103,7 +6103,10 @@ Your selected tab belongs in the URL. `UrlStateController` reads path segments, 
 removing unrelated query parameters, and restores the screen on browser Back/Forward. The screen validates
 identifiers against its loaded data and permissions; a URL never establishes authentication. Use
 replacement history for defaults and invalid destinations, and push history for a new selection.
-Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
+Keep passwords, PINs, pairing codes and unsaved form contents out of the URL. One exception: while
+a new Cloud connection waits for Cloud, the **Open Cloud** link that connects it carries the box's
+pairing code after the `#`. This is a link to Cloud, not the dashboard's own address (the owner's
+request, 2026-11-19).
 
 Module management tabs use `/<section>/view/<key>`. Departments always opens its list
 at `/venue-operations`. A department opens at

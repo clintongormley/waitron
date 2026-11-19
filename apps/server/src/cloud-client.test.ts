@@ -105,6 +105,11 @@ it("persists before sending, resumes a failed start after restart and never expo
     f.reject();
     await expect(client.start()).rejects.toMatchObject({ code: "cloud.unavailable" });
     const before = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
+    const unsent = await client.status();
+    expect(unsent.code).toMatch(/^\d{8}$/);
+    expect(unsent.openCloudUrl).toBe(
+      `${f.options.origin}/connect#request=${unsent.requestId}&code=${unsent.code}`,
+    );
     expect((await stat(join(f.stateDir, "cloud/connection.json"))).mode & 0o777).toBe(0o600);
     f.accept();
     const resumed = createCloudConnection(f.options);
