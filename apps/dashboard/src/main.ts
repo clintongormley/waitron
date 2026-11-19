@@ -4,7 +4,6 @@ import {
   startWithPopover,
   registerIcons,
   startThemeChoice,
-  startThemedFavicon,
   startVenueTheme,
 } from "@waitron/ui";
 import {
@@ -27,7 +26,6 @@ import "./screens/attendance-corrections-screen.js";
 
 applyTokens(document.documentElement);
 startThemeChoice(document.documentElement);
-startThemedFavicon();
 registerIcons(DASHBOARD_ICONS);
 const app = document.querySelector<HTMLElement>("#app")!;
 const publicLocale =

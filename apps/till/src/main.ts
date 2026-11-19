@@ -4,7 +4,6 @@ import {
   setMediaServer,
   startWithPopover,
   startThemeChoice,
-  startThemedFavicon,
   startVenueTheme,
 } from "@waitron/ui";
 import {
@@ -35,7 +34,6 @@ startVenueTheme(document.documentElement, {
   fetchImpl: createInstrumentedFetch(withServerTarget(watchedFetch, router), diag),
 });
 startThemeChoice(document.documentElement);
-startThemedFavicon();
 
 installErrorCapture(window, diag);
 
