@@ -679,6 +679,8 @@ Slice 3.
 
 ## Decisions and deliberate limits
 
+**`cloud/replacement.json` and `cloud/recovery.json` stay until a reset (owner, 2026-11-09).** They are not deleted when the replacement flow ends: every start resumes a completed replacement, and a later stop is recorded in it. The owner's answer: "option A — move the files only; both stay until a reset, as today."
+
 ### Integrity waits and waiting reasons
 
 Restore and emergency handover use the same provisional, unmeasured thirty-minute

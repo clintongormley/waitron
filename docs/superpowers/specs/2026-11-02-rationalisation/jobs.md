@@ -313,7 +313,7 @@ Two tests behind this, 4 November 2026, on stand-ins:
 **R16 `housekeeping`: what the daily tidy-up deletes.** Each step works in short batches, one transaction each, so
 a sale never waits long for the write lock. Its writes stay on the main thread (§1). Measure 10 sets the batch size.
 
-**2026-11-17 implementation:** [jr7's current-main port](../../plans/2026-11-08-a1308-jr7-housekeeping.md)
+**2026-11-17 implementation:** [jr7's current-main port](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-jr7-housekeeping.md)
 records the existing startup catch-up, clock gate, retired mirror-session exception, disabled
 command step's available close times and the watcher's 30-day measurement clearance. Those
 dated corrections supersede the older table and measurement wording below.

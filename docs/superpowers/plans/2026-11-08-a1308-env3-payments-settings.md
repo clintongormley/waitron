@@ -21,10 +21,10 @@ dashboard).
 go to the shared `settings` table"), §3 rows `WAITRON_TILL_TIPS` and `WAITRON_PAYMENT_TEST_PROVIDERS`,
 §4 "Performance", §5 measure 5; [README](../specs/2026-11-02-rationalisation/README.md) §5 U2, §7;
 [slice 1b-i](2026-11-08-a1308-1b-settings-table.md) "Interfaces fixed by this slice" and
-[1b-ii](2026-11-08-a1308-1b-ii-adjustments-settings.md) (the transfer path and the shared
-`settings.out_of_date` wording); [4b](2026-11-08-a1308-4b-dropped-payment-and-box-features.md)
+[1b-ii](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-1b-ii-adjustments-settings.md) (the transfer path and the shared
+`settings.out_of_date` wording); [4b](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-4b-dropped-payment-and-box-features.md)
 "What it leaves out" (this plan finishes `TillAppSettings`). Rules:
-[the slice rules](2026-11-08-a1308-slice-rules.md). Part overview: [env1](2026-11-08-a1308-env1-tuning-constants.md).
+[the slice rules](2026-11-08-a1308-slice-rules.md). Part overview: [env1](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-env1-tuning-constants.md).
 
 **Needs:** 1b-i and 1b-ii landed (the API, the descriptor seat `WaitronModule.settings`, per-module
 live types, the transfer path); 4b landed (`TillAppSettings` is `{ tipsEnabled }`); the payments and

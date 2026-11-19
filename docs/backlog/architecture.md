@@ -1070,6 +1070,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Decisions and deliberate limits
 
+**Orders history keeps its own tables for good (owner, 2026-11-19).** Receipt-copy requests and invoice PDF downloads stay in their own append-only history tables, with their protections and the dashboard's live subscriptions, rather than moving into the activity log: "On 19 November the owner chose to keep Orders history for good."
+
 - **Department receipt rasters stay cached** (watcher, 2026-11-15 16:45). On the designated test box, converting one wordmark inside a synthetic write transaction added 15.913 ms warm for decode/dither and 114.681 ms including rendition. The removal follow-up is retired. [Measurement and limits](../superpowers/plans/2026-11-08-a1308-vb5-department-receipts.md#receipt-logo-cache-after-the-box-timing-2026-11-15).
 
 **Venue identity (owner, 2026-11-02).** Cloud assigns its venue id; a box not connected to Cloud backs up where its owner chooses. A1308 slice 5 completes the removal of the old location object. Cloud, not the box, makes the id because one Cloud account can hold several venues and "a box-made id cannot be guaranteed unique"; inside the box the venue has no id, like the taxpayer row. A box with no Cloud id that pairs becomes a new Cloud venue; it is not attached to an existing one, and carrying a venue on means restoring its data, which carries the id (lane B's default, 2026-11-04, built as written).

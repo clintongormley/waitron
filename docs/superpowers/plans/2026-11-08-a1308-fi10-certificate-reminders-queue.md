@@ -30,9 +30,9 @@ job if jr4 landed first), and now only queues.
 "`fiscal_certificate_reminders` goes", §5 (its row); [jobs.md](../specs/2026-11-02-rationalisation/jobs.md)
 R5, R6, "Draft: the `outgoing_mail` table" (kind, dedupe key, "Where today's protections go", "Rules
 each kind needs from the queue", "Don't send after" = 7 days for `certificate_reminder`); README §5
-U4; [3a-ii](2026-11-08-a1308-3a-ii-mail-queue.md) ("What it builds", Task 2's `enqueueMail` and
-`MAIL_LIFETIME_MS`, Task 3's `MailKindOwner`); [3b](2026-11-08-a1308-3b-reminders-and-alerts-on-queue.md)
-(`boxAlertMail`, the pattern this owner follows; `reopenMail`, Task 1, which this plan leaves as it is); [jr4](2026-11-08-a1308-jr4-working-time-and-mail.md)
+U4; [3a-ii](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-3a-ii-mail-queue.md) ("What it builds", Task 2's `enqueueMail` and
+`MAIL_LIFETIME_MS`, Task 3's `MailKindOwner`); [3b](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-3b-reminders-and-alerts-on-queue.md)
+(`boxAlertMail`, the pattern this owner follows; `reopenMail`, Task 1, which this plan leaves as it is); [jr4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-jr4-working-time-and-mail.md)
 Task 3 (the decision as a job; it builds against either shape); rules [2026-11-08-a1308-slice-rules.md](2026-11-08-a1308-slice-rules.md).
 
 **Base:** `main` after fi9, with slices 3a-ii and 3b landed. Line numbers read at `9c66ef0356`
@@ -48,7 +48,7 @@ before this cannot be restored or imported." (`outgoing_mail`'s kind list alread
 
 ## What slice 3a-ii gives this plan
 
-Read from [3a-ii](2026-11-08-a1308-3a-ii-mail-queue.md); a name that differs on `main` is a stop
+Read from [3a-ii](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-3a-ii-mail-queue.md); a name that differs on `main` is a stop
 (rules §5.1):
 
 1. **Enqueue** — `enqueueMail(tx, { kind, dedupeKey, subjectId, personId, params, notAfter })` in

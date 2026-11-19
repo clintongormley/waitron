@@ -14,6 +14,6 @@ the job itself. Each retry carries the id forward. Reverting the link would requ
 those readers and rebuilding the core migration. The
 [os13 plan](2026-11-08-a1308-os13-refunds.md) repoints the key to `refunds(id)`.
 
-The [os9 plan](2026-11-08-a1308-os9-sale-activity.md#expected-protection-list-difference) records
+The [os9 plan](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-os9-sale-activity.md#expected-protection-list-difference) records
 the changes that landed in #3779. This amendment closes the remaining work in documentation.
 It expects an equal protection list before and after.

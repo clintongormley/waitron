@@ -94,11 +94,11 @@ for this slice.
 | --- | --- |
 | `registros_tenant_node_secuencia_uq`, `TenantTransport`, `tenantsWithWork`, `drain.tenant_skipped` | fiscal slice fi1 (README U9; [fi1](2026-11-08-a1308-fi1-verifactu-names.md) :77), owner lands |
 | The fiscal pair (`packages/fiscal-verifactu/src/write-path.e2e.test.ts`, `inmutabilidad.test.ts`) and the fiscal fixture names they import — `TENANT_A`, `TENANT_B`, `seedTenantWithSif`, `seedTenantNodeSif`, `seedTenants` (`packages/fiscal-verifactu/test/fixtures.ts:29-104, :297`) | fi1, which says so ([fi1](2026-11-08-a1308-fi1-verifactu-names.md) :85-88): the pair is never edited by a lane-landed PR (A1301 plan, "The fiscal pair"; `scripts/a1301-seed-codemod.mjs:92-97`) |
-| `persons_tenant_email_uq`, `_live_display_name_uq`, `_pending_email_uq`, `_google_subject_uq` | people, [pp4](2026-11-08-a1308-pp4-person-folded-keys.md) (renames to `persons_*_uq`; three are matched by name in `packages/identity/src/person-constraints.ts`) |
-| `working_orders_tenant_status_idx`, `sales_tenant_issued_idx` | orders, [os1](2026-11-08-a1308-os1-order-numbers.md) :38 and [os8](2026-11-08-a1308-os8-sale-receipt-facts.md) :41 (`sales` is owner-landed) |
+| `persons_tenant_email_uq`, `_live_display_name_uq`, `_pending_email_uq`, `_google_subject_uq` | people, [pp4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp4-person-folded-keys.md) (renames to `persons_*_uq`; three are matched by name in `packages/identity/src/person-constraints.ts`) |
+| `working_orders_tenant_status_idx`, `sales_tenant_issued_idx` | orders, [os1](2026-11-08-a1308-os1-order-numbers.md) :38 and [os8](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-os8-sale-receipt-facts.md) :41 (`sales` is owner-landed) |
 | `print_agents_tenant_node_key`, `purchase_invoices_tenant_received_idx` | devices and menu area slices: no plan names them yet — **coordination point 3** in the return. This PR does not take them: rules §7 keeps another area's tables out of this lane's PRs |
 | The taxpayer's privacy columns leaving the row | vb2 |
-| Non-secret fields leaving `venue_credentials` | environment slice [env4](2026-11-08-a1308-env4-unsealed-settings.md) |
+| Non-secret fields leaving `venue_credentials` | environment slice [env4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-env4-unsealed-settings.md) |
 | `server.credential_unusable`'s prefix (`docs/backlog/architecture.md:295`) | not in A1308's lists; it touches `packages/fiscal-verifactu/src/errors.ts`, so it is not folded into a lane-landed rename |
 
 ## The rename script

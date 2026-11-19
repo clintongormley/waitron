@@ -684,7 +684,7 @@ Names are today's; the appendices give each table's new name.
 
 **A1368 as built, 2026-11-18.** The group keeps its station record for later corrections.
 The dish's existing ticket item records its HOLD paper. See the
-[os10 implementation note](../../plans/2026-11-08-a1308-os10-hold-paper-per-dish.md).
+[os10 implementation note](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-os10-hold-paper-per-dish.md).
 
 A1308 slice 0's bench found three slow reads on a year of trading, placed the same way:
 

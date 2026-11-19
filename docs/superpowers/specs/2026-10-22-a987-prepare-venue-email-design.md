@@ -1,6 +1,6 @@
 # A987: approved venue email amendment
 
-> **2026-11-14:** [A1308 env4](../plans/2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP terminal instructions below: save or remove SMTP through dashboard Email settings; the generic credentials CLI refuses SMTP set/delete.
+> **2026-11-14:** [A1308 env4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP terminal instructions below: save or remove SMTP through dashboard Email settings; the generic credentials CLI refuses SMTP set/delete.
 
 
 2026-11-08: the watcher released A739 for invoice-envelope naming and narrowed this cut to ordinary SMTP and the Settings test, without setup naming or a preview; see the [sender-naming plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a987-sender-naming.md).

@@ -1,6 +1,6 @@
 # A231q implementation plan: invoice delivery, part 2
 
-> **2026-11-14:** [A1308 env4](2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP terminal instructions below: save or remove SMTP through dashboard Email settings; the generic credentials CLI refuses SMTP set/delete.
+> **2026-11-14:** [A1308 env4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP terminal instructions below: save or remove SMTP through dashboard Email settings; the generic credentials CLI refuses SMTP set/delete.
 
 
 > **2026-10-15, A661:** a location no longer has one invoice printer. The

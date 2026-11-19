@@ -28,7 +28,7 @@ go.
 [`tables-fiscal.md`](../specs/2026-11-02-rationalisation/tables-fiscal.md) (`verifactu_certificates`,
 "all 14 columns" unchanged; `:297-307`); (2) [`environment.md`](../specs/2026-11-02-rationalisation/environment.md)
 §3 rows `WAITRON_NODE_RECOVERY_KEY` and `WAITRON_RECOVERY_OPERATION_FILE`, §5 measure 1. Rules:
-[the slice rules](2026-11-08-a1308-slice-rules.md). Part overview: [env1](2026-11-08-a1308-env1-tuning-constants.md).
+[the slice rules](2026-11-08-a1308-slice-rules.md). Part overview: [env1](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-env1-tuning-constants.md).
 
 **A decision this plan makes; confirmed by the owner, 2026-11-09.** tables-venuebox §1.16 says
 `certKind` moves to "its owning module's settings document", but tables-fiscal §2 says the fiscal

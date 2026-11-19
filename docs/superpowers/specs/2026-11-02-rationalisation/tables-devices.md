@@ -6,7 +6,7 @@
 
 > **18 November 2026 — A1308 dv10:** Device Delete keeps the device and its settings. The device
 > foreign key on `device_approved_profiles` still cascades on a physical delete, superseding the
-> key described in §§1.3 and 5 below. See [the dv10 preflight decision](../../plans/2026-11-08-a1308-dv10-approved-profile-zones.md).
+> key described in §§1.3 and 5 below. See [the dv10 preflight decision](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-dv10-approved-profile-zones.md).
 
 # Target design: devices, device profiles and printers
 
@@ -351,7 +351,7 @@ trigger on `devices` (§1.1) and the writers of the JSON lists.
 
 **2026-11-18, dv11 Part A.** Ordinary receipt-printer documents have a `next_attempt_at` for
 automatic retry. The invoice queue discussion below predates that change. See the
-[dv11 plan](../../plans/2026-11-08-a1308-dv11-print-job-claims.md#part-a--handover-retry-spacing-m1).
+[dv11 plan](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-dv11-print-job-claims.md#part-a--handover-retry-spacing-m1).
 
 Every print goes through this table, A4 included (owner, 2026-11-04).
 

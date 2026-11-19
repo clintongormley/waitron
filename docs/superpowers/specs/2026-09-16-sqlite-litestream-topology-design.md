@@ -1,7 +1,7 @@
 # SQLite + Litestream: storage engine, replication and failover topologies — design
 
 > **2026-11-12:** The current pairing and bucket formats are specified in
-> [A1308 slice 5g](../plans/2026-11-08-a1308-5g-cloud-venue-id.md): Cloud assigns the
+> [A1308 slice 5g](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-5g-cloud-venue-id.md): Cloud assigns the
 > venue id, bucket paths use the chosen prefix, and v2 recovery kits carry a stream id.
 > Earlier path and format descriptions below record the design at its original date.
 

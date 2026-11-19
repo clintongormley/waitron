@@ -70,9 +70,9 @@ each has its own plan.
 | PR | Plan | What | Counted lines (est.) | Lands |
 | --- | --- | --- | --- | --- |
 | pa1 | this file | resolutions, holds and hold outcomes fold into `payments`; a payment keeps the reader it was charged on; guard trigger; measurement 5 | ~1,000 | lane |
-| pa2 | [pa2](2026-11-08-a1308-pa2-payments-delete-refusal.md) | `payments` refuses every delete (6 November addition, A805 follow-up) | ~90 | **owner** |
-| pa3 | [pa3](2026-11-08-a1308-pa3-requester-and-refund-attempts.md) | `payments.requested_by`; `payment_refunds` append-only, two copied columns gone; `scheduled_runs` → `reconciliation_runs` | ~460 + script output | lane |
-| pa4 | [pa4](2026-11-08-a1308-pa4-card-readers.md) | `card_reader_holders`, `device_card_readers`, `device_profile_card_readers` fold into `card_readers`, `devices`, `device_profiles`; `card_readers.active` goes | ~960 | lane |
+| pa2 | [pa2](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pa2-payments-delete-refusal.md) | `payments` refuses every delete (6 November addition, A805 follow-up) | ~90 | **owner** |
+| pa3 | [pa3](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pa3-requester-and-refund-attempts.md) | `payments.requested_by`; `payment_refunds` append-only, two copied columns gone; `scheduled_runs` → `reconciliation_runs` | ~460 + script output | lane |
+| pa4 | [pa4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pa4-card-readers.md) | `card_reader_holders`, `device_card_readers`, `device_profile_card_readers` fold into `card_readers`, `devices`, `device_profiles`; `card_readers.active` goes | ~960 | lane |
 | pa5 | [pa5](2026-11-08-a1308-pa5-adjustments.md) | `adjustments.comped_extras` goes; measurement 6 decides `splits`; person keys on `adjustments` | ~300 (fallback) / ~570 (if `splits` moves) | lane |
 
 pa2 is opened as soon as pa1 lands and waits for the owner; nothing later waits for it. pa5 does

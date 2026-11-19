@@ -89,7 +89,7 @@ before this cannot be restored or imported."
 - Partial index `verifactu_submissions_case_idx (case_opened_at) where case_opened_at is not null`.
 - `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (created by fi4a for its one history
   trigger, owner 2026-11-09; this plan appends to it; slice 1a's command appends a set's
-  `<package>/triggers/<set>.sql`, [1a](2026-11-08-a1308-1a-baseline-rebuild.md):60), two statements:
+  `<package>/triggers/<set>.sql`, [1a](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-1a-baseline-rebuild.md):60), two statements:
 
   ```sql
   CREATE TRIGGER verifactu_submissions_guard_update BEFORE UPDATE ON verifactu_submissions

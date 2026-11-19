@@ -1,6 +1,6 @@
 # A1543: keep the evidence, bound two kinds of working record
 
-> **2026-11-17, A1308 os2 Tasks 1–4:** Bill editor ownership now lives on working_orders; the bill_edit_states measurement below records the earlier layout. See [the os2 plan](../plans/2026-11-08-a1308-os2-bill-identity.md).
+> **2026-11-17, A1308 os2 Tasks 1–4:** Bill editor ownership now lives on working_orders; the bill_edit_states measurement below records the earlier layout. See [the os2 plan](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-os2-bill-identity.md).
 
 ## Owner decision, 2026-11-15
 

@@ -1,6 +1,6 @@
 # Full invoices by email as a PDF, and on an office printer (A231d)
 
-> **2026-11-14:** [A1308 env4](../plans/2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP terminal instructions below: save or remove SMTP through dashboard Email settings; the generic credentials CLI refuses SMTP set/delete.
+> **2026-11-14:** [A1308 env4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP terminal instructions below: save or remove SMTP through dashboard Email settings; the generic credentials CLI refuses SMTP set/delete.
 
 
 > 2026-10-22: A998 supersedes the saved SMTP settings permission in this historical document.

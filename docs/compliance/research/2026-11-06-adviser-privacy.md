@@ -1,6 +1,6 @@
 # Privacy adviser questions: what free primary sources already settle
 
-> Storage note, 2026-11-13: [fk6](../../superpowers/plans/2026-11-08-a1308-fk6-parties-and-person-keys.md) moves the answer, actor and time onto `parties` and records an answer and guest count in `activity_log`. The schema descriptions below record the earlier storage.
+> Storage note, 2026-11-13: [fk6](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-fk6-parties-and-person-keys.md) moves the answer, actor and time onto `parties` and records an answer and guest count in `activity_log`. The schema descriptions below record the earlier storage.
 
 **Research pass, 6 November 2026.** Covers Q48 (privacy part), Q54 to Q59, Q62 and L3 from the
 [batch of 5 November](../2026-11-05-consultas-para-asesores.md). Nothing here has been sent to anyone, and
@@ -186,7 +186,7 @@ RGPD for breaches [S22].
   (`allergy_frozen`, `allergy_original`, `allergy_current`), classified `ledger` without append-only
   protection in [core's classification](../../../packages/db/src/classification.ts). The current
   copy can still be updated, and deleting its order line deletes the ticket.
-  [Implementation plan](../../superpowers/plans/2026-11-08-a1308-fk8-kitchen-tickets.md).
+  [Implementation plan](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-fk8-kitchen-tickets.md).
 - The bucket keeps 168 hours of history (`packages/stream/src/litestream.ts`). Scheduled backups keep
   the newest 7 and nothing older than 30 days by default, and a venue can change that
   (`apps/server/src/backup-config.ts`). Turning the copy off leaves what is stored.

@@ -31,7 +31,7 @@ cap, so it is split:
 - **1b-i (this plan):** the table, the API, per-module live updates, the per-module rule pattern,
   measurement 1 (tables-venuebox §8.1), the guards that keep documents out of migrations, and the
   write-path rule restated, all proven with test-only documents.
-- **1b-ii** ([plan](2026-11-08-a1308-1b-ii-adjustments-settings.md)): configuration export and
+- **1b-ii** ([plan](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-1b-ii-adjustments-settings.md)): configuration export and
   import of documents, and `adjustment_settings` becoming the `settings` row `adjustments`, with its
   screen, routes and every reader.
 

@@ -122,7 +122,7 @@ confirmation naming this record").
   `clock_checks` refused a confirmation naming anything else; the history's `ref_id` key only proves
   the row exists, so one `BEFORE INSERT` trigger restores the rest, in a new hand-written file
   `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (slice 1a's rebuild command appends a
-  set's `triggers/<set>.sql`, [1a](2026-11-08-a1308-1a-baseline-rebuild.md), "Words used here"):
+  set's `triggers/<set>.sql`, [1a](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-1a-baseline-rebuild.md), "Words used here"):
 
   ```sql
   CREATE TRIGGER verifactu_history_confirmation_names_check BEFORE INSERT ON verifactu_history

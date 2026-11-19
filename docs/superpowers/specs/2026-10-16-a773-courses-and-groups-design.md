@@ -1,6 +1,6 @@
 # A773. Courses, groups and the pass — design
 
-> **2026-11-17, A1308 os2 Tasks 1–4:** Bill editor ownership and its version now use working_orders.editor_id and editor_version. See [the os2 plan](../plans/2026-11-08-a1308-os2-bill-identity.md).
+> **2026-11-17, A1308 os2 Tasks 1–4:** Bill editor ownership and its version now use working_orders.editor_id and editor_version. See [the os2 plan](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-os2-bill-identity.md).
 
 **2026-11-11:** Recall and its saved source rows are retired by
 [R3-owner](../plans/2026-11-11-r3-owner-retire-recall.md). The Recall paths below describe the earlier design.

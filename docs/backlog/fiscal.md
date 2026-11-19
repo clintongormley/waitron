@@ -1075,6 +1075,8 @@ the box adds by itself, and how the record reaches the tax office.
 
 ## Decisions and deliberate limits
 
+**The recovery pack's paper-block check compares no venue id (owner, 2026-11-09).** The box's recovery key is what counts; the venue name printed on the sheet is for the person to check by eye, though the signed block still carries `recipientVenueId`. The owner's words: "There is only one venue so there is no point comparing the ID. We have the name on the sheet that the user can check, but the important bit for us is the recovery key."
+
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 
 The recovery guide's **After a recovery** section (`apps/server/src/guide/en/backup-recovery.md`,

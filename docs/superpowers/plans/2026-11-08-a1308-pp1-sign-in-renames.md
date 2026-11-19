@@ -56,17 +56,17 @@ This is the first of twelve plans for the people and working time area, in build
 | # | Plan | Tables |
 | --- | --- | --- |
 | pp1 | this one | `sessions` → `till_sessions`, `management_sessions` → `dashboard_sessions`, `management_account_actions` → `account_actions`; person keys |
-| pp2 | [sign-in challenges](2026-11-08-a1308-pp2-sign-in-challenges.md) | `webauthn_challenges`, `google_oidc_states`, `totp_enrollments` → `sign_in_challenges`; `webauthn_credentials.name` dropped |
-| pp3 | [dashboard sign-ins and account actions](2026-11-08-a1308-pp3-dashboard-sessions-and-account-actions.md) | `dashboard_sessions` rows deleted on sign-out, history in `activity_log`; `account_actions.target_email` dropped |
-| pp4 | [person folded keys](2026-11-08-a1308-pp4-person-folded-keys.md) | `persons`: folded columns required, unique indexes read them, names lose "tenant" |
-| pp5 | [one sealing method](2026-11-08-a1308-pp5-one-sealing-method.md) | no table; two-step secrets sealed by `@waitron/credentials`, `WAITRON_ACCOUNT_KEY` removed |
-| pp6 | [chain head](2026-11-08-a1308-pp6-chain-head.md) | `workforce_chains` deleted |
-| pp7 | [shifts and convenio](2026-11-08-a1308-pp7-shifts-and-convenio.md) | `shift_assignments` → `shifts`; `roster_version_id` required; `convenio_config` one row |
-| pp8 | [attendance days, questions, answers](2026-11-08-a1308-pp8-attendance-days-questions-answers.md) | `attendance_day_work` → `attendance_days`; questions point at their day; `attendance_response_commands` → append-only `attendance_answers` |
-| pp9 | [day marks at every write](2026-11-08-a1308-pp9-attendance-day-marks.md) | no table; every write that changes attendance evidence marks its day |
-| pp10 | [staff activity](2026-11-08-a1308-pp10-staff-activity.md) | `attendance_operation_facts` → `staff_activity`; sign-ins, payments, refunds and amendments read where they live |
-| pp11 | [card payments](2026-11-08-a1308-pp11-card-payments.md) | card payments read from `payments`; the in-flight poller deleted; `staff_activity` narrowed; `payments_created_at_idx` |
-| pp12 | [re-check recent days](2026-11-08-a1308-pp12-recheck-recent-days.md) | `attendance_source_state` and the discovery scan deleted; recent days re-checked after a restore, migration or format change |
+| pp2 | [sign-in challenges](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp2-sign-in-challenges.md) | `webauthn_challenges`, `google_oidc_states`, `totp_enrollments` → `sign_in_challenges`; `webauthn_credentials.name` dropped |
+| pp3 | [dashboard sign-ins and account actions](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp3-dashboard-sessions-and-account-actions.md) | `dashboard_sessions` rows deleted on sign-out, history in `activity_log`; `account_actions.target_email` dropped |
+| pp4 | [person folded keys](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp4-person-folded-keys.md) | `persons`: folded columns required, unique indexes read them, names lose "tenant" |
+| pp5 | [one sealing method](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp5-one-sealing-method.md) | no table; two-step secrets sealed by `@waitron/credentials`, `WAITRON_ACCOUNT_KEY` removed |
+| pp6 | [chain head](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp6-chain-head.md) | `workforce_chains` deleted |
+| pp7 | [shifts and convenio](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp7-shifts-and-convenio.md) | `shift_assignments` → `shifts`; `roster_version_id` required; `convenio_config` one row |
+| pp8 | [attendance days, questions, answers](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp8-attendance-days-questions-answers.md) | `attendance_day_work` → `attendance_days`; questions point at their day; `attendance_response_commands` → append-only `attendance_answers` |
+| pp9 | [day marks at every write](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp9-attendance-day-marks.md) | no table; every write that changes attendance evidence marks its day |
+| pp10 | [staff activity](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp10-staff-activity.md) | `attendance_operation_facts` → `staff_activity`; sign-ins, payments, refunds and amendments read where they live |
+| pp11 | [card payments](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp11-card-payments.md) | card payments read from `payments`; the in-flight poller deleted; `staff_activity` narrowed; `payments_created_at_idx` |
+| pp12 | [re-check recent days](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-pp12-recheck-recent-days.md) | `attendance_source_state` and the discovery scan deleted; recent days re-checked after a restore, migration or format change |
 
 The build order estimated 5–7 pull requests. It is twelve because the attendance rewrite cannot be
 one pull request under the size cap and is split by risk (pp8 reshapes; pp9 adds the marks with the

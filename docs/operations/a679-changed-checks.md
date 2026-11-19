@@ -589,7 +589,7 @@ No package threshold, exclusion or ignore changes.
 **2026-11-12, A1308 env1:** the maximum-tick environment setting and its startup refusal are
 retired. The default idle sleep is checked against the drain budget in `health.test.ts`.
 The command and results below are the historical receipt, including the retired refusal case.
-See the [env1 plan](../superpowers/plans/2026-11-08-a1308-env1-tuning-constants.md) for the current checks.
+See the [env1 plan](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-env1-tuning-constants.md) for the current checks.
 
 With a configured setup directory missing `index.html`, or a maximum tick interval at the drain
 budget, you receive `server.config_invalid` before the server inspects setup workspace files.

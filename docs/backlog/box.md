@@ -1288,6 +1288,10 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Decisions and deliberate limits
 
+**A branch install does not clear Docker's build cache (owner, 2026-11-09).** `docker builder prune` also deletes what other software on the machine left (`deploy/README.md` says so where it describes clearing the cache by hand): "no — the step is dropped and `deploy/README.md` stays as it is."
+
+**The server does not refuse `WAITRON_VENUE_DIR` outside development (owner, 2026-11-09).** A box never sets it because the deploy files never name it (guarded by `scripts/deploy-image-env.test.ts`); the variable is listed as a development setting: "the server does not refuse the variable outside development; it is listed as a development setting."
+
 - **A950, step 1b (watcher, 2026-11-18 22:47, open to the owner).** A numbered install that
   keeps venue data refuses an older release. A confirmed reset may choose an older signed
   release because the wipe discards that data. Fresh and reset installs keep their retained
