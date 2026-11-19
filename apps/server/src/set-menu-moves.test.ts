@@ -293,6 +293,10 @@ it("checks the bill revision for a takeaway order without a party", async () => 
     status: 200,
     json: { partyRevision: revision + 1 },
   });
+  expect(await request(revision)).toMatchObject({
+    status: 409,
+    json: { code: "working_order.out_of_date", params: { revision: revision + 1 } },
+  });
   expect(await row(dishId)).toMatchObject({ setMenuLineId: destinationId, lineTotal: 500 });
 });
 

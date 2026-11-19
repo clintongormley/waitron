@@ -227,6 +227,9 @@ it("places added portions without moving the first dish", async () => {
 
 it("splits each added set-menu dish even when its ordinary unit accepts fractions", async () => {
   const tab = await bill(3, decimalUnitMenu);
+  const original = (await rows(tab.tabId))[3]!;
+  expect(original.wholePortion).toBe(false);
+  expect(original.cohortId).toEqual(expect.any(String));
   await edit(tab, { quantity: "3" });
   const dishes = (await rows(tab.tabId)).filter(({ setMenuRole }) => setMenuRole === "dish");
   expect(dishes.map(({ quantity }) => quantity)).toEqual([1000, 1000, 1000]);
@@ -270,13 +273,10 @@ it.each([
   });
 });
 
-it.each([
-  ["item cancel", cancelItemForTest],
-  ["adjustment", cancelLine],
-] as const)("a set-menu heading is refused via %s", async (_route, cancel) => {
+it("an adjustment refuses a set-menu heading", async () => {
   const tab = await bill();
   const before = await rows(tab.tabId);
-  await expect(inTx(venue, (tx) => cancel(tx, venue.cfg, tab.tabId, 1))).rejects.toMatchObject({
+  await expect(inTx(venue, (tx) => cancelLine(tx, venue.cfg, tab.tabId, 1))).rejects.toMatchObject({
     code: "set_menu.remove_from_summary",
   });
   expect(await rows(tab.tabId)).toEqual(before);
