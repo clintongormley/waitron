@@ -1218,6 +1218,178 @@ describe("till-app: a print's answer arriving after staff moved on", () => {
     expect(text(printedNotice(el))).toBe(t("bill.issued"));
   });
 
+  const answersByBill = (first: Promise<EndedMeal>, second: () => Promise<EndedMeal>) =>
+    vi.fn((_party: string, request: EndMealRequest) =>
+      request.billId === "wo-4" ? first : second(),
+    );
+  const billTwoEnded = { ...ended, workingOrderId: "wo-9", invoiceNumber: "F-0043" };
+
+  it("shows no Bill issued in a later visit when the answer arrives after the table was reopened", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const { el } = await pressThenReopen({ endMeal: () => answer.promise });
+
+    answer.resolve(ended);
+    await flush(el, 6);
+
+    expect(printedNotice(el)).toBeNull();
+  });
+
+  it("keeps the first bill's waiting Bill issued when the second bill is printed, and shows each under its own bill", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const { el } = await pressThenSwitchToBillTwo({
+      endMeal: answersByBill(answer.promise, async () => billTwoEnded),
+    });
+    answer.resolve(ended);
+    await flush(el, 6);
+    expect(printedNotice(el)).toBeNull();
+
+    emit(tableOrder(el), "end-meal", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+
+    await showBill(el, "wo-4");
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+  });
+
+  it("shows a waiting Bill issued once: it is gone after staff leave the bill and come back", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const { el } = await pressThenSwitchToBillTwo({ endMeal: () => answer.promise });
+    answer.resolve(ended);
+    await flush(el, 6);
+
+    await showBill(el, "wo-4");
+    expect(printedNotice(el)).not.toBeNull();
+    await showBill(el, "wo-9");
+    expect(printedNotice(el)).toBeNull();
+    await showBill(el, "wo-4");
+    expect(printedNotice(el)).toBeNull();
+  });
+
+  it("leaves the not-served list on the second bill when the first bill's print succeeds late", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const list = heldAnswer<EndedMeal>();
+    const { el } = await openBill({
+      getPartyBills: twoBills(),
+      endMeal: answersByBill(answer.promise, () => list.promise),
+    });
+    await showBill(el, "wo-9");
+    emit(tableOrder(el), "end-meal", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    await showBill(el, "wo-4");
+    list.reject({ ...unservedRefusal, workingOrderId: "wo-9" });
+    await flush(el, 6);
+    await printBill(el);
+    await showBill(el, "wo-9");
+    expect(text(warning(el))).toContain("Paella");
+
+    answer.resolve(ended);
+    await flush(el, 6);
+
+    expect(text(warning(el))).toContain("Paella");
+    expect(printedNotice(el)).toBeNull();
+    await showBill(el, "wo-4");
+    expect(warning(el)).toBeNull();
+    expect(printedNotice(el)).not.toBeNull();
+  });
+
+  it("keeps a refusal waiting for the first bill while the second bill is printed", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const { el } = await pressThenSwitchToBillTwo({
+      endMeal: answersByBill(answer.promise, async () => billTwoEnded),
+    });
+    answer.reject({ code: "meal_end.no_printer", status: 409 });
+    await flush(el, 6);
+
+    emit(tableOrder(el), "end-meal", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    expect(banner(el)).toBeNull();
+
+    await showBill(el, "wo-4");
+    expect(banner(el)!.textContent).toContain(codeMessage("meal_end.no_printer"));
+  });
+
+  it("keeps the warning off the bill the screen moves to while that bill's lines are still being read", async () => {
+    const deadlines = deadlinesByHand();
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    let gone = false;
+    const { el } = await openBill({
+      endMeal: unansweredUntilDeadline,
+      getTabLines,
+      getPartyBills: vi.fn(async () =>
+        gone
+          ? [billOf({ workingOrderId: "wo-9", billNumber: 2 })]
+          : [billOf(), billOf({ workingOrderId: "wo-9", billNumber: 2 })],
+      ),
+    });
+    await printBill(el);
+    gone = true;
+
+    deadlines.expire();
+    await flush(el, 6);
+
+    expect(tableOrder(el).orderId).toBe("wo-9");
+    expect(banner(el)).toBeNull();
+    release();
+    await flush(el, 6);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("shows an answer that arrived on the floor once staff come back to the bill, and not on the floor", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const tablet = "tablet-landscape" as const;
+    const { el } = await openBill({
+      endMeal: () => answer.promise,
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        formFactor: tablet,
+        capabilities: ["print-receipt", "take-cash", "hand-over-orders"],
+      }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "till-dev", name: "Till 1", formFactor: tablet }),
+    });
+    await printBill(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el, 6);
+
+    answer.reject({ code: "meal_end.no_printer", status: 409 });
+    await flush(el, 6);
+    expect(banner(el)).toBeNull();
+
+    emit(shell(el), "screen-select", { screen: "order" });
+    await flush(el, 6);
+    expect(banner(el)!.textContent).toContain(codeMessage("meal_end.no_printer"));
+  });
+
+  it("keeps a refusal up while staff carry on working on the bill", async () => {
+    const { el } = await openBill({
+      endMeal: vi.fn().mockRejectedValue({ code: "meal_end.no_printer", status: 409 }),
+    });
+    await printBill(el);
+
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+
+    expect(api.markServed).toHaveBeenCalledOnce();
+    expect(banner(el)!.textContent).toContain(codeMessage("meal_end.no_printer"));
+  });
+
+  it("takes a bill's own earlier answer down at the next press of that bill", async () => {
+    const answer = heldAnswer<EndedMeal>();
+    const endMeal = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "meal_end.no_printer", status: 409 })
+      .mockReturnValue(answer.promise);
+    const { el } = await openBill({ endMeal });
+    await printBill(el);
+    expect(banner(el)).not.toBeNull();
+
+    await printBill(el);
+
+    expect(endMeal).toHaveBeenCalledTimes(2);
+    expect(banner(el)).toBeNull();
+  });
+
   it("reloads a table that changed elsewhere without saying so under the second bill", async () => {
     let moved = false;
     const answer = heldAnswer<EndedMeal>();
@@ -1988,6 +2160,30 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
 
     expect(endMeal).not.toHaveBeenCalled();
     expect(banner(el)).toBeNull();
+  });
+
+  it("keeps the table-moved message for the pressed bill and shows it when staff return to that bill", async () => {
+    const { getTabLines, release } = holdingFirstBillTwoRead();
+    const { el, endMeal } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      getTabLines,
+    });
+    await pressPrintFromFinishRefusal(el);
+    emit(tableOrder(el), "serve-lines", { items: [{ lineId: "line-1", quantity: "1" }] });
+    await flush(el, 6);
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-4" });
+    await flush(el, 6);
+
+    release();
+    await flush(el, 6);
+    expect(banner(el)).toBeNull();
+
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+
+    expect(endMeal).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("meal_end.table_moved"));
   });
 
   it("says why nothing was sent when the bill it opens has a part payment held", async () => {
