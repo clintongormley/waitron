@@ -503,7 +503,7 @@ Everything else you do at the table is in the **⋮** menu beside the switcher, 
 first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
 this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Record
 unpaid departure**, **Full invoice**, **Print the bill**, **Receipt copy** and **Cancel and
-credit**, each when it applies to the bill. The second, **Whole table**, acts on everyone at the
+credit**, each when it applies. The second, **Whole table**, acts on everyone at the
 table: **Allergies**, **Name the party**, **Guests**, **Mark bill requested for …** with the party's
 name (once requested, **Cancel the bill request for …**), **Split a table** (when the party sits at
 more than one table), **Join a table**, **Move guests** and **Finish table**. An action that needs a
@@ -584,7 +584,8 @@ Send or take off any dishes not yet sent first. If dishes on the bill are not ma
 nothing prints yet: the till lists them under **Not served yet:**. If the guests have had them,
 choose **Mark served** where it shows, then **Print the bill** again. Otherwise choose **Print
 anyway**: a dish that then never comes is refunded after payment with
-[Correct an invoice](table-service.md#correct-invoice).
+[Correct an invoice](table-service.md#correct-invoice). The till cannot correct a full invoice naming
+a customer, so on one of those take off any dish that may not come before you print.
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 

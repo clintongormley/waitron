@@ -12,9 +12,16 @@ replace the adviser sheet's question 3 (17:52); and the owner asked that "once a
 (its invoice issued), neither invoice switch may happen" (17:59, lane L `queue.md`), which Task 3a
 builds.
 
-**Corrected 2026-11-18** after PR B's Task 10 review: §2.2, §2.6, Task 6 Step 1, Task 10 and §6 Q7 now say what
+**Corrected 2026-11-18** after PR B's Task 10 review: §2.2, §2.6, Task 6 Step 1 and §6 Q7 now say what
 the code does after the last payment of a printed bill (pinned by
 `till-app-bill-payments.test.ts`'s "the payment that settles a bill %s shows the change").
+
+**Changed by PR B's review, 2026-11-19.** Where this differs from the text below, this paragraph is
+what was built. **Print the bill** is also hidden on a device whose profile may not print receipts
+when the bill needs paper, and while a part payment on the bill is held; **Receipt copy** is hidden
+on such a device. The not-served list gains **Cancel**. On a full invoice naming a customer, which
+the till cannot correct (`sale.correction_unsupported`), the list tells staff to take off any dish
+that may not come before printing; **Print anyway** is still offered there.
 
 **Authority.** Owner decision D1, 16 November (`docs/compliance/2026-11-15-adviser-answers.md`,
 Part B1): "yes. The ticket is issued when the meal ends, even if the bill is paid much later"; the
@@ -721,12 +728,16 @@ it) and `apps/server/src/find-bill-api.test.ts`.
 | code `meal_end.no_printer` | This device has no receipt printer. Choose one in Equipment, then print the bill. | Este dispositivo no tiene impresora de tickets. Elige una en Equipo y luego imprime la cuenta. |
 | code `meal_end.delivery_unavailable` | This full invoice cannot go where it was chosen to go. Choose another printer or email, then print the bill. | Esta factura completa no puede ir adonde se eligió. Elige otra impresora u otro correo y luego imprime la cuenta. |
 | `meal_end.not_admitted` (for `device_profile.not_admitted`) | This device's profile no longer lets you work on it, so it cannot print the bill for you. Log in on a device whose profile allows it. | El perfil de este dispositivo ya no te deja trabajar en él, así que no puede imprimir la cuenta por ti. Inicia sesión en un dispositivo cuyo perfil te admita. |
-| `meal_end.refused` (a refusal with no sentence of its own) | The bill was not printed and no ticket was issued. Nothing on the bill has changed. | La cuenta no se ha impreso y no se ha emitido ningún ticket. La cuenta no ha cambiado. |
+| `meal_end.refused` (a refusal from the server with no sentence of its own, when no earlier send went unanswered) | The bill was not printed and no ticket was issued. Nothing on the bill has changed. | La cuenta no se ha impreso y no se ha emitido ningún ticket. La cuenta no ha cambiado. |
+| `meal_end.cannot_file` (a permanent tax-filing refusal) | This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help. | El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada. |
+| `meal_end.unconfirmed` (no confirmed answer) | Print the bill got no answer, so the bill may have been printed. Check this bill before trying again. | Imprimir la cuenta no obtuvo respuesta, así que puede que se haya impreso. Revisa esta cuenta antes de volver a intentarlo. |
+| `meal_end.table_moved` (the table changed while Finish table's press opened the bill) | This table changed while the bill was opening, so nothing was printed. Check the bill, then choose Print the bill again. | Esta mesa ha cambiado mientras se abría la cuenta, así que no se ha impreso nada. Revisa la cuenta y vuelve a elegir Imprimir la cuenta. |
+| `meal_end.unserved_full_invoice` (not-served list on a full invoice naming a customer) | Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot file a correction for it, so take off any dish that may not come before you print. | Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede presentar una rectificación para ella, así que quita antes de imprimir los platos que puedan no llegar. |
 | `invoice.delivery_receipt` (was "Receipt printer: print after paying") | Receipt printer | Impresora de tickets |
 | code `bill.presented` (changed; also shown for a bill presented with no ticket) | This bill is ready for payment, so it cannot be changed. | Esta cuenta ya está lista para cobrar, así que no se puede cambiar. |
 | `table.print_taken_over` (`_unnamed`: "Someone else") | {name} has taken over this order, so the bill was not printed. | {name} ha tomado este pedido, así que la cuenta no se imprimió. |
 
-`codes.test.ts:307-312` asserts today's `bill.presented` text: **before** "…so it cannot be changed";
+`codes.test.ts` asserts `bill.presented`'s text: **before** "…so it cannot be changed";
 **after** the row above (decision: this plan, the coffee example in §2.6).
 
 **Guide**, from the code as built (CLAUDE.md §3 "A help bubble…", "A guide sentence earns its

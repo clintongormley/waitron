@@ -541,7 +541,7 @@ primera, con el nombre de la cuenta en pantalla como título, por ejemplo **Cuen
 solo sobre esa cuenta: **Poner nombre a esta cuenta**, **Mover platos…**, **Juntar cuentas**,
 **Mover esta cuenta**, **Descuento en la cuenta**, **Registrar salida sin pagar**, **Factura
 completa**, **Imprimir la cuenta**, **Copia del ticket** y **Cancelar y abonar**, cada una cuando
-corresponde a la cuenta. La segunda, **Toda la mesa**, actúa sobre todos los de la mesa:
+corresponde. La segunda, **Toda la mesa**, actúa sobre todos los de la mesa:
 **Alergias**, **Poner nombre a los clientes**, **Comensales**, **Marcar cuenta pedida para …** con
 el nombre del grupo (una vez pedida, **Anular la petición de cuenta de …**), **Separar una mesa**
 (cuando el grupo ocupa más de una mesa), **Unir una mesa**, **Mover clientes** y **Cerrar mesa**.
@@ -625,7 +625,8 @@ Primero envía o quita los platos que aún no se han enviado. Si hay platos de l
 como servidos, todavía no se imprime nada: la caja los muestra bajo **Aún sin servir:**. Si los
 clientes ya los han tomado, elige **Marcar como servidos** donde aparezca y vuelve a elegir
 **Imprimir la cuenta**. Si no, elige **Imprimir igualmente**: un plato que al final no llegue se devuelve después
-del cobro con [Rectificar una factura](table-service.md#correct-invoice).
+del cobro con [Rectificar una factura](table-service.md#correct-invoice). La caja no puede rectificar una factura completa a nombre de
+un cliente, así que en esas cuentas quita antes de imprimir los platos que puedan no llegar.
 
 Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo en **+ Cuenta
 nueva**.
