@@ -365,7 +365,7 @@ describe("why the receipt Print button is greyed", () => {
       roleOf("receipt", off, [patio]),
       copy,
       "receipt-printer-off",
-      () => t("pay_equipment.printer_switched_off").replace("{item}", "Bar"),
+      () => t("document.printer_off_choose_other").replace("{item}", "Bar"),
     ],
     [
       "no receipt printer listed",

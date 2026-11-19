@@ -2071,7 +2071,10 @@ describe("A790 recorded document then printer", () => {
     expect(part(el, "reprint")!.hasAttribute("disabled")).toBe(true);
     expect(noPrinter(el)).toBeUndefined();
     expect(printerOff(el)).toBe(
-      uiText("pay_equipment.printer_switched_off").replace("{item}", "Bar"),
+      "Bar is switched off: unless you choose another, no ticket will print",
+    );
+    expect(printerOff(el)).toBe(
+      uiText("document.printer_off_choose_other").replace("{item}", "Bar"),
     );
     el.invoicePrinterLoading = true;
     await el.updateComplete;

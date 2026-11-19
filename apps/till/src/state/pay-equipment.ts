@@ -17,7 +17,7 @@ export type PayReader =
 /** The printer a payment's receipt would print on. */
 export type PayPrinter =
   | { kind: "ready"; id: string; name: string; fromDefault: boolean }
-  /** The printer the receipt role points at, switched off: the receipt prints nothing. */
+  /** The printer the receipt role points at, switched off: the receipt waits until it is back on. */
   | { kind: "switched_off"; id: string; name: string }
   | { kind: "unset" }
   | { kind: "none_listed" };
@@ -52,7 +52,7 @@ export function payPrinterOf(equipment: DeviceEquipment | null): PayPrinter {
   const role = roleOf(equipment, "receipt");
   const resolved = role?.resolved ?? null;
   // A chosen printer that is switched off does not fall back to the default: the role still
-  // resolves to it, and a receipt sent there prints nothing.
+  // resolves to it, and the receipt waits there until it is switched back on.
   if (resolved !== null) {
     return resolved.available
       ? {

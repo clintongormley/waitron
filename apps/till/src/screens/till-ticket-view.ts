@@ -552,7 +552,7 @@ export class TillTicketView extends LitElement {
         ${t(
           role.choices.length === 0
             ? "document.printer_off_no_other"
-            : "pay_equipment.printer_switched_off",
+            : "document.printer_off_choose_other",
         ).replace("{item}", () => destination.name)}
       </p>`;
     if (role.choices.length === 0)

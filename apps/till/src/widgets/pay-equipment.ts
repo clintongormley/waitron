@@ -21,7 +21,7 @@ import {
   readerChoices,
 } from "../state/pay-equipment.js";
 
-/** What the open row says under the printer field when the receipt would print nothing; the
+/** What the open row says under the printer field when the receipt cannot print now; the
  * payment still goes ahead (design default 19). */
 function printerWarning(printer: PayPrinter): string | null {
   if (printer.kind === "switched_off")

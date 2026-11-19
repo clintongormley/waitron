@@ -6340,7 +6340,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
     },
   );
 
-  describe("a printer that would print nothing", () => {
+  describe("a printer that cannot print now", () => {
     const off = (selection: "item" | "default"): RoleEquipment =>
       selection === "item"
         ? roleOf("receipt", UNAVAILABLE_BAR_PRINTER, [UNAVAILABLE_BAR_PRINTER, TERRACE_PRINTER])
