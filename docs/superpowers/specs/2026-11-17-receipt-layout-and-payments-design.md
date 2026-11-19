@@ -79,7 +79,7 @@ to say what is still owed.
   said 32 for 58 mm.)
 - The receipt is rebuilt from the database each time it prints (`readSettledTicket`,
   `readTransactionReceipt`); only a retry of a failed original reuses stored bytes
-  (`receipt-print.ts:559`). Goal 5 relies on that.
+  (`enqueueOriginalReceipt` in `receipt-print.ts`). Goal 5 relies on that.
 - After a ticket is issued, a payment must settle the whole amount due (`settle-sale.ts`). Part
   payments are bill payments, kept in `bill_payments` until the sale settles; only settlement
   writes `tenders`, which is all today's receipt reads (`readBillTenderLines`). So for an issued,
@@ -127,3 +127,30 @@ to say what is still owed.
   `Total`); amounts in the table carry no `€`.
 - Card line wording: `Visa ****4034 (Sin contacto)` with its amount on the right, then
   `Autorización 354739` when present; a typed reference keeps today's `Ref.` line.
+- _19 November 2026: superseded. Payment slips are now optional and never reprinted from the
+  till; see the [plan's 19 November rework](../plans/2026-11-17-receipt-layout-and-payments.md#rework-2026-11-19-payment-slips-are-optional)._ The payment slip as built
+  (18 November 2026, PR 3), which goal 6 does not describe. Goal 6 says a
+  slip prints for a payment that settles the ticket. As built, a cash or hand-keyed card payment
+  after the ticket prints one by itself, part payments included, with no new choice on the till and
+  under the same device and printer conditions as a reader's slip. The watcher kept both of those
+  on 18 November for the owner to confirm when landing. A connected reader's payment prints one
+  only when **Print card slip** was ticked, and never on a reader that prints its own; without the
+  tick it gets no slip unless someone prints a copy. When its answer was unclear and staff press Pay
+  again to file it, that second Pay prints no slip, whatever it asked for (the watcher, 18 November):
+  a copy can recover that slip (**Print a copy** under **Payments on this bill** while the bill is
+  open, or **Payment slip** in the window after the payment). That button copies only the card
+  payment the action took, marked as a copy, and shows only when that payment has a slip to copy
+  and the device has a slip printer. After a refund or a correction it prints the original amount,
+  as **Print a copy** does (the watcher, 18 November). A counter order still listed as **Paid, not
+  handed over** in **Find bill** still offers **Payment slip**, which prints the slip of the one
+  card payment chosen, marked as a copy (#3803). A first Pay that asked for a slip and is still waiting at
+  the reader prints its slip when it finishes. A later cash or hand-keyed card payment's slip
+  is decided once, when the payment is taken: it prints if the sale already has an original receipt
+  job or an original email or A4 delivery, in any state, a failed one included. With neither, no
+  slip prints and the first original lists the payment. An email or A4 page reads the sale when it
+  goes out, so a payment taken while it is queued or being sent can be on both that page and a slip,
+  and a payment taken after an original failed can be on both the slip and the next original. A
+  device that may not print receipts, or has no payment slip printer, prints no slip. The watcher
+  chose on 18 November to count a queued original. Counting a failed one is this branch's reading of
+  the watcher's reason ("A payment can then never be on no paper"). Both are for the owner to
+  confirm when landing.

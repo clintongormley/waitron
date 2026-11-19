@@ -89,6 +89,9 @@ electrónico, el recibo se imprime al cerrar. Si la impresora está desactivada 
 imprime por sí solo cuando vuelva a funcionar; si al día siguiente no se ha impreso, imprímelo desde la
 venta. Si el dispositivo no tiene impresora de tickets, no se imprime nada: elige una o envía el
 correo antes de cerrar. Cierras la mesa por separado.
+Después de imprimir una cuenta con **Imprimir la cuenta**, la ventana que aparece tras el último
+pago ofrece una copia en lugar del original, que se imprimió con la cuenta; imprímela solo si el
+cliente pide otro recibo.
 Si necesitas un documento más tarde, abre la venta y elige **Imprimir/Reimprimir**.
 
 ## Comprobar un pago con tarjeta antes de cancelar {#cancel-pending-card}
@@ -180,13 +183,18 @@ si solo hay una impresora disponible, aparece seleccionada. Usa **Actualizar imp
 aparece ninguna,
 o **Cancelar** para salir sin imprimir.
 
-## Evitar justificantes de tarjeta duplicados {#reader-slips}
+## Justificantes de pago {#reader-slips}
 
-Activa **Imprimir justificante de tarjeta** antes de cobrar si el cliente lo quiere. Empieza desactivado para cada pago e imprime cuando se confirma la tarjeta. Si la respuesta del lector no está clara o el servidor se reinicia antes de imprimir, usa una copia.
+El justificante de pago es opcional; el ticket o la factura, no. Si quien paga quiere justificante,
+activa **Imprimir justificante de pago** antes de cobrar, en efectivo, con **Otro datáfono** o con
+lector de tarjetas. Aparece cuando tu dispositivo tiene impresora de justificantes de pago y empieza
+desactivado para cada pago. El justificante muestra ese pago y cómo se pagó, no lo que queda por
+pagar; con **Otro datáfono** muestra también el datáfono y el número de operación si los indicaste.
 
-Para imprimir un pago con tarjeta antes de completar la cuenta, vuelve a **Cobrar** y elige **Imprimir una copia** junto al pago recibido en **Pagos de esta cuenta**. La copia muestra lo que quedaba pendiente cuando se cobró esa tarjeta.
-
-En un pedido marcado **Pagado, sin entregar**, ábrelo en **Buscar cuenta** y pulsa **Justificante de pago** si aparece. Imprime una copia marcada como duplicado. Si pagaron varias tarjetas, elige la tarjeta de quien lo pide.
+Un justificante se imprime una sola vez; la caja no puede volver a imprimirlo. Para sustituir uno
+perdido, usa **Reimprimir** en la [Cola de impresión](printers.md#print-queue). Si la caja muestra
+**Pago recibido, pero no se pudo imprimir el justificante de pago.**, el pago está registrado: no
+lo cobres de nuevo.
 
 Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el
 panel, edita ese lector y activa **Imprime su propio justificante automáticamente**. Después elige
@@ -196,8 +204,6 @@ describe el lector; no cambia la configuración de su impresora. Empieza desacti
 Si añades de nuevo un lector reconocido, conserva tu elección. Consulta [Lectores de tarjetas](printers.md#card-readers)
 para eliminar un lector o añadirlo de nuevo. La exportación de configuración incluye la política
 de pagos, pero no los lectores ni este ajuste.
-
-Cuando Waitron imprime el justificante de tarjeta de una venta, sus palabras, fecha e importes siguen el idioma de ticket guardado con esa venta. Cambiar el idioma de tu pantalla o el idioma de ticket actual del local conserva el idioma original del justificante de la venta anterior.
 
 ## Confía en el servidor antes de abrir la caja {#certificate-trust}
 

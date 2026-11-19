@@ -550,6 +550,8 @@ export function buildReceiptDocument({
       row(label.charged, formatMoney(t.charged, locale));
     }
   }
+  if (result.owed !== undefined)
+    row(label.owed, formatMoney(result.owed, locale), 0, { bold: true });
   rule();
   if (guests !== undefined) {
     const people = `${guests} ${guests === 1 ? label.guest : label.guests}`;

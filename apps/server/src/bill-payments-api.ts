@@ -18,12 +18,7 @@ import type { BillPaymentAsk, BillPaymentRequest, CounterPaymentBasket } from ".
 import { settleFromProviderRow } from "./bill-payments-loop.js";
 import { refundBillPayment, refundProvidersOf, refundTender } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
-import { printBillPaymentSlip } from "./payment-slip-print.js";
-import {
-  assertDeviceCapability,
-  assertProfileAction,
-  assertTakesTender,
-} from "./device-session.js";
+import { assertProfileAction, assertTakesTender } from "./device-session.js";
 import { readGuestCountChoice } from "./receipt-guests.js";
 import type { Logger } from "./logger.js";
 import {
@@ -140,7 +135,11 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     request.receiptLanguage = requireString(body.receiptLanguage, "receiptLanguage");
   const guestCount = readGuestCountChoice(body.guestCount);
   if (guestCount !== undefined) request.guestCount = guestCount;
-  const readerOnly = ["readerId", "simulationOutcome", "printCardSlip"] as const;
+  const readerOnly = ["readerId", "simulationOutcome"] as const;
+  if (body.printCardSlip !== undefined) {
+    if (typeof body.printCardSlip !== "boolean") throw invalid("printCardSlip");
+    request.printCardSlip = body.printCardSlip;
+  }
   if (request.method === "card") {
     request.entry = oneOf(body.entry, ["manual", "reader"] as const, "entry");
   } else if (body.entry !== undefined) {
@@ -156,10 +155,6 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     throw invalid("externalRef");
   }
   if (request.entry === "reader") {
-    if (body.printCardSlip !== undefined) {
-      if (typeof body.printCardSlip !== "boolean") throw invalid("printCardSlip");
-      request.printCardSlip = body.printCardSlip;
-    }
     if (body.simulationOutcome !== undefined) {
       request.simulationOutcome = oneOf(
         body.simulationOutcome,
@@ -363,23 +358,6 @@ export function mountBillPaymentsApi(
           ),
         ),
       );
-    }),
-  );
-
-  app.post("/api/working-orders/:id/payments/:paymentId/slip-copy", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c);
-      await assertDeviceCapability(deps, c, "print-receipt", "slip-copy", session.device);
-      await assertRequestDevice(deps, c, session);
-      const id = requireBillParam(c.req.param("id"));
-      await gateZones(deps, session, [{ orderId: id }]);
-      await printBillPaymentSlip(
-        deps.db,
-        requestCfg(deps.cfg, session),
-        id,
-        c.req.param("paymentId"),
-      );
-      return c.body(null, 200);
     }),
   );
 

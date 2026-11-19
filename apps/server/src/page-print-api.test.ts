@@ -1,5 +1,6 @@
 import { dateA4Job, readDeliveryAndClaim } from "./testing/a4-print-job.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { AsyncResource } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -19,6 +20,7 @@ import {
   sales,
   taxpayer,
   withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { hashDeviceToken } from "@waitron/identity";
 import { createClient, PAGE_FORMATS, PAGE_HOLDS, PAGE_MEDIA } from "@waitron/print-agent";
@@ -81,7 +83,19 @@ type Render = (
 
 type Venue = Awaited<ReturnType<typeof venue>>;
 
-async function venue(opts: { render?: Render; realClock?: true; bus?: LiveEvents } = {}) {
+async function venue(
+  opts: {
+    render?: Render;
+    realClock?: true;
+    bus?: LiveEvents;
+    /** Wraps the real invoice read. */
+    read?: (
+      tx: Transaction,
+      saleId: string,
+      real: () => Promise<ReceiptDocumentInput>,
+    ) => Promise<ReceiptDocumentInput>;
+  } = {},
+) {
   await seedPerson(suite.db, { id: "staff-one" });
   await seedTaxpayer(suite.db);
   await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
@@ -125,7 +139,10 @@ async function venue(opts: { render?: Render; realClock?: true; bus?: LiveEvents
               return state.now;
             },
           }),
-      readInvoiceDocument: (tx, saleId) => readInvoiceDocument(backend, tx, cfg, saleId),
+      readInvoiceDocument: (tx, saleId) => {
+        const real = () => readInvoiceDocument(backend, tx, cfg, saleId);
+        return opts.read === undefined ? real() : opts.read(tx, saleId, real);
+      },
       layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       ...(opts.render === undefined ? {} : { renderInvoicePage: opts.render }),
     },
@@ -803,6 +820,61 @@ describe("fetching a page job's document", () => {
           );
     expect(bytes.equals(expected)).toBe(true);
     if (format === "application/pdf") expect(await pdfText(bytes)).not.toContain("DUPLICADO");
+    expect(await row(id)).toMatchObject({ status: "sending" });
+  });
+
+  it("prints the invoice as it stands at each fetch", async () => {
+    // What the invoice shows; a payment taken between claim and print changes it.
+    let owed = "1.00";
+    const seen: string[] = [];
+    const rendered: ReceiptDocumentInput[] = [];
+    let deliveryId = "";
+    // Bound here, outside the fetch, so the read is another caller's rather than the fetch's own.
+    const statusSeenOutside = AsyncResource.bind(async () => (await row(deliveryId)).status);
+    const v = await venue({
+      read: async (_tx, _saleId, real) => {
+        seen.push(await statusSeenOutside());
+        const document = await real();
+        return { ...document, result: { ...document.result, owed } };
+      },
+      render: async (document) => {
+        rendered.push(document);
+        return Buffer.from("bytes");
+      },
+    });
+    const office = await printer(v.agentOne);
+    deliveryId = await queueA4(await fullInvoice(v), office);
+    const job = (await claim(v))!;
+    expect(seen).toEqual([]);
+    owed = "0.50";
+
+    expect((await fetchDocument(v, deliveryId, held(job))).status).toBe(200);
+    owed = "0.25";
+    expect((await fetchDocument(v, deliveryId, held(job))).status).toBe(200);
+
+    expect(seen).toEqual(["sending", "sending"]);
+    expect(rendered.map((document) => document.result.owed)).toEqual(["0.50", "0.25"]);
+  });
+
+  it("answers a claim whose invoice could not be read with no bytes, leaving it claimed", async () => {
+    let rendered = 0;
+    const v = await venue({
+      read: async () => {
+        throw new Error("Unreadable invoice");
+      },
+      render: async () => {
+        rendered++;
+        return Buffer.from("bytes");
+      },
+    });
+    const office = await printer(v.agentOne);
+    const id = await queueA4(await fullInvoice(v), office);
+    const job = (await claim(v))!;
+    expect(job.id).toBe(id);
+
+    expect((await fetchDocument(v, id, held(job))).status).toBe(500);
+
+    expect(rendered).toBe(0);
     expect(await row(id)).toMatchObject({ status: "sending" });
   });
 

@@ -353,11 +353,11 @@ import { readIssuedSales } from "./sale-due.js";
 import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import { outstandingOf } from "./bill-payment-money.js";
 import {
   assertBillInvariant,
   issueIfFullyPaid,
   linkBillCardPaymentsToSale,
-  outstandingOf,
   readPaidQuantities,
   readPaymentsByBill,
   refuseBillHoldingMoney,

@@ -439,12 +439,29 @@ describe("a presented bill on a handheld", () => {
     await payFromSheet(el, { method: "card", readerId: "r2", printCardSlip: true });
     expect(vi.mocked(api.pay).mock.calls[0]![0]).toHaveProperty("printCardSlip", true);
     expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
-      t("payment_slip.capture_failed_table"),
+      t("payment_slip.capture_failed"),
     );
     expect(vi.mocked(api.pay)).toHaveBeenCalledOnce();
   });
 
-  it("points at Print a copy when a short presented capture's slip could not print", async () => {
+  it.each([
+    ["cash", { method: "cash", tendered: "150.00" }],
+    ["Other card machine", { method: "manual", externalProvider: "other" }],
+  ] as const)(
+    "sends the presented sheet's %s slip request and says when it failed",
+    async (_, detail) => {
+      const { el } = await openPresented({
+        collectOrder: vi.fn().mockResolvedValue({ ...ticket(), slipPrintFailed: true }),
+      });
+      await payFromSheet(el, { ...detail, printCardSlip: true });
+      expect(vi.mocked(api.collectOrder).mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
+      expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
+        t("payment_slip.capture_failed"),
+      );
+    },
+  );
+
+  it("says in the Pay window when a short presented capture's slip could not print", async () => {
     const balance = balanceOf({ status: "placed", received: "110.00", outstanding: "10.00" });
     const { el } = await openPresented({
       getBillBalance: vi.fn().mockResolvedValue(balance),
@@ -1254,6 +1271,27 @@ describe("an unanswered presented payment on a handheld", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("a resent cash payment keeps the slip it first asked for", async () => {
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(noAnswer())
+      .mockResolvedValueOnce(invoiceOf("120.00", "F2"));
+    const { el } = await mountApp(
+      onPhone({ getPartyBills: vi.fn().mockResolvedValue([placedBill]), collectOrder: send }),
+    );
+    const order = await openPhoneTable(el);
+    await pressPaySheet(el, order);
+    emit(presented(el)!, "presented-pay", { ...asked.cash, printCardSlip: true });
+    await flush(el);
+    await pressPaySheet(el, order);
+    await presented(el)!.updateComplete;
+    await resend(el);
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
+    expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
   });
 
   it("a resend with no answer keeps the sheet open and locked on the same payment", async () => {
@@ -2575,13 +2613,11 @@ describe("till-app: the next guest on a handheld", () => {
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("payment_slip.capture_failed"));
   });
 
-  it("leaves the slip warning behind on the next guest's form, keeping Print a copy for the share paid", async () => {
+  it("leaves the slip warning behind on the next guest's form", async () => {
     const paid = balanceOf({
       received: "40.00",
       outstanding: "80.00",
-      payments: [
-        paymentOf({ canCopySlip: true, method: "card", entry: "reader", applied: "40.00" }),
-      ],
+      payments: [paymentOf({ method: "card", entry: "reader", applied: "40.00" })],
     });
     const getBillBalance = vi.fn().mockResolvedValue(balanceOf());
     const { el } = await mountApp(
@@ -2616,7 +2652,6 @@ describe("till-app: the next guest on a handheld", () => {
     expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
     expect(inDialog(el, "wt-form-actions")!.error).toBe("");
     expect(el.shadowRoot!.querySelector('.error[role="alert"]')).toBeNull();
-    expect(inDialog(el, '[data-payment-slip-copy="pay-1"]')).not.toBeNull();
   });
 
   it("after the first of three shares, the sheet offers the second, which previews a share among two", async () => {

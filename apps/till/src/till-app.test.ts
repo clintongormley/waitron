@@ -521,7 +521,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     collectOrder: vi.fn().mockResolvedValue(saleResult),
     reprint: vi.fn().mockResolvedValue(undefined),
     printReceipt: vi.fn().mockResolvedValue(undefined),
-    printPaymentSlip: vi.fn().mockResolvedValue(undefined),
     openDrawer: vi.fn().mockResolvedValue(undefined),
     listDrawerAuthorizers: vi
       .fn()
@@ -6496,45 +6495,7 @@ describe("till-app", () => {
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
   });
 
-  it("the payment-slip event prints the card payment it names", async () => {
-    const filed: TillSaleResult = {
-      ...saleResult,
-      tender: { method: "card", charged: "3.50", tip: "0.50", reference: null },
-    };
-    const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
-    const { el } = await mountApp({
-      recordSale: vi.fn().mockResolvedValue(filed),
-      printPaymentSlip,
-    });
-    const c = await toCounter(el);
-    c.store.addProduct(coffee, "2");
-    const workingOrderId = c.store.id;
-    emit(c, "confirm-payment", { method: "card", amount: "3.00" });
-    await flush(el);
-
-    emit(ticket(el)!, "payment-slip", { capturedPaymentId: "pay-1" });
-    await flush(el);
-    expect(printPaymentSlip).toHaveBeenCalledWith(workingOrderId, "pay-1");
-    expect(ticket(el)).not.toBeNull();
-  });
-
-  it("the window after a card payment offers no payment slip button", async () => {
-    const filed: TillSaleResult = {
-      ...saleResult,
-      tender: { method: "card", charged: "3.00", tip: "0.00", reference: null },
-      paymentSlips: [{ id: "pay-1", charged: "3.00", last4: "1111" }],
-    };
-    const { el } = await mountApp({ recordSale: vi.fn().mockResolvedValue(filed) });
-    const c = await toCounter(el);
-    c.store.addProduct(coffee, "2");
-    emit(c, "confirm-payment", { method: "card", amount: "3.00" });
-    await flush(el);
-
-    expect(ticket(el)!.localName).toBe("till-settlement-document-dialog");
-    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
-  });
-
-  it("an enrolled device without print-receipt gets no receipt or payment-slip actions", async () => {
+  it("an enrolled device without print-receipt gets no receipt actions", async () => {
     const filed: TillSaleResult = {
       ...saleResult,
       tender: { method: "card", charged: "3.00", tip: "0.00", reference: null },
@@ -6549,7 +6510,6 @@ describe("till-app", () => {
     await flush(el);
 
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
-    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=open-drawer]")).not.toBeNull();
   });
 
@@ -13589,6 +13549,74 @@ describe("till-app", () => {
         ],
       ]);
       expect(ticket(el)!.originalReceiptAvailable).toBe(false);
+    });
+    const slipPrinter = {
+      roles: [roleOf("payment_slip", equipmentItem("s1", "Slips"), [])],
+      notices: [],
+    };
+    it("Find a bill offers the slip switch when the device has a payment slip printer", async () => {
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        getDeviceEquipment: vi.fn().mockResolvedValue(slipPrinter),
+      });
+      const form = await openCollection(el);
+      expect(form.slipPrinterAvailable).toBe(true);
+    });
+    it.each([
+      ["cash", { method: "cash", amount: "30.00" }],
+      ["Other card machine", { method: "card", amount: "30.00", externalProvider: "other" }],
+    ] as const)(
+      "Find a bill's %s Pay sends the slip request and says when it failed",
+      async (_, tender) => {
+        const { el } = await mountApp({
+          getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+          collectOrder: vi.fn().mockResolvedValue({ ...saleResult, slipPrintFailed: true }),
+        });
+        const form = await openCollection(el);
+        emit(form, "find-bill-pay", {
+          workingOrderId: "wo-debt",
+          tender,
+          invoiced: true,
+          printCardSlip: true,
+        });
+        await flush(el);
+        expect(vi.mocked(currentApi.collectOrder).mock.calls[0]![1]).toEqual({
+          ...tender,
+          printCardSlip: true,
+        });
+        expect(
+          el.shadowRoot!.querySelector<HTMLElement>('.error[role="alert"]')?.textContent?.trim(),
+        ).toBe(t("payment_slip.capture_failed"));
+      },
+    );
+    it("Find a bill resends a lost collection with the slip choice it first sent", async () => {
+      const collect = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue(saleResult);
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        collectOrder: collect,
+      });
+      const form = await openCollection(el);
+      const tender = { method: "cash", amount: "30.00" };
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender,
+        invoiced: true,
+        printCardSlip: true,
+      });
+      await flush(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender,
+        invoiced: true,
+        printCardSlip: false,
+      });
+      await flush(el);
+      expect(collect).toHaveBeenCalledTimes(2);
+      expect(collect.mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
+      expect(collect.mock.calls[1]).toEqual(collect.mock.calls[0]);
     });
     it.each([true, false])(
       "Find a bill names a box handing over on a hand-keyed card collection only when no earlier send went unanswered (earlier unanswered: %s)",
@@ -26112,39 +26140,6 @@ describe("A737 Find a bill page", () => {
     expect(counter.store.lines[0]!.quantity).toBe("1");
     expect(currentApi.markCollected).not.toHaveBeenCalled();
     expect(currentApi.collectOrder).not.toHaveBeenCalled();
-  });
-
-  it("a paid waiting order split across two cards prints only the card pressed", async () => {
-    const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
-    const { el, view } = await open({
-      getFindBill: vi.fn().mockResolvedValue(
-        billRow({
-          workingOrderId: "bill-paid",
-          orderStatus: "settled",
-          state: "paid-not-handed-over",
-          paid: "25.10",
-          stillOwed: "0.00",
-        }),
-      ),
-      getFiledTicket: vi.fn().mockResolvedValue({
-        ...saleResult,
-        paymentSlips: [
-          { id: "pay-1", charged: "10.00", last4: "1111" },
-          { id: "pay-2", charged: "15.10", last4: "2222" },
-        ],
-      }),
-      printPaymentSlip,
-    });
-    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "bill-paid" }) });
-    await vi.waitFor(() => expect(ticket(el)?.localName).toBe("till-ticket-view"));
-    await ticket(el)!.updateComplete;
-    const buttons = ticket(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
-      "[data-test=payment-slip]",
-    );
-    expect(buttons).toHaveLength(2);
-    buttons[1]!.click();
-    await flush(el);
-    expect(printPaymentSlip.mock.calls).toEqual([["bill-paid", "pay-2"]]);
   });
 
   it("Back during a table offer read prevents that table from opening afterwards", async () => {

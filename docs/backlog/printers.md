@@ -341,8 +341,8 @@ Hardware and inbox checks to complete in the owner session.
 
 - **A739 physical payment and delivery qualification.** On the real till, printer and reader,
   check the payment window, the final Receipt / Full invoice choice and that **Done** prints the receipt; original and copy
-  paper output; requested card slips after a confirmed capture and Print a copy before full
-  payment; and Receipt Email arriving in the intended inbox. No physical printer, reader or
+  paper output; a payment slip requested for a reader, cash and another card machine, and a lost
+  slip reprinted from Print Queue; and Receipt Email arriving in the intended inbox. No physical printer, reader or
   inbox qualification was performed by the software cuts. The watcher moved these remaining
   checks here on 11 November 2026 at 17:20; they add no prerequisite to A840/A842/A848.
 - **The spare file's size is measured on HFS+ and Linux tmpfs only** — not ext4, copy-on-write

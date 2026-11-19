@@ -36,7 +36,8 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { outstandingOf, readPaymentsByBill } from "./bill-payments.js";
+import { outstandingOf } from "./bill-payment-money.js";
+import { readPaymentsByBill } from "./bill-payments.js";
 import { optionAnswersKey } from "./receipt-lines.js";
 import { readIssuedSales } from "./sale-due.js";
 import {

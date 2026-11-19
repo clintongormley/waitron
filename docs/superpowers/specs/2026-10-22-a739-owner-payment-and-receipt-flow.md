@@ -2,6 +2,8 @@
 
 **10 November 2026 update:** the owner chose “Memory only (Recommended)” at 16:53, relayed by the watcher at 17:38. A requested card slip is held in memory; a restart or unclear reader answer may miss it. Staff recover with “print a copy”, including before full payment, using the reader payment’s stored remaining balance. This supersedes the restart-recovery proposal below; no slip-request table is authorised. The [revised slip plan](../plans/2026-11-10-a739-memory-only-card-slips.md) was reviewed by Claude and cleared by watcher17:32 with reader-only balance writes, no copy audit and a build hold until #2736 lands.
 
+**19 November 2026 pointer (RECEIPT-LAYOUT-3, #3752).** Payment slips are now optional and never reprinted from the till: any method's slip prints once, only when the payer asks, so "Cash never prints payment slips", "Manual card remains excluded", "no cash slips" and every "print a copy" below no longer hold. See the [plan's 19 November rework](../plans/2026-11-17-receipt-layout-and-payments.md#rework-2026-11-19-payment-slips-are-optional).
+
 **Authoritative addendum.** The owner approved the revised pay screen at about 02:12 CET,
 after answering dismissal at 02:01 and reader settings at 02:05. These answers take precedence
 over every conflicting question, proposal, gate and estimate below, in the companion revision,

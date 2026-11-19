@@ -2624,6 +2624,12 @@ addition. This publishes the plan and updated static boards; product/runtime acc
 **All earlier notes and body below remain verbatim history; conflicting open questions and
 no-rebuild/native-control/pending-choice/F1-off proposals are superseded.**
 
+**2026-11-19 pointer (the owner's answers of 19 November).** "Cash/manual card have no Waitron
+slip" above and "No cash slips" below no longer hold: a payment slip, for any method, prints once,
+only when the payer asks through **Print payment slip**, and is never reprinted from the till; a
+lost one is reprinted from the dashboard's Print Queue. No slip shows a remaining balance. See the
+[receipt layout plan's 19 November rework](../superpowers/plans/2026-11-17-receipt-layout-and-payments.md#rework-2026-11-19-payment-slips-are-optional).
+
 **2026-10-27 precedence.** The [current amendment](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
 and eight four-case boards (removed from the repository on 2026-11-02) supersede conflicting history
 below. The owner's 2026-10-26 ~07:00 YES requires an initially unticked native-reader checkbox;

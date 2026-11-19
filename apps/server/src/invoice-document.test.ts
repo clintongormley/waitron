@@ -1251,6 +1251,39 @@ describe("a card payment on the A4 page", () => {
   });
 });
 
+describe("what is still owed on the A4 page", () => {
+  it("the A4 page prints Pendiente in bold after the payments", () => {
+    const [page] = layoutInvoicePages({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      result: {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        tender: { method: "unpaid" },
+        payments: [
+          {
+            method: "cash",
+            amount: "10.00",
+            tip: "0.00",
+            tendered: "10.00",
+            change: "0.00",
+            refunds: [],
+          },
+        ],
+        owed: "9.69",
+      },
+    });
+    const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
+    const cash = texts.findIndex(({ text }) => text === "Efectivo");
+    const caption = texts.findIndex(({ text }) => text === "Pendiente");
+    expect(cash).toBeGreaterThanOrEqual(0);
+    expect(texts[caption]!.y).toBeGreaterThan(texts[cash]!.y);
+    const amount = texts.find(
+      ({ text, y }, index) => index > caption && y === texts[caption]!.y && text === "9,69 €",
+    );
+    expect(amount).toBeDefined();
+    expect([texts[caption]!.bold, amount!.bold]).toEqual([true, true]);
+  });
+});
+
 describe("the simplified receipt's A4 tax table", () => {
   it("draws the simplified tax table on A4", () => {
     const [page] = layoutInvoicePages({

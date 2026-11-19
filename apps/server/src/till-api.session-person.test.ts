@@ -106,7 +106,6 @@ const BODIES: Readonly<Record<string, () => unknown>> = {
 
 /** The owner's named routes, and the kitchen screens, that must be among the refused. */
 const NAMED_REFUSED = [
-  "POST /api/working-orders/:id/payments/:paymentId/slip-copy",
   "POST /api/parties/:id/drafts/:did/discard",
   "POST /api/parties/:id/drafts/:did/submit",
   "POST /api/parties/:id/end-meal",

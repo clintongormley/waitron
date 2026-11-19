@@ -1,5 +1,9 @@
 # 2026-10-27 approved precedence
 
+**19 November 2026 pointer (RECEIPT-LAYOUT-3, #3752).** Payment slips are now optional and never
+reprinted from the till: any method's slip prints once, only when the payer asks, so "Cash/manual
+card have no Waitron slip" below no longer holds; see the [plan's 19 November rework](../plans/2026-11-17-receipt-layout-and-payments.md#rework-2026-11-19-payment-slips-are-optional).
+
 The [authoritative approved addendum](2026-10-22-a739-owner-payment-and-receipt-flow.md)
 and [implementation plan](../plans/2026-10-27-a739-approved-payment-flow.md) supersede the
 questions and proposals below. The owner approved payment first, next tender after each part,

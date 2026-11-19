@@ -894,7 +894,7 @@ declare module "@waitron/shared" {
      */
     "bill.received_exceeds_total": { workingOrderId: string; excess: string };
     /**
-     * Money has been taken on the bill before its invoice. Paying it in one go by the
+     * Money has been taken on the bill. Paying it in one go by the
      * single-payment routes, placing it, merging it with another bill and moving items between it
      * and another are refused while it has any pending or received bill payment, even one given
      * back in full; abandoning it and finishing its table are refused while it still holds money.
@@ -913,15 +913,8 @@ declare module "@waitron/shared" {
      * dish on `workingOrderId`.
      */
     "bill.merge_invoice_choice_required": { workingOrderId: string; intoWorkingOrderId: string };
-    /**
-     * No payment was found for `paymentId`, the id the caller sent: a bill payment's id, or, on the
-     * Payment slip press, a captured card payment's.
-     */
+    /** No bill payment was found for `paymentId`, the id the caller sent. */
     "bill.payment_not_found": { paymentId: string };
-    /** This device has no payment slip printer it can use for the copy `paymentId` asks for. */
-    "bill.payment_slip_no_printer": { paymentId: string };
-    /** The payment exists here, but no copy of a card slip is offered for it. */
-    "bill.payment_slip_unavailable": { paymentId: string };
     "bill.payment_not_stuck": { paymentId: string };
     /**
      * What became of a pending card bill payment is not confirmed, so nothing was recorded and the

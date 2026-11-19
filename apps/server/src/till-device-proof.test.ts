@@ -362,18 +362,9 @@ describe("till refund device proof over HTTP", () => {
   });
 });
 
-type DocumentRoute =
-  | "bill-slip-copy"
-  | "receipt"
-  | "payment-slip"
-  | "reprint"
-  | "transaction-reprint"
-  | "refund-reprint"
-  | "drawer";
+type DocumentRoute = "receipt" | "reprint" | "transaction-reprint" | "refund-reprint" | "drawer";
 const documentRoutes: DocumentRoute[] = [
-  "bill-slip-copy",
   "receipt",
-  "payment-slip",
   "reprint",
   "transaction-reprint",
   "refund-reprint",
@@ -388,17 +379,7 @@ async function documentRequest(kind: DocumentRoute) {
     expect(answer.status).toBe(200);
     return { path: `/api/tender-refunds/${body.id}/reprint`, body: {} };
   }
-  if (kind === "bill-slip-copy") {
-    const request = await paymentRequest("bill-reader");
-    const response = await post(request.path, `${sessionCookie}; ${deviceCookie}`, request.body);
-    const result = (await response.json()) as { payment: { id: string } };
-    expect(response.status).toBe(200);
-    return {
-      path: `/api/working-orders/${request.id}/payments/${result.payment.id}/slip-copy`,
-      body: {},
-    };
-  }
-  const payment = await paymentRequest(kind === "payment-slip" ? "reader" : "sale");
+  const payment = await paymentRequest("sale");
   const answer = await post(payment.path, `${sessionCookie}; ${deviceCookie}`, payment.body);
   expect(answer.status).toBe(200);
   await answer.arrayBuffer();
@@ -407,12 +388,6 @@ async function documentRequest(kind: DocumentRoute) {
       sql`select id from sales where working_order_id = ${payment.id}`,
     );
     return { path: `/api/transactions/${sale!.id}/reprint`, body: {} };
-  }
-  if (kind === "payment-slip") {
-    const [capture] = await suite.db.all<{ id: string }>(
-      sql`select id from payments where working_order_id = ${payment.id}`,
-    );
-    return { path: `/api/sales/${payment.id}/payment-slip/${capture!.id}`, body: {} };
   }
   return { path: `/api/sales/${payment.id}/${kind}`, body: {} };
 }

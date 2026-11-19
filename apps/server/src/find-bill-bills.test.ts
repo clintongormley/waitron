@@ -38,7 +38,8 @@ import { combineParties } from "./testing/table-action-fixture.js";
 import { closingEditsForTest, partyRevision } from "./testing/party-close-fixture.js";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 
-import { readBillBalance, readPaymentsByBill, outstandingOf } from "./bill-payments.js";
+import { outstandingOf } from "./bill-payment-money.js";
+import { readBillBalance, readPaymentsByBill } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
 import { assignProductUnit, setProductVariants, units } from "@waitron/menu";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";

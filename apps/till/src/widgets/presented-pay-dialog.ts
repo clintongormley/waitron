@@ -52,8 +52,13 @@ type Field = "tendered" | "externalRef" | "guests";
 /** `presented-pay`'s detail; `guestCount` is absent unless the venue asks for it, null for none. */
 export type PresentedPayDetail =
   | { method: "card"; readerId?: string; guestCount?: number | null; printCardSlip?: boolean }
-  | { method: "cash"; tendered: string; guestCount?: number | null }
-  | ({ method: "manual"; externalRef?: string; guestCount?: number | null } & OutsideCardDetails);
+  | { method: "cash"; tendered: string; guestCount?: number | null; printCardSlip?: boolean }
+  | ({
+      method: "manual";
+      externalRef?: string;
+      guestCount?: number | null;
+      printCardSlip?: boolean;
+    } & OutsideCardDetails);
 
 /** What the waiter has typed: the cash handed over and the operation number. */
 interface EntryDraft {
@@ -305,7 +310,8 @@ export class TillPresentedPayDialog extends LitElement {
   #slipAvailable(): boolean {
     return (
       this.slipPrinterAvailable &&
-      ((this.fixedReader !== null && this.fixedReader.id === undefined) ||
+      (this.method !== "card" ||
+        (this.fixedReader !== null && this.fixedReader.id === undefined) ||
         this.equipment?.roles.find((role) => role.role === "card_terminal")?.resolved
           ?.printsOwnSlipAutomatically !== true)
     );
@@ -418,20 +424,22 @@ export class TillPresentedPayDialog extends LitElement {
     const reader =
       this.method === "card" ? readyPayReader(this.equipment, this.fixedReader)! : null;
     this.#sent = reader === null ? null : sentCard(reader, this.amount);
+    const slip = this.#slipAvailable() ? { printCardSlip: this.printCardSlip } : {};
     const detail: PresentedPayDetail =
       reader !== null
         ? {
             method: "card",
             ...(reader.id === undefined ? {} : { readerId: reader.id }),
-            ...(this.#slipAvailable() ? { printCardSlip: this.printCardSlip } : {}),
+            ...slip,
             ...guests,
           }
         : this.method === "cash"
-          ? { method: "cash", tendered: typedAmount(this.tendered)!, ...guests }
+          ? { method: "cash", tendered: typedAmount(this.tendered)!, ...slip, ...guests }
           : {
               method: "manual",
               ...(ref === "" ? {} : { externalRef: ref }),
               ...outsideCardValues(this.outside),
+              ...slip,
               ...guests,
             };
     this.#emit("presented-pay", detail);
@@ -671,7 +679,7 @@ export class TillPresentedPayDialog extends LitElement {
             }
             ${this.#equipmentRow()}
             ${cardSlipChoice(
-              this.method === "card" && this.#slipAvailable(),
+              this.#slipAvailable(),
               this.printCardSlip,
               this.busy || this.equipmentBusy,
               (value) => {

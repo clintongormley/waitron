@@ -1403,6 +1403,111 @@ describe("TillApi", () => {
     },
   );
 
+  it.each([
+    ["cash", { method: "cash", amount: "5.00" }],
+    ["Other card machine", { method: "card", amount: "3.00", externalProvider: "other" }],
+  ] as const)(
+    "sends a walk-up %s sale's slip request beside its tender, not in it",
+    async (_, tender) => {
+      const fetchStub = vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ invoiceNumber: "A/1", slipPrintFailed: true }));
+      const result = await new TillApi("", fetchStub).recordSale(
+        [{ menuItemId: "mi-p", quantity: "1" }],
+        { ...tender, printCardSlip: true },
+        "wo1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
+        "eat_in",
+      );
+      const body = JSON.parse(fetchStub.mock.calls[0]![1].body as string);
+      expect(body.printCardSlip).toBe(true);
+      expect(body.tender).toEqual(tender);
+      expect(result.slipPrintFailed).toBe(true);
+    },
+  );
+
+  it.each(["open", "placed"] as const)(
+    "sends a %s whole bill's cash slip request and returns its failure with the ticket",
+    async (status) => {
+      const ticket = { invoiceNumber: "A/1", tender: { method: "cash", change: "0.50" } };
+      const fetchStub = wholeBillReplies(status, "1.50", {
+        outcome: "received",
+        invoice: ticket,
+        slipPrintFailed: true,
+      });
+      const api = new TillApi("", fetchStub);
+      const tender = { method: "cash", amount: "2.00", printCardSlip: true } as const;
+      const result =
+        status === "open"
+          ? await api.recordSale(
+              [],
+              tender,
+              "wo1",
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              { billId: "wo1", editorVersion: 1, draftId: null, draftRevision: null },
+              "eat_in",
+            )
+          : await api.collectOrder("wo1", tender, undefined, null, null);
+      expect(postedBodies(fetchStub)[0]).toMatchObject({ method: "cash", printCardSlip: true });
+      expect(result).toEqual({ ...ticket, slipPrintFailed: true });
+    },
+  );
+
+  it("sends an Other card machine collection's slip request", async () => {
+    const fetchStub = wholeBillReplies("placed", "1.50");
+    await new TillApi("", fetchStub).collectOrder(
+      "wo1",
+      { method: "card", amount: "1.50", externalProvider: "other", printCardSlip: true },
+      undefined,
+      null,
+      null,
+    );
+    expect(postedBodies(fetchStub)[0]).toMatchObject({ entry: "manual", printCardSlip: true });
+  });
+
+  it("resends an unanswered whole-bill cash payment with the same slip choice", async () => {
+    const fetchStub = wholeBillReplies("placed", "1.50", undefined, () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const api = new TillApi("", fetchStub);
+    const cash = { method: "cash", amount: "2.00", printCardSlip: true } as const;
+    await expect(api.collectOrder("wo1", cash, undefined, null, null)).rejects.toThrow(TypeError);
+    await api.collectOrder("wo1", cash, undefined, null, null);
+    const [first, resent] = postedBodies(fetchStub);
+    expect(first.printCardSlip).toBe(true);
+    expect(resent).toEqual(first);
+  });
+
+  it("reads again before paying when the slip choice changes after no answer", async () => {
+    const fetchStub = wholeBillReplies("placed", "1.50", undefined, () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const api = new TillApi("", fetchStub);
+    const cash = { method: "cash", amount: "2.00" } as const;
+    await expect(
+      api.collectOrder("wo1", { ...cash, printCardSlip: true }, undefined, null, null),
+    ).rejects.toThrow(TypeError);
+    await api.collectOrder("wo1", { ...cash, printCardSlip: false }, undefined, null, null);
+    expect(fetchStub.mock.calls.map(([, init]) => init.method)).toEqual([
+      "GET",
+      "POST",
+      "GET",
+      "POST",
+    ]);
+    const [first, next] = postedBodies(fetchStub);
+    expect(next.submissionId).not.toBe(first.submissionId);
+    expect(next.printCardSlip).toBe(false);
+  });
+
   it("looks up a paid bill's ticket after a reload without sending another payment", async () => {
     const ticket = { invoiceNumber: "A/1", tender: { method: "cash", change: "0.50" } };
     const fetchStub = vi
@@ -2142,11 +2247,6 @@ describe("TillApi", () => {
 
   it.each([
     ["printReceipt", "/api/sales/wo1/receipt", (api: TillApi) => api.printReceipt("wo1")],
-    [
-      "printPaymentSlip",
-      "/api/sales/wo1/payment-slip/pay1",
-      (api: TillApi) => api.printPaymentSlip("wo1", "pay1"),
-    ],
   ] as const)("%s POSTs an empty object to %s", async (_method, path, call) => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const api = new TillApi("", fetchStub);
@@ -2185,13 +2285,6 @@ describe("TillApi", () => {
       "/api/invoice-delivery-options",
       "GET",
       undefined,
-    ],
-    [
-      "printBillPaymentSlip",
-      (api: TillApi) => api.printBillPaymentSlip("wo1", "pay1"),
-      "/api/working-orders/wo1/payments/pay1/slip-copy",
-      "POST",
-      {},
     ],
     [
       "askDraftDeadEnds",

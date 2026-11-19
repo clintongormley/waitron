@@ -230,7 +230,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
     reprint: vi.fn().mockResolvedValue(undefined),
     printReceipt: vi.fn().mockResolvedValue(undefined),
-    printPaymentSlip: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi);
@@ -1760,49 +1759,9 @@ describe("till-app receipt issuance", () => {
     expect(ticket(el)!.originalReceiptAvailable).toBe(true);
   });
 
-  it("says the card slip could not print when printing it fails", async () => {
-    const printPaymentSlip = vi.fn().mockRejectedValue({ code: "printing.no_printer" });
-    const { el } = await mountApp({ printPaymentSlip });
-    const c = await toCounter(el);
-    c.store.addProduct(c.products[0]!, "1");
-    await el.updateComplete;
-    emit(c, "confirm-payment", { method: "cash", amount: "5" });
-    await flush(el);
-
-    emit(ticket(el)!, "payment-slip", { capturedPaymentId: "pay-1" });
-    await flush(el);
-
-    expect(printPaymentSlip).toHaveBeenCalledOnce();
-    expect(banner(el)!.textContent).toContain(t("payment_slip.error"));
-    expect(ticket(el)).not.toBeNull();
-  });
-
-  it.each(["bill.payment_slip_no_printer", "bill.payment_slip_unavailable"])(
-    "says why a press is refused with %s",
-    async (code) => {
-      const printPaymentSlip = vi.fn().mockRejectedValue({ code });
-      const { el } = await mountApp({ printPaymentSlip });
-      const c = await toCounter(el);
-      c.store.addProduct(c.products[0]!, "1");
-      await el.updateComplete;
-      emit(c, "confirm-payment", { method: "cash", amount: "5" });
-      await flush(el);
-      const paid = ticket(el)!.result;
-
-      emit(ticket(el)!, "payment-slip", { capturedPaymentId: "pay-1" });
-      await flush(el);
-
-      expect(printPaymentSlip).toHaveBeenCalledOnce();
-      expect(banner(el)!.textContent).toContain(codeMessage(code));
-      expect(banner(el)!.textContent).not.toContain(t("payment_slip.error"));
-      expect(ticket(el)!.result).toEqual(paid);
-    },
-  );
-
   it.each([
     ["reprint", "reprint"],
     ["print-receipt", "printReceipt"],
-    ["payment-slip", "printPaymentSlip"],
   ] as const)("a full disk refuses %s without losing the paid ticket", async (event, method) => {
     const { el } = await mountApp({
       [method]: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
@@ -1825,7 +1784,6 @@ describe("till-app receipt issuance", () => {
   it.each([
     ["reprint", "reprint"],
     ["print-receipt", "printReceipt"],
-    ["payment-slip", "printPaymentSlip"],
   ] as const)("a %s request with no filed sale on screen sends nothing", async (type, method) => {
     const { el } = await mountApp();
     const c = await toCounter(el);
@@ -7628,5 +7586,38 @@ describe("A1208 a retrieved counter order's portions", () => {
       expect(c.store.editsLocked).toBe(false);
       expect(c.store.lines.map((line) => line.portionLineIds)).toEqual([four]);
     });
+  });
+});
+
+describe("till-app counter: a payment slip that was asked for", () => {
+  const SLIP_FAILED = () => t("payment_slip.capture_failed");
+  const failed = { ...saleResult, slipPrintFailed: true as const };
+  const alert = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement>('.error[role="alert"]')?.textContent?.trim();
+
+  it.each([
+    ["cash", { method: "cash", amount: "5" }],
+    ["Other card machine", { method: "card", amount: "1.50", externalProvider: "other" }],
+  ] as const)(
+    "a walk-up %s sale sends the slip request and says when it failed",
+    async (_, pay) => {
+      const { el } = await mountApp({ recordSale: vi.fn().mockResolvedValue(failed) });
+      const c = await toCounter(el);
+      c.store.addProduct(c.products[0]!, "1");
+      emit(c, "confirm-payment", { ...pay, printCardSlip: true });
+      await flush(el);
+      expect(vi.mocked(api.recordSale).mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
+      expect(alert(el)).toBe(SLIP_FAILED());
+    },
+  );
+
+  it("collecting a placed order in cash sends the slip request and says when it failed", async () => {
+    const { el } = await mountApp({ collectOrder: vi.fn().mockResolvedValue(failed) });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "collect-order", { method: "cash", amount: "5", printCardSlip: true });
+    await flush(el);
+    expect(vi.mocked(api.collectOrder).mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
+    expect(alert(el)).toBe(SLIP_FAILED());
   });
 });

@@ -2207,7 +2207,7 @@ describe("handheld sales and device capability gates", () => {
     return `${login.headers.get("set-cookie")!.split(";")[0]!}; ${loginDeviceCookie}`;
   }
 
-  it.each(["receipt", "reprint", "payment-slip"])(
+  it.each(["receipt", "reprint"])(
     "requires device proof and print-receipt of the session's device for handheld %s requests",
     async (action) => {
       const { cfg, available, operatorId } = await setupVenue();
@@ -2233,11 +2233,7 @@ describe("handheld sales and device capability gates", () => {
         }),
       });
       expect(sale.status).toBe(200);
-      // This sale took no card, so a slip press that gets past the checks finds no such payment.
-      const route =
-        action === "payment-slip"
-          ? `/api/sales/${workingOrderId}/payment-slip/${randomUUID()}`
-          : `/api/sales/${workingOrderId}/${action}`;
+      const route = `/api/sales/${workingOrderId}/${action}`;
       const refused = await app.request(route, {
         method: "POST",
         headers: { cookie: `${blockedSession}; ${blockedDevice}` },
@@ -2245,9 +2241,8 @@ describe("handheld sales and device capability gates", () => {
       expect(refused.status).toBe(403);
       expect(await refused.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
       // The handheld has no receipt printer, so a receipt past the gates is refused for that alone.
-      const passed = action === "payment-slip" ? 404 : 409;
       for (const [cookie, status] of [
-        [allowedSession, passed],
+        [allowedSession, 409],
         [allowedSession.split(";")[0]!, 401],
       ] as const) {
         const accepted = await app.request(route, { method: "POST", headers: { cookie } });

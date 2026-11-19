@@ -555,6 +555,15 @@ export async function confirmReceiptHandover(
   return readOriginalReceiptPrint(tx, saleId);
 }
 
+async function hasOriginalReceiptJob(tx: Transaction, saleId: string): Promise<boolean> {
+  const [original] = await tx
+    .select({ id: printJobs.id })
+    .from(printJobs)
+    .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)))
+    .limit(1);
+  return original !== undefined;
+}
+
 /**
  * Queues the sale's original receipt on the receipt printer, and says what it did: `"exists"` when
  * the sale already has an original job, `"not_queued"` when no printer or receipt resolves, else the
@@ -575,13 +584,8 @@ export async function enqueueOriginalReceipt(
 ): Promise<"exists" | "not_queued" | { jobId: string; receiptCopy: boolean }> {
   const { personId, requestKey, language } = options;
   const printers = options.printers ?? printerLookup(tx, cfg.origin);
-  const [original] = await tx
-    .select({ id: printJobs.id })
-    .from(printJobs)
-    .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)))
-    .limit(1);
   // A failed original is retried through its existing job, preserving its bytes and history.
-  if (original !== undefined) return "exists";
+  if (await hasOriginalReceiptJob(tx, saleId)) return "exists";
   let duplicate = false;
   if (ticket.invoiceType !== "F1") {
     const emails = await tx
@@ -634,8 +638,7 @@ async function enqueueBillDrawer(
 }
 
 /**
- * Cash taken against a bill before its invoice opens the drawer {@link drawerPrinter} finds, naming
- * the bill payment.
+ * Cash taken against a bill opens the drawer {@link drawerPrinter} finds, naming the bill payment.
  */
 export async function enqueueBillPaymentDrawer(
   tx: Transaction,

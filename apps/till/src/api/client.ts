@@ -998,6 +998,9 @@ export interface CardTender extends OutsideCardDetails {
 /** Either tender `POST /api/sales` accepts. The server distinguishes them on `method`. */
 export type Tender = CashTender | CardTender;
 
+/** A tender with the payer's payment slip choice, which the client sends beside the tender. */
+export type SlipTender = Tender & { printCardSlip?: boolean };
+
 /**
  * One line of the FILED composition the receipt identifies (RD 1619/2012 art. 7.1.e): `descriptions`
  * in the invoice locale, the display `quantity`, and the GROSS line total. The receipt renders THESE,
@@ -1054,14 +1057,9 @@ export type TenderBlock =
       externalMachine?: string;
     };
 
-export interface PaymentSlipChoice {
-  id: string;
-  charged: string;
-  last4: string | null;
-}
-
 /** The recorded ticket carried by payment answers and receipt reads. */
 export interface TillSaleResult extends ReceiptPresentation {
+  slipPrintFailed?: true;
   receiptPreview?: readonly ReceiptElement[];
   simulatedCardPayment?: boolean;
   invoiceEvidence?: InvoiceEvidence;
@@ -1102,10 +1100,8 @@ export interface TillSaleResult extends ReceiptPresentation {
   billAdjustments?: ReceiptAdjustment[];
   /** The FIRST payment only when the bill was paid in parts; `payments` then lists them all. */
   tender: TenderBlock;
-  /** Every payment, when the bill was paid in parts before its invoice; absent otherwise. */
+  /** Every bill payment the sale was paid with, or, while it is unpaid, received so far. */
   payments?: BillTenderLine[];
-  /** On the ticket screen's read, each card payment this device can print a slip copy of. */
-  paymentSlips?: PaymentSlipChoice[];
   qr: string;
   /** The fiscal backend's words around the QR; present only beside a non-empty `qr`. */
   qrText?: { caption: string; legend: string };
@@ -1200,7 +1196,6 @@ export interface BillRefundView {
 
 export interface BillPaymentView extends OutsideCardDetails {
   externalRef?: string;
-  canCopySlip?: true;
   id: string;
   submissionId: string;
   kind: "items" | "contribution" | "share";
@@ -3121,7 +3116,7 @@ export class TillApi {
    */
   recordSale(
     lines: SaleLine[],
-    tender: Tender,
+    tender: SlipTender,
     workingOrderId: string,
     zoneId: string | undefined,
     invoice:
@@ -3377,23 +3372,6 @@ export class TillApi {
   /** Print the ORIGINAL receipt offered at invoice issuance. */
   async printReceipt(workingOrderId: string, options: { ifOwed?: true } = {}): Promise<void> {
     await this.#request<void>(`/api/sales/${workingOrderId}/receipt`, "POST", options);
-  }
-
-  async printBillPaymentSlip(workingOrderId: string, paymentId: string): Promise<void> {
-    await this.#request<void>(
-      `/api/working-orders/${workingOrderId}/payments/${paymentId}/slip-copy`,
-      "POST",
-      {},
-    );
-  }
-
-  /** Print a marked copy of the named card payment's slip. */
-  async printPaymentSlip(workingOrderId: string, capturedPaymentId: string): Promise<void> {
-    await this.#request<void>(
-      `/api/sales/${workingOrderId}/payment-slip/${capturedPaymentId}`,
-      "POST",
-      {},
-    );
   }
 
   /**
@@ -3659,7 +3637,7 @@ export class TillApi {
   /** Collect the remaining balance of a placed order and return its ticket. */
   collectOrder(
     id: string,
-    tender: Tender,
+    tender: SlipTender,
     receiptLanguage: string | undefined,
     guestCount: number | null | undefined,
     expectedEdit: BillEditExpected | null,
@@ -3674,15 +3652,16 @@ export class TillApi {
   async #collectWholeBill(
     id: string,
     status: "open" | "placed",
-    tender: Tender,
+    tender: SlipTender,
     bill: Pick<WholeBillTender, "expectedEdit" | "receiptLanguage" | "guestCount" | "dining">,
     basket?: CounterPaymentBasket,
   ): Promise<TillSaleResult> {
-    const { amount, ...details } = tender;
+    const { amount, printCardSlip, ...details } = tender;
+    const slip = printCardSlip === undefined ? {} : { printCardSlip };
     const ask: WholeBillTender =
       details.method === "cash"
-        ? { ...bill, method: "cash", tendered: amount }
-        : { ...bill, ...details, entry: "manual" };
+        ? { ...bill, ...slip, method: "cash", tendered: amount }
+        : { ...bill, ...details, ...slip, entry: "manual" };
     const result = await this.#payWholeBill(
       id,
       status,
@@ -3691,7 +3670,9 @@ export class TillApi {
       basket,
     );
     if (result.invoice === undefined) throw { code: "bill.payments_received", workingOrderId: id };
-    return result.invoice;
+    return result.outcome !== "settled" && result.slipPrintFailed === true
+      ? { ...result.invoice, slipPrintFailed: true }
+      : result.invoice;
   }
 
   async #payWholeBill(
@@ -3717,6 +3698,7 @@ export class TillApi {
       tender.simulationOutcome,
       tender.dining,
       tender.receiptLanguage,
+      tender.printCardSlip,
       basket === undefined ? null : [basketFields, lateSend?.menuIds],
     ]);
     const pending = this.#unansweredWholeBills.get(id);

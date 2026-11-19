@@ -333,9 +333,7 @@ for (const theme of ["light", "dark"] as const) {
             theme,
           );
           const field =
-            el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-              '[name="printCardSlip"]',
-            )!;
+            el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]')!;
           await field.updateComplete;
           const input = field.shadowRoot!.querySelector("input")!;
           expect(input.getAttribute("aria-label")).toBe(t("payment_slip.request"));
