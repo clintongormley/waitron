@@ -1270,6 +1270,8 @@ export const en = {
   "venue_details.locked": "locked",
   "business_day.title": "Business-day start",
   "business_day.starts_at": "Starts at",
+  "business_day.starts_at_help":
+    "Choose a time when the venue is closed. Table bills still open then get their ticket, without printing.",
   "business_day.new_start": "New start",
   "business_day.new_start_value": "{time}, from {when}",
   "business_day.day_length": "Business day {day} lasts {duration}.",
@@ -5771,6 +5773,8 @@ export const es: Record<StringKey, string> = {
   "venue_details.locked": "bloqueado",
   "business_day.title": "Inicio del día de trabajo",
   "business_day.starts_at": "Empieza a las",
+  "business_day.starts_at_help":
+    "Elige una hora en que el local esté cerrado. Las cuentas de mesa que sigan abiertas entonces reciben su ticket, sin imprimirlo.",
   "business_day.new_start": "Nuevo inicio",
   "business_day.new_start_value": "{time}, desde {when}",
   "business_day.day_length": "El día de trabajo {day} dura {duration}.",

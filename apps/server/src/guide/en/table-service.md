@@ -560,6 +560,10 @@ from **Find a bill** and take the rest there. The table stays open while another
 or paid food still needs serving. Serve the remaining food, then choose **Finish table** when
 everyone has finished.
 
+A bill still open when the business day ends gets its ticket then, without printing. Take its
+payment with **Pay**, record an unpaid departure, or print the ticket from **Find a bill**. A bill
+with dishes held or not yet sent stays open.
+
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
 **Check again** to continue the same payment before taking another. If it was not recorded, this
 may charge the card or record the cash payment.
