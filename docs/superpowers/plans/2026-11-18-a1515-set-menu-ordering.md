@@ -1267,6 +1267,11 @@ export function draftPlacements(
   in both themes.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/set-menu-place-dialog.test.ts src/widgets/set-menu-place-dialog.a11y.test.ts src/till-app-set-menus.test.ts`; they fail.
 - [ ] **Step 3: Implement.** **Step 4: Run them and `src/till-app-late-send.test.ts`.**
+- [ ] **Standalone takeaway (PR 12).** Return full recorded copies in the per-bill set-menu read
+  and use them in the counter's set-menu ordering and refresh. Test on a takeaway without a party:
+  add a set menu, republish its full menu, reopen the bill and order from the original copy.
+  Watcher clearance, 19 November 2026 at 13:24.
+
 - [ ] **Step 5: Commit** — "Set menus: ask when a dish has no place in the bill's set menus".
 
 ### Task 16b: The till — the set-menu refusals' wording

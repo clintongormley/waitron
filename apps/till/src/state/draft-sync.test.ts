@@ -3182,7 +3182,7 @@ describe("DraftSync: a request refused because it names someone not signed in", 
   });
 });
 
-it("uses the server's corrected set-menu reservation after a draft save", async () => {
+it("rebuilds a saved draft when the returned set-menu reservation differs", async () => {
   const draft = new DraftSync({
     api: server,
     partyId: "v1",

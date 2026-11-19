@@ -1491,7 +1491,12 @@ describe("a sign-in whose offers fail to load", () => {
 // ── Fix round 2 ──────────────────────────────────────────────────────────────────────────────────
 
 type RoundStore = {
-  lines: { quantity: string; blocked?: string; product: { variantId?: string } }[];
+  lines: {
+    quantity: string;
+    blocked?: string;
+    unavailableOnServer?: true;
+    product: { variantId?: string };
+  }[];
   lineCount: number;
   setLineQuantity(index: number, quantity: string): void;
   removeLine(index: number): void;
@@ -3291,6 +3296,18 @@ it.each(["recorded", "live"] as const)(
         },
       ],
     });
+    if (recorded) {
+      const other = {
+        ...drafts.drafts[0]!.lines[0]!,
+        id: "lemonade",
+        menuItemId: "offer-lemonade",
+        menuVersionId: "v1",
+        setMenuId: undefined,
+        setMenuReservedLineId: undefined,
+        setMenuReservedPlace: undefined,
+      };
+      drafts.drafts[0]!.lines.push(other);
+    }
     const liveCopy = {
       ...copy,
       offers: recorded ? [] : [dish],
@@ -3332,6 +3349,23 @@ it.each(["recorded", "live"] as const)(
       }
       await poll(el);
     };
+    if (recorded) {
+      let answerBills!: (bills: (typeof bill)[]) => void;
+      api.getPartyBills.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answerBills = resolve;
+          }),
+      );
+      drafts.unavailable.add("offer-lemonade");
+      stream.event("change", JSON.stringify([{ type: "bill_set_menu_copies" }]));
+      await flush(el);
+      expect(roundStore(el).lines[1]?.unavailableOnServer).toBe(true);
+      answerBills([bill]);
+      await flush(el);
+      expect(roundStore(el).lines[1]?.unavailableOnServer).toBe(true);
+    }
+
     await showAvailability(false);
     expect(roundStore(el).lines[0]?.blocked).toBe("unavailable");
 

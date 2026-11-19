@@ -6827,7 +6827,7 @@ export class TillApp extends LitElement {
     sync?.store.refreshDeclarations(this.#tableOffers.products());
     this.#partylessDraft.refreshDeclarations(this.#tableOffers.products());
     this.#markRounds(true);
-    this.#markDraft(true);
+    this.#markDraft("zone");
   }
 
   /** A round refused because a dish in it cannot be sold as it stands is marked against the table's
@@ -6851,24 +6851,24 @@ export class TillApp extends LitElement {
     }
   }
 
-  /**
-   * Marks each line of the person's draft that cannot be sold as it stands against the table's
-   * offers. With `newer`, the offers are fresher than the server's last answer, so a line the offers
-   * say can be sold loses the server's flag; the next answer brings it back if the server still
-   * disagrees. Nothing is marked while the offers could not be read.
-   */
-  #markDraft(newer = false, notify = true): void {
-    const store = this.#draftSync?.store;
-    if (store === undefined || !this.#tableOffers.loaded) return;
-    const reasons = this.#tableOffers.blocks(store.lines, this.#tableSetMenuLookup());
+  /** A fresh read clears the server's unavailable flag only for the offers it refreshed. */
+  #markDraft(source?: "zone" | "bill", notify = true): void {
+    const sync = this.#draftSync;
+    if (sync === undefined || !this.#tableOffers.loaded) return;
+    const { store } = sync;
+    const bill = this.partyBills.find((row) => row.workingOrderId === sync.billId);
+    const reasons = this.#tableOffers.blocks(store.lines, this.#tableOffers.setMenuLookup(bill));
     store.setBlocked(reasons, notify);
     store.setEndedPeriods(this.#tableOffers.endedPeriods(store.lines), notify);
-    if (newer)
-      store.setUnavailableOnServer(
-        store.lines.map(
-          (line, index) => line.unavailableOnServer === true && reasons[index] !== undefined,
-        ),
-      );
+    if (source === undefined) return;
+    const versions = bill?.setMenus?.recorded ?? {};
+    store.setUnavailableOnServer(
+      store.lines.map((line, index) => {
+        if (line.unavailableOnServer !== true) return false;
+        const recorded = line.setMenuId !== undefined && Object.hasOwn(versions, line.setMenuId);
+        return recorded !== (source === "bill") || reasons[index] !== undefined;
+      }),
+    );
   }
 
   /**
@@ -6961,7 +6961,7 @@ export class TillApp extends LitElement {
       if (this.#tableGridOffers.setUnavailable(state.unavailable) || unavailableMoved) {
         this.tableProducts = this.#tableGridOffers.products();
         this.#markRounds();
-        this.#markDraft(true);
+        this.#markDraft("zone");
       }
       const serviceMoved =
         state.service.open !== this.tableService?.open ||
@@ -13657,7 +13657,7 @@ export class TillApp extends LitElement {
     sync.store.subscribe(() => {
       if (sync === this.#draftSync) {
         this.requestUpdate();
-        this.#markDraft(false, false);
+        this.#markDraft(undefined, false);
         if (this.#tableMenuPending) this.#followTableMenu();
       }
     });
@@ -13973,16 +13973,22 @@ export class TillApp extends LitElement {
   #otherDrafts(shown: WorkingOrderStore | null): readonly OtherDraft[] {
     const sync = this.#draftSync;
     if (sync === undefined || shown !== sync.store) return [];
-    const key = { others: sync.others, offers: this.tableProducts, bills: this.partyBills };
+    const bill = this.partyBills.find((row) => row.workingOrderId === sync.billId);
+    const copies = bill?.setMenuCopies;
+    const key = {
+      others: sync.others,
+      offers: this.tableProducts,
+      copies: copies?.length ? copies : undefined,
+    };
     const cached = this.#otherDraftViews;
     if (
       cached !== undefined &&
       cached.key.others === key.others &&
       cached.key.offers === key.offers &&
-      cached.key.bills === key.bills
+      cached.key.copies === key.copies
     )
       return cached.views;
-    const lookup = this.#tableSetMenuLookup(sync.billId);
+    const lookup = this.#tableOffers.setMenuLookup(bill);
     const views = sync.others.map((other) => ({
       id: other.id,
       revision: other.revision,
@@ -13997,7 +14003,7 @@ export class TillApp extends LitElement {
   }
 
   #otherDraftViews?: {
-    key: { others: unknown; offers: unknown; bills: unknown };
+    key: { others: unknown; offers: unknown; copies: unknown };
     views: readonly OtherDraft[];
   };
 
@@ -14155,7 +14161,7 @@ export class TillApp extends LitElement {
         this.#syncDraftBillStatus();
         if (this.#draftSync?.store.lines.some((line) => line.setMenuId !== undefined)) {
           this.#reshowDraftOffers();
-          this.#markDraft(true);
+          this.#markDraft("bill");
         }
         answer.balance = this.#loadBillBalance(balance);
         if (follow) await this.#followBillsRead(answer, before, false, splitRead);
