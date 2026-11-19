@@ -128,7 +128,7 @@ writer)** here and where they first appear in a task.
    is placed on its own (spec §3); a second soup is a second tap, asked about on its own. The
    basket shows no quantity stepper on such a line.
 7. **A dish sold by measure is never a set-menu dish: piece 1's rule, with a backstop here**
-   (piece 1 decision 12, confirmed by the owner on 18 November 2026). A
+   (piece 1 decision 12, the owner’s “no”, relayed by waitron-4e on 18 November 2026). A
    stored line's amount is unit price × quantity, so a flat surcharge on 0.300 kg would be filed as
    30% of itself (Fable F6, run). Piece 1's editor refuses such a product and its publish refuses a
    set menu whose dish's unit was changed to one. In case a copy still holds one, piece 2 applies

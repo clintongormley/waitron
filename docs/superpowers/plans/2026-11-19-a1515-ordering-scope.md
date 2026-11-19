@@ -20,7 +20,7 @@ their existing pieces.
 | 5 · 7a–c | Draft merge, server drafts, order groups, working-order and venue-service line context. Reuse the existing draft and send transactions. | Draft keeps each unit. Send places or rolls back the whole batch, and a recorded copy still works after its period ends. Skip placement reads on ordinary sends. PR 8 tests the race with the real removal route. | 470 / 530 |
 | 6 · 8–9 | Server `set-menu-moves`, till API, edits and cancels. Reuse `checkMoves` and the send placement step. | An explicit move writes the new price in one transaction. Editing keeps the first dish's place. Test that cancelling frees a place here and that removal then succeeds in PR 8. | 350 / 450 |
 | 7 · 11a–b | Server bill actions, move-bill, working-order, table and draft splits. | Moving a menu keeps its dishes and copy. A loose dish needs a place on the target, and splitting clears source reservations. | 400 / 490 |
-| 8 · 6 | Server `set-menu-count`, party reads and till routes. Reuse the party revision, session and zone checks. | Counts save on an eligible bill, preserve its recorded copy and refuse to leave a draft dish without a place. Test removal after cancellation and − racing Send with real routes. Menu creation follows the money, kitchen and move checks. | 390 / 650 |
+| 8 · 6 | Server `set-menu-count`, party reads and till routes. Reuse the party revision, session and zone checks. | Counts save on an eligible bill, preserve its recorded copy and refuse to leave a draft dish without a place. Test removal after cancellation. Menu creation follows the money, kitchen and move checks. | 390 / 650 |
 | 9 · 13, 16b | Till API and live updates, draft state, refresh and bilingual refusals. | The client picks the bill's copy and sees sold-out changes. Refusals name the dishes and the available next step. | 260 / 390 |
 | 10 · 14–15 | Build the folder, count and summary widgets with the shared stepper. Add basket and sent-line tags and total logic. | Widget checks cover prices, draft places and accessibility. PR 12 takes the menu-browser and screen wiring and their browser tests. | 440 / 480 |
 | 11 · 17 | Connect set-menu bill moves in the till's move screen. Reuse the target bill read and placement preview. | Browser checks cover moving a menu with its dishes, a loose dish's price on the target and a refused move. | 250 / 310 |
@@ -28,6 +28,7 @@ their existing pieces.
 
 Estimated total is 4,240 lines of code and 5,660 of tests. PR 2 also regenerates the baseline at
 350–500 changed lines (for comparison, #3763 changed 355 generated lines). Run each
-PR's focused tests and required CI. PR 12 first shows the ordering controls. Piece 4 enables
-payment, comps and discounts. Confirm when the ordering controls should reach a live
-venue with the watcher before publishing them to one.
+PR's focused tests and required CI. PR 12 first shows the ordering controls. From PR 12 on, each PR states that set-menu bills
+cannot be paid until piece 4 (Lane L's A1515-SET-MENU-BILL) lands.
+Where a row moves a test, it takes precedence over the task text, and each implementation
+brief quotes its PR's row.
