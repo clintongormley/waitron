@@ -682,7 +682,7 @@ and §6](../specs/2026-10-19-a798-degraded-trading-design.md).
 
 **14 November 2026, re-mapped and built as W41s-11:** the bullets below are historical. What was
 built, kept or dropped, and why, is in
-[the W41s-11 plan](2026-11-14-w41s-11-offline-exercise.md). The procedure is the in-app guide's
+[the W41s-11 plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-w41s-11-offline-exercise.md). The procedure is the in-app guide's
 [After a recovery](../../../apps/server/src/guide/en/backup-recovery.md#after-recovery) section,
 not `docs/operations/fiscal-recovery.md`. The missing-history half of the test below is
 `apps/server/src/restore-missing-history.e2e.test.ts`; it stands in for the start's internet time

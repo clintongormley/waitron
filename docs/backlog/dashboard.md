@@ -297,7 +297,7 @@ Size M.
   17:30, Lane K questions.md). Their derivation now yields the event loop; other writes still wait
   for that transaction. Existing secret checks retain their treatment before the write lock.
   Setup-only parsing/reset proof, startup dummy hashes and offline commands retain synchronous
-  hashing. See [the cleared plan](../superpowers/plans/2026-11-14-kdf-off-main-thread.md).
+  hashing. See [the cleared plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-kdf-off-main-thread.md).
 
 - **An unreadable authenticator secret is a sign-in refusal (C95, #930).**
   `manager-login.ts` reports an authenticator secret it cannot decrypt as a failed login
@@ -618,6 +618,8 @@ the new names answer supersedes that allowance only.
 **2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
 and [reviewed plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
 **2026-11-14:** the [roles redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md) supersedes that build split; its access roles grant permissions, while job roles grant none.
+
+- **The device editor keeps Approved profiles as a ninth field, one past the eight the owner first set (owner, 2026-11-15 05:25, A1534: "Allow nine").**
 
 ## What C38 left as it was (a generated display name is the first given name and first surname, #827, owner decision 2026-09-28).
 

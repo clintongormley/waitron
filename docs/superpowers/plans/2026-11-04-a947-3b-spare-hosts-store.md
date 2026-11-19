@@ -1,6 +1,6 @@
 > **2026-11-10, watcher's clearance:** the campaign watcher cleared this plan with four changes
 
-**14 November 2026, 3c split:** the [cleared 3c plan](2026-11-14-a947-3c-spare-follows.md)
+**14 November 2026, 3c split:** the [cleared 3c plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a947-3c-spare-follows.md)
 follows into scratch. The live database and switching copy remain the joining copy until 4b;
 older references below to updating it in 3c describe the earlier split.
 

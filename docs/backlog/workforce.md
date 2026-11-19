@@ -237,7 +237,7 @@ legal record. Under the watcher-cleared plan, payment attempts count when staff 
 recovery workers add no staff activity. The checker reads these endpoints and legal clock entries,
 not per-action history or source-table discovery. Earlier endpoint detail is deliberately unavailable.
 The implementation and remaining log-retention work are in the
-[DB-GROWTH plan](../superpowers/plans/2026-11-15-db-growth.md).
+[DB-GROWTH plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-db-growth.md).
 
 
 ### Pay-period cadence after closure (owner, 2026-10-15)

@@ -1485,7 +1485,7 @@ A947 3b no such box exists (fact 3), so on today's boxes every start proceeds as
 
 #### Task 3.1: The signed peer query
 
-**14 November 2026 update:** the [peer-route limits plan](2026-11-14-peer-route-limits.md) supersedes this task’s peer-status authentication status and peer-query operation-id parsing, and adds request-body budgets. The steps below retain the original build record.
+**14 November 2026 update:** the [peer-route limits plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-peer-route-limits.md) supersedes this task’s peer-status authentication status and peer-query operation-id parsing, and adds request-body budgets. The steps below retain the original build record.
 
 **Files:** Create `apps/server/src/peer-status-api.ts`; mount it in the full start, the restricted
 start, the pending-adoption start (`boot.ts:1540-1579`) and the waiting start (Task 3.5). Test
@@ -3877,7 +3877,7 @@ item's evidence.
 
 #### Task 12a.5: Lines beside the daily close and the cash-up
 
-**2026-11-13 update:** the [returned-invoice report-marker plan](2026-11-13-a1018-report-return-markers.md),
+**2026-11-13 update:** the [returned-invoice report-marker plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-13-a1018-report-return-markers.md),
 cleared by the watcher after Claude review, supersedes this task’s missing-money/gap-line model.
 The implementation uses the existing report notice and returned-invoice list, with no new gap store
 or change to totals, frozen closes, cash-up or filing.
@@ -4370,6 +4370,6 @@ round-7 correction, and typechecked the required fields against Tasks 5a.1 and 5
 ## Handover manifest and summary follow-ups — 2026-11-14
 
 The state-entry decisions and summary/check follow-ups from Slice 4 are covered by
-[the handover state-files plan](2026-11-14-handover-state-files.md).
+[the handover state-files plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-handover-state-files.md).
 The declaration guard and its limits are in
 scripts/handover-manifest-complete.test.ts.

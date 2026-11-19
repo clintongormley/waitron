@@ -2039,7 +2039,7 @@ first running A133's probe on the box's own disk, and chose to leave them alone.
 
 **14 November 2026, paired spares:** the fifteen-minute threshold below still applies to ordinary
 buckets. A paired spare warns above 60 seconds of pending upload/apply delay, and after two
-continuous minutes of an unusable store. See [the 3c plan](../superpowers/plans/2026-11-14-a947-3c-spare-follows.md).
+continuous minutes of an unusable store. See [the 3c plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a947-3c-spare-follows.md).
 
 **A copy behind, the side file's bound, and the guards.** A copy fifteen minutes behind raises
 `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
@@ -4180,7 +4180,7 @@ Cost: a corrupted colour on `/setup/trust`, and an image library that answered 5
 Cost: db's mutation score read about 86% (A539).
 
 **14 November 2026:** paired-spare warnings use the separate 60-second upload/apply and two-minute
-continuous-outage policy in [the 3c plan](../superpowers/plans/2026-11-14-a947-3c-spare-follows.md); the ordinary-bucket threshold below is unchanged.
+continuous-outage policy in [the 3c plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a947-3c-spare-follows.md); the ordinary-bucket threshold below is unchanged.
 
 ### The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write lock
 

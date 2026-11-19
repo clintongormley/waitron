@@ -213,7 +213,7 @@ by the answers):
 
 - **DB-GROWTH, 2026-11-15:** you chose to prune the activity log after about a month
   ("The activity log may be useful briefly (eg one month max) but we can prune it after that",
-  recorded in Lane H's queue and the [plan evidence](../superpowers/plans/2026-11-15-db-growth-evidence.md#authority)).
+  recorded in Lane H's queue and the [plan evidence](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-db-growth-evidence.md#authority)).
   The watcher cleared a fixed 30-day cutoff at 23:01. Housekeeping removes older entries;
   UPDATE remains refused. This overrides A1543 for this log only; it does not
   authorise trimming fiscal, payment or other working records.

@@ -481,12 +481,12 @@ full main run after it lands is the check. This closes the watcher's remaining
 A1398-2 qualification; it does not make the whole full run green.
 
 Earlier cuts and their limits remain in their dated plans:
-[dashboard packing](../superpowers/plans/2026-11-14-a1398-next-browser-cut.md),
-[till task turns](../superpowers/plans/2026-11-14-a1398-till-task-waits.md),
-[stream readiness polling](../superpowers/plans/2026-11-14-a1398-stream-clock-poll.md),
-[root colour scan](../superpowers/plans/2026-11-14-a1398-root-colour-scan.md),
-[table-write detection](../superpowers/plans/2026-11-14-a1398-table-write-regex.md)
-and [history prefilter](../superpowers/plans/2026-11-14-a1398-history-scan.md).
+[dashboard packing](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1398-next-browser-cut.md),
+[till task turns](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1398-till-task-waits.md),
+[stream readiness polling](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1398-stream-clock-poll.md),
+[root colour scan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1398-root-colour-scan.md),
+[table-write detection](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1398-table-write-regex.md)
+and [history prefilter](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1398-history-scan.md).
 The local history-prefilter timing target was missed; it is not a measured hosted
 gain. The accent-precheck proposal was withdrawn and remains unbuilt. Do not add
 another small cut without a measured whole-job benefit. The archiver's separate

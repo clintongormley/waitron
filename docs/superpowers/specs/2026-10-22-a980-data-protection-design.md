@@ -1,6 +1,6 @@
 # A980: data protection (RGPD), Waitron's side
 
-> **2026-11-14, A1532:** [Print-payload retention](../plans/2026-11-14-a1532-print-payload-retention.md) supersedes this snapshot
+> **2026-11-14, A1532:** [Print-payload retention](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1532-print-payload-retention.md) supersedes this snapshot
 > where it says raw print bytes are kept indefinitely. Eligible jobs give up bytes after one week; rows remain.
 
 **Revision 2, 2026-10-24 · OWNER DECISIONS ANSWERED · NO CODE.** Revision 1 was written

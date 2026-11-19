@@ -1,7 +1,7 @@
 # A takeaway sale needs no extra marker in the Veri\*Factu record
 
 Checked on 14 November 2026 for A1522 Task 1
-([plan](../../superpowers/plans/2026-11-14-a1522-eat-in-takeaway-vat.md)). This is research, not legal
+([plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1522-eat-in-takeaway-vat.md)). This is research, not legal
 advice. It gates the plan's PR 2.
 
 ## Answer

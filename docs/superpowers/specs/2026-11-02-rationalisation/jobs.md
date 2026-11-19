@@ -327,7 +327,7 @@ dated corrections supersede the older table and measurement wording below.
 
 **2026-11-14, A1532:** `housekeeping` also empties finished or abandoned print-job payloads
 older than one week, retaining rows and links and undecided failures. The owner chose one week;
-[A1532](../../plans/2026-11-14-a1532-print-payload-retention.md) supplies this job with only that
+[A1532](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1532-print-payload-retention.md) supplies this job with only that
 step before jr7 adds its remaining steps.
 
 Everything else stays out of this job until A980's specialists agree a period (README U10): ended `till_sessions`,

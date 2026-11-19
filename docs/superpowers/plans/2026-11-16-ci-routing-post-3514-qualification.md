@@ -12,7 +12,7 @@ at 14:15 in Lane I questions.md. No owner design approval is claimed.
 **Finish:** qualify and delete each proved sub-requirement below, then deliver one concrete
 A935 experiment proposal for watcher clearance. Unseen cases stay open. This partial slice
 cannot promise the whole bundle's deletion. Watcher direction: questions.md, 16 November 14:02.
-Reuse the checked first-slice evidence and `2026-11-15-ci-routing-qualification.md`.
+Reuse the checked first-slice evidence and [`2026-11-15-ci-routing-qualification.md`](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-ci-routing-qualification.md).
 
 1. **Inspect real runs since #3514, targeting four open proofs:** natural planner shortfall
    followed by eligible rescue; routing's agreeing-row inventory exception followed by selected

@@ -1,6 +1,6 @@
 # Payments and card readers — detail
 
-_2026-11-15, A1529: The recovery and comparison pages below moved to **Check card payments** in Reporting. Reader tools stay on **Card payments**. [Move plan](../superpowers/plans/2026-11-15-a1529-card-pages.md)._
+_2026-11-15, A1529: The recovery and comparison pages below moved to **Check card payments** in Reporting. Reader tools stay on **Card payments**. [Move plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a1529-card-pages.md)._
 
 The open entries are listed in [the backlog](../backlog.md), under "Payments and card readers". This file holds
 their full text.
@@ -349,7 +349,7 @@ Remaining Stripe qualification and maintenance.
   send one full refund only with an exact saved Waitron reference, matching amount and no prior refund.
   The existing orphan marker commits before sending and forbids any resend, including a crash before HTTP.
   Unconfirmed marked payments stay visible in Card payments for a manager to check in SumUp.
-  [Plan and authority](../superpowers/plans/2026-11-13-a949-orphan-self-heal.md).
+  [Plan and authority](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-13-a949-orphan-self-heal.md).
 
 
 - **Money moving does not stop kitchen and course work** (owner, 2026-11-12, R7-1: asked whether

@@ -114,7 +114,7 @@ without Cloud. See [how a venue gives the tax office access](#how-a-venue-gives-
     the owner's reading, not something a source we found says.
   - If the guest leaves the cola out and still pays €12.00, does the cola still take a share, or is the
     whole €12.00 food at 10% (€10.91 + €1.09 VAT)?
-  - Added 14 November 2026, for the [eat-in and takeaway design](../superpowers/specs/2026-11-14-eat-in-takeaway-vat-design.md).
+  - Added 14 November 2026, for the [eat-in and takeaway design](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/specs/2026-11-14-eat-in-takeaway-vat-design.md).
     A cola is rung up at a bar counter, with tables and the bar available, as drunk here at 10%. The
     customer then walks out with it. Does the 10% stand? No source we found says.
   - At that counter, the customer does not say whether it is to drink here or take away. May the

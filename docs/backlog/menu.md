@@ -78,7 +78,9 @@ Left open:
   (`apps/till/src/widgets/menu-browser.ts`). Grid sizing, arrangement, trails and indexing already
   use shared rules. The preview also copies table ordering's width switch, flex share, gap and
   inset. A shared presentation boundary would need adapters for the till's ordering state and
-  the dashboard's shortcut controls; the MENU-HOME-TAB plan explains the deferred extraction.
+  the dashboard's shortcut controls. Even a partial extraction (sharing only the CSS, thumbnails and
+  paint helpers) was deferred: it would add a cross-package interface while leaving both renderers
+  (watcher, 2026-11-14 08:56, MENU-HOME-TAB).
 
 ## An included menu can show its sections directly (A322, #1372): left open
 
@@ -607,7 +609,7 @@ retain the earlier scope and the six follow-ups.
 
 - **Live declarations (A1150, owner 2026-10-27).** Allergens and diet labels take their source
   from the live product without publishing the menu. Sent till/history declarations follow A1517
-  decision 6 below. [Design](../superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md).
+  decision 6 below. [Design](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md).
 
 - **Sent declarations (A1517 decision 6, owner 2026-11-11, “As recommended”).** Sent till dishes and
   Orders history detail use declarations captured at the first send, including each extra's own

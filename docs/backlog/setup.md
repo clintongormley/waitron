@@ -340,7 +340,7 @@ validation with its synchronous encrypted-input snapshot measured 743 MiB raw an
 with the same input shapes on the same image. The earlier 488/486 MiB file-path probe omitted
 that snapshot and does not describe the final validator's memory use.
 _15 November 2026: the three browser-used upload routes now stream ciphertext to scratch;
-the [streamed-upload plan](../superpowers/plans/2026-11-15-large-backup-streamed-upload.md) supersedes
+the [streamed-upload plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-large-backup-streamed-upload.md) supersedes
 the former 256 MiB limit and buffered-HTTP measurements above. A year remains unmeasured._
 Raw uploads inherit the file
 reader's 4096-entry, 4096-byte-name and 16 MiB metadata limits and briefly need disk space for

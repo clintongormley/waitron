@@ -477,7 +477,7 @@ Hardware and inbox checks to complete in the owner session.
 
 - **Print jobs keep their rows; finished or abandoned jobs release their bytes after one week**
   (owner, 2026-11-14 17:02, “a week is fine”; watcher cleared all printouts at 17:37 and the
-  plan at 17:49; [A1532 plan](../superpowers/plans/2026-11-14-a1532-print-payload-retention.md)).
+  plan at 17:49; [A1532 plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1532-print-payload-retention.md)).
   The owner’s 2026-10-14 distinction stays: the print queue is for something just lost or failed;
   Orders rebuilds sale receipts and invoices at any age. Expired queue reprints refuse consistently,
   including another printer. Kitchen tickets, refund receipts, payment slips and reports lose their
@@ -488,7 +488,7 @@ Hardware and inbox checks to complete in the owner session.
   file, browser journal, prepare/accept and duplicate-print protection on 9 November 2026 at
   20:34. Landed foundations grant no cleanup authority. Keep the Printers tab’s A4-printers
   wording; F2 replacement and A661’s print-queue Resend policy remain separate work. See the
-  [closeout and implementation receipts](../superpowers/plans/2026-11-13-a790-payment-invoice-printer.md).
+  [closeout and implementation receipts](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-13-a790-payment-invoice-printer.md).
 
 - **Add a printer lists a Bluetooth device its agent reports paired unless the agent says it is
   not a printer; one whose kind it cannot tell is listed (A404, 2026-11-05).** The owner asked that
@@ -647,6 +647,7 @@ Hardware and inbox checks to complete in the owner session.
 - **A Valencian venue is not offered Catalan receipts (owner, 2026-10-11).** Content and receipt
   languages match by exact code, so a `ca-ES-valencia` content language does not offer `ca-ES`
   (`offeredReceiptLanguages`, `apps/server/src/venue-locale.ts`).
+- **Stored print data is not compressed (watcher, 2026-11-15 23:01, database growth work).** The one-off saving measured, 156,401,664 bytes, did not justify about 430 lines of code and making every later reader unpack it.
 
 ## Shared office-printer queues
 

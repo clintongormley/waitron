@@ -2,7 +2,7 @@
 
 > **15 November 2026 — A1534:** the profile now owns one kitchen screen, inherited by all its
 > devices. Device screen choices, narrowing history and the four device-screen tables are retired.
-> See [the remaining-device plan](../plans/2026-11-15-a1534-remaining-devices.md).
+> See [the remaining-device plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a1534-remaining-devices.md).
 
 Status: **design REVISED 2026-10-21 for the owner's answer to Q42** (2026-10-18 ~22:55: parts
 (a)–(f) approved with changes, (g) approved; lane C's questions file, "OWNER NOTES on Q42 (A797)"

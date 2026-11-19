@@ -20,7 +20,7 @@ this under existing housekeeping before the wider A664 work; neither choice is a
 The owner asked to “start now” on the proposal, not trimming. Claude reviewed the audit approach;
 the watcher cleared that approach and disposable synthetic-copy measurements on November 15 at
 13:19/13:24. Neither clearance approves a period. The recorded approach is
-`docs/superpowers/plans/2026-11-15-a1543-working-records-proposal.md:3`.
+[2026-11-15-a1543-working-records-proposal.md:3](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a1543-working-records-proposal.md).
 
 **What seven days means.** Set the cutoff to the housekeeping run's time minus 604,800,000
 milliseconds. Only timestamps strictly before it qualify; equality stays. No clock field is

@@ -496,7 +496,7 @@ watcher. [Plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f
 
 ### 5.11 "Made here, no ticket"
 
-_2026-11-15 (A1534): a fixed till now chooses one station or Nowhere under “This device stands at”. Handheld and kitchen profiles do not apply saved choices. See the [remaining-devices plan](../plans/2026-11-15-a1534-remaining-devices.md)._
+_2026-11-15 (A1534): a fixed till now chooses one station or Nowhere under “This device stands at”. Handheld and kitchen profiles do not apply saved choices. See the [remaining-devices plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a1534-remaining-devices.md)._
 
 A till can be set to say that items for certain stations are made on the spot. For example, on the
 bar till: "Items for these stations are made here: [Bar]". Those items get no ticket. The bar is

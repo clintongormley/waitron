@@ -1,6 +1,6 @@
 > 2026-11-12: the watcher cleared the [host-only network read](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-b3-19-network-status.md), with installed-image qualification, ahead of the later interface.
 
-> 2026-11-14: [Wi-Fi host slice 1](2026-11-14-b3-wifi-host.md) extends the installed executable with scan/join and boot-copy publication/restart repair. The read entry point remains read-only. Its earlier join-refusal control proves only that entry point; canonical scan/join now have positive and malformed/actor-refusal controls. Forget, external-change reconciliation and dashboard controls remain later work.
+> 2026-11-14: [Wi-Fi host slice 1](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-b3-wifi-host.md) extends the installed executable with scan/join and boot-copy publication/restart repair. The read entry point remains read-only. Its earlier join-refusal control proves only that entry point; canonical scan/join now have positive and malformed/actor-refusal controls. Forget, external-change reconciliation and dashboard controls remain later work.
 
 > 2026-11-11: the [console warning cut](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-b3-18c-console-warning.md) adds paired Spanish/English wording and the checked Live marking. The watcher deferred graphics to later kiosk/physical work; it is not dropped.
 
@@ -327,8 +327,8 @@ Self-review coverage: §§0–4 → 1.1/2.1/5.1; §5 → 2.1/2.2/6.1; §6 → 1.
 
 After fresh review, hand the completed artifacts to the parent for path validation, existing checks and visual work. Do not ask for a new plan approval and do not execute from this author turn. At an eventual authorised implementation branch completion, run the repository's `finish-branch` process with its required review/normal hook/current-head CI and announce readiness; do not merge without separate landing authority.
 
-**14 November 2026, Wi-Fi host slice 2a:** [The cleared cut](2026-11-14-b3-wifi-host-reconcile.md) adds host forget and startup/after-operation boot-copy reconciliation. Live outside-change monitoring, dashboard controls and physical qualification remain open; parent B3 remains 0/6.
+**14 November 2026, Wi-Fi host slice 2a:** [The cleared cut](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-b3-wifi-host-reconcile.md) adds host forget and startup/after-operation boot-copy reconciliation. Live outside-change monitoring, dashboard controls and physical qualification remain open; parent B3 remains 0/6.
 
-**15 November 2026, Wi-Fi host slice 2b:** [The monitor cut](2026-11-15-b3-wifi-host-monitor.md) observes outside NetworkManager changes and reuses the existing systemd worker. Dashboard controls and physical qualification remain open; parent B3 remains 0/6.
+**15 November 2026, Wi-Fi host slice 2b:** [The monitor cut](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-b3-wifi-host-monitor.md) observes outside NetworkManager changes and reuses the existing systemd worker. Dashboard controls and physical qualification remain open; parent B3 remains 0/6.
 
-> 15 November 2026: [Box status Wi-Fi controls](2026-11-15-b3-wifi-controls.md) add Scan and Join. Confirmed Forget and physical qualification remain open.
+> 15 November 2026: [Box status Wi-Fi controls](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-b3-wifi-controls.md) add Scan and Join. Confirmed Forget and physical qualification remain open.

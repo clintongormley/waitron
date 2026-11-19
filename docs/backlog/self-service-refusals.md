@@ -1,6 +1,6 @@
 # A1089: refusals with a self-service next step
 
-_2026-11-15, A1529: The card-payment recovery destinations named below moved to **Check card payments** in Reporting. Their existing checks and confirmed-outcome actions stay together. [Move plan](../superpowers/plans/2026-11-15-a1529-card-pages.md)._
+_2026-11-15, A1529: The card-payment recovery destinations named below moved to **Check card payments** in Reporting. Their existing checks and confirmed-outcome actions stay together. [Move plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a1529-card-pages.md)._
 
 _2026-11-16, Bluetooth pairing commands: the `printer.bluetooth_command_busy` row under *Temporary waits and other screened matches* is superseded by one pending operation per agent. A differing request names the current action and remaining seconds before retry. [Plan](../superpowers/plans/2026-11-16-bluetooth-pairing-commands.md)._
 

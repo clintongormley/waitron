@@ -1952,7 +1952,7 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
   with 4a's name and W41s's activation, the stored-key check, restart, the in-flight reset; tests
   for the spare re-filing an inherited record against the drain's real duplicate handling (§7.1).
   **Fiscal.** Built as
-  [`2026-11-14-a947-4b-promote-from-followed-copy.md`](../plans/2026-11-14-a947-4b-promote-from-followed-copy.md)
+  [`2026-11-14-a947-4b-promote-from-followed-copy.md`](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a947-4b-promote-from-followed-copy.md)
   (2026-11-14): the in-memory passkey challenge moved to 4c (watcher, 2026-11-14 16:12), and the
   switch page offers the copy the spare took when it joined, dated, when the followed copy cannot be
   taken (owner, 2026-11-14 16:16).
@@ -1962,7 +1962,7 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
   countdown (§6.5, "Every wait explains itself") — `node.promote` at the till, the venue name
   and certificate on the spare after promotion, the router's switch (no "print a new sheet" prompt:
   the owner dropped it, §6.7), and the card-payment ownership rule A764 asks for. Not fiscal, but it lands after 4b.
-  Built to [`2026-11-14-a947-4c-devices-follow.md`](../plans/2026-11-14-a947-4c-devices-follow.md)
+  Built to [`2026-11-14-a947-4c-devices-follow.md`](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a947-4c-devices-follow.md)
   (2026-11-15): a till or handheld shows the strip after 20 s and opens the spare's own switch page,
   which links back to it; the till says "server" («servidor»), not «equipo»; no "ask for help" line
   when the clocks differ. On the till's sign-in screen everyone sees the switch button; a
@@ -1983,7 +1983,7 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
   spare's own banner when the main box is silent, the #257 same-site cookie measurement in a real
   browser on two `.local` names, and the switch's passkey (until then a password, plus a code when
   one is enrolled).
-  4d-1 built (2026-11-15) to [the 4d plan](../plans/2026-11-15-a947-4d-reach-the-switch.md), which
+  4d-1 built (2026-11-15) to [the 4d plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a947-4d-reach-the-switch.md), which
   departs from this design in six places: labels printed from Servers, not at joining; the label's
   words and the `/handover/emergency` path; nothing on the spare's own screen beyond the switch
   page; no passkey for the controlled handover; the name announced and withdrawn rather than its

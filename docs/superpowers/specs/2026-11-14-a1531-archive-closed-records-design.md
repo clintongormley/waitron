@@ -164,7 +164,7 @@ with time.
 **A1533** landed as #3245 (a4a4a425b3). On the retained 30-day sample it measured encrypted backups falling
 "from **676,798,984 to 144,176,735 bytes** (about 79% smaller). Capture took 13.77 → 18.27 seconds;
 data-only restore took 4.98 → 6.83 seconds" (the PR's description, read with `gh pr view 3245`). It
-chose gzip over zstd (`docs/superpowers/plans/2026-11-14-a1533-compressed-backups.md`, step 1). At
+chose gzip over zstd ([2026-11-14-a1533-compressed-backups.md](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1533-compressed-backups.md), step 1). At
 the same ratio the year's 6.1 GB would back up to about 1.3 GB; that ratio on a year is an
 assumption.
 
@@ -316,14 +316,14 @@ the archiving recommendation unchanged. [Full results and limits](../../develope
 
 ## The recommended next item: trim finished working rows
 
-**2026-11-15:** [A1543's proposal](2026-11-15-a1543-working-records-proposal.md) now separates the
+**2026-11-15:** [A1543's proposal](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a1543-working-records-proposal.md) now separates the
 retained evidence from two limited cleanup candidates, with a fresh sample and current link receipts.
 Its proposed periods and the decision to build still await the owner.
 
 **2026-11-15, 19:32 update:** the owner chose “Keep everything”, recorded by the watcher in
 Lane J’s `questions.md` at 19:55. Trim nothing now; revisit retention with A664 after the
 advisers. The preceding pending status and recommendation below record the earlier proposal;
-see [A1543’s decision](2026-11-15-a1543-working-records-proposal.md#owner-decision-2026-11-15).
+see [A1543’s decision](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a1543-working-records-proposal.md#owner-decision-2026-11-15).
 
 A short item, shaped like A1532:
 
@@ -352,7 +352,7 @@ This needs no change to the append-only protection, so it does not need A664's G
 (`docs/superpowers/specs/2026-10-16-a664-data-retention-design.md:179`). But A664's adopted approach
 places "explicitly approved mutable personal/operational cleanup" after the advisers' design
 agreement and after G4's verification (A664 line 191). A1532 trimmed print payloads on your own
-choice ("a week is fine", `docs/superpowers/plans/2026-11-14-a1532-print-payload-retention.md:3-4`);
+choice ("a week is fine", [2026-11-14-a1532-print-payload-retention.md:3-4](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1532-print-payload-retention.md));
 the same choice is yours here, for machinery rows only.
 
 ## The archive design, for when it is worth building

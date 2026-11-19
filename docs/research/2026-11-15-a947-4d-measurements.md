@@ -1,6 +1,6 @@
 # A947 4d: reaching the switch — the lane's browser measurements, and the owner's checklist
 
-Task 8 of [the 4d plan](../superpowers/plans/2026-11-15-a947-4d-reach-the-switch.md). Two parts:
+Task 8 of [the 4d plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a947-4d-reach-the-switch.md). Two parts:
 what the lane measured in a browser on the Mac on 15 November 2026, and the checks only the owner
 can run, on the venue's own tills and phones.
 

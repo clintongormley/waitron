@@ -1,7 +1,7 @@
 > Appendix to [README.md](README.md), the rationalisation design of 2 November 2026: one researcher's proposal for this area, written to the shared rules. Where README.md §5 decides differently, README.md wins.
 
 > **2026-11-16:** The owner's first/latest per-planned-shift decision supersedes this appendix's
-> per-action attendance and discovery design; see the [DB-GROWTH plan](../../plans/2026-11-15-db-growth.md).
+> per-action attendance and discovery design; see the [DB-GROWTH plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-db-growth.md).
 > Other table changes remain separate work.
 
 > **2026-11-12, A1002 PR4:** the [11 November roles redesign](../2026-11-11-a1002-roles-redesign-design.md) replaces the job-role deletion preview and `staff_role.in_use` refusal below. Used job roles are hidden, with their existing shifts retained; unused roles are deleted.

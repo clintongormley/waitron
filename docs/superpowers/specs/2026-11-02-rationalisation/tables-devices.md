@@ -2,7 +2,7 @@
 
 > **15 November 2026 — A1534:** the profile now owns one kitchen screen, inherited by all its
 > devices. Device screen choices, narrowing history and the four device-screen tables are retired.
-> See [the remaining-device plan](../../plans/2026-11-15-a1534-remaining-devices.md).
+> See [the remaining-device plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a1534-remaining-devices.md).
 
 > **18 November 2026 — A1308 dv10:** Device Delete keeps the device and its settings. The device
 > foreign key on `device_approved_profiles` still cascades on a physical delete, superseding the

@@ -1268,7 +1268,7 @@ reader refuses.
 
 A corrective by replacement repeats its original's full total, and the original carries the sale:
 its payments and settlement stay on it, and a later refund corrects the replacement (Q37-FIX plan,
-`docs/superpowers/plans/2026-11-13-q37-fix-put-right.md`, "How the sale is counted once"). So what
+[2026-11-13-q37-fix-put-right.md](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-13-q37-fix-put-right.md), "How the sale is counted once"). So what
 a sale owes is its total plus its own correctives except the replacement, plus the replacement's
 correctives. `correctivesOf(corrective, saleId)` in `packages/db/src/correctives-of.ts` is that
 set, as a condition on the caller's own `sales` row named `corrective`. Money readers and "has it been credited" tests use it. The lines the guard below

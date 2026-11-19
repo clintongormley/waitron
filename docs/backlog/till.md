@@ -2470,6 +2470,9 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
   because no data-migration code is written before go-live (CLAUDE.md §3). A venue holding a
   switched-off reason gets it back as a reason; one whose switched-off reason shares a name with
   another reason fails that migration on the unique name index, and is reset.
+- **The meal list places each step by its named start, with no dragging; a step not done five minutes after it is due gets an amber outline; colours are fixed by kind, with no colour choice per venue (owner, 2026-11-14 21:09, relayed by the watcher; A1526).** The design's words: "The three accepted choices are placement by named start without dragging, an amber outline five minutes after a step is due, and fixed colours by kind with no per-venue picker."
+- **Dishes are not moved, and bills not merged, between an eaten-here order and a takeaway one (`order.dining_differs`): lines follow their order, so a move would quietly change a sent line's VAT rate. A whole bill may move, to another table or from the counter to a table, and keeps its way, even into a department set the other way (owner, 2026-11-14, A1522: "Keep the refusal").**
+- **A takeaway order moved to a table stays takeaway, whatever the department (owner, 2026-11-14, A1522: "Stays Take away"; the offered alternative, becoming eaten here on arrival, was not taken).**
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 
