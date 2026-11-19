@@ -99,6 +99,7 @@ function listsSetMenu(members: readonly DocumentMember[], id: string): boolean {
 
 type SearchResult =
   | { kind: "product"; product: TillProduct }
+  | { kind: "set_menu"; row: OrderingCopy }
   | { kind: "section"; section: SectionNode; path: SectionStep[]; disabled: boolean };
 
 /**
@@ -872,12 +873,18 @@ export class TillMenuBrowser extends LitElement {
     return search(names);
   }
 
-  #matches(index: MenuIndex, unfiltered: MenuIndex, search: NameSearch): SearchResult[] {
+  #matches(
+    menu: TillZoneMenu,
+    index: MenuIndex,
+    unfiltered: MenuIndex,
+    search: NameSearch,
+  ): SearchResult[] {
     this.#productMatches(index, searchFor(""));
     const productNames = new Map(this.#searchable.get(index)!);
     const seen = new Set<string>();
+    const seenSetMenus = new Set<string>();
     const walk = (members: readonly DocumentMember[], path: SectionStep[]) => {
-      const list = shownMembers(members);
+      const list = shownMembers(members, this.setMenuCopies.length > 0);
       const paths = tilePaths(list, path);
       const named: [SearchResult, string][] = [];
       const customerNamed: [SearchResult, string][] = [];
@@ -896,25 +903,29 @@ export class TillMenuBrowser extends LitElement {
           const customerName = descriptionFor(product.customerName ?? {}, "");
           if (customerName !== "")
             customerNamed.push([result, this.#customerSearchName(product, customerName)]);
+        } else if (member.kind === "set_menu") {
+          const row = this.#setMenuCopy(member.menuId);
+          if (row === undefined || seenSetMenus.has(member.menuId)) return;
+          seenSetMenus.add(member.menuId);
+          named.push([{ kind: "set_menu", row }, foldForSearch(row.copy.name)]);
         } else {
           const opens = paths[position]!;
           const children = walk(member.members, opens);
-          if (!children.populated) return;
-          populated = true;
-          enabled ||= children.enabled;
-          named.push(
-            [
+          if (children.populated) {
+            populated = true;
+            enabled ||= children.enabled;
+            named.push([
               { kind: "section", section: member, path: opens, disabled: !children.enabled },
               this.#sectionSearchName(member, this.#sectionName(member)),
-            ],
-            ...children.named,
-          );
+            ]);
+          }
+          named.push(...children.named);
           customerNamed.push(...children.customerNamed);
         }
       });
       return { named, customerNamed, populated, enabled };
     };
-    const { named, customerNamed } = walk(unfiltered.home, []);
+    const { named, customerNamed } = walk(menu.structure.members, []);
     const found = search(named);
     const shown = new Set(found);
     return [...found, ...search(customerNamed).filter((result) => !shown.has(result))];
@@ -923,6 +934,7 @@ export class TillMenuBrowser extends LitElement {
   #resultTile(result: SearchResult, mode: HomeTileMode, menuId: string): TemplateResult {
     if (result.kind === "product")
       return this.#productButton(result.product, mode, () => this.#pick(result.product));
+    if (result.kind === "set_menu") return this.#setMenuTile(result.row);
     return this.#sectionButton(
       result.section,
       mode,
@@ -1041,7 +1053,7 @@ export class TillMenuBrowser extends LitElement {
   ): TemplateResult | typeof nothing {
     if (ref.kind === "empty") return nothing;
     if (ref.kind === "set_menu") {
-      const row = this.setMenuCopies.find(({ copy }) => copy.menuId === ref.menuId);
+      const row = this.#setMenuCopy(ref.menuId);
       return row === undefined ? nothing : this.#setMenuTile(row);
     }
     if (ref.kind === "section") {
@@ -1157,6 +1169,10 @@ export class TillMenuBrowser extends LitElement {
     );
   }
 
+  #setMenuCopy(menuId: string): OrderingCopy | undefined {
+    return this.setMenuCopies.find(({ copy }) => copy.menuId === menuId);
+  }
+
   #setMenuTile(row: OrderingCopy | undefined, held = false): TemplateResult {
     const copy = row?.copy;
     return html`<wt-button
@@ -1225,12 +1241,17 @@ export class TillMenuBrowser extends LitElement {
    * regions fail axe's landmark-unique. */
   #results(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
     const search = searchFor(this.query);
-    const found = this.#matches(index, this.#unfilteredIndex(menu), search);
+    const found = this.#matches(menu, index, this.#unfilteredIndex(menu), search);
     const otherMenus = orderableMenus(this.menus).filter((other) => other.id !== menu.id);
     const others = otherMenus
       .map((other) => ({
         menu: other,
-        found: this.#matches(this.#otherIndex(other), this.#otherUnfilteredIndex(other), search),
+        found: this.#matches(
+          other,
+          this.#otherIndex(other),
+          this.#otherUnfilteredIndex(other),
+          search,
+        ),
       }))
       .filter((other) => other.found.length > 0);
     const tiles = (results: SearchResult[], menuId: string) =>

@@ -313,6 +313,8 @@ En **Vista previa**, revisa dónde la has puesto, los cambios y cualquier proble
 corregir. Publica la carta completa para enviar la versión actual a las cajas. Cada cambio
 posterior llega a las cajas cuando vuelves a publicar la carta completa.
 
+Al tomar un pedido en mesa, escribe el nombre de la carta a precio fijo en **Buscar** y pulsa su botón.
+
 ## Revisa la página de inicio de la carta {#menu-home}
 
 Abre la pestaña **Página de inicio** de una carta para ordenar sus accesos directos y elegir

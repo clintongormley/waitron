@@ -300,6 +300,8 @@ menu or section where it belongs, choose **Set menu…** and pick it. Use **Prev
 placement, later edits and anything you need to fix. Publish the full menu to send the current
 set menu to the tills. Each later edit reaches the tills when you publish the full menu again.
 
+When taking a table order, enter the set menu’s name in **Search** and select its tile.
+
 ## Check the menu's home page {#menu-home}
 
 Open a menu's **Home page** tab to arrange its shortcuts and choose its tile layout.
