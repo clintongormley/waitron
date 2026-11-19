@@ -23467,6 +23467,12 @@ export class TillApp extends LitElement {
                 }}
                 @settlement-close=${() => {
                   const close = () => {
+                    const owed = this.ticketWorkingOrderId;
+                    if (
+                      owed !== undefined &&
+                      (this.deviceId === undefined || this.capabilities.includes("print-receipt"))
+                    )
+                      this.api.printReceipt(owed, { ifOwed: true }).catch(() => undefined);
                     if (this.settlementDocument?.surface === "table") void this.#onBackToTable();
                     else {
                       this.settlementDocument = null;

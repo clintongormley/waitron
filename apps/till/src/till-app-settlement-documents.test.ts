@@ -1,5 +1,5 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TillApp } from "./till-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
@@ -10,13 +10,15 @@ import {
   invoiceOf,
   openTable,
   resetBillPayDrafts,
+  lock,
   stubApi,
   till,
   shell,
 } from "../test/bill-pay-app.js";
 
 import { transactionRow } from "../test/find-bill-fixtures.js";
-import type { InvoiceDeliveryStatus } from "./api/client.js";
+import type { InvoiceDeliveryStatus, TillApi, TillProduct } from "./api/client.js";
+import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 
 const originalLocale = currentLocale();
 beforeEach(() => {
@@ -386,3 +388,128 @@ it.each([
     }
   },
 );
+
+const coffee: TillProduct = {
+  id: "cafe",
+  name: "Café",
+  pricingUnit: "each",
+  unitPrice: "1.50",
+  vatClass: "general",
+  category: null,
+  allergens: null,
+  menuId: "cat-default",
+  menuName: "Carta",
+  menuItemId: "mi-cafe",
+  menuVersionId: "v1",
+};
+
+const documents = (el: TillApp) => el.shadowRoot!.querySelector("till-settlement-document-dialog");
+
+async function payAtCounter(el: TillApp, api: TillApi): Promise<string> {
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+  await flush(el);
+  const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  counter.store.addProduct(coffee, "1");
+  await el.updateComplete;
+  emit(counter, "confirm-payment", { method: "cash", amount: "5" });
+  await flush(el);
+  expect(documents(el)).not.toBeNull();
+  return vi.mocked(api.recordSale).mock.calls[0]![2] as string;
+}
+
+async function payAtTable(el: TillApp): Promise<string> {
+  const order = await openTable(el);
+  emit(order, "pay-tab", { method: "cash", amount: "120.00" });
+  await flush(el);
+  expect(documents(el)).not.toBeNull();
+  return "wo-4";
+}
+
+const closeBy = {
+  Done: (el: TillApp) =>
+    documents(el)!.shadowRoot!.querySelector<HTMLElement>("[data-settlement-done]")!.click(),
+  "the window's close": (el: TillApp) =>
+    documents(el)!
+      .shadowRoot!.querySelector("wt-dialog")!
+      .dispatchEvent(new CustomEvent("wt-close")),
+};
+
+function closingApi(overrides: Record<string, unknown> = {}): TillApi {
+  return stubApi({
+    recordSale: vi.fn().mockResolvedValue(invoiceOf("1.50")),
+    getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    printReceipt: vi.fn(() => new Promise<void>(() => {})),
+    ...overrides,
+  });
+}
+
+const surfaces = [
+  ["a counter sale", payAtCounter],
+  ["a table bill", (el: TillApp) => payAtTable(el)],
+] as const;
+
+describe.each(surfaces)("closing the documents window after %s", (_surface, pay) => {
+  it.each(Object.keys(closeBy) as (keyof typeof closeBy)[])(
+    "%s asks once for the original if it is still owed and closes without waiting",
+    async (way) => {
+      const api = closingApi();
+      const { el } = await mountWidget<TillApp>("till-app", { api });
+      const id = await pay(el, api);
+      closeBy[way](el);
+      await flush(el);
+      expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith(id, { ifOwed: true });
+      expect(documents(el)).toBeNull();
+    },
+  );
+
+  it("closes, and throws nothing, when the request for the original fails", async () => {
+    const api = closingApi({
+      printReceipt: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const id = await pay(el, api);
+    closeBy.Done(el);
+    await flush(el);
+    expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith(id, { ifOwed: true });
+    expect(documents(el)).toBeNull();
+  });
+
+  it("asks for nothing on a device that may not print receipts", async () => {
+    const api = closingApi({
+      getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["take-cash"] }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await pay(el, api);
+    closeBy.Done(el);
+    await flush(el);
+    expect(documents(el)).toBeNull();
+    expect(api.printReceipt).not.toHaveBeenCalled();
+  });
+});
+
+it("sends nothing and keeps the window when staff keep the basket, and sends once they discard it", async () => {
+  const api = closingApi();
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  const id = await payAtCounter(el, api);
+  const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  counter.store.addProduct(coffee, "1");
+  await el.updateComplete;
+  closeBy.Done(el);
+  await flush(el);
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  expect(question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await flush(el);
+  expect(documents(el)).not.toBeNull();
+  expect(api.printReceipt).not.toHaveBeenCalled();
+
+  closeBy.Done(el);
+  await flush(el);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await flush(el);
+  expect(documents(el)).toBeNull();
+  expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith(id, { ifOwed: true });
+});
