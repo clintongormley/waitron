@@ -99,6 +99,7 @@ export {
   workingOrderStatus,
   type StagedInvoiceDelivery,
 } from "./schema/orders.js";
+export { billSetMenuCopies } from "./schema/set-menu-copies.js";
 export { orderAmendmentKind, orderAmendments } from "./schema/order-amendments.js";
 export { appendOrderAmendment } from "./append-order-amendment.js";
 export type { AppendAmendmentInput } from "./append-order-amendment.js";

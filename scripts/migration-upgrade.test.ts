@@ -1422,6 +1422,8 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   "venue_credentials.auth_tag": [new Uint8Array(16)],
   // A trigger wants an object keyed by exactly the venue's invoice locales, `["es"]` here.
   "working_order_lines.descriptions": ['{"es":"a"}'],
+  // The walk fills ordinary order lines, which cannot link to a set-menu parent.
+  "working_order_lines.set_menu_line_id": [null],
   // A settlement's trigger wants the sale's tenders to sum to its total; a sale of nothing settles
   // with none, in whichever order the two tables are filled.
   "sales.total": [0n],
