@@ -388,14 +388,20 @@ export async function saveDraft(
     [draftId],
     draftId,
     normaliseDraftLines(
-      lines.map((line) => ({
-        ...line,
-        source: null,
-        id: line.id ?? newId(),
-        noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
-        unavailable: false,
-        measured: soldMeasured(offers.get(line.menuItemId)),
-      })),
+      lines.map((line) => {
+        const stored = line.id === undefined ? undefined : owned.get(line.id);
+        return {
+          ...line,
+          source: null,
+          id: line.id ?? newId(),
+          noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
+          unavailable: false,
+          measured: soldMeasured(offers.get(line.menuItemId)),
+          setMenuId: stored?.setMenuId,
+          setMenuReservedLineId: stored?.setMenuReservedLineId,
+          setMenuReservedPlace: stored?.setMenuReservedPlace,
+        };
+      }),
     ),
   );
   if (lines.length === 0) {

@@ -4083,19 +4083,7 @@ describe("fresh drafts alongside existing bill families", () => {
     );
   }
 
-  it("a direct bill merge absorbs same-owner fresh drafts, preserving slots, charges and both tick kinds", async () => {
-    const v = await setupVenue();
-    const { partyId, tabId } = await seated(v);
-    const intoId = randomUUID();
-    await inTx((tx) =>
-      orderWrites.createOpenOrder(tx, v.cfg, intoId, [], "Bill 2", {
-        partyId,
-        existingService: true,
-        copyServiceContextFrom: tabId,
-      }),
-    );
-    const own = await billDraft(v, partyId, intoId);
-    const source = await billDraft(v, partyId, tabId);
+  async function seedDraftReservation(id: string) {
     const setMenu = await inTx((tx) =>
       createMenu(tx, {
         name: "Lunch set menu",
@@ -4109,10 +4097,43 @@ describe("fresh drafts alongside existing bill families", () => {
       setMenuReservedLineId: randomUUID(),
       setMenuReservedPlace: 1,
     };
-    await db
-      .update(orderDraftLines)
-      .set(reservation)
-      .where(eq(orderDraftLines.id, source.lines[0]!.id));
+    await db.update(orderDraftLines).set(reservation).where(eq(orderDraftLines.id, id));
+    return reservation;
+  }
+
+  it("preserves a stored reservation when an existing draft line is saved again", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const draft = await billDraft(v, partyId, tabId);
+    const id = draft.lines[0]!.id;
+    const reservation = await seedDraftReservation(id);
+
+    const saved = await inTx((tx) =>
+      saveDraft(tx, v.cfg, partyId, ALEX, {
+        billId: tabId,
+        draftId: draft.id,
+        revision: draft.revision,
+        lines: [{ ...item(v, "beer", { note: "Bring after the starter", slot: 1 }), id }],
+      }),
+    );
+
+    expect(saved.lines[0]).toMatchObject({ id, note: "Bring after the starter", ...reservation });
+  });
+
+  it("a direct bill merge absorbs same-owner fresh drafts, preserving slots, charges and both tick kinds", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const intoId = randomUUID();
+    await inTx((tx) =>
+      orderWrites.createOpenOrder(tx, v.cfg, intoId, [], "Bill 2", {
+        partyId,
+        existingService: true,
+        copyServiceContextFrom: tabId,
+      }),
+    );
+    const own = await billDraft(v, partyId, intoId);
+    const source = await billDraft(v, partyId, tabId);
+    const reservation = await seedDraftReservation(source.lines[0]!.id);
     const frozen = await family(v, tabId);
     const allergy = await inTx(async (tx) =>
       savePartyAllergy(
