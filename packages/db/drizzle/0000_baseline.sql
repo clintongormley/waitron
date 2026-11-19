@@ -188,6 +188,7 @@ CREATE INDEX `working_order_lines_group_idx` ON `working_order_lines` (`group_id
 CREATE INDEX `working_order_lines_parent_idx` ON `working_order_lines` (`parent_line_id`);--> statement-breakpoint
 CREATE INDEX `working_order_lines_order_idx` ON `working_order_lines` (`working_order_id`);--> statement-breakpoint
 CREATE INDEX `working_order_lines_course_idx` ON `working_order_lines` (`course_id`);--> statement-breakpoint
+CREATE INDEX `working_order_lines_set_menu_line_idx` ON `working_order_lines` (`set_menu_line_id`) WHERE "working_order_lines"."set_menu_line_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX `working_order_lines_cohort_ordinal_key` ON `working_order_lines` (`cohort_id`,`cohort_ordinal`);--> statement-breakpoint
 CREATE UNIQUE INDEX `working_order_lines_line_no_key` ON `working_order_lines` (`working_order_id`,`line_no`);--> statement-breakpoint
 CREATE TABLE `working_orders` (

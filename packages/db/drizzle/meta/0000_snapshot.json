@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "dcc9f4db-f2d1-4b85-865b-6ddb113ab3d9",
+  "id": "e5cd8bf3-2d02-4e3f-ac5a-74a123769df7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -906,6 +906,14 @@
             "course_id"
           ],
           "isUnique": false
+        },
+        "working_order_lines_set_menu_line_idx": {
+          "name": "working_order_lines_set_menu_line_idx",
+          "columns": [
+            "set_menu_line_id"
+          ],
+          "isUnique": false,
+          "where": "\"working_order_lines\".\"set_menu_line_id\" is not null"
         },
         "working_order_lines_cohort_ordinal_key": {
           "name": "working_order_lines_cohort_ordinal_key",

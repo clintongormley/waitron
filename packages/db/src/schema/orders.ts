@@ -383,6 +383,9 @@ export const workingOrderLines = table(
       foreignColumns: [t.id],
       name: "working_order_lines_set_menu_line_fk",
     }).onDelete("set null"),
+    index("working_order_lines_set_menu_line_idx")
+      .on(t.setMenuLineId)
+      .where(sql`${t.setMenuLineId} is not null`),
     check("working_order_lines_set_menu_role_ck", enumCheck(t.setMenuRole)),
     check(
       "working_order_lines_set_menu_ck",
