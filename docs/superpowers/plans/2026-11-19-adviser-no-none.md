@@ -1,12 +1,11 @@
 # ADVISER-NO-NONE. Every sale prints its ticket or emails it
 
-Status: plan, for a fresh read and then the watcher. FISCAL item; the owner lands it. Written against
-main `b2948b1917`.
+Status: plan, revised after a fresh-context read (five Important findings, all verified and taken),
+for the watcher. FISCAL item; the owner lands it. Written against main `b2948b1917`.
 
-**Size: larger than the "medium" estimate.** Production code is medium (about +190 lines across nine
-files, no migration); the tests are large (about +650 new or rewritten lines), because the change
-touches the till's window, a server job and the print outbox, and every till test that closes the
-window today has to say what it now expects.
+**Size: larger than the "medium" estimate.** Production code is medium (about +200 lines across ten
+files, no migration); the tests are large (about +580 new and +120 changed lines), because every till
+test that closes the window today has to say what it now expects.
 
 ## What was decided
 
@@ -29,19 +28,21 @@ Statements below come from reading unless a command is named.
 or Full invoice (lines 55-76), a Print button (94-100), email and delivery status
 (`renderOriginalDelivery`, 103), the drawer, and a footer **None** button (113-121) that only closes
 the window, as the window's own close does (35-38). Both send `settlement-close`, which the till
-handles at `apps/till/src/till-app.ts:23398-23411` by starting a new sale or going back to the
-table; nothing prints. Ran `pnpm --filter @waitron/till exec vitest run
-src/widgets/settlement-document-dialog.test.ts`: 14 passed, including "None closes the choice"
-with no print event (test file lines 16-39).
+handles at `apps/till/src/till-app.ts:23398-23411`: a table goes back to the table; a counter sale
+first asks to discard an unsaved basket (`#replaceBasket`, 2945-2961, which leaves the window open
+if staff keep it) and then starts a new sale. Nothing prints. Ran `pnpm --filter @waitron/till exec
+vitest run src/widgets/settlement-document-dialog.test.ts`: 14 passed, including "None closes the
+choice" with no print event (test file lines 16-39).
 
 **Nothing prints the receipt by itself.** Every issuance calls `enqueueSaleReceipt`
 (`apps/server/src/receipt-print.ts:267-287`), which queues only a pre-pay collection number and a
 full invoice's A4 or email delivery chosen before payment (`reserveStagedInvoiceDelivery`,
 `apps/server/src/invoice-choice-delivery.ts:68-99`). The receipt original is queued only when staff
-press Print: `POST /api/sales/:id/receipt` (`apps/server/src/till-api.ts:2693-2715`) →
-`printSaleReceipt` (`apps/server/src/till-sale.ts:1029-1055`) → `enqueueOriginalReceipt`
-(`receipt-print.ts:550-597`), which returns `"exists"` when an original job exists (570) and
-`"not_queued"` when the device resolves no switched-on receipt printer (590; resolution at 79-89).
+press Print: `POST /api/sales/:id/receipt`, whose `:id` is the order's id, not the sale's
+(`apps/server/src/till-api.ts:2693-2715`) → `printSaleReceipt` (`apps/server/src/till-sale.ts:1029-1055`)
+→ `enqueueOriginalReceipt` (`receipt-print.ts:550-597`). That returns `"exists"` when any original
+job exists (570) and `"not_queued"` when the device resolves no receipt printer; a switched-off
+printer counts as none (`readDevicePrinters`, 151).
 
 **Every way a ticket is issued** (searched `#showTicket(` in `till-app.ts` and the server's callers
 of `issueIfFullyPaid`, `issueWhenFullyPaid`, `issueUnpaidInvoice` and `enqueueSaleReceipt`):
@@ -65,72 +66,90 @@ and are claimed by `claimPrintJobs` (`packages/printing/src/runtime.ts`). A USB 
 job is claimed only while the agent sees the device (117-120, 146), and a switched-off printer's not
 at all (145), so those jobs stay queued and print when the printer returns, restart included. A
 network printer's job is tried five times, waiting 5, 15, 30 and 60 seconds (runtime.ts:8-9,
-222-231), about two minutes, then stays failed. A full invoice's receipt sent through its delivery
-record ends after one failure (`apps/server/src/invoice-delivery.ts:512-520`).
+222-231), about two minutes, then gives up. While a document waits to retry, later documents on the
+same printer wait behind it (150-157; `runtime.retry.test.ts:126`). A full invoice's receipt sent
+through its delivery record gives up after one failure (`apps/server/src/invoice-delivery.ts:512-520`);
+that is the path Print uses for a full invoice, and #3704's Print the bill too.
 
-**Email after a print.** While an original print waits or retries, an email is refused
-(`invoice-delivery.ts:116-139`, `invoice_delivery.active`) and the till does not offer it
-(`apps/server/src/invoice-delivery-status.ts:327-367`). Once the print is done, an email is a
+**What staff can do with a print that has not printed.** "Retry original" and a resend need the job
+to have given up (`packages/printing/src/outbox.ts:102-115`; route `till-api.ts:2490-2512`). Moving
+it elsewhere needs it stuck, and a network printer always counts as reachable
+(`apps/server/src/print-api.ts:540-546`, `apps/server/src/print-job-reprint.ts:41-57`). Email is
+refused while a print waits or retries (`invoice-delivery.ts:116-139`) and not offered then
+(`apps/server/src/invoice-delivery-status.ts:327-367`). Once a print is done, an email is a
 «DUPLICADO» copy (`invoice-delivery.ts:142-150`); once an email original is sent, a print is a copy
-(`receipt-print.ts:573-581`).
+(`receipt-print.ts:573-581`). Email and print both need the device's profile to allow receipts
+(`till-api.ts:2592-2595`, `apps/till/src/screens/till-ticket-view.ts:747`).
 
 ## The design
 
 **D1. Closing the window prints the original, unless it was emailed.** The footer button becomes
 **Done** ("Listo"); "None" and the string `settlement.none` go. Done and the window's own close both
-ask the server to print the original "if owed". The till does not wait for the answer: it closes at
-once, so a slow or absent server never holds the next sale.
+send the print request inside the close step, after any "discard the basket?" question is answered,
+so keeping the basket keeps the window open and sends nothing. The till does not wait for the answer:
+a slow or absent server never holds the next sale.
 
 **D2. The server decides what is owed, in one function.** New `owesOriginal(tx, saleId)` in
-`apps/server/src/owed-receipts.ts`: the sale has a device, is not a corrective
-(`sales.corrects_sale_id`), is not an unpaid departure (`unpaid_departures.sale_id`), has no
-original receipt job in any state (the same test as `receipt-print.ts:565-570`), and has no original
-A4 or email delivery that is queued, sending, sent or "may have arrived" (`unknown`). A failed email
-does not count, so a closed window after a failed email prints. `POST /api/sales/:id/receipt` gains
-an optional body field `ifOwed: true`; with it, the route queues the original only when owed and
-otherwise does nothing. No new route, so the till route inventories stay as they are.
+`apps/server/src/owed-receipts.ts`: the sale is not a corrective (`sales.corrects_sale_id`) and not an
+unpaid departure (`unpaid_departures.sale_id`); no original receipt print is done or still trying
+(queued, printing, or failed with attempts left), whichever path made it, so a given-up print still
+owes; and no original A4 or email delivery is queued, sending, sent or "may have arrived"
+(`unknown`), so a failed email still owes. `POST /api/sales/:id/receipt` gains an optional body field
+`ifOwed: true`; with it, the route queues the original only when owed and no original job exists, and
+otherwise does nothing (no `invoice_delivery.active` refusal). It queues on the device's receipt
+printer even when that printer is switched off (a new option on `readDevicePrinters`, used only here),
+so the job waits until it is switched on. No new route, so the till route inventories stay as they are.
 
-**D3. Automatic prints keep trying.** An owed original is queued through `enqueueOriginalReceipt`
-with no person, so it is a plain job even for a full invoice (no delivery record; such a job is
-already read as "an untracked receipt original", `invoice-delivery-status.ts:306-321`). In
-`reportPrintJob` (`runtime.ts:217-238`), a failed original sale receipt (a document job with
-`receipt_copy = 0` and a `sale_id`, issued in the last 24 hours) stops counting at four attempts and
-waits 60 seconds before the next, so it is never given up. Kitchen, drawer, copy and slip jobs keep
-today's five attempts. Every place that reads "failed with attempts left" as "still trying" then
-tells the truth without change: email stays refused while it retries, the till shows the existing
-"Printing failed. Automatic retry is pending." (`apps/till/src/i18n/strings.ts:467`, Spanish 2595),
-and the printer's amber "not printing" notice appears after two minutes as today
-(`apps/server/src/print-job-trouble.ts:17`). Pressing **Print on {printer}** for a full invoice
-keeps today's delivery-tracked path.
+**D3. A server job starts a fresh round for an original that gave up.** The shared print runtime is
+not changed: every job keeps five attempts. New job `receipt.owed` (on the job runner, marked `stop`
+in `apps/server/src/job-catalogue.ts`, registered in `apps/server/src/boot.ts` beside
+`menuActivationJob` at 4499, so it runs only on the primary). Every minute it takes original receipt
+jobs for sales issued in the last 24 hours (via `sales_issued_idx`; `issued_at` is stored by
+`toISOString`, `packages/core/src/record-sale.ts:297`) that are the newest of their sale's originals,
+gave up on a delivery failure (not `printer.deleted`, `printer.unpaired` or `print_job.moved`),
+were last tried over 10 minutes ago (`claimed_at`), and whose sale `owesOriginal` accepts. For each it
+does what the till's "Retry original" does: `resendInvoicePrintJob` (`apps/server/src/invoice-print.ts:44`)
+on the same printer, so the sale keeps one original and the resend names the first job. For an
+automatic round it passes no person; a receipt delivery row already allows that
+(`packages/db/src/schema/invoice-deliveries.ts:97`), and the function's person parameter widens to
+allow `null`. It renders nothing itself, so it needs no device settings; if a later change makes it
+lay out a receipt, it builds them as `payments-api.ts:1603` does (`{ ...deps.cfg, origin }` with the
+sale's device).
 
-**D4. A server job is the safety net.** New job `receipt.owed` (on the job runner, marked `stop` in
-`apps/server/src/job-catalogue.ts`, registered in `apps/server/src/boot.ts` beside
-`menuActivationJob` at 4499, running only on the primary). Every minute it takes sales issued between
-5 minutes and 24 hours ago (using `sales_issued_idx`; `issued_at` is stored by `toISOString`,
-`packages/core/src/record-sale.ts:297`) that `owesOriginal` accepts, on a device that is not deleted
-and whose profile may print receipts (as `printsReceipts`, `invoice-corrections.ts:410`), and queues
-each original on that device's receipt printer as resolved now. This covers a till that crashed or
-lost its connection before closing, a device with no receipt printer or a switched-off one (it
-prints the first pass after one is set or switched on), and the window-less paths in the table above.
-Two prints racing (the till's close and the job) produce one job: both run in a write transaction and
-the second sees the first's job (`"exists"`), as `receipt-print.test.ts:933` already shows for two
-Print presses.
+This keeps today's ways out between rounds: for up to 10 minutes after each round, the print has
+given up, so staff can Retry it, reprint it elsewhere or (as today) email it; the "could not print a
+ticket · Reprint it" notice shows meanwhile. A round holds later documents on that printer only as
+any failing document does today, and only those created after the round's own job, so kitchen tickets
+on a shared printer are not held any longer than now. About one new job row per stuck sale every 12
+minutes, for at most 24 hours.
 
-**D5. "No working receipt printer"**, case by case:
+**D4. "No working receipt printer"**, case by case:
 
 | Case | What holds the ticket | What prints it, restart included |
 | --- | --- | --- |
-| No receipt printer for the device, or it is switched off | Nothing is queued; the sale owes it (D2) | The job (D4), on the first pass after a printer is set or switched on, within 24 hours |
-| USB or Bluetooth printer unplugged | The queued job | The agent, when it sees the printer again (today's behaviour) |
-| Network printer off for an hour | The failed job, still retrying (D3) | The next retry after the printer is back, at most 60 seconds later |
+| Printer switched off | The job queued to it at Done (D2) | The agent, once it is switched on (no time limit) |
+| USB or Bluetooth printer unplugged | The queued job | The agent, when it sees the printer again (no time limit) |
+| Network printer off for an hour | The given-up job | The next fresh round after it is back, at most about 12 minutes later, within 24 hours |
+| No receipt printer set for the device | Nothing | Nothing: the window says so before Done, and offers its printer choice and email (open question 1) |
+| Printer deleted or unpaired after the job was queued | The ended job | Nothing automatic; staff reprint elsewhere, as today (open question 3) |
 
-**D6. Email after a print has been queued.** Before Done, staff can still email instead: nothing is
-queued yet, so the email is the original. After Done, today's rules hold: while the print waits,
-email is refused; once it printed, an email is a «DUPLICADO» copy. A full invoice keeps its type,
-chosen before payment; if its original went by A4 or email, closing prints nothing; if it was to
-print after paying, closing prints its receipt original.
+A late-night sale whose network printer is off overnight prints at the next morning's opening if that
+is within 24 hours of the sale; a USB, Bluetooth or switched-off printer's ticket prints whenever the
+printer returns.
 
-**D7. No migration.** What is owed is worked out from existing rows; nothing new is stored.
+**D5. Email after a print has been queued.** Before Done, staff can still email instead: nothing is
+queued yet, so the email is the original. After Done, today's rules hold: while the print waits or
+retries, email is refused; between rounds it is allowed as the original; once printed, an email is a
+«DUPLICADO» copy. A full invoice keeps its type, chosen before payment: if its original went by A4 or
+email, closing prints nothing; otherwise closing prints its receipt original.
+
+**D6. Only sales a till closed are printed automatically.** The first print comes only from the
+window's close; D3 only repeats prints that exist. Sales that never showed a window (unpaid
+departure, split table's loose bills, a payment kept from the dashboard, a recovered card payment)
+behave as today (open question 2). A till that crashes before closing leaves the ticket unprinted;
+staff print it from Find a bill.
+
+**D7. No migration.** What is owed is worked out from existing rows.
 
 ## What the till says
 
@@ -138,18 +157,21 @@ print after paying, closing prints its receipt original.
 | --- | --- | --- |
 | Footer button | Done | Listo |
 | The original is still owed | Closing prints the receipt unless you email it. | Al cerrar se imprime el recibo, salvo que lo envíes por correo electrónico. |
-| …and the device has no receipt printer | This device has no receipt printer. The receipt will print by itself once one is set. | Este dispositivo no tiene impresora de recibos. El recibo se imprimirá solo cuando se configure una. |
-| …and its printer is switched off | The receipt printer is not available. The receipt will print by itself when it is back. | La impresora de recibos no está disponible. El recibo se imprimirá solo cuando vuelva. |
+| …and the printer is switched off | {printer} is switched off. The receipt will print when it is switched back on. | {printer} está desactivada. El recibo se imprimirá cuando vuelva a activarse. |
+| …and the device has no receipt printer | This device has no receipt printer. Choose one above or email the receipt before closing. | Este dispositivo no tiene impresora de recibos. Elige una arriba o envía el recibo por correo antes de cerrar. |
+| Profile may not print or email receipts | This device may not print or email receipts. Print it from Find a bill on a till that can. | Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda. |
 
 The till knows "none" and "switched off" from `receiptEquipment.resolved` (null, or `available`
-false: `apps/till/src/api/client.ts:1853-1860`). It cannot know a network printer is unreachable; that
-case shows the first line and, after two minutes, the existing amber printer notice.
+false: `apps/till/src/api/client.ts:1853-1860`), and the window already offers a printer choice saved
+to the device (`renderInvoicePrinter`). It cannot know a network printer is unreachable; that case
+shows the first line and, after two minutes, the existing amber printer notice. "Buscar cuenta" is
+the till's own Spanish name for Find a bill (`apps/till/src/i18n/strings.ts:2777`).
 
 **Guide pages, English and Spanish:**
 - `apps/server/src/guide/en/table-service.md:64-77` and `es/table-service.md:69-83` (Choose
   documents after paying): drop **None**; "Press **Done** or close the window to carry on. Unless you
-  emailed it, the receipt prints when you close. If the printer is not ready, it prints by itself
-  when it is back." Spanish to match.
+  emailed it, the receipt prints when you close. If the printer is not working, it prints by itself
+  when it is back."
 - `en/table-service.md:117-119` and its Spanish twin: with **Receipt printer: print after paying**,
   the receipt prints when the window closes.
 - `en/kitchen-service.md:17` ("or keep serving without one") and `es/kitchen-service.md:19` ("o
@@ -165,15 +187,15 @@ fails or never arrives changes nothing about the sale.
 ## Open pull requests this touches
 
 - **#3752** edits the same dialog (adds Payment slip next to `renderOriginalDelivery`), the same
-  guide paragraph around "Choose **None**", and moves the original-job test into
-  `hasOriginalReceiptJob` / `originalAttempted` in `receipt-print.ts`. If it lands first,
-  `owesOriginal` reuses `hasOriginalReceiptJob`, and the guide edit is rebased onto its text.
-- **#3704 / #3724** (Print the bill) print the original when the bill is printed (#3704's
-  `meal-end.ts` calls `enqueueOriginalReceipt`), so such a bill is never owed and closing after its
-  last payment prints nothing more. #3724 rewrites `table-service.md:117-119`; whichever lands
-  second words that line.
-- **#3828** makes an email the mail server accepted late count as delivered. If it lands first,
-  `owesOriginal` must count that email as sent; Task 2 has a case for it either way.
+  guide paragraph around "Choose **None**", moves the original-job test into `hasOriginalReceiptJob`
+  in `receipt-print.ts`, and adds tests that expect `[data-settlement-none]`
+  (`till-app-settlement-documents.test.ts`). Tasks 3-5 update those tests if it lands first.
+- **#3704 / #3724** (Print the bill) print the original through the tracked path when the bill is
+  printed, so such a bill is not owed unless that print gives up, when D3 retries it. #3724 rewrites
+  `table-service.md:117-119`; whichever lands second words that line.
+- **#3828** makes an email the mail server accepted late count as delivered, and also changes
+  `settlement-document-dialog.test.ts` and `till-ticket-view.ts`. If it lands first, `owesOriginal`
+  counts that email as sent; Task 1 has a case for it either way.
 - **#3803** touches `till-ticket-view.ts` and `till-app.ts`, not the window's footer or close; a
   textual rebase only.
 
@@ -183,66 +205,79 @@ Each starts with its failing test. Run single files with `pnpm --filter <pkg> ex
 <file>`; never `pnpm test <file> -t`, which drops the name filter (CLAUDE.md §2). Every task's check
 includes `pnpm exec prettier --check <changed files>`.
 
-1. **Original receipts keep retrying** (`packages/printing`). Failing cases first in
-   `src/runtime.retry.test.ts`: an original sale receipt failing ten times stays failed with four
-   attempts, waits 60 seconds and is claimed again; one issued over 24 hours ago ends at five; a copy,
-   a kitchen document and a drawer job still end at five. Then change `reportPrintJob`
-   (`src/runtime.ts:217-238`). Add one case to `apps/server/src/print-job-trouble.test.ts`: a
-   retrying original raises the two-minute notice and never "could not print · Reprint it".
-   About +15 production, +120 test.
-2. **What is owed, and the route flag** (`apps/server`). Failing cases in a new
-   `src/owed-receipts.test.ts` (`useVenueDb`): owed with nothing sent; not owed with an original job
-   in each state, an email or A4 original queued, sending, sent or unknown, a corrective, an unpaid
-   departure, no device; owed after a failed email; a full invoice's automatic print has no delivery
-   record. Cases in `src/till-api.receipt.test.ts`: `ifOwed` queues once, does nothing when not owed
-   or when an email is queued (no `invoice_delivery.active` refusal), and refuses a non-boolean
-   `ifOwed` with `management.request_invalid`. Then `owesOriginal` and `queueOwedOriginal` and the
-   body parse at `till-api.ts:2693-2715`. About +60 production, +170 test.
-3. **The safety-net job** (`apps/server`). Failing cases in `src/owed-receipts.test.ts`: a pass
-   queues a 6-minute-old owed sale on its device's printer; skips one 4 minutes old or 25 hours old,
-   a deleted device and a profile without `print-receipt`; with no printer it queues nothing, and
-   after a printer is set the next pass queues it; a pass beside a till print leaves one job. Then
-   the job, its catalogue line (`job-catalogue.test.ts` passes) and its boot registration. Run
-   `src/job-catalogue.test.ts` and `src/boot.restricted-quiet.test.ts` too. About +60 production,
-   +130 test.
-4. **The window** (`apps/till`). Failing cases in `src/widgets/settlement-document-dialog.test.ts`:
-   no **None**, a **Done** button that sends `settlement-close`; each hint above, shown only while the
-   original is owed, in English and Spanish. Extend `settlement-document-dialog.a11y.test.ts` to the
-   three hint states in both themes. Then the dialog and strings (remove `settlement.none`, add
-   `settlement.done` and the three hints, EN and ES). About +35 production, +90 test.
-5. **Closing prints** (`apps/till`). Failing cases in `src/till-app-settlement-documents.test.ts`:
-   Done and the window's close each call `printReceipt(id, { ifOwed: true })` once and close without
-   waiting; a failing call still closes; no call on a device without `print-receipt`; a counter sale
-   and a table bill both covered. Add the option to `src/api/client.ts` with a `client.test.ts` case.
-   Then the `settlement-close` handler (`till-app.ts:23398`). Update the tests that press
-   `[data-settlement-none]` (`till-app-drafts.test.ts:9304`, `till-app-handheld-pay.test.ts:164,
-   3602, 3794, 4142`, `settlement-document-dialog.a11y.test.ts:46`) and review each
-   `printReceipt).not.toHaveBeenCalled()` that follows a close: keep it where no close happens
-   (`settlement-document-dialog.unsaved.test.ts:57`, the element is removed, not closed), change it to
-   the `ifOwed` call where the close is the point. About +25 production, +150 new and ~40 changed test.
-   If this passes about 100 tool calls, split the existing-test updates into a 5b.
-6. **Guide** (`apps/server`). The three edits above in English and Spanish, keeping the `{#id}`
+1. **What is owed, and the route flag** (`apps/server`). Failing cases in a new
+   `src/owed-receipts.test.ts` (`useVenueDb`): owed with nothing sent; owed after a failed email and
+   after a given-up original from either path (plain, and a full invoice's tracked one); not owed with
+   an original done or still trying, an email or A4 original queued, sending, sent or unknown, a
+   corrective or an unpaid departure. Cases in `src/till-api.receipt.test.ts`: `ifOwed` queues once
+   (two requests together leave one job); does nothing when not owed or when an email is queued; queues
+   to a switched-off printer, which prints once switched on; refuses a non-boolean `ifOwed` with
+   `management.request_invalid`. Then `owesOriginal`, the `readDevicePrinters` option and the body
+   parse. About +60 production, +170 test.
+2. **Fresh rounds** (`apps/server`, plus one case in `packages/printing`). Failing cases in
+   `src/owed-receipts.test.ts`: a given-up original last tried 11 minutes ago gets one resend on the
+   same printer, marked as an original, naming the first job; none at 9 minutes, for a sale over 24
+   hours old, a deleted or unpaired printer, a moved job, or a sale no longer owed; a full invoice's
+   tracked original is resent with no person. In `packages/printing/src/runtime.retry.test.ts`: a
+   kitchen job queued before a fresh round's job prints without waiting, and one queued during the
+   round waits no longer than "holds later documents on the same printer" (line 126) allows today.
+   Then the job, `resendInvoicePrintJob`'s `null` person, its catalogue line and boot registration.
+   Also run `src/job-catalogue.test.ts` and `src/boot.restricted-quiet.test.ts`. About +75
+   production, +170 test.
+3. **The window** (`apps/till`). Failing cases in `src/widgets/settlement-document-dialog.test.ts`:
+   no **None**, a **Done** button that sends `settlement-close`; each line above, shown only in its
+   state, in English and Spanish. Extend `settlement-document-dialog.a11y.test.ts` to those states in
+   both themes. Then the dialog and strings (remove `settlement.none`, add `settlement.done` and the
+   four lines, EN and ES). About +35 production, +90 test.
+4. **Closing prints** (`apps/till`), in two parts from the start.
+   - **4a.** Failing cases in `src/till-app-settlement-documents.test.ts`: Done and the window's close
+     each call `printReceipt(id, { ifOwed: true })` once and close without waiting; a failing call
+     still closes; keeping the basket when asked sends nothing and keeps the window; no call on a
+     device without `print-receipt`; a counter sale and a table bill both covered. Add the option to
+     `src/api/client.ts` with a `client.test.ts` case. Then the `settlement-close` handler
+     (`till-app.ts:23398`). About +25 production, +150 test.
+   - **4b.** Update the existing tests that close the window: those pressing `[data-settlement-none]`
+     (`till-app-drafts.test.ts:9304`, `till-app-handheld-pay.test.ts:164, 3602, 3794, 4142`) and those
+     that close through `closeTicket` or `settlement-close` (`till-app.test.ts`, all 24 uses of
+     `closeTicket`; `till-app-parties.test.ts:5499`; `till-app-bill-payments.test.ts:5528`;
+     `till-app.invoice-printer-choice.test.ts:319, 463, 508`;
+     `till-app.document-printer-choice.test.ts:214`). Review each
+     `printReceipt).not.toHaveBeenCalled()` after a close: change it to expect the `ifOwed` call where
+     the close is the point; keep it where nothing closes
+     (`settlement-document-dialog.unsaved.test.ts:57` removes the element). Their fake APIs gain the
+     option. About +120 changed test lines.
+5. **Guide** (`apps/server`). The three edits above in English and Spanish, keeping the `{#id}`
    headings. Run `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and, from the
    root, `pnpm exec vitest run scripts/guide-links.test.ts`. About +12/−10 lines each language.
-7. **Look at it.** Start the worktree's stack with `wa-wt demo <worktree-name>`, pay a counter sale
+6. **Look at it.** Start the worktree's stack with `wa-wt demo <worktree-name>`, pay a counter sale
    on the till and open the window at phone width (390 px) in English and Spanish, light and dark,
    with a printer, with none, and with it switched off; screenshot with the workspace's Playwright
    Chromium into the working folder (never committed) and show the owner. Then `/finish-branch`.
 
+**For the PR's first lines:** on its first start, D3 retries every original that gave up in the
+previous 24 hours while its sale still owes one, including prints staff never retried. Harmless
+before go-live (CLAUDE.md §3, any installation may be reset).
+
 ## Open questions for the watcher
 
-1. **A table recorded as left without paying.** The guests have gone. Recommended default: no
-   automatic print (excluded in D2); staff can print it from Find a bill. A €0 departure leaves no
-   departure row (`unpaid-departure.ts:142-151`), so its €0 ticket would print; accepted as harmless.
-2. **How long a missing printer is waited for.** Recommended default: 24 hours from issue, then the
-   ticket is no longer printed by itself. On the first start of this change, sales from the previous
-   24 hours that never printed or emailed print once; the PR says so in its first lines.
-3. **How long the safety net waits before printing for a till that never closed the window.**
-   Recommended default: 5 minutes, long enough for staff typing an email address.
-4. **A device whose profile may not print receipts.** Recommended default: its tickets are emailed
-   or wait (D4 skips it), and its window shows the "no receipt printer" line. The alternative is to
-   print on its receipt printer anyway.
-5. **Email instead of a print that is still waiting** (printer down after Done). Recommended
-   default: not in this item; email stays refused until the print finishes, as today. Allowing it
-   would end the waiting print and send the email as the original: about +60 production and +150
-   test, plus keeping that ended print out of the "Reprint it" notice.
+1. **A device with no receipt printer set.** Recommended default: the sale completes and Done closes;
+   the window first says the device has no receipt printer and offers its printer choice and email.
+   A ticket closed that way is not printed later: nothing can hold a print with no printer, and a
+   stored "owed" mark would need a migration. The owner's "prints when the printer is back" covers a
+   printer that stops working, which D2-D4 handle.
+2. **Sales that never showed a till window** (unpaid departure, split table's loose bills, a payment
+   kept from the dashboard, a recovered card payment). Recommended default: unchanged, nothing prints
+   by itself (D6). The data does not tell a dashboard payment from a till one (the dashboard issues
+   with the payment's device, `payments-api.ts:1603`), so printing the others but not the dashboard's
+   would need a new mark. For unpaid departures the guests have gone.
+3. **A printer deleted or unpaired after its job was queued.** Recommended default: no automatic
+   reprint (unpairing ends jobs on purpose, `packages/printing/src/runtime.ts:183-194`); the till
+   already says the printer was deleted and offers reprinting elsewhere.
+4. **A device whose profile may not print receipts.** Email needs the same permission
+   (`till-api.ts:2595`, `till-ticket-view.ts:747`), so such a device can deliver no ticket at all.
+   Recommended default: keep the permission as it is; the window says the device may not print or email
+   receipts and points to Find a bill on a till that can. The alternative, letting the automatic print
+   ignore the profile, changes what a profile permits and is a permissions change for the owner.
+5. **Fresh-round timing.** Recommended default: a new round 10 minutes after the last attempt, for
+   sales up to 24 hours old. The 24-hour limit applies only to rounds; a job waiting on an unplugged
+   USB or Bluetooth printer, or a switched-off one, prints whenever the printer returns.
