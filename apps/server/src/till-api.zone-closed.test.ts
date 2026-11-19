@@ -27,6 +27,7 @@ import {
 import { createExtraList, createMenu, createProduct, writeProductModifiers } from "@waitron/menu";
 import { createTable } from "./testing/live-table.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { createOpenOrder } from "./working-order.js";
 import { provisionBillVenue, send as rawGroupSend, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
@@ -232,39 +233,51 @@ describe("closed zones take no new service", () => {
     expect(await suite.db.select().from(parties)).toEqual(beforeParties);
   });
 
-  it.each(["/api/sales", "/api/working-orders", "/api/pay"])(
-    "refuses a new %s order without writing it",
-    async (path) => {
-      const v = await venue();
-      const before = await orderRows();
-      at("23:45");
-      expect(
-        await request(v, "POST", path, {
-          id: randomUUID(),
-          zoneId: v.zoneId,
-          lines: [line(v)],
-          tender: { method: "cash", amount: "3.00" },
-          dining: "eat_in",
-        }),
-      ).toEqual(refused(v));
-      expect(await orderRows()).toEqual(before);
-    },
-  );
-
-  it("uses the delivery table's closed zone for a walk-up sale", async () => {
+  it("refuses to park or pay a new order in a closed zone without writing it", async () => {
     const v = await venue();
-    const t = await table(v);
     const before = await orderRows();
+    const basket = { zoneId: v.zoneId, lines: [line(v)] };
     at("23:45");
     expect(
-      await request(v, "POST", "/api/sales", {
-        dining: "eat_in",
+      await request(v, "POST", "/api/working-orders", {
         id: randomUUID(),
-        deliveryTableId: t.id,
-        lines: [line(v)],
-        tender: { method: "cash", amount: "3.00" },
+        ...basket,
+        dining: "eat_in",
       }),
     ).toEqual(refused(v));
+    expect(await orderRows()).toEqual(before);
+    expect(
+      await request(v, "POST", `/api/working-orders/${randomUUID()}/payments`, {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "3.00",
+        dining: "eat_in",
+        basket,
+      }),
+    ).toEqual(refused(v));
+    expect(await orderRows()).toEqual(before);
+  });
+
+  it("refuses to create an order for a delivery table in a closed zone", async () => {
+    const v = await venue();
+    const t = await table(v);
+    const [counter] = await suite.db
+      .select({ id: floorZones.id })
+      .from(floorZones)
+      .where(eq(floorZones.isCounterDefault, true));
+    const before = await orderRows();
+    at("23:45");
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        createOpenOrder(tx, v.cfg, randomUUID(), [], null, {
+          zoneId: counter!.id,
+          deliveryTableId: t.id,
+          dining: "eat_in",
+        }),
+      ),
+    ).rejects.toMatchObject(refused(v).json);
     expect(await orderRows()).toEqual(before);
   });
 
@@ -442,11 +455,14 @@ describe("existing service in a closed zone", () => {
     at("23:45");
     expect(
       (
-        await request(v, "POST", "/api/sales", {
+        await request(v, "POST", `/api/working-orders/${id}/payments`, {
+          submissionId: randomUUID(),
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "3.00",
           dining: "eat_in",
-          workingOrderId: id,
-          lines: [],
-          tender: { method: "cash", amount: "3.00" },
+          basket: { lines: [] },
         })
       ).status,
     ).toBe(200);

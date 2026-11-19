@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -98,8 +99,18 @@ describe("till bill lookup", () => {
 
   it("collecting the same bill twice records one tender", async () => {
     const party = await namedDebt("Twice only");
-    expect((await collect(venue, party.tabId, "30.00")).status).toBe(200);
-    expect((await collect(venue, party.tabId, "30.00")).status).toBe(200);
+    const path = `/api/working-orders/${party.tabId}/payments`;
+    const body = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "30.00",
+      applied: "30.00",
+      tip: "0.00",
+    };
+    expect((await send(venue.app, venue.cookie, "POST", path, body)).status).toBe(200);
+    expect((await send(venue.app, venue.cookie, "POST", path, body)).status).toBe(200);
     const [row] = venue.db.all<{ count: number }>(
       sql`select count(*) as count from tenders t join sales s on s.id = t.sale_id where s.working_order_id = ${party.tabId}`,
     );

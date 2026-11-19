@@ -24,6 +24,7 @@ import {
   type BillVenue,
 } from "./bill-venue.js";
 import { offerProducts } from "./zone-offers.js";
+import { getBillBalance } from "../bill-payments.js";
 import { issueOrderInvoice } from "./issue-order.js";
 import { fixturePinHash } from "./known-secret-hashes.js";
 
@@ -176,9 +177,20 @@ export async function departed(venue: OrderVenue, ...names: string[]) {
   return party;
 }
 
-export function collect(venue: OrderVenue, billId: string, amount: string): Promise<Answer> {
-  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/collect`, {
-    tender: { method: "cash", amount },
+export async function collect(
+  venue: OrderVenue,
+  billId: string,
+  tendered: string,
+): Promise<Answer> {
+  const { outstanding } = await getBillBalance(venue, billId);
+  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered,
+    applied: outstanding,
+    tip: "0.00",
   });
 }
 

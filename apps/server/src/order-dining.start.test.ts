@@ -24,7 +24,7 @@ import {
 } from "./testing/bill-venue.js";
 import { seedTakeawayProducts } from "./testing/takeaway-menu.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
+import { createOpenOrder, parkOrder } from "./working-order.js";
 
 // A new order takes its way of selling from its department; a request naming a way the order does
 // not have is refused before anything is sent, priced or paid (A1522, Decisions 3 and 11).
@@ -97,6 +97,22 @@ async function effectsOf(orderId: string): Promise<{ sales: number; ticketItems:
 
 const croquettes = () => [{ menuItemId: venue.offerFor("Croquettes"), quantity: "1" }];
 
+function counterPayment(
+  id: string,
+  payment: { method: "cash"; tendered: string } | { method: "card"; entry: "reader" },
+  dining: Dining | undefined,
+  lines = croquettes(),
+) {
+  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    ...payment,
+    dining,
+    basket: { lines, zoneId: counterZoneId },
+  });
+}
+
 function park(body: Record<string, unknown>) {
   return send(venue.app, venue.cookie, "POST", "/api/working-orders", {
     dining: "eat_in",
@@ -152,13 +168,11 @@ describe("a new order's way of selling", () => {
   it("sells a walk-up asked takeaway, in a till-choice department starting takeaway", async () => {
     await departmentsSell("till_choice", "takeaway");
     const workingOrderId = randomUUID();
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+    const sold = await counterPayment(
       workingOrderId,
-      lines: croquettes(),
-      zoneId: counterZoneId,
-      tender: { method: "cash", amount: "10.00" },
-      dining: "takeaway",
-    });
+      { method: "cash", tendered: "10.00" },
+      "takeaway",
+    );
     expect(sold.status).toBe(200);
     expect(await diningOf(workingOrderId)).toBe("takeaway");
   });
@@ -166,12 +180,11 @@ describe("a new order's way of selling", () => {
   it("refuses a walk-up that does not say its way, in a till-choice department, and records nothing", async () => {
     await departmentsSell("till_choice", "takeaway");
     const workingOrderId = randomUUID();
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+    const sold = await counterPayment(
       workingOrderId,
-      lines: croquettes(),
-      zoneId: counterZoneId,
-      tender: { method: "cash", amount: "10.00" },
-    });
+      { method: "cash", tendered: "10.00" },
+      undefined,
+    );
     expect(sold.status).toBe(400);
     expect(sold.json).toEqual({ code: "management.request_invalid", params: { field: "dining" } });
     expect(await diningOf(workingOrderId)).toBeUndefined();
@@ -181,13 +194,11 @@ describe("a new order's way of selling", () => {
   it("sells a walk-up asked to eat in, in a till-choice department starting takeaway", async () => {
     await departmentsSell("till_choice", "takeaway");
     const workingOrderId = randomUUID();
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+    const sold = await counterPayment(
       workingOrderId,
-      lines: croquettes(),
-      zoneId: counterZoneId,
-      tender: { method: "cash", amount: "10.00" },
-      dining: "eat_in",
-    });
+      { method: "cash", tendered: "10.00" },
+      "eat_in",
+    );
     expect(sold.status).toBe(200);
     expect(await diningOf(workingOrderId)).toBe("eat_in");
   });
@@ -198,7 +209,7 @@ describe("a new order's way of selling", () => {
     expect(await diningOf(tabId)).toBe("eat_in");
   });
 
-  it("judges a counter sale delivered to a table by the table's department", async () => {
+  it("creates an order delivered to a table using the table's dining rule", async () => {
     await departmentsSell("takeaway");
     const tableId = await inTx(venue, async (tx) => {
       const terrace = await createDepartment(tx, { name: `Terrace ${randomUUID()}` });
@@ -212,15 +223,13 @@ describe("a new order's way of selling", () => {
       return (await createTable(tx, venue.cfg, { label: `T-${randomUUID()}`, zoneId: zone.id })).id;
     });
     const workingOrderId = randomUUID();
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId,
-      lines: croquettes(),
-      zoneId: counterZoneId,
-      deliveryTableId: tableId,
-      tender: { method: "cash", amount: "10.00" },
-    });
-    expect(sold.status).toBe(200);
+    await inTx(venue, (tx) =>
+      createOpenOrder(tx, venue.cfg, workingOrderId, croquettes(), null, {
+        dining: "eat_in",
+        zoneId: counterZoneId,
+        deliveryTableId: tableId,
+      }),
+    );
     expect(await diningOf(workingOrderId)).toBe("eat_in");
   });
 
@@ -368,12 +377,7 @@ describe("a request naming a way an existing order does not have", () => {
 
   it("refuses a cash sale of a takeaway order shown as eaten here", async () => {
     const id = await parkedTakeaway();
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "10.00" },
-      dining: "eat_in",
-    });
+    const sold = await counterPayment(id, { method: "cash", tendered: "10.00" }, "eat_in", []);
     expect(sold.status).toBe(409);
     expect(sold.json).toEqual({
       code: "working_order.out_of_date",
@@ -385,11 +389,7 @@ describe("a request naming a way an existing order does not have", () => {
   it("refuses a card pay of a takeaway order shown as eaten here", async () => {
     const id = await parkedTakeaway();
     const calls = venue.card.collectCalls.length;
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      id,
-      lines: [],
-      dining: "eat_in",
-    });
+    const paid = await counterPayment(id, { method: "card", entry: "reader" }, "eat_in", []);
     expect(paid.status).toBe(409);
     expect(paid.json).toEqual({
       code: "working_order.out_of_date",
@@ -421,12 +421,7 @@ describe("a request naming a way an existing order does not have", () => {
 
   it("accepts a cash sale of a takeaway order shown as takeaway", async () => {
     const id = await parkedTakeaway();
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "10.00" },
-      dining: "takeaway",
-    });
+    const sold = await counterPayment(id, { method: "cash", tendered: "10.00" }, "takeaway", []);
     expect(sold.status).toBe(200);
     expect((await effectsOf(id)).sales).toBe(1);
   });
@@ -490,13 +485,11 @@ describe("a request that does not say how the order is sold", () => {
 
   it("refuses a cash sale and records nothing", async () => {
     const workingOrderId = randomUUID();
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+    const sold = await counterPayment(
       workingOrderId,
-      lines: croquettes(),
-      zoneId: counterZoneId,
-      tender: { method: "cash", amount: "10.00" },
-      dining: undefined,
-    });
+      { method: "cash", tendered: "10.00" },
+      undefined,
+    );
     expect(sold.status).toBe(400);
     expect(sold.json).toEqual(refusal);
     expect(await diningOf(workingOrderId)).toBeUndefined();
@@ -507,11 +500,7 @@ describe("a request that does not say how the order is sold", () => {
     const id = await parkedTakeaway();
     const revision = await revisionOf(id);
     const calls = venue.card.collectCalls.length;
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      id,
-      lines: [],
-      dining: undefined,
-    });
+    const paid = await counterPayment(id, { method: "card", entry: "reader" }, undefined, []);
     expect(paid.status).toBe(400);
     expect(paid.json).toEqual(refusal);
     expect(venue.card.collectCalls.length).toBe(calls);
