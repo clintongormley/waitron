@@ -13,13 +13,16 @@ import {
   floor,
   flush,
   heldTable,
+  openDialog,
   openTable,
+  press,
   resetBillPayDrafts,
   shell,
   stubApi,
   tableOrder,
   text,
   till,
+  type,
 } from "../test/bill-pay-app.js";
 
 /** How long a send that gets no answer is given to be sent again. The resends wait real time. */
@@ -1156,6 +1159,25 @@ describe("till-app: Print the bill on a device that may not print receipts", () 
     await printBill(el);
 
     expect(endMeal).toHaveBeenCalledOnce();
+  });
+});
+
+describe("till-app: Print the bill while a part payment on the bill is held", () => {
+  it("offers no Print the bill, and sends nothing if asked", async () => {
+    const { el, endMeal } = await openBill({
+      takeBillPayment: vi.fn(() => new Promise(() => {})),
+    });
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(tableOrder(el).billPaymentHeld).toBe(true);
+
+    expect(shadow(el).querySelector('[data-table-menu] [data-action="print-bill"]')).toBeNull();
+    await printBill(el);
+
+    expect(endMeal).not.toHaveBeenCalled();
   });
 });
 

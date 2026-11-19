@@ -15,7 +15,7 @@ function needsReceiptPaper(bill: Pick<PartyBill, "invoiceType" | "invoiceDeliver
 
 /**
  * Print the bill is offered for a bill with no ticket that still owes and was not left unpaid, with
- * no whole payment awaiting its answer, to a person who may take payment, on a device that may print
+ * no payment awaiting its answer, to a person who may take payment, on a device that may print
  * what the bill needs, and with dishes on it; the server's other refusals are said when it is
  * pressed. `dishes` is the count of the bill's sent dishes when the till has read them; for a bill it
  * has not read, the bills read's total stands in, so an open bill off screen at 0.00 is not offered,

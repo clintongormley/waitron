@@ -5319,12 +5319,13 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  /** The till reads the dishes and the unanswered whole payment of the bill on screen only. */
+  /** The till reads the dishes and the payments awaiting an answer of the bill on screen only. */
   #printBillOffered(bill: PartyBill): boolean {
     const onScreen = bill.workingOrderId === this.orderId;
     return printBillOffered(bill, {
       dishes: onScreen ? this.lines.length : undefined,
-      paymentUnanswered: onScreen && this.paymentConfirmation !== undefined,
+      paymentUnanswered:
+        onScreen && (this.paymentConfirmation !== undefined || this.billPaymentHeld),
       printsReceipts: this.canPrintReceipts,
       takesPayment: this.takesPayment,
     });

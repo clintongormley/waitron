@@ -568,6 +568,19 @@ describe("till-table-order-screen: Print the bill beside Finish table's refusal"
     expect(refusal.querySelector("[data-print-bill]")).toBeNull();
   });
 
+  it("offers no Print the bill while the bill it names, on screen, has a part payment held", async () => {
+    const el = await mountScreen({
+      finishRefused: true,
+      orderId: "wo-check",
+      lines: [wine],
+      billPaymentHeld: true,
+    });
+
+    const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    expect(refusal.querySelector("[data-take-payment]")).not.toBeNull();
+    expect(refusal.querySelector("[data-print-bill]")).toBeNull();
+  });
+
   it("offers no Print the bill to a person who may not take payment", async () => {
     const el = await mountScreen({ finishRefused: true, takesPayment: false });
 

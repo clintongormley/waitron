@@ -20130,7 +20130,9 @@ export class TillApp extends LitElement {
       bill === undefined ||
       !printBillOffered(bill, {
         dishes: this.tabLines.length,
-        paymentUnanswered: this.#unansweredWholePayments.has(workingOrderId),
+        paymentUnanswered:
+          this.#unansweredWholePayments.has(workingOrderId) ||
+          this.#billPaymentHeld(workingOrderId),
         printsReceipts: this.#mayPrintReceipts(),
         takesPayment: this.permissions.includes("payment.take"),
       })

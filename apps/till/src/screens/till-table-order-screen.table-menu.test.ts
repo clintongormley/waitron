@@ -360,6 +360,14 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(item(el, '[data-action="print-bill"]')).toBeNull();
   });
 
+  it("offers no Print the bill while a part payment on the bill is held", async () => {
+    const el = await mountScreen();
+    el.billPaymentHeld = true;
+    await el.updateComplete;
+
+    expect(item(el, '[data-action="print-bill"]')).toBeNull();
+  });
+
   it("offers no Print the bill on a new bill with no dishes, which the server says owes nothing", async () => {
     const empty = partyBill("wo-2", 2, "0.00");
     const el = await mountScreen({ bills: [empty], lines: [] });
