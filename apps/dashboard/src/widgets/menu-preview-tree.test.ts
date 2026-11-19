@@ -625,7 +625,9 @@ it.each(
   expect(row("copy")?.textContent).toContain(display.source);
   expect(row("copy")?.textContent).toContain("Weekend");
   expect(row("saved")?.textContent).toContain(display.saved);
-  expect(row("copy")?.querySelector("a[data-edit-change]")).toBeNull();
+  expect(row("copy")?.querySelector("a[data-edit-change]")?.getAttribute("href")).toBe(
+    "/menus/menu/daily/view/set-menu",
+  );
   expect(row("copy")?.querySelector("[data-undo-change]")).toBeNull();
   await expectNoA11yViolations(host);
   await page.screenshot({

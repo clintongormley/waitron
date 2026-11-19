@@ -896,6 +896,14 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   #renderEdit(change: MenuChange) {
+    if (change.kind === "set_menu_changed" || change.kind === "set_menu_added") {
+      const { id, name } = change.setMenu;
+      return html`<a
+        data-edit-change=${change.id}
+        href=${`/menus/menu/${encodeURIComponent(id)}/view/set-menu`}
+        >${fill("menu_preview.edit_menu", { menu: name })}</a
+      >`;
+    }
     const action = this.#actions.get(change.id);
     switch (action?.kind) {
       case "edit_product":
@@ -1067,8 +1075,33 @@ export class MenuPreviewPanel extends LitElement {
     </section>`;
   }
 
+  #renderSetMenuProblems() {
+    const drafts = this.preview?.setMenuProblems ?? [];
+    if (this.failed || drafts.length === 0) return nothing;
+    return html`<section>
+      <h2>${t("menu_preview.set_menu_problems")}</h2>
+      <ul>
+        ${drafts.map(
+          ({ menuId, name, problems }) => html`
+            <li>
+              <a href=${`/menus/menu/${encodeURIComponent(menuId)}/view/set-menu`}
+                >${fill(
+                  problems.length === 1
+                    ? "menu_preview.set_menu_problem_count_one"
+                    : "menu_preview.set_menu_problem_count",
+                  { name, count: String(problems.length) },
+                )}</a
+              >
+            </li>
+          `,
+        )}
+      </ul>
+    </section>`;
+  }
+
   override render() {
     return html`${this.#renderResult()} ${this.#renderWarnings()} ${this.#renderClashes()}
+      ${this.#renderSetMenuProblems()}
       <div class="panes">
         <div class="changes-column" data-test="changes-column">
           <dashboard-menu-publications

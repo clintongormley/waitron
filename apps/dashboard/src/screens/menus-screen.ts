@@ -4,11 +4,13 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ref } from "lit/directives/ref.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { live } from "lit/directives/live.js";
+import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
   ChangeObserver,
   subscribeContentLanguages,
   pageTitleStyles,
+  navigationGuardFor,
   leaveCoordinatorFor,
   draftScopeFor,
   saveActionState,
@@ -48,6 +50,7 @@ import "../widgets/device-home-preview.js";
 import "../widgets/home-shortcut-picker.js";
 import "../widgets/menu-patch-dialog.js";
 import "../widgets/menu-copy-dialog.js";
+import "../widgets/set-menu-editor.js";
 import "../widgets/guest-menu-preview.js";
 import { overtakeSentence } from "../widgets/menu-publications.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
@@ -82,17 +85,24 @@ import { MenuReadController } from "../api/menu-read-controller.js";
 import { sendMenuUndo, undoRefusalText } from "../api/menu-undo.js";
 import { menuChangeAction } from "@waitron/menu/src/menu-undo.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import { HOME_COLUMN_RANGE, HOME_DEVICES, HOME_ORDERS, HOME_TILE_MODES } from "@waitron/shared";
+import {
+  HOME_COLUMN_RANGE,
+  HOME_DEVICES,
+  HOME_ORDERS,
+  HOME_TILE_MODES,
+  formatMoney,
+} from "@waitron/shared";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { homeDeviceName } from "../i18n/domain.js";
 
 const TABS = ["structure", "prices", "home", "preview"] as const;
-type Tab = (typeof TABS)[number];
+type Tab = (typeof TABS)[number] | "set-menu";
 
-const isTab = (value: string | null): value is Tab => TABS.includes(value as Tab);
+const isTab = (value: string | null): value is (typeof TABS)[number] =>
+  TABS.includes(value as (typeof TABS)[number]);
 
 /** A list being edited, by section id, with the name it was shown under and the menu and path
  * it was reached by. */
@@ -833,6 +843,24 @@ export class MenusScreen extends LitElement {
     middle: this.#buildColumns("middle"),
     wide: this.#buildColumns("wide"),
   };
+  readonly #kindColumn: DataTableColumn<MenuRow> = {
+    key: "kind",
+    label: t("menus.kind"),
+    cell: (menu) => html`
+      ${t(menu.kind === "set_menu" ? "menus.set_menu_kind" : "menus.menu_kind")}
+      ${
+        menu.setPrice == null
+          ? nothing
+          : html`<span part="stacked">${formatMoney(menu.setPrice, currentLocale())}</span>`
+      }
+    `,
+  };
+  readonly #columnsWithKind = Object.fromEntries(
+    Object.entries(this.#columns).map(([layout, columns]) => [
+      layout,
+      [...columns.slice(0, -1), this.#kindColumn, columns.at(-1)!],
+    ]),
+  ) as Record<ListLayout, DataTableColumn<MenuRow>[]>;
   #listSize: ResizeObserver | null = null;
   readonly #probes = new Map<"narrow" | "wide", Element>();
   #rows: MenuRow[] = [];
@@ -1066,6 +1094,7 @@ export class MenusScreen extends LitElement {
   #watchMenus(): Promise<void> {
     return this.#queries.watch("listMenus", [], (value) => {
       this.menus = value;
+      this.#checkAddress();
     });
   }
 
@@ -1209,6 +1238,11 @@ export class MenusScreen extends LitElement {
         this.#statusQueries.release("getMenuStatuses");
         this.#includedStatusesFor = null;
       }
+      if (this.view === "set-menu") {
+        this.#menuReads.release();
+        this.#menuReadGeneration++;
+        return;
+      }
       if (again && (this.view === "preview" || this.view === "home"))
         void this.#watchPreview(menuId);
       else void this.#watchMenu(again);
@@ -1293,9 +1327,6 @@ export class MenusScreen extends LitElement {
       return;
     }
     this.#select(this.#url.read("menu"));
-    const view = this.#url.read("view");
-    this.showPriceClashes = view === "prices" && this.#url.read("price-filter") === "clashes";
-    this.#showView(isTab(view) ? view : TABS[0]);
     this.#checkAddress();
   }
 
@@ -1348,38 +1379,50 @@ export class MenusScreen extends LitElement {
   /** Replaces an address naming a menu that does not exist, or a tab the editor does not have. */
   #checkAddress(): void {
     if (this.#url.read("dashboard") !== "menus") return;
+    const addressView = this.#url.read("view");
     const priceFilter = this.#url.read("price-filter");
-    if (
-      priceFilter !== null &&
-      (this.menuId === null || this.view !== "prices" || priceFilter !== "clashes")
-    )
-      this.#url.write({ "price-filter": null }, true);
     if (this.menuId === null) {
-      if (this.#url.read("view") !== null) this.#url.write({ view: null }, true);
+      if (addressView !== null || priceFilter !== null)
+        this.#url.write({ view: null, "price-filter": null }, true);
       return;
     }
-    if (!this.loading && !this.loadError && !this.menus.some(({ id }) => id === this.menuId)) {
+    const menu = this.#selectedMenu();
+    if (!menu && !this.loading && !this.loadError) {
       this.#select(null);
       this.#url.write({ menu: null, view: null, "price-filter": null }, true);
       return;
     }
-    if (!isTab(this.#url.read("view"))) this.#url.write({ view: TABS[0] }, true);
+    const view =
+      menu?.kind === "set_menu" || (!menu && addressView === "set-menu")
+        ? "set-menu"
+        : isTab(addressView)
+          ? addressView
+          : TABS[0];
+    this.showPriceClashes = view === "prices" && priceFilter === "clashes";
+    if (view !== this.view || this.#statusFor !== this.menuId) this.#showView(view);
+    if (menu && (view !== addressView || (priceFilter !== null && !this.showPriceClashes)))
+      this.#url.write({ view, "price-filter": this.showPriceClashes ? priceFilter : null }, true);
   }
 
   #open(menuId: string, view: Tab = TABS[0], priceFilter: "clashes" | null = null): void {
     this.#select(menuId);
+    if (this.#selectedMenu()?.kind === "set_menu") view = "set-menu";
     this.showPriceClashes = priceFilter === "clashes";
     this.#showView(view);
     this.#url.write({ dashboard: "menus", menu: menuId, view, "price-filter": priceFilter });
   }
 
   #backToList(): void {
-    this.#select(null);
+    if (this.view !== "set-menu" || !navigationGuardFor(window)) this.#select(null);
     this.#url.write({ dashboard: "menus", menu: null, view: null, "price-filter": null });
   }
 
+  #selectedMenu(): MenuSummary | undefined {
+    return this.menus.find(({ id }) => id === this.menuId);
+  }
+
   #menuName(): string {
-    return this.menus.find(({ id }) => id === this.menuId)?.name ?? "";
+    return this.#selectedMenu()?.name ?? "";
   }
 
   /** Every node on the path is a section, so no product name is needed. */
@@ -1589,7 +1632,7 @@ export class MenusScreen extends LitElement {
     if (code === "set_menu.not_publishable") {
       const params = (error as { params?: { menuId?: unknown; count?: unknown } }).params;
       const name = this.menus.find(({ id }) => id === params?.menuId)?.name;
-      return codeMessage(code, undefined, { name, count: params?.count });
+      return `${codeMessage(code, undefined, { name, count: params?.count })} ${t("menu_preview.set_menu_problems_in_editor")}`;
     }
     if (code !== "menu_publication.overtakes_queued") return codeMessage(code);
     const overtaken = (error as { params?: { overtaken?: unknown } }).params?.overtaken;
@@ -2306,6 +2349,7 @@ export class MenusScreen extends LitElement {
   // ── Rendering ────────────────────────────────────────────────────────────────────────────────
 
   #statusCell(menu: MenuRow) {
+    if (menu.kind === "set_menu") return nothing;
     const test = `status-${menu.id}`;
     if (typeof menu.status === "string")
       return html`<span part="status muted" data-test=${test}
@@ -2326,7 +2370,12 @@ export class MenusScreen extends LitElement {
 
   /** Only a menu with a live version can have changes to it; one never published has none. */
   #changesCell(menu: MenuRow) {
-    if (typeof menu.status === "string" || menu.status.state !== "changed") return nothing;
+    if (
+      menu.kind === "set_menu" ||
+      typeof menu.status === "string" ||
+      menu.status.state !== "changed"
+    )
+      return nothing;
     const label = t("menus.changes_link");
     return html`<a
       part="changes-link"
@@ -2411,9 +2460,15 @@ export class MenusScreen extends LitElement {
           html`<wt-row-actions label=${`${t("menus.actions")}: ${menu.name}`}
             ><wt-button data-test=${`edit-${menu.id}`} @click=${() => this.#open(menu.id)}
               >${t("menus.open")}</wt-button
-            ><wt-button data-test=${`rename-${menu.id}`} @click=${() => this.#openMenuForm(menu)}
-              >${t("menus.rename")}</wt-button
-            ><wt-button
+            >${
+              menu.kind === "set_menu"
+                ? nothing
+                : html`<wt-button
+                    data-test=${`rename-${menu.id}`}
+                    @click=${() => this.#openMenuForm(menu)}
+                    >${t("menus.rename")}</wt-button
+                  >`
+            }<wt-button
               data-test=${`duplicate-${menu.id}`}
               ?disabled=${this.copyingMenu?.id === menu.id}
               @click=${() => {
@@ -2599,7 +2654,7 @@ export class MenusScreen extends LitElement {
                 sortKey="name"
                 sortDirection="ascending"
                 .rows=${this.#rows}
-                .columns=${this.#columns[this.layout]}
+                .columns=${(this.menus.some((menu) => menu.kind === "set_menu") ? this.#columnsWithKind : this.#columns)[this.layout]}
                 .rowKey=${(menu: MenuRow) => menu.id}
                 .rowClick=${(menu: MenuRow) => this.#open(menu.id)}
                 .rowClickLabel=${(menu: MenuRow) => `${t("menus.open")}: ${menu.name}`}
@@ -3912,7 +3967,9 @@ export class MenusScreen extends LitElement {
   }
 
   #renderEditor(menuId: string) {
-    const name = this.#menuName();
+    const menu = this.#selectedMenu();
+    const name = menu?.name ?? "";
+    const setMenu = menu?.kind === "set_menu";
     return html`<div class="heading">
         <nav aria-label=${t("menus.menu_trail")} data-test="menu-breadcrumb">
           <a
@@ -3928,10 +3985,37 @@ export class MenusScreen extends LitElement {
         </nav>
         <div class="title">
           <h1>${name || t("menus.title")}</h1>
-          ${this.#renderLiveWords()}
+          ${setMenu ? nothing : this.#renderLiveWords()}
         </div>
       </div>
-      ${this.#renderClashes(menuId)} ${this.#renderLoadState()} ${this.#renderMemberError()}
+      ${this.#renderLoadState()} ${this.#renderMemberError()}
+      ${
+        menu === undefined && this.view === "set-menu"
+          ? nothing
+          : setMenu
+            ? html`<wt-tabs
+                data-test="menu-tabs"
+                label=${menu.name}
+                value="set-menu"
+                .items=${[{ key: "set-menu", label: t("menus.set_menu_kind") }]}
+              >
+                <div slot="set-menu">
+                  ${keyed(
+                    menuId,
+                    html`<dashboard-set-menu-editor
+                      .api=${this.api}
+                      .menuId=${menuId}
+                      @set-menu-terms-saved=${() => void this.#watchMenus().catch(() => undefined)}
+                    ></dashboard-set-menu-editor>`,
+                  )}
+                </div>
+              </wt-tabs>`
+            : this.#renderFullMenuEditor(menuId, name)
+      }`;
+  }
+
+  #renderFullMenuEditor(menuId: string, name: string) {
+    return html`${this.#renderClashes(menuId)}
       ${this.statusesError && this.statusesResetRequired ? html`<p class="error" role="alert" data-test="status-reset-error">${codeMessage("menu.reset_required")}</p>` : nothing}
       <wt-tabs
         data-test="menu-tabs"

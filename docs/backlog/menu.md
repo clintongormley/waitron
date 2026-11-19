@@ -999,10 +999,11 @@ Shared ordering code calculates where a dish fits, what it costs there and which
 Bill storage now holds set menus and their recorded copies, dish places and draft reservations.
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
-The dashboard editor and placement controls, the Preview editor link and draft problems on screen,
-and selecting copy-only dishes in the live correction dialog remain open. Till ordering and payment,
-bill documents, and the demo and guides also remain open. Release set menus to venues
-only once all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
+The dashboard can open an existing set-menu draft, edit its name, price, VAT rates and inclusion
+lines, and show what to fix before publishing. A full menu’s Preview links to its set menus with changes or publication problems.
+The dashboard’s creation, dish and placement controls, and selecting copy-only dishes in the live
+correction dialog, remain open. Till ordering and payment, bill documents, and the demo and guides
+also remain open. Release set menus to venues only once all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer
 (owner, 2026-11-18, question 4 of the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md);

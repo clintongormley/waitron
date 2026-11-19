@@ -13,13 +13,13 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { VAT_CLASSES, vatRateOn, localToday, type VatClass } from "@waitron/shared";
+import { VAT_CLASSES } from "@waitron/shared";
 import { QueryController } from "@waitron/dashboard-kit";
 import type { DashboardApi, VenueDefaults } from "../api/client.js";
 import { dashboardQuery } from "../api/live-queries.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { vatClassName } from "../i18n/domain.js";
+import { vatClassLabel } from "../i18n/domain.js";
 import { fill, t } from "../i18n/t.js";
 import { receiptLanguageName, receiptLanguageWarning } from "../widgets/receipt-language.js";
 import { readAfterSave } from "../widgets/read-after-save.js";
@@ -34,11 +34,6 @@ function changes(expected: Draft, draft: Draft): Partial<Draft> {
   return Object.fromEntries(
     FIELDS.filter((key) => draft[key] !== expected[key]).map((key) => [key, draft[key]]),
   );
-}
-
-export function vatClassLabel(value: VatClass): string {
-  const rate = vatRateOn(value, localToday()).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1");
-  return `${vatClassName(value)} (${rate}%)`;
 }
 
 @customElement("dashboard-venue-defaults-panel")
