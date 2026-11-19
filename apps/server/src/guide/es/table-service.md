@@ -601,8 +601,8 @@ mesa sigue abierta mientras quede otra cuenta por cerrar o comida pagada por ser
 queda y elige **Cerrar mesa** cuando todos hayan terminado.
 
 Una cuenta que sigue abierta al terminar el día de trabajo recibe entonces su ticket, sin
-imprimirlo. Cóbrala con **Cobrar**, registra una salida sin pagar o imprime el ticket desde
-**Buscar cuenta**. Una cuenta con platos en espera o sin enviar sigue abierta.
+imprimirlo. Cóbrala con **Cobrar** o registra una salida sin pagar. Una cuenta con platos en espera
+o sin enviar sigue abierta.
 
 Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,
 elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba
