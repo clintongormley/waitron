@@ -29,9 +29,9 @@ Use the WireGuard container for remote staff access. The old in-process TCP rela
 settings from your environment; boot no longer reads them. `WAITRON_TUNNEL_CONTROL_DIR`
 still selects the WireGuard container's control directory.
 
-The staff entrance carries dashboard requests only. Joining a spare box does not use it: the
-mirror-bundle route names the main box's own address. A staff connection does not enable the
-parked cloud-standby work.
+The staff entrance carries dashboard requests and Cloud's `GET /public/availability` check
+only. Joining a spare box does not use it: the mirror-bundle route names the main box's own
+address. A staff connection does not enable the parked cloud-standby work.
 
 For the A951-S trial, set `WAITRON_TUNNEL_CONTROL_DIR` to the tunnel container's shared control
 directory. The container persists its private key before publishing `public-key`; the app reads
@@ -301,6 +301,9 @@ Staff HTTPS ends at the venue. Public HTTPS ends at the gateway, where a browser
 challenge and an exact path allowlist protect the onward encrypted connection.
 The only public endpoint in this milestone is `GET /public/availability`, which
 returns `{ "available": true }` or a 503 with `false` according to the serving gate.
+The box answers it on its remote-access staff listener too, because Cloud's
+[public gate](https://github.com/waitron-io/waitron-cloud/blob/b5d4c9a233ce92d7b3b0d196ae13a20e340c76ae/packages/remote-access/src/public-gate.ts#L103)
+sends it to the venue's staff hostname; that listener answers no other `/public/` path.
 Menus, bookings and the customer-facing remote setup screen remain separate work.
 
 Your staff certificate private key stays in `WAITRON_STATE_DIR/cloud/staff.key`.

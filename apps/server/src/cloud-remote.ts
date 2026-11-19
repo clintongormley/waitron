@@ -109,7 +109,7 @@ export async function installStaffCertificate(
   await writeFileDurable(join(stateDir, CLOUD_STAFF_CERT_FILE), chain, 0o600);
 }
 
-/** The remote listener forwards only the dashboard surface; a header cannot grant a local source. */
+/** The remote listener forwards an allowlisted set of paths; a header cannot grant a local source. */
 export function createStaffApp(
   app: Hono,
   origin: () => Promise<string | undefined>,
@@ -163,6 +163,7 @@ export function createStaffApp(
       (read &&
         (path === "/api/theme" ||
           path === "/api/content-languages" ||
+          path === "/public/availability" ||
           path.startsWith("/media/") ||
           path.startsWith("/help/") ||
           path.startsWith("/legal/")));

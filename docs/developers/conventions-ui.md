@@ -500,7 +500,7 @@ These serve them:
 - the plain-HTTP listener, both its forms (`apps/server/src/landing-app.ts:29`);
 - the recovery listener (`apps/server/src/recovery-listener.ts:128`);
 - the Waitron Cloud staff entrance, which passes `/legal/` reads, beside `/help/`, to the main app
-  (`apps/server/src/cloud-remote.ts:143-144`, `:162`).
+  (`apps/server/src/cloud-remote.ts:168-169`).
 
 Only the main app, the staff entrance that reaches it, and the plain-HTTP listener `bootServer`
 starts beside it on a trading or time-zone repair start, list and serve the kept versions, and only
