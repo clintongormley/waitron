@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  billPaymentRefunds,
   billPayments,
   invoiceDeliveries,
   invoiceSeries,
@@ -182,6 +183,19 @@ function deliveriesOf(saleId: string) {
   return inTx(venue, (tx) =>
     tx
       .select({ medium: invoiceDeliveries.medium })
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.saleId, saleId)),
+  );
+}
+
+function deliveryRowsOf(saleId: string) {
+  return inTx(venue, (tx) =>
+    tx
+      .select({
+        medium: invoiceDeliveries.medium,
+        status: invoiceDeliveries.status,
+        failureCode: invoiceDeliveries.failureCode,
+      })
       .from(invoiceDeliveries)
       .where(eq(invoiceDeliveries.saleId, saleId)),
   );
@@ -410,6 +424,34 @@ describe("issueBillAtClose", () => {
     expect(outcome).toEqual({ kind: "issued", saleId: sale!.id });
     expect(sale).toMatchObject({ counterpartyTaxId: "B12345674", source: "trading_day_close" });
     expect(await jobsOf(sale!.id)).toEqual([]);
+    expect(await deliveryRowsOf(sale!.id)).toEqual([
+      { medium: "a4", status: "failed", failureCode: "printer_disabled" },
+    ]);
+  });
+
+  it("still issues a full invoice staged for an A4 printer that no longer exists, queuing nothing", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    await chooseFullInvoice(party.tabId);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({
+          invoiceDelivery: {
+            medium: "a4",
+            pagePrinterId: randomUUID(),
+            personId: venue.operatorId,
+          },
+        })
+        .where(eq(workingOrders.id, party.tabId)),
+    );
+
+    const outcome = await close(party.tabId);
+
+    const [sale] = await salesOf(party.tabId);
+    expect(outcome).toEqual({ kind: "issued", saleId: sale!.id });
+    expect(sale).toMatchObject({ counterpartyTaxId: "B12345674", source: "trading_day_close" });
+    expect(await deliveryRowsOf(sale!.id)).toEqual([]);
+    expect(await jobsOf(sale!.id)).toEqual([]);
   });
 
   it("issues and settles a €0.00 bill", async () => {
@@ -437,6 +479,27 @@ describe("issueBillAtClose", () => {
     expect(await close(party.tabId)).toMatchObject({ kind: "issued" });
     expect(await salesOf(party.tabId)).toMatchObject([{ total: 3000 }]);
     expect(owedOn(party.tabId)).toBe("25.00");
+  });
+
+  it("skips a bill with a refund still pending", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    const [payment] = await insertPayment(party.tabId, "received", 500);
+    await inTx(venue, (tx) =>
+      tx.insert(billPaymentRefunds).values({
+        billPaymentId: payment!.id,
+        submissionId: randomUUID(),
+        fingerprint: randomUUID(),
+        appliedAmount: 500,
+        reason: "error",
+        authorizedBy: venue.operatorId,
+        requestedBy: venue.operatorId,
+        source: "device",
+        deviceId: venue.deviceId,
+        state: "pending",
+      }),
+    );
+
+    expect(await leftAlone(party, () => close(party.tabId))).toEqual({ kind: "money_moving" });
   });
 
   it("lets any other refusal from the payment-in-flight check through", async () => {

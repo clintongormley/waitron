@@ -94,8 +94,8 @@ export async function issueBillAtClose(
   const owed = await stillOwedOnIssuedBill(tx, billId, total);
   if (decimalToCents(total) !== 0 && decimalToCents(owed) <= 0)
     return { kind: "left_open", reason: "owes_nothing" };
-  // Unlike Print the bill, a staged delivery that cannot be reserved does not stop the close:
-  // nobody is there to hand it to.
+  // Unlike Print the bill, a staged delivery that fails or cannot be reserved does not stop the
+  // close: nobody is there to hand it to.
   const { saleId } = await issueUnpaidInvoice(
     tx,
     deps.backend,
