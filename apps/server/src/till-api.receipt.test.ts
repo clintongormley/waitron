@@ -1816,6 +1816,11 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
       );
       expect(jobs[0]!.claimTokenHash).toBeNull();
       expect(jobs[0]!.printerHold).toBeNull();
+      expect(jobs[0]).toMatchObject({
+        pageDocument: null,
+        pageLanguage: null,
+        pageDesignation: null,
+      });
       expect(Object.keys(jobs[0]!).sort()).toEqual(
         [
           "id",
@@ -1824,6 +1829,9 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
           "payload",
           "kind",
           "receiptCopy",
+          "pageDocument",
+          "pageLanguage",
+          "pageDesignation",
           "resendOf",
           "status",
           "attempts",
