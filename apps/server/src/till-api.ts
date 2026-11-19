@@ -450,6 +450,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "print_job.not_resendable": 409,
   "print_job.sale_payload_expired": 409,
   "receipt.not_printed": 409,
+  "receipt.no_printer": 409,
   "pin.invalid": 401,
   // 429, not 401, so the till can tell "wait N seconds" apart from "wrong PIN".
   "pin.throttled": 429,

@@ -663,6 +663,46 @@ describe("GET /api/sales/:id/receipt (original print status)", () => {
   });
 });
 
+describe("POST /api/sales/:id/receipt (original receipt)", () => {
+  it("refuses with receipt.no_printer (409) and queues nothing when the device has no receipt printer", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt({ printerId: null });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
+    const res = await app.request(`/api/sales/${orderId}/receipt`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "receipt.no_printer" },
+    });
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    const status = await app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
+    expect(await status.json()).toEqual({ status: "not_queued" });
+    expect(await fiscalRecordCount()).toBe(1);
+  });
+
+  it("still answers 200 for a sale whose original already exists, with no printer now", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt({ printerId: await makePrinter() });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const orderId = await ringSale(app, cookie, each.menuItemId);
+    const post = () =>
+      app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } });
+    expect((await post()).status).toBe(200);
+    const jobs = await suite.db.select().from(printJobs);
+    expect(jobs).toHaveLength(1);
+    await configureReceipt({ printerId: null });
+    expect((await post()).status).toBe(200);
+    expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+  });
+});
+
 describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
   it("persists the first staff confirmation without refiling or changing original bytes and print status", async () => {
     const { cfg, each, operatorId, supervisorId } = await setupVenue();
@@ -1174,7 +1214,7 @@ describe("an original receipt whose printer was deleted", () => {
     expect(facts).not.toHaveProperty("failureCode");
   });
 
-  it("leaves the device with no receipt printer, as if none were set: a new sale queues no paper and a reprint answers as with none", async () => {
+  it("leaves the device with no receipt printer, as if none were set: a new sale queues no paper and a reprint refuses as with none", async () => {
     const { app, cookie, printerId, menuItemId } = await open();
     await deleteVia(printerId);
     const jobsBefore = await suite.db.select().from(printJobs);
@@ -1188,6 +1228,10 @@ describe("an original receipt whose printer was deleted", () => {
       body: "{}",
     });
     const deletedAnswer = [deletedReprint.status, await deletedReprint.text()];
+    expect(deletedReprint.status).toBe(409);
+    expect(JSON.parse(deletedAnswer[1] as string)).toMatchObject({
+      error: { code: "receipt.no_printer" },
+    });
     expect(await suite.db.select().from(printJobs)).toEqual(jobsBefore);
 
     await configureReceipt({ printerId: null });
@@ -1473,7 +1517,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(await printJobsFor(cfg)).toEqual([]);
   });
 
-  it("is a 200 no-op when the device has no receipt printer set (nothing to print to)", async () => {
+  it("refuses with receipt.no_printer (409) when the device has no receipt printer set", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     // A real filed sale, but no printer on the device.
     await configureReceipt({ printerId: null });
@@ -1487,9 +1531,13 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       method: "POST",
       headers: { cookie },
     });
-    expect(res.status).toBe(200);
-    expect(await printJobsFor(cfg)).toEqual([]); // no printer → nothing enqueued
-    expect(await fiscalRecordCount()).toBe(1); // and still no re-file
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "receipt.no_printer" },
+    });
+    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await suite.db.select().from(receiptReprints)).toEqual([]);
+    expect(await fiscalRecordCount()).toBe(1);
   });
 
   it("refuses a malformed id with working_order.not_found (404) before any query", async () => {
@@ -3453,10 +3501,14 @@ describe("explicit F1 receipt delivery enrollment", () => {
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
   });
 
-  it("queues no delivery when the explicit original has no active printer", async () => {
+  it("refuses the explicit original and queues no delivery when there is no active printer", async () => {
     const { post } = await issued();
     await configureReceipt({ printerId: null });
-    expect((await post("receipt")).status).toBe(200);
+    const res = await post("receipt");
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "receipt.no_printer" },
+    });
     expect(await suite.db.select().from(printJobs)).toEqual([]);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
   });

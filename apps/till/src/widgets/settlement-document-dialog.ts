@@ -92,12 +92,12 @@ export class TillSettlementDocumentDialog extends TillTicketView {
           ? designation === null || !this.canPrintReceipt
             ? nothing
             : html`<wt-button
-                data-test=${designation === "original" ? "print-receipt" : "reprint"}
-                variant="primary"
-                ?disabled=${!printer?.available || this.invoicePrinterLoading || this.invoicePrinterBlocked || this.originalReceiptBusy || this.deliveryBusy}
-                @click=${() => this.dispatchEvent(new CustomEvent(designation === "original" ? "print-receipt" : "reprint", { bubbles: true, composed: true }))}
-                >${t(designation === "original" ? "invoice.print_on" : "invoice.print_on_copy").replace("{printer}", () => printer?.name ?? t("equipment.none"))}</wt-button
-              >`
+                  data-test=${designation === "original" ? "print-receipt" : "reprint"}
+                  variant="primary"
+                  ?disabled=${!printer?.available || this.invoicePrinterLoading || this.invoicePrinterBlocked || this.originalReceiptBusy || this.deliveryBusy}
+                  @click=${() => this.dispatchEvent(new CustomEvent(designation === "original" ? "print-receipt" : "reprint", { bubbles: true, composed: true }))}
+                  >${t(designation === "original" ? "invoice.print_on" : "invoice.print_on_copy").replace("{printer}", () => printer?.name ?? t("equipment.none"))}</wt-button
+                >${this.renderReceiptPrinterNote(designation)}`
           : this.renderInvoicePrint()
       }
       ${this.renderOriginalDelivery(true)} ${this.renderDrawer()}

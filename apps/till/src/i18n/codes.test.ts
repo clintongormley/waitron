@@ -651,6 +651,21 @@ it("says a printer was deleted, or no longer exists, in both languages", () => {
   expect(codeMessage("printer.not_found", "es")).toBe("Esa impresora ya no existe. Elige otra");
 });
 
+it("says a receipt copy has no printer on this device, and what to do, in both languages", () => {
+  expect(codeMessage("receipt.no_printer", "en")).toBe(
+    "This device has no receipt printer switched on. Choose one in Equipment, or print the copy from another device.",
+  );
+  expect(codeMessage("receipt.no_printer", "es")).toBe(
+    "Este dispositivo no tiene ninguna impresora de tickets activada. Elige una en Equipo o imprime la copia desde otro dispositivo.",
+  );
+  expect(codeMessage("invoice_delivery.receipt_unavailable", "en")).toBe(
+    "This device has no receipt printer switched on to print the invoice on. Choose one in Equipment, then try again.",
+  );
+  expect(codeMessage("invoice_delivery.receipt_unavailable", "es")).toBe(
+    "Este dispositivo no tiene ninguna impresora de tickets activada para imprimir la factura. Elige una en Equipo e inténtalo de nuevo.",
+  );
+});
+
 it("explains why an extra cannot move independently in both languages", () => {
   expect(codeMessage("ticket.extra_not_movable", "en")).toBe("Extras cannot be moved separately");
   expect(codeMessage("ticket.extra_not_movable", "es")).toBe(

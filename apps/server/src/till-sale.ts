@@ -1049,8 +1049,15 @@ export async function printSaleReceipt(
     // No filed sale → nothing to print. This keeps `readSettledTicket`'s "no sale" throw unreachable.
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
-    if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);
-    else await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, { personId });
+    if (duplicate) {
+      await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);
+      return;
+    }
+    const printers = printerLookup(tx, cfg.origin);
+    const made = await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, { personId, printers });
+    // "not_queued" also covers a receipt that could not be built; only a missing printer is refused.
+    if (made === "not_queued" && (await printers("receipt")) === undefined)
+      throw new AppError("receipt.no_printer", {});
   });
 }
 

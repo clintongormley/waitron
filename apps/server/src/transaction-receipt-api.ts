@@ -272,7 +272,7 @@ export function mountTransactionReceiptApi(
         )
           throw new AppError("management.request_invalid", { field: "language" });
         const printer = await resolveReceiptPrinter(tx, cfg.origin);
-        if (printer === undefined) return;
+        if (printer === undefined) throw new AppError("receipt.no_printer", {});
         let copy: { jobId: string } | undefined;
         if (ticket.corrects?.inFull === true) {
           // Put this right issues a replacement without printing it, so its first print is its

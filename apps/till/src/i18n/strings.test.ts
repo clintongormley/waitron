@@ -377,6 +377,27 @@ it("says why a till that cannot give cash back stops after opening a correction,
   );
 });
 
+it("says a receipt has no printer on this device, and what to do, in both languages", () => {
+  expect([en["document.no_receipt_printer"], es["document.no_receipt_printer"]]).toEqual([
+    "This device has no receipt printer switched on. Choose one in Equipment, then try again.",
+    "Este dispositivo no tiene ninguna impresora de tickets activada. Elige una en Equipo e inténtalo de nuevo.",
+  ]);
+});
+
+it("says no receipt printer is available to the device, and to print elsewhere, in both languages", () => {
+  expect([en["document.no_printers_note"], es["document.no_printers_note"]]).toEqual([
+    "No receipt printer is available to this device. Print the receipt from another device.",
+    "Este dispositivo no tiene ninguna impresora de tickets disponible. Imprime el recibo desde otro dispositivo.",
+  ]);
+});
+
+it("says the only receipt printer is switched off, and to print elsewhere, in both languages", () => {
+  expect([en["document.printer_off_no_other"], es["document.printer_off_no_other"]]).toEqual([
+    "{item} is switched off, and this device has no other receipt printer. Print from another device.",
+    "{item} está desactivada y este dispositivo no tiene otra impresora de tickets. Imprime desde otro dispositivo.",
+  ]);
+});
+
 describe("till texts say where a problem is put right", () => {
   const sendsElsewhere = /manager|whoever|encargado|responsable/i;
   it.each([

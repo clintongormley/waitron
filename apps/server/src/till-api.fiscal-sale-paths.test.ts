@@ -2195,14 +2195,19 @@ describe("handheld sales and device capability gates", () => {
       });
       expect(refused.status).toBe(403);
       expect(await refused.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
+      // The handheld has no receipt printer, so a receipt past the gates is refused for that alone.
+      const passed = action === "payment-slip" ? 200 : 409;
       for (const [cookie, status] of [
-        [allowedSession, 200],
+        [allowedSession, passed],
         [allowedSession.split(";")[0]!, 401],
       ] as const) {
         const accepted = await app.request(route, { method: "POST", headers: { cookie } });
         expect(accepted.status).toBe(status);
         if (status === 401) {
           expect(await accepted.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+        }
+        if (status === 409) {
+          expect(await accepted.json()).toMatchObject({ error: { code: "receipt.no_printer" } });
         }
       }
     },

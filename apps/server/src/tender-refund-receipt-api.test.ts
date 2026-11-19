@@ -357,13 +357,13 @@ it("uses a full invoice's recorded customer and domicile without inventing anoth
   expect((await print(row.id)).status).toBe(200);
   expect(await immutable()).toEqual(before);
 });
-it("does not print or audit when the device has no active receipt printer", async () => {
+it("refuses with receipt.no_printer, printing and auditing nothing, when the device has no active receipt printer", async () => {
   const row = await target();
   await inTx(venue, (tx) =>
     tx.update(devices).set({ receiptPrinterId: null }).where(eq(devices.id, venue.deviceId)),
   );
   const before = await printed();
-  expect((await print(row.id)).status).toBe(200);
+  expect(await print(row.id)).toMatchObject({ status: 409, json: { code: "receipt.no_printer" } });
   expect(await printed()).toEqual(before);
 });
 it("rolls the document job back when its audit cannot commit", async () => {

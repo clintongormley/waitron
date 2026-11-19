@@ -2041,6 +2041,11 @@ function profileRefusalOf(
     : undefined;
 }
 
+function reprintErrorKey(error: unknown): CounterError {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code === "storage.disk_full" || code === "receipt.no_printer" ? { code } : "reprint.error";
+}
+
 function isPermanentSaleRefusal(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
@@ -10266,10 +10271,7 @@ export class TillApp extends LitElement {
           this.historicalReceipt === receipt &&
           session === this.#operatorSession)
       )
-        this.errorKey =
-          (error as { code?: string } | undefined)?.code === "storage.disk_full"
-            ? { code: "storage.disk_full" }
-            : "reprint.error";
+        this.errorKey = reprintErrorKey(error);
     }
   }
 
@@ -10310,11 +10312,7 @@ export class TillApp extends LitElement {
     try {
       await api.reprintTenderRefund(refundId, language);
     } catch (error) {
-      if (current())
-        this.errorKey =
-          (error as { code?: string } | undefined)?.code === "storage.disk_full"
-            ? { code: "storage.disk_full" }
-            : "reprint.error";
+      if (current()) this.errorKey = reprintErrorKey(error);
     } finally {
       if (current()) this.refundPrintBusy = false;
     }
@@ -10838,11 +10836,18 @@ export class TillApp extends LitElement {
         this.#readInvoiceDeliveries(target, session, visit),
       ]);
     } catch (error) {
-      if (this.#ticketIsCurrent(target, session, visit))
+      if (this.#ticketIsCurrent(target, session, visit)) {
+        const code = (error as { code?: string } | undefined)?.code;
+        // The code's own text speaks of a copy; this is the original, worded as the panel words it.
         this.errorKey =
-          (error as { code?: string } | undefined)?.code === "storage.disk_full"
-            ? { code: "storage.disk_full" }
-            : "receipt.error";
+          code === "storage.disk_full"
+            ? { code }
+            : code !== "receipt.no_printer"
+              ? "receipt.error"
+              : full
+                ? { code: "invoice_delivery.receipt_unavailable" }
+                : "document.no_receipt_printer";
+      }
     } finally {
       if (this.#ticketIsCurrent(target, session, visit)) this.originalReceiptBusy = false;
     }

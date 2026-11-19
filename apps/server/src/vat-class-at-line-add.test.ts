@@ -7,7 +7,9 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  devices,
   diningTables,
+  printJobs,
   saleLines,
   sales,
   tenders,
@@ -16,6 +18,8 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createPrinter } from "@waitron/printing";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignMenuToVenue,
@@ -367,8 +371,15 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     expect(await stored(id)).toEqual(storedAtAdd);
 
     await setVat(v.products.beer, "super_reduced");
+    await giveReceiptPrinter(v.cfg.origin.deviceId);
     await reprintSale(deps(), v.cfg, id);
     await printSaleReceipt(deps(), v.cfg, id, false);
+    // The copy and the original were both built and queued, each printing the filed 10%.
+    expect(await suite.db.select().from(printJobs)).toHaveLength(2);
+    for (const job of await suite.db.select().from(printJobs))
+      expect(decodeTicket(new Uint8Array(job.payload!))).toContain(
+        "10%          2,27        0,23         2,50",
+      );
     const replay = await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
       id,
       lines: [],
@@ -768,4 +779,16 @@ async function sessionPrepareSpy(into: string[]): Promise<{ restore: () => void 
       proto.prepareQuery = original;
     },
   };
+}
+
+/** Gives the device a switched-on receipt printer, so receipts are built and queued. */
+async function giveReceiptPrinter(deviceId: string): Promise<void> {
+  await withTransaction(suite.db, async (tx) => {
+    const { id } = await createPrinter(tx, {
+      name: "Receipts",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
+    await tx.update(devices).set({ receiptPrinterId: id }).where(eq(devices.id, deviceId));
+  });
 }

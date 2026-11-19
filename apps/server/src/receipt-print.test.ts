@@ -1462,7 +1462,9 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       },
       OPERATOR,
     );
-    await printSaleReceipt(deps(), cfg, orderId, false);
+    await expect(printSaleReceipt(deps(), cfg, orderId, false)).rejects.toMatchObject({
+      code: "receipt.no_printer",
+    });
     expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await printJobsFor(cfg)).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);
@@ -1693,7 +1695,9 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
       .where(eq(devices.id, device.id));
     const display = { ...cfg, origin: deviceOrigin(device!.id) };
 
-    await sale(display, product, "cash");
+    await expect(sale(display, product, "cash")).rejects.toMatchObject({
+      code: "receipt.no_printer",
+    });
     expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);
 

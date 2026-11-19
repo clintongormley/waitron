@@ -10,7 +10,9 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  devices,
   diningTables,
+  printJobs,
   saleLines,
   sales,
   withTransaction,
@@ -18,6 +20,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createPrinter } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import {
@@ -705,6 +708,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, sale);
     const filed = await filedLines(id);
     await moveCocktailsToSpirits(v);
+    await giveReceiptPrinter(v.cfg.origin.deviceId);
 
     const statements: string[] = [];
     const prepare = await sessionPrepareSpy(statements);
@@ -716,6 +720,8 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       prepare.restore();
     }
 
+    // The copy and the original were both built and queued.
+    expect(await suite.db.select().from(printJobs)).toHaveLength(2);
     expect(await filedLines(id)).toEqual(filed);
     expect(statements.filter((s) => /from "categories"/.test(s))).toEqual([]);
   });
@@ -886,3 +892,15 @@ describe("issuancePass", () => {
     });
   });
 });
+
+/** Gives the device a switched-on receipt printer, so receipts are built and queued. */
+async function giveReceiptPrinter(deviceId: string): Promise<void> {
+  await withTransaction(suite.db, async (tx) => {
+    const { id } = await createPrinter(tx, {
+      name: "Receipts",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
+    await tx.update(devices).set({ receiptPrinterId: id }).where(eq(devices.id, deviceId));
+  });
+}
