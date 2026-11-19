@@ -539,9 +539,9 @@ export function checkMoves(
   stale one is ignored, decision 4) with `setMenuReservedPlace` (`count`); CHECK both null or both
   set, and set only with `setMenuId`.
 - No trigger checks that a dish's set-menu line is on the dish's own bill (**my call (plan
-  writer)**): a move takes a set menu and its dishes in one statement per bill pair, and a row
-  trigger would see them in an order the statement does not fix, refusing a sound move. Task 11a
-  tests it instead ("a set menu's dishes are on its bill after every move").
+  writer)**): a move takes the set menu and its dishes in one transaction. The rows can
+  briefly be on different bills inside that transaction. Task 11a tests that the menu and its
+  dishes end on the same bill.
 - `billSetMenuCopies` (`bill_set_menu_copies`): `workingOrderId` → `working_orders.id` on delete
   cascade, `setMenuId` → `menus.id`, `menuVersionId` → `menu_versions.id`; primary key
   `(working_order_id, set_menu_id)`. Classified `state`. Every classified table is a live-update
@@ -957,7 +957,9 @@ export function setMenuOfferLookup(
 - A set-menu dish moved without its set-menu line is placed again on the target by `placeInOrder`
   (no reservations), and written with `setMenuDishColumns` by `replaceMovedDishes`; with no place
   → `set_menu.no_place_on_target` naming it, whose wording says to move a set menu with it, and
-  nothing moves (spec §4).
+  nothing moves (spec §4). A cancelled dish whose charge was kept can move with its set menu.
+  Its place and charge stay fixed. A move of that dish alone gives the same refusal
+  (watcher, 19 November at 10:03).
 - A move of a set-menu line or dish to a bill that `refuseUnlessSetMenuBill` refuses is refused
   with its code. Nothing changes on the bill left behind (spec §4).
 - Merging two bills keeps the target's recorded copies, adds the source's for set menus the target

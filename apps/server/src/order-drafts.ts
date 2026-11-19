@@ -196,7 +196,7 @@ export async function splitDraft(
       });
       await tx
         .update(orderDraftLines)
-        .set({ draftId: newDraftId })
+        .set({ draftId: newDraftId, setMenuReservedLineId: null, setMenuReservedPlace: null })
         .where(and(eq(orderDraftLines.draftId, id), inArray(orderDraftLines.id, lineIds)));
       const empty = selected.length === lines.length;
       if (empty) await closeBillDraft(tx, billId, input.operatorId, expectedEdit, "discarded");

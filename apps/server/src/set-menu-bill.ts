@@ -1,10 +1,11 @@
-import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   adjustmentLines,
   adjustments,
   billPaymentLines,
   billPayments,
   billSetMenuCopies,
+  lineServiceCancellations,
   orderDraftLines,
   orderDrafts,
   products,
@@ -33,6 +34,23 @@ export function notSetMenuLine() {
   return sql`${workingOrderLines.setMenuRole} is not 'set_menu'`;
 }
 
+export async function hasBillSetMenuLines(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<boolean> {
+  const [line] = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, workingOrderId),
+        isNotNull(workingOrderLines.setMenuRole),
+      ),
+    )
+    .limit(1);
+  return line !== undefined;
+}
+
 // Set-menu billing replaces this refusal once it can price the menu and its dishes together.
 export async function refuseSetMenuMoney(
   tx: Transaction,
@@ -41,18 +59,7 @@ export async function refuseSetMenuMoney(
 ): Promise<void> {
   const hasSetMenu =
     lines === undefined
-      ? (
-          await tx
-            .select({ id: workingOrderLines.id })
-            .from(workingOrderLines)
-            .where(
-              and(
-                eq(workingOrderLines.workingOrderId, workingOrderId),
-                isNotNull(workingOrderLines.setMenuRole),
-              ),
-            )
-            .limit(1)
-        ).length > 0
+      ? await hasBillSetMenuLines(tx, workingOrderId)
       : lines.some((line) => line.setMenuRole !== null);
   if (hasSetMenu) throw new AppError("set_menu.payment_not_ready", {});
 }
@@ -88,6 +95,39 @@ export async function readBillSetMenuVersions(
   return new Map(rows.map(({ menuId, versionId }) => [menuId, versionId]));
 }
 
+export async function carryBillSetMenuCopies(
+  tx: Transaction,
+  fromBillId: string,
+  toBillId: string,
+  menuIds?: readonly string[],
+): Promise<void> {
+  await tx
+    .insert(billSetMenuCopies)
+    .select(
+      tx
+        .select({
+          workingOrderId: sql<string>`${toBillId}`.as("working_order_id"),
+          setMenuId: billSetMenuCopies.setMenuId,
+          menuVersionId: billSetMenuCopies.menuVersionId,
+        })
+        .from(billSetMenuCopies)
+        .where(
+          and(
+            eq(billSetMenuCopies.workingOrderId, fromBillId),
+            menuIds === undefined
+              ? undefined
+              : inArray(
+                  billSetMenuCopies.setMenuId,
+                  sql`(select value from json_each(${JSON.stringify(menuIds)}))`,
+                ),
+          ),
+        ),
+    )
+    .onConflictDoNothing({
+      target: [billSetMenuCopies.workingOrderId, billSetMenuCopies.setMenuId],
+    });
+}
+
 export async function readBillSetMenus(
   tx: Transaction,
   workingOrderId: string,
@@ -104,10 +144,12 @@ export async function readBillSetMenus(
       countsAsCourseId: workingOrderLines.setMenuCountsAsCourseId,
       priceCents: workingOrderLines.unitPriceGross,
       productId: workingOrderLines.productId,
+      cancellationLineId: lineServiceCancellations.lineId,
       parentProductId: products.parentId,
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .where(
       and(
         eq(workingOrderLines.workingOrderId, workingOrderId),
@@ -183,7 +225,7 @@ export async function readBillSetMenus(
       place: line.place!,
       priceCents: line.priceCents,
       countsAsCourseId: line.countsAsCourseId!,
-      movable: !fixed.has(line.id),
+      movable: line.cancellationLineId === null && !fixed.has(line.id),
     }));
   return { copies: [...copies.values()], recorded, setMenus, dishes };
 }
