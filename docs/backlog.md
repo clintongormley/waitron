@@ -1246,7 +1246,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Automatic upgrades with rollback until a clean, running restart (A950).** The checked manual
   path retains a stopped copy, requires a successful disposable-copy sale and offers Restore/Keep.
-  The release job can publish a signed file once its keys are configured. The retained
+  The release job signs and attaches the release file. The retained
   installer checks it before downloading a numbered release. A checked numbered upgrade
   refreshes the keys and verifier. The [offer publisher](operations/release.md#offer-a-release-to-a-group)
   signs and reads back the staged offer. Still open are prerelease publishing, the first live offer,
