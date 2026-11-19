@@ -210,7 +210,7 @@ describe("on a full disk, a restart", () => {
   it("with the box's spare file, the summary of a crashed setup database of about 10 MiB answers and leaves its folder unchanged, and Start again finishes", async (ctx) => {
     const small = needDisk(ctx);
     const { f, ask } = await crashedOnFullDisk(small, {
-      databaseBytes: 2_850_000,
+      databaseBytes: 2_950_000,
       walBytes: 3_000_000,
     });
     const venue = join(f.roots.venueDir, "venue.db");

@@ -303,7 +303,6 @@ const ADDED_TABLES = [
   "device_invoice_save_operations",
   "document_delivery_requests",
   "document_delivery_sequences",
-  "document_page_jobs",
   "document_page_reprints",
   "fiscal_conflict_evidence",
   "fiscal_lookup_conflicts",
@@ -2731,7 +2730,16 @@ for (const locale of ["en", "es"] as const) {
       expect(payload?.notnull, `${phase}/print_jobs/payload was required`).toBe(1);
       payload!.notnull = 0;
       for (const [anchor, names] of [
-        ["receipt_copy", ["handed_over_by", "handed_over_at"]],
+        [
+          "receipt_copy",
+          [
+            "page_document",
+            "page_language",
+            "page_designation",
+            "handed_over_by",
+            "handed_over_at",
+          ],
+        ],
         ["last_error", ["next_attempt_at"]],
         ["claimed_at", ["claim_token_hash", "printer_hold"]],
       ] as const) {

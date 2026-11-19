@@ -54,7 +54,6 @@
   "src/schema/devices.ts": 54.3,
   "src/schema/dining-tables.ts": 61.9,
   "src/schema/document-delivery-requests.ts": 99.2,
-  "src/schema/document-page-jobs.ts": 152.8,
   "src/schema/drawer-opens.ts": 36.4,
   "src/schema/floor-plans.ts": 242.4,
   "src/schema/floor-zones.ts": 47.6,

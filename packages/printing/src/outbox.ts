@@ -42,6 +42,7 @@ export function enqueueA4PrintJob(
     saleId,
     receiptCopy: null,
     tenderRefundId: null,
+    pageDocument: "invoice",
     createdAt,
   });
 }
@@ -56,12 +57,14 @@ async function insertPrintJob(
     saleId,
     receiptCopy,
     tenderRefundId,
+    pageDocument,
     createdAt,
   }: {
     resendOf: string | null;
     saleId: string | null;
     receiptCopy: boolean | null;
     tenderRefundId: string | null;
+    pageDocument?: "invoice";
     createdAt?: string;
   },
 ): Promise<{ jobId: string }> {
@@ -89,6 +92,7 @@ async function insertPrintJob(
       saleId,
       receiptCopy,
       tenderRefundId,
+      pageDocument,
       createdAt,
     })
     .returning({ id: printJobs.id });
