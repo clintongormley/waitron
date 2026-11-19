@@ -527,4 +527,30 @@ describe("Print the bill's refused wording", () => {
   ])("says in %s that nothing happened", (locale, message) => {
     expect(catalogues[locale]?.["meal_end.refused"]).toBe(message);
   });
+
+  it.each([
+    [
+      "en-GB",
+      "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help. If this bill has a full invoice, check its customer's details.",
+    ],
+    [
+      "es-ES",
+      "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada. Si esta cuenta lleva factura completa, revisa los datos del cliente.",
+    ],
+  ])("says in %s that a bill's ticket cannot be filed", (locale, message) => {
+    expect(catalogues[locale]?.["meal_end.cannot_file"]).toBe(message);
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot file a correction for it, so take off any dish that may not come before you print.",
+    ],
+    [
+      "es-ES",
+      "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede presentar una rectificación para ella, así que quita antes de imprimir los platos que puedan no llegar.",
+    ],
+  ])("says in %s that a full invoice naming a customer cannot be corrected", (locale, message) => {
+    expect(catalogues[locale]?.["meal_end.unserved_full_invoice"]).toBe(message);
+  });
 });

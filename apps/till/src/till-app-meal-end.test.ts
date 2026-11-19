@@ -559,16 +559,6 @@ describe("till-app: Print the bill", () => {
     },
   );
 
-  it("words a bill that cannot be filed exactly, in English and Spanish", () => {
-    expect(t("meal_end.cannot_file")).toBe(
-      "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help. If this bill has a full invoice, check its customer's details.",
-    );
-    setLocale("es");
-    expect(t("meal_end.cannot_file")).toBe(
-      "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada. Si esta cuenta lleva factura completa, revisa los datos del cliente.",
-    );
-  });
-
   it.each([
     "node.read_only",
     "server.waiting_for_clock",
@@ -2504,16 +2494,6 @@ describe("till-app: Print the bill with dishes not served", () => {
       expect(text(warning(el))).not.toContain(t("meal_end.unserved_full_invoice"));
     },
   );
-
-  it("words the notice for a full invoice naming a customer exactly, in English and Spanish", () => {
-    expect(t("meal_end.unserved_full_invoice")).toBe(
-      "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot file a correction for it, so take off any dish that may not come before you print.",
-    );
-    setLocale("es");
-    expect(t("meal_end.unserved_full_invoice")).toBe(
-      "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede presentar una rectificación para ella, así que quita antes de imprimir los platos que puedan no llegar.",
-    );
-  });
 
   it("Cancel takes the list down and sends nothing; Print the bill then asks again without printing anyway", async () => {
     const endMeal = vi.fn().mockRejectedValue(unservedRefusal);
