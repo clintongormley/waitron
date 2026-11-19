@@ -92,6 +92,7 @@ export interface StaffingMonthArea {
   area: AreaRef;
   needed: number;
   unfilled: number | null;
+  blocks: (Pick<StaffingBlock, "headcount" | "startsAt" | "endsAt"> & { staffRoleName: string })[];
 }
 
 /** The whole Monday-to-Sunday weeks covering `month`, as the opening-hours month lists them. */

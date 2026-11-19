@@ -1,4 +1,4 @@
-import type { Transaction } from "@waitron/db";
+import { staffRoles, type Transaction } from "@waitron/db";
 import { cutoverForBusinessDay } from "@waitron/shared";
 import { readCalendarMonthPlan } from "@waitron/venue-service";
 import { listStaffingAreas, resolveStaffing } from "./paint.js";
@@ -19,6 +19,8 @@ export async function readStaffingMonth(
     frame.days.map((day) => day.date),
     { plan: frame.plan, areas, cutover: frame.clock.dayCutover },
   );
+  const roles = await tx.select({ id: staffRoles.id, name: staffRoles.name }).from(staffRoles);
+  const roleNames = new Map(roles.map(({ id, name }) => [id, name]));
   const first = frame.days[0]!.date;
   const last = mondayOf(frame.days.at(-1)!.date);
   const rota = await readRotaRows(tx, first, last);
@@ -64,7 +66,19 @@ export async function readStaffingMonth(
                 () => true,
               ).slots.filter((s) => s.status.kind === "unfilled").length
             : null;
-          return [{ area, needed, unfilled }];
+          return [
+            {
+              area,
+              needed,
+              unfilled,
+              blocks: blocks.map(({ staffRoleId, headcount, startsAt, endsAt }) => ({
+                staffRoleName: roleNames.get(staffRoleId)!,
+                headcount,
+                startsAt,
+                endsAt,
+              })),
+            },
+          ];
         }),
       };
     }),

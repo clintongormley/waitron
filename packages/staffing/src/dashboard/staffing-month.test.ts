@@ -338,7 +338,14 @@ describe("the Staffing view's month", () => {
       read.days[1] = { ...read.days[1]!, seasonId: null };
       read.days[2] = {
         ...read.days[2]!,
-        areas: [{ area: { kind: "station", id: "st-new" }, needed: 3, unfilled: null }],
+        areas: [
+          {
+            area: { kind: "station", id: "st-new" },
+            needed: 3,
+            unfilled: null,
+            blocks: [{ staffRoleName: "Waiter", headcount: 3, startsAt: "12:00", endsAt: "16:00" }],
+          },
+        ],
       };
       return read;
     });
@@ -457,6 +464,8 @@ describe("the Staffing view's month", () => {
     const { api } = fakeApi(async (month) => {
       const read = staffingMonth(month);
       read.seasons = [...read.seasons.slice(0, 1), { ...read.seasons[1]!, name }];
+      const kitchen = read.days.find(({ date }) => date === "2026-12-03")!.areas[2]!;
+      kitchen.blocks[1]!.staffRoleName = "Evening shift sous chef";
       return read;
     });
     const { el } = await mount({ api, width: "390px", canWrite: true });
@@ -472,6 +481,22 @@ describe("the Staffing view's month", () => {
     expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(placed.right);
     for (const button of box.querySelectorAll<HTMLElement>("wt-button"))
       expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(placed.right);
+
+    const visible = box.shadowRoot!.querySelectorAll("dd")[2]!.querySelector("[aria-hidden]");
+    const text = [...(visible?.childNodes ?? [])].find((node) => node instanceof Text);
+    expect(text).toBeInstanceOf(Text);
+    const blocks = text!.textContent!.split(" · ").slice(1);
+    expect(blocks).toHaveLength(2);
+    const range = document.createRange();
+    const tops = blocks.map((block) => {
+      const start = text!.textContent!.indexOf(block);
+      range.setStart(text!, start);
+      range.setEnd(text!, start + block.length);
+      const rects = range.getClientRects();
+      expect(rects, block).toHaveLength(1);
+      return rects[0]!.top;
+    });
+    expect(tops[1]).toBeGreaterThan(tops[0]!);
   });
 
   it("draws no bar for an area that needs nobody, beside its 0", async () => {
@@ -481,7 +506,7 @@ describe("the Staffing view's month", () => {
       read.days[day] = {
         ...read.days[day]!,
         areas: read.days[day]!.areas.map((line, index) =>
-          index === 0 ? { ...line, needed: 0 } : line,
+          index === 0 ? { ...line, needed: 0, blocks: [] } : line,
         ),
       };
       return read;
@@ -932,7 +957,11 @@ describe("the day box", () => {
     const box = await openBox(el, "2026-12-03");
     expect(box.line).toBe("Winter standard staffing");
     expect(box.name).toBe("");
-    expect(box.rows).toEqual([{ name: "Bar", text: "2" }]);
+    expect(box.rows.map(({ name }) => name)).toEqual(["Bar"]);
+    expect(box.rows[0]!.text.replace(/\u2060/g, "").replace(/\s/g, " ")).toBe(
+      "2 · Bartender ×2 16:00–01:30",
+    );
+    expect(box.rows[0]!.spokenText).toBe("2, Bartender, 2 people, 16:00–01:30");
     await openBox(el, "2026-12-24");
     expect(box.line).toBe("Special day — replaces Winter's standard staffing");
     await openBox(el, "2026-12-07");
@@ -940,10 +969,12 @@ describe("the day box", () => {
     expect(box.message).toBe("Closed");
     const { el: every } = await mount();
     const all = await openBox(every, "2026-12-03");
-    expect(all.rows).toEqual([
-      { name: "Restaurant", text: "6" },
-      { name: "Bar", text: "2" },
-      { name: "Kitchen", text: "4" },
+    expect(
+      all.rows.map(({ name, text }) => [name, text.replace(/\u2060/g, "").replace(/\s/g, " ")]),
+    ).toEqual([
+      ["Restaurant", "6 · Waiter ×6 12:00–23:00"],
+      ["Bar", "2 · Bartender ×2 16:00–01:30"],
+      ["Kitchen", "4 · Head chef ×1 16:00–01:30 · Sous chef ×3 17:00–23:00"],
     ]);
   });
 
@@ -955,10 +986,10 @@ describe("the day box", () => {
     });
     const { el } = await mount({ api });
     const box = await openBox(el, "2026-12-01");
-    expect(box.rows).toEqual([
-      { name: "Restaurant", text: "6" },
-      { name: "Bar", text: "2, 1 unfilled" },
-      { name: "Kitchen", text: "4" },
+    expect(box.rows.map(({ name, text }) => [name, text.split(" · ")[0]])).toEqual([
+      ["Restaurant", "6"],
+      ["Bar", "2, 1 unfilled"],
+      ["Kitchen", "4"],
     ]);
   });
 
@@ -994,7 +1025,14 @@ describe("the day box", () => {
           if (!day.closedAllDay)
             day.areas = [
               ...day.areas,
-              ...extra.map(({ area }) => ({ area, needed: 3, unfilled: null })),
+              ...extra.map(({ area }) => ({
+                area,
+                needed: 3,
+                unfilled: null,
+                blocks: [
+                  { staffRoleName: "Waiter", headcount: 3, startsAt: "12:00", endsAt: "16:00" },
+                ],
+              })),
             ];
         return read;
       }).api;
@@ -1032,7 +1070,7 @@ describe("the day box", () => {
       el.parentElement!.style.paddingTop = `${innerHeight - 40 - day.getBoundingClientRect().bottom}px`;
       const box = await openBox(el, "2026-12-30");
       expect(boxButtons(el)).toEqual(["Edit Winter's standard week", "Rota for this week"]);
-      expect(placement(box, day)).toEqual(kept);
+      await vi.waitFor(() => expect(placement(box, day)).toEqual(kept));
     });
 
     it("when a new read makes it bigger while it is open", async () => {
@@ -1051,7 +1089,7 @@ describe("the day box", () => {
       const day = dayButton(el, "2026-12-30")!;
       el.parentElement!.style.paddingTop = `${innerHeight - 40 - day.getBoundingClientRect().bottom}px`;
       const box = await openBox(el, "2026-12-30");
-      expect(placement(box, day)).toEqual(kept);
+      await vi.waitFor(() => expect(placement(box, day)).toEqual(kept));
       const before = box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect().height;
       special = true;
       liveData.invalidate([{ type: "staffing_blocks" }]);
@@ -1061,7 +1099,7 @@ describe("the day box", () => {
         box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect().height,
       ).toBeGreaterThan(before);
       expect(box.shown).toBe(true);
-      expect(placement(box, day)).toEqual(kept);
+      await vi.waitFor(() => expect(placement(box, day)).toEqual(kept));
     });
   });
 

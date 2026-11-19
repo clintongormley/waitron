@@ -17,7 +17,7 @@ import "@waitron/venue-service/dashboard/calendar-day-box";
 import { areaKey } from "../slots.js";
 import type { StaffingArea, StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
-import { mondayFirst, utc } from "./format.js";
+import { formatStaffingBlock, mondayFirst, utc } from "./format.js";
 import { STAFFING_STRINGS, t, tf } from "./strings.js";
 
 type Day = StaffingMonth["days"][number];
@@ -503,10 +503,9 @@ export class StaffingMonthView extends LitElement {
   #shown(day: Day, chosen: string, names: Map<string, string>) {
     return day.areas
       .filter(({ area }) => chosen === ALL || areaKey(area) === chosen)
-      .map(({ area, needed, unfilled }) => ({
+      .map(({ area, ...staffing }) => ({
         name: names.get(areaKey(area)) ?? "",
-        needed,
-        unfilled,
+        ...staffing,
       }));
   }
 
@@ -523,13 +522,21 @@ export class StaffingMonthView extends LitElement {
         : "";
     const rows = day.closedAllDay
       ? []
-      : this.#shown(day, chosen, names).map(({ name, needed, unfilled }) => ({
-          name,
-          text:
+      : this.#shown(day, chosen, names).map(({ name, needed, unfilled, blocks }) => {
+          const count =
             unfilled === null
               ? String(needed)
-              : `${needed}, ${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}`,
-        }));
+              : `${needed}, ${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}`;
+          if (blocks.length === 0) return { name, text: count };
+          const formatted = blocks.map((block) =>
+            formatStaffingBlock(block, block.staffRoleName, { keepTogether: true }),
+          );
+          return {
+            name,
+            text: [count, ...formatted.map((block) => block.text)].join(" · "),
+            spokenText: [count, ...formatted.map((block) => block.spokenText)].join(", "),
+          };
+        });
     const act = (run: () => void) => () => {
       const box = this.renderRoot.querySelector("calendar-day-box")!;
       if (!box.shown) return;

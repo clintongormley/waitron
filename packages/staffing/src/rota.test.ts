@@ -222,7 +222,7 @@ describe("the rota week", () => {
         readStaffingMonth(t, businessDay.slice(0, 7), new Date("2026-11-16T12:00:00Z")),
       );
       expect(month.days.find((d) => d.date === businessDay)!.areas).toEqual([
-        { area: v.area, needed: 2, unfilled: 1 },
+        expect.objectContaining({ area: v.area, needed: 2, unfilled: 1 }),
       ]);
     }
   });

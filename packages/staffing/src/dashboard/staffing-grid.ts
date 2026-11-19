@@ -38,7 +38,8 @@ import { blockSpan, type StaffingBlock } from "../slots.js";
 import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
 import { showHeadcount } from "./headcount-control.js";
 import { roleInitials } from "./role-initials.js";
-import { peopleNeeded, t } from "./strings.js";
+import { formatStaffingBlock } from "./format.js";
+import { t } from "./strings.js";
 
 export interface StaffingColumn {
   key: string;
@@ -389,24 +390,8 @@ export class StaffingGrid extends LitElement {
   #role(staffRoleId: string): StaffRole | undefined {
     return this.staffRoles.find(({ id }) => id === staffRoleId);
   }
-  /** A block in words, for a screen reader. */
-  #describe(block: StaffingBlock): string {
-    return [
-      this.#role(block.staffRoleId)?.name,
-      peopleNeeded(block.headcount),
-      `${block.startsAt}–${block.endsAt}`,
-    ]
-      .filter(Boolean)
-      .join(", ");
-  }
-  #summary(block: StaffingBlock): string {
-    return [
-      this.#role(block.staffRoleId)?.name,
-      `×${block.headcount}`,
-      `${block.startsAt}–${block.endsAt}`,
-    ]
-      .filter(Boolean)
-      .join(" ");
+  #formatBlock(block: StaffingBlock) {
+    return formatStaffingBlock(block, this.#role(block.staffRoleId)?.name);
   }
 
   #onPointerdown(event: PointerEvent, key: string): void {
@@ -639,7 +624,7 @@ export class StaffingGrid extends LitElement {
     const { start, end } = drawnSpan(block, this.cutover);
     const style = this.#position(start, end, place.lane, place.lanes);
     const colour = this.#role(block.staffRoleId)?.colour;
-    const title = `${column.label}, ${this.#describe(block)}`;
+    const title = `${column.label}, ${this.#formatBlock(block).spokenText}`;
     // The name ends with the drawn text as one run, so a spoken command naming it matches (WCAG 2.5.3).
     const label = `${title}: ${this.#drawn(block).filter(Boolean).join(" ")}`;
     if (this.readOnly)
@@ -729,7 +714,7 @@ export class StaffingGrid extends LitElement {
       data-colour=${this.#role(block.staffRoleId)?.colour ?? nothing}
       style=${this.#position(start, end)}
     >
-      ${this.#summary(block)}
+      ${this.#formatBlock(block).text}
     </div>`;
   }
   #menu() {
@@ -742,7 +727,7 @@ export class StaffingGrid extends LitElement {
       popover
       role="dialog"
       tabindex="-1"
-      aria-label=${block === undefined ? t("staffing.grid.staff_role") : this.#describe(block)}
+      aria-label=${block === undefined ? t("staffing.grid.staff_role") : this.#formatBlock(block).spokenText}
       @keydown=${(event: KeyboardEvent) => this.#onMenuKeydown(event)}
       @focusout=${(event: FocusEvent) => this.#onFocusout(event)}
       @toggle=${(event: ToggleEvent) => {

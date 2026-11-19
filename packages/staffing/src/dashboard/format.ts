@@ -1,4 +1,6 @@
 import { dateFormat, formatWeekTitleParts } from "@waitron/venue-service/dashboard/hours-view";
+import type { StaffingBlock } from "../slots.js";
+import { peopleNeeded } from "./strings.js";
 
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = Date.UTC(2024, 0, 1);
@@ -24,4 +26,19 @@ export const dateLabel = (date: string) =>
 export function weekTitleParts(monday: string, language?: string) {
   const sunday = new Date(utc(monday).getTime() + 6 * DAY_MS).toISOString().slice(0, 10);
   return formatWeekTitleParts(monday, sunday, language);
+}
+
+export function formatStaffingBlock(
+  { headcount, startsAt, endsAt }: Pick<StaffingBlock, "headcount" | "startsAt" | "endsAt">,
+  roleName: string | undefined,
+  { keepTogether = false }: { keepTogether?: boolean } = {},
+) {
+  const time = `${startsAt}–${endsAt}`;
+  const text = [roleName, `×${headcount}`, keepTogether ? `${startsAt}–\u2060${endsAt}` : time]
+    .filter(Boolean)
+    .join(" ");
+  return {
+    text: keepTogether ? text.replaceAll(" ", "\u00a0") : text,
+    spokenText: [roleName, peopleNeeded(headcount), time].filter(Boolean).join(", "),
+  };
 }

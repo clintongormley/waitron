@@ -1029,7 +1029,12 @@ describe("the staffing month route", () => {
     const month = (await response.json()) as StaffingMonth;
     expect(month.month).toBe("2026-08");
     expect(month.days.find((d) => d.date === "2026-08-21")!.areas).toEqual([
-      { area: p.grill, needed: 4, unfilled: null },
+      {
+        area: p.grill,
+        needed: 4,
+        unfilled: null,
+        blocks: [{ staffRoleName: "Waiter", headcount: 4, startsAt: "12:00", endsAt: "16:00" }],
+      },
     ]);
     expect(month.days.find((d) => d.date === "2026-08-22")!.areas).toEqual([]);
   });

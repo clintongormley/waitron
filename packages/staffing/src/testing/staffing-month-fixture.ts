@@ -45,9 +45,41 @@ export function staffingMonth(month = "2026-12"): StaffingMonth {
       areas: closedAllDay
         ? []
         : [
-            { area: restaurant, needed: busy ? 8 : 6, unfilled: null },
-            { area: bar, needed: 2, unfilled: null },
-            { area: kitchen, needed: busy ? 5 : 4, unfilled: null },
+            {
+              area: restaurant,
+              needed: busy ? 8 : 6,
+              unfilled: null,
+              blocks: [
+                {
+                  staffRoleName: "Waiter",
+                  headcount: busy ? 8 : 6,
+                  startsAt: "12:00",
+                  endsAt: "23:00",
+                },
+              ],
+            },
+            {
+              area: bar,
+              needed: 2,
+              unfilled: null,
+              blocks: [
+                { staffRoleName: "Bartender", headcount: 2, startsAt: "16:00", endsAt: "01:30" },
+              ],
+            },
+            {
+              area: kitchen,
+              needed: busy ? 5 : 4,
+              unfilled: null,
+              blocks: [
+                { staffRoleName: "Head chef", headcount: 1, startsAt: "16:00", endsAt: "01:30" },
+                {
+                  staffRoleName: "Sous chef",
+                  headcount: busy ? 4 : 3,
+                  startsAt: "17:00",
+                  endsAt: "23:00",
+                },
+              ],
+            },
           ],
     };
   });

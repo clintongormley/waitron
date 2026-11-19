@@ -155,12 +155,6 @@ scheduled hours into accrued-versus-pending money. Rates are editable data, neve
 numbers; needs public holidays for every year it pays (today only 2026 exists), national,
 regional and local. Gated on the labour advisor; not fiscal.
 
-## Staffing's day box: each area's staff roles and times.
-
-The box lists each area's number; the
-mockup's role names and times ("Head chef ×1 16:00–01:30") need the month read to carry each
-block. Decision 13 of the [A720 plan](../superpowers/plans/2026-10-15-a720-calendar-year-month.md).
-
 ## A587. Availability and personal preferences
 
 "can't work Wednesdays"; "Anna only works
@@ -194,14 +188,9 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 ## Bundle: Staffing month day box
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
 - **A763 point 9. The Staffing month's Monday "Rota for this week" link goes, and the Rota tab
   opens the week last picked (owner, 2026-10-16).** Waits for the second part of A724.
   [Detail](workforce.md#a763-point-9-the-staffing-months-monday-rota-for-this-week-link-goes).
-- **Staffing's day box: each area's staff roles and times.**
-  [Detail](workforce.md#staffings-day-box-each-areas-staff-roles-and-times)
-
 
 ## Decisions and deliberate limits
 

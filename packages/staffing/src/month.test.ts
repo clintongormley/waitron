@@ -38,6 +38,10 @@ async function painted() {
       .insert(staffRoles)
       .values({ name: "Waiter" })
       .returning({ id: staffRoles.id });
+    const [chef] = await tx
+      .insert(staffRoles)
+      .values({ name: "Head chef" })
+      .returning({ id: staffRoles.id });
     const [special] = await tx
       .insert(specialDays)
       .values({ name: "Fiesta" })
@@ -62,7 +66,10 @@ async function painted() {
       {
         area: dept,
         weekday: 5,
-        blocks: [block(role), block(role, { headcount: 1, startsAt: "20:00", endsAt: "02:00" })],
+        blocks: [
+          block(role),
+          block(chef!.id, { headcount: 1, startsAt: "20:00", endsAt: "02:00" }),
+        ],
       },
       { area: grill, weekday: 5, blocks: [block(role, { headcount: 4 })] },
       { area: dept, weekday: 6, blocks: [block(role, { headcount: 6 })] },
@@ -102,6 +109,26 @@ async function tablesRead<T>(fn: (tx: Transaction) => Promise<T>) {
 }
 
 describe("readStaffingMonth", () => {
+  it("carries resolved blocks and role names in the month", async () => {
+    await painted();
+    const month = await read();
+    const blocks = (date: string) =>
+      month.days.find((d) => d.date === date)!.areas.map((a) => a.blocks);
+    const grill = { staffRoleName: "Waiter", headcount: 4, startsAt: "12:00", endsAt: "16:00" };
+    expect(blocks("2026-08-07")).toEqual([
+      [
+        { staffRoleName: "Waiter", headcount: 2, startsAt: "12:00", endsAt: "16:00" },
+        { staffRoleName: "Head chef", headcount: 1, startsAt: "20:00", endsAt: "02:00" },
+      ],
+      [grill],
+    ]);
+    expect(blocks("2026-08-14")).toEqual([
+      [{ staffRoleName: "Waiter", headcount: 5, startsAt: "12:00", endsAt: "16:00" }],
+      [grill],
+    ]);
+    expect(blocks("2026-08-21")).toEqual([[], [grill]]);
+  });
+
   it("counts each painted area's slots on each business day of the month's whole weeks", async () => {
     const v = await painted();
     const month = await read();
@@ -120,8 +147,8 @@ describe("readStaffingMonth", () => {
     expect(month.days.at(-1)!.date).toBe("2026-09-06");
     const day = (date: string) => month.days.find((d) => d.date === date)!;
     const friday = [
-      { area: v.dept, needed: 3, unfilled: null },
-      { area: v.grill, needed: 4, unfilled: null },
+      expect.objectContaining({ area: v.dept, needed: 3, unfilled: null }),
+      expect.objectContaining({ area: v.grill, needed: 4, unfilled: null }),
     ];
     expect(day("2026-07-31")).toEqual({
       date: "2026-07-31",
@@ -139,8 +166,8 @@ describe("readStaffingMonth", () => {
       specialDay: { id: v.specialDayId, name: "Fiesta" },
       closedAllDay: false,
       areas: [
-        { area: v.dept, needed: 5, unfilled: null },
-        { area: v.grill, needed: 4, unfilled: null },
+        expect.objectContaining({ area: v.dept, needed: 5, unfilled: null }),
+        expect.objectContaining({ area: v.grill, needed: 4, unfilled: null }),
       ],
     });
     expect(day("2026-08-15")).toEqual({
@@ -149,11 +176,11 @@ describe("readStaffingMonth", () => {
       seasonId: v.seasonId,
       specialDay: { id: v.specialDayId, name: "Fiesta" },
       closedAllDay: true,
-      areas: [{ area: v.dept, needed: 6, unfilled: null }],
+      areas: [expect.objectContaining({ area: v.dept, needed: 6, unfilled: null })],
     });
     expect(day("2026-08-21").areas).toEqual([
-      { area: v.dept, needed: 0, unfilled: null },
-      { area: v.grill, needed: 4, unfilled: null },
+      expect.objectContaining({ area: v.dept, needed: 0, unfilled: null }),
+      expect.objectContaining({ area: v.grill, needed: 4, unfilled: null }),
     ]);
     const paintedDays = month.days.filter((d) => d.areas.length > 0).map((d) => d.date);
     expect(paintedDays).toEqual([
@@ -194,7 +221,9 @@ describe("readStaffingMonth", () => {
     );
     const month = await read();
     const friday = month.days.find((d) => d.date === "2026-08-14")!;
-    expect(friday.areas).toEqual([{ area: v.grill, needed: 4, unfilled: null }]);
+    expect(friday.areas).toEqual([
+      expect.objectContaining({ area: v.grill, needed: 4, unfilled: null }),
+    ]);
     expect(month.areas).toEqual([{ area: v.grill, name: "Grill" }]);
   });
 
@@ -257,7 +286,7 @@ describe("rota counts in the staffing month", () => {
         startsOffsetMinutes: 120,
         endsOffsetMinutes: 120,
       });
-      const [role] = await tx.select().from(staffRoles);
+      const [role] = await tx.select().from(staffRoles).where(eq(staffRoles.name, "Waiter"));
       await tx
         .update(shifts)
         .set({ departmentId: v.departmentId, staffRoleId: role!.id })
@@ -267,8 +296,8 @@ describe("rota counts in the staffing month", () => {
       readStaffingMonth(tx, "2026-08", AT),
     );
     expect(month.days.find((d) => d.date === "2026-08-14")!.areas).toEqual([
-      { area: v.dept, needed: 5, unfilled: 4 },
-      { area: v.grill, needed: 4, unfilled: 4 },
+      expect.objectContaining({ area: v.dept, needed: 5, unfilled: 4 }),
+      expect.objectContaining({ area: v.grill, needed: 4, unfilled: 4 }),
     ]);
     expect(month.days.find((d) => d.date === "2026-08-07")!.areas[0]!.unfilled).toBeNull();
     expect(tables.filter((t, i) => tables.indexOf(t) !== i)).toEqual([]);
