@@ -7590,11 +7590,20 @@ describe("the publish job on a release tag", () => {
       git(origin, "commit", "-q", "--allow-empty", "-m", "off main");
       const offMain = git(origin, "rev-parse", "HEAD");
       git(origin, "checkout", "-q", "main");
+      git(origin, "tag", "-a", "v1.2.3", tagged, "-m", "Waitron 1.2.3");
+      git(origin, "tag", "-a", "v1.2.4", tagged, "-m", "Waitron prerelease 1.2.4");
+      git(origin, "tag", "-a", "v1.2.5", offMain, "-m", "Waitron 1.2.5");
+      git(origin, "tag", "-a", "v1.2.6", tagged, "-m", "Waitron prerelease 1.2.7");
+      git(origin, "tag", "v1.2.7", tagged);
+      git(origin, "tag", "-a", "v1.2.8", tagged, "-m", "Waitron 1.2.8", "-m", "Extra text");
+      git(origin, "tag", "-a", "v1.2.9", "v1.2.3", "-m", "Waitron 1.2.9");
 
-      const run = (sha) => {
+      const run = (sha, tag = "v1.2.3") => {
         const dir = mkdtempSync(join(root, "run-"));
         const work = join(dir, "work");
+        const output = join(dir, "output");
         mkdirSync(work);
+        writeFileSync(output, "");
         git(work, "init", "-q");
         git(work, "remote", "add", "origin", `file://${origin}`);
         git(work, "fetch", "-q", "--no-tags", "--depth", "1", "origin", sha);
@@ -7608,11 +7617,17 @@ describe("the publish job on a release tag", () => {
             ...gitEnv,
             PATH: `${bin}:${process.env.PATH}`,
             GITHUB_SHA: sha,
-            GITHUB_REF_NAME: "v1.2.3",
+            GITHUB_REF: `refs/tags/${tag}`,
+            GITHUB_REF_NAME: tag,
+            GITHUB_OUTPUT: output,
             STUB_DIR: dir,
           },
         });
-        return { ...result, timeoutArgs: readFileSync(join(dir, "timeout.args"), "utf8") };
+        return {
+          ...result,
+          timeoutArgs: readFileSync(join(dir, "timeout.args"), "utf8"),
+          output: readFileSync(output, "utf8"),
+        };
       };
 
       it("passes a tag on a commit of main behind its tip, in a one-commit-deep checkout", () => {
@@ -7622,11 +7637,30 @@ describe("the publish job on a release tag", () => {
       });
 
       it("refuses a tag on a commit main does not hold, naming the tag", () => {
-        const result = run(offMain);
+        const result = run(offMain, "v1.2.5");
         expect(result.status).toBe(1);
-        expect(result.stderr).toContain("v1.2.3");
+        expect(result.stderr).toContain("v1.2.5");
         expect(result.stderr).toContain("main");
       });
+
+      it.each([
+        ["v1.2.3", "false"],
+        ["v1.2.4", "true"],
+      ])("reads the prerelease flag for %s from its remote annotation", (tag, flag) => {
+        const result = run(tagged, tag);
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.output).toContain(`release_prerelease=${flag}\n`);
+      });
+
+      it.each(["v1.2.5", "v1.2.6", "v1.2.7", "v1.2.8", "v1.2.9"])(
+        "refuses %s when it does not directly annotate this commit with its version",
+        (tag) => {
+          const result = run(tagged, tag);
+          expect(result.status).toBe(1);
+          expect(result.stderr).toContain(tag);
+          expect(result.output).toBe("");
+        },
+      );
     });
   });
 
@@ -7909,6 +7943,17 @@ describe("the release job", () => {
     expect(named(RELEASE_ATTACH_STEP).envOf("RELEASE_VERSION")).toBe(
       "${{ needs.publish.outputs.release_version }}",
     );
+  });
+
+  it("takes the same prerelease choice from publish for the declaration and signed file", () => {
+    const publish = job("publish").body;
+    expect(publish).toContain(
+      "      release_prerelease: ${{ steps.release_tag.outputs.release_prerelease }}",
+    );
+    for (const step of [RELEASE_ATTACH_STEP, RELEASE_SIGN_STEP])
+      expect(named(step).envOf("RELEASE_PRERELEASE")).toBe(
+        "${{ needs.publish.outputs.release_prerelease }}",
+      );
   });
 
   it("logs in to GHCR and pulls before attaching the declaration", () => {

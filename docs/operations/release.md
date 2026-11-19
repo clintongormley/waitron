@@ -180,14 +180,19 @@ code, version and yes/no answers still match the code; unless the version is sti
 and `tag`, which is why it checks the declaration again. Then it makes the annotated tag
 `v1.0.0` ("Waitron 1.0.0") and pushes it.
 
+To publish a version for manual installation only, prepare and land its own declaration as above,
+then tag it with `pnpm release tag 1.0.0 --prerelease`. Pick a higher version number and prepare a
+new declaration for the next release. Keep the tag fixed once you push it. The publish job reads
+the annotation when it runs, and the signed release file records the prerelease choice.
+
 `main`'s green run proves less than it sounds: an ordinary push to `main` runs no package tests.
 The tag's own CI run is the full one, and publishing the image waits for it.
 
 The push goes through the repository's pre-push hook, whose messages are printed as it runs.
 Nobody has pushed a tag through it yet: what it does with an annotated tag's id, which is the
 tag's own id rather than its commit's, was read (`.husky/pre-push:24-40`), not run. If the push
-stops, the command deletes the tag it made on your machine; fix what the push's messages name and
-run `pnpm release tag 1.0.0` again. If that run says `1.0.0 is already released`, the tag reached
+stops, the command deletes the tag it made on your machine. Fix what the push's messages name and
+repeat your tag command with the same options. If that run says `1.0.0 is already released`, the tag reached
 GitHub before the push stopped: go on to step 7. Never push with `--no-verify`.
 
 ## 7. Watch the tag's CI run
@@ -200,9 +205,9 @@ gh run watch <run id>
 Pick the run whose branch is `v1.0.0`. It runs every check, as the nightly run does, and then
 two jobs make the release:
 
-1. **`publish`** waits for the whole run to be green. It refuses a tag that is not on `main` or
-   whose name is not a release version, then builds the image with the version stamped in. The
-   build renders the version's declaration into `/app/declaration/`, and fails if the committed
+1. **`publish`** waits for the whole run to be green. It requires the annotation from step 6 and
+   a tag pointing directly to a commit on `main`. It then builds the image with the version stamped
+   in. The build renders the version's declaration into `/app/declaration/` and fails if the committed
    `declarations/v1.0.0.md` is missing, carries a blocker line or disagrees with the code. It runs
    `check-release 1.0.0` inside the built image, refuses a version the registry already holds, and
    only then pushes the print agent and tunnel companion's `:1.0.0` tags. It pushes the app last.
@@ -210,8 +215,10 @@ two jobs make the release:
    it, and attaches them to the GitHub Release `v1.0.0` as `waitron-1.0.0-declaration.pdf` and
    `waitron-1.0.0-declaration.txt`, making the Release if there is none. Because the files come
    out of the published image, they are the same bytes every box running that image serves.
+   With `--prerelease`, this job creates a GitHub prerelease and leaves Latest alone.
    When signing is configured, it also attaches `waitron-release.json`. The signed
-   payload names the release, the source commit and the app, print agent and tunnel image digests.
+   payload names the release, its prerelease flag, the source commit and the app, print agent and
+   tunnel image digests.
 
 Check the Release once the run is green:
 
@@ -236,6 +243,10 @@ secret matching one of the keys in the tagged commit before retrying. If the tag
 lacks two valid, distinct public keys, cut a new numbered release after you
 correct the keys on main.
 
+If the existing GitHub Release has a different prerelease flag, check its signed file if present.
+Restore the Release's flag to match that file, or the tag's annotation if signing did not finish,
+before retrying.
+
 If `publish` fails while pushing, re-run it with `gh run rerun <run id> --failed`. The app image is
 pushed last, so a run that stopped before that push has not published the version, and the re-run
 pushes all three images.
@@ -256,7 +267,8 @@ For the first publication of the tunnel companion, run full verification on main
 Before a fresh `install main`, check that a box without registry credentials can pull
 `ghcr.io/clintongormley/waitron-tunnel:main`. If GHCR refuses the pull because the package is
 private, make the companion package public and check the pull again.
-A production box starts only on a numbered release.
+A production box starts only on a numbered release. Use the same manual command for a signed
+prerelease. The offer publisher refuses to include prereleases in automatic upgrade offers.
 
 ## Offer a release to a group
 

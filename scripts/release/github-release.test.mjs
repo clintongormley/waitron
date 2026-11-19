@@ -31,7 +31,7 @@ writeFileSync(
   `#!/usr/bin/env bash
 printf 'gh %s\\n' "$*" >> "$STUB_DIR/calls"
 for arg in "$@"; do [ -f "$arg" ] && printf '%s: %s\\n' "\${arg##*/}" "$(cat "$arg")" >> "$STUB_DIR/files"; done
-if [ "$1 $2" = "release view" ] && [ "$4" = "--json" ]; then
+if [ "$1 $2" = "release view" ] && [ "$5" = "assets" ]; then
   if [ "$STUB_SIGNED_ASSET" = "unreadable" ]; then
     echo "HTTP 401: Bad credentials" >&2
     exit 1
@@ -45,7 +45,7 @@ if [ "$1 $2" = "release download" ]; then
 fi
 if [ "$1 $2" = "release view" ]; then
   case "$STUB_RELEASE" in
-    present) echo "title: 1.2.3" ;;
+    present) echo "$STUB_IS_PRERELEASE" ;;
     absent) echo "release not found" >&2; exit 1 ;;
     *) echo "HTTP 401: Bad credentials" >&2; exit 1 ;;
   esac
@@ -55,7 +55,14 @@ fi
 chmodSync(join(bin, "docker"), 0o755);
 chmodSync(join(bin, "gh"), 0o755);
 
-function run({ release = "absent", cpFails = "", args = ["1.2.3", IMAGE], signedAsset } = {}) {
+function run({
+  release = "absent",
+  cpFails = "",
+  args = ["1.2.3", IMAGE],
+  signedAsset,
+  prerelease = "false",
+  isPrerelease = "false",
+} = {}) {
   const dir = mkdtempSync(join(tmpdir(), "github-release-"));
   try {
     if (signedAsset) {
@@ -75,6 +82,8 @@ function run({ release = "absent", cpFails = "", args = ["1.2.3", IMAGE], signed
         STUB_RELEASE: release,
         STUB_CP_FAILS: cpFails,
         STUB_SIGNED_ASSET: signedAsset ?? "",
+        STUB_IS_PRERELEASE: isPrerelease,
+        ...(prerelease === null ? {} : { RELEASE_PRERELEASE: prerelease }),
       },
     });
     const read = (name) =>
@@ -94,6 +103,7 @@ const COPIED = [
   "waitron-1.2.3-declaration.txt: inside container-1:/app/declaration/declaration.txt",
 ];
 const ghCalls = (calls) => calls.filter((call) => call.startsWith("gh "));
+const VIEW = "gh release view v1.2.3 --json isPrerelease --jq .isPrerelease";
 
 describe("github-release.sh", () => {
   it("copies both files out of the image and makes the Release when there is none", () => {
@@ -102,7 +112,7 @@ describe("github-release.sh", () => {
     expect(result.calls[0]).toBe(`create --pull never ${IMAGE}`);
     expect(result.calls).toContain("rm container-1");
     expect(ghCalls(result.calls)).toEqual([
-      "gh release view v1.2.3",
+      VIEW,
       expect.stringMatching(
         /^gh release create v1\.2\.3 --title 1\.2\.3 --verify-tag \S+\/waitron-1\.2\.3-declaration\.pdf \S+\/waitron-1\.2\.3-declaration\.txt$/,
       ),
@@ -111,16 +121,40 @@ describe("github-release.sh", () => {
     expect(result.leftovers).toEqual([]);
   });
 
+  it("creates a prerelease without making it Latest", () => {
+    const result = run({ prerelease: "true" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(ghCalls(result.calls)).toEqual([
+      VIEW,
+      expect.stringMatching(/^gh release create v1\.2\.3 .* --prerelease --latest=false /),
+    ]);
+    expect(result.files.split("\n").filter(Boolean)).toEqual(COPIED);
+  });
+
   it("replaces the two files on a Release that already exists, never making a second", () => {
     const result = run({ release: "present" });
     expect(result.status, result.stderr).toBe(0);
     expect(ghCalls(result.calls)).toEqual([
-      "gh release view v1.2.3",
+      VIEW,
       expect.stringMatching(
         /^gh release upload v1\.2\.3 --clobber \S+\/waitron-1\.2\.3-declaration\.pdf \S+\/waitron-1\.2\.3-declaration\.txt$/,
       ),
     ]);
     expect(result.files.split("\n").filter(Boolean)).toEqual(COPIED);
+  });
+
+  it("leaves an existing stable Release alone when retrying a prerelease", () => {
+    const result = run({ release: "present", prerelease: "true" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("prerelease flag");
+    expect(ghCalls(result.calls)).toEqual([VIEW]);
+  });
+
+  it.each([null, "yes"])("refuses to publish with prerelease input %j", (prerelease) => {
+    const result = run({ prerelease });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("RELEASE_PRERELEASE");
+    expect(result.calls).toEqual([]);
   });
 
   it.each(["declaration.pdf", "declaration.txt"])(
@@ -140,7 +174,7 @@ describe("github-release.sh", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("HTTP 401: Bad credentials");
     expect(result.stderr).toContain("v1.2.3");
-    expect(ghCalls(result.calls)).toEqual(["gh release view v1.2.3"]);
+    expect(ghCalls(result.calls)).toEqual([VIEW]);
   });
 
   it.each([[[]], [["1.2.3"]], [["1.2.3", IMAGE, "extra"]]])(

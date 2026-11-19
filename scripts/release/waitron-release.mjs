@@ -7,7 +7,7 @@ import { isMainScript } from "../is-main-script.mjs";
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const TAG = /^refs\/tags\/v(.+)$/;
 const USAGE =
-  "usage: pnpm release prepare <version> --place <place>\n       pnpm release tag <version>\n";
+  "usage: pnpm release prepare <version> --place <place>\n       pnpm release tag <version> [--prerelease]\n";
 // The push runs the pre-push hook, which typechecks; that can take minutes.
 const COMMAND_TIMEOUT_MS = 20 * 60_000;
 const SHOWN = { show: true };
@@ -122,7 +122,7 @@ export async function prepareRelease({ version, place, run, ask, now, print }) {
   );
 }
 
-export async function tagRelease({ version, run }) {
+export async function tagRelease({ version, prerelease = false, run }) {
   parseVersion(version);
   const head = onCleanBranchAtOriginMain(run, "main");
   const file = declarationFile(version);
@@ -159,7 +159,8 @@ export async function tagRelease({ version, run }) {
   }
 
   const tag = `v${version}`;
-  run("git", ["tag", "-a", tag, "-m", `Waitron ${version}`]);
+  const subject = prerelease ? `Waitron prerelease ${version}` : `Waitron ${version}`;
+  run("git", ["tag", "-a", tag, "-m", subject]);
   try {
     run("git", ["push", "origin", tag], SHOWN);
   } catch (error) {
@@ -235,10 +236,12 @@ function parse(argv) {
     const { values, positionals } = parseArgs({
       args: rest,
       allowPositionals: true,
-      options: command === "prepare" ? { place: { type: "string" } } : {},
+      options:
+        command === "prepare" ? { place: { type: "string" } } : { prerelease: { type: "boolean" } },
     });
     if (positionals.length !== 1) return null;
-    if (command === "tag") return { release: tagRelease, version: positionals[0] };
+    if (command === "tag")
+      return { release: tagRelease, version: positionals[0], prerelease: values.prerelease };
     if (values.place === undefined) return null;
     return { release: prepareRelease, version: positionals[0], place: values.place };
   } catch {

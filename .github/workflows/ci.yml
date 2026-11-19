@@ -4477,6 +4477,7 @@ jobs:
       packages: write
     outputs:
       release_version: ${{ steps.tags.outputs.release_version }}
+      release_prerelease: ${{ steps.release_tag.outputs.release_prerelease }}
       release_image: ${{ format('{0}@{1}', steps.tags.outputs.release_repository, steps.push_app.outputs.digest) }}
       app_digest: ${{ steps.push_app.outputs.digest }}
       print_agent_digest: ${{ steps.push_print_agent.outputs.digest }}
@@ -4513,7 +4514,8 @@ jobs:
 
       # The checkout is one commit deep, and a shallow fetch of main answers "not an ancestor" for a
       # tag behind main's tip, so main is fetched whole.
-      - name: Refuse a release tag that is not on main
+      - id: release_tag
+        name: Refuse a release tag that is not on main
         if: startsWith(github.ref, 'refs/tags/v')
         timeout-minutes: 4
         env:
@@ -4523,11 +4525,11 @@ jobs:
           set -euo pipefail
           fetched=0
           for attempt in 1 2; do
-            if timeout 90 git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main; then
+            if timeout 90 git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "+$GITHUB_REF:$GITHUB_REF"; then
               fetched=1
               break
             fi
-            echo "fetching main failed (attempt $attempt)" >&2
+            echo "fetching main and $GITHUB_REF_NAME failed (attempt $attempt)" >&2
             for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
           done
           [ "$fetched" -eq 1 ] || exit 1
@@ -4536,6 +4538,23 @@ jobs:
             exit 1
           fi
           echo "the tag $GITHUB_REF_NAME is on a commit of main"
+          if ! target=$(git cat-file tag "$GITHUB_REF" | sed -n '1,2p') ||
+             [ "$target" != "$(printf 'object %s\ntype commit' "$(git rev-parse HEAD)")" ]; then
+            echo "$GITHUB_REF_NAME must be an annotated tag pointing directly to this commit" >&2
+            exit 1
+          fi
+          subject=$(git for-each-ref --format='%(contents:subject)' "$GITHUB_REF")
+          body=$(git for-each-ref --format='%(contents:body)' "$GITHUB_REF")
+          version=${GITHUB_REF_NAME#v}
+          case "$subject:$body" in
+            "Waitron $version:") prerelease=false ;;
+            "Waitron prerelease $version:") prerelease=true ;;
+            *)
+              echo "$GITHUB_REF_NAME must carry the annotation made by pnpm release tag" >&2
+              exit 1
+              ;;
+          esac
+          echo "release_prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
       # The release image carries the software producer's settings from three repository secrets. A
       # fork has none of them until it sets its own, so its publish stops here.
@@ -4919,6 +4938,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ needs.publish.outputs.release_version }}
+          RELEASE_PRERELEASE: ${{ needs.publish.outputs.release_prerelease }}
           RELEASE_IMAGE: ${{ needs.publish.outputs.release_image }}
         run: |
           set -euo pipefail
@@ -4945,6 +4965,7 @@ jobs:
         env:
           WAITRON_RELEASE_SIGNING_KEY: ${{ secrets.WAITRON_RELEASE_SIGNING_KEY }}
           RELEASE_VERSION: ${{ needs.publish.outputs.release_version }}
+          RELEASE_PRERELEASE: ${{ needs.publish.outputs.release_prerelease }}
           RELEASE_SOURCE_SHA: ${{ github.sha }}
           RELEASE_APP_DIGEST: ${{ needs.publish.outputs.app_digest }}
           RELEASE_PRINT_AGENT_DIGEST: ${{ needs.publish.outputs.print_agent_digest }}

@@ -669,6 +669,20 @@ describe("the entry point", () => {
     expect(recorded).toEqual(argvOnly(tagPath()));
   });
 
+  it("tags a prerelease after the same declaration and CI checks", () => {
+    const { result, recorded } = runEntryPoint(
+      ["tag", "1.0.0", "--prerelease"],
+      { WT_BRANCH: "main" },
+      "",
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(recorded).toEqual([
+      ...argvOnly(tagPath().slice(0, -2)),
+      ["git", "tag", "-a", "v1.0.0", "-m", "Waitron prerelease 1.0.0"],
+      ["git", "push", "origin", "v1.0.0"],
+    ]);
+  });
+
   it("names the step that stopped prepare, and prints none of its output", () => {
     const { result, recorded } = runEntryPoint(
       ["prepare", "1.0.0", "--place", "Elche"],
