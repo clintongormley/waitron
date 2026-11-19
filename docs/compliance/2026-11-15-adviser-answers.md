@@ -205,6 +205,8 @@ the customer never got an original.
 4. A QR code or link for the customer to download the ticket is not built. Build it only if you
    want it, with proof of download and a paper fallback.
 
+_19 November 2026: the owner reversed D2 (question 3 of the [19 November sheet](2026-11-19-adviser-meeting.md)): "We must always print one unless we email it instead."; the till's None was removed (ADVISER-NO-NONE)._
+
 **Your decision (D2).** *Owner, 16 November: keep None. Most customers don't want the ticket, and
 printing every one wastes paper.* By the adviser's answer, a ticket the customer never receives
 breaches the delivery rule, so this is a risk you are choosing to take. Thursday's question 16 asks

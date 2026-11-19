@@ -340,7 +340,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 Hardware and inbox checks to complete in the owner session.
 
 - **A739 physical payment and delivery qualification.** On the real till, printer and reader,
-  check the payment window and final Receipt / Full invoice / None choice; original and copy
+  check the payment window, the final Receipt / Full invoice choice and that **Done** prints the receipt; original and copy
   paper output; requested card slips after a confirmed capture and Print a copy before full
   payment; and Receipt Email arriving in the intended inbox. No physical printer, reader or
   inbox qualification was performed by the software cuts. The watcher moved these remaining

@@ -74,8 +74,9 @@ look at the printer first. If sending fails, or the customer does not have it, u
 again** to retry the same address, or choose another address.
 
 Press **Done** or close the window to carry on. Unless you emailed it, the receipt prints when you
-close. If the printer is not working, it prints by itself when it is back. You close the table
-separately.
+close. If the printer is switched off or not working, it prints by itself when it is back; if it has
+not printed by the next day, print it from the sale. If the device has no receipt printer, nothing
+prints: choose one or send the email before closing. You close the table separately.
 For a document later, open the sale and choose **Print/Reprint**.
 
 ## Check a card before cancelling {#cancel-pending-card}
