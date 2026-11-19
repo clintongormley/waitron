@@ -488,6 +488,22 @@ enviarlo todo, el terminal de camarero se queda en la mesa hasta que tocas **Sal
 pantalla de 720 px de ancho o más, como la de una tableta, la carta y el pedido aparecen uno junto
 al otro.
 
+## Cartas a precio fijo en una mesa {#set-menus}
+
+Indica cuántas cartas de cada tipo lleva la cuenta. Abre la carpeta de la carta a
+precio fijo y elige los platos. En la carpeta puedes ver qué platos están incluidos y
+cuáles tienen suplemento. Si la comida es para llevar, elige **Para llevar** en la
+cuenta antes de añadir una carta a precio fijo.
+
+Abre el resumen en **Pedido** para ver dónde va cada plato y qué sitios quedan libres.
+Si un plato no tiene sitio, elige una de las opciones que aparecen o pulsa **Cancelar**
+para dejar el pedido como estaba. Desde el resumen puedes mover un plato a otra carta
+de la misma cuenta o cancelar una carta vacía.
+
+Para pasar una carta a otra cuenta, abre **Mover platos** y selecciona la carta. Sus
+platos se mueven con ella. Si eliges un solo plato, comprueba su precio en la otra
+cuenta antes de confirmar.
+
 ## Dar a una mesa un nombre corto {#short-names}
 
 Un móvil o una tableta muestra el nombre corto de una mesa en los botones de mesa de la barra y en

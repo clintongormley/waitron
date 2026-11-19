@@ -80,11 +80,19 @@ type DocumentSection = Extract<DocumentMember, { kind: "section" }>;
  * members, in their order; a direct include among those gives way too. */
 type ShownMember = Exclude<DocumentMember, { kind: "set_menu" }>;
 
-export function shownMembers(members: readonly DocumentMember[]): ShownMember[] {
+export function shownMembers(
+  members: readonly DocumentMember[],
+  includeSetMenus: boolean,
+): DocumentMember[];
+export function shownMembers(members: readonly DocumentMember[]): ShownMember[];
+export function shownMembers(
+  members: readonly DocumentMember[],
+  includeSetMenus = false,
+): DocumentMember[] {
   return members.flatMap((member) => {
-    if (member.kind === "set_menu") return [];
+    if (member.kind === "set_menu" && !includeSetMenus) return [];
     return member.kind === "section" && member.direct === true
-      ? shownMembers(member.members)
+      ? shownMembers(member.members, includeSetMenus)
       : [member];
   });
 }
@@ -169,6 +177,7 @@ export function sectionTrail(
 export function indexDocument<P>(
   members: readonly DocumentMember[],
   offerOf: (menuItemId: string) => P | undefined,
+  hasSetMenu?: (menuId: string) => boolean,
 ): HomeIndex<P> {
   const index: HomeIndex<P> = {
     sections: new Map(),
@@ -185,7 +194,9 @@ export function indexDocument<P>(
         holdsSomething = true;
         // A product placed twice keeps its first place: a Map keeps a key where it was first set.
         index.products.set(member.productId, offer);
-      } else if (member.kind === "section" && walk(member.members)) {
+      } else if (member.kind === "set_menu") {
+        if (hasSetMenu?.(member.menuId)) holdsSomething = true;
+      } else if (walk(member.members)) {
         holdsSomething = true;
         index.sections.set(member.sectionId, member);
       }

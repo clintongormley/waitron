@@ -163,7 +163,7 @@ export class TillLastAdded extends LitElement {
         ${(line.extras ?? []).map((extra) => html`<span class="modifier-answer">${extra.name || t("basket.not_offered")}${extra.quantity > 1 ? ` ×${extra.quantity}` : ""}</span>`)}
         ${line.note === undefined ? nothing : html`<span class="line-note">${t("line.note.label")}: ${line.note}</span>`}
       </button>
-      ${soldByTheUnit(line.product) ? html`<span class="last-added-steps">${([-1, 1] as const).map((by) => html`<wt-button variant="secondary" data-last-added-step=${by} ?disabled=${this.#blocked() || this.readOnly || (by === 1 && this.store.canSelectProduct?.(line.product) === false)} .ariaLabel=${`${t(by === -1 ? "basket.decrease" : "basket.increase")} ${by === -1 ? "−1" : "+1"} · ${name}`} @click=${() => this.#step(line, by)}>${by === -1 ? "−1" : "+1"}</wt-button>`)}</span>` : nothing}
+      ${line.setMenuId === undefined && soldByTheUnit(line.product) ? html`<span class="last-added-steps">${([-1, 1] as const).map((by) => html`<wt-button variant="secondary" data-last-added-step=${by} ?disabled=${this.#blocked() || this.readOnly || (by === 1 && this.store.canSelectProduct?.(line.product) === false)} .ariaLabel=${`${t(by === -1 ? "basket.decrease" : "basket.increase")} ${by === -1 ? "−1" : "+1"} · ${name}`} @click=${() => this.#step(line, by)}>${by === -1 ? "−1" : "+1"}</wt-button>`)}</span>` : nothing}
     </div>`;
   }
 }

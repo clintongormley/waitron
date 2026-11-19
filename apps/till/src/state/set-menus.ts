@@ -1,7 +1,9 @@
 import {
+  centsToDecimal,
   placeInOrder,
   type BillSetMenuState,
   type DishToPlace,
+  type DishMove,
   type ServedSetMenu,
   type ServedSetMenuCopy,
 } from "@waitron/shared";
@@ -9,7 +11,11 @@ import type { FreshDraftLine, PartyBill, TillMenuOffer } from "../api/client.js"
 import { lineProductName } from "../widgets/product-name.js";
 import type { OrderLine } from "./working-order.js";
 
-type OrderingCopy = { copy: ServedSetMenuCopy; versionId: string };
+export type OrderingCopy = { copy: ServedSetMenuCopy; versionId: string };
+export const NO_ORDERING_COPIES: OrderingCopy[] = [];
+export type SetMenuChange =
+  { menuId: string; count: number } | { remove: string } | { moves: readonly DishMove[] };
+
 type BillCopies = Pick<PartyBill, "setMenus" | "setMenuCopies">;
 
 export function orderingCopies(
@@ -17,6 +23,7 @@ export function orderingCopies(
   zone: readonly ServedSetMenu[],
   sellingVersions?: ReadonlySet<string>,
 ): OrderingCopy[] {
+  if (zone.length === 0 && !bill?.setMenuCopies?.length) return NO_ORDERING_COPIES;
   const recorded = bill?.setMenus?.recorded ?? {};
   const served = new Map(bill?.setMenuCopies?.map((copy) => [copy.key, copy]));
   const copies: OrderingCopy[] = [];
@@ -45,8 +52,8 @@ export function lookupSetMenuLine(line: OrderLine, lookup?: SetMenuOfferLookup) 
   });
 }
 
-export function draftPlacements(bill: BillSetMenuState, draft: readonly OrderLine[]) {
-  const dishes = draft.flatMap((line, index): DishToPlace[] =>
+export function draftMenuDishes(draft: readonly OrderLine[]): DishToPlace[] {
+  return draft.flatMap((line, index): DishToPlace[] =>
     line.setMenuId === undefined || line.workingOrderLineId !== undefined
       ? []
       : [
@@ -58,7 +65,10 @@ export function draftPlacements(bill: BillSetMenuState, draft: readonly OrderLin
           },
         ],
   );
-  return placeInOrder(bill, dishes);
+}
+
+export function draftPlacements(bill: BillSetMenuState, draft: readonly OrderLine[]) {
+  return placeInOrder(bill, draftMenuDishes(draft));
 }
 
 export function draftPlacementId(line: OrderLine, index: number): string {
@@ -82,4 +92,16 @@ export function draftNamesLosingPlace(
     draft.map((line, index) => [draftPlacementId(line, index), lineProductName(line.product)]),
   );
   return [...new Set(before.filter(({ id }) => unplaced.has(id)).map(({ id }) => names.get(id)!))];
+}
+
+export function sentMenuDishes(bill: BillSetMenuState | null | undefined) {
+  const result = new Map<string, { setMenuId: string; price: string }>();
+  if (bill === null || bill === undefined) return result;
+  const ids = new Map(menusWithCopies(bill).map(({ menu, copy }) => [menu.lineId, copy.setMenuId]));
+  for (const dish of bill.dishes)
+    result.set(dish.lineId, {
+      setMenuId: ids.get(dish.setMenuLineId)!,
+      price: centsToDecimal(dish.priceCents),
+    });
+  return result;
 }

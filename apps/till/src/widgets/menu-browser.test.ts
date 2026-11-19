@@ -1,3 +1,4 @@
+import { bill as setMenuBill, daily, special } from "../../test/set-menu-widgets.js";
 import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
 import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -274,6 +275,108 @@ function notice(el: TillMenuBrowser): string | null {
 afterEach(() => {
   setLocale("en-GB");
   cleanupWidgets();
+});
+
+describe("set-menu folders", () => {
+  const dailyMember = { kind: "set_menu", menuId: daily.menuId, name: daily.name } as const;
+  const sectionWithSetMenu = section("fixed-price", "Lunch choices", {}, [dailyMember]);
+  const menu = lunch({ structure: { members: [sectionWithSetMenu] } });
+
+  it("opens a set menu nested in a section with no ordinary dishes", async () => {
+    const { el } = await mount({
+      menu,
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+    });
+    await tap(el, entry(el, "structure", "Lunch choices"));
+    await tap(el, entry(el, "section", daily.name));
+    const folder = root(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "till-set-menu-folder",
+    )!;
+    await folder.updateComplete;
+    expect(folder.shadowRoot!.textContent).toContain("€14.00");
+  });
+
+  it("keeps a bill's recorded folder after it disappears from the served menu", async () => {
+    const { el } = await mount({
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+      setMenuBill,
+    });
+    await tap(el, entry(el, "structure", "Set menus"));
+    await tap(el, entry(el, "section", daily.name));
+    const folder = root(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "till-set-menu-folder",
+    )!;
+    await folder.updateComplete;
+    expect(folder.shadowRoot!.textContent).toContain("€14.00");
+  });
+
+  it("drafts a whole set-menu dish with the recorded offer and that offer's course", async () => {
+    const { el, store } = await mount({
+      menu,
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+      setMenuBill,
+    });
+    await tap(el, entry(el, "structure", "Lunch choices"));
+    await tap(el, entry(el, "section", daily.name));
+    const folder = root(el).querySelector("till-set-menu-folder")!;
+    await folder.updateComplete;
+    await userEvent.click(page.elementLocator(folder).getByRole("button", { name: /Soup/ }));
+    expect(store.lines).toMatchObject([
+      {
+        quantity: "1",
+        setMenuId: daily.menuId,
+        noMerge: true,
+        courseId: "starter",
+        product: { menuItemId: "soup", menuVersionId: "lunch" },
+      },
+    ]);
+  });
+
+  it("offers a set menu before a dish with no place, then reserves the dish on it", async () => {
+    const { el, store } = await mount({
+      menu: lunch({
+        structure: { members: [{ kind: "set_menu", menuId: special.menuId, name: special.name }] },
+      }),
+      setMenuCopies: [daily, special].map((copy) => ({ copy, versionId: "lunch" })),
+      setMenuBill: {
+        ...setMenuBill,
+        setMenus: setMenuBill.setMenus.filter(({ lineId }) => lineId !== "special-1"),
+      },
+    });
+    const add = vi.fn(async () => {
+      el.setMenuBill = setMenuBill;
+      await el.updateComplete;
+      return undefined;
+    });
+    el.addSetMenu = add;
+    await tap(el, entry(el, "structure", special.name));
+    const folder = root(el).querySelector("till-set-menu-folder")!;
+    await folder.updateComplete;
+    await userEvent.click(page.elementLocator(folder).getByRole("button", { name: /Sea bass/ }));
+    expect(store.lines).toEqual([]);
+    const modal = root(el).querySelector<import("@waitron/ui").WtDialog>("[data-set-menu-place]")!;
+    await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    expect(modal.heading).toContain("No place for Sea bass");
+    await userEvent.click(
+      page.elementLocator(modal).getByRole("button", { name: /Add a Special menu.*19.00/ }),
+    );
+    await vi.waitFor(() =>
+      expect(store.lines).toMatchObject([
+        {
+          quantity: "1",
+          setMenuId: special.menuId,
+          setMenuReserved: { setMenuLineId: "special-1", place: 0 },
+        },
+      ]),
+    );
+    expect(add).toHaveBeenCalledExactlyOnceWith(special.menuId);
+  });
+
+  it("hides set menus on a surface without set-menu ordering", async () => {
+    const { el } = await mount({ menu });
+    expect(names(entries(el, "structure"))).not.toContain("Lunch choices");
+  });
 });
 
 describe("till-menu-browser", () => {
