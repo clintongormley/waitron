@@ -16,7 +16,7 @@
 > with 400, by the rule.
 
 > **2026-10-11 supersession.** A435 step 6 changes deleted hierarchy target and import refusals. The HTTP survey below records its earlier contract; table in-service and hardware refusals remain separate. See the
-> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+> [step 6 reconciliation](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 
 
 > Naming update, 2026-10-08 (A354): current menu-price code calls product variants “variants”;

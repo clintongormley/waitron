@@ -3,7 +3,7 @@
 > **2026-10-10, receipt presentation:** A366 slice 7 supersedes the F1 location-address
 > exclusions below. Thermal and till receipts follow the global current-address switch,
 > independently of filed domicile; A4 omits the optional current-address block. Filed domicile
-> remains. Follow [the slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md).
+> remains. Follow [the slice 7 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md).
 
 The open entries are listed in [the backlog](../backlog.md), under "Fiscal records, invoices and the asesor". This file holds
 their full text.

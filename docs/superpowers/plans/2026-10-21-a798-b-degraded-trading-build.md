@@ -58,7 +58,7 @@ Backlog: A798-B (`docs/backlog.md`).
 
 Ten slices, in §8's order, each on its own branch and pull request. **Only slice 1 is detailed
 here.** Each later slice gets its own plan, written against `main` after the slice before it lands,
-in the way A366 ran (`2026-10-07-a366-slice-1-service-periods.md`, then one plan per slice). That
+in the way A366 ran ([`2026-10-07-a366-slice-1-service-periods.md`](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-07-a366-slice-1-service-periods.md), then one plan per slice). That
 plan re-reads the code, runs the experiments its slice needs, and may correct this table with
 evidence.
 

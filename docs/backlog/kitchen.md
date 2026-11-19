@@ -145,7 +145,7 @@ and "fire the mains, then move a Steak into them" in `apps/server/src/order-grou
 
 A dish whose course is switched off follows the no-course rule: Fire now, listed first, whether
 you send it or move its bill. This replaces the earlier earliest-listed-course rule in the
-[table-actions plan](../superpowers/plans/2026-09-28-table-actions.md).
+[table-actions plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-09-28-table-actions.md).
 
 ### A756. The Kitchen tab split up: a Courses page, a department Service tab and an Every station card
 

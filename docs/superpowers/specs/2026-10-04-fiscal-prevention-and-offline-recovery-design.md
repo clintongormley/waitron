@@ -18,7 +18,7 @@ awaits review. No implementation or new live AEAT probe is claimed by this appro
 
 This updates the [2026-10-03 design](2026-10-03-fiscal-chain-divergence-design.md). Its incident
 research and decision history remain available there; the changes below take precedence where
-they differ. The [old implementation plan](../plans/2026-10-03-fiscal-chain-divergence.md) needs
+they differ. The [old implementation plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-03-fiscal-chain-divergence.md) needs
 replacement by the revised plan linked above. Adviser questions live in
 [asesor-questions.md](../../compliance/asesor-questions.md), Q5(f) and Q33–Q41.
 

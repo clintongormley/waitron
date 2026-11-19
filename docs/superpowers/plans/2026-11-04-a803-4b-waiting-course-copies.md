@@ -420,7 +420,7 @@ Run each again at the task that touches it; list any new consumer in the ledger.
 | `order_group_events` readers | D9's check | 1a |
 | Till `codes.ts`, `codes.test.ts`, `client.ts:4699` | words, comment | 7 |
 | `docs/backlog/kitchen.md:390` (A660's record: "a bill holding a held course cannot move again") | dated pointer | 11 |
-| `docs/superpowers/specs/2026-09-28-table-actions-design.md:242`, `:387` | dated pointer | 11 |
+| [`2026-09-28-table-actions-design.md:242`](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-09-28-table-actions-design.md), `:387` | dated pointer | 11 |
 
 ## Changed checks
 
@@ -907,7 +907,7 @@ landing either way).
   if added). Delete nothing else.
 - [ ] Dated pointers (one line each, never a rewrite): `docs/backlog/kitchen.md:390` (A660's record:
   since A803 4b a bill holding a held course can move to another table, not to the counter);
-  `docs/superpowers/specs/2026-09-28-table-actions-design.md:242` and `:387`; the A803 spec §3.7's
+  [`2026-09-28-table-actions-design.md:242`](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-09-28-table-actions-design.md) and `:387`; the A803 spec §3.7's
   "Today a bill holding held dishes cannot leave its party" (`:128-130`).
 - [ ] **Record pass.** Append "## Build record (4b)" to this plan: what was built versus planned,
   each departure with its reason, line numbers that moved, and the deletion-control table from

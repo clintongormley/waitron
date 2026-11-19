@@ -29,7 +29,7 @@
 > [single core rewrite](../../backlog/printers.md#decisions-and-deliberate-limits).
 > Current consent checks, stored payloads, reservation and retry remain until that work lands;
 > do not build the historical consent UI or fabricate acceptance data. The
-> [slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md) supplies the independent
+> [slice 7 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md) supplies the independent
 > department/default contact selector and receipt presentation. Part A remains unlanded.
 > Public F1 gates and A448's separate compliance question remain open.
 

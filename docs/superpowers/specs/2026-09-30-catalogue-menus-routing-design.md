@@ -12,9 +12,9 @@
 > [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
 > and [the slice 4 plan](../plans/2026-10-08-a366-slice-4-prep-stations.md).
 
-> **2026-10-07 — A366:** §5.7 and §5.9 are replaced by [Service times, departments, zones and prep stations](2026-10-07-service-times-departments-and-stations-design.md).
+> **2026-10-07 — A366:** §5.7 and §5.9 are replaced by [Service times, departments, zones and prep stations](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md).
 
-> **2026-10-05 — A261 step 3:** For the replacement station, printer, watcher and timing controls, see the [Prep stations tabs implementation plan](../plans/2026-10-05-prep-stations-tabs.md) and its dated implementation checkpoints. This document retains the earlier screen layout and procedures as historical context.
+> **2026-10-05 — A261 step 3:** For the replacement station, printer, watcher and timing controls, see the [Prep stations tabs implementation plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-05-prep-stations-tabs.md) and its dated implementation checkpoints. This document retains the earlier screen layout and procedures as historical context.
 
 > **2026-10-07 — A343:** the Price overrides tab no longer shows a count of the menu's own prices; the owner removed it.
 
@@ -42,7 +42,7 @@ Each names its file so it can be re-checked before building.
 - **Categories are for reporting and routing.** They are folders in the products screen. Each has
   one internal name, with no translations, no image and no colour. The Categories screen goes.
   Superseded 2026-10-05 by W92
-  (`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): a category has an optional
+  ([2026-10-05-w92-product-colours-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w92-product-colours-design.md)): a category has an optional
   colour again, which products inherit.
 - **Folders also decide where things are made.** On one new screen, **Prep Stations**, each station
   claims folders. Ordered exceptions sit above the claims, and the venue's default station catches
@@ -71,7 +71,7 @@ what "Uncategorised" means today. Reports roll up along the tree, as now.
 - the translated name, which becomes one plain name;
 - the image and the colour;
   Superseded 2026-10-05 by W92
-  (`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): a category has an optional
+  ([2026-10-05-w92-product-colours-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w92-product-colours-design.md)): a category has an optional
   colour again, which products inherit.
 - the kitchen station.
 
@@ -89,7 +89,7 @@ the line is added.
 ### 2.2 The products screen
 
 > 2026-10-02: the folder view became a category tree; see
-> [2026-10-02-products-category-tree-design.md](2026-10-02-products-category-tree-design.md).
+> [2026-10-02-products-category-tree-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-02-products-category-tree-design.md).
 
 The products screen shows products and folders together.
 
@@ -167,7 +167,7 @@ There is no description until something shows one. The till does not yet show a 
 colour (`apps/till/src/widgets/menu-browser.ts` shows a folder icon and the name), though the
 published menu carries both.
 Superseded 2026-10-05 for colour by W92
-(`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): the till paints a section's
+([2026-10-05-w92-product-colours-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w92-product-colours-design.md)): the till paints a section's
 colour on its tile.
 
 **Retired:** library sections (`sections.role = 'library'`, `packages/catalogue/src/schema/sections.ts`)
@@ -189,7 +189,7 @@ edited only in that menu's editor. That editor must therefore edit every section
   still read-only, and priced exactly as they are inside the folder (the switch changes no offer); an include inside it keeps its own setting,
   and a section of the same name as one of the including menu's is shown beside it, not merged. A
   Device Home Page shortcut to an included menu shown this way still opens it as a folder. Plan:
-  [A322](../plans/2026-10-07-a322-included-menu-direct-sections.md)._
+  [A322](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-07-a322-included-menu-direct-sections.md)._
 - So a menu needs the same presentation fields as a section: a customer-facing name with
   translations, and an optional image and colour. These are what the folder shows.
 - A menu that is included elsewhere is still a menu in its own right. A bar till can run on Drinks
@@ -216,7 +216,7 @@ is still one item, with one price and one on/off state, wherever it is tapped.
 _2026-10-01, owner: for a product with sizes, a price set for a specific size beats a price set
 for the whole product, wherever each was set — so a menu's own price for the product does not
 override an included menu's price for one size. Detail: the
-[slice 2 plan](../plans/2026-09-30-menus-include-menus-slice-2.md), decision P4._
+[slice 2 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-09-30-menus-include-menus-slice-2.md), decision P4._
 
 **Worked example.** Drinks overrides lager to €3.50. Afternoon includes Drinks and also puts lager
 in its own Specials section, where it carries the product's own €3. Afternoon shows a clash:
@@ -228,7 +228,7 @@ a disagreement is a clash. Evening can switch off lemonade without touching Drin
 "sold out tonight", which the till handles during service.
 
 _(Superseded 2026-10-05 by W90: a menu has no on/off setting of its own for a product or a variant;
-see [the W90 design](2026-10-05-w90-remove-menu-offered-switch-design.md).)_
+see [the W90 design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w90-remove-menu-offered-switch-design.md).)_
 
 **Where prices are stored today.** Every product has its own price (`products.unit_price`). Every
 menu can override it (`menu_items.gross_price`, empty meaning "use the product's price";
@@ -277,7 +277,7 @@ unchanged, apart from three points:
    - The editor warns before and after publishing, for example "2 shortcuts on Evening's Counter
      layout point at things no longer in this menu".
    - The empty slot is a new kind of tile, on the till and in the published menu.
-     _2026-10-01: [slice 2](../plans/2026-09-30-menus-include-menus-slice-2.md) implements this
+     _2026-10-01: [slice 2](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-09-30-menus-include-menus-slice-2.md) implements this
      contract as `{ kind: "empty" }`, with till rendering and an editor offering Remove and Replace;
      its focused checks pass and landing is pending._
 
@@ -306,7 +306,7 @@ the default moved to Prep Stations. The list below records the design's starting
   - A printer can print one ticket per station, or one per whole order (`printTicketScope`,
     `packages/db/src/schema/printers.ts`).
   _2026-10-01 (slice 3d): a kitchen screen binds a station or a watcher; the whole-order setting
-  is gone. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
+  is gone. [Plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-01-watchers-slice-3d.md)._
 - **Routing rules** are edited on a different screen: Venue operations › Preparation routing
   (`packages/venue-service/src/dashboard/venue-operations-screen.ts:730`, table
   `preparation_routes`). A rule matches a zone (or all zones) together with a product or a category,
@@ -347,7 +347,7 @@ fallback, and so on. The chain ends at the venue default.
 The chosen station is **recorded when the work is sent**, as today. Changing a rule never moves
 work that has already been sent.
 
-_2026-10-01 (slice 3b, owner): the [3b plan](../plans/2026-10-01-station-hours-fallbacks-slice-3b.md)
+_2026-10-01 (slice 3b, owner): the [3b plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md)
 replaces the fallback policy above. Closed and switched-off stations follow their fallback chain;
 no replacement is a dead end, and the till asks where to make the dish before sending or taking
 payment. Printer and screen failures raise alerts. Closing a station moves only new work._
@@ -356,7 +356,7 @@ _2026-10-01 (slice 3c-3, owner): a waiter can move a dish the kitchen has not st
 station. At release, a held dish at a closed or switched-off station follows the current rules unless
 a station chosen by hand remains switched on; that choice stays even when closed, without an alert.
 If the rules find no replacement, the dish stays at its old station and raises an alert
-([plan](../plans/2026-10-01-moving-dishes-slice-3c3.md)). A rule change alone still moves nothing
+([plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md)). A rule change alone still moves nothing
 already sent._
 
 ### 5.4 Delivery area
@@ -377,7 +377,7 @@ separate conditions for order type and ordering device. The delivery area is fou
 
 > **2026-10-06 follow-up (W97):** a device's default zone and `device_zone_defaults` are gone,
 > replaced by a device profile's starting zone; see the
-> [devices, menus and service zones design](2026-10-04-devices-menus-and-service-zones-design.md).
+> [devices, menus and service zones design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md).
 
 ### 5.5 Station claims
 
@@ -451,7 +451,7 @@ what, then the delivery area, then the station.
 _2026-10-01 (slice 3c-2): the full rule runs for an extra; matching nothing, or the default,
 means it follows its dish; "No preparation" keeps it on the dish's ticket; a closed station with
 no replacement leaves it with its dish, silently; it splits off only to a station other than its
-dish's. [Plan](../plans/2026-10-01-split-off-extras-slice-3c2.md)._
+dish's. [Plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md)._
 
 ### 5.9 Watchers
 
@@ -472,7 +472,7 @@ action appears on the expediter's watcher screen.
 
 _2026-10-01 (slice 3d): a watcher is its own thing, not a station. Its station and service-zone
 filters must both match. It marks its own Done; Away remains one shared mark. Fire is a switch on
-the watcher. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
+the watcher. [Plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-01-watchers-slice-3d.md)._
 
 ### 5.10 What a ticket shows
 
@@ -480,7 +480,7 @@ the watcher. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
   example, "Burger — with chips from Extras station", and "Chips — for the burger at Grill".
   _2026-10-01 (slice 3c-2): the dish's cross-reference says it is with the extra at its station;
   the extra's says it is for the dish at the dish's station. Paper prints each reference on a
-  `> ` line. [Plan](../plans/2026-10-01-split-off-extras-slice-3c2.md)._
+  `> ` line. [Plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md)._
 - **"Show the rest of the order"** is a setting per station, off by default. It adds the rest of the
   order under a clearly marked heading, "Also on this order (not for this station)", with each
   line's station:
@@ -492,7 +492,7 @@ _2026-10-01 (slice 3c-1): a station's own tickets, first send, FIRE, HOLD and re
 _2026-10-01 (slice 3d): watcher printers replace whole-order printing. A watcher's ticket is headed
 by its name; its printers also receive matching correction slips, headed by the dish's station. An
 existing whole-order printer prints its attached stations' tickets until you attach it to a
-watcher. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
+watcher. [Plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-01-watchers-slice-3d.md)._
 
 ### 5.11 "Made here, no ticket"
 
@@ -530,7 +530,7 @@ Preparation routing. It holds:
   - the folders it claims.
 
   _2026-10-01 (slice 3d): watchers are a separate group on Prep Stations. A station card says which
-  watchers follow it. [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
+  watchers follow it. [Plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-01-watchers-slice-3d.md)._
 
   Claims are added by picking from the unassigned list.
 - **The unassigned list** (§5.5).
@@ -558,7 +558,7 @@ folders. Slice 2 is independent of both.
   drag and drop, the folder-delete choice, and variants.
 - Categories lose translations, image and colour.
   Superseded 2026-10-05 by W92
-  (`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): a category has an optional
+  ([2026-10-05-w92-product-colours-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w92-product-colours-design.md)): a category has an optional
   colour again, which products inherit.
 - The Categories screen goes.
 - Labels are removed (§3).
@@ -612,7 +612,7 @@ These were not discussed. Each is the default this document takes.
    (`menu_item_extra_items`). Each is merged and clash-checked the same way.
    _2026-10-01: the owner dropped per-menu extras while slice 2 was planned, so the rule covers a
    product's price and each variant's; a menu offer carries its product's extras lists at the
-   lists' prices ([slice 2 plan](../plans/2026-09-30-menus-include-menus-slice-2.md))._
+   lists' prices ([slice 2 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-09-30-menus-include-menus-slice-2.md))._
 3. **An included menu's folder shows the included menu's customer-facing name.** The including menu
    cannot rename it. To show a different name, include it inside a section of your own.
    _Reversed 2026-10-07 by A322 (owner, ~10:50): the include's own Edit dialog can give its folder
@@ -620,7 +620,7 @@ These were not discussed. Each is the default this document takes.
    value keeps following it, so a later rename of that menu still reaches the folder; only a field
    the manager changed is fixed on the include. The dashboard row still reads "Menu: <name>" with
    the included menu's own name. Plan:
-   [A322](../plans/2026-10-07-a322-included-menu-direct-sections.md)._
+   [A322](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-07-a322-included-menu-direct-sections.md)._
 4. **A folder with a claim that is deleted** takes its claim with it. Its products then fall to the
    nearest claim above, or appear on the unassigned list. Deleting it shows this in the routing
    preview (§5.12).
@@ -640,7 +640,7 @@ These were not discussed. Each is the default this document takes.
   one copy per send, headed by its name, and every correction slip for a dish on that paper. A
   printer still set to "one ticket per order" prints its attached stations' tickets until you
   attach it to a watcher. The setting is gone; its column stays unread until the next reset.
-  [Plan](../plans/2026-10-01-watchers-slice-3d.md)._
+  [Plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-01-watchers-slice-3d.md)._
 - **Bundles.** Waitron may gain bundled products, made of a list of other products: a set menu, for
   example. Bundles are not designed here. The direction for routing: each product in a bundle is
   an ordinary product in its own folder, so it routes by its own folder like any other. The bundle

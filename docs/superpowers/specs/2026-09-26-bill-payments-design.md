@@ -34,7 +34,7 @@ Today the software cannot do that: every bill is paid in one go at the moment it
 invoice is issued. This document decides how money taken before the invoice is recorded, how each
 payment is split between the bill, change and tip, what several devices may do at once, how a card
 payment interrupted by a crash is recovered, and which transaction issues the invoice. The
-[implementation plan](../plans/2026-09-26-service-ordering-and-billing.md) Task 14 builds the server
+[implementation plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-09-26-service-ordering-and-billing.md) Task 14 builds the server
 side and Task 15 the till.
 
 **Words used here.** A **bill** is one working order that is paid and invoiced on its own: a table's
@@ -867,7 +867,7 @@ collected; `issueUnpaidInvoice` links the bill's card payments to the invoice wh
 §2.5 asks. With no invoice yet, and on an open bill, they still refuse any pending or received
 payment.)_
 _(2026-09-30: no longer true of merging. The table-actions design's decision 5 (owner, 2026-09-28,
-`docs/superpowers/specs/2026-09-28-table-actions-design.md`) lets only an untouched bill merge, and
+[2026-09-28-table-actions-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-09-28-table-actions-design.md)) lets only an untouched bill merge, and
 the code refuses merging two bills, or moving items between them, with `bill.payments_received`
 while either has any pending or received payment, one refunded in full included
 (`requireUntouchedPair`, `apps/server/src/bill-actions.ts`). Abandoning still goes through once

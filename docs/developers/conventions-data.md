@@ -2669,7 +2669,7 @@ recorded. Terminal booking and delivery table pointers may clear with copied lab
 existing floor release path. Individual table Delete still follows the master/today lifecycle above.
 
 These limits follow the owner-approved
-[A435 step 6 reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md),
+[A435 step 6 reconciliation](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md),
 which gives the later floor design precedence over the original immediate-table Delete proposal.
 
 ## A read taken while ANOTHER caller's write transaction is open sees committed rows only

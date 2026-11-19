@@ -246,7 +246,7 @@ To decide before building:
 ## A436 — a kitchen display with someone signed in, logged out only after a long idle time
 
 - **Owner, 2026-10-08, answering decisions 4 and 5 of the
-  [A366 slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md):** "kitchen
+  [A366 slice 5 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-a366-slice-5-monitors.md):** "kitchen
   displays can have a login, but i would not expect them to log off automatically, or at least
   only after an extended logout time (eg 30 minutes)". With nobody signed in, the device is the one
   acting; with someone signed in, that person is recorded.
@@ -389,7 +389,7 @@ Open:
 
 ## Tables, parties and bills — the till's table actions
 
-[plan](../superpowers/plans/2026-09-28-table-actions.md). What stays open:
+[plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-09-28-table-actions.md). What stays open:
 
 - **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows
   the original invoice total.** `collectOrder` queues no receipt on this path; the ticket it
@@ -1541,6 +1541,9 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 
 ## Decisions and deliberate limits
 
+- **A table's seats are a guide, never a limit (owner, 2026-10-08, A429 decision 6).** The seat
+  count is one number, used as a guide and for bookings; the till seats a larger party without a
+  refusal.
 - **The till's `TableState.today` stays nullable, wider than what the server sends (watcher,
   2026-11-18, lane A, not the owner; the owner may overrule).** `/api/tables/state` lists only
   on-floor tables in switched-on zones (`packages/db/src/table-in-service.ts`), and
@@ -2025,7 +2028,7 @@ checks replaces the physical-till trial.
 
 ### Device equipment defaults (W100, #1332; owner kept every default, 2026-10-07)
 
-From the [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md).
+From the [equipment plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md).
 The owner's answer, 2026-10-07 ~08:50 (lane C's questions file): "Ok", keep every default.
 
 - **Staff cannot switch a device's printing off.** The till's "No printer" choice is gone and the
@@ -2263,7 +2266,7 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   separate and removes saved/today/reset state after refusing live work. Only terminal booking
   and delivery table pointers may release with copied labels; recorded fiscal, sale, receipt,
   order/line context and finished transfer facts stay. See the
-  [reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md).
+  [reconciliation](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md).
 
 - **The old small floor-token work waited (owner, 2026-09-30, C82).** The owner said "wait on
   this" about its cramped labels, party names and chips. A429 slice 5 removes that map and its
@@ -2275,8 +2278,8 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
 - **Floor plans use two separate plans (A429, owner 2026-10-08).** The dashboard edits the master;
   the till works from today's copy. Service changes affect that copy. Table creation and renaming
   belong to the master editor; reserve tables supply today's spares. See
-  [the design](../superpowers/specs/2026-10-08-floor-plan-design.md) and
-  [the plan](../superpowers/plans/2026-10-08-floor-plan.md) for the approved decisions.
+  [the design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-08-floor-plan-design.md) and
+  [the plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-floor-plan.md) for the approved decisions.
 
 - **A presented bill moved to the counter keeps its recorded zone (A440, 2026-10-09, chosen in
   the branch's plan review, not an owner ruling).** A presented bill takes the new zone when it
@@ -2300,7 +2303,7 @@ payment belongs to the table, so no payment is lost.
 
 - **Service, ordering and billing.**
   [Design](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) (#693);
-  [plan](../superpowers/plans/2026-09-26-service-ordering-and-billing.md), eighteen tasks;
+  [plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-09-26-service-ordering-and-billing.md), eighteen tasks;
   Task 0's [bill payments design](../superpowers/specs/2026-09-26-bill-payments-design.md)
   (#698). Every task has landed: Task 1 #706, 2 #715, 3 #733, 4 #748, 5 #750, 6 #761, 7 #789,
   8 #806, 9 #814, 10 #908, 11 #916 (with lane B's B11a–B11g), 12 #923, 13 #903, 14 #721, 15 #956,

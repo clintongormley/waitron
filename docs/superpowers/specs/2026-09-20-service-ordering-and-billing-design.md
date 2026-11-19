@@ -30,7 +30,7 @@ This is intended behaviour, not a description of verified application features. 
 order, kitchen and menu rules the menus work (lane C) is landing — saved-order editing, kitchen
 notices, the recorded "sent" mark, selling from the published menu, and the till's home page — so
 most of it is built after those land. The
-[implementation plan](../plans/2026-09-26-service-ordering-and-billing.md) orders the work and names
+[implementation plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-09-26-service-ordering-and-billing.md) orders the work and names
 each dependency. Inventory, guest cloud access and the other later features below are not
 prerequisites for the staff workflow.
 
@@ -94,7 +94,7 @@ invoiced and awaiting payment — stays recorded on the absorbed visit, but ever
 matter it counts as the surviving visit's related bill: it is listed with the others, it counts in
 the outstanding balance until paid, its receipts stay reachable, and it blocks Finish table while
 outstanding. _(2026-10-03: a bill already invoiced and awaiting payment now moves to the surviving
-visit too — decision P13 of `docs/superpowers/plans/2026-09-28-table-actions.md`, made possible by
+visit too — decision P13 of [2026-09-28-table-actions.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-09-28-table-actions.md), made possible by
 that plan's Task 7 trigger change; only paid and abandoned bills stay on the absorbed visit. The move
 is pinned by "a merged party's invoiced bill, collected at the till (spec §12 item 9)" in
 `apps/server/src/parties.test.ts`.)_ The same holds through any chain of merges (a party merged

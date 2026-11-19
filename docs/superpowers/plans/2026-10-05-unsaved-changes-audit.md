@@ -20,7 +20,7 @@ floor-plan editing remain separate.
 > See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
 
 > **2026-10-11 supersession.** The later floor design retires the old floor checkpoint’s immediate zone Enable/Disable and placement actions. A435 step 6 uses shared-impact hierarchy Delete and invalidates deleted editor targets; individual-table draft rules remain. See the
-> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+> [step 6 reconciliation](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 
 
 ## 2026-10-06 receipt language and operation-description checkpoint
@@ -341,7 +341,7 @@ a summary change updates its registry notification. The final catalogue pair pas
 No existing assertion changed. Logs: `rebase-consumers.log`, `hidden-choice-red.log` and
 `hidden-choice-green.log` in the same local receipt directory.
 
-Baseline: `5597e06923b64acacf9df54ed6e8fb42e7fa411e`, inspected 2026-10-05 in the W69 documentation worktree. This inventory records **observed source owners** and **proposed protection**. None of its rows is a claim that a browser behavior was run or verified. Read it with the [design](../specs/2026-10-05-unsaved-changes-warning-design.md) and [implementation plan](2026-10-05-unsaved-changes-warning.md).
+Baseline: `5597e06923b64acacf9df54ed6e8fb42e7fa411e`, inspected 2026-10-05 in the W69 documentation worktree. This inventory records **observed source owners** and **proposed protection**. None of its rows is a claim that a browser behavior was run or verified. Read it with the [design](../specs/2026-10-05-unsaved-changes-warning-design.md) and [implementation plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-05-unsaved-changes-warning.md).
 
 2026-10-06 implementation checkpoint: Product Add/Edit and its nested Variant form now register
 scopes on the W69 branch. The cross-owner suite

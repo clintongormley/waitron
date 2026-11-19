@@ -32,7 +32,7 @@ The references below to the boot series setting describe the earlier implementat
 Status: **proposed; the owner decided D1–D9 on 2026-10-03 (§11), and the spec and plan await the
 owner's approval as decided.** Nothing here is built. Research done
 2026-10-03 against `main` at `ea57412dc` (W21, #1130, included). Plan:
-`docs/superpowers/plans/2026-10-03-fiscal-chain-divergence.md`. Backlog: W41s.
+[2026-10-03-fiscal-chain-divergence.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-03-fiscal-chain-divergence.md). Backlog: W41s.
 
 ## 1. The problem
 

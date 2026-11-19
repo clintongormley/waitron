@@ -59,11 +59,11 @@
 > `main` at `ce8185e82` (marked **M**) and slice 1's branch at `bdf64d9cd` (marked **S1**). Part B
 > must be re-grounded on `main` when it is started.
 >
-> It builds on the [slice 1 plan](2026-10-07-a366-slice-1-service-periods.md), the
-> [slice 2 plan](2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md) and the
-> [slice 3 plan](2026-10-08-a366-slice-3-station-controls.md), all three now built (slice 3's
+> It builds on the [slice 1 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-07-a366-slice-1-service-periods.md), the
+> [slice 2 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md) and the
+> [slice 3 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-a366-slice-3-station-controls.md), all three now built (slice 3's
 > Part B, keeping a zone open later, is not needed here), and reads the
-> [slice 5 plan](2026-10-08-a366-slice-5-monitors.md) for what its Part B needs from this slice.
+> [slice 5 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-a366-slice-5-monitors.md) for what its Part B needs from this slice.
 >
 > **Either part may start now:** slices 1, 2 and 3 Part A have merged. Part B re-grounds first.
 
@@ -89,7 +89,7 @@ the routing, and feeds a read-only view in the Opening hours Week tab.
 **Tech stack:** TypeScript, drizzle on SQLite (`node:sqlite`), Hono, Lit, Vitest (node and real
 Chromium browser projects).
 
-**Spec:** [Service times, departments, zones and prep stations](../specs/2026-10-07-service-times-departments-and-stations-design.md)
+**Spec:** [Service times, departments, zones and prep stations](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md)
 §2 (kitchen tickets), §3 (Prep station), §8, §9 ("Nothing on them shows live state"), §9.2 (the
 prep station view), §9.3, §12 (station hours, the station fallback setting, the tester, the
 Tickets tab), §13 item 4. Backlog: A366, and the phone-width entries "On the Routing tab, the
@@ -547,7 +547,7 @@ owner may override any when reviewing the plan.
     server's `not_offered` refusal shows under the line. Override: check every period in the
     request, so a stale line must be removed before the cell can be saved.
     _Owner override 2026-10-09: save, but flag it — the check stays as above, and a stored line
-    whose period's menus no longer offer the row is marked "Not on … menus"; built in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
+    whose period's menus no longer offer the row is marked "Not on … menus"; built in [A455](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-10-a455-prep-stations-owner-answers.md)._
 30. **The new refusal is a reason, not a new code.** _Added 2026-10-09, not yet answered._
     `route.period_invalid` gains `reason: "not_offered"`, beside its other two, as the house's
     siblings carry a `reason` union under one code (`station.destination_invalid`,
@@ -561,7 +561,7 @@ owner may override any when reviewing the plan.
     import still refuses the rows decision 10 lists otherwise (Task A3). Override: refuse such a
     row on import as well.
     _Owner 2026-10-09: the default stands; an imported line its period's menus no longer offer
-    shows decision 29's mark, built in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
+    shows decision 29's mark, built in [A455](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-10-a455-prep-stations-owner-answers.md)._
 32. **What goes with the tester.** _Added 2026-10-09, not yet answered._ The route `GET
     /management-api/venue-service/routing/explain` (`routes.ts:442-478`, N) answers 404;
     `explainRoute` and `ExplainWhen` (`routing-store.ts:332-426`, N), `RouteExplanation` and
@@ -584,7 +584,7 @@ owner may override any when reviewing the plan.
     (`/manage/prep-stations/view/routing/test/<id>`) opens the tab its `view` names, else Stations:
     the URL controller ignores a segment its config does not name (`packages/ui/src/url-state.ts:58-75`,
     N) and drops it at its next write. Override: keep the route for a later tool.
-    _Owner 2026-10-09: nothing to build — no old tester links exist ([A455](2026-10-10-a455-prep-stations-owner-answers.md))._
+    _Owner 2026-10-09: nothing to build — no old tester links exist ([A455](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-10-a455-prep-stations-owner-answers.md))._
 33. **The extras note belongs to the cell's plain choice.** _Added 2026-10-09, not yet answered._
     Spec §9.3: an empty cell (nothing set at it or above it, so it falls through to the default
     station) shows "{station} (default) — as an extra, follows its dish", and a No preparation
@@ -597,7 +597,7 @@ owner may override any when reviewing the plan.
     every empty cell falls through to. It is built with the tester's removal (Task A3d), so no
     commit leaves the grid without what only the tester showed. Override: also note a No
     preparation period line; leave the default cell without the note.
-    _Owner override 2026-10-09: no note; the note is removed in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
+    _Owner override 2026-10-09: no note; the note is removed in [A455](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-10-a455-prep-stations-owner-answers.md)._
 34. **The printer-down and dark-screen notes leave the Stations tab too.** _Added 2026-10-09, not
     yet answered._ They come from the same live read (`#name`, `station-health-table.ts:114-130`,
     N) and are live state, which spec §9 keeps off these pages. The dashboard still raises both as
@@ -626,7 +626,7 @@ owner may override any when reviewing the plan.
     N). This keeps the existing permission pattern and adds no read. Override: stop offering the
     page to `venue.view` (remove its `readPermission`).
     _Owner override 2026-10-09: hide the page — it is offered only with `venue_service.manage`, and
-    the read-only overview route is gone; built in [A455](2026-10-10-a455-prep-stations-owner-answers.md)._
+    the read-only overview route is gone; built in [A455](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-10-a455-prep-stations-owner-answers.md)._
 36. **The table is renamed for what it shows.** _Added 2026-10-09, not yet answered._ With no
     health in it, `prep-station-health-table` in `dashboard/station-health-table.ts` would misname
     itself, so it becomes `prep-station-table` in `dashboard/station-table.ts` (`git mv`, with its

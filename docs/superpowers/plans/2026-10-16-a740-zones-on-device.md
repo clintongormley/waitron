@@ -9,7 +9,7 @@ derive menu defaults and service-period identity on the server, retaining browsi
 **Spec:** [A737–A740 introduction and A740](../../backlog/till.md#a737a740-the-counter-till-redesigned-owner-2026-10-15),
 [backlog A740](../../backlog.md), board 5. Read the 2026-10-16
 addition: table-only Floor pills; List and ⋮ on the pills' row. Text wins over the board.
-**Related contracts:** [W97](../specs/2026-10-04-devices-menus-and-service-zones-design.md),
+**Related contracts:** [W97](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md),
 [Fixed device screens](../../developers/design-system.md#fixed-device-screens). A740 supersedes W97's reset-on-zone-change menu rule and its
 profile-only starting choice where specified below.
 **Execution:** Inline driver execution using `superpowers:executing-plans`, selected by the owner's standing preference. Read the TDD skill before

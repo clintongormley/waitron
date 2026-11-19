@@ -466,7 +466,7 @@ Remaining Stripe qualification and maintenance.
   say so beforehand; disconnecting and connecting again with a working key fixes it (Disconnect
   needs every SumUp reader switched off first), and the delete then unpairs; and a rejected key and
   an outage answer alike, told apart only in the log (`reader.unpair_failed`'s `logReason`).
-  Plan: `docs/superpowers/plans/2026-10-10-a435-3b-reader-delete-disconnected.md`.
+  Plan: [2026-10-10-a435-3b-reader-delete-disconnected.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-10-a435-3b-reader-delete-disconnected.md).
 
 - **SumUp's card-present price is a plan choice, not a rate** (owner supplied the table, 2026-09-18).
   Tarifa Plana (€25/month, 0 % up to €2 500/month of Spanish debit/credit, then 0,79 %) is the plan to

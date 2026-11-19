@@ -27,7 +27,7 @@ The following is the complete A493 entry, including its last two lines beyond th
 
 **A493 (owner, 2026-10-11) — OPEN (lane D).** A435 step 6 replaces a zone's and a department's
 Disable with permanent Delete in the same screens
-([plan](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)). The owner's
+([plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)). The owner's
 mockup is the private canvas https://claude.ai/artifact/Tya5FcmK39ESBkQ2hTaA7s, which has four
 boards: the list, Edit department, Edit zone and Edit receipt.
 

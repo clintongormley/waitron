@@ -463,6 +463,10 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Decisions and deliberate limits
 
+- **The print agent's setup page has no TLS certificate, on purpose (owner, 2026-09-27).** It asks
+  for no password, its matching number is useful only to the manager typing it into the dashboard,
+  and once joined the page answers only its own machine. Revisit only if the page ever asks for a
+  password.
 - **Bluetooth command limits (watcher, 2026-11-16 03:02).** One pending operation per agent;
   exact retries keep their ID and deadline. Channel discovery caches a successful lookup, including
   an inconclusive answer's channel-1 fallback; a failed send drops it for the next job. The server

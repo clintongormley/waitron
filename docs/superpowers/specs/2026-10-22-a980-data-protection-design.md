@@ -584,7 +584,7 @@ button; the invoices in an invoice customer's download are not recorded (the S3 
 
 **Worked example.** On a Saturday night a till tablet is stolen. The manager revokes it
 (_Devices → Revoke_, `apps/server/src/device-api.ts:743`, which ends its open sign-ins,
-`docs/superpowers/specs/2026-10-08-delete-and-archive-design.md:182-184`). The breach checklist in
+[`2026-10-08-delete-and-archive-design.md:182-184`](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-08-delete-and-archive-design.md)). The breach checklist in
 the help guide (S6) asks the Article 33(3) questions (R20), points to the tablet's last sessions, and lists what
 a till's browser can keep (§2.4 r11): the last operator's id, unfinished refund drafts with their
 typed reason, and the "make now" list with dish names and notes. The manager answers and records

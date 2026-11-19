@@ -968,7 +968,7 @@ Per-task reviewer: none (LIGHT), except the driver reads Task 17's doc claims ag
 ### Task 17: docs, backlog, final checks (~50 tool calls)
 
 **Files:** `docs/developers/conventions-data.md` (`:655-661`, `:672-676`, `:1202-1210`),
-`docs/developers/design-system.md:5141-5147`, `docs/superpowers/specs/2026-10-11-a495-business-day-history-design.md`
+`docs/developers/design-system.md:5141-5147`, [2026-10-11-a495-business-day-history-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-11-a495-business-day-history-design.md)
 (dated pointer under the title), `docs/backlog/service-periods.md:578-588` (dated pointer in the
 Decisions entry), `docs/backlog.md` (`:1431-1435` A788 line; `:1543-1544` loose end), the design
 doc's Status line.

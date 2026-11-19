@@ -11,7 +11,7 @@ floor-plan editing remain separate.
 > editor. References below describe the code when this document was written.
 
 > **2026-10-11 supersession.** A435 step 6 replaces hierarchy Disable with Delete, which waits for fresh impact and no refusals before becoming ready. Saved-form rules and hardware Enable remain separate. See the
-> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+> [step 6 reconciliation](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 
 
 > 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent

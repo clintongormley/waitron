@@ -16,7 +16,7 @@
 
 > **2026-10-10, A366 slice 7:** the W111 top-block and current-address checkpoints below
 > describe their dated implementation. Follow the
-> [slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md) for current department
+> [slice 7 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md) for current department
 > translations, live venue defaults and thermal/till versus A4 presentation. Part A is still
 > unlanded. The owner's removal of the separate email consent step belongs to the
 > [core rewrite](../../backlog/printers.md#decisions-and-deliberate-limits);

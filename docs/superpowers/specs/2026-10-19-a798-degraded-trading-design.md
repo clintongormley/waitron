@@ -1402,7 +1402,7 @@ decisions section and in any CLAUDE.md / backlog text that states the old rule."
   last sale — which sells, warns the manager, and shows staff nothing.
 - Where the old rules are stated as current, a dated pointer to this revision is added:
   `2026-10-03-fiscal-chain-divergence-design.md` (D8, and the A364 note under P7), the plans
-  `2026-10-03-fiscal-chain-divergence.md` and `2026-10-04-fiscal-prevention-and-offline-recovery.md`,
+  [`2026-10-03-fiscal-chain-divergence.md`](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-03-fiscal-chain-divergence.md) and `2026-10-04-fiscal-prevention-and-offline-recovery.md`,
   the design `2026-10-04-fiscal-prevention-and-offline-recovery-design.md` (its D8 row), and
   `docs/compliance/verifactu-findings.md` ("Do not block invoicing on clock drift"). CLAUDE.md does
   not state either rule (searched).

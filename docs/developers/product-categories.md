@@ -77,7 +77,7 @@ category row up the chain with a cell for the order's service zone, or for Every
 All categories comes last (`selectRoutingCell`, `packages/venue-service/src/routing.ts`). In the
 deciding cell, a period choice for the period running in the zone's department replaces the cell's
 own choice; an order with no zone, and the baseline above, use the cell's own choice. See
-[the routing grid plan](../superpowers/plans/2026-10-05-routing-grid.md), which replaced the
+[the routing grid plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-05-routing-grid.md), which replaced the
 claims and ordered exceptions of
 [the earlier design](../superpowers/specs/2026-09-30-menu-menus-routing-design.md).
 

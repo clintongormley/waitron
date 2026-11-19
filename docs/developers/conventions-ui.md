@@ -623,7 +623,7 @@ routes it names, so another payment route that does not ask for the permission i
 and since every role holds the permission, it makes the refusal by wrapping `authorize`, so no real
 role is ever refused.
 
-Since A238 (owner, 2026-10-03; `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md` §2
+Since A238 (owner, 2026-10-03; [2026-10-03-till-is-a-device-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-03-till-is-a-device-design.md) §2
 and §4), whether a device may take cash and open the drawer is set on its device profile, never on the
 device, by its form factor, or per till. The per-till "Opens the cash drawer" switch of 2026-10-02
 (B29) is gone with the `tills` table; a till that must not open a drawer it shares with another
@@ -690,7 +690,7 @@ row. Pointer: #324.
 
 ## A device's profile and the signed-in person must both allow what the device does
 
-Since W97 (spec `docs/superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md`) a
+Since W97 (spec [2026-10-04-devices-menus-and-service-zones-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md)) a
 device profile decides where its devices serve, who may sign in on them and what they may do, and
 the server checks each at the route, never trusting the till's copy:
 

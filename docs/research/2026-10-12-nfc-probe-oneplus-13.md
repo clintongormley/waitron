@@ -5,7 +5,7 @@ Claude reading two logs.
 
 This is the hardware probe that the equipment plan's Task 5 asks for before any NFC product code is
 written
-([plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md), "Task 5: Probe
+([plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md), "Task 5: Probe
 and enable NFC on intended handhelds"). It answers what the phone, Chrome and the stickers actually
 do. It says nothing about any other phone or browser.
 

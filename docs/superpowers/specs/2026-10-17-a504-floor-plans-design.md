@@ -155,7 +155,7 @@ and the owner's answers:
 - **Floor plans get a page of their own (owner, 2026-10-16).** What is edited is a named set of
   floor plans, one layout per zone, and a period picks the set it uses. The Departments list's
   per-zone floor plan link goes when that page lands. This supersedes the 2026-10-08 plan's "the
-  dashboard has no `floor` screen and no Floor plan nav item" (`docs/superpowers/plans/2026-10-08-floor-plan.md:5951`).
+  dashboard has no `floor` screen and no Floor plan nav item" ([`2026-10-08-floor-plan.md:5951`](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-floor-plan.md)).
 - **No publication dates for layouts (owner, 2026-10-17).** The 2026-10-11 wish that "a layout can
   go live on a chosen date, as a menu can" is dropped as "probably overkill". A change that comes
   back every year is done with seasons: a "Summer lunch" period painted only in the Summer season
@@ -193,7 +193,7 @@ and the owner's answers:
 - **A reset undoes every change staff made for the day to a free table**, including "Take off for
   today": the copied row sets `takenOff: false` and clears today's name (`todayColumns`,
   `floor-today-store.ts:433-440`). The approved floor plan spec says of today's changes: "It is all
-  undone at the next reset anyway" (`2026-10-08-floor-plan-design.md:178-180`).
+  undone at the next reset anyway" ([`2026-10-08-floor-plan-design.md:178-180`](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-08-floor-plan-design.md)).
 - **Reset table refuses to put a table down on another.** It throws `table.place_taken` when a
   table stands in the place it would put a joined table back (`refusePlaceTaken`,
   `apps/server/src/floor-today-reset-table.ts:158-191`). The floor-wide reset and its catch-up have
@@ -294,7 +294,7 @@ while its tables stand is not a spare (section 4.2), so Standard's Inside has no
 Each department has its own sets, and a set holds one layout for each of that department's zones.
 A period can pick only its own department's sets. The floor plan spec's later-work list already
 describes this ("Named plans per department … chosen by service period as menus are",
-[2026-10-08 spec](2026-10-08-floor-plan-design.md) §14).
+[2026-10-08 spec](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-08-floor-plan-design.md) §14).
 
 > Restaurant has "Standard", "Dinner" and "Private party", each with an Inside and a Terrace
 > layout; Bar has its own "Standard". The Dinner period is offered Restaurant's three, never Bar's.
@@ -794,7 +794,7 @@ New: on a phone, List and Map go into the ⋮ menu (section 7.7).
   away; the plan confirms.
 - **Deleting a department** (A435 step 6) must delete its sets and their layouts with it; the impact
   read in its delete dialog should count them
-  ([reconciliation](../plans/2026-10-11-a435-6-tables-zones-departments-delete.md)).
+  ([reconciliation](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)).
 - **A zone's own closed times and "keep open"** (`zone_days` and `zone_day_ranges`,
   `packages/venue-service/src/schema/seasons.ts`; `zone_extensions`,
   `packages/venue-service/src/schema/zone-extensions.ts`, A366). The rule here follows the
@@ -823,7 +823,7 @@ New: on a phone, List and Map go into the ⋮ menu (section 7.7).
   every reset. A table that needs clearing now waits too, and a reset no longer clears "needs
   clearing" on split-off tables it takes back.
 - **"It is all undone at the next reset anyway"** (floor plan spec §6, of staff's changes for the
-  day; `2026-10-08-floor-plan-design.md:178-180`). Update layout keeps tables taken off for today
+  day; [`2026-10-08-floor-plan-design.md:178-180`](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-08-floor-plan-design.md)). Update layout keeps tables taken off for today
   off. The day's first reset and "Reset to … plan" still undo everything.
 - **"Like menus, a layout can go live on a chosen date"** (owner, 2026-10-11). Dropped by the owner
   on 2026-10-17.

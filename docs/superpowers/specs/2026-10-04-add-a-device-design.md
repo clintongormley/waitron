@@ -10,8 +10,8 @@ The original design and plan below remain historical.
 review. No plan or product change accompanies it. Behaviour described as "today" was read from the
 code on 2026-10-04 at main `501842559`; everything else is the target design.
 
-**Related work:** A238 ([a till is a device](2026-10-03-till-is-a-device-design.md), landed #1164)
-and the [devices, menus and service zones](2026-10-04-devices-menus-and-service-zones-design.md)
+**Related work:** A238 ([a till is a device](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-03-till-is-a-device-design.md), landed #1164)
+and the [devices, menus and service zones](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-04-devices-menus-and-service-zones-design.md)
 spec, whose "Device" row (approved profiles, active profile, current equipment, station or watcher)
 sets what the Edit dialog below grows into. Backlog: A268 (this spec), A269 to A272 (the follow-ups
 in §9).

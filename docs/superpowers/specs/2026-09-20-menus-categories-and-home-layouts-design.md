@@ -35,7 +35,7 @@ home page, landed as #729. What the
 closing sweep found missing against §2 and §9, and the choices it leaves for the owner, are open
 entries in [the backlog](../../backlog.md), beside the plan's Track A entry.
 **2026-10-05:** home layouts (§5, the §6 view table's Home page row, §7 example 9 and §9's
-removed-layout decision) are superseded by W93 ([its design](2026-10-05-w93-device-home-page-design.md)):
+removed-layout decision) are superseded by W93 ([its design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w93-device-home-page-design.md)):
 one Device Home Page per menu, edited in the Structure tree; no named layouts and no per-profile
 choice; each device's form factor picks the Handheld or Till display.
 
@@ -218,7 +218,7 @@ not permission to reprice it silently.
 
 ## 5. Home layouts help staff order quickly
 
-_Superseded 2026-10-05 by W93 ([its design](2026-10-05-w93-device-home-page-design.md)): one
+_Superseded 2026-10-05 by W93 ([its design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w93-device-home-page-design.md)): one
 Device Home Page per menu, edited in the Structure tree; no named layouts and no per-profile choice;
 each device's form factor picks the Handheld or Till display._
 
@@ -234,7 +234,7 @@ this design so buttons remain in predictable positions during service.
 
 ### A home layout is a menu-owned category
 
-_Superseded 2026-10-05 by W93 ([its design](2026-10-05-w93-device-home-page-design.md)): one
+_Superseded 2026-10-05 by W93 ([its design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w93-device-home-page-design.md)): one
 Device Home Page per menu, edited in the Structure tree; no named layouts and no per-profile choice;
 each device's form factor picks the Handheld or Till display._
 
@@ -303,7 +303,7 @@ These are required future checks, not tests run as part of writing this specific
    leaves the previous complete version live.
 8. *(2026-09-25: groups are dropped, §10.1; read "a reporting-category or label edit".)* Group-only edits do not flag a content change. Relevant nested content and home-layout edits do.
    Availability changes take effect without altering the published snapshot.
-9. *(Superseded 2026-10-05 by W93, [its design](2026-10-05-w93-device-home-page-design.md): one
+9. *(Superseded 2026-10-05 by W93, [its design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w93-device-home-page-design.md): one
    Device Home Page per menu and no alternatives; each device's form factor picks the Handheld or
    Till display.)* A default home layout works at handheld and till widths in the same item order. A device can use
    an alternative for the same menu without changing prices, search or the full menu underneath.
@@ -367,14 +367,14 @@ tap a home tile whose product or category is no longer in the version the device
 the device says the item was not found and reloads the home screen. How the editor and preview
 treat a shortcut whose target has left the working menu is not decided here and stays with the plan.
 
-_Superseded 2026-10-05 by W93 ([its design](2026-10-05-w93-device-home-page-design.md)): there are
+_Superseded 2026-10-05 by W93 ([its design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w93-device-home-page-design.md)): there are
 no named layouts to delete and no per-profile choice, so this decision no longer applies._
 
 **A device whose home layout is deleted falls back to the menu's default layout, with a warning
 first.** The device shows a warning notification, then switches to that menu's default layout.
 What a rename does, and what happens when a device switches to another menu, stay with the plan.
 
-_2026-10-01: [slice 2](../plans/2026-09-30-menus-include-menus-slice-2.md) removes per-menu extras
+_2026-10-01: [slice 2](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-09-30-menus-include-menus-slice-2.md) removes per-menu extras
 (owner decision, 2026-09-30), uses nullable on/off decisions and keeps product and size price
 overrides. This paragraph records the earlier decision._
 
@@ -825,7 +825,7 @@ tickets printed._
 _2026-09-29: since table-actions Task 4, a party's slips name all its tables, and joining,
 unjoining, moving a table and merging bills send a MOVED notice for the sent dishes of each open,
 placed or settled bill of the parties involved whose tables changed; a table's bill of no party
-keeps the lowest-id rule and gets no notice on a join; see `docs/superpowers/specs/2026-09-28-table-actions-design.md` decision 9 and §8._
+keeps the lowest-id rule and gets no notice on a join; see [2026-09-28-table-actions-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-09-28-table-actions-design.md) decision 9 and §8._
 
 ### 11.6 Staff edit a sent line from the till, not through an API call
 

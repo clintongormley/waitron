@@ -134,7 +134,7 @@ Boards 08–10.
   bill** at the leaving table (owner: "they can always be merged later"); there is no choice.
 - **A dish waiting for its course can go.** The leaving table gets its own copy of that course,
   still waiting, and fires it separately. (Today a bill holding held dishes cannot leave its party;
-  the block is the table-wide held group, `docs/superpowers/specs/2026-09-28-table-actions-design.md`
+  the block is the table-wide held group, [2026-09-28-table-actions-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-09-28-table-actions-design.md)
   around line 380.) The kitchen gets a MOVED notice for the dishes that changed table only.
   _(2026-11-04: that "Today" describes the time before A803 slice 4b, which lifted the block for a move to a table; only the counter still refuses.)_
 - Guest counts for both tables are set in the same window.

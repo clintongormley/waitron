@@ -454,7 +454,7 @@ the season painter continues saving through the season-week route._
   seasons that cover the whole year and repeat every year, each with its own week per department;
   a special day is painted over its dates, and its unpainted time follows the season; periods have
   a page of their own; the venue holds no hours of its own. The rules are in the
-  [spec](../superpowers/specs/2026-10-11-opening-hours-seasons-design.md).
+  [spec](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-11-opening-hours-seasons-design.md).
 
 - A season delete's confirmation names only the departments with hours in it, though the delete
   also removes the zones' closed times for that season (`seasonDeleteImpact`,
@@ -469,7 +469,7 @@ the season painter continues saving through the season-week route._
   needs re-authoring before scheduling. Reports keep historical date boundaries, not snapshots
   of authored hours. Full backups retain the timeline; configuration export refuses a pending
   change and otherwise exports the active start with no history. The
-  [design](../superpowers/specs/2026-10-11-a495-business-day-history-design.md) records DST and
+  [design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-11-a495-business-day-history-design.md) records DST and
   UTC-clock limits. `apps/server/src/business-day-history.test.ts` compares recorded fiscal,
   invoice-series and close rows before and after scheduling; it does not establish external
   filing behavior.
@@ -491,7 +491,7 @@ the season painter continues saving through the season-week route._
   never invented configuration or wider access. An explicit empty KDS parent stays empty; Every
   stays Every. A default change does not rewrite historical department attribution. Closed today,
   opening hours and hardware Disable remain separate. The
-  [reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)
+  [reconciliation](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)
   records the complete limits.
 
 - **Permanent station Delete is separate from Close for today (A435 step 5, 2026-10-10).**

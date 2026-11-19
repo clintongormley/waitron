@@ -41,7 +41,7 @@ This is the single most important correction to the original design assumption.
 > `registros_facturacion`/`sales`.
 >
 > **Update, 2026-10-04 (A238).** The till snapshot is gone too: those rows now name a `source` and,
-> for a sale made on a device, its `device_id` (`docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`).
+> for a sale made on a device, its `device_id` ([2026-10-03-till-is-a-device-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-03-till-is-a-device-design.md)).
 
 **Orden HAC/1177/2024 art. 7.c):**
 
@@ -1230,13 +1230,13 @@ receipt path in `apps/server/src` or `packages/printing/src`; every receipt is E
 
 **Source update, 2026-10-06:** A261 step 8 removes the unused location receipt column.
 The current receipt policy is declared in `packages/db/src/schema/venue-service/service.ts` and read
-by `packages/venue-service/src/operations.ts`; [the retirement plan](../superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
+by `packages/venue-service/src/operations.ts`; [the retirement plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
 records the release. Q22 remains unanswered; the earlier source references below describe the
 implementation when this question was written.
 
 **Scope update, 2026-10-05:** A261 step 2 moves the receipt choice to each department, with an
 optional zone override. A sale without a zone uses automatic printing. The delivery concern below
-still applies to **On request** and **Never**. See the [step 2 plan](../superpowers/plans/2026-10-04-departments-and-zones.md).
+still applies to **On request** and **Never**. See the [step 2 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-04-departments-and-zones.md).
 
 **Where `receipt_print_mode` sits against this.** The enum is `auto | on_request | never`
 (`packages/db/src/schema/tenants.ts`), and only `auto` auto-prints (`receipt-print.ts` §1). The saving

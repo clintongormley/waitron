@@ -2331,14 +2331,14 @@ its own printer when it is moved.
 
 **Source update, 2026-10-06:** A261 step 8 removes the unused location receipt column.
 The current receipt policy is declared in `packages/db/src/schema/venue-service/service.ts` and read
-by `packages/venue-service/src/operations.ts`; [the retirement plan](../superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
+by `packages/venue-service/src/operations.ts`; [the retirement plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
 records the release. Q22 remains unanswered; the earlier source references below describe the
 implementation when this question was written.
 
 **Scope update, 2026-10-05:** A261 step 2 moves the receipt choice from the venue to each
 department, with an optional zone override. A sale without a zone uses automatic printing. The
 delivery question below applies to a manager choosing **On request** or **Never** at either scope;
-the change of scope does not answer it. See the [step 2 plan](../superpowers/plans/2026-10-04-departments-and-zones.md).
+the change of scope does not answer it. See the [step 2 plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-04-departments-and-zones.md).
 
 **Why it matters.** Each venue sets `receipt_print_mode` (`packages/db/src/schema/tenants.ts`):
 `auto` prints after every sale, `on_request` and `never` do not. In every mode the invoice is issued

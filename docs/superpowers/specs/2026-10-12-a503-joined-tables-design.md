@@ -282,7 +282,7 @@ with `merge.seats_required`.
 
 ### Docs
 
-- The floor plan spec (`docs/superpowers/specs/2026-10-08-floor-plan-design.md` §3, §4, §6.1–§6.3,
+- The floor plan spec ([2026-10-08-floor-plan-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-08-floor-plan-design.md) §3, §4, §6.1–§6.3,
   §7, §9, §13) gets dated pointers to this design rather than rewrites.
 - `docs/developers/conventions-data.md`'s sentence that the reset copies joins changes with the code.
 - The "A saved join's seats have no upper bound" bullet goes from `docs/backlog/till.md` and

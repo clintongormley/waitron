@@ -30,7 +30,7 @@
 > venue-contact proposal below are historical product plans. The owner removed the separate
 > consent step; its [core rewrite](../../backlog/printers.md#decisions-and-deliberate-limits)
 > is still open, and today's staging, reservation and retry paths still require consent data.
-> [Slice 7](../plans/2026-10-08-a366-slice-7-receipts-per-department.md) owns department/default
+> [Slice 7](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md) owns department/default
 > contact selection and receipt presentation, retaining live venue logo and text defaults and
 > omitting the optional current venue address on A4. Its Part A remains unlanded. These product
 > decisions do not settle the legal research below or the independent A448 question.
@@ -39,7 +39,7 @@
 
 > **Update, 2026-10-05 (A261 step 2):** The receipt-printing setting described under
 > **What is already there** records the location-wide setting at the time of this design. The
-> [Departments and zones plan](../plans/2026-10-04-departments-and-zones.md) moves that choice to a
+> [Departments and zones plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-04-departments-and-zones.md) moves that choice to a
 > department with an optional zone override; a sale without a zone defaults to automatic printing.
 
 **Status:** amended proposal for owner approval, 2026-10-03. The owner approved decisions 1–5 of the first version, changed decision 6, and answered the second version's decisions 7–9 (see [Owner decisions](#owner-decisions-2026-10-03)); this third version carries those answers and compares Debian's own printing system with drawing pages ourselves ([below](#debians-printing-system-cups-instead-of-drawing-pages-ourselves)). Nothing here is built. The build is queued only after the owner approves this version, and it follows the A231 build, which it depends on.
@@ -188,7 +188,7 @@ So this printer would be sent PDF, and could be sent Apple Raster, but not PWG R
   - It then greys office printers out. It asks a printer's IPP service only for `media-supported` ([ipp-probe.ts:49](../../../apps/print-agent/src/ipp-probe.ts#L49)), and the dashboard shows "Office printer — not supported for receipts" instead of Add ([strings.ts:952](../../../apps/dashboard/src/i18n/strings.ts#L952), decided at [printers-screen.ts:1069-1072](../../../apps/dashboard/src/screens/printers-screen.ts#L1069-L1072) and drawn at [printers-screen.ts:2905-2910](../../../apps/dashboard/src/screens/printers-screen.ts#L2905-L2910)).
   - The printing package already draws text as dots, for receipts: a fixed-width bitmap font of 12 × 28 dots per character, made from Iosevka ([raster-text.ts](../../../packages/printing/src/raster-text.ts), [glyphs.ts](../../../packages/printing/src/glyphs.ts)).
   - A printer row is `usb`, `network_tcp`, `bluetooth` or `cloud_poll`, with a 58 or 80 mm roll. Database checks hold each of those lists ([printers.ts:55-65](../../../packages/db/src/schema/printers.ts#L55-L65)).
-  - Six tables point at `printers`: `devices`, `tills`, `drawer_opens`, `station_printers`, `watcher_printers` and `print_jobs`. _2026-10-04: superseded by A238 (`docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`): `tills` is gone and `device_profile_printers` points at `printers` too; list them again before relying on this._
+  - Six tables point at `printers`: `devices`, `tills`, `drawer_opens`, `station_printers`, `watcher_printers` and `print_jobs`. _2026-10-04: superseded by A238 ([2026-10-03-till-is-a-device-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-03-till-is-a-device-design.md)): `tills` is gone and `device_profile_printers` points at `printers` too; list them again before relying on this._
   - A print job's payload is described as ESC/POS bytes ([print-jobs.ts:51-53](../../../packages/db/src/schema/print-jobs.ts#L51-L53)).
 - **Print-job delivery is deliberately "at least once".**
   - A job left half-sent for more than 60 seconds can be claimed again and printed twice ([runtime.ts:22-33](../../../packages/printing/src/runtime.ts#L22-L33)).

@@ -340,7 +340,7 @@ never relies on colour.
 below remains available as shared tokens; Calendar's named mode uses only the red, purple, blue,
 standard and Closed fills. (2026-10-13, A506-5: the blue Working day fill went with named days.
 A506-6 replaced the Calendar with the Year, above.) The earlier six-colour date choice is recorded in the historical
-[Hours plan](../superpowers/plans/2026-10-05-hours.md). **2026-10-17, A753:** the palette grew to
+[Hours plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-05-hours.md). **2026-10-17, A753:** the palette grew to
 thirteen, in the owner's rainbow order, and periods and staff roles pick from all of it.
 **2026-10-18, A783:** yellow joined it after amber, sky after cyan and magenta after purple
 (`CALENDAR_COLOURS`, `packages/shared/src/calendar-colours.ts`).
@@ -1509,7 +1509,7 @@ Add a device button, including while empty (owner, A413, 2026-10-08). A table wi
 leaves the slot empty. A widget that draws a table with an Add button for a screen passes the button through:
 `apps/dashboard/src/widgets/staff-list.ts` forwards the slot
 (`<slot name="empty-action" slot="empty-action">`), while the Products screen has no Add button in its table: its tree always shows the All products
-row, whose menu holds the screen's adds (spec `docs/superpowers/specs/2026-10-02-products-category-tree-design.md`
+row, whose menu holds the screen's adds (spec [2026-10-02-products-category-tree-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-02-products-category-tree-design.md)
 §3), so its box appears only when a search matches nothing, holding the no-matches sentence. A
 menu's Structure tab has a root row like it, whose ⋮ holds the menu's top-level adds, and an empty
 menu's box repeats them as buttons (below, after tree mode). When the first item made from the slotted button empties the slot,
@@ -7226,7 +7226,7 @@ until their hardware Delete/Add slice lands.
 
 Individual tables follow the floor plan editor's contract: Delete, after a confirmation, has Undo
 until Save. Saving a layout preserves today's deferred removal rules. See the
-[A435 step 6 reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)
+[A435 step 6 reconciliation](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)
 for the hierarchy's separate immediate cleanup and retained-history limits.
 
 

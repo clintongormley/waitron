@@ -712,7 +712,7 @@ are given.
 5. **Settled: takeover rules stay as built**: scan takes, list asks, busy refuses. The owner kept
    the question on 2026-10-19 ("(a) keep the question … only when taking someone else's reader from
    the list; a sticker scan or NFC tap takes it at once, as today"). These come from W100's
-   plan ([2026-10-04-device-equipment-and-independent-drawers.md](../plans/2026-10-04-device-equipment-and-independent-drawers.md)
+   plan ([2026-10-04-device-equipment-and-independent-drawers.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md)
    line 17,
    "QR scan takes over immediately; dropdown takeover identifies the holder and requires
    confirmation"), not from the list of defaults the owner kept on 2026-10-07
@@ -792,7 +792,7 @@ are given.
     "The bill can be settled at the table"; the owner, 2026-10-01 (`docs/developers/conventions-ui.md`):
     "A handheld should be able to do pretty much anything a till can do, it just depends on the
     permissions of the person using the handheld"; and 2026-10-03
-    ([2026-10-03-till-is-a-device-design.md](2026-10-03-till-is-a-device-design.md) §1–§2): "A
+    ([2026-10-03-till-is-a-device-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-03-till-is-a-device-design.md) §1–§2): "A
     device's profile decides what it may do", "Even without a float a waiter can take cash, just
     without giving change", and "The owner expected a Prepare or Live venue to start with no devices
     and add each one". Today's list is

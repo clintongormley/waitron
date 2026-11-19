@@ -459,7 +459,7 @@ a **sello de entidad** — owned by the company, designed for machine custody. T
 an optional nicety and becomes the correct instrument.
 
 > **Premise superseded, 2026-07-31.** "When we host" no longer describes any supported deployment.
-> `docs/superpowers/specs/2026-07-31-cloud-storage-model-design.md` makes the cloud a sync root that
+> [`2026-07-31-cloud-storage-model-design.md`](https://github.com/clintongormley/waitron/blob/6ff3d446d64a366f3cd5c780e4f40a29d04e5e63/docs/superpowers/specs/2026-07-31-cloud-storage-model-design.md) makes the cloud a sync root that
 > never holds the key ring: the certificate stays on the client's own local server, sealed under a key
 > ring only they hold, and the local server always submits. **The client's key does not live on our
 > infrastructure under any topology.** The sello-de-entidad recommendation is unaffected and arguably

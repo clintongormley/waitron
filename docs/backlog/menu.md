@@ -811,7 +811,7 @@ Closing a branch closes its descendants, including hidden paths. Preview keeps E
 Structure uses one Select mode for checkboxes and drag handles. Search openings and their parents
 survive clearing unless deliberately closed; after clearing, a closed current Structure path
 returns editing to its nearest open parent. Products remembers deliberate closures across reloads.
-[Implementation plan](../superpowers/plans/2026-10-10-a462-table-toolbars.md).
+[Implementation plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-10-a462-table-toolbars.md).
 
 **Product search (A461, owner 2026-10-10).** Products and Menu Structure show flat own matches
 with inline paths. Each new query starts branches collapsed. Opening one shows its contents
@@ -823,7 +823,7 @@ ticks; Select all changes visible ticks only. Dragging carries visible ticks on 
 and keeps hidden ticks; Move/Remove take the full selection. Removed or no-longer-owned rows
 are trimmed. The till mixes products and displayed sections by closeness with traversal-order
 ties, disables diet-empty sections, and opens a section without changing the basket.
-[Implementation plan](../superpowers/plans/2026-10-10-a461-product-search.md).
+[Implementation plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-10-a461-product-search.md).
 
 - **Courses and stations use permanent Delete (A435 step 5, owner, 2026-10-10).**
   Neither kind offers Disable, Enable or a Status filter/column. You may reuse a deleted name

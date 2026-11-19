@@ -129,7 +129,7 @@ So the freeze exists because the Save check runs once, at Save. Without the free
 made afterwards could create exactly the clash the Save check refused, and nothing would look again
 before the changeover. A495's design says so: "Time-related schedule editing is paused while a
 change is pending; edit hours first, or cancel the pending change"
-(`docs/superpowers/specs/2026-10-11-a495-business-day-history-design.md:62`, `:104`).
+([`2026-10-11-a495-business-day-history-design.md:62`](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-11-a495-business-day-history-design.md), `:104`).
 
 ### Which of those checks still bite if the change applies at the next changeover
 

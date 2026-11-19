@@ -79,9 +79,9 @@ stack). The front-end vite servers can stay up.
 standalone on-prem primary, so the setup wizard (area 1) is no longer parked — its corrections are
 listed under the backlog's _The setup wizard, onboarding and the demo venue_ (formerly A2). Walk areas 2–20 at the real box; area 19 (device
 management) carries the register-versus-device decision
-(`superpowers/specs/2026-09-05-register-and-device-model-decision.md`: keep both — register = the
+([`2026-09-05-register-and-device-model-decision.md`](https://github.com/clintongormley/waitron/blob/6ff3d446d64a366f3cd5c780e4f40a29d04e5e63/docs/superpowers/specs/2026-09-05-register-and-device-model-decision.md): keep both — register = the
 drawer, device = the screen; the no-migration half landed #269; _2026-10-03: superseded by A238 —
-a till is a device, `superpowers/specs/2026-10-03-till-is-a-device-design.md`_). A correction that needs a new table
+a till is a device, [2026-10-03-till-is-a-device-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-03-till-is-a-device-design.md)_). A correction that needs a new table
 needs CLAUDE.md §3's classification line and nothing else.
 
 ## Walkthrough order & status

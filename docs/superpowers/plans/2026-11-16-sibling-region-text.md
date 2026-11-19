@@ -10,7 +10,7 @@ H reproduced it (`~/waitron-campaign-h/receipts/language-fallback/review-a.md`, 
 The shared lookup stops taking another region's text: a name asked for in one region of a language
 (Spain's Spanish, `es-ES`) no longer shows text stored only for another region (Mexico's, `es-MX`); it
 falls back as the design orders: requested tag → its bare language → the venue default
-(`resolveContentText`), then any stored text (`resolveSnapshotText` only) (`docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md:31-33`: "There is
+(`resolveContentText`), then any stored text (`resolveSnapshotText` only) ([`2026-08-30-localization-fallback-negotiation-design.md:31-33`](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md): "There is
 no lateral sibling-region jump (`es-PT` does not detour through `es-ES`)"). Stored snapshots are not
 touched. With a default in the same language (`es`), the default's own pass can still reach `es-MX`,
 as the design's "any available entry" step allows.
