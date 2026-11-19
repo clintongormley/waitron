@@ -884,7 +884,7 @@ export class TillMenuBrowser extends LitElement {
     const seen = new Set<string>();
     const seenSetMenus = new Set<string>();
     const walk = (members: readonly DocumentMember[], path: SectionStep[]) => {
-      const list = shownMembers(members, this.setMenuCopies.length > 0);
+      const list = shownMembers(members, true);
       const paths = tilePaths(list, path);
       const named: [SearchResult, string][] = [];
       const customerNamed: [SearchResult, string][] = [];

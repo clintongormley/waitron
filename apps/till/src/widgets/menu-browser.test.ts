@@ -297,14 +297,15 @@ describe("set-menu folders", () => {
     expect(folder.shadowRoot!.textContent).toContain("€14.00");
   });
 
-  it("finds a visible set menu by its exact name and opens its folder", async () => {
+  it.each([
+    { placement: "at the top level", members: [dailyMember] },
+    { placement: "in a section", members: [sectionWithSetMenu] },
+    { placement: "in two places", members: [dailyMember, sectionWithSetMenu] },
+  ])("finds a set menu placed $placement by its exact name", async ({ members }) => {
     const { el } = await mount({
-      menu,
+      menu: lunch({ structure: { members } }),
       setMenuCopies: [{ copy: daily, versionId: "lunch" }],
     });
-    await tap(el, entry(el, "structure", "Lunch choices"));
-    expect(names(entries(el, "section"))).toEqual(["Daily menu"]);
-
     await search(el, "Daily menu");
     expect(names(entries(el, "results"))).toEqual(["Daily menu"]);
     const result = entry(el, "results", "Daily menu");
