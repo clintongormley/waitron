@@ -210,6 +210,9 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/department-transfers/:id/decline                | designated desk's department | department-transfer-api.test.ts: refuses decline from an undesignated profile in the destination |
  * | POST /api/bills/:id/merge                               | order; body order      | refuses POST /api/bills/:id/merge (into), (from)     |
  * | PUT  /api/bills/:id/name | bill's party; order when it has none | refuses PUT /api/bills/:id/name, (no number); "naming a paid bill after a party merge" |
+ * | GET /api/bills/:id/set-menus | order | refuses GET /api/bills/:id/set-menus |
+ * | PUT /api/bills/:id/set-menus/:setMenuId | order | refuses PUT /api/bills/:id/set-menus/:setMenuId |
+ * | DELETE /api/bills/:id/set-menu-lines/:lineId | order | refuses DELETE /api/bills/:id/set-menu-lines/:lineId |
  * | POST /api/bills/:id/set-menu-moves | order | refuses POST /api/bills/:id/set-menu-moves |
  * | POST /api/bills/:id/move-dishes                         | order; body order      | refuses POST /api/bills/:id/move-dishes (from), (to) |
  * | POST /api/bills/:id/move                                | order; body table/zone | refuses POST /api/bills/:id/move (bill), (table), (counter) |
@@ -1257,6 +1260,27 @@ const ROUTES: readonly Row[] = [
         .sort()
         .map((billId) => ({ billId, editorVersion: 0, draftId: null, draftRevision: null })),
     }),
+    deliTableZone,
+  ],
+  [
+    "GET /api/bills/:id/set-menus",
+    "GET",
+    (x) => `/api/bills/${x.deliTab}/set-menus`,
+    undefined,
+    deliTableZone,
+  ],
+  [
+    "PUT /api/bills/:id/set-menus/:setMenuId",
+    "PUT",
+    (x) => `/api/bills/${x.deliTab}/set-menus/${x.deliTab}`,
+    () => ({ count: 1, expectedPartyRevision: 0 }),
+    deliTableZone,
+  ],
+  [
+    "DELETE /api/bills/:id/set-menu-lines/:lineId",
+    "DELETE",
+    (x) => `/api/bills/${x.deliTab}/set-menu-lines/${x.deliTab}`,
+    () => ({ expectedPartyRevision: 0 }),
     deliTableZone,
   ],
   [
