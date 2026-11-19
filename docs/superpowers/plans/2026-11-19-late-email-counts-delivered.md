@@ -18,8 +18,10 @@ later print or email of that invoice is marked «DUPLICADO».
 
 ## What happens today (read in `apps/server/src/invoice-delivery.ts`, main `b49a25b0db`)
 
-- An email attempt that waits too long is marked `unknown` (`abandonInvoiceEmail`, or
-  `expireInvoiceDeliveryClaims` at a restart).
+- An email attempt whose mail-sending claim runs past its lease is marked `unknown`
+  (`abandonInvoiceEmail`, called from the mail sender, `mail-sender.ts`). A late answer can then
+  arrive from the first sending pass. At a restart, emails are also abandoned
+  (`abandonMailClaims`), but no late answer can follow; `expireInvoiceDeliveryClaims` skips email.
 - When the mail server's answer arrives after that, `settleInvoiceEmail` calls
   `recordDeliveryReport`. If no newer attempt exists for the sale, a success already turns the
   attempt into `sent`, and the invoice counts as delivered. Nothing changes there.
@@ -40,13 +42,23 @@ So the change is only the historical case, and only for email.
    only when they go out (email at claim, `invoice-mail.ts` compose; A4 at each fetch,
    `page-print-api.ts`), so the copy that goes out carries «DUPLICADO». An attempt already
    `sending` or finished keeps its designation: its document may already be out.
-3. A newer **receipt** original already queued as a print job keeps its designation: the job's
-   copy flag is fixed at enqueue (`receiptCopy`), and changing a queued print job is outside this
-   item. One line in the PR thread.
+3. **Automatic email retries** (`retryInvoiceEmail`, after the mail server refuses an attempt)
+   take `duplicate` once the sale has a completed original, instead of copying the failed
+   attempt's designation (`invoice-delivery.ts:565`). Without this, a retry already being sent
+   when the late success arrives, then refused, would be retried automatically as a second
+   original (the plan read reproduced that end state).
+3a. A newer **receipt** original already queued as a print job keeps «original» bytes
+   (`receiptCopy: false`, fixed at enqueue). If the printer is offline it can print after the
+   email was counted: a second original. Whether to end that job and queue a copy in the same
+   transaction is asked of the watcher (WATCHER-NEEDED, 2026-11-19); built only if chosen.
 4. A4 and receipt late reports keep today's rule (history only once superseded). The owner's
    answer is about email, and line 51 is about SMTP acceptance.
 5. Nothing filed with AEAT changes: no invoice record, chain, number or series is touched; only
    `invoice_deliveries` rows change.
+
+Once a queued email or A4 attempt becomes a duplicate, the till no longer offers "receipt instead"
+for it, and a request already on screen is refused as `invoice_delivery.active`. That follows the
+new rule; the PR says so.
 
 #3773's check-first wording and alert stay: they still apply to an A4 late success, and to an email
 whose late answer has not arrived.
@@ -69,6 +81,8 @@ whose late answer has not arrived.
 - Email late success after the newer attempt has already been claimed or sent: first attempt
   `sent`, newer attempt keeps `original`.
 - Newer attempt by A4 still queued: becomes `duplicate`, and the page fetched says «DUPLICADO».
+- The read's sequence: first email abandoned, Retry original by email already claimed, late
+  success, then the mail server refuses the retry: the automatic retry is `duplicate`.
 - Late **failure** on a superseded email: unchanged (history only).
 - A4 late success on a superseded attempt: unchanged (the existing status test at
   `invoice-delivery-status.test.ts` "lists every attempt newest first, with its staff member and a
