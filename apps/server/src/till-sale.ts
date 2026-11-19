@@ -109,7 +109,7 @@ import { issuancePass } from "./issuance-pass.js";
 import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
 import { pinnedAt } from "./issue-moment.js";
-import { cardTakenAt, issueOrderMoment } from "./sale-day.js";
+import { cardSaleMoment, issueOrderMoment } from "./sale-day.js";
 import { ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import {
@@ -1695,7 +1695,7 @@ async function finalizeRecovery(
         .select({
           source: payments.source,
           deviceId: payments.deviceId,
-          providerTakenAt: payments.providerTakenAt,
+          providerCheckoutStartedAt: payments.providerCheckoutStartedAt,
           resolutionOutcome: payments.resolutionOutcome,
           createdAt: payments.createdAt,
           settledAt: payments.settledAt,
@@ -1707,7 +1707,7 @@ async function finalizeRecovery(
         cfg,
         deps,
         await issuancePass(tx, req.id, order),
-        cardTakenAt(startedOn!) ?? undefined,
+        cardSaleMoment(startedOn!) ?? undefined,
       );
       const capturedAmount = decimal(captured.amount);
 

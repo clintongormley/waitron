@@ -490,6 +490,11 @@ D3, except for a Stripe card found later, a limit stated in D3. Held points (`fi
 (`docs/compliance/2026-11-15-adviser-answers.md:161`); **3** (the PR text) by a rewritten PR body at
 the fresh READY that cites the meeting rule, D1, D10, D12 and this amendment's decisions.
 
+  Correction 2026-11-19 (R3 review): SumUp's `timestamp` is the checkout's start, not the tap
+  (`docs/research/2026-09-10-sumup-solo-experiments.md:277-279`). Finding 3 closes only for a card
+  answered live and filed late; a card found later by either provider carries the moment the reader
+  was asked.
+
 **5. Tests that must fail first** (against `1a88d75706`). Finding 3, whole order: card row created
 31 March 23:58, live answer stored 1 April 00:01, filing made to fail once, recovery issues 1 April
 09:00 → no `supply_day`, no `fecha_operacion`, no `saleDay`; the same through the bill-payment loop;
@@ -572,6 +577,12 @@ match the owner's "correct" to "a dinner that ends after midnight on 1 April tak
   23:58 and tapped at 00:01 carries the earlier day. Alternative, no schema: `settled_at` unless it is
   more than a fixed reader window after `created_at`; the window (SumUp's comment says two minutes
   covers a slow tap, `provider.ts:41-42`) is reasoned, not a guaranteed limit.
+
+  Correction 2026-11-19 (R3 review): SumUp's `timestamp` is the checkout's start, not the tap
+  (`docs/research/2026-09-10-sumup-solo-experiments.md:277-279`), so the column is named
+  `provider_checkout_started_at` and the limit above holds for SumUp too: a card found later by
+  either provider carries the moment the reader was asked. Finding 3 closes only for a card answered
+  live and filed late.
 - **D4, VAT for a quarter already filed.** This branch does NOT handle a quarter already filed: the
   watcher's 13:20 note sends such an invoice to the accountant's corrections report instead of
   changing the filed quarter, and nothing here does that. Main has no record of a filed quarter (RUN:

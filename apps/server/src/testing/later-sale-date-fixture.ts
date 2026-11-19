@@ -43,13 +43,20 @@ export async function filedFor(venue: BillVenue, orderId: string) {
 }
 
 /** A pending card bill payment whose provider row captured it, each row dated as given: the card
- * row created at `card`, settled at `settled` (default `card`), and carrying the provider's time
- * `takenAt` when given. */
+ * row created at `card`, settled at `settled` (default `card`), carrying the provider's checkout
+ * start `checkoutStartedAt` when given, and, when `resolved`, the resolution Stripe's check writes
+ * for a card it found later. */
 export async function capturedPending(
   venue: BillVenue,
   billId: string,
   cents: number,
-  dated: { bill: string; card: string; settled?: string; takenAt?: string },
+  dated: {
+    bill: string;
+    card: string;
+    settled?: string;
+    checkoutStartedAt?: string;
+    resolved?: boolean;
+  },
 ): Promise<{ billPaymentId: string; paymentId: string }> {
   const paymentRef = `captured-${randomUUID()}`;
   const billPaymentId = await withTransaction(venue.db, async (tx) => {
@@ -81,10 +88,22 @@ export async function capturedPending(
       settledAt: new Date(dated.settled ?? dated.card),
       billPaymentId: row!.id,
     });
+    if (dated.resolved === true)
+      await recordAttemptResolution(
+        tx,
+        { provider: venue.card.provider, paymentRef },
+        {
+          personId: null,
+          outcome: "captured",
+          cancelledAtProvider: false,
+          providerStatus: "succeeded",
+          resolvedAt: new Date(dated.settled ?? dated.card),
+        },
+      );
     await liftPaymentGuard(tx, () =>
       tx
         .update(payments)
-        .set({ createdAt: dated.card, providerTakenAt: dated.takenAt ?? null })
+        .set({ createdAt: dated.card, providerCheckoutStartedAt: dated.checkoutStartedAt ?? null })
         .where(eq(payments.paymentRef, paymentRef)),
     );
     return row!.id;

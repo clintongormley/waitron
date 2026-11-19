@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { cardTakenAt, venueDayOf } from "./sale-day.js";
+import { cardSaleMoment, venueDayOf } from "./sale-day.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -31,9 +31,9 @@ describe("venueDayOf", () => {
   });
 });
 
-describe("cardTakenAt", () => {
+describe("cardSaleMoment", () => {
   const card = {
-    providerTakenAt: null,
+    providerCheckoutStartedAt: null,
     resolutionOutcome: null,
     createdAt: "2026-03-31T21:58:00.000Z",
     settledAt: "2026-03-31T22:01:00.000Z",
@@ -42,9 +42,13 @@ describe("cardTakenAt", () => {
   it.each([
     ["a live answer: when it settled", card, card.settledAt],
     [
-      "the provider's own time, ahead of everything else",
-      { ...card, providerTakenAt: "2026-03-31T22:00:00.000Z", resolutionOutcome: "captured" },
-      "2026-03-31T22:00:00.000Z",
+      "the provider's start of the checkout, ahead of everything else",
+      {
+        ...card,
+        providerCheckoutStartedAt: "2026-03-31T21:58:01.000Z",
+        resolutionOutcome: "captured",
+      },
+      "2026-03-31T21:58:01.000Z",
     ],
     [
       "a resolved row: when it was written",
@@ -53,6 +57,6 @@ describe("cardTakenAt", () => {
     ],
     ["nothing, for a card that never settled", { ...card, settledAt: null }, null],
   ])("takes %s", (_case, row, want) => {
-    expect(cardTakenAt(row)).toBe(want);
+    expect(cardSaleMoment(row)).toBe(want);
   });
 });

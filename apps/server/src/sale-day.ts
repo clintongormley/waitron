@@ -20,22 +20,22 @@ export async function venueDayOf(
   return civilDateOf(new Date(instant), await readIssueZone(tx, scope));
 }
 
-/** The card row's columns {@link cardTakenAt} reads. */
+/** The card row's columns {@link cardSaleMoment} reads. */
 export interface CardTiming {
-  providerTakenAt: string | null;
+  providerCheckoutStartedAt: string | null;
   resolutionOutcome: string | null;
   createdAt: string;
   settledAt: string | null;
 }
 
 /**
- * When a card was taken, or null for one that never settled. A live answer's `settled_at` is that
- * moment, but a check made after the answer was missed settles the row when it asked: SumUp's check
- * stores SumUp's own time, and a card Stripe's check resolved falls back to when the row was written,
- * just before the reader was asked, as Stripe's lookup names no time.
+ * The moment a card payment dates its sale by, or null for one that never settled: a live answer's
+ * `settled_at`; for a card a check found after its live answer was missed, which settles the row
+ * when the check asked, the provider's start of the checkout, or, for a row recording a resolution,
+ * when the row was written.
  */
-export function cardTakenAt(card: CardTiming): string | null {
-  if (card.providerTakenAt !== null) return card.providerTakenAt;
+export function cardSaleMoment(card: CardTiming): string | null {
+  if (card.providerCheckoutStartedAt !== null) return card.providerCheckoutStartedAt;
   if (card.settledAt === null) return null;
   return card.resolutionOutcome === null ? card.settledAt : card.createdAt;
 }

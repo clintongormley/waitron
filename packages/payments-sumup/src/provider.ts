@@ -496,8 +496,8 @@ export class SumUpCloudProvider implements PaymentProvider {
             declined++;
             return false;
           }
-          // The live answer was missed, so `now` is when this check asked, not when the card was
-          // taken; without SumUp's own time, the row was written just before the reader was asked.
+          // SumUp's `timestamp` is when the checkout began, not the tap
+          // (docs/research/2026-09-10-sumup-solo-experiments.md); without it, when the row was written.
           const sumupTime = t.timestamp === undefined ? NaN : Date.parse(t.timestamp);
           await captureAttempting(tx, {
             ...key,
@@ -505,7 +505,7 @@ export class SumUpCloudProvider implements PaymentProvider {
             externalRef: outcome.transactionId,
             card: outcome.card,
             amount: outcome.amount,
-            takenAt: new Date(Number.isFinite(sumupTime) ? sumupTime : row.createdAt),
+            checkoutStartedAt: new Date(Number.isFinite(sumupTime) ? sumupTime : row.createdAt),
           });
           if (await this.saveRefunds(tx, key, outcome)) incidentsRaised++;
           return true;

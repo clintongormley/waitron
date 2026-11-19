@@ -59,6 +59,7 @@ describe("a payment's fixed columns", () => {
     "reconcile_remediated_at",
     "requested_amount",
     "bill_payment_id",
+    "provider_checkout_started_at",
   ])("sets %s once", async (column) => {
     const seeded = await seedWorkingOrder(suite.db);
     const first =

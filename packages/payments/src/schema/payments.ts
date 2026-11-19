@@ -81,9 +81,9 @@ export const payments = table(
     requestedAmount: money("requested_amount"),
     state: paymentState("state").notNull(),
     settledAt: tsString("settled_at"),
-    /** When the provider says the card was taken, for a card the box learned of only later; null
-     * on a live answer, whose `settled_at` is that moment. */
-    providerTakenAt: tsString("provider_taken_at"),
+    /** When the provider says the checkout began, written once, only by a check that finds the
+     * card after its live answer was missed. */
+    providerCheckoutStartedAt: tsString("provider_checkout_started_at"),
     /** Committed before reversing an orphan; the provider's reconciler owns recovery of this claim. */
     reconcileRemediatedAt: tsString("reconcile_remediated_at"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),

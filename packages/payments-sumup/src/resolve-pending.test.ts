@@ -388,14 +388,14 @@ describe("SumUpCloudProvider.resolvePending", () => {
   });
 
   it.each([
-    { timestamp: "2026-03-31T22:01:00Z", taken: "SumUp's time", want: "2026-03-31T22:01:00.000Z" },
-    { timestamp: undefined, taken: "the row's creation", want: "created" },
-    { timestamp: "not a time", taken: "the row's creation", want: "created" },
+    { timestamp: "2026-03-31T21:58:01Z", source: "SumUp's time", want: "2026-03-31T21:58:01.000Z" },
+    { timestamp: undefined, source: "the row's creation", want: "created" },
+    { timestamp: "not a time", source: "the row's creation", want: "created" },
   ])(
-    "stores $taken as the time the card was taken (timestamp $timestamp)",
+    "stores $source as when the checkout began (timestamp $timestamp)",
     async ({ timestamp, want }) => {
       const { fake, provider } = await setup();
-      const paymentRef = `taken-${String(timestamp)}`;
+      const paymentRef = `started-${String(timestamp)}`;
       await withTransaction(suite.db, async (tx) => {
         const t = await seedWorkingOrder(suite.db, freshNif());
         await insertAttempting(tx, {
@@ -418,13 +418,13 @@ describe("SumUpCloudProvider.resolvePending", () => {
       );
       const [row] = await suite.db
         .select({
-          takenAt: payments.providerTakenAt,
+          checkoutStartedAt: payments.providerCheckoutStartedAt,
           createdAt: payments.createdAt,
           settledAt: payments.settledAt,
         })
         .from(payments)
         .where(eq(payments.paymentRef, paymentRef));
-      expect(row!.takenAt).toBe(want === "created" ? row!.createdAt : want);
+      expect(row!.checkoutStartedAt).toBe(want === "created" ? row!.createdAt : want);
       expect(row!.settledAt).toBe(T0.toISOString());
     },
   );

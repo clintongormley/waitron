@@ -45,7 +45,7 @@ interface Held extends CardFacts {
   foreignTransactionId: string;
   status: SumUpTransaction["status"];
   amount: Decimal;
-  /** SumUp's own time of the transaction, as its lookup answers it. */
+  /** SumUp's `timestamp`: when the checkout began, not the tap. */
   timestamp?: string;
   refundEvents?: SumUpRefundEvent[];
   /** When set, the FIRST `findTransaction` that locates this checkout rewrites its status to this

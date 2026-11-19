@@ -174,14 +174,14 @@ export async function captureAttempting(
     externalRef: string;
     card?: CardDetails;
     amount?: Decimal;
-    /** When the provider says the card was taken; only a check made after the live answer was
+    /** When the provider says the checkout began; only a check made after the live answer was
      * missed passes it. */
-    takenAt?: Date;
+    checkoutStartedAt?: Date;
   },
 ): Promise<PaymentRow> {
   return resolveAttempting(tx, params, "captured", {
     settledAt: params.settledAt.toISOString(),
-    takenAt: params.takenAt?.toISOString(),
+    checkoutStartedAt: params.checkoutStartedAt?.toISOString(),
     externalRef: params.externalRef,
     card: params.card,
     amount: params.amount,
@@ -199,7 +199,7 @@ async function resolveAttempting(
   state: "captured" | "failed",
   extra: {
     settledAt?: string;
-    takenAt?: string;
+    checkoutStartedAt?: string;
     externalRef?: string;
     card?: CardDetails;
     amount?: Decimal;
@@ -212,7 +212,7 @@ async function resolveAttempting(
       amount: extra.amount === undefined ? undefined : decimalToCents(extra.amount),
       requestedAmount: sql`${payments.amount}`,
       settledAt: extra.settledAt ?? null,
-      providerTakenAt: extra.takenAt ?? null,
+      providerCheckoutStartedAt: extra.checkoutStartedAt ?? null,
       externalRef: extra.externalRef ?? null,
       cardScheme: extra.card?.scheme ?? null,
       cardLast4: extra.card?.last4 ?? null,

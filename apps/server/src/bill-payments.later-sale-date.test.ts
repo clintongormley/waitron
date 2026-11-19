@@ -342,26 +342,50 @@ describe("a bill payment completed on a later day files the day it was accepted"
     expect(record).toEqual({ operationDate: null, issueDate: "2026-04-01" });
   });
 
+  it("files 31 March for a card Stripe's check found at 09:00, its row written at 23:58", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const billId = await tabWith(venue, "Croquettes");
+    await capturedPending(venue, billId, 1000, {
+      bill: ASKED_31,
+      card: ASKED_31,
+      settled: MORNING_1,
+      resolved: true,
+    });
+
+    expect(await settleAt(venue, MORNING_1)).toMatchObject({ received: 1 });
+
+    const { supplyDay, record } = await filedFor(venue, billId);
+    expect(supplyDay).toBe("2026-03-31");
+    expect(record).toEqual({ operationDate: "2026-03-31", issueDate: "2026-04-01" });
+  });
+
+  // SumUp's own time is when the checkout began, a second after the box asked the reader, not the
+  // tap (docs/research/2026-09-10-sumup-solo-experiments.md).
   it.each([
-    { takenAt: TAKEN_1, saleDay: null },
-    { takenAt: "2026-03-31T21:59:00.000Z", saleDay: "2026-03-31" },
+    { started: "2026-03-31T21:58:01.000Z", found: MORNING_1, issued: "2026-04-01" },
+    {
+      started: "2026-03-31T18:30:01.000Z",
+      found: "2026-04-02T07:00:00.000Z",
+      issued: "2026-04-02",
+    },
   ])(
-    "takes SumUp's time $takenAt for a card its check found at 09:00 (sale day $saleDay)",
-    async ({ takenAt, saleDay }) => {
+    "files 31 March for a SumUp card whose checkout began at $started and its check found at $found",
+    async ({ started, found, issued }) => {
       const venue = await provisionBillVenue(suite.db);
       const billId = await tabWith(venue, "Croquettes");
+      const asked = new Date(Date.parse(started) - 1000).toISOString();
       await capturedPending(venue, billId, 1000, {
-        bill: ASKED_31,
-        card: ASKED_31,
-        settled: MORNING_1,
-        takenAt,
+        bill: asked,
+        card: asked,
+        settled: found,
+        checkoutStartedAt: started,
       });
 
-      expect(await settleAt(venue, MORNING_1)).toMatchObject({ received: 1 });
+      expect(await settleAt(venue, found)).toMatchObject({ received: 1 });
 
       const { supplyDay, record } = await filedFor(venue, billId);
-      expect(supplyDay).toBe(saleDay);
-      expect(record).toEqual({ operationDate: saleDay, issueDate: "2026-04-01" });
+      expect(supplyDay).toBe("2026-03-31");
+      expect(record).toEqual({ operationDate: "2026-03-31", issueDate: issued });
     },
   );
 });

@@ -107,9 +107,12 @@ async function capturedPayment(externalRef: string): Promise<{ paymentRef: strin
   return { paymentRef };
 }
 
-async function takenAtOf(paymentRef: string) {
+async function checkoutStartedAtOf(paymentRef: string) {
   const [row] = await suite.db
-    .select({ takenAt: payments.providerTakenAt, resolutionOutcome: payments.resolutionOutcome })
+    .select({
+      checkoutStartedAt: payments.providerCheckoutStartedAt,
+      resolutionOutcome: payments.resolutionOutcome,
+    })
     .from(payments)
     .where(eq(payments.paymentRef, paymentRef));
   return row;
@@ -136,11 +139,11 @@ describe("StripeTerminalProvider.collect", () => {
     expect(row?.externalRef).toMatch(/^pi_/);
   });
 
-  it("a live answer leaves the provider's time the card was taken empty", async () => {
+  it("a live answer leaves the provider's checkout start empty", async () => {
     const result = await providerFor(new FakeStripe()).collect(await collectParams());
     expect(result.state).toBe("captured");
-    expect(await takenAtOf(result.paymentRef)).toEqual({
-      takenAt: null,
+    expect(await checkoutStartedAtOf(result.paymentRef)).toEqual({
+      checkoutStartedAt: null,
       resolutionOutcome: null,
     });
   });
@@ -836,8 +839,8 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     fake.setIntent("pi_later", { status: "succeeded", amount: 1210, amountReceived: 1210 });
     const { paymentRef } = await abandonedRow("pi_later");
     await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT);
-    expect(await takenAtOf(paymentRef)).toEqual({
-      takenAt: null,
+    expect(await checkoutStartedAtOf(paymentRef)).toEqual({
+      checkoutStartedAt: null,
       resolutionOutcome: "captured",
     });
   });

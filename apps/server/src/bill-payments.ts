@@ -79,7 +79,7 @@ import type {
 } from "./bill-allocation.js";
 import { issuancePass } from "./issuance-pass.js";
 import { pinnedAt } from "./issue-moment.js";
-import { cardTakenAt, issueOrderMoment } from "./sale-day.js";
+import { cardSaleMoment, issueOrderMoment } from "./sale-day.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -773,15 +773,19 @@ export async function readBillBalance(
   };
 }
 
-/** The latest moment among `received` that a payment was taken: a card's as {@link cardTakenAt}
- * reads it, and a cash payment's, or a card's with no settled card row, when its own row was
- * written. The caller passes only payments that still hold money: one given back in full paid for
- * nothing, so its later acceptance would move the sale off the day it happened. */
-async function latestAcceptance(tx: Transaction, received: readonly PaymentRow[]): Promise<string> {
+/** The latest moment among `received` that dates a payment: a card's {@link cardSaleMoment}, and
+ * a cash payment's, or a card's with no settled card row, when its own row was written; undefined
+ * for none, which files the issue date alone. The caller passes only payments that still hold
+ * money: one given back in full paid for nothing, so its later acceptance would move the sale off
+ * the day it happened. */
+async function latestAcceptance(
+  tx: Transaction,
+  received: readonly PaymentRow[],
+): Promise<string | undefined> {
   const cards = await tx
     .select({
       billPaymentId: providerPayments.billPaymentId,
-      providerTakenAt: providerPayments.providerTakenAt,
+      providerCheckoutStartedAt: providerPayments.providerCheckoutStartedAt,
       resolutionOutcome: providerPayments.resolutionOutcome,
       createdAt: providerPayments.createdAt,
       settledAt: providerPayments.settledAt,
@@ -796,9 +800,12 @@ async function latestAcceptance(tx: Transaction, received: readonly PaymentRow[]
   return received
     .map((row) => {
       const card = cards.find((candidate) => candidate.billPaymentId === row.id);
-      return (card === undefined ? null : cardTakenAt(card)) ?? row.createdAt;
+      return (card === undefined ? null : cardSaleMoment(card)) ?? row.createdAt;
     })
-    .reduce((latest, at) => (at > latest ? at : latest));
+    .reduce<string | undefined>(
+      (latest, at) => (latest === undefined || at > latest ? at : latest),
+      undefined,
+    );
 }
 
 type IssueOptions = {

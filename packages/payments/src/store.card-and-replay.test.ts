@@ -180,8 +180,8 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
   });
 });
 
-describe("the provider's time the card was taken", () => {
-  async function captured(paymentRef: string, takenAt?: Date) {
+describe("the provider's start of the checkout", () => {
+  async function captured(paymentRef: string, checkoutStartedAt?: Date) {
     const taxpayer = await seedWorkingOrder(suite.db, freshNif());
     await withTransaction(suite.db, async (tx) => {
       await insertAttempting(tx, {
@@ -197,24 +197,27 @@ describe("the provider's time the card was taken", () => {
         paymentRef,
         settledAt: SETTLED,
         externalRef: `txn-${paymentRef}`,
-        ...(takenAt === undefined ? {} : { takenAt }),
+        ...(checkoutStartedAt === undefined ? {} : { checkoutStartedAt }),
       });
     });
     const [row] = await suite.db
-      .select({ takenAt: payments.providerTakenAt, settledAt: payments.settledAt })
+      .select({
+        checkoutStartedAt: payments.providerCheckoutStartedAt,
+        settledAt: payments.settledAt,
+      })
       .from(payments)
       .where(eq(payments.paymentRef, paymentRef));
     return row!;
   }
 
   it("stores the time a capture names, beside the box's settled time", async () => {
-    expect(await captured("taken-1", new Date("2026-03-31T22:01:00Z"))).toEqual({
-      takenAt: "2026-03-31T22:01:00.000Z",
+    expect(await captured("started-1", new Date("2026-03-31T21:58:01Z"))).toEqual({
+      checkoutStartedAt: "2026-03-31T21:58:01.000Z",
       settledAt: SETTLED.toISOString(),
     });
   });
 
   it("leaves it empty when the capture names none", async () => {
-    expect((await captured("taken-2")).takenAt).toBeNull();
+    expect((await captured("started-2")).checkoutStartedAt).toBeNull();
   });
 });

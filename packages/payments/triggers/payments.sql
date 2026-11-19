@@ -21,6 +21,8 @@ BEGIN
     AND (old.reader_id IS NULL OR new.reader_id IS old.reader_id)
     AND (old.reconcile_remediated_at IS NULL
       OR new.reconcile_remediated_at IS old.reconcile_remediated_at)
+    AND (old.provider_checkout_started_at IS NULL
+      OR new.provider_checkout_started_at IS old.provider_checkout_started_at)
     AND (old.resolution_outcome IS NULL OR (
       new.resolution_outcome IS old.resolution_outcome
       AND new.resolution_cancelled_at_provider IS old.resolution_cancelled_at_provider
