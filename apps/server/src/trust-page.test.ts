@@ -7,6 +7,7 @@ import {
 } from "./trust-page.js";
 import { DEVICE_HELP, DEVICE_ORDER } from "./trust-page-devices.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
+import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
 
 const base: TrustPageInput = {
   reachUrls: ["https://waitron.local", "https://192.168.1.50"],
@@ -129,18 +130,18 @@ it("shows the browser's own warning words when telling the operator to start aga
   expect(html).toContain("come back here and start again from step 1.");
 });
 
-// Every hand-copied token pair in the page's stylesheet, light then dark. Weaker than its name: the
-// expected values are literals here, not read from packages/ui-core/src/tokens/colors.css, so a token
-// changed there goes unseen.
+// Every hand-copied token pair in the page's stylesheet, light then dark.
+const pair = (token: string): string =>
+  `light-dark(${SERVER_THEME_DEFAULTS.light[token]}, ${SERVER_THEME_DEFAULTS.dark[token]})`;
 it.each([
-  ["--wt-color-primary", "background: light-dark(#007392, #71cfeb)"],
-  ["--wt-color-on-primary", "color: light-dark(#ffffff, #001016)"],
-  ["--wt-color-primary-text", "a { color: light-dark(#007392, #71cfeb); }"],
-  ["--wt-color-focus", "outline: 3px solid light-dark(#007392, #71cfeb)"],
-  ["--wt-color-text-muted", "light-dark(#626366, #a1a7b3)"],
-  ["--wt-color-danger", "light-dark(#b3261e, #ff7f73)"],
-])("keeps %s in step with the design tokens", (_token, declaration) => {
-  expect(renderTrustPage(base)).toContain(declaration);
+  ["--wt-color-primary", (value: string) => `background: ${value}`],
+  ["--wt-color-on-primary", (value: string) => `color: ${value}`],
+  ["--wt-color-primary-text", (value: string) => `a { color: ${value}; }`],
+  ["--wt-color-focus", (value: string) => `outline: 3px solid ${value}`],
+  ["--wt-color-text-muted", (value: string) => `.note { color: ${value};`],
+  ["--wt-color-danger", (value: string) => `.accent, .warning-words { color: ${value}; }`],
+])("keeps %s in step with the design tokens", (token, declaration) => {
+  expect(renderTrustPage(base)).toContain(declaration(pair(token)));
 });
 
 it("drops the troubleshooting box the owner did not want", () => {

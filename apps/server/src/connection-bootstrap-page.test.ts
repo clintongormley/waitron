@@ -540,8 +540,8 @@ it.each(["en", "es"] as const)(
 
 async function themeInks(page: Page) {
   return page.evaluate(() => ({
-    teal: getComputedStyle(document.querySelector(".teal")!).fill,
-    ink: getComputedStyle(document.querySelector(".ink")!).fill,
+    teal: getComputedStyle(document.querySelector(".wt-logo-teal")!).fill,
+    ink: getComputedStyle(document.querySelector(".wt-logo-ink")!).fill,
     action: getComputedStyle(document.querySelector(".button, button")!).backgroundColor,
   }));
 }
@@ -618,7 +618,7 @@ it("without JavaScript certificate help keeps readable device inks", async () =>
     expect(await page.getByRole("link", { name: "Download the certificate" }).isVisible()).toBe(
       true,
     );
-    expect(await page.locator(".ink").evaluate((word) => getComputedStyle(word).fill)).toBe(
+    expect(await page.locator(".wt-logo-ink").evaluate((word) => getComputedStyle(word).fill)).toBe(
       "rgb(236, 238, 242)",
     );
   } finally {
