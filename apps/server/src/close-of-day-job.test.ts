@@ -46,6 +46,23 @@ vi.mock("./till-sale.js", async (importOriginal) => {
   };
 });
 
+/** Runs once, before the next transaction opened through `@waitron/db`'s `withTransaction`. */
+const beforeNextTransaction = vi.hoisted(() => ({
+  run: undefined as (() => Promise<void>) | undefined,
+}));
+vi.mock("@waitron/db", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@waitron/db")>();
+  return {
+    ...original,
+    withTransaction: async (...args: Parameters<typeof original.withTransaction>) => {
+      const run = beforeNextTransaction.run;
+      beforeNextTransaction.run = undefined;
+      await run?.();
+      return original.withTransaction(...args);
+    },
+  };
+});
+
 let venue: BillVenue;
 let venueClock: BusinessDayClock;
 let today: string;
@@ -352,6 +369,29 @@ describe("bills.close_of_day", () => {
     await look(definition);
     expect(issued(bill)).toBe(true);
     expect(issued(bad)).toBe(true);
+  });
+
+  it("issues no bill opened during a hold that began and ended while a look was under way", async () => {
+    const definition = job();
+    at = day(19).startAt + 3 * HOUR;
+    let bill = "";
+    // The look's first transaction comes after it has read the highest bill row and the count.
+    beforeNextTransaction.run = async () => {
+      hold();
+      bill = await billOpenedAt(day(18).startAt + 10 * HOUR);
+      seatHolds = false;
+    };
+    await look(definition);
+    expect(bill).not.toBe("");
+    expect(issued(bill)).toBe(false);
+    at += 5_000;
+    await look(definition);
+    expect(issued(bill)).toBe(false);
+    expect(fiscalRecordCount(venue, bill)).toBe(0);
+
+    at = day(19).endAt + 60_000;
+    await look(definition);
+    expect(issued(bill)).toBe(true);
   });
 
   it("applies only on a primary box that is neither a mirror nor fenced", () => {

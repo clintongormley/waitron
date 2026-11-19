@@ -194,11 +194,12 @@ export function highestBillRow(db: Database): number {
   return row?.top ?? 0;
 }
 
-/** Table bills that look due under `rule`; `issueBillAtClose` checks each again in its own
+/** Table bills up to row `upToRow` that look due under `rule`; `issueBillAtClose` checks each again in its own
  * transaction. */
 async function dueBills(
   tx: Transaction,
   nodeId: string,
+  upToRow: number,
   rule: (rows: ReadonlyMap<string, number>) => CloseOfDayRule,
 ): Promise<{ ids: string[]; rule: CloseOfDayRule }> {
   const rows = await tx
@@ -212,6 +213,7 @@ async function dueBills(
     .where(
       and(
         eq(workingOrders.nodeId, nodeId),
+        sql`${workingOrders}.rowid <= ${upToRow}`,
         inArray(workingOrders.status, ["open", "placed"]),
         exists(
           tx
@@ -265,9 +267,9 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
   let queryAgain = true;
   let queriedDayStart = 0;
 
-  async function issueDue(dayStartedAt: Date): Promise<void> {
+  async function issueDue(dayStartedAt: Date, upToRow: number): Promise<void> {
     const due = await withTransaction(deps.db, (tx) =>
-      dueBills(tx, cfg.nodeId, (rows) => ({
+      dueBills(tx, cfg.nodeId, upToRow, (rows) => ({
         dayStartedAt,
         openedAt: (billId) => {
           const row = rows.get(billId);
@@ -327,6 +329,9 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
     maxSleepMs: LOOK_MS,
     backoff: { firstMs: 5_000, maxMs: 300_000 },
     async pass() {
+      // The row before the count: a hold that begins after the count is read covers only rows
+      // above `top`, which this look leaves for the next.
+      const top = highestBillRow(deps.db);
       const holds = deps.clockHoldsBegun();
       if (deps.clockUnconfirmed()) {
         held = true;
@@ -334,7 +339,6 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
       }
       if (holds !== holdsSeen) held = true;
       holdsSeen = holds;
-      const top = highestBillRow(deps.db);
       const reading = deps.clock.now().instant;
       if (held) {
         if (top > mark) windows.push({ after: mark, upTo: top, releasedAt: reading });
@@ -349,7 +353,7 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
       if (!queryAgain && dayStartedAt.getTime() <= queriedDayStart) return { nextDueAt: null };
       queryAgain = false;
       queriedDayStart = dayStartedAt.getTime();
-      await issueDue(dayStartedAt);
+      await issueDue(dayStartedAt, top);
       return { nextDueAt: null };
     },
   };
