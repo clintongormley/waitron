@@ -1979,6 +1979,29 @@ describe("till-app: Print the bill from Finish table's refusal", () => {
     expect(banner(el)).toBeNull();
   });
 
+  it("says why nothing was sent when the bill it opens has a part payment held", async () => {
+    const { el, endMeal } = await openBill({
+      finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+      getPartyBills: twoBills(),
+      takeBillPayment: vi.fn(() => new Promise(() => {})),
+    });
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(tableOrder(el).billPaymentHeld).toBe(true);
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+    expect(tableOrder(el).billPaymentHeld).toBe(false);
+
+    await pressPrintFromFinishRefusal(el);
+
+    expect(tableOrder(el).orderId).toBe("wo-4");
+    expect(endMeal).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("bill_pay.sending"));
+  });
+
   it("shows the bill the refusal names before printing it, and says it is printed under that bill", async () => {
     let printed = false;
     const { el, endMeal } = await openBill({

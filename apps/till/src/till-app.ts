@@ -20152,11 +20152,9 @@ export class TillApp extends LitElement {
     const { workingOrderId, printAnyway, showFirst } = (
       event as CustomEvent<{ workingOrderId: string; printAnyway?: boolean; showFirst?: boolean }>
     ).detail;
-    if (
-      showFirst === true &&
-      this.#billPrinting() === null &&
-      this.activeTabId !== workingOrderId
-    ) {
+    const switching =
+      showFirst === true && this.#billPrinting() === null && this.activeTabId !== workingOrderId;
+    if (switching) {
       const { api, orderParty: pressed } = this;
       const session = this.#operatorSession;
       const visit = this.#orderVisit;
@@ -20183,17 +20181,22 @@ export class TillApp extends LitElement {
       party === null ||
       this.#billPrinting() !== null ||
       this.activeTabId !== workingOrderId ||
-      bill === undefined ||
+      bill === undefined
+    )
+      return;
+    const held = this.#holdRefusal(workingOrderId);
+    if (
       !printBillOffered(bill, {
         dishes: this.tabLines.length,
-        paymentUnanswered:
-          this.#unansweredWholePayments.has(workingOrderId) ||
-          this.#billPaymentHeld(workingOrderId),
+        paymentUnanswered: this.#unansweredWholePayments.has(workingOrderId) || held !== null,
         printsReceipts: this.#mayPrintReceipts(),
         takesPayment: this.permissions.includes("payment.take"),
       })
-    )
+    ) {
+      // The screen offered this press without knowing another bill's held payment.
+      if (switching && held !== null) this.errorKey = held;
       return;
+    }
     const listed =
       warned !== null && warned.workingOrderId === workingOrderId && "unserved" in warned
         ? this.mealEnd!.revision
