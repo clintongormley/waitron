@@ -111,7 +111,7 @@ export type BoxStatusDeps = {
   readJobs: () => Readonly<Record<string, JobView>>;
   readSingletonRole: () => SingletonRole;
   readAwaitingFiscalCertificate: () => boolean;
-  /** Shared with `/api/box/health`, so both read the host's clock service once a minute. */
+  /** Shared with `/api/box/health`, so both read the host's clock service through one cache. */
   readTime: () => Promise<TimeHealth>;
 };
 

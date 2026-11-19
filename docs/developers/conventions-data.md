@@ -4671,9 +4671,12 @@ How it moves (A1420 plan D3; A1506 plan row 3):
 - **`by_internet` is left only after a clock jump or a future-date refusal** (below); nothing else
   moves it.
 - **The time service.** Until the start is `by_internet`, each clock-watch look (every 15 seconds,
-  `CLOCK_WATCH_MS`, on every node) reads the time service through the same shared reading, so the
-  host program, which systemd starts once per request, runs at most once a minute. A synchronised
-  answer confirms `by_internet`, from `waiting`, `by_devices` or `by_person`.
+  `CLOCK_WATCH_MS`, on every node) reads the time service through the same shared reading. While
+  the start waits, the look first clears that reading and time health's cache (`clearClockStatus`),
+  so the host program, which systemd starts once per request, runs at every look, and a service
+  that has just synchronised is seen at the next one; once devices or a person have confirmed, the
+  reading's minute applies. A synchronised answer confirms `by_internet`, from `waiting`,
+  `by_devices` or `by_person`.
 - **Two devices.** While waiting, except for a future-date refusal (below), each look also offers
   the stored device readings: two or more devices at different network addresses, each within 5
   seconds (`START_CLOCK_MARGIN_MS`) of the box and of each other, confirm `by_devices` and log `clock_start.confirmed` with source
@@ -4703,10 +4706,8 @@ How it moves (A1420 plan D3; A1506 plan row 3):
   synchronised, or a host that does not answer or throws, sends the box back to `waiting` with
   cause `clock_jumped` from any status, `by_internet` included (`backToWaitingUnlessSynchronised`,
   `apps/server/src/start-clock-check.ts`). Either way it logs `clock_watch.jumped`, as a warning
-  when it moved the box. The wait ends as a start's does. The next look, 15 seconds later, reads
-  the time service afresh once more, so a service that reports synchronised just after the jump
-  confirms the box then. After that the shared one-minute reading applies, as at a start, so a
-  later change is seen within about 75 seconds. Device readings taken before the jump do not count towards it: the store
+  when it moved the box. The wait ends as a start's does, so a service that reports synchronised
+  after the jump confirms the box at the next look. Device readings taken before the jump do not count towards it: the store
   (`apps/server/src/clock-witnesses.ts`) drops a reading once the wall clock has moved more than a
   second against its own steady clock (`performance.now()`) since it arrived. The cause reaches Box status as
   `clock.waiting.cause`, and the till's `clock.unconfirmed` notice and the dashboard bell's
@@ -4821,8 +4822,10 @@ sends one cash sale and one correction-record request through boot itself; a new
 covered only once that file lists it. The jump cases in `clock-watch.start-up.test.ts` and
 `clock-correction.test.ts` move stand-in clocks: no case makes a real clock step or a real
 suspend. `boot.clock-correction.test.ts` checks that boot hands the watch the boot reader's
-`elapsed` and adds the watch as an anchor, by identity; no boot test makes a jump, so boot's own
-`clearClockStatus` is run by no test.
+`elapsed` and adds the watch as an anchor, by identity; no boot test makes a jump, and none
+checks what boot's own `clearClockStatus` clears: the control case of
+`boot.restricted-quiet.test.ts` runs the watch while the start waits, so it calls it, but asserts
+only that looks ran.
 
 ### The box sets its own clock
 
@@ -4879,7 +4882,8 @@ The start check, the clock watch, time health, the `clock.sync_off` warning
 (`apps/server/src/clock-sync-alert.ts`: `off`, `stopped`, `unsynchronised`, and `unreachable` in
 production only), the `clock.disagrees` and `clock.peer_disagrees` warnings and the till's
 `clock.device_wrong` notice read the status through one 60-second cache
-(`sharedClockServiceReading`), which a set clears; a clock set asks the host itself. Boot hands
+(`sharedClockServiceReading`), which a set clears, and the clock watch clears before each look
+while the start waits; a clock set asks the host itself. Boot hands
 every reader the host through `keepTimeServiceOn` (`apps/server/src/time-service-kept-on.ts`): a
 status reading `off` asks `clock.sync-on` and waits for its answer, logs `time_service.switched_on`
 or, once per distinct failure, `time_service.switch_on_failed`, and answers the reading as it was.
@@ -4891,8 +4895,8 @@ reading that finds the service not `off`, starts the wait again at a minute. So 
 `timedatectl set-ntp true` keeps failing is asked about once an hour rather than at every reading.
 In trading mode the clock watch also reads the shared reading at the end of every look, every 15
 seconds, whatever the start's state (`readTimeService` in `createClockWatch`), so a service
-switched off is found with no request from a screen; the cache keeps that to about one host request
-a minute. It reads outside the correction's turn.
+switched off is found with no request from a screen; once the start is confirmed, the cache keeps
+that to about one host request a minute. It reads outside the correction's turn.
 The same file's `boxHostRequests()` asks B3's seven host requests and answers the same way, with
 two more answers, `unsupported` (the host does not take that request) and `invalid` (nothing sent),
 and one difference: a whole reply line that arrived before the connection broke is read as the

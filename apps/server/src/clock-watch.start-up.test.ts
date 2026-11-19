@@ -181,6 +181,30 @@ describe("the clock watch and the start check", () => {
     expect(h.host).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["by_person", "by_devices"] as const)(
+    "leaves the shared reading's minute alone once the start is confirmed %s, the time service not synchronised",
+    async (by) => {
+      const h = harness({ host: async () => NOT_SYNCHRONISED, readTimeService: true });
+      if (by === "by_person") h.startState.confirm("by_person", { "node-1": 7 });
+      else {
+        h.noteDevice("till-1", "10.0.0.2", 3_000);
+        h.noteDevice("till-2", "10.0.0.3", 4_000);
+      }
+      await h.tick();
+      expect(h.startState.status).toBe(by);
+      expect(h.host).toHaveBeenCalledTimes(1);
+      for (let look = 0; look < 3; look++) await h.tick();
+      expect(h.clockStatus).toHaveBeenCalledTimes(4);
+      expect(h.host).toHaveBeenCalledTimes(1);
+      // Sent back to waiting, the next look reads afresh again.
+      h.startState.backToWaiting("future_date_refused", "2026-10-31");
+      await h.tick();
+      expect(h.host).toHaveBeenCalledTimes(2);
+      await h.tick();
+      expect(h.host).toHaveBeenCalledTimes(3);
+    },
+  );
+
   it("reads no chain heads while no devices agree, and is confirmed by two noted between looks, writing no row", async () => {
     const h = harness({ host: async () => NOT_SYNCHRONISED });
     await h.tick();

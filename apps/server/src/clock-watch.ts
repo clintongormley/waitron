@@ -33,8 +33,8 @@ export function createClockWatch(deps: {
   correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "writePending" | "steps">;
   /** Closed by a look at a reading a record could carry. */
   startUp?: Pick<ClockStartUp, "noStop">;
-  /** The start check: until the internet confirms it, each look reads the time service afresh
-   * through `clockStatus`, and while it waits, offers it the device readings. After a jump it
+  /** The start check: until the internet confirms it, each look reads the time service through
+   * `clockStatus`; while it waits, afresh, offering it the device readings too. After a jump it
    * reads the time service afresh, whatever the status, and sends the box back to waiting unless
    * it is synchronised. Never asks AEAT. */
   start?: {
@@ -89,7 +89,7 @@ export function createClockWatch(deps: {
     const byInternet = () => start.state.status === "by_internet";
     if (byInternet()) return;
     const heads = () => deps.read(start.heads);
-    start.clearClockStatus?.();
+    if (start.state.status === "waiting") start.clearClockStatus?.();
     await lookAtClockService({ state: start.state, clockStatus: start.clockStatus, heads });
     if (stopped) return;
     if (byInternet()) {
