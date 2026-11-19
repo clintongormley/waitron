@@ -813,6 +813,7 @@ describe("Print the bill's receipt", () => {
           printerId: printJobs.printerId,
           kind: printJobs.kind,
           copy: printJobs.receiptCopy,
+          page: printJobs.pageDocument,
         })
         .from(printJobs)
         .where(eq(printJobs.saleId, saleId)),
@@ -849,7 +850,7 @@ describe("Print the bill's receipt", () => {
     const { saleId } = await end(party);
 
     expect(await jobsOf(saleId)).toEqual([
-      { printerId: await venuePrinterId(), kind: "document", copy: false },
+      { printerId: await venuePrinterId(), kind: "document", copy: false, page: null },
     ]);
     expect(await drawerJobs()).toBe(drawers);
   });
@@ -867,7 +868,9 @@ describe("Print the bill's receipt", () => {
 
     const { saleId } = await end(party, {}, cfg);
 
-    expect(await jobsOf(saleId)).toEqual([{ printerId, kind: "document", copy: false }]);
+    expect(await jobsOf(saleId)).toEqual([
+      { printerId, kind: "document", copy: false, page: null },
+    ]);
   });
 
   it("a full invoice staged for email prints no receipt and needs no printer", async () => {
@@ -917,11 +920,13 @@ describe("Print the bill's receipt", () => {
   });
 
   it("a full invoice staged for A4 prints no receipt on a device that has a printer", async () => {
-    const party = await stagedForA4(true);
+    const { party, pagePrinterId } = await stagedForA4(true);
 
     const { saleId } = await end(party);
 
-    expect(await jobsOf(saleId)).toEqual([]);
+    expect(await jobsOf(saleId)).toEqual([
+      { printerId: pagePrinterId, kind: "a4", copy: null, page: "invoice" },
+    ]);
     expect(await deliveriesOf(saleId)).toEqual([{ medium: "a4" }]);
   });
 
@@ -943,7 +948,7 @@ describe("Print the bill's receipt", () => {
       await inTx(venue, (tx) =>
         tx.update(printers).set({ active: false }).where(eq(printers.id, pagePrinterId)),
       );
-    return party;
+    return { party, pagePrinterId };
   }
 
   /** The refusal, and no record filed, the bill still open and the party's revision unmoved. */
@@ -962,7 +967,7 @@ describe("Print the bill's receipt", () => {
   }
 
   it("refuses a full invoice staged for an A4 printer switched off since, issuing nothing", async () => {
-    await refusedUndelivered(await stagedForA4(false), "a4");
+    await refusedUndelivered((await stagedForA4(false)).party, "a4");
   });
 
   it("refuses a full invoice staged for email whose delivery cannot be queued, issuing nothing", async () => {
