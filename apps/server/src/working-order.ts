@@ -138,6 +138,7 @@ import type { RetainedCourseLine } from "./retained-course.js";
 import {
   carryBillSetMenuCopies,
   placeSetMenuRows,
+  readBillSetMenus,
   refuseSetMenuMoney,
   refuseDraftLosingSetMenuPlace,
   refuseUnlessSetMenuBill,
@@ -145,6 +146,7 @@ import {
   type SetMenuDraftLine,
   type SetMenuPlacement,
 } from "./set-menu-bill.js";
+import { setSetMenuCount } from "./set-menu-count.js";
 import { replaceMovedDishes } from "./set-menu-moves.js";
 import {
   assertSetMenuPortion,
@@ -1481,11 +1483,14 @@ export interface ParkOrderRequest {
   operatorId?: string;
   lateSend?: LateSendConfirmation;
   dining?: Dining;
+  firstSetMenu?: { menuId: string; personId: string };
 }
 
 export interface ParkOrderResult {
   id: string;
   orderNumber: number;
+  revision?: number;
+  setMenus?: Awaited<ReturnType<typeof readBillSetMenus>>;
 }
 
 /**
@@ -1670,7 +1675,7 @@ export async function parkOrder(
   req: ParkOrderRequest,
   attendance?: OrderAttendance,
 ): Promise<ParkOrderResult> {
-  if (req.lines.length === 0) {
+  if (req.lines.length === 0 && req.firstSetMenu === undefined) {
     throw new AppError("sale.empty_basket", {});
   }
 
@@ -1684,7 +1689,10 @@ export async function parkOrder(
         dining: req.dining,
       });
       await captureOrderEdit(tx, attendance, req.id, req.operatorId, 0, "park");
-      return { id: req.id, orderNumber };
+      if (req.firstSetMenu === undefined) return { id: req.id, orderNumber };
+      const { menuId, personId } = req.firstSetMenu;
+      const setMenus = await setSetMenuCount(tx, cfg, req.id, menuId, 1, personId);
+      return { id: req.id, orderNumber, revision: await readOrderRevision(tx, req.id), setMenus };
     });
   } catch (error) {
     if (!isUniqueViolation(error)) {
@@ -1694,14 +1702,17 @@ export async function parkOrder(
     // venue file at a time, so that row is readable in a fresh transaction: replay its number.
     return withTransaction(deps.db, async (tx) => {
       const [existing] = await tx
-        .select({ orderNumber: workingOrders.orderNumber })
+        .select({ orderNumber: workingOrders.orderNumber, revision: workingOrders.revision })
         .from(workingOrders)
         .where(and(eq(workingOrders.id, req.id), eq(workingOrders.status, "open")));
       // The colliding id is not `open`: an id reuse, not a retry.
       if (existing === undefined) {
         throw error;
       }
-      return { id: req.id, orderNumber: existing.orderNumber };
+      const reply = { id: req.id, orderNumber: existing.orderNumber };
+      return req.firstSetMenu === undefined
+        ? reply
+        : { ...reply, revision: existing.revision, setMenus: await readBillSetMenus(tx, req.id) };
     });
   }
 }

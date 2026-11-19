@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
-import { persons, workingOrderLines } from "@waitron/db";
+import { floorZones, persons, workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin } from "@waitron/identity";
 import { updateMenuDetails } from "@waitron/menu";
@@ -283,4 +283,68 @@ it("returns each bill's recorded copy in full with one lookup, even after republ
   } finally {
     serve.mockRestore();
   }
+});
+
+it("starts a counter takeaway with one set menu and replays the same order number", async () => {
+  const { venue, copy } = fixture;
+  const id = crypto.randomUUID();
+  const zoneId = venue.counter.zoneId;
+  await inTx(venue, async (tx) => {
+    const [zone] = await tx
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, zoneId));
+    await venueService.setDepartmentSalePolicyField(
+      tx,
+      zone!.departmentId,
+      "dining",
+      "till_choice",
+    );
+  });
+  const body = { id, zoneId, dining: "takeaway", lines: [], firstSetMenuId: copy.menuId };
+  const opened = await request("POST", "/api/working-orders", body);
+  expect(opened.status).toBe(200);
+  const answer = await opened.json();
+  expect(answer).toMatchObject({
+    id,
+    orderNumber: expect.any(Number),
+    revision: 1,
+    setMenus: { setMenus: [{ lineNo: 1 }], dishes: [] },
+  });
+  const retried = await request("POST", "/api/working-orders", body);
+  expect(retried.status).toBe(200);
+  expect(await retried.json()).toEqual(answer);
+  expect(
+    await venue.db
+      .select({ id: workingOrders.id, dining: workingOrders.dining })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id)),
+  ).toEqual([{ id, dining: "takeaway" }]);
+  expect(
+    await venue.db
+      .select({ role: workingOrderLines.setMenuRole })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id)),
+  ).toEqual([{ role: "set_menu" }]);
+});
+
+it("requires the shown counter zone before opening a bill for a set menu", async () => {
+  const { venue, copy } = fixture;
+  const id = crypto.randomUUID();
+  const response = await request("POST", "/api/working-orders", {
+    id,
+    dining: "takeaway",
+    lines: [],
+    firstSetMenuId: copy.menuId,
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "zoneId" } },
+  });
+  expect(
+    await venue.db
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id)),
+  ).toEqual([]);
 });
