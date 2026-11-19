@@ -2,7 +2,13 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { invoiceSeries, nodes, sales, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { nodeId as brandNodeId, type NodeId } from "@waitron/shared";
+import {
+  decimal,
+  deviceOrigin,
+  nodeId as brandNodeId,
+  saleId as brandSaleId,
+  type NodeId,
+} from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
@@ -12,6 +18,7 @@ import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
+import { VerifactuBackend } from "./backend.js";
 
 /**
  * Which calendar month `reconcile` audits, and what form the date reaches an incident in.
@@ -171,6 +178,64 @@ describe("reconcile — which calendar month the audit selects", () => {
       1,
     );
     expect((await reconcile(depsAgainstEmptyAeat(), { year: "2026", month: "1" })).checked).toBe(1);
+  });
+});
+
+describe("reconcile — a sale filed with an earlier sale day", () => {
+  it("audits the invoice under the sale day's month, not the issue day's", async () => {
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+    });
+    const saleId = brandSaleId("b1111111-1111-4111-8111-111111111111");
+    // 09:10 on 1 April at +01:00, for a sale on 31 March.
+    const issuedAt = new Date("2026-04-01T08:10:00Z");
+    await suite.db.transaction(async (tx) => {
+      await tx.insert(sales).values({
+        id: saleId,
+        source: "device",
+        deviceId: venue.deviceId,
+        nodeId: venue.nodeId,
+        seriesId: venue.seriesId,
+        invoiceNumber: 1,
+        issuedAt: issuedAt.toISOString(),
+        issuedOffsetMinutes: 60,
+        total: 0,
+        vatBreakdown: [],
+        locale: "es",
+        invoiceLocales: ["es"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
+      await backend.recordSale(
+        tx,
+        {
+          origin: deviceOrigin(venue.deviceId),
+          nodeId: venue.nodeId,
+          saleId,
+          seriesId: venue.seriesId,
+          seriesCode: "A",
+          invoiceNumber: 1,
+          issuedAt,
+          offsetMinutes: 60,
+          descriptionOfOperation: "Venta en establecimiento",
+          total: decimal("12.10"),
+          vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
+          counterparty: null,
+        },
+        { operationDate: "2026-03-31" },
+      );
+    });
+
+    expect((await reconcile(depsAgainstEmptyAeat(), { year: "2026", month: "03" })).checked).toBe(
+      1,
+    );
+    // The control: the issue day's month, which the record's own issue date names.
+    expect(await rowsMatchingPrefix("2026-04")).toBe(1);
+    expect((await reconcile(depsAgainstEmptyAeat(), { year: "2026", month: "04" })).checked).toBe(
+      0,
+    );
   });
 });
 

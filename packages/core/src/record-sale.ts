@@ -16,6 +16,8 @@ import {
   centsToDecimal,
   compareDecimal,
   decimal,
+  isCalendarDate,
+  localCalendarDate,
   percentOf,
   stringToCents,
   sumDecimals,
@@ -102,6 +104,8 @@ export interface RecordSaleInput {
   /** The operator who rang the sale, for attribution. */
   operatorId?: string;
   receipt?: SaleReceiptFacts;
+  /** The venue calendar day the sale happened, `YYYY-MM-DD`. */
+  operationDate?: string;
 }
 
 /**
@@ -279,6 +283,14 @@ export async function recordSale(
   // same timestamp for one event.
   const now = input.clock.now();
 
+  const issueDay = localCalendarDate(now.instant, now.offsetMinutes);
+  const supplyDay =
+    input.operationDate !== undefined &&
+    isCalendarDate(input.operationDate) &&
+    input.operationDate < issueDay
+      ? input.operationDate
+      : null;
+
   // A degraded clock warns; it never blocks the sale.
   if (now.warning) {
     pending.push({ error: now.warning, severity: "warning" });
@@ -313,6 +325,7 @@ export async function recordSale(
     receiptDepartmentId: input.receipt?.departmentId,
     receiptTradingName: input.receipt?.tradingName,
     receiptPrintsTradingName: input.receipt?.printsTradingName,
+    supplyDay,
   });
 
   // On this same transaction, so an incident never commits for a sale that rolls back.
@@ -337,20 +350,24 @@ export async function recordSale(
 
   // The module builds the fiscal record behind this one call; this package never touches a
   // module's tables.
-  const fiscal = await backend.recordSale(tx, {
-    origin: input.origin,
-    nodeId: input.nodeId,
-    saleId,
-    seriesId: input.seriesId,
-    seriesCode: series.code,
-    invoiceNumber,
-    issuedAt: now.instant,
-    offsetMinutes: now.offsetMinutes,
-    descriptionOfOperation,
-    total,
-    vatBreakdown,
-    counterparty,
-  });
+  const fiscal = await backend.recordSale(
+    tx,
+    {
+      origin: input.origin,
+      nodeId: input.nodeId,
+      saleId,
+      seriesId: input.seriesId,
+      seriesCode: series.code,
+      invoiceNumber,
+      issuedAt: now.instant,
+      offsetMinutes: now.offsetMinutes,
+      descriptionOfOperation,
+      total,
+      vatBreakdown,
+      counterparty,
+    },
+    ...(supplyDay === null ? [] : [{ operationDate: supplyDay }]),
+  );
 
   return { saleId, fiscal };
 }

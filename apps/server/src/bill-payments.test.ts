@@ -856,8 +856,10 @@ describe("the guests a manager's confirmation stores", () => {
         paymentId,
         new Date(),
         {
-          attestedBy: OPERATOR,
-          note: "The terminal shows the transaction",
+          attestation: {
+            attestedBy: OPERATOR,
+            note: "The terminal shows the transaction",
+          },
         },
       ),
     );
@@ -1567,9 +1569,10 @@ describe("the invoice at full payment", () => {
             venue.cfg,
             id,
             clock.now().instant,
-            { attestedBy: OPERATOR, note: "Confirmed net" },
-            undefined,
-            { applied: decimal(applied), tip: decimal("0.00") },
+            {
+              attestation: { attestedBy: OPERATOR, note: "Confirmed net" },
+              confirmedNet: { applied: decimal(applied), tip: decimal("0.00") },
+            },
           ),
         );
       await expect(complete("3.00")).rejects.toMatchObject({

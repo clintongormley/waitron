@@ -1,5 +1,5 @@
 import { listOutsidePayments, type OutsidePayment } from "./outside-payments-report.js";
-import { validatedRangeWindow } from "@waitron/reporting";
+import { validatedRangeWindow, vatReturnDay } from "@waitron/reporting";
 import { readVenueClock } from "@waitron/db";
 import { and, asc, between, eq, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -29,6 +29,8 @@ export interface AccountantInvoice {
   invoiceNumber: string;
   invoiceType: "F1" | "F2" | "corrective" | "replacement";
   issueDate: string;
+  /** The day the sale happened, present only when it is earlier than `issueDate`. */
+  saleDate?: string;
   customerName: string | null;
   customerTaxId: string | null;
   customerIdentifierType: string | null;
@@ -117,6 +119,8 @@ export async function renderAccountantWorkbook(
         invoice.originalInvoiceNumber,
         invoice.voidedAt,
         null,
+        // Left off rather than blank: a missing trailing cell reads as an empty one.
+        ...(invoice.saleDate === undefined ? [] : [invoice.saleDate]),
       ]);
     }
   }
@@ -176,7 +180,10 @@ export async function renderAccountantWorkbook(
     "xl/workbook.xml": `${XML}<workbook xmlns="${SHEET}" xmlns:r="${REL}"><sheets><sheet name="${words.invoiceSheet}" sheetId="1" r:id="rId1"/><sheet name="${words.purchaseSheet}" sheetId="2" r:id="rId2"/><sheet name="${words.outsideSheet}" sheetId="3" r:id="rId4"/></sheets></workbook>`,
     "xl/_rels/workbook.xml.rels": `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${REL}/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId4" Type="${REL}/worksheet" Target="worksheets/sheet3.xml"/><Relationship Id="rId3" Type="${REL}/styles" Target="styles.xml"/></Relationships>`,
     "xl/styles.xml": `${XML}<styleSheet xmlns="${SHEET}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
-    "xl/worksheets/sheet1.xml": await worksheet([words.invoiceColumns, ...invoiceRows]),
+    "xl/worksheets/sheet1.xml": await worksheet([
+      [...words.invoiceColumns, words.saleDateColumn],
+      ...invoiceRows,
+    ]),
     "xl/worksheets/sheet3.xml": await worksheet([words.outsideColumns, ...outsideRows]),
     "xl/worksheets/sheet2.xml": await worksheet([words.purchaseColumns, ...purchaseRows]),
   };
@@ -197,7 +204,22 @@ export async function listAccountantExport(
 ): Promise<AccountantExport> {
   const original = alias(sales, "original_invoice");
   const originalSeries = alias(invoiceSeries, "original_series");
+  const replacement = alias(sales, "replacement_invoice");
   const civilDate = sql<string>`date(${sales.issuedAt}, printf('%+d minutes', ${sales.issuedOffsetMinutes}))`;
+  // The day `computeVatReturn` counts the sale in: a replacement goes with the original it repeats.
+  const periodDay = sql<string>`case when ${sales.replacesOriginal} = 1
+    then ${vatReturnDay({
+      replacementSupplyDay: sales.supplyDay,
+      supplyDay: original.supplyDay,
+      issuedAt: original.issuedAt,
+      issuedOffsetMinutes: original.issuedOffsetMinutes,
+    })}
+    else ${vatReturnDay({
+      replacementSupplyDay: replacement.supplyDay,
+      supplyDay: sales.supplyDay,
+      issuedAt: sales.issuedAt,
+      issuedOffsetMinutes: sales.issuedOffsetMinutes,
+    })} end`;
   const rows = await tx
     .select({
       id: sales.id,
@@ -205,6 +227,7 @@ export async function listAccountantExport(
       code: invoiceSeries.code,
       number: sales.invoiceNumber,
       issueDate: civilDate,
+      supplyDay: sales.supplyDay,
       customerName: sales.counterpartyLegalName,
       customerTaxId: sales.counterpartyTaxId,
       customerIdentifierType: sales.counterpartyIdentifierType,
@@ -224,12 +247,17 @@ export async function listAccountantExport(
     .leftJoin(original, eq(original.id, sales.correctsSaleId))
     .leftJoin(originalSeries, eq(originalSeries.id, original.seriesId))
     .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
+    .leftJoin(
+      replacement,
+      and(eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)),
+    )
     .leftJoin(saleSubstitutions, eq(saleSubstitutions.substitutionSaleId, sales.id))
-    .where(and(between(civilDate, range.from, range.to), isNull(saleSubstitutions.id)))
-    .orderBy(asc(civilDate), asc(sales.issuedAt), asc(sales.id));
+    .where(and(between(periodDay, range.from, range.to), isNull(saleSubstitutions.id)))
+    .orderBy(asc(periodDay), asc(sales.issuedAt), asc(sales.id));
   const invoices: AccountantInvoice[] = rows.map(
-    ({ code, number, originalCode, originalNumber, replacesOriginal, ...row }) => ({
+    ({ code, number, originalCode, originalNumber, replacesOriginal, supplyDay, ...row }) => ({
       ...row,
+      ...(supplyDay !== null && supplyDay < row.issueDate ? { saleDate: supplyDay } : {}),
       invoiceNumber: formatInvoiceNumber(code, number),
       invoiceType: replacesOriginal
         ? "replacement"

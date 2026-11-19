@@ -1465,7 +1465,7 @@ CREATE TABLE `sales` (
 	FOREIGN KEY (`operator_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`receipt_department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "sales_replaces_original_ck" CHECK("sales"."replaces_original" = 0 or "sales"."corrects_sale_id" is not null),
-	CONSTRAINT "sales_supply_day_ck" CHECK("sales"."supply_day" is null or "sales"."replaces_original" = 1),
+	CONSTRAINT "sales_supply_day_ck" CHECK("sales"."supply_day" is null or "sales"."replaces_original" = 1 or "sales"."corrects_sale_id" is null),
 	CONSTRAINT "sales_total_ck" CHECK("sales"."total" >= 0 or "sales"."corrects_sale_id" is not null),
 	CONSTRAINT "sales_invoice_number_ck" CHECK("sales"."invoice_number" >= 1),
 	CONSTRAINT "sales_invoice_locales_ck" CHECK(json_array_length("sales"."invoice_locales") between 1 and 2),

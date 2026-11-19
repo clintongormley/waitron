@@ -40,6 +40,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     },
     negative: "Negative total",
     unreconciled: "Total differs from VAT lines",
+    saleDateColumn: "Sale date, when earlier than the issue date",
     invoiceColumns: [
       "Invoice id",
       "Node id",
@@ -59,7 +60,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       "Original invoice id",
       "Original invoice number",
       "Voided at (UTC)",
-      "Notes: F3 replacements omitted; original tickets retained; voids flagged, not netted; replacement correctives flagged, not added",
+      "Notes: F3 replacements omitted; original tickets retained; voids flagged, not netted; replacement correctives flagged, not added; an invoice issued after its sale day is listed under that day",
     ],
     purchaseColumns: [
       "Invoice number",
@@ -123,6 +124,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     },
     negative: "Total negativo",
     unreconciled: "El total no coincide con las líneas de IVA",
+    saleDateColumn: "Fecha de operación, si es anterior a la de expedición",
     invoiceColumns: [
       "Id. de factura",
       "Id. de nodo",
@@ -142,7 +144,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       "Id. de factura original",
       "Número de factura original",
       "Anulada el (UTC)",
-      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones se indican, no se restan; las rectificativas por sustitución se indican, no se suman",
+      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones se indican, no se restan; las rectificativas por sustitución se indican, no se suman; una factura expedida después del día de la operación figura en ese día",
     ],
     purchaseColumns: [
       "Número de factura",

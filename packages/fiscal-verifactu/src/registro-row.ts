@@ -139,9 +139,11 @@ export function toRegistroRow(
         "IdAcuerdoSistemaInformatico",
       ] as const)
     : (["RefExterna", "GeneradoPor", "Generador"] as const);
-  // Only a replacement corrective files the sale's real day apart from its own issue date.
+  // An F1/F2, or a replacement corrective, files the sale's real day apart from its issue date.
   const operationDateRefused =
     isAlta(record) &&
+    record.TipoFactura !== "F1" &&
+    record.TipoFactura !== "F2" &&
     ((record.TipoFactura !== "R4" && record.TipoFactura !== "R5") ||
       record.TipoRectificativa !== "S");
   const fields = [

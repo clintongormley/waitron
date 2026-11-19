@@ -2072,3 +2072,62 @@ it("records all 2,001 sale lines and the extra's parent across insert chunks", a
     stored.every((row) => row.quantity === 1000 && row.unitPrice === 100 && row.lineTotal === 100),
   ).toBe(true);
 });
+
+describe("recordSale — a sale day earlier than the issue day", () => {
+  async function filedAndStored(
+    overrides: Partial<RecordSaleInput>,
+  ): Promise<{ filings: unknown[][]; supplyDay: string | null }> {
+    const fake = new FakeFiscalBackend(suite.db);
+    const filings: unknown[][] = [];
+    const backend = wrapBackend(fake, {
+      recordSale: (tx, sale, ...rest) => {
+        filings.push(rest);
+        return fake.recordSale(tx, sale);
+      },
+    });
+    const { saleId } = await run(backend, overrides);
+    const [row] = await rows<{ supply_day: string | null }>(
+      sql`select supply_day from sales where id = ${saleId}`,
+    );
+    return { filings, supplyDay: row!.supply_day };
+  }
+
+  it("stores an earlier day as the supply day and hands it to the backend", async () => {
+    // Issued 2026-03-01 at +01:00.
+    expect(await filedAndStored({ operationDate: "2026-02-28" })).toEqual({
+      filings: [[{ operationDate: "2026-02-28" }]],
+      supplyDay: "2026-02-28",
+    });
+  });
+
+  it("compares with the issue day at the clock's offset, not the UTC day", async () => {
+    // 00:30 on 1 March at +01:00 is still 28 February in UTC.
+    const earlyMorning = fixedClock(() => ({
+      instant: new Date("2026-03-01T00:30:00+01:00"),
+      offsetMinutes: 60,
+      confident: true,
+      confidence: "anchored",
+      anchorAgeSeconds: 0,
+    }));
+    expect(await filedAndStored({ operationDate: "2026-02-28", clock: earlyMorning })).toEqual({
+      filings: [[{ operationDate: "2026-02-28" }]],
+      supplyDay: "2026-02-28",
+    });
+  });
+
+  it.each([
+    ["the issue day itself", "2026-03-01"],
+    ["a later day", "2026-03-02"],
+    ["a malformed day", "2026-02-1"],
+    ["a day no calendar has", "2026-02-30"],
+  ])("records %s as an ordinary sale with no supply day", async (_label, operationDate) => {
+    expect(await filedAndStored({ operationDate })).toEqual({
+      filings: [[]],
+      supplyDay: null,
+    });
+  });
+
+  it("records a sale with no operation date as an ordinary sale", async () => {
+    expect(await filedAndStored({})).toEqual({ filings: [[]], supplyDay: null });
+  });
+});

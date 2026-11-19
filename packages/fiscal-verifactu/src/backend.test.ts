@@ -1326,6 +1326,162 @@ describe("recordSale — invoice type selection", () => {
   });
 });
 
+describe("recordSale — an invoice issued on a later day than the sale", () => {
+  /** Records one sale directly through the backend, issued at `issuedAt` at +01:00. */
+  async function fileSale(
+    saleId: string,
+    invoiceNumber: number,
+    issuedAt: Date,
+    filing?: { operationDate?: string },
+    counterparty: Counterparty | null = null,
+  ) {
+    await withTransaction(suite.db, async (tx) => {
+      await tx.insert(sales).values({
+        id: saleId,
+        source: "device",
+        deviceId,
+        nodeId,
+        seriesId,
+        invoiceNumber,
+        issuedAt: issuedAt.toISOString(),
+        issuedOffsetMinutes: 60,
+        total: 0,
+        vatBreakdown: [],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
+      await backend.recordSale(
+        tx,
+        {
+          origin: deviceOrigin(deviceId),
+          nodeId,
+          saleId: brandSaleId(saleId),
+          seriesId,
+          seriesCode: "A",
+          invoiceNumber,
+          issuedAt,
+          offsetMinutes: 60,
+          descriptionOfOperation: "Venta en establecimiento",
+          total: decimal("12.10"),
+          vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
+          counterparty,
+        },
+        filing,
+      );
+    });
+    const { rows } = await suite.db.execute<Record<string, unknown>>(
+      sql`select * from registros_facturacion where sale_id = ${saleId}`,
+    );
+    const row = decodeRegistroRow(rows[0]!);
+    return { row, record: fromRegistroRow(row) as RegistroAlta };
+  }
+
+  const issuedNextMorning = new Date("2026-03-15T08:10:00Z");
+
+  it("files the earlier sale day as FechaOperacion on a simplified invoice", async () => {
+    const { row, record } = await fileSale(
+      "a1111111-1111-4111-8111-111111111111",
+      801,
+      issuedNextMorning,
+      { operationDate: "2026-03-14" },
+    );
+
+    expect(record.TipoFactura).toBe("F2");
+    expect(record.FechaOperacion).toBe("14-03-2026");
+    expect(record.IDFactura.FechaExpedicionFactura).toBe("15-03-2026");
+    expect(row.fecha_operacion).toBe("2026-03-14");
+    expect(validate(record, { now: issuedNextMorning })).toEqual([]);
+  });
+
+  it("files the earlier sale day as FechaOperacion on a full invoice", async () => {
+    const { row, record } = await fileSale(
+      "a2222222-2222-4222-8222-222222222222",
+      802,
+      issuedNextMorning,
+      { operationDate: "2026-03-14" },
+      { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
+    );
+
+    expect(record.TipoFactura).toBe("F1");
+    expect(record.FechaOperacion).toBe("14-03-2026");
+    expect(row.fecha_operacion).toBe("2026-03-14");
+    expect(validate(record, { now: issuedNextMorning })).toEqual([]);
+  });
+
+  it("files the last day of the year when the invoice is issued on New Year's Day", async () => {
+    // 00:10 on 1 January at +01:00.
+    const newYear = new Date("2026-12-31T23:10:00Z");
+    const { row, record } = await fileSale("a3333333-3333-4333-8333-333333333333", 803, newYear, {
+      operationDate: "2026-12-31",
+    });
+
+    expect(record.FechaOperacion).toBe("31-12-2026");
+    expect(record.IDFactura.FechaExpedicionFactura).toBe("01-01-2027");
+    expect(row.fecha_operacion).toBe("2026-12-31");
+  });
+
+  it("files no FechaOperacion when handed no sale day", async () => {
+    const { row, record } = await fileSale(
+      "a4444444-4444-4444-8444-444444444444",
+      804,
+      issuedNextMorning,
+    );
+
+    expect(record).not.toHaveProperty("FechaOperacion");
+    expect(row.fecha_operacion).toBeNull();
+  });
+
+  it.each([
+    {
+      name: "the issue day itself",
+      operationDate: "2026-03-15",
+      saleId: "a6666666-6666-4666-8666-666666666666",
+      invoiceNumber: 806,
+    },
+    {
+      name: "a later day",
+      operationDate: "2026-03-16",
+      saleId: "a7777777-7777-4777-8777-777777777777",
+      invoiceNumber: 807,
+    },
+    {
+      name: "a malformed day",
+      operationDate: "2026-3-14",
+      saleId: "a8888888-8888-4888-8888-888888888888",
+      invoiceNumber: 808,
+    },
+  ])(
+    "records the sale with no FechaOperacion when handed $name",
+    async ({ operationDate, saleId, invoiceNumber }) => {
+      const { row, record } = await fileSale(saleId, invoiceNumber, issuedNextMorning, {
+        operationDate,
+      });
+
+      expect(record).not.toHaveProperty("FechaOperacion");
+      expect(row.fecha_operacion).toBeNull();
+      expect(record.IDFactura.FechaExpedicionFactura).toBe("15-03-2026");
+    },
+  );
+
+  it("leaves the fingerprint unchanged by the sale day", async () => {
+    const { row, record } = await fileSale(
+      "a5555555-5555-4555-8555-555555555555",
+      805,
+      issuedNextMorning,
+      { operationDate: "2026-03-14" },
+    );
+    const withoutDate = fromRegistroRow({ ...row, fecha_operacion: null }) as RegistroAlta;
+
+    expect(record.FechaOperacion).toBe("14-03-2026");
+    expect(withoutDate).not.toHaveProperty("FechaOperacion");
+    expect(computeHuella(withoutDate)).toBe(row.huella);
+    // The control: a field the fingerprint does cover moves it.
+    expect(computeHuella({ ...withoutDate, TipoFactura: "F1" })).not.toBe(row.huella);
+  });
+});
+
 describe("the membership chart on each record", () => {
   /** The statements that read the held chart while `body` runs. */
   async function chartReads<T>(body: () => Promise<T>): Promise<number> {

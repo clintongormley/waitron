@@ -95,7 +95,7 @@ export async function closeBillDeferredTx(
   await deps.backend.refuseUntilRecordable(tx, reading);
   await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
   deps.backend.assertRecordableAt(reading);
-  // One reading prices the invoice and dates the settlement, the order and the closure.
+  // One reading dates the settlement, the order, the closure and any invoice issued here.
   const clock = await prepareIssueClock(tx, cfg, pinnedAt(deps.clock, reading));
   const closedAt = clock.now().instant;
   const businessDay = businessDayAt(await resolveVenueClock(tx, cfg.nodeId), closedAt);

@@ -2,7 +2,6 @@ import { takesExtras, type ExtrasUnit } from "@waitron/menu/src/unit-extras.js";
 export { takesExtras } from "@waitron/menu/src/unit-extras.js";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
-import { prepareIssueClock } from "@waitron/fiscal";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import {
   newCustomerPresentation,
@@ -276,7 +275,8 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
 import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
-import { issueMoment, type IssueMoment } from "./issue-moment.js";
+import type { IssueMoment } from "./issue-moment.js";
+import { issueOrderMoment } from "./sale-day.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   readOrderDinings,
@@ -7655,7 +7655,7 @@ export async function placeOrder(
   );
 }
 
-/** An order's invoice priced from its stored lines at the rates of today, its issue date. */
+/** An order's invoice priced from its stored lines. */
 export interface PricedInvoice extends IssueMoment {
   id: string;
   /** The working-order line each of `priced.lines` was priced from. */
@@ -7674,11 +7674,7 @@ export async function priceForIssuance(
   return {
     id,
     identities: order.identities,
-    ...issueMoment(
-      await prepareIssueClock(tx, cfg, clock),
-      await issuancePass(tx, id, order),
-      backend,
-    ),
+    ...(await issueOrderMoment(tx, cfg, { clock, backend }, await issuancePass(tx, id, order))),
   };
 }
 
@@ -7707,7 +7703,7 @@ export async function issueUnpaidInvoice(
   log?: Logger,
 ): Promise<IssuedInvoice> {
   await requireEconomicWrite(tx, cfg, admission);
-  const { id, priced, clock } = invoice;
+  const { id, priced, clock, operationDate } = invoice;
   await backend.refuseNewIssuance(tx, cfg.nodeId);
   const selected = await selectOrderInvoice(tx, backend, cfg, id, priced.total);
   const language = await saleLanguageFor(tx, selected.receiptLocale, {
@@ -7730,6 +7726,7 @@ export async function issueUnpaidInvoice(
     lines: withReceiptListPrices(priced.lines, invoice.identities),
     vatBreakdown: priced.vatBreakdown,
     clock,
+    operationDate,
     operatorId,
     settlement: { kind: "deferred" },
   });

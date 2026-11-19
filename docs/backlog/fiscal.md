@@ -1129,14 +1129,15 @@ Asked whether lane L should switch to the creation date everywhere and park what
 the adviser answers, the owner answered "yes" (11:10). This replaces the 27 October rule ("the
 meal ends when the bill closes") until the adviser answers
 [S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09). No invoice, full or
-simplified, carries a separate operation date: paper, the till, the A4/email document and the
+simplified, carries a separate operation date (exceptions in the dated notes below): paper, the till, the A4/email document and the
 accountant export show the creation date, which is the only date AEAT receives. This also answers
 "Can a simplified invoice carry an operation date different from its issue date?", left open by
-A663 Part 2: no. The work built for the bill-close date stays parked on
+A663 Part 2: no, except a replacement corrective of a refused simplified invoice and an invoice
+issued on a later day than the sale (dated notes below). The work built for the bill-close date stays parked on
 `feat/a444-fiscal-operation-day` and `feat/a444-close-day-capture`, branches in lane L's local
 worktrees that were never pushed, and its plan on `docs/a444-revised-plan`.
 [Plan](../superpowers/plans/2026-11-12-a444-creation-date-only.md).
-_2026-11-14 (owner's answer B, Q37-FIX): the one exception is a replacement corrective (R5 "S") of
+_2026-11-14 (owner's answer B, Q37-FIX): an exception is a replacement corrective (R5 "S") of
 a refused simplified invoice, which files the original sale's real day as `FechaOperacion` when it
 differs from its own date._
 _2026-11-15 (A1407): an R4 "S" replacing a refused full invoice is the same exception, filing the
@@ -1152,7 +1153,27 @@ when the table closes, which normally coincides with the invoice date; an invoic
 the meal carries a separate date of sale. A1407 step 2 applies that to replacement correctives. The owner
 ruled on 2026-11-15 at 05:28 that an invoice issued on a later day (card recovery, a bill paid or
 left open for days, a takeaway collected days later) files and prints the sale date too, queued as
-LATER-SALE-DATE; nothing about those paths has changed yet._
+LATER-SALE-DATE._
+_2026-11-15 (LATER-SALE-DATE, built): an invoice a bill's order issues on a later venue day than the
+sale now files that day as `FechaOperacion`, uses its VAT rates, prints it as the date of the sale,
+keeps it in `sales.supply_day`, counts in its period on the VAT return and in the accountant export,
+which shows it in its last column. The sale's day is when staff last marked a dish served, if every
+dish still owed was served and that fell on an earlier business day than the payment; otherwise the
+payment's (for an unpaid departure, when it was recorded), and for a card the box finishes later,
+when the card was taken (`saleCloseDay`). Owner's
+answers, relayed by the watcher at 12:12 (lane L `questions.md`): Q1 "Monday, last dish", so a bill
+paid on Monday whose last unserved dish is removed on Wednesday files Monday, and an unpaid
+departure recorded days later follows the same rule; Q2 "sale day" for the VAT return and the
+export. The export picks such an invoice by its sale day, else its issue date, keeping both dates:
+the owner's "(a) By meal date", relayed by the watcher at 20:59 (lane L `questions.md`). The
+adviser is asked about these points in questions 3 and 7 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md).
+[Plan](../superpowers/plans/2026-11-15-later-sale-date.md)._
+_2026-11-19 (LATER-SALE-DATE rework): serving marks no longer date anything, and
+`working_order_lines.last_served_at` is gone. An order's invoice carries a sale date only when card
+recovery or a bill payment the box completes later issues it on a later calendar day than the
+moment it passes (`issueOrderMoment`); every other path issues it with one date. The plan's
+"Amendment 2026-11-19" has the meeting's meal-end rule this follows._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 

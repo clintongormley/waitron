@@ -106,7 +106,16 @@ function altaRowWithOperationDate(
 }
 
 it.each([
-  { name: "a simplified invoice", type: { TipoFactura: "F2" } },
+  { name: "a simplified invoice (F2)", type: { TipoFactura: "F2" } },
+  { name: "a full invoice (F1)", type: { TipoFactura: "F1" } },
+] as const)("stores the operation date of $name", ({ type }) => {
+  const row = altaRowWithOperationDate(type);
+
+  expect(row.fechaOperacion).toBe("2026-07-18");
+});
+
+it.each([
+  { name: "a full invoice for tickets (F3)", type: { TipoFactura: "F3" } },
   { name: "a corrective by differences", type: { TipoFactura: "R5", TipoRectificativa: "I" } },
 ] as const)("refuses to store an operation date on $name", ({ type }) => {
   expect(() => altaRowWithOperationDate(type)).toThrow(

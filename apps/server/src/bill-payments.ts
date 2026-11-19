@@ -54,6 +54,7 @@ import {
   findPaymentByBillPayment,
   findCaptureWarning,
   MANUAL_PROVIDER,
+  payments as providerPayments,
   recordManualCardPayment,
 } from "@waitron/payments";
 import type {
@@ -77,7 +78,8 @@ import type {
   BillFunds,
 } from "./bill-allocation.js";
 import { issuancePass } from "./issuance-pass.js";
-import { issueMoment, pinnedAt } from "./issue-moment.js";
+import { pinnedAt } from "./issue-moment.js";
+import { issueOrderMoment } from "./sale-day.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -771,6 +773,35 @@ export async function readBillBalance(
   };
 }
 
+/** The latest moment among `received` that a payment was accepted: each one's earlier of its own
+ * row's and its card row's `created_at`, as a manager's retention writes the bill payment only when
+ * it confirms the card. The caller passes only payments that still hold money: one given back in
+ * full paid for nothing, so its later acceptance would move the sale off the day it happened. */
+async function latestAcceptance(tx: Transaction, received: readonly PaymentRow[]): Promise<string> {
+  const cards = await tx
+    .select({
+      billPaymentId: providerPayments.billPaymentId,
+      createdAt: providerPayments.createdAt,
+    })
+    .from(providerPayments)
+    .where(
+      inArray(
+        providerPayments.billPaymentId,
+        received.map((row) => row.id),
+      ),
+    );
+  return received
+    .map((row) =>
+      cards
+        .filter((card) => card.billPaymentId === row.id)
+        .reduce(
+          (earliest, card) => (card.createdAt < earliest ? card.createdAt : earliest),
+          row.createdAt,
+        ),
+    )
+    .reduce((latest, at) => (at > latest ? at : latest));
+}
+
 type IssueOptions = {
   moneyMoved?: boolean;
   closeZero?: boolean;
@@ -778,6 +809,7 @@ type IssueOptions = {
   alreadyRead?: IssuedAndTotal;
   printers?: PrinterLookup;
   guestCount?: GuestCountChoice;
+  closedAt?: "latest-acceptance";
 };
 
 /** {@link issueOrSettleWhenFullyPaid}, then an issued sale's waiting original lists the bill's payments. */
@@ -799,6 +831,9 @@ async function issueWhenFullyPaid(
  * caller's {@link issuedAndTotal} of this bill, from earlier in this transaction with no sale
  * issued or corrected since; without it the sale is read here. `total` is the bill's total when the
  * caller has priced its current lines in this transaction already.
+ * `closedAt: "latest-acceptance"` is for a bill completed after its payments were taken: the
+ * moment the last of those still holding money was accepted is handed to {@link issueOrderMoment}
+ * as the moment the meal ended.
  */
 async function issueOrSettleWhenFullyPaid(
   tx: Transaction,
@@ -839,8 +874,8 @@ async function issueOrSettleWhenFullyPaid(
     return { invoice: null, total };
   }
   if (zero && held.some(receivedHoldsMoney)) return { invoice: null, total };
-  const tendersOfBill: SettleSaleTender[] = held
-    .filter(receivedHoldsMoney)
+  const holding = held.filter(receivedHoldsMoney);
+  const tendersOfBill: SettleSaleTender[] = [...holding]
     .sort((a, b) => a.row.receivedAt!.localeCompare(b.row.receivedAt!))
     .map(({ row, netApplied, netTip }) => ({
       method: row.method,
@@ -886,10 +921,17 @@ async function issueOrSettleWhenFullyPaid(
     }
     throw error;
   }
-  const { priced, clock, gross } = issueMoment(
-    await prepareIssueClock(tx, cfg, deps.clock),
+  const { priced, clock, gross, operationDate } = await issueOrderMoment(
+    tx,
+    cfg,
+    deps,
     await issuancePass(tx, workingOrderId, stored),
-    deps.backend,
+    options.closedAt === undefined
+      ? undefined
+      : await latestAcceptance(
+          tx,
+          holding.map(({ row }) => row),
+        ),
   );
   const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
   const language = await saleLanguageFor(tx, selected.receiptLocale, {
@@ -917,6 +959,7 @@ async function issueOrSettleWhenFullyPaid(
     lines: withReceiptListPrices(priced.lines, stored.identities),
     vatBreakdown: priced.vatBreakdown,
     clock,
+    operationDate,
     operatorId,
     settlement: { kind: "deferred" },
   });
@@ -978,7 +1021,7 @@ export async function issueIfFullyPaid(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId?: string,
-  options: { moneyMoved?: boolean; closeZero?: boolean } = {},
+  options: { moneyMoved?: boolean; closeZero?: boolean; closedAt?: "latest-acceptance" } = {},
 ): Promise<TillSaleResult | null> {
   return (await issueWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, options)).invoice;
 }
@@ -1885,10 +1928,14 @@ export async function completeBillPayment(
   cfg: TradingContext,
   billPaymentId: string,
   receivedAt: Date,
-  attestation?: Attestation,
-  guestCount?: GuestCountChoice,
-  confirmedNet?: { applied: Decimal; tip: Decimal },
+  options: {
+    attestation?: Attestation;
+    guestCount?: GuestCountChoice;
+    confirmedNet?: { applied: Decimal; tip: Decimal };
+    closedAt?: "latest-acceptance";
+  } = {},
 ): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
+  const { attestation, guestCount, confirmedNet, closedAt } = options;
   await requireEconomicWrite(tx, cfg, deps.admission);
   const [pending] = await tx
     .select({
@@ -1966,7 +2013,7 @@ export async function completeBillPayment(
     { ...cfg, origin: storedDeviceOrigin(payment!) },
     payment!.workingOrderId,
     payment!.requestedBy,
-    { moneyMoved: true, guestCount },
+    { moneyMoved: true, guestCount, closedAt },
   );
   return { payment: payment!, ...issued };
 }
@@ -2159,15 +2206,9 @@ export async function takeReaderBillPayment(
             withIssuanceTransaction(
               deps.db,
               async (tx) => {
-                const done = await completeBillPayment(
-                  tx,
-                  deps,
-                  cfg,
-                  payment.id,
-                  settledAt,
-                  undefined,
-                  req.guestCount,
-                );
+                const done = await completeBillPayment(tx, deps, cfg, payment.id, settledAt, {
+                  guestCount: req.guestCount,
+                });
                 const printed = await print(tx, payment.id);
                 return {
                   ...(await resultOf(tx, deps, cfg, done.payment, done.invoice, done.total)),

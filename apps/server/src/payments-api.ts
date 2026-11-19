@@ -1563,16 +1563,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           const attestation = { attestedBy: personId, note: "Retained confirmed remaining money" };
           const receivedAt = new Date(payment.settledAt!);
           if (bill) {
-            await completeBillPayment(
-              tx,
-              fiscal,
-              deps.cfg,
-              bill.id,
-              receivedAt,
+            await completeBillPayment(tx, fiscal, deps.cfg, bill.id, receivedAt, {
               attestation,
-              undefined,
-              { applied: allocation.applied, tip: allocation.tip },
-            );
+              confirmedNet: { applied: allocation.applied, tip: allocation.tip },
+              closedAt: "latest-acceptance",
+            });
             await print(tx, bill.id);
             if (order.paymentAttemptAt !== null)
               await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
@@ -1609,7 +1604,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
               { ...deps.cfg, origin: storedDeviceOrigin(payment) },
               payment.workingOrderId,
               personId,
-              { moneyMoved: true },
+              { moneyMoved: true, closedAt: "latest-acceptance" },
             );
           }
           return allocation;
@@ -2042,7 +2037,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           provided === undefined || provided.settledAt === null
             ? now
             : new Date(provided.settledAt);
-        const done = await completeBillPayment(tx, fiscal, deps.cfg, id, receivedAt, attestation);
+        const done = await completeBillPayment(tx, fiscal, deps.cfg, id, receivedAt, {
+          attestation,
+          closedAt: "latest-acceptance",
+        });
         await print(tx, id);
         return {
           outcome: "received" as const,

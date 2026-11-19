@@ -3014,7 +3014,7 @@ export const en = {
   "sales.export_deferred": "Export deferred payments (CSV)",
   "sales.export_accountant": "Download for accountant (XLSX)",
   "sales.accountant_dates":
-    "Issued invoices and recorded purchases for your accountant. From and To include both calendar dates, regardless of the trading-day cut-off.",
+    "Issued invoices and recorded purchases for your accountant. From and To include both calendar dates, regardless of the trading-day cut-off. An invoice issued after its sale day is listed under that day.",
   "sales.print_sent": "Category sales sent to {printer}.",
   "sales.no_printers_manage":
     "No active printer at this venue. Add a receipt printer on Printers to print this report here.",
@@ -7604,7 +7604,7 @@ export const es: Record<StringKey, string> = {
   "sales.export_deferred": "Exportar pagos aplazados (CSV)",
   "sales.export_accountant": "Descargar para tu gestor (XLSX)",
   "sales.accountant_dates":
-    "Facturas emitidas y compras registradas para tu gestor. Desde y Hasta incluyen ambas fechas naturales, independientemente de la hora de cierre del día de trabajo.",
+    "Facturas emitidas y compras registradas para tu gestor. Desde y Hasta incluyen ambas fechas naturales, independientemente de la hora de cierre del día de trabajo. Una factura expedida después del día de la operación figura en ese día.",
   "sales.print_sent": "Ventas por categoría enviadas a {printer}.",
   "sales.no_printers_manage":
     "No hay ninguna impresora activa en este local. Añade una impresora de recibos en Impresoras para imprimir aquí este informe.",

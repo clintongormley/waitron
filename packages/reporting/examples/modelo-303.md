@@ -27,7 +27,8 @@ You have six ordinary invoices and one correction. All amounts below are euros.
 | One, correction of day 3 | 18         | 21%      | -5.00  | -1.05 |
 
 Call `computeVatReturn(tx, { year: 2026, period: { kind: "month", month: 8 } })` to
-aggregate the period by the invoices' recorded civil issue dates. Its output VAT, _IVA devengado_, is:
+aggregate the period by the sale day stored on each invoice's replacement, else on the invoice
+itself, else by its recorded civil issue date. Its output VAT, _IVA devengado_, is:
 
 | Rate  | Base   | Tax   |
 | ----- | ------ | ----- |

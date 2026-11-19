@@ -100,13 +100,13 @@ describe("a full invoice for a bill opened before midnight carries only its crea
     expect(printed).not.toContain("14 oct 2026");
   });
 
-  it("the accountant export has no operation date column", async () => {
+  it("the accountant export shows no sale date for it", async () => {
     await fullInvoiceAcrossMidnight();
     const data = await withTransaction(v.db, (tx) =>
       listAccountantExport(tx, { from: "2026-10-01", to: "2026-10-31" }),
     );
     expect(data.invoices).toHaveLength(1);
-    expect(data.invoices[0]).not.toHaveProperty("operationDate");
+    expect(data.invoices[0]).not.toHaveProperty("saleDate");
     const sheet = strFromU8(
       unzipSync(await renderAccountantWorkbook(data, "es"))["xl/worksheets/sheet1.xml"]!,
     );

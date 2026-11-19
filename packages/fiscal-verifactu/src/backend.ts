@@ -124,6 +124,20 @@ type OriginalAltaForCorrection = Pick<
 >;
 
 /**
+ * `day` (`YYYY-MM-DD`) as the instant `formatDate` renders as that calendar day at `offsetMinutes`,
+ * or `undefined` when it is the issue day itself, so only a different day is filed.
+ */
+export function fechaOperacionFor(
+  day: string,
+  issuedAt: Date,
+  offsetMinutes: number,
+): Date | undefined {
+  if (toAeatDate(day) === formatDate(issuedAt, offsetMinutes)) return undefined;
+  // The same offset cancellation as `recordVoid`'s `FechaExpedicionFacturaAnulada`.
+  return new Date(Date.parse(`${day}T00:00:00Z`) - offsetMinutes * 60_000);
+}
+
+/**
  * One filed VAT line. "S1" is sujeta y no exenta, sin inversión del sujeto pasivo, the ordinary
  * domestic sale; a rectificativa por diferencias files the same shape with negative figures. No
  * exempt, reverse-charge or recargo de equivalencia line is filed today. `Impuesto` is omitted,
@@ -244,7 +258,11 @@ export class VerifactuBackend implements FiscalBackend {
    * Reads NO clock of its own: `sale.issuedAt`/`sale.offsetMinutes` are the reading the caller
    * took for the sale row, so the sale and its fiscal record carry one instant.
    */
-  async recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef> {
+  async recordSale(
+    tx: Transaction,
+    sale: SaleForFiscalRecord,
+    filing?: { operationDate?: string },
+  ): Promise<FiscalRecordRef> {
     const chart = await this.admitIssuance(tx, sale.nodeId);
     const sif = await currentSif(tx, sale.nodeId);
     const taxpayer = await this.taxpayer(tx);
@@ -255,6 +273,16 @@ export class VerifactuBackend implements FiscalBackend {
     // Postal country does not determine the identifier type or its issuing country.
     const destinatarios =
       sale.counterparty !== null ? this.buildDestinatarios(sale.counterparty) : undefined;
+    const handedDay =
+      filing?.operationDate !== undefined && isCalendarDate(filing.operationDate)
+        ? fechaOperacionFor(filing.operationDate, sale.issuedAt, sale.offsetMinutes)
+        : undefined;
+    // Only a strictly earlier day is filed: a later one fails AEAT's validation and would refuse the
+    // sale. A later day's midnight falls after the issue instant; an earlier day's before it.
+    const fechaOperacion =
+      handedDay !== undefined && handedDay.getTime() < sale.issuedAt.getTime()
+        ? handedDay
+        : undefined;
 
     const input: Omit<AltaInput, "Encadenamiento"> = {
       IDEmisorFactura: sif.nif,
@@ -263,6 +291,7 @@ export class VerifactuBackend implements FiscalBackend {
       NombreRazonEmisor: taxpayer.legalName,
       TipoFactura: sale.counterparty === null ? "F2" : "F1",
       Destinatarios: destinatarios,
+      ...(fechaOperacion !== undefined && { FechaOperacion: fechaOperacion }),
       DescripcionOperacion: sale.descriptionOfOperation,
       Desglose: desglose,
       CuotaTotal: cuotaTotal,
@@ -555,11 +584,8 @@ export class VerifactuBackend implements FiscalBackend {
     const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
     const fechaOperacion =
-      replacesRefused &&
-      operationDate !== undefined &&
-      toAeatDate(operationDate) !== formatDate(sale.issuedAt, sale.offsetMinutes)
-        ? // The same offset cancellation as `recordVoid`'s `FechaExpedicionFacturaAnulada`.
-          new Date(Date.parse(`${operationDate}T00:00:00Z`) - sale.offsetMinutes * 60_000)
+      replacesRefused && operationDate !== undefined
+        ? fechaOperacionFor(operationDate, sale.issuedAt, sale.offsetMinutes)
         : undefined;
 
     const input: Omit<AltaInput, "Encadenamiento"> = {
