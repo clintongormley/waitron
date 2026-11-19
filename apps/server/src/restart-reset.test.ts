@@ -40,6 +40,22 @@ describe("resetBeforeFirstDrain", () => {
     expect(calls).toEqual(["reset", "drain", "drain"]);
   });
 
+  it("forwards the filing job's signal after the reset", async () => {
+    const controller = new AbortController();
+    const drain = resetBeforeFirstDrain({
+      reset: async () => controller.abort(),
+      drain: async (_now, signal) => {
+        expect(signal).toBe(controller.signal);
+        expect(signal?.aborted).toBe(true);
+        return emptyDrainResult();
+      },
+      skipRetryMs: SKIP_RETRY_MS,
+      log: recordingLog().log,
+    });
+
+    await drain(NOW, controller.signal);
+  });
+
   it("does not drain when the reset fails, reports the pass skipped, and tries the reset again on the next pass", async () => {
     const calls: string[] = [];
     const { lines, log } = recordingLog();

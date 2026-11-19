@@ -2,7 +2,14 @@ import { Hono } from "hono";
 import { isVenueHolderFresh, readVenueHolderAsync, type SingletonRole } from "@waitron/db";
 import type { StreamView } from "@waitron/stream";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
-import { ALL_DUTIES, DRAIN_DUTY, RECONCILE_DUTY, type Duty, type PassReport } from "./pass.js";
+import {
+  ALL_DUTIES,
+  DRAIN_DUTY,
+  RECONCILE_DUTY,
+  type Duty,
+  type DutyReport,
+  type PassReport,
+} from "./pass.js";
 import type { Logger } from "./logger.js";
 import type { JobView, PublicJobView } from "./job-runner.js";
 import type { TradingAdmissionView } from "./trading-admission.js";
@@ -81,34 +88,34 @@ export interface DutyRecord {
  */
 export function recordPass(state: HealthState, report: PassReport, at: Date): DutyRecord[] {
   state.lastPassAt = at;
-  const records: DutyRecord[] = [];
-  for (const entry of report.duties) {
-    const duty = (state.duties[entry.duty] ??= {
-      lastOkAt: null,
-      consecutiveFailures: 0,
-      skipped: 0,
-      parked: 0,
-    });
-    duty.skipped = entry.skipped ?? 0;
-    duty.parked = entry.parked ?? 0;
-    const degraded = !(entry.ok && duty.skipped === 0 && duty.parked === 0);
-    if (degraded) {
-      duty.consecutiveFailures += 1;
-    } else {
-      duty.lastOkAt = at;
-      duty.consecutiveFailures = 0;
-    }
-    records.push({
-      duty: entry.duty,
-      consecutiveFailures: duty.consecutiveFailures,
-      skipped: duty.skipped,
-      parked: duty.parked,
-      stale: isStale(duty, budgetFor(entry.duty), at),
-      lastOkAt: duty.lastOkAt,
-      degraded,
-    });
+  return report.duties.map((entry) => recordDuty(state, entry, at));
+}
+
+export function recordDuty(state: HealthState, entry: DutyReport, at: Date): DutyRecord {
+  const duty = (state.duties[entry.duty] ??= {
+    lastOkAt: null,
+    consecutiveFailures: 0,
+    skipped: 0,
+    parked: 0,
+  });
+  duty.skipped = entry.skipped ?? 0;
+  duty.parked = entry.parked ?? 0;
+  const degraded = !(entry.ok && duty.skipped === 0 && duty.parked === 0);
+  if (degraded) {
+    duty.consecutiveFailures += 1;
+  } else {
+    duty.lastOkAt = at;
+    duty.consecutiveFailures = 0;
   }
-  return records;
+  return {
+    duty: entry.duty,
+    consecutiveFailures: duty.consecutiveFailures,
+    skipped: duty.skipped,
+    parked: duty.parked,
+    stale: isStale(duty, budgetFor(entry.duty), at),
+    lastOkAt: duty.lastOkAt,
+    degraded,
+  };
 }
 
 /**

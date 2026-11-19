@@ -78,63 +78,14 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
   // DRAIN FIRST, unconditionally. It is the duty with a legal clock.
   duties.push(
     await attempt(DRAIN_DUTY, now, deps.log, deps.monotonicMs, async () => {
-      const result = await deps.drain(now);
-      let sawMissingCert = false;
-      for (const skipped of result.skipped) {
-        deps.log("warn", "drain.tenant_skipped", skipped);
-        if (skipped.errorCode === AWAITING_CERT_ERROR) sawMissingCert = true;
-      }
-      // A no-work pass read no cert, so it leaves the flag unchanged; clearing it there would log
-      // `fiscal.certificate_available` when nothing arrived.
-      if (result.tenantsWithWork > 0) {
-        noteAwaitingCert(deps, sawMissingCert);
-      }
-      deps.log("info", "drain.complete", {
-        batchesSent: result.batchesSent,
-        recordsSubmitted: result.recordsSubmitted,
-        recordsAccepted: result.recordsAccepted,
-        recordsHalted: result.recordsHalted,
-        incidentsRaised: result.incidentsRaised,
-        skipped: result.skipped.length,
-        nextDueAt: result.nextDueAt?.toISOString() ?? null,
-      });
-      // DECISION: `recordsHalted`/`incidentsRaised` do NOT feed `parked` or any other field that
-      // flips `/health`; `parked` is always `0` for this duty. A record AEAT rejects, or one that
-      // conflicts with AEAT's copy, already gets a filing case, and an incident unless it is a held
-      // chain's hourly retry refused with its run's code (`raiseIncident`, `openCase`,
-      // packages/fiscal-verifactu/src/drain.ts); a record held behind it gets neither and
-      // counts in the `fiscal.submission_stopped` alert. The dashboard's alerts show both to anyone
-      // holding `fiscal.view`; and a record AEAT rejects can be one invoice's data problem, not a
-      // sign that this process is stuck.
-      return { nextDueAt: result.nextDueAt, skipped: result.skipped.length, parked: 0 };
+      return drainReport(await deps.drain(now), deps);
     }),
   );
 
   if (deps.signal?.aborted !== true) {
     duties.push(
       await attempt(RECONCILE_DUTY, now, deps.log, deps.monotonicMs, async () => {
-        const result = await deps.reconcile(now);
-        for (const skipped of result.skipped) {
-          deps.log("warn", "reconcile.pair_skipped", skipped);
-        }
-        // A bare count of `result.ran` cannot tell a clean sweep from runs abandoned for good.
-        const ranByOutcome = { succeeded: 0, failed: 0, parked: 0 };
-        for (const record of result.ran) {
-          ranByOutcome[record.outcome] += 1;
-          logNonSucceededRun(deps.log, record);
-        }
-        deps.log("info", "reconcile.complete", {
-          ran: ranByOutcome,
-          deferred: result.deferred,
-          beyondHorizon: result.beyondHorizon,
-          skipped: result.skipped.length,
-          nextDueAt: result.nextDueAt?.toISOString() ?? null,
-        });
-        return {
-          nextDueAt: result.nextDueAt,
-          skipped: result.skipped.length,
-          parked: ranByOutcome.parked,
-        };
+        return reconcileReport(await deps.reconcile(now), deps.log);
       }),
     );
   }
@@ -192,8 +143,63 @@ async function attempt(
   }
 }
 
+export function drainReport(result: DrainResult, deps: Pick<PassDeps, "awaitingCert" | "log">) {
+  let sawMissingCert = false;
+  for (const skipped of result.skipped) {
+    deps.log("warn", "drain.tenant_skipped", skipped);
+    if (skipped.errorCode === AWAITING_CERT_ERROR) sawMissingCert = true;
+  }
+  // A no-work pass read no cert, so it leaves the flag unchanged; clearing it there would log
+  // `fiscal.certificate_available` when nothing arrived.
+  if (result.tenantsWithWork > 0) {
+    noteAwaitingCert(deps, sawMissingCert);
+  }
+  deps.log("info", "drain.complete", {
+    batchesSent: result.batchesSent,
+    recordsSubmitted: result.recordsSubmitted,
+    recordsAccepted: result.recordsAccepted,
+    recordsHalted: result.recordsHalted,
+    incidentsRaised: result.incidentsRaised,
+    skipped: result.skipped.length,
+    nextDueAt: result.nextDueAt?.toISOString() ?? null,
+  });
+  // DECISION: `recordsHalted`/`incidentsRaised` do NOT feed `parked` or any other field that
+  // flips `/health`; `parked` is always `0` for this duty. A record AEAT rejects, or one that
+  // conflicts with AEAT's copy, already gets a filing case, and an incident unless it is a held
+  // chain's hourly retry refused with its run's code (`raiseIncident`, `openCase`,
+  // packages/fiscal-verifactu/src/drain.ts); a record held behind it gets neither and
+  // counts in the `fiscal.submission_stopped` alert. The dashboard's alerts show both to anyone
+  // holding `fiscal.view`; and a record AEAT rejects can be one invoice's data problem, not a
+  // sign that this process is stuck.
+  return { nextDueAt: result.nextDueAt, skipped: result.skipped.length, parked: 0 };
+}
+
+export function reconcileReport(result: TickResult, log: Logger) {
+  for (const skipped of result.skipped) {
+    log("warn", "reconcile.pair_skipped", skipped);
+  }
+  // A bare count of `result.ran` cannot tell a clean sweep from runs abandoned for good.
+  const ranByOutcome = { succeeded: 0, failed: 0, parked: 0 };
+  for (const record of result.ran) {
+    ranByOutcome[record.outcome] += 1;
+    logNonSucceededRun(log, record);
+  }
+  log("info", "reconcile.complete", {
+    ran: ranByOutcome,
+    deferred: result.deferred,
+    beyondHorizon: result.beyondHorizon,
+    skipped: result.skipped.length,
+    nextDueAt: result.nextDueAt?.toISOString() ?? null,
+  });
+  return {
+    nextDueAt: result.nextDueAt,
+    skipped: result.skipped.length,
+    parked: ranByOutcome.parked,
+  };
+}
+
 /** Records whether this pass is awaiting the fiscal certificate, logging only on a transition. */
-function noteAwaitingCert(deps: PassDeps, awaiting: boolean): void {
+function noteAwaitingCert(deps: Pick<PassDeps, "awaitingCert" | "log">, awaiting: boolean): void {
   if (awaiting === deps.awaitingCert.current) return;
   deps.awaitingCert.current = awaiting;
   if (awaiting) {
