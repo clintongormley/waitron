@@ -813,6 +813,7 @@ describe("Print the bill's receipt", () => {
           printerId: printJobs.printerId,
           kind: printJobs.kind,
           copy: printJobs.receiptCopy,
+          page: printJobs.pageDocument,
         })
         .from(printJobs)
         .where(eq(printJobs.saleId, saleId)),
@@ -849,7 +850,7 @@ describe("Print the bill's receipt", () => {
     const { saleId } = await end(party);
 
     expect(await jobsOf(saleId)).toEqual([
-      { printerId: await venuePrinterId(), kind: "document", copy: false },
+      { printerId: await venuePrinterId(), kind: "document", copy: false, page: null },
     ]);
     expect(await drawerJobs()).toBe(drawers);
   });
@@ -867,7 +868,9 @@ describe("Print the bill's receipt", () => {
 
     const { saleId } = await end(party, {}, cfg);
 
-    expect(await jobsOf(saleId)).toEqual([{ printerId, kind: "document", copy: false }]);
+    expect(await jobsOf(saleId)).toEqual([
+      { printerId, kind: "document", copy: false, page: null },
+    ]);
   });
 
   it("a full invoice staged for email prints no receipt and needs no printer", async () => {
@@ -921,7 +924,9 @@ describe("Print the bill's receipt", () => {
 
     const { saleId } = await end(party);
 
-    expect(await jobsOf(saleId)).toEqual([{ printerId: pagePrinterId, kind: "a4", copy: null }]);
+    expect(await jobsOf(saleId)).toEqual([
+      { printerId: pagePrinterId, kind: "a4", copy: null, page: "invoice" },
+    ]);
     expect(await deliveriesOf(saleId)).toEqual([{ medium: "a4" }]);
   });
 
