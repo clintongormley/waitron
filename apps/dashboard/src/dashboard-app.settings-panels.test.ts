@@ -4,7 +4,7 @@ import type { DashboardContribution } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale, t } from "./i18n/t.js";
-import { vatClassLabel } from "./screens/venue-defaults-panel.js";
+import { vatClassLabel } from "./i18n/domain.js";
 import type { DashboardApi } from "./api/client.js";
 import "./dashboard-app.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
