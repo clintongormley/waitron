@@ -20,9 +20,11 @@ sh scripts/tunnel-container-smoke.sh
 
 The check renders the real Compose configuration, starts its tunnel profile beside an isolated
 gateway and staff echo service, then removes its own
-containers, volumes, network and tagged image. It checks the fixed staff destination, refusal of
-another source and port, disconnection, reconnection and a container restart. It does not reboot
-the host, issue a certificate or touch a running Waitron installation.
+containers, volumes, network and tagged image. It checks that an idle peer reopens the staff stream
+within 90 seconds of the gateway losing its WireGuard session at the same address. It also checks
+the fixed staff destination, refusal of another source and port, disconnection, reconnection and a
+container restart. It does not reboot the host, issue a certificate or touch a running Waitron
+installation.
 
 On a connected test installation, turn on remote access. The box takes its staff name from Cloud.
 The certificate worker opens the listener after installing its first valid certificate.
@@ -58,8 +60,13 @@ there is no valid `peer.json` in the shared `tunnel_control` volume. The app see
 
 Replace the example values with the placement assigned to your box. Write the complete file to a
 temporary sibling with mode 0644 and rename it to `peer.json`. These fields are not secrets;
-the directory is restricted to the app (uid 10001) and the peer’s root group. Removing it disconnects the tunnel on the next
-poll, normally within two seconds. This is not an instant shutdown guarantee.
+the directory is restricted to the app (uid 10001) and the peer’s root group. Removing it disconnects
+the tunnel on the next poll. If a gateway probe is in progress, the poll waits up to one extra second.
+
+While the tunnel is on, the peer sends one byte to the gateway's private UDP port 9 on activation
+and about every 20 seconds. This gives WireGuard traffic to retry when an idle gateway loses its
+session. The gateway needs no listener on that port. If the send fails, the peer logs
+`tunnel.probe_failed` once for that configuration and keeps the staff forwarder running.
 
 Both reset forms stop the profile and clear its connection settings and key, because the box
 will pair with Cloud again. An ordinary container restart retains them.
