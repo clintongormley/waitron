@@ -192,7 +192,7 @@ describe("bills.close_of_day", () => {
     await look(definition);
     expect(salesOf(first)).toEqual([
       expect.objectContaining({
-        source: "trading_day_close",
+        source: "business_day_close",
         issuedAt: new Date(at).toISOString(),
       }),
     ]);

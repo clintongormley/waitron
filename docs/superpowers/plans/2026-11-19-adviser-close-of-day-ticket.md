@@ -199,7 +199,7 @@ pnpm exec prettier --check <changed files>
 
 ### Task 1. The "close of business day" source (only if D2 (a) stands)
 
-Add `trading_day_close` to `SOURCES` and `SALE_SOURCES` (`packages/shared/src/origin.ts`); its
+Add `business_day_close` to `SOURCES` and `SALE_SOURCES` (`packages/shared/src/origin.ts`); its
 label beside `apps/dashboard/src/i18n/strings.ts:1246` and `:5922` ("Close of business day" /
 "Cierre de la jornada"); a `SaleOriginConfig` in `apps/server/src/trading-context.ts` (a trading
 context whose origin is a `SaleOrigin`), and `issueUnpaidInvoice`'s parameter
@@ -214,7 +214,7 @@ exactly those four (it does at `cb1aeeb7b2`).
   `:20-29`, `SALE_SOURCES` at `:37`); each gains the one new value, a pinned whole list gaining one
   key, allowed under the lane's rule. A new case in
   `packages/fiscal-verifactu/src/registros-origin.test.ts` (existing cases untouched): a record with
-  source `trading_day_close` and no device is accepted.
+  source `business_day_close` and no device is accepted.
 - Run: `pnpm --filter @waitron/shared exec vitest run src/origin.test.ts`;
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/registros-origin.test.ts`; from the
   root `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts
@@ -229,7 +229,7 @@ and `close-of-day.test.ts` using `provisionBillVenue`, `seatedWith`, `send` and
 next day start (`createTrustedClock`, `packages/fiscal/src/clock.ts:66`). Failing tests first:
 
 1. An unprinted, unpaid table bill: one sale for its total, one record, `placed`, the party's
-   revision bumped, no print job, no kitchen job, source `trading_day_close`.
+   revision bumped, no print job, no kitchen job, source `business_day_close`.
 2. Part-paid (€5.00 of €30.00): one €30.00 sale, €25.00 owed, the €5.00 kept against it.
 3. A dish never marked served is charged; a bill holding a held course is left open (D4).
 4. A staged full invoice by email or A4: issued as that invoice, its delivery queued, no receipt.

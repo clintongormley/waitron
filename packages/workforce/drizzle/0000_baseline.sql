@@ -311,7 +311,7 @@ CREATE TABLE `time_entries` (
 	CONSTRAINT "time_entries_event_at_second_ck" CHECK("time_entries"."event_at" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'),
 	CONSTRAINT "time_entries_recorded_at_second_ck" CHECK("time_entries"."recorded_at" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'),
 	CONSTRAINT "time_entries_entry_kind_ck" CHECK("time_entries"."entry_kind" in ('in', 'out', 'break_start', 'break_end', 'correction', 'confirmation')),
-	CONSTRAINT "time_entries_captured_by_source_ck" CHECK("time_entries"."captured_by_source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "time_entries_captured_by_source_ck" CHECK("time_entries"."captured_by_source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "time_entries_captured_by_source_device_ck" CHECK(("time_entries"."captured_by_source" = 'device') = ("time_entries"."captured_by_device_id" is not null)),
 	CONSTRAINT "time_entries_correction_status_ck" CHECK("time_entries"."correction_status" in ('requested', 'approved', 'declined', 'disputed'))
 );

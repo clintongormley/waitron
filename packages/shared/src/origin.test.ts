@@ -26,7 +26,7 @@ describe("the source vocabulary", () => {
       "demo_seed",
       "readiness_test",
       "operator_script",
-      "trading_day_close",
+      "business_day_close",
     ]);
   });
 
@@ -40,7 +40,7 @@ describe("the source vocabulary", () => {
       "demo_seed",
       "readiness_test",
       "operator_script",
-      "trading_day_close",
+      "business_day_close",
     ]);
   });
 });

@@ -306,14 +306,14 @@ describe("issueBillAtClose", () => {
         id: expect.any(String),
         total: 3000,
         counterpartyTaxId: null,
-        source: "trading_day_close",
+        source: "business_day_close",
         deviceId: null,
         operatorId: seatedBy!.id,
       },
     ]);
     expect(outcome).toEqual({ kind: "issued", saleId: issued[0]!.id });
     expect(fiscalRecordCount(venue, party.tabId)).toBe(1);
-    expect(recordSources(party.tabId)).toEqual([{ source: "trading_day_close", deviceId: null }]);
+    expect(recordSources(party.tabId)).toEqual([{ source: "business_day_close", deviceId: null }]);
     expect(await statusOf(venue, party.tabId)).toBe("placed");
     expect(revisionOf(party.partyId)).toBeGreaterThan(revision);
     expect(await partyStateOf(party.partyId)).toBe("open");
@@ -370,7 +370,7 @@ describe("issueBillAtClose", () => {
     expect(outcome).toEqual({ kind: "issued", saleId: sale!.id });
     expect(sale).toMatchObject({
       counterpartyTaxId: "B12345674",
-      source: "trading_day_close",
+      source: "business_day_close",
       deviceId: null,
     });
     expect(await deliveriesOf(sale!.id)).toEqual([{ medium: "email" }]);
@@ -396,7 +396,7 @@ describe("issueBillAtClose", () => {
     const [sale] = await salesOf(party.tabId);
     expect(sale).toMatchObject({
       counterpartyTaxId: "B12345674",
-      source: "trading_day_close",
+      source: "business_day_close",
       deviceId: null,
     });
     expect(await deliveriesOf(sale!.id)).toEqual([{ medium: "a4" }]);
@@ -424,7 +424,7 @@ describe("issueBillAtClose", () => {
 
     const [sale] = await salesOf(party.tabId);
     expect(outcome).toEqual({ kind: "issued", saleId: sale!.id });
-    expect(sale).toMatchObject({ counterpartyTaxId: "B12345674", source: "trading_day_close" });
+    expect(sale).toMatchObject({ counterpartyTaxId: "B12345674", source: "business_day_close" });
     expect(await jobsOf(sale!.id)).toEqual([]);
     expect(await deliveryRowsOf(sale!.id)).toEqual([
       { medium: "a4", status: "failed", failureCode: "printer_disabled" },
@@ -451,7 +451,7 @@ describe("issueBillAtClose", () => {
 
     const [sale] = await salesOf(party.tabId);
     expect(outcome).toEqual({ kind: "issued", saleId: sale!.id });
-    expect(sale).toMatchObject({ counterpartyTaxId: "B12345674", source: "trading_day_close" });
+    expect(sale).toMatchObject({ counterpartyTaxId: "B12345674", source: "business_day_close" });
     expect(await deliveryRowsOf(sale!.id)).toEqual([]);
     expect(await jobsOf(sale!.id)).toEqual([]);
   });

@@ -15,7 +15,7 @@ export const SOURCES = [
   "demo_seed",
   "readiness_test",
   "operator_script",
-  "trading_day_close",
+  "business_day_close",
 ] as const;
 export type Source = (typeof SOURCES)[number];
 
@@ -25,7 +25,7 @@ export const SALE_SOURCES = [
   "demo_seed",
   "readiness_test",
   "operator_script",
-  "trading_day_close",
+  "business_day_close",
 ] as const satisfies readonly Source[];
 export type SaleSource = (typeof SALE_SOURCES)[number];
 

@@ -64,7 +64,7 @@ export interface CloseOfDayDeps {
 }
 
 export function closeOfDayConfig(base: TradingContext): SaleOriginConfig {
-  return { ...base, origin: jobOrigin("trading_day_close") };
+  return { ...base, origin: jobOrigin("business_day_close") };
 }
 
 /**

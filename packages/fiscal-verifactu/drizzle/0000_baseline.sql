@@ -304,7 +304,7 @@ CREATE TABLE `registros_facturacion` (
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`sif_id`) REFERENCES `registro_sif`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "registros_facturacion_source_ck" CHECK("registros_facturacion"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "registros_facturacion_source_ck" CHECK("registros_facturacion"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "registros_facturacion_source_device_ck" CHECK(("registros_facturacion"."source" = 'device') = ("registros_facturacion"."device_id" is not null)),
 	CONSTRAINT "registros_tipo_registro_ck" CHECK("registros_facturacion"."tipo_registro" in ('alta', 'anulacion')),
 	CONSTRAINT "registros_tipo_huella_ck" CHECK("registros_facturacion"."tipo_huella" = '01'),

@@ -239,7 +239,7 @@ CREATE TABLE `working_orders` (
 	CONSTRAINT "working_orders_service_mode_ck" CHECK("working_orders"."service_mode" is null or "working_orders"."service_mode" in ('table_tab','prepay','ticket_then_pay')),
 	CONSTRAINT "working_orders_service_context_ck" CHECK(("working_orders"."zone_id" is null and "working_orders"."department_id" is null and "working_orders"."service_mode" is null)
         or ("working_orders"."zone_id" is not null and "working_orders"."department_id" is not null and "working_orders"."service_mode" is not null)),
-	CONSTRAINT "working_orders_source_ck" CHECK("working_orders"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "working_orders_source_ck" CHECK("working_orders"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "working_orders_source_device_ck" CHECK(("working_orders"."source" = 'device') = ("working_orders"."device_id" is not null)),
 	CONSTRAINT "working_orders_settled_at_ck" CHECK(("working_orders"."status" = 'settled') = ("working_orders"."settled_at" is not null))
 );
@@ -281,7 +281,7 @@ CREATE TABLE `order_amendments` (
 	FOREIGN KEY (`actor_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "order_amendments_sequence_no_ck" CHECK("order_amendments"."sequence_no" > 0),
 	CONSTRAINT "order_amendments_kind_ck" CHECK("order_amendments"."kind" in ('order_placed', 'order_cancelled')),
-	CONSTRAINT "order_amendments_captured_by_source_ck" CHECK("order_amendments"."captured_by_source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "order_amendments_captured_by_source_ck" CHECK("order_amendments"."captured_by_source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "order_amendments_captured_by_source_device_ck" CHECK(("order_amendments"."captured_by_source" = 'device') = ("order_amendments"."captured_by_device_id" is not null)),
 	CONSTRAINT "order_amendments_entry_hash_ck" CHECK(length("order_amendments"."entry_hash") = 64 and "order_amendments"."entry_hash" not glob '*[^0-9A-F]*'),
 	CONSTRAINT "order_amendments_event_offset_ck" CHECK("order_amendments"."event_offset_minutes" between -840 and 840),
@@ -1019,7 +1019,7 @@ CREATE TABLE `invoice_corrections` (
 	FOREIGN KEY (`corrective_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "invoice_corrections_source_ck" CHECK("invoice_corrections"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "invoice_corrections_source_ck" CHECK("invoice_corrections"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "invoice_corrections_source_device_ck" CHECK(("invoice_corrections"."source" = 'device') = ("invoice_corrections"."device_id" is not null)),
 	CONSTRAINT "invoice_corrections_state_ck" CHECK("invoice_corrections"."state" in ('open', 'filed', 'discarded', 'closed')),
 	CONSTRAINT "invoice_corrections_gross_ck" CHECK(typeof("invoice_corrections"."gross") = 'integer' and "invoice_corrections"."gross" > 0),
@@ -1313,7 +1313,7 @@ CREATE TABLE `bill_payment_refunds` (
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`bill_payment_id`) REFERENCES `bill_payments`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "bill_payment_refunds_state_ck" CHECK("bill_payment_refunds"."state" in ('pending', 'completed', 'failed')),
-	CONSTRAINT "bill_payment_refunds_source_ck" CHECK("bill_payment_refunds"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "bill_payment_refunds_source_ck" CHECK("bill_payment_refunds"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "bill_payment_refunds_source_device_ck" CHECK(("bill_payment_refunds"."source" = 'device') = ("bill_payment_refunds"."device_id" is not null)),
 	CONSTRAINT "bill_payment_refunds_amounts_ck" CHECK("bill_payment_refunds"."applied_amount" >= 0 and "bill_payment_refunds"."tip_amount" >= 0 and "bill_payment_refunds"."applied_amount" + "bill_payment_refunds"."tip_amount" > 0),
 	CONSTRAINT "bill_payment_refunds_sent_ck" CHECK(("bill_payment_refunds"."send_count" = 0) = ("bill_payment_refunds"."sent_at" is null) and "bill_payment_refunds"."send_count" >= 0),
@@ -1349,7 +1349,7 @@ CREATE TABLE `bill_payments` (
 	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`attested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "bill_payments_kind_ck" CHECK("bill_payments"."kind" in ('items', 'contribution', 'share')),
-	CONSTRAINT "bill_payments_source_ck" CHECK("bill_payments"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "bill_payments_source_ck" CHECK("bill_payments"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "bill_payments_source_device_ck" CHECK(("bill_payments"."source" = 'device') = ("bill_payments"."device_id" is not null)),
 	CONSTRAINT "bill_payments_method_ck" CHECK("bill_payments"."method" in ('cash', 'card')),
 	CONSTRAINT "bill_payments_state_ck" CHECK("bill_payments"."state" in ('pending', 'received', 'failed', 'declined')),
@@ -1473,7 +1473,7 @@ CREATE TABLE `sales` (
 	CONSTRAINT "sales_receipt_header_ck" CHECK(("sales"."receipt_trading_name" is null) = ("sales"."receipt_prints_trading_name" is null)
         and ("sales"."receipt_department_id" is null or "sales"."receipt_trading_name" is not null)),
 	CONSTRAINT "sales_receipt_guest_count_recorded_ck" CHECK("sales"."receipt_guest_count" is null or "sales"."receipt_trading_name" is not null),
-	CONSTRAINT "sales_source_ck" CHECK("sales"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "sales_source_ck" CHECK("sales"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "sales_source_device_ck" CHECK(("sales"."source" = 'device') = ("sales"."device_id" is not null))
 );
 --> statement-breakpoint
@@ -1533,7 +1533,7 @@ CREATE TABLE `unpaid_departures` (
 	FOREIGN KEY (`recorded_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`authorized_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "unpaid_departures_amount_ck" CHECK("unpaid_departures"."amount" > 0),
-	CONSTRAINT "unpaid_departures_source_ck" CHECK("unpaid_departures"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "unpaid_departures_source_ck" CHECK("unpaid_departures"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "unpaid_departures_source_device_ck" CHECK(("unpaid_departures"."source" = 'device') = ("unpaid_departures"."device_id" is not null))
 );
 --> statement-breakpoint
@@ -1556,7 +1556,7 @@ CREATE TABLE `deferred_closures` (
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "deferred_closures_business_day_ck" CHECK(length("deferred_closures"."business_day") = 10 and "deferred_closures"."business_day" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
-	CONSTRAINT "deferred_closures_source_ck" CHECK("deferred_closures"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "deferred_closures_source_ck" CHECK("deferred_closures"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "deferred_closures_source_device_ck" CHECK(("deferred_closures"."source" = 'device') = ("deferred_closures"."device_id" is not null))
 );
 --> statement-breakpoint
@@ -1602,7 +1602,7 @@ CREATE TABLE `incidents` (
 	FOREIGN KEY (`acknowledged_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "incidents_severity_ck" CHECK("incidents"."severity" in ('warning', 'error')),
 	CONSTRAINT "incidents_code_ck" CHECK("incidents"."code" <> ''),
-	CONSTRAINT "incidents_source_ck" CHECK("incidents"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close', 'backup')),
+	CONSTRAINT "incidents_source_ck" CHECK("incidents"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close', 'backup')),
 	CONSTRAINT "incidents_source_device_ck" CHECK(("incidents"."source" = 'device') = ("incidents"."device_id" is not null))
 );
 --> statement-breakpoint
@@ -1718,7 +1718,7 @@ CREATE TABLE `tender_refunds` (
 	FOREIGN KEY (`tender_id`) REFERENCES `tenders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "tender_refunds_source_ck" CHECK("tender_refunds"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'trading_day_close')),
+	CONSTRAINT "tender_refunds_source_ck" CHECK("tender_refunds"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "tender_refunds_source_device_ck" CHECK(("tender_refunds"."source" = 'device') = ("tender_refunds"."device_id" is not null)),
 	CONSTRAINT "tender_refunds_state_ck" CHECK("tender_refunds"."state" in ('pending', 'completed', 'failed')),
 	CONSTRAINT "tender_refunds_method_ck" CHECK("tender_refunds"."method" in ('cash', 'card')),
