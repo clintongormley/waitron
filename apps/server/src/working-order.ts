@@ -136,6 +136,7 @@ import { offeredKey } from "@waitron/venue-service";
 import { venueMomentAt } from "@waitron/reporting";
 import type { RetainedCourseLine } from "./retained-course.js";
 import {
+  carryBillSetMenuCopies,
   placeSetMenuRows,
   refuseSetMenuMoney,
   refuseUnlessSetMenuBill,
@@ -143,6 +144,7 @@ import {
   type SetMenuDraftLine,
   type SetMenuPlacement,
 } from "./set-menu-bill.js";
+import { replaceMovedDishes } from "./set-menu-moves.js";
 import {
   assertSetMenuPortion,
   setMenuOfferLookup,
@@ -4181,8 +4183,9 @@ function modesMatch(
 /**
  * Move lines (default all) from one OPEN order to another at the destination's next `line_no`s,
  * keeping each line's id, modifier links and any fired ticket; returns the ids of the lines it
- * moved. It makes no service-mode check: the caller has made {@link assertServiceModesMatch}'s, or
- * copied the source's context onto the destination.
+ * moved. A caller naming a set-menu line includes its dishes in the selection. It makes no
+ * service-mode check: the caller has made {@link assertServiceModesMatch}'s, or copied the
+ * source's context onto the destination.
  */
 export async function moveOrderLines(
   tx: Transaction,
@@ -4232,6 +4235,9 @@ export async function moveOrderLines(
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
+      setMenuRole: workingOrderLines.setMenuRole,
+      setMenuId: workingOrderLines.setMenuId,
+      setMenuLineId: workingOrderLines.setMenuLineId,
     })
     .from(workingOrderLines)
     .where(sourceWhere)
@@ -4242,6 +4248,24 @@ export async function moveOrderLines(
     fromTabId,
     source.map((line) => ({ id: line.id, lineNo: line.lineNo, keeps: 0 })),
   );
+
+  const movedMenus = source.filter(({ setMenuRole }) => setMenuRole === "set_menu");
+  const movedMenuIds = new Set(movedMenus.map(({ id }) => id));
+  const looseDishes = source.filter(
+    ({ setMenuRole, setMenuLineId }) =>
+      setMenuRole === "dish" && (setMenuLineId === null || !movedMenuIds.has(setMenuLineId)),
+  );
+  if (movedMenus.length > 0 || looseDishes.length > 0) {
+    await refuseUnlessSetMenuBill(tx, toTabId);
+  }
+  if (lineNos === undefined || movedMenus.length > 0) {
+    await carryBillSetMenuCopies(
+      tx,
+      fromTabId,
+      toTabId,
+      lineNos === undefined ? undefined : movedMenus.map(({ setMenuId }) => setMenuId!),
+    );
+  }
 
   const [agg] = await tx
     .select({ next: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)` })
@@ -4260,6 +4284,14 @@ export async function moveOrderLines(
       .where(
         and(eq(workingOrderLines.workingOrderId, fromTabId), eq(workingOrderLines.id, line.id)),
       );
+  }
+  // Loose dishes can take places on menus that arrived in the same move.
+  if (looseDishes.length > 0) {
+    await replaceMovedDishes(
+      tx,
+      toTabId,
+      looseDishes.map(({ id }) => id),
+    );
   }
   if (source.length > 0) {
     const lineIds = source.map((line) => line.id);

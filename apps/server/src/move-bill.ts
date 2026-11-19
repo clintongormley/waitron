@@ -15,6 +15,8 @@ import { AppError, isUuid, partyDisplayName } from "@waitron/shared";
 import { guardPathParty } from "./bill-actions.js";
 import { enqueueMovedSlips, firedQuantity, readSentWork, type SentWork } from "./kitchen-print.js";
 import { moveBillDraftsToParty } from "./order-drafts.js";
+import { storedOrderDining } from "./order-dining.js";
+import { hasBillSetMenuLines, hasDraftSetMenuLines } from "./set-menu-bill.js";
 import {
   readPartyBillIds,
   requireRelocatableBillEditors,
@@ -188,8 +190,16 @@ async function moveBillOnce(
     ...(destination.kind === "party" ? await readPartyBillIds(tx, [destination.partyId]) : []),
   ];
   await requireRelocatableBillEditors(tx, affected, options.operatorId, options.expectedEdits);
-  const zoneId = destination.kind === "party" ? await partyZone(tx, destination.partyId) : null;
   const expectedEdit = options.expectedEdits.find((e) => e.billId === billId)!;
+  if (
+    destination.kind === "counter" &&
+    ((await hasBillSetMenuLines(tx, billId)) ||
+      (expectedEdit.draftId !== null && (await hasDraftSetMenuLines(tx, expectedEdit.draftId)))) &&
+    (await storedOrderDining(tx, billId)) !== "takeaway"
+  ) {
+    throw new AppError("set_menu.not_seated", {});
+  }
+  const zoneId = destination.kind === "party" ? await partyZone(tx, destination.partyId) : null;
   const open = path.status === "open";
   const activity =
     attendance === undefined

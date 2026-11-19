@@ -204,6 +204,7 @@ export async function resolveMoveLines(
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
+      setMenuRole: workingOrderLines.setMenuRole,
     })
     .from(workingOrderLines)
     .where(
@@ -225,6 +226,25 @@ export async function resolveMoveLines(
     return { lineNo: row.lineNo };
   });
   assertDistinctTransferLines(billId, transfers);
+  const menuIds = rows.filter((row) => row.setMenuRole === "set_menu").map((row) => row.id);
+  if (menuIds.length > 0) {
+    const named = new Set(transfers.map(({ lineNo }) => lineNo));
+    const dishes = await tx
+      .select({ lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, billId),
+          inArray(
+            workingOrderLines.setMenuLineId,
+            sql`(select value from json_each(${JSON.stringify(menuIds)}))`,
+          ),
+        ),
+      );
+    for (const dish of dishes) {
+      if (!named.has(dish.lineNo)) transfers.push(dish);
+    }
+  }
   return { transfers };
 }
 

@@ -1005,7 +1005,10 @@ separate in drafts and saves their places and prices together on Send. A table c
 from its recorded copy after the menu period ends. The server can move placed dishes to another
 set menu on the same bill and save the new surcharge. An edit keeps the first dish's place,
 and additional dishes each need their own place. Cancelling a dish without charging for it opens
-its place. The summary controls and the route for removing a set-menu heading are still being built.
+its place. The server can move a menu with its dishes between bills, keeping their prices. A
+dish moved on its own needs a place on the destination bill and takes that place's surcharge.
+Splitting a draft keeps the dish's menu offer and clears its place reservation on the old bill.
+The summary controls and the route for removing a set-menu heading are still being built.
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
 The dashboard can open an existing set-menu draft, edit its name, price, VAT rates and inclusion
