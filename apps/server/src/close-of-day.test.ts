@@ -631,38 +631,31 @@ describe("issueBillAtClose", () => {
       expect(await leftAlone(party, () => close(party.tabId))).toEqual({ kind: "not_due" });
     });
 
-    it("a bill opened before this node's latest series retirement", async () => {
+    it("a bill a restore left for staff", async () => {
       const party = await seatedWith(venue, "Red wine bottle");
-      const [retired] = await inTx(venue, (tx) =>
+      await inTx(venue, (tx) =>
         tx
-          .insert(invoiceSeries)
-          .values({
-            nodeId: venue.cfg.nodeId,
-            code: `OLD-${randomUUID().slice(0, 8)}`,
-            retiredAt: new Date(Date.now() + 1000),
-          })
-          .returning({ id: invoiceSeries.id }),
+          .update(workingOrders)
+          .set({ beforeRestore: true })
+          .where(eq(workingOrders.id, party.tabId)),
       );
-      try {
-        expect(await leftAlone(party, () => close(party.tabId))).toEqual({ kind: "not_due" });
-      } finally {
-        await inTx(venue, (tx) =>
-          tx.delete(invoiceSeries).where(eq(invoiceSeries.id, retired!.id)),
-        );
-      }
+
+      expect(await leftAlone(party, () => close(party.tabId))).toEqual({ kind: "not_due" });
     });
   });
 
-  it("issues a bill stored as opened before the latest series retirement but counted as opened after it", async () => {
+  it("issues a bill opened before a later series retirement when no restore left it for staff", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
-    const retiredAt = new Date(Date.now() + 1000);
     const [retired] = await inTx(venue, (tx) =>
       tx
         .insert(invoiceSeries)
-        .values({ nodeId: venue.cfg.nodeId, code: `OLD-${randomUUID().slice(0, 8)}`, retiredAt })
+        .values({
+          nodeId: venue.cfg.nodeId,
+          code: `OLD-${randomUUID().slice(0, 8)}`,
+          retiredAt: new Date(Date.now() + 1000),
+        })
         .returning({ id: invoiceSeries.id }),
     );
-    trustOpeningAt(party.tabId, new Date(retiredAt.getTime() + 1000));
     try {
       expect(await close(party.tabId)).toMatchObject({ kind: "issued" });
     } finally {

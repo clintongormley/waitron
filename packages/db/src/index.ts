@@ -266,7 +266,6 @@ export {
   readStandardSeriesId,
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
-  trustBillsAtLatestRetirementTx,
   insertNodeSeriesTx,
   type ReservedNodeInput,
   type ReservedSeriesInput,

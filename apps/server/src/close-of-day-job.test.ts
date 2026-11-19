@@ -894,7 +894,7 @@ describe("a bill opened while the box's time is unconfirmed", () => {
     },
   );
 
-  // Last in the file: it retires the venue's series, which leaves every bill opened before it alone.
+  // Last in the file: the restore leaves every bill then open in the venue for staff.
   it("leaves a bill from before a restore whose hook hands the host new series for staff, whether or not its time was confirmed", async () => {
     hold();
     const unconfirmed = await billOpenedAt(day(41).startAt + HOUR);

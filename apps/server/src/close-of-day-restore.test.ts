@@ -38,9 +38,6 @@ let seatHolds = false;
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
-  setup: async (db) => {
-    venue = await provisionBillVenue(db);
-  },
 });
 
 const MINUTE = 60_000;
@@ -200,30 +197,84 @@ async function restoreThroughFiscalHook() {
   }
 }
 
-it("leaves bills from before a Veri*Factu restore for staff, whether or not their time was confirmed, and issues one opened after it", async () => {
+const HOUR = 60 * MINUTE;
+
+// Backward: the clock read later before the restore than at it, and earlier again after it.
+it.each([
+  {
+    order: "forward",
+    before: () => Date.now() - DAY,
+    after: (restoredAt: number) => restoredAt + 30_000,
+  },
+  { order: "backward", before: () => Date.now() + HOUR, after: () => Date.now() - DAY },
+])(
+  "leaves bills from before a Veri*Factu restore for staff, whether or not their time was confirmed, and issues one opened after it, with the clock moving $order",
+  async ({ before, after: afterAt }) => {
+    venue = await provisionBillVenue(suite.db);
+    const clock = await inTx(venue, (tx) => readVenueClock(tx));
+    const openedBefore = before();
+    seatHolds = true;
+    const unconfirmed = await billOpenedAt(openedBefore);
+    seatHolds = false;
+    const confirmed = await billOpenedAt(openedBefore);
+
+    const restored = await restoreThroughFiscalHook();
+    expect(restored.reports).toEqual([expect.stringMatching(/^fiscal-verifactu: SIF /)]);
+    const restoredAt = Date.now();
+    const after = await billOpenedAt(afterAt(restoredAt));
+
+    let at = restoredAt + MINUTE;
+    const base = systemClock();
+    const trusted: TrustedClock = {
+      ...base,
+      now: () => ({ ...base.now(), instant: new Date(at), offsetMinutes: 60 }),
+    };
+    const definition = closeOfDayJob({
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: gateSeatOnStartClock(venue.backend, () => false),
+      clock: trusted,
+      cfg: venue.cfg,
+      log: () => {},
+      selling: { mode: () => "primary", role: () => "primary", fenced: () => false },
+      clockUnconfirmed: () => false,
+      clockHoldsBegun: () => 1,
+      clockReleasedAt: () => null,
+    });
+    const look = () => definition.pass({ now: new Date(at), signal: new AbortController().signal });
+    await look();
+    const latest = new Date(Math.max(openedBefore, restoredAt + 30_000));
+    at = Date.parse(businessDayBounds(clock, businessDayAt(clock, latest)).endAt) + MINUTE;
+    await look();
+
+    expect([unconfirmed, confirmed, after].map((bill) => fiscalRecordCount(venue, bill))).toEqual([
+      0, 0, 1,
+    ]);
+  },
+);
+
+it("leaves a bill from before a restore that replaced no series for staff", async () => {
+  venue = await provisionBillVenue(suite.db);
   const clock = await inTx(venue, (tx) => readVenueClock(tx));
-  const yesterday = Date.now() - DAY;
-  seatHolds = true;
-  const unconfirmed = await billOpenedAt(yesterday);
-  seatHolds = false;
-  const confirmed = await billOpenedAt(yesterday);
-
-  const restored = await restoreThroughFiscalHook();
-  expect(restored.reports).toEqual([expect.stringMatching(/^fiscal-verifactu: SIF /)]);
-  const restoredAt = Date.now();
-  const after = await billOpenedAt(restoredAt + 30_000);
-
-  let at = restoredAt + MINUTE;
-  const base = systemClock();
-  const trusted: TrustedClock = {
-    ...base,
-    now: () => ({ ...base.now(), instant: new Date(at), offsetMinutes: 60 }),
+  const before = await billOpenedAt(Date.now() - DAY);
+  const unchanged = {
+    ...fakeModule("test-regime"),
+    backup: { restore: async () => ({ report: "unchanged" }) },
   };
+  await runRestoreHooks({
+    db: suite.db,
+    nodeDb: suite.node,
+    node: { nodeId: venue.cfg.nodeId },
+    modules: [unchanged],
+    log: () => {},
+  });
+  const at = Date.parse(businessDayBounds(clock, businessDayAt(clock, new Date())).endAt) + MINUTE;
+  const base = systemClock();
   const definition = closeOfDayJob({
     admission: testTradingAdmission(),
     db: venue.db,
     backend: gateSeatOnStartClock(venue.backend, () => false),
-    clock: trusted,
+    clock: { ...base, now: () => ({ ...base.now(), instant: new Date(at), offsetMinutes: 60 }) },
     cfg: venue.cfg,
     log: () => {},
     selling: { mode: () => "primary", role: () => "primary", fenced: () => false },
@@ -231,12 +282,7 @@ it("leaves bills from before a Veri*Factu restore for staff, whether or not thei
     clockHoldsBegun: () => 1,
     clockReleasedAt: () => null,
   });
-  const look = () => definition.pass({ now: new Date(at), signal: new AbortController().signal });
-  await look();
-  at = Date.parse(businessDayBounds(clock, businessDayAt(clock, new Date(at))).endAt) + MINUTE;
-  await look();
+  await definition.pass({ now: new Date(at), signal: new AbortController().signal });
 
-  expect([unconfirmed, confirmed, after].map((bill) => fiscalRecordCount(venue, bill))).toEqual([
-    0, 0, 1,
-  ]);
+  expect(fiscalRecordCount(venue, before)).toBe(0);
 });

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "915ee8a1-fb9f-4a8a-b8f9-fa9f17c09f4a",
+  "id": "a3f78cd8-ac12-4bd3-a8ac-826b3e105910",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1226,6 +1226,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "before_restore": {
+          "name": "before_restore",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "settled_at": {
           "name": "settled_at",

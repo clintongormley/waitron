@@ -1,11 +1,10 @@
-import { and, eq, inArray, isNull, max } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Endorsement } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
 import "./errors.js";
 import { now } from "./schema/columns.js";
 import { nodes } from "./schema/nodes.js";
-import { workingOrders } from "./schema/orders.js";
 import { invoiceSeries } from "./schema/series.js";
 import { withTransaction } from "./tenancy.js";
 
@@ -127,33 +126,6 @@ export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promi
     .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)))
     .returning({ id: invoiceSeries.id });
   return rows.length;
-}
-
-/**
- * Gives the node's open and placed bills with no trusted opening time the node's latest series
- * retirement as theirs, so the close of the business day, which leaves bills opened at or before
- * that retirement for staff, never counts them as opened after it. A node with no retired series
- * is left alone. A restore calls it once the node's series are settled, whichever side retired them.
- */
-export async function trustBillsAtLatestRetirementTx(
-  tx: Transaction,
-  nodeId: string,
-): Promise<void> {
-  const [latest] = await tx
-    .select({ at: max(invoiceSeries.retiredAt) })
-    .from(invoiceSeries)
-    .where(eq(invoiceSeries.nodeId, nodeId));
-  if (latest?.at == null) return;
-  await tx
-    .update(workingOrders)
-    .set({ trustedOpenedAt: new Date(latest.at).toISOString() })
-    .where(
-      and(
-        eq(workingOrders.nodeId, nodeId),
-        isNull(workingOrders.trustedOpenedAt),
-        inArray(workingOrders.status, ["open", "placed"]),
-      ),
-    );
 }
 
 /**

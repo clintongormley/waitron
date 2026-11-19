@@ -999,6 +999,71 @@ describe("working_orders_enforce_transition's exception for a placed order's tru
   });
 });
 
+/** Every column of `working_orders` a restore's mark on a placed order must leave as it is. */
+const FROZEN_RESTORE_MARK_COLUMNS = connection
+  .prepare(`select name from pragma_table_info('working_orders') order by cid`)
+  .all()
+  .map((row) => String(row.name))
+  .filter((name) => name !== "before_restore");
+
+describe("working_orders_enforce_transition's exception for a restore's mark on a placed order", () => {
+  it("reads the table's columns, so the per-column cases below are not vacuous", () => {
+    expect(FROZEN_RESTORE_MARK_COLUMNS).toEqual(
+      expect.arrayContaining(["id", "status", "trusted_opened_at", "party_id", "collected_at"]),
+    );
+  });
+
+  it("accepts marking a placed order alone", () => {
+    placedCounterOrder("wo-restore-alone");
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set before_restore = 1 where id = 'wo-restore-alone'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it.each(FROZEN_RESTORE_MARK_COLUMNS)(
+    "refuses a placed order's restore mark when %s changes with it",
+    (column) => {
+      const id = `wo-restore-with-${column}`;
+      placedCounterOrder(id);
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set before_restore = 1, ${column} = 'changed' ` +
+            `where id = '${id}'`,
+        ),
+      ).toBe(TRANSITION_REFUSAL);
+    },
+  );
+
+  it("refuses clearing a placed order's restore mark, and settling it with the mark cleared", () => {
+    placedCounterOrder("wo-restore-kept");
+    connection.exec(`update working_orders set before_restore = 1 where id = 'wo-restore-kept'`);
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set before_restore = 0 where id = 'wo-restore-kept'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set status = 'settled', settled_at = '${STAMP}', ` +
+          `before_restore = 0 where id = 'wo-restore-kept'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
+          `where id = 'wo-restore-kept'`,
+      ),
+    ).toBeUndefined();
+  });
+});
+
 /** The two columns a finished delivery order's table release changes. */
 const RELEASE_COLUMNS = new Set(["delivery_table_id", "delivery_table_label"]);
 /** Every column of `working_orders` a delivery table's release must leave as it is. */

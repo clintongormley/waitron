@@ -33,7 +33,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, posix, sep } from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { AppError, isAppError, nodeId as brandNodeId } from "@waitron/shared";
 import {
   insertNodeSeriesTx,
@@ -43,8 +43,8 @@ import {
   openVenueDatabase,
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
-  trustBillsAtLatestRetirementTx,
   withTransaction,
+  workingOrders,
   readVenueSettings,
   type Database,
   type NodeDatabase,
@@ -1044,7 +1044,10 @@ export async function runRestoreHooks(args: {
       throw wrapHookError(owner, err);
     }
     // Bills from before a restore are left for staff (D6).
-    await trustBillsAtLatestRetirementTx(tx, node.nodeId);
+    await tx
+      .update(workingOrders)
+      .set({ beforeRestore: true })
+      .where(inArray(workingOrders.status, ["open", "placed"]));
     for (const m of args.modules) {
       if (m.backup?.restore !== undefined) {
         try {

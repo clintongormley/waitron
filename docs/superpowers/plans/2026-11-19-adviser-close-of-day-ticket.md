@@ -94,6 +94,9 @@ values in the fiscal package's database layout, which is why D2 is yours.
   live series and opens new ones (`packages/db/src/schema/series.ts:31-33`), so the latest
   `invoice_series.retired_at` of this node marks it. Bills opened by another node are left alone
   too, as the deferred close does (`deferred-close.ts`, `ineligible("other_node")`).
+  (2026-11-19, after review: a clock moved backward across a restore made the `retired_at` comparison
+  misorder bills, so a restore now marks every bill it finds open or placed
+  (`working_orders.before_restore`) and the job skips marked bills; see PR #3847.)
 
 **The lane's choices** (open to you): one transaction per bill, so one refusal never stops the
 others and nothing is issued twice (one sale per bill: `sales_working_order_id_key`,

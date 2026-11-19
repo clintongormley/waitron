@@ -1159,6 +1159,7 @@ for (const locale of ["en", "es"] as const) {
         orders.columns.findIndex((column) => column.name === "opened_at") + 1,
         0,
         { name: "trusted_opened_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+        { name: "before_restore", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
       );
       for (const row of Object.values(orders.rows)) row.trusted_opened_at = row.opened_at;
       for (const row of Object.values(orders.rows))

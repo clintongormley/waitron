@@ -1,7 +1,6 @@
-import { and, count, eq, exists, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
+import { and, count, eq, exists, inArray, isNull, sql } from "drizzle-orm";
 import { withIssuanceTransaction } from "@waitron/core";
 import {
-  invoiceSeries,
   parties,
   readVenueClock,
   workingOrderLines,
@@ -122,7 +121,7 @@ export async function issueBillAtClose(
 }
 
 /** The bill when it is due under `rule`: a table bill with lines and no sale, opened by this node
- * after its latest series retirement (D6) and before the day began. */
+ * and before the day began, that no restore left for staff (D6). */
 async function readDueBill(
   tx: Transaction,
   cfg: SaleOriginConfig,
@@ -141,34 +140,24 @@ async function readDueBill(
     .from(workingOrders)
     .innerJoin(parties, eq(parties.id, workingOrders.partyId))
     .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-    .where(and(eq(workingOrders.id, billId), inArray(workingOrders.status, ["open", "placed"])))
+    .where(
+      and(
+        eq(workingOrders.id, billId),
+        inArray(workingOrders.status, ["open", "placed"]),
+        eq(workingOrders.beforeRestore, false),
+      ),
+    )
     .groupBy(workingOrders.id);
   if (bill === undefined || bill.lines === 0 || bill.nodeId !== cfg.nodeId) return undefined;
   if ((await readIssuedSales(tx, [billId])).has(billId)) return undefined;
-  const retiredAt = await latestRetirement(tx, cfg.nodeId);
-  if (!openedInDueSpan(bill.openedAt, retiredAt, rule)) return undefined;
+  if (!openedInDueSpan(bill.openedAt, rule)) return undefined;
   return { status: bill.status, partyId: bill.partyId!, openedBy: bill.openedBy };
 }
 
-async function latestRetirement(tx: Transaction, nodeId: string): Promise<number | undefined> {
-  const [series] = await tx
-    .select({ retiredAt: max(invoiceSeries.retiredAt) })
-    .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.nodeId, nodeId), isNotNull(invoiceSeries.retiredAt)));
-  return series?.retiredAt == null ? undefined : new Date(series.retiredAt).getTime();
-}
-
-/** After this node's latest series retirement (D6) and before the day began, counted from the
- * bill's trusted opening time; a bill with none yet is never due. */
-function openedInDueSpan(
-  trustedOpenedAt: string | null,
-  retiredAt: number | undefined,
-  rule: CloseOfDayRule,
-): boolean {
-  if (trustedOpenedAt === null) return false;
-  const openedAt = Date.parse(trustedOpenedAt);
-  if (retiredAt !== undefined && openedAt <= retiredAt) return false;
-  return openedAt < rule.dayStartedAt.getTime();
+/** Before the day began, counted from the bill's trusted opening time; a bill with none yet is
+ * never due. */
+function openedInDueSpan(trustedOpenedAt: string | null, rule: CloseOfDayRule): boolean {
+  return trustedOpenedAt !== null && Date.parse(trustedOpenedAt) < rule.dayStartedAt.getTime();
 }
 
 /** Table bills that look due under `rule`; `issueBillAtClose` checks each again in its own
@@ -182,6 +171,7 @@ async function dueBills(tx: Transaction, nodeId: string, rule: CloseOfDayRule): 
       and(
         eq(workingOrders.nodeId, nodeId),
         inArray(workingOrders.status, ["open", "placed"]),
+        eq(workingOrders.beforeRestore, false),
         exists(
           tx
             .select({ id: workingOrderLines.id })
@@ -195,9 +185,8 @@ async function dueBills(tx: Transaction, nodeId: string, rule: CloseOfDayRule): 
     tx,
     rows.map((row) => row.id),
   );
-  const retiredAt = await latestRetirement(tx, nodeId);
   return rows
-    .filter((row) => !issuedSales.has(row.id) && openedInDueSpan(row.openedAt, retiredAt, rule))
+    .filter((row) => !issuedSales.has(row.id) && openedInDueSpan(row.openedAt, rule))
     .map((row) => row.id);
 }
 
