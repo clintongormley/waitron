@@ -84,7 +84,7 @@ export const orderDraftLines = table(
     // `normaliseDraftLines` never adds this row to another, nor another to it.
     noMerge: flag("no_merge").notNull().default(false),
     setMenuId: id("set_menu_id"),
-    // A reservation can outlive the line it names. Placement checks whether it still applies.
+    // A reservation can outlive the line it names, so it has no foreign key.
     setMenuReservedLineId: id("set_menu_reserved_line_id"),
     setMenuReservedPlace: count("set_menu_reserved_place"),
   },

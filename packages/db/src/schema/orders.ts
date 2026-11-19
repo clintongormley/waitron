@@ -294,7 +294,7 @@ export const workingOrderLines = table(
     setMenuVersionId: id("set_menu_version_id"),
     setMenuLineId: id("set_menu_line_id"),
     setMenuPlace: count("set_menu_place"),
-    // Placement establishes the course, which can later be deleted from the menu.
+    // The bill keeps its recorded course id even if that course is deleted.
     setMenuCountsAsCourseId: id("set_menu_counts_as_course_id"),
   },
   (t) => [
