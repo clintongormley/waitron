@@ -151,6 +151,30 @@ for (const locale of ["en", "es"] as const)
       }
     });
 
+it("shows the free-trial reason on opening Cloud services and clears it after refresh", async () => {
+  const status = {
+    state: "complete",
+    configured: true,
+    isPrimary: true,
+    remoteAccessEnabled: true,
+    installation: { state: "active", revision: 1, services: [] },
+  };
+  const api = new DashboardApi("", async (url) => {
+    if (String(url).endsWith("/refresh")) return Response.json(status);
+    if (String(url).endsWith("/billing")) return new Response(null, { status: 503 });
+    return Response.json({ ...status, remoteAccessPlanRequired: true });
+  });
+  const { el, host } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+    api,
+  });
+  const message = () =>
+    el.shadowRoot!.querySelector("[data-test=remote-access-status]")?.textContent;
+  await expect.poll(message).toContain(codeMessage("cloud.tunnel_plan_required"));
+  await expectNoA11yViolations(host);
+  el.shadowRoot!.querySelector<HTMLElement>("#refresh")!.click();
+  await expect.poll(message).toContain(t("cloud.remote_on"));
+});
+
 for (const enabled of [false, true])
   it(`reads the saved ${enabled} choice after a failed reply and preserves the refusal`, async () => {
     let saved = !enabled;

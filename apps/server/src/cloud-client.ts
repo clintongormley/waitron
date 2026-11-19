@@ -83,6 +83,7 @@ export interface CloudPairingView {
 }
 export interface CloudConnectionStatus extends Partial<Omit<CloudPairingView, "state">> {
   remoteAccessEnabled?: boolean;
+  remoteAccessPlanRequired?: true;
   state: "not_connected" | "awaiting_cloud" | "awaiting_local" | "complete";
   code: string;
   installation?: CloudInstallationStatus;
@@ -343,6 +344,16 @@ export function createCloudConnection(options: CloudConnectionOptions) {
   }
   function project(state: SavedCloudState | undefined): CloudConnectionStatus {
     if (!state) return { state: "not_connected", code: "", signupUrl: `${options.origin}/signup` };
+    const installation = projectCloudInstallation(state);
+    const remoteAccessEnabled = state.remoteAccessEnabled !== false;
+    const planRequired =
+      remoteAccessEnabled &&
+      installation?.state === "active" &&
+      state.lifecycle?.tunnelPlanRequired &&
+      state.lifecycle.pending?.action !== "revoke" &&
+      !installation.services.some(
+        (s) => s.service === "remote_access" && s.state !== "unconfigured",
+      );
     return {
       state: "awaiting_cloud",
       requestId: state.requestId,
@@ -353,8 +364,9 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       openCloudUrl: `${options.origin}/connect#request=${state.requestId}`,
       ...(state.view?.registration
         ? {
-            installation: projectCloudInstallation(state),
-            remoteAccessEnabled: state.remoteAccessEnabled !== false,
+            installation,
+            remoteAccessEnabled,
+            ...(planRequired ? { remoteAccessPlanRequired: true } : {}),
             ...(state.lifecycle?.revoked ? {} : { accountUrl: `${options.origin}/account` }),
           }
         : { signupUrl: `${options.origin}/signup` }),

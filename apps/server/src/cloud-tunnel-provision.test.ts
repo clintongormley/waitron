@@ -487,12 +487,21 @@ it("reports that the plan excludes remote access and retries after the venue sta
     await job.pass({ now: new Date(), signal });
     expect(logged).toMatchObject([{ code: "cloud.tunnel_plan_required" }]);
     expect(menuChecks).toEqual([signal]);
-    expect((await f.client.status()).installation?.state).toBe("active");
+    const restarted = createCloudConnection(f.options);
+    expect(await restarted.status()).toMatchObject({
+      installation: { state: "active" },
+      remoteAccessPlanRequired: true,
+    });
+    expect(await restarted.setRemoteAccess(false, async () => {})).not.toHaveProperty(
+      "remoteAccessPlanRequired",
+    );
+    await restarted.setRemoteAccess(true, async () => {});
     await expect(readFile(join(f.directory, "peer.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
     f.mode("ok");
-    await f.client.refresh();
+    expect(await restarted.refresh()).not.toHaveProperty("remoteAccessPlanRequired");
+    expect(await restarted.status()).not.toHaveProperty("remoteAccessPlanRequired");
     expect(f.submissions()).toHaveLength(2);
     expect(JSON.parse(await readFile(join(f.directory, "peer.json"), "utf8")).address).toBe(
       f.placement.address,

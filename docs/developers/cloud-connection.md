@@ -49,8 +49,8 @@ restarting does not keep submitting a key Cloud has refused. The caller neither 
 container key nor rotates the Cloud placement. A later configuration that already matches the
 saved key needs no new submission, including while its service reports a failure. A tunnel refusal
 leaves the successful Cloud control read available to the other services. A `remote_plan_required`
-refusal tells you to start the venue’s free trial in Waitron Cloud Billing. After that, choose
-**Refresh status** to try again immediately.
+refusal appears when you open **Cloud services** and tells you to start the venue’s free trial in
+Waitron Cloud Billing. After that, choose **Refresh status** to try again immediately.
 
 You can still choose **Stop Cloud access**. This revokes the current registration; it does not
 repair the conflicting placement or replace the container key. A bad public-key file is reported
