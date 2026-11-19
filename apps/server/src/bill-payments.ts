@@ -1246,20 +1246,21 @@ async function requireReadyForPayment(
   tx: Transaction,
   db: Database,
   workingOrderId: string,
-  payable: "open" | "placed",
-  operatorId: string,
-  expectedEdit: BillEditExpected | null,
+  payable: PayableBill,
+  operator: { personId: string },
+  req: BillPaymentRequest,
 ): Promise<void> {
+  refuseOtherDining(workingOrderId, payable, req.dining);
   await requireOrderBillEditor(tx, workingOrderId, {
-    operatorId,
-    expectedEdit,
+    operatorId: operator.personId,
+    expectedEdit: req.expectedEdit,
   });
   await assertBillHasNoUnsent(tx, workingOrderId);
   await refuseSetMenuMoney(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
   // A part payment's card reserves its share, as on an open bill (design §5.2).
-  if (payable === "placed") {
+  if (payable.status === "placed") {
     await refusePlacedPaymentInFlight(db, tx, [workingOrderId], { wholeOrderOnly: true });
   }
 }
@@ -1303,15 +1304,7 @@ export async function closeZeroBill(
       }
 
       const payable = await requirePayableBill(tx, workingOrderId);
-      refuseOtherDining(workingOrderId, payable, req.dining);
-      await requireReadyForPayment(
-        tx,
-        deps.db,
-        workingOrderId,
-        payable.status,
-        operator.personId,
-        req.expectedEdit,
-      );
+      await requireReadyForPayment(tx, deps.db, workingOrderId, payable, operator, req);
       if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, workingOrderId);
       const reading = deps.clock.now();
       await deps.backend.refuseUntilRecordable(tx, reading);
@@ -1391,31 +1384,32 @@ async function beginBillPayment(
   await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
   const payable = await requirePayableBill(tx, workingOrderId);
-  refuseOtherDining(workingOrderId, payable, req.dining);
-  await requireReadyForPayment(
-    tx,
-    deps.db,
-    workingOrderId,
-    payable.status,
-    operator.personId,
-    req.expectedEdit,
-  );
+  await requireReadyForPayment(tx, deps.db, workingOrderId, payable, operator, req);
   const held = payable.held ?? (await readPaymentMoney(tx, [workingOrderId]));
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await billPaymentTotal(tx, workingOrderId);
   deps.backend.assertRecordableAt(reading);
   if (refusals.diskFull()) refuseForDiskStop(refusals.log, workingOrderId);
   if (!payable.invoiced) {
-    await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);
     await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, total);
     await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: workingOrderId });
   }
+  const funds = fundsOf(workingOrderId, total, held);
   const allocation = confirmAllocation(
-    fundsOf(workingOrderId, total, held),
+    funds,
     request,
     { tipsEnabled: cfg.tipsEnabled },
-    { applied: decimal(req.applied), tip: decimal(req.tip) },
+    {
+      applied: decimal(req.applied),
+      tip: decimal(req.tip),
+    },
   );
+  // A reader may finish on recovery, so keep the final attempt's choice before asking it.
+  if (
+    !payable.invoiced &&
+    compareDecimal(addDecimal(funds.received, allocation.applied), total) === 0
+  )
+    await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);
 
   await requireEconomicWrite(tx, cfg, deps.admission);
   if (state === "pending") await prepareIssueClock(tx, cfg, pinnedAt(deps.clock, reading));

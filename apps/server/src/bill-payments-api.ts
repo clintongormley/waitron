@@ -278,8 +278,6 @@ export function mountBillPaymentsApi(
           }),
         );
       }
-      // The guards `/api/pay` runs before a reader is asked, in its order. A card outcome is data,
-      // answered 200 even for a decline.
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
       return c.json(
         await takeReaderBillPayment(

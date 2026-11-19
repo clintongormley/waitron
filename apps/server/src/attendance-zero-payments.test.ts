@@ -15,7 +15,7 @@ import { payments } from "@waitron/payments";
 import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { republishMenus } from "./testing/publish-menu.js";
-import { payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
+import { collectOrder, payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import {
   setupPartyVenue,
   seat,
@@ -69,10 +69,16 @@ function at(instant = "2026-01-05T11:00:00.987Z") {
   vi.spyOn(v.clock, "now").mockReturnValue({ ...reading, instant: new Date(instant) });
 }
 const operations = () => suite.db.select().from(staffActivity);
+const tender = (method: "cash" | "card") => ({
+  method,
+  amount: "20.00",
+  ...(method === "card" ? { externalRef: "hand keyed" } : {}),
+});
 const request = (id: string = newId()) => ({
   workingOrderId: id,
   zoneId: v.counter.zoneId,
   lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+  tender: tender("cash"),
 });
 function evidence() {
   return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" };
@@ -115,29 +121,55 @@ describe("a human zero-owing command remains attendance evidence", () => {
     async (method) => {
       const id = await zeroBill(true);
       at();
-      const req = {
-        expectedEdit: await readBillEditState(suite.db, id),
-        submissionId: newId(),
-        kind: "contribution" as const,
-        amount: "0.00",
-        method,
-        ...(method === "cash" ? { tendered: "20.00" } : { entry: "manual" as const }),
-        applied: "0.00",
-        tip: "0.00",
-      };
-      const fiscal = { ...deps(), admission: testTradingAdmission() };
-      const closed = await closeZeroBill(fiscal, v.cfg, id, req, collector);
-      expect(closed.invoice.total).toBe("0.00");
-      expect(closed.invoice.tender).toEqual({ method: "unpaid" });
+      const ticket = await collectOrder(
+        { ...deps(), admission: testTradingAdmission() },
+        v.cfg,
+        { id, lines: [], tender: tender(method) },
+        collector,
+      );
+      expect(ticket.total).toBe("0.00");
+      expect(ticket.tender).toEqual({ method: "unpaid" });
       expect(await operations()).toMatchObject([evidence()]);
       await noMoney();
       vi.spyOn(v.clock, "now").mockImplementation(() => {
         throw new Error("New clock unavailable");
       });
-      expect(await closeZeroBill(fiscal, v.cfg, id, req, v.operator)).toEqual(closed);
+      expect(
+        await collectOrder(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          { id, lines: [], tender: tender(method) },
+          v.operator,
+        ),
+      ).toEqual(ticket);
       expect(await operations()).toMatchObject([evidence()]);
     },
   );
+  it("records staff activity once when the bill route closes an issued zero bill", async () => {
+    const id = await zeroBill(true);
+    at();
+    const req = {
+      expectedEdit: await readBillEditState(suite.db, id),
+      submissionId: newId(),
+      kind: "contribution" as const,
+      amount: "0.00",
+      method: "cash" as const,
+      tendered: "20.00",
+      applied: "0.00",
+      tip: "0.00",
+    };
+    const fiscal = { ...deps(), admission: testTradingAdmission() };
+    const closed = await closeZeroBill(fiscal, v.cfg, id, req, collector);
+    expect(closed.invoice).toMatchObject({ total: "0.00", tender: { method: "unpaid" } });
+    expect(await operations()).toMatchObject([evidence()]);
+    await noMoney();
+
+    vi.spyOn(v.clock, "now").mockImplementation(() => {
+      throw new Error("New clock unavailable");
+    });
+    expect(await closeZeroBill(fiscal, v.cfg, id, req, v.operator)).toEqual(closed);
+    expect(await operations()).toMatchObject([evidence()]);
+  });
   it.each(["issued", "placed", "retrieved", "counter"] as const)(
     "records an integrated %s zero-owing action without a charge",
     async (path) => {

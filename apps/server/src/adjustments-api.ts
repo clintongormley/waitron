@@ -242,7 +242,7 @@ export function mountAdjustmentsApi(
                 : { recorder: deps.attendance, clock: deps.clock },
               () =>
                 issueIfFullyPaid(tx, fiscal, saleCfg, id, personId, {
-                  closeZero: ask.action === "comp" || ask.action === "discount_percent",
+                  closeZero: ask.action !== "cancel",
                 }),
             );
             await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);

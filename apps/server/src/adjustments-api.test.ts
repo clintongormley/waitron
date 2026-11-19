@@ -1209,11 +1209,11 @@ describe("the route's own rules", () => {
     const answer = await post(orderId, { lineId: rows[0]!.id, action: "comp" });
 
     expect(answer.status).toBe(200);
-    expect(answer.json).toMatchObject({
+    expect(answer.json).toEqual({
       adjustmentIds: [expect.any(String)],
       revision: revision + 1,
       party: null,
-      invoice: { total: "0.00", tender: { method: "unpaid" } },
+      invoice: expect.objectContaining({ total: "0.00", tender: { method: "unpaid" } }),
     });
     expect(await recordedOn(orderId)).toMatchObject([
       { action: "comp", lineId: rows[0]!.id, reduction: 1200 },
