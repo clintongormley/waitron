@@ -1,4 +1,4 @@
-import { and, eq, gt, isNotNull } from "drizzle-orm";
+import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
 import {
   adjustmentLines,
   adjustments,
@@ -22,6 +22,10 @@ import { serveRecordedSetMenus } from "@waitron/venue-service";
 import "./errors.js";
 
 type LineRole = Pick<typeof workingOrderLines.$inferSelect, "setMenuRole">;
+
+export function notSetMenuLine() {
+  return sql`${workingOrderLines.setMenuRole} is not 'set_menu'`;
+}
 
 // Set-menu billing replaces this refusal once it can price the menu and its dishes together.
 export async function refuseSetMenuMoney(

@@ -72,6 +72,7 @@ export async function seedBillSetMenu(
       vatClass: "reduced",
       takeawayVatClass: "general",
       sentAt: "2026-11-19T12:00:00.000Z",
+      servedAt: "2026-11-19T12:00:00.000Z",
       servedQuantity: 1000,
       setMenuRole: "set_menu",
       setMenuId: copy.menuId,

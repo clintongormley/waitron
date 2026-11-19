@@ -123,6 +123,7 @@ import {
   prepareAllergyRelease,
   normaliseAllergyPatch,
 } from "./party-allergy.js";
+import { notSetMenuLine } from "./set-menu-bill.js";
 
 export type GroupRelease = "fire" | "hold";
 
@@ -2188,7 +2189,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     .leftJoin(units, unitOwnerJoin)
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    .where(and(inArray(workingOrders.partyId, family), onShownBill()))
+    .where(and(inArray(workingOrders.partyId, family), onShownBill(), notSetMenuLine()))
     .orderBy(
       asc(workingOrders.openedAt),
       asc(workingOrders.orderNumber),
@@ -2831,6 +2832,7 @@ export async function groupArrivingDishes(
         eq(workingOrderLines.workingOrderId, billId),
         isNull(sql`+${workingOrderLines.parentLineId}`),
         isNull(workingOrderLines.groupId),
+        notSetMenuLine(),
       ),
     )
     .orderBy(

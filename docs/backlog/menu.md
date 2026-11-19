@@ -999,6 +999,8 @@ Shared ordering code calculates where a dish fits, what it costs there and which
 Bill storage now holds set menus and their recorded copies, dish places and draft reservations.
 The server reads the recorded copies and dish places, and refuses new payments, comps,
 discounts and ticket issuance for these bills until set-menu billing is ready.
+Kitchen tickets, station queues and service reads show the dishes from a set menu. The menu
+itself adds no kitchen work and does not count as a dish.
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
 The dashboard can open an existing set-menu draft, edit its name, price, VAT rates and inclusion
