@@ -557,7 +557,8 @@ export async function confirmReceiptHandover(
 /**
  * Queues the sale's original receipt on the receipt printer, and says what it did: `"exists"` when
  * the sale already has an original job, `"not_queued"` when no printer or receipt resolves, else the
- * queued job and whether it is marked a copy.
+ * queued job and whether it is marked a copy. `includeSwitchedOff` also queues on a switched-off
+ * receipt printer, where the job waits until it is switched on.
  */
 export async function enqueueOriginalReceipt(
   tx: Transaction,
@@ -569,10 +570,11 @@ export async function enqueueOriginalReceipt(
     personId?: string | null;
     requestKey?: string;
     language?: string;
+    includeSwitchedOff?: boolean;
   } = {},
 ): Promise<"exists" | "not_queued" | { jobId: string; receiptCopy: boolean }> {
-  const { personId, requestKey, language } = options;
-  const printers = options.printers ?? printerLookup(tx, cfg.origin);
+  const { personId, requestKey, language, includeSwitchedOff = false } = options;
+  const printers = options.printers ?? printerLookup(tx, cfg.origin, { includeSwitchedOff });
   const [original] = await tx
     .select({ id: printJobs.id })
     .from(printJobs)
@@ -603,6 +605,7 @@ export async function enqueueOriginalReceipt(
   const job = await enqueuePrintJob(tx, resolved.printer.id, resolved.receiptBytes, "document", {
     saleId,
     receiptCopy: duplicate,
+    whileSwitchedOff: includeSwitchedOff,
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey);
   return { jobId: job.jobId, receiptCopy: duplicate };

@@ -7,7 +7,11 @@ import type { Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 
-/** Keep hardware I/O in the worker so enqueueing a job does not wait for the printer. */
+/**
+ * Keep hardware I/O in the worker so enqueueing a job does not wait for the printer.
+ * `whileSwitchedOff` also queues on a switched-off (never a deleted) printer, where the job waits
+ * until the printer is switched on.
+ */
 export async function enqueuePrintJob(
   tx: Transaction,
   printerId: string,
@@ -17,10 +21,12 @@ export async function enqueuePrintJob(
     saleId = null,
     receiptCopy = null,
     tenderRefundId = null,
+    whileSwitchedOff = false,
   }: {
     saleId?: string | null;
     receiptCopy?: boolean | null;
     tenderRefundId?: string | null;
+    whileSwitchedOff?: boolean;
   } = {},
 ): Promise<{ jobId: string }> {
   return insertPrintJob(tx, printerId, payload, kind, {
@@ -28,6 +34,7 @@ export async function enqueuePrintJob(
     saleId,
     receiptCopy,
     tenderRefundId,
+    whileSwitchedOff,
   });
 }
 
@@ -59,6 +66,7 @@ async function insertPrintJob(
     tenderRefundId,
     pageDocument,
     createdAt,
+    whileSwitchedOff = false,
   }: {
     resendOf: string | null;
     saleId: string | null;
@@ -66,9 +74,11 @@ async function insertPrintJob(
     tenderRefundId: string | null;
     pageDocument?: "invoice";
     createdAt?: string;
+    whileSwitchedOff?: boolean;
   },
 ): Promise<{ jobId: string }> {
-  // A deactivated or deleted printer is reported as `printer.not_found`, not a code of its own.
+  // A deleted printer, or a deactivated one without `whileSwitchedOff`, is reported as
+  // `printer.not_found`, not a code of its own.
   const [printer] = await tx
     .select({ id: printers.id })
     .from(printers)
@@ -76,7 +86,7 @@ async function insertPrintJob(
       and(
         kind === "a4" ? isA4Printer() : isReceiptPrinter(),
         eq(printers.id, printerId),
-        eq(printers.active, true),
+        whileSwitchedOff ? undefined : eq(printers.active, true),
         isNull(printers.deletedAt),
       ),
     );

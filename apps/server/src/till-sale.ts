@@ -1063,7 +1063,7 @@ export async function printSaleReceipt(
     if (ifOwed) {
       await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, {
         personId,
-        printers: printerLookup(tx, cfg.origin, { includeSwitchedOff: true }),
+        includeSwitchedOff: true,
       });
       return;
     }
