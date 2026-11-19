@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { sales, workingOrderLines, workingOrders } from "@waitron/db";
+import { billPayments, sales, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
@@ -11,6 +11,7 @@ import { decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { closeBillDeferredTx } from "./deferred-close.js";
 import { recordUnpaidDeparture } from "./unpaid-departure.js";
+import { completeBillPayment, issueIfFullyPaid } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
 import { priceStoredOrderForIssuance, readOrderRevision } from "./working-order.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
@@ -302,4 +303,73 @@ it("still lets staff cancel a dish on a set-menu bill", async () => {
     cancelLine(tx, venue.cfg, id, 1, undefined, venue.operator.personId),
   );
   expect(adjustmentIds).toHaveLength(1);
+});
+
+it("keeps the cancellation when the remaining set-menu bill matches cash already received", async () => {
+  const id = await bill(false);
+  await order(venue, id, "Paella");
+  const paymentId = await cashContribution(venue, id, "26.00");
+  await inTx(venue, (tx) => seedBillSetMenu(tx, id, copy, 3));
+
+  const invoice = await inTx(venue, async (tx) => {
+    await cancelLine(tx, venue.cfg, id, 2, undefined, venue.operator.personId);
+    return issueIfFullyPaid(tx, deps(), venue.cfg, id, venue.operator.personId);
+  });
+  expect(invoice).toBeNull();
+  expect((await billRow(venue, id)).status).toBe("open");
+  expect(await paymentsOf(venue, id)).toMatchObject([
+    { id: paymentId, applied: 2600, state: "received" },
+  ]);
+  const lines = await venue.db
+    .select({ lineNo: workingOrderLines.lineNo })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id))
+    .orderBy(workingOrderLines.lineNo);
+  expect(lines).toEqual([{ lineNo: 1 }, { lineNo: 3 }]);
+  expect(
+    await venue.db.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
+  ).toEqual([]);
+});
+
+it("records a captured bill payment that covers the whole set-menu bill", async () => {
+  const id = await bill();
+  const receivedAt = venue.clock.now().instant;
+  const paymentId = await inTx(venue, async (tx) => {
+    const [{ id: paymentId }] = await tx
+      .insert(billPayments)
+      .values({
+        workingOrderId: id,
+        submissionId: crypto.randomUUID(),
+        fingerprint: "pending-card-payment",
+        kind: "contribution",
+        method: "card",
+        applied: 2600,
+        state: "pending",
+        requestedBy: venue.operator.personId,
+        source: venue.cfg.origin.source,
+        deviceId: venue.cfg.origin.deviceId,
+      })
+      .returning({ id: billPayments.id });
+    await insertCapturedPayment(tx, {
+      origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
+      workingOrderId: id,
+      billPaymentId: paymentId,
+      provider: "fake",
+      paymentRef: crypto.randomUUID(),
+      amount: decimal("26.00"),
+      settledAt: receivedAt,
+    });
+    return paymentId;
+  });
+  const result = await inTx(venue, (tx) =>
+    completeBillPayment(tx, deps(), venue.cfg, paymentId, receivedAt),
+  );
+  expect(result).toMatchObject({
+    payment: { id: paymentId, state: "received" },
+    invoice: { total: "26.00" },
+  });
+  expect(
+    await venue.db.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
+  ).toHaveLength(1);
 });

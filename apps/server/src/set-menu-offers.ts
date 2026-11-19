@@ -50,8 +50,9 @@ export async function setMenuOfferLookup(
     if (fullMenuId === undefined) {
       throw new AppError("management.request_invalid", { field: "menuVersionId" });
     }
-    const expected = recorded.get(menuId) ?? live.get(fullMenuId) ?? null;
-    if (versionId !== expected) changed.set(fullMenuId, expected);
+    const liveVersionId = live.get(fullMenuId) ?? null;
+    const expected = recorded.get(menuId) ?? liveVersionId;
+    if (versionId !== expected) changed.set(fullMenuId, liveVersionId);
   }
   if (changed.size > 0) {
     throw new AppError("menu.version_changed", {

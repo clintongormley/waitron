@@ -11,7 +11,13 @@ import {
 import { recordAdjustment } from "@waitron/adjustments";
 import { decimal } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { saveSetMenuDishCourse, updateMenuDetails } from "@waitron/menu";
+import {
+  addMember,
+  createMenu,
+  requireMenuRoot,
+  saveSetMenuDishCourse,
+  updateMenuDetails,
+} from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listZoneOffers } from "@waitron/venue-service";
 import {
@@ -243,7 +249,14 @@ it.each([false, true])(
         });
       await expect(setMenuOfferLookup(tx, id, [asked(daily)], zone.menus)).rejects.toMatchObject({
         code: "menu.version_changed",
-        params: { menus: [{ menuId: daily.fullMenuId, liveVersionId: expect.any(String) }] },
+        params: {
+          menus: [
+            {
+              menuId: daily.fullMenuId,
+              liveVersionId: zone.menus.find(({ id }) => id === daily.fullMenuId)!.versionId,
+            },
+          ],
+        },
       });
     });
   },
@@ -342,25 +355,19 @@ it("keeps a dish reduced by a bill-wide discount placed but unavailable for move
   expect((await read(id)).dishes).toMatchObject([{ lineId, movable: false }]);
 });
 
-it("writes the chosen place and its surcharge without taking the menu price", async () => {
-  const id = await tableBill();
-  const setMenuLineId = await inTx(venue, (tx) => seedBillSetMenu(tx, id, daily, 1));
-  const { copies } = await read(id);
+it("writes the chosen place and its surcharge without taking the menu price", () => {
   expect(
-    setMenuDishColumns(
-      {
-        id: "dish",
-        setMenuLineId,
-        place: 2,
-        priceCents: 450,
-        countsAsCourseId: daily.courseId,
-      },
-      copies[0]!,
-    ),
+    setMenuDishColumns({
+      id: "dish",
+      setMenuLineId: "lunch",
+      place: 2,
+      priceCents: 450,
+      countsAsCourseId: "starter",
+    }),
   ).toEqual({
-    setMenuLineId,
+    setMenuLineId: "lunch",
     setMenuPlace: 2,
-    setMenuCountsAsCourseId: daily.courseId,
+    setMenuCountsAsCourseId: "starter",
     unitPriceGross: 450,
     lineTotal: 450,
   });
@@ -388,4 +395,28 @@ it("loads the requested versions in a single read across the basket", async () =
   } finally {
     restore();
   }
+});
+
+it("reports the tapped full menu's live version when the bill's copy belongs to another menu", async () => {
+  const id = await tableBill();
+  await inTx(venue, async (tx) => {
+    await seedBillSetMenu(tx, id, daily, 1);
+    const other = await createMenu(tx, { name: "Dinner" });
+    await addMember(tx, await requireMenuRoot(tx, other.id), {
+      kind: "set_menu",
+      menuId: daily.menuId,
+    });
+    const zoneVersion = await publishWorkingMenu(tx, other.id);
+    await expect(
+      setMenuOfferLookup(
+        tx,
+        id,
+        [asked(daily, zoneVersion)],
+        [{ id: other.id, versionId: zoneVersion }],
+      ),
+    ).rejects.toMatchObject({
+      code: "menu.version_changed",
+      params: { menus: [{ menuId: other.id, liveVersionId: zoneVersion }] },
+    });
+  });
 });

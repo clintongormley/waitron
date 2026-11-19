@@ -188,7 +188,7 @@ export function setMenuLineDescriptions(
   );
 }
 
-export function setMenuDishColumns(result: PlacementResult, _copy: SetMenuCopy) {
+export function setMenuDishColumns(result: PlacementResult) {
   return {
     setMenuLineId: result.setMenuLineId,
     setMenuPlace: result.place,

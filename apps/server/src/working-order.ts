@@ -1335,7 +1335,10 @@ export async function readStoredOrder(
   };
 }
 
-/** `refuseUnsentUnavailable: false` keeps already-captured money recordable after archival. */
+/**
+ * Use `refuseUnsentUnavailable: false` only to record money already captured. That path must
+ * still record it after product archival or when set-menu billing is unavailable.
+ */
 export async function priceStoredOrderForIssuance(
   tx: Transaction,
   workingOrderId: string,

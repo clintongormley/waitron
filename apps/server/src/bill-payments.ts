@@ -34,6 +34,7 @@ import {
   decimalToCents,
   diskFullIn,
   firstCodeInCauseChain,
+  hasCode,
   isAppError,
   MONEY_SCALE,
   multiplyDecimal,
@@ -114,7 +115,7 @@ import {
   storedOrderTotal,
   toVatBreakdown,
 } from "./working-order.js";
-import type { TillSaleDeps } from "./working-order.js";
+import type { GrossOrder, TillSaleDeps } from "./working-order.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import { storePrepayMadeHere } from "./made-here.js";
 import { assertStillSignedIn } from "./till-session.js";
@@ -782,9 +783,18 @@ async function issueWhenFullyPaid(
   }
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
-  const stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
-    refuseUnsentUnavailable: options.moneyMoved !== true,
-  });
+  let stored: GrossOrder;
+  try {
+    stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
+      refuseUnsentUnavailable: options.moneyMoved !== true,
+    });
+  } catch (error) {
+    // Automatic issuance must leave an edit intact while set-menu billing is unavailable.
+    if (options.moneyMoved !== true && hasCode(error, "set_menu.payment_not_ready")) {
+      return { invoice: null, total };
+    }
+    throw error;
+  }
   const { priced, clock, gross } = issueMoment(
     await prepareIssueClock(tx, cfg, deps.clock),
     await issuancePass(tx, workingOrderId, stored),
