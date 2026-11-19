@@ -6,6 +6,8 @@ import type { SetMenuProblem } from "@waitron/shared";
 import { fill, t } from "../i18n/t.js";
 import "./set-menu-terms-form.js";
 import "./set-menu-lines-form.js";
+import type { SetMenuDishesSaved } from "./set-menu-dishes.js";
+import "./set-menu-dishes.js";
 
 @customElement("dashboard-set-menu-editor")
 export class SetMenuEditor extends LitElement {
@@ -28,6 +30,7 @@ export class SetMenuEditor extends LitElement {
   @property() menuId = "";
   @state() private details: SetMenuDetails | null = null;
   @state() private failed = false;
+  @state() private lineNotices: string[] = [];
   @state() private retrying = false;
   // A fresh read of inclusion lines must not reset a separate edit to the terms.
   #terms: SetMenuDetails | null = null;
@@ -55,6 +58,31 @@ export class SetMenuEditor extends LitElement {
     } catch {
       if (generation === this.#read) this.failed = true;
     }
+  }
+
+  #dishesSaved(event: CustomEvent<SetMenuDishesSaved>): void {
+    const { details, addedLines = [], removedLines = [] } = event.detail;
+    this.renderRoot
+      .querySelector("dashboard-set-menu-lines-form")
+      ?.applyDishLineChanges(details.lines, addedLines, removedLines);
+    this.#read++;
+    this.details = details;
+    this.failed = false;
+    const notice = (
+      line: (typeof addedLines)[number],
+      key: "menus.set_menu_line_added" | "menus.set_menu_line_removed",
+    ) =>
+      fill(key, {
+        count: String(line.count),
+        courses: details.courses
+          .filter(({ id }) => line.courseIds.includes(id))
+          .map(({ name }) => name)
+          .join(` ${t("menus.set_menu_or")} `),
+      });
+    this.lineNotices = [
+      ...addedLines.map((line) => notice(line, "menus.set_menu_line_added")),
+      ...removedLines.map((line) => notice(line, "menus.set_menu_line_removed")),
+    ];
   }
 
   #problem(problem: SetMenuProblem, details: SetMenuDetails) {
@@ -105,6 +133,15 @@ export class SetMenuEditor extends LitElement {
                 >${fill("menus.set_menu_edit_product", { name: product.name })}</a
               >`
             : nothing
+        }
+        ${
+          product?.variants.length && problem.kind === "dish_not_included"
+            ? html`<wt-button
+                variant="secondary"
+                @click=${() => this.renderRoot.querySelector("dashboard-set-menu-dishes")!.showVariants(product)}
+                >${fill("menus.set_menu_edit_variants", { name: product.name })}</wt-button
+              >`
+            : nothing
         }`;
       }
     }
@@ -143,13 +180,22 @@ export class SetMenuEditor extends LitElement {
         .value=${this.#terms}
         .languages=${currentContentLanguages()}
       ></dashboard-set-menu-terms-form>
+      <dashboard-set-menu-dishes
+        .api=${this.api}
+        .details=${details}
+        @set-menu-dishes-saved=${(event: CustomEvent<SetMenuDishesSaved>) => this.#dishesSaved(event)}
+      ></dashboard-set-menu-dishes>
       <h2>${t("menus.set_menu_inclusions")}</h2>
+      <div role="status">${this.lineNotices.map((notice) => html`<p>${notice}</p>`)}</div>
       <dashboard-set-menu-lines-form
         .api=${this.api}
         .menuId=${this.menuId}
         .lines=${details.lines}
         .courses=${details.courses}
-        @set-menu-lines-saved=${() => void this.#load()}
+        @set-menu-lines-saved=${() => {
+          this.lineNotices = [];
+          void this.#load();
+        }}
       ></dashboard-set-menu-lines-form>
       ${this.failed ? this.#renderFailure() : nothing}
       ${

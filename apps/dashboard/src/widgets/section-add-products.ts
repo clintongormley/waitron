@@ -151,6 +151,7 @@ export class SectionAddProducts extends LitElement {
   @property({ attribute: false }) onMenu: string[] | null = null;
   @property({ type: Boolean }) busy = false;
   @property() requestError = "";
+  @property() confirmLabel = "";
   @state() private categoryId = "";
   @state() private search = "";
   @state() private selected: ReadonlySet<string> = new Set();
@@ -429,7 +430,7 @@ export class SectionAddProducts extends LitElement {
             data-test="add"
             .disabled=${addAction.unchanged || this.busy}
             @click=${(event: Event) => this.#confirm(event)}
-            >${t("add_products.confirm")}</wt-button
+            >${this.confirmLabel || t("add_products.confirm")}</wt-button
           >
         </wt-form-actions>
       </div>`;
