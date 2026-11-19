@@ -13,7 +13,6 @@ import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { lockupFileInks } from "@waitron/ui/src/test-helpers.js";
 import darkLockup from "../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
-import lightLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { DashboardApp } from "./dashboard-app.js";
@@ -91,6 +90,25 @@ async function theLine(el: DashboardApp): Promise<WtPoweredBy> {
   await loadedLockup(line);
   await frame();
   return line;
+}
+
+const BLUES = ["rgb(113, 207, 235)", "rgb(0, 115, 146)"];
+
+/** The paint of the lockup's near-black pieces, then the W's sky blue and teal. */
+function pieceFills(lockup: WtWaitronLockup): string[] {
+  return [".ink", ".sky", ".teal"].map(
+    (piece) => getComputedStyle(lockup.shadowRoot!.querySelector(`svg > ${piece}`)!).fill,
+  );
+}
+
+/** A colour token as `on` resolves it. */
+function resolvedToken(on: Element, name: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = getComputedStyle(on).getPropertyValue(name);
+  document.body.append(probe);
+  const value = getComputedStyle(probe).color;
+  probe.remove();
+  return value;
 }
 
 function overlaps(a: DOMRect, b: DOMRect): boolean {
@@ -202,29 +220,37 @@ describe("Powered by in the signed-in banner", () => {
     else expect(label).not.toBe("Powered by");
   });
 
-  it("paints Waitron's lockup in the venue theme's dark colours, not the stock ones", async () => {
+  it("paints Waitron's ink in the venue theme's dark text colour and keeps the W's blues", async () => {
     store(withLogo);
     startVenueTheme(document.documentElement, { fetchImpl: never });
     const el = await signedIn({ theme: "dark" });
     const line = await theLine(el);
     const lockup = await loadedLockup(line);
-    const inks = [...lockup.shadowRoot!.querySelectorAll("svg > g")]
-      .map((g) => getComputedStyle(g).fill)
-      .join(" ");
-    const resolved = ["--wt-color-primary", "--wt-color-text"].map((name) => {
-      const probe = document.createElement("span");
-      probe.style.color = getComputedStyle(line).getPropertyValue(name);
-      document.body.append(probe);
-      const value = getComputedStyle(probe).color;
-      probe.remove();
-      return value;
-    });
-    expect(inks).toBe(resolved.join(" "));
-    // The word takes the dark theme's ink; the cloche, the venue's own colour.
-    expect(inks.split(") ")[1]).toBe(lockupFileInks(darkLockup)[1]);
-    expect(inks).not.toBe(lockupFileInks(darkLockup).join(" "));
-    expect(inks).not.toBe(lockupFileInks(lightLockup).join(" "));
+    expect(pieceFills(lockup)).toEqual([resolvedToken(line, "--wt-color-text"), ...BLUES]);
+    expect(pieceFills(lockup)).toEqual(lockupFileInks(darkLockup));
   });
+
+  it.each([
+    ["light", "rgb(18, 52, 86)"],
+    ["dark", "rgb(254, 220, 186)"],
+  ] as const)(
+    "keeps the W's blues under a venue's own brand colour and paints its ink in the venue's hand-set %s text colour",
+    async (mode, text) => {
+      const theme = deriveTheme({
+        ...WAITRON_CHOICES,
+        brandColor: "#c62828",
+        handSet: { light: { text: "#123456" }, dark: { text: "#fedcba" } },
+      });
+      store({ ...withLogo, css: themeSheet(theme) });
+      startVenueTheme(document.documentElement, { fetchImpl: never });
+      const el = await signedIn({ theme: mode });
+      const line = await theLine(el);
+      const lockup = await loadedLockup(line);
+      expect(resolvedToken(line, "--wt-color-text")).toBe(text);
+      expect(resolvedToken(line, "--wt-color-primary")).not.toBe(text);
+      expect(pieceFills(lockup)).toEqual([text, ...BLUES]);
+    },
+  );
 
   describe.each(["en-GB", "es-ES"] as const)("at desktop width (%s)", (locale) => {
     it.each([
@@ -388,9 +414,9 @@ describe("Powered by in the signed-in banner", () => {
       ).toBe(scale === 100 ? "14px" : "18px");
       const probe = document.createElement("span");
       probe.style.display = "block";
-      probe.style.width = "calc(var(--wt-space-6) * 2)";
+      probe.style.height = "calc(var(--wt-space-6) * 11 / 32)";
       document.body.append(probe);
-      const lockupWidth = probe.getBoundingClientRect().width;
+      const lockupHeight = probe.getBoundingClientRect().height;
       probe.remove();
       for (const [part, box] of [
         ["the line", at],
@@ -406,7 +432,7 @@ describe("Powered by in the signed-in banner", () => {
         Math.max(name.bottom, pill.bottom),
       );
       expect(at.top, "the line below the first row").toBeGreaterThanOrEqual(menu.bottom);
-      expect(lockup.width, "the lockup's drawn width").toBeCloseTo(lockupWidth, 0);
+      expect(lockup.height, "the lockup's drawn height").toBeCloseTo(lockupHeight, 0);
       expect(Math.abs(at.right - menu.right), "trailing end under the menu's").toBeLessThanOrEqual(
         1,
       );

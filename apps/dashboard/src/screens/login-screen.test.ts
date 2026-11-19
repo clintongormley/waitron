@@ -3130,11 +3130,11 @@ describe("login-screen: the sign-in card", () => {
       expect(style.borderTopLeftRadius).toBe(
         tokenValue(el, "border-top-left-radius", "var(--wt-radius-lg)"),
       );
-      // The banner above the card carries the lockup; the brand file's cloche ink finds an
-      // inlined copy whatever wraps it.
+      // The banner above the card carries the lockup; the brand file's teal finds an inlined copy
+      // whatever wraps it.
       expect(screen.querySelector("[data-test=login-logo]")).toBeNull();
       expect(screen.querySelector("wt-waitron-lockup")).toBeNull();
-      expect(screen.querySelector('svg > g[fill="#1f6feb"]')).toBeNull();
+      expect(screen.querySelector('svg > .teal[fill="#007392"]')).toBeNull();
       expect(screen.firstElementChild).toBe(screen.querySelector("h1"));
     },
   );

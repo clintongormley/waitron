@@ -3991,7 +3991,7 @@ describe("page shell", () => {
   });
 
   it.each(["light", "dark"] as const)(
-    "paints the logo's word in the text colour and its cloche in the primary colour (%s theme)",
+    "paints the logo's near-black pieces in the text colour and keeps the W's blues (%s theme)",
     async (theme) => {
       const el = await mountSetupApp();
       const host = el.parentElement!;
@@ -4006,11 +4006,13 @@ describe("page shell", () => {
       expect(logo.localName).toBe("wt-waitron-lockup");
       await logo.updateComplete;
       const svg = logo.shadowRoot!.querySelector("svg")!;
-      // Found by the brand file's own ink, not by position, so a reordered file fails here.
-      const cloche = svg.querySelector(':scope > g[fill="#1f6feb"]');
-      const word = svg.querySelector(':scope > g[fill="#16181d"]');
-      expect(getComputedStyle(word!).fill).toBe(colourOf("--wt-color-text"));
-      expect(getComputedStyle(cloche!).fill).toBe(colourOf("--wt-color-primary"));
+      // Found by the brand file's own fills, not by position, so a reordered file fails here.
+      const ink = svg.querySelector(':scope > .ink[fill="#231f20"]');
+      const sky = svg.querySelector(':scope > .sky[fill="#71cfeb"]');
+      const teal = svg.querySelector(':scope > .teal[fill="#007392"]');
+      expect(getComputedStyle(ink!).fill).toBe(colourOf("--wt-color-text"));
+      expect(getComputedStyle(sky!).fill).toBe("rgb(113, 207, 235)");
+      expect(getComputedStyle(teal!).fill).toBe("rgb(0, 115, 146)");
     },
   );
 });

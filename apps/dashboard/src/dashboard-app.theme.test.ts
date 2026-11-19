@@ -59,7 +59,11 @@ function stubApi(locale: Locale = "es-ES", onboardingIntent = "prepare"): Dashbo
   } as unknown as DashboardApi;
 }
 
-async function mountShell(): Promise<{ host: HTMLElement; shown: () => Promise<string> }> {
+async function mountShell(): Promise<{
+  host: HTMLElement;
+  lockup: WtWaitronLockup;
+  shown: () => Promise<string>;
+}> {
   const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
   // As main.ts does for the page: the theme choice paints the tokens the lockup reads.
   startThemeChoice(host);
@@ -69,17 +73,51 @@ async function mountShell(): Promise<{ host: HTMLElement; shown: () => Promise<s
     "[data-test=brand-banner] wt-waitron-lockup",
   )!;
   await lockup.updateComplete;
-  const shown = async () =>
-    [...lockup.shadowRoot!.querySelectorAll("svg > g")]
-      .map((g) => getComputedStyle(g).fill)
-      .join(" ");
-  return { host, shown };
+  const shown = async () => pieceFills(lockup).join(" ");
+  return { host, lockup, shown };
+}
+
+/** The paint of the lockup's near-black pieces, then the W's sky blue and teal. */
+const pieceFills = (lockup: WtWaitronLockup) =>
+  [".ink", ".sky", ".teal"].map(
+    (piece) => getComputedStyle(lockup.shadowRoot!.querySelector(`svg > ${piece}`)!).fill,
+  );
+
+/** A colour token as `on` resolves it. */
+function resolvedToken(on: Element, name: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = getComputedStyle(on).getPropertyValue(name);
+  document.body.append(probe);
+  const value = getComputedStyle(probe).color;
+  probe.remove();
+  return value;
 }
 
 it("tells the two lockups apart", () => {
   expect(lockupFileInks(darkLockup).join(" ")).not.toBe(lockupFileInks(lightLockup).join(" "));
-  expect(lockupFileInks(lightLockup).join(" ")).toMatch(/^rgb\(.*\) rgb\(.*\)$/);
+  expect(lockupFileInks(lightLockup).join(" ")).toMatch(/^rgb\(.*\) rgb\(.*\) rgb\(.*\)$/);
 });
+
+it.each([
+  ["dark", "light"],
+  ["light", "dark"],
+] as const)(
+  "with %s chosen while the computer is %s, the logo's ink and the brand colour follow the choice and the W's blues stay",
+  async (chosen, computer) => {
+    await commands.emulateColorScheme(computer);
+    const { host, lockup } = await mountShell();
+    const before = {
+      text: resolvedToken(host, "--wt-color-text"),
+      primary: resolvedToken(host, "--wt-color-primary"),
+    };
+    chooseTheme(chosen);
+    await expect.poll(() => resolvedToken(host, "--wt-color-text")).not.toBe(before.text);
+    expect(resolvedToken(host, "--wt-color-primary")).not.toBe(before.primary);
+    const ink = (chosen === "dark" ? lockupFileInks(darkLockup) : lockupFileInks(lightLockup))[0];
+    expect(resolvedToken(host, "--wt-color-text")).toBe(ink);
+    expect(pieceFills(lockup)).toEqual([ink, "rgb(113, 207, 235)", "rgb(0, 115, 146)"]);
+  },
+);
 
 it("with Dark chosen the banner paints the lockup in the dark theme's inks, whatever the computer is set to", async () => {
   await commands.emulateColorScheme("light");

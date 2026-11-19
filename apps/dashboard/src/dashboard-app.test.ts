@@ -898,7 +898,7 @@ describe("dashboard-app", () => {
     expect(logoutBtn(el)).toBeNull();
   });
 
-  it("paints the banner's lockup in the dark theme's inks while the computer is in dark mode, and the light theme's otherwise", async () => {
+  it("paints the banner's lockup ink in the dark theme's text colour while the computer is in dark mode, and the light theme's otherwise, keeping the W's blues", async () => {
     const api = stubApi({
       getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
     });
@@ -910,8 +910,8 @@ describe("dashboard-app", () => {
     const lockup = brandBanner(el)!.querySelector<WtWaitronLockup>("wt-waitron-lockup")!;
     await lockup.updateComplete;
     const shown = async () =>
-      [...lockup.shadowRoot!.querySelectorAll("svg > g")]
-        .map((g) => getComputedStyle(g).fill)
+      [".ink", ".sky", ".teal"]
+        .map((piece) => getComputedStyle(lockup.shadowRoot!.querySelector(`svg > ${piece}`)!).fill)
         .join(" ");
     try {
       await commands.emulateColorScheme("dark");

@@ -10,12 +10,12 @@ const lockupMarkup = lockupSource.slice(
 );
 const lockupViewBox = /viewBox="([^"]+)"/.exec(lockupSource)![1]!;
 const [, , lockupWidth, lockupHeight] = lockupViewBox.split(/\s+/);
-/** Where the word's letters sit, in the drawing's units: the bottom of its "w". */
-const WORD_BASELINE = 77.19;
+/** Where the word's letters sit, in the drawing's units: the bottom of its "I", less the viewBox's top. */
+const WORD_BASELINE = 51.6;
 
 /**
- * Waitron's lockup drawn inline, so it reads the theme it sits in: the cloche in
- * `--wt-color-primary`, the word in `--wt-color-text`. Size it by its width or its height; the
+ * Waitron's lockup drawn inline, so it reads the theme it sits in: its near-black pieces (`.ink`)
+ * in `--wt-color-text`; the W's two blues keep the drawing's own fills. Size it by its width or its height; the
  * other follows the drawing's shape. Its baseline is the word's, so text beside it can line up by
  * baseline.
  * `label` names it; an empty `label` makes it decoration.
@@ -44,11 +44,7 @@ export class WtWaitronLockup extends LitElement {
         block-size: 100%;
       }
 
-      svg > g:first-of-type {
-        fill: var(--wt-color-primary);
-      }
-
-      svg > g:last-of-type {
+      .ink {
         fill: var(--wt-color-text);
       }
     `,

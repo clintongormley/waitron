@@ -792,7 +792,16 @@ export class SetupApp extends LitElement {
 
       .logo {
         flex: 0 0 auto;
-        width: calc(var(--wt-space-6) * 5);
+        height: calc(var(--wt-space-6) * 27 / 32);
+      }
+
+      /* By its width here: by its height, the wider drawing pushes the header's controls past the
+         card's edge at 400px. */
+      @media (max-width: 40rem) {
+        .logo {
+          height: auto;
+          width: calc(var(--wt-space-6) * 5);
+        }
       }
     `,
   ];

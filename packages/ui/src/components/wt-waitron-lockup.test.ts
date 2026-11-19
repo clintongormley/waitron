@@ -9,8 +9,8 @@ import * as ui from "../index.js";
 afterEach(cleanup);
 
 const svg = (el: WtWaitronLockup) => el.shadowRoot!.querySelector<SVGSVGElement>("svg")!;
-const groups = (el: WtWaitronLockup) =>
-  [...svg(el).children].filter((node): node is SVGGElement => node.localName === "g");
+const piece = (el: WtWaitronLockup, name: "ink" | "sky" | "teal") =>
+  getComputedStyle(svg(el).querySelector(`:scope > .${name}`)!);
 
 /** Each element's name and attributes, depth first: the drawing, whatever the serialisation. */
 const shape = (node: Element): string[] =>
@@ -40,36 +40,39 @@ describe("wt-waitron-lockup", () => {
     const el = await lockup();
     const source = new DOMParser().parseFromString(lockupSource, "image/svg+xml").documentElement;
     expect(svg(el).getAttribute("viewBox")).toBe(source.getAttribute("viewBox"));
-    expect(groups(el).map(shape)).toEqual([...source.children].map(shape));
+    expect([...svg(el).children].map(shape)).toEqual([...source.children].map(shape));
   });
 
-  it("paints the cloche from --wt-color-primary and the word from --wt-color-text", async () => {
-    const el = await lockup();
-    el.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
-    el.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
-    expect(groups(el).map((g) => getComputedStyle(g).fill)).toEqual([
-      "rgb(1, 2, 3)",
-      "rgb(4, 5, 6)",
-    ]);
-  });
-
-  it.each(["light", "dark"] as const)("follows the %s theme's tokens", async (theme) => {
-    const el = (await mountThemed(
-      "<wt-waitron-lockup></wt-waitron-lockup>",
-      theme,
-    )) as WtWaitronLockup;
+  it("paints only the near-black pieces from --wt-color-text and keeps the W's blues fixed", async () => {
+    await mount(
+      `<div style="--wt-color-primary: #c62828; --wt-color-text: #123456">` +
+        `<wt-waitron-lockup></wt-waitron-lockup></div>`,
+    );
+    const el = host.querySelector<WtWaitronLockup>("wt-waitron-lockup")!;
     await el.updateComplete;
-    const tokens = getComputedStyle(el);
-    const expected = ["--wt-color-primary", "--wt-color-text"].map((name) => {
-      const probe = document.createElement("span");
-      probe.style.color = tokens.getPropertyValue(name);
-      el.parentElement!.append(probe);
-      const value = getComputedStyle(probe).color;
-      probe.remove();
-      return value;
-    });
-    expect(groups(el).map((g) => getComputedStyle(g).fill)).toEqual(expected);
+    expect(piece(el, "ink").fill).toBe("rgb(18, 52, 86)");
+    expect(piece(el, "sky").fill).toBe("rgb(113, 207, 235)");
+    expect(piece(el, "teal").fill).toBe("rgb(0, 115, 146)");
   });
+
+  it.each(["light", "dark"] as const)(
+    "paints its ink from the %s theme's text colour and keeps the blues",
+    async (theme) => {
+      const el = (await mountThemed(
+        "<wt-waitron-lockup></wt-waitron-lockup>",
+        theme,
+      )) as WtWaitronLockup;
+      await el.updateComplete;
+      const probe = document.createElement("span");
+      probe.style.color = getComputedStyle(el).getPropertyValue("--wt-color-text");
+      el.parentElement!.append(probe);
+      const text = getComputedStyle(probe).color;
+      probe.remove();
+      expect(piece(el, "ink").fill).toBe(text);
+      expect(piece(el, "sky").fill).toBe("rgb(113, 207, 235)");
+      expect(piece(el, "teal").fill).toBe("rgb(0, 115, 146)");
+    },
+  );
 
   it("sizes its height from its width", async () => {
     const el = await lockup('<wt-waitron-lockup style="width: 200px"></wt-waitron-lockup>');
@@ -95,7 +98,7 @@ describe("wt-waitron-lockup", () => {
     async (_, size) => {
       await mount(
         `<div style="display: flex; align-items: baseline; font-size: 14px">` +
-          `<wt-waitron-lockup style="${size}"></wt-waitron-lockup><span>Casa Delgado</span></div>`,
+          `<wt-waitron-lockup style="${size}"></wt-waitron-lockup><span style="white-space: nowrap">Casa Delgado</span></div>`,
       );
       const el = host.querySelector<WtWaitronLockup>("wt-waitron-lockup")!;
       await el.updateComplete;

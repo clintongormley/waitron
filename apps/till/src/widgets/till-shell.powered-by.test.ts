@@ -97,20 +97,18 @@ async function lockupLoaded(line: WtPoweredBy): Promise<WtWaitronLockup> {
   return lockup;
 }
 
-/** The lockup's cloche and word inks, and the two tokens they should be painted from. */
+/** The paint of the lockup's near-black pieces, the W's sky blue and teal, and what each should be:
+ * the text colour, then the two fixed blues. */
 function inks(lockup: WtWaitronLockup): { drawn: string[]; tokens: string[] } {
-  const drawn = [...lockup.shadowRoot!.querySelectorAll("svg > g")].map(
-    (g) => getComputedStyle(g).fill,
+  const drawn = [".ink", ".sky", ".teal"].map(
+    (piece) => getComputedStyle(lockup.shadowRoot!.querySelector(`svg > ${piece}`)!).fill,
   );
-  const tokens = ["--wt-color-primary", "--wt-color-text"].map((name) => {
-    const probe = document.createElement("span");
-    probe.style.color = getComputedStyle(lockup).getPropertyValue(name);
-    document.body.append(probe);
-    const value = getComputedStyle(probe).color;
-    probe.remove();
-    return value;
-  });
-  return { drawn, tokens };
+  const probe = document.createElement("span");
+  probe.style.color = getComputedStyle(lockup).getPropertyValue("--wt-color-text");
+  document.body.append(probe);
+  const text = getComputedStyle(probe).color;
+  probe.remove();
+  return { drawn, tokens: [text, "rgb(113, 207, 235)", "rgb(0, 115, 146)"] };
 }
 
 /** Mounts a handheld, or the shell `props` describe, with the stored logo, and lets it settle. */
@@ -146,7 +144,7 @@ describe("Powered by Waitron at the foot of a handheld's More", () => {
       expect(line.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe("Powered by");
       const { drawn, tokens } = inks(await lockupLoaded(line));
       expect(drawn).toEqual(tokens);
-      expect(drawn[1]).toBe(lockupFileInks(lightLockup)[1]);
+      expect(drawn).toEqual(lockupFileInks(lightLockup));
       const logout = moreMenu(el).querySelector(".logout")!.getBoundingClientRect();
       expect(line.getBoundingClientRect().top).toBeGreaterThanOrEqual(logout.bottom);
     });
@@ -265,7 +263,7 @@ describe("Powered by Waitron at the foot of a handheld's More", () => {
       await openMenu(el);
       const { drawn, tokens } = inks(await lockupLoaded(lineOf(el)!));
       expect(drawn).toEqual(tokens);
-      expect(drawn[1]).toBe(lockupFileInks(darkLockup)[1]);
+      expect(drawn).toEqual(lockupFileInks(darkLockup));
     });
   });
 });
@@ -288,7 +286,7 @@ describe("Powered by Waitron at the foot of a cash register's More", () => {
       expect(line.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe("Powered by");
       const { drawn, tokens } = inks(await lockupLoaded(line));
       expect(drawn).toEqual(tokens);
-      expect(drawn[1]).toBe(lockupFileInks(lightLockup)[1]);
+      expect(drawn).toEqual(lockupFileInks(lightLockup));
       const logout = moreMenu(el).querySelector(".logout")!.getBoundingClientRect();
       expect(line.getBoundingClientRect().top).toBeGreaterThanOrEqual(logout.bottom);
     });
@@ -442,7 +440,7 @@ describe("Powered by Waitron at the foot of a cash register's More", () => {
       await openMenu(el);
       const { drawn, tokens } = inks(await lockupLoaded(lineOf(el)!));
       expect(drawn).toEqual(tokens);
-      expect(drawn[1]).toBe(lockupFileInks(darkLockup)[1]);
+      expect(drawn).toEqual(lockupFileInks(darkLockup));
     });
   });
 });

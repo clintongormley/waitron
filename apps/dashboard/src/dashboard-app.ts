@@ -728,7 +728,7 @@ export class DashboardApp extends LitElement {
 
       .brand-logo {
         flex: 0 0 auto;
-        width: calc(var(--wt-space-6) * 4);
+        height: calc(var(--wt-space-6) * 11 / 16);
       }
 
       .venue-logo {
@@ -860,8 +860,12 @@ export class DashboardApp extends LitElement {
           grid-area: toggle;
           margin-inline-end: 0;
         }
+        /* By its width here: by its height, the wider drawing does not fit beside the controls at
+           400px. */
         .brand-logo {
           grid-area: logo;
+          height: auto;
+          width: calc(var(--wt-space-6) * 4);
           max-width: 100%;
         }
         .banner-actions {
