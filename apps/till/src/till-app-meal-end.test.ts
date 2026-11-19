@@ -1052,6 +1052,90 @@ describe("till-app: a refusal after a send that got no answer", () => {
     expect(banner(el)!.textContent).toContain(t("meal_end.cannot_file"));
   });
 
+  /** Bills reads show the ticket, and table reads the moved table, once `issue` is called. */
+  function ticketFoundLater() {
+    let issued = false;
+    return {
+      overrides: {
+        getPartyBills: vi.fn(async () => [issued ? printedBill : billOf()]),
+        getTablesState: vi.fn(async () => [heldTable(issued ? { revision: 5 } : {})]),
+      },
+      issue: (now = true) => {
+        issued = now;
+      },
+    };
+  }
+  const expectAlreadyIssued = (el: TillApp) => {
+    const said = banner(el)!.textContent!;
+    expect(said).toContain(codeMessage("meal_end.already_issued"));
+    expect(said).not.toContain(codeMessage("meal_end.no_printer"));
+    expect(said).not.toContain(t("meal_end.unconfirmed"));
+    expect(said).not.toContain(t("party.try_again"));
+  };
+
+  it("says the bill has its receipt when the read after a refused resend finds it, and the bill is no longer in doubt", async () => {
+    const { overrides, issue } = ticketFoundLater();
+    let answer: unknown = refusal("meal_end.no_printer");
+    const { el, endMeal } = await pressLeftUnanswered(() => Promise.reject(answer), overrides);
+    issue();
+
+    await printBill(el);
+    expectAlreadyIssued(el);
+
+    issue(false);
+    answer = refusal("authorization.not_permitted");
+    await signInAs(el, "p1");
+    await printBill(el);
+
+    const [first, second, third] = submissionIds(endMeal);
+    expect(second).toBe(first);
+    expect(third).not.toBe(first);
+    expect(banner(el)!.textContent).toContain(t("take_payment.not_permitted"));
+    expect(banner(el)!.textContent).not.toContain(t("meal_end.unconfirmed"));
+  });
+
+  it("keeps the warning when the read after a press with no answer finds the ticket", async () => {
+    const deadlines = deadlinesByHand();
+    const { overrides, issue } = ticketFoundLater();
+    const { el } = await openBill({ ...overrides, endMeal: unansweredUntilDeadline });
+    await printBill(el);
+    issue();
+
+    deadlines.expire();
+    await flush(el, 6);
+
+    expectWarned(el);
+    expect(banner(el)!.textContent).not.toContain(codeMessage("meal_end.already_issued"));
+  });
+
+  it("says the bill has its receipt when the reload after a resend's changed-table refusal finds it", async () => {
+    const { overrides, issue } = ticketFoundLater();
+    const { el } = await pressLeftUnanswered(
+      refusal("party.out_of_date", { partyId: "v1", revision: 5 }),
+      overrides,
+    );
+    issue();
+
+    await printBill(el);
+
+    expectAlreadyIssued(el);
+  });
+
+  it("says the bill has its receipt when the reload after a first press's changed-table refusal finds it", async () => {
+    const { overrides, issue } = ticketFoundLater();
+    const { el } = await openBill({
+      ...overrides,
+      endMeal: vi
+        .fn()
+        .mockRejectedValue(refusal("party.out_of_date", { partyId: "v1", revision: 5 })),
+    });
+    issue();
+
+    await printBill(el);
+
+    expectAlreadyIssued(el);
+  });
+
   it("warns on submission.id_reused, then uses a new id, and the bill stays uncertain", async () => {
     let answer: unknown = refusal("submission.id_reused", { submissionId: "taken" });
     const { el, endMeal } = await pressLeftUnanswered(() => Promise.reject(answer));
@@ -1331,6 +1415,74 @@ describe("till-app: the bills read after a print's answer", () => {
     expect(banner(el)!.textContent).toContain(codeMessage("meal_end.no_printer"));
     expect(tableOrder(el).billPrintPending).toBe(false);
     expect(printInMenu(el).disabled).toBe(false);
+  });
+
+  it("brings nothing back when staff left the bill before the read after a refusal found its ticket", async () => {
+    const other = billOf({ workingOrderId: "wo-9", billNumber: 2 });
+    const { getPartyBills, read, hold } = billsReadHeldOnDemand(() => [billOf(), other]);
+    const { el } = await openBill({
+      endMeal: vi.fn(async () => {
+        hold();
+        throw { code: "meal_end.no_printer", status: 409 };
+      }),
+      getPartyBills,
+    });
+    await printBill(el);
+    expect(banner(el)!.textContent).toContain(codeMessage("meal_end.no_printer"));
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-9" });
+    await flush(el, 6);
+
+    read.resolve([printedBill, other]);
+    await flush(el, 6);
+    emit(tableOrder(el), "switch-bill", { workingOrderId: "wo-4" });
+    await flush(el, 6);
+
+    expect(tableOrder(el).orderId).toBe("wo-4");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("leaves a newer press's Bill issued alone when the read after an earlier refusal finds the ticket", async () => {
+    const { getPartyBills, read, hold } = billsReadHeldOnDemand();
+    const endMeal = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        hold();
+        throw { code: "meal_end.no_printer", status: 409 };
+      })
+      .mockResolvedValue(ended);
+    const { el } = await openBill({ endMeal, getPartyBills });
+    await printBill(el);
+    await printBill(el);
+    expect(endMeal).toHaveBeenCalledTimes(2);
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+
+    read.resolve([printedBill]);
+    await flush(el, 6);
+
+    expect(text(printedNotice(el))).toBe(t("bill.issued"));
+    expect(banner(el)).toBeNull();
+  });
+
+  it("leaves a newer press's refusal alone when the read after an earlier refusal finds the ticket", async () => {
+    const { getPartyBills, read, hold } = billsReadHeldOnDemand();
+    const endMeal = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        hold();
+        throw { code: "meal_end.no_printer", status: 409 };
+      })
+      .mockRejectedValue({ code: "party.not_open", status: 409, partyId: "v1" });
+    const { el } = await openBill({ endMeal, getPartyBills });
+    await printBill(el);
+    await printBill(el);
+    expect(endMeal).toHaveBeenCalledTimes(2);
+    const said = banner(el)!.textContent;
+    expect(said).not.toContain(codeMessage("meal_end.no_printer"));
+
+    read.resolve([printedBill]);
+    await flush(el, 6);
+
+    expect(banner(el)!.textContent).toBe(said);
   });
 
   it("does not leave the warning under the bill the screen moves to when that read finds the bill gone", async () => {

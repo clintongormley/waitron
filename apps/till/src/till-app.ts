@@ -20435,14 +20435,30 @@ export class TillApp extends LitElement {
 
   /** The bills are read again, and kept if the read fails, since a print that got no answer often
    * means the box cannot be reached. */
-  async #rereadBillsAfterPrint(): Promise<void> {
-    await this.#loadPartyBills(undefined, true, false, false, true);
+  async #rereadBillsAfterPrint(): Promise<ReadBills> {
+    return this.#loadPartyBills(undefined, true, false, false, true);
+  }
+
+  /** A bill read with an invoice number has its ticket, whichever request issued it, and can get no
+   * other. So it is no longer in doubt, and the refusal, which may tell staff to print it, gives way
+   * if it is still this press's answer. */
+  #onTicketFoundAfterRefusal(asked: PressedBill, bills: readonly PartyBill[] | null): void {
+    const bill = bills?.find((row) => row.workingOrderId === asked.billId);
+    if (bill?.invoiceNumber === undefined) return;
+    this.#mealEndUnanswered.delete(asked.billId);
+    const answer = this.mealEndAnswers.get(asked.billId);
+    if (answer?.press === asked)
+      this.#setMealEndAnswer(asked.billId, {
+        ...answer,
+        said: { error: { code: "meal_end.already_issued" } },
+      });
   }
 
   /** What a refusal says of the sends this bill has out: `sentBefore`, this send may already have
    * reached the server under its id. A refusal describes only the request it answers, and an earlier
-   * one still on its way can issue the ticket afterwards, so only `meal_end.already_issued` ends the
-   * uncertainty here. Returns what staff are told. */
+   * one still on its way can issue the ticket afterwards, so of the refusals only
+   * `meal_end.already_issued` ends the uncertainty; {@link #onTicketFoundAfterRefusal} ends it when
+   * the bills read after one shows the ticket. Returns what staff are told. */
   #settleMealEndSends(
     billId: string,
     send: UnansweredPrint,
@@ -20489,6 +20505,7 @@ export class TillApp extends LitElement {
         sayError(said);
         await this.#onPartyOutOfDate(error, undefined, () => {});
       } else await this.#onPartyOutOfDate(error, undefined, sayError);
+      this.#onTicketFoundAfterRefusal(asked, this.partyBills);
       return;
     }
     if (refusal?.code === "party.not_open") {
@@ -20496,7 +20513,8 @@ export class TillApp extends LitElement {
       return;
     }
     sayError(said);
-    await this.#rereadBillsAfterPrint();
+    const { bills } = await this.#rereadBillsAfterPrint();
+    this.#onTicketFoundAfterRefusal(asked, bills);
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
