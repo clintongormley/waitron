@@ -122,9 +122,10 @@ approve the new request in Cloud.
 
 ## Prove access to the selected backup {#proof}
 
-When you finish setting up a venue in Preparation, write the server key and its name on paper.
-Keep it with the recovery pack for your bucket. After you review a bucket backup, match the name
-shown to the one you wrote down and type the grouped key in **Server key**.
+When you finish setting up a venue in Preparation, choose **Save as a file** to save the server key
+and its name, then print the file or move it off that computer; or write them on paper. Keep them
+with the recovery pack for your bucket. After you review a bucket backup, match the name shown to
+the one you wrote down and type the grouped key in **Server key**.
 
 Below the review, under "Recover this box", choose your recovery pack, or an older recovery PDF,
 that holds the server key for this backup in **Recovery PDF**; or type the grouped key printed on it

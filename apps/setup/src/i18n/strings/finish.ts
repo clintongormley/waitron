@@ -87,10 +87,17 @@ export const finishEn = {
   "done.break_glass.backups":
     "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
   "done.break_glass.warning":
-    "Write this down and store it offline. It is shown once and will not be shown again.",
+    "Save it as a file or write it down, and keep it off this computer. It is shown once and will not be shown again.",
   "done.break_glass.promote": "You need it to promote this server if the primary is unreachable.",
   "done.break_glass.restore":
-    "Write the name and key on paper and keep it with your recovery pack. The key is shown once. You need it to restore this venue from its bucket.",
+    "Save the name and key as a file or write them on paper, and keep them with your recovery pack. The key is shown once. You need it to restore this venue from its bucket.",
+  "done.break_glass.save": "Save as a file",
+  "done.break_glass.save_failed": "The file could not be saved. Write the key down instead.",
+  "done.break_glass.file.title": "Waitron server key",
+  "done.break_glass.file.purpose":
+    "You need this key to restore this venue from its backup bucket, and to make a server the primary if the primary cannot be reached.",
+  "done.break_glass.file.keep":
+    "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
   "done.break_glass.replacement":
     "The server key was issued when setup finished. If you did not save it, sign in to Backups and make a recovery pack with a new server key before taking your first bucket copy.",
   "done.break_glass.open_backups": "Open Backups",
@@ -195,11 +202,18 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.backups":
     "Para restaurar una copia de seguridad hace falta la clave del servidor que estaba en vigor cuando se hizo. Si tienes una clave del servidor anterior, consérvala mientras conserves copias de su época.",
   "done.break_glass.warning":
-    "Anótala y guárdala fuera de línea. Se muestra una sola vez y no se volverá a mostrar.",
+    "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez y no se volverá a mostrar.",
   "done.break_glass.promote":
     "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
   "done.break_glass.restore":
-    "Anota el nombre y la clave en papel y guárdalo con tu paquete de recuperación. La clave se muestra una sola vez. La necesitas para restaurar este local desde su bucket.",
+    "Guarda el nombre y la clave en un archivo o anótalos en papel, y guárdalos con tu paquete de recuperación. La clave se muestra una sola vez. La necesitas para restaurar este local desde su bucket.",
+  "done.break_glass.save": "Guardar en un archivo",
+  "done.break_glass.save_failed": "No se pudo guardar el archivo. Anota la clave.",
+  "done.break_glass.file.title": "Clave del servidor de Waitron",
+  "done.break_glass.file.purpose":
+    "Necesitas esta clave para restaurar este local desde su bucket de copias y para que un servidor pase a ser el principal si no se puede contactar con el principal.",
+  "done.break_glass.file.keep":
+    "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
   "done.break_glass.replacement":
     "La clave del servidor se generó al terminar la configuración. Si no la guardaste, inicia sesión en Copias de seguridad y crea un paquete de recuperación con una clave nueva antes de hacer la primera copia en el bucket.",
   "done.break_glass.open_backups": "Abrir Copias de seguridad",

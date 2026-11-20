@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./done-screen.js";
@@ -1370,6 +1371,123 @@ describe("setup-done-screen", () => {
     await el.updateComplete;
     expect(q(el, "h1")!.textContent!.trim()).toBe("Configuración completada");
     expect(q(el, "[data-test=mode-indicator]")!.textContent!.trim()).toBe("En vivo");
+  });
+});
+
+describe("saving the server key as a file", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Spies the browser download so a test reads the file the button saves instead. */
+  function captureSaves() {
+    const realURL = URL.createObjectURL.bind(URL);
+    const blobs: Blob[] = [];
+    const urls: string[] = [];
+    const names: string[] = [];
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      blobs.push(blob as Blob);
+      const url = realURL(blob);
+      urls.push(url);
+      return url;
+    });
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    return { blobs, urls, names, revoke };
+  }
+
+  it("saves the key, its name and what it is for as one text file, and keeps the key on screen", async () => {
+    const saves = captureSaves();
+    const el = await mountDone(() => new Promise(() => {}), {
+      breakGlassSecret: "key-on-paper",
+      breakGlassKeyName: "2026-10-15 · K7QF",
+    });
+    await userEvent.click(q(el, "[data-test=break-glass-save]")!);
+    expect(saves.names).toEqual(["waitron-server-key-2026-10-15-K7QF.txt"]);
+    expect(saves.blobs).toHaveLength(1);
+    expect(saves.blobs[0]!.type).toBe("text/plain;charset=utf-8");
+    expect((await saves.blobs[0]!.text()).split("\n")).toEqual([
+      "Waitron server key",
+      "Server key 15 Oct 2026 · K7QF",
+      "",
+      "key-on-paper",
+      "",
+      "You need this key to restore this venue from its backup bucket, and to make a server the primary if the primary cannot be reached.",
+      "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
+      "",
+      "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
+      "",
+    ]);
+    expect(saves.revoke).toHaveBeenCalledWith(saves.urls[0]);
+    expect(document.querySelector(`a[href="${saves.urls[0]}"]`)).toBeNull();
+    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
+    expect(q(el, "[data-test=break-glass-save-error]")).toBeNull();
+  });
+
+  it("writes the file in Spanish when the screen is in Spanish", async () => {
+    setLocale("es-ES");
+    const saves = captureSaves();
+    const el = await mountDone(() => new Promise(() => {}), {
+      breakGlassSecret: "key-on-paper",
+      breakGlassKeyName: "2026-10-15 · K7QF",
+    });
+    const button = q(el, "[data-test=break-glass-save]")!;
+    expect(button.textContent!.trim()).toBe("Guardar en un archivo");
+    await userEvent.click(button);
+    expect(saves.names).toEqual(["waitron-server-key-2026-10-15-K7QF.txt"]);
+    expect((await saves.blobs[0]!.text()).split("\n")).toEqual([
+      "Clave del servidor de Waitron",
+      "Clave del servidor 15 oct 2026 · K7QF",
+      "",
+      "key-on-paper",
+      "",
+      "Necesitas esta clave para restaurar este local desde su bucket de copias y para que un servidor pase a ser el principal si no se puede contactar con el principal.",
+      "Para restaurar una copia de seguridad hace falta la clave del servidor que estaba en vigor cuando se hizo. Si tienes una clave del servidor anterior, consérvala mientras conserves copias de su época.",
+      "",
+      "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
+      "",
+    ]);
+    setLocale("en-GB");
+  });
+
+  it("falls back to a plain file name and leaves out the name line when the key has no name", async () => {
+    const saves = captureSaves();
+    const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "key-on-paper" });
+    await userEvent.click(q(el, "[data-test=break-glass-save]")!);
+    expect(saves.names).toEqual(["waitron-server-key.txt"]);
+    expect((await saves.blobs[0]!.text()).split("\n").slice(0, 4)).toEqual([
+      "Waitron server key",
+      "",
+      "key-on-paper",
+      "",
+    ]);
+  });
+
+  it("says the file could not be saved and keeps the key on screen when the download fails", async () => {
+    const realURL = URL.createObjectURL.bind(URL);
+    vi.spyOn(URL, "createObjectURL")
+      .mockImplementationOnce(() => {
+        throw new Error("Download refused");
+      })
+      .mockImplementation(realURL);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "key-on-paper" });
+    const button = q(el, "[data-test=break-glass-save]")!;
+    await userEvent.click(button);
+    await el.updateComplete;
+    const error = q(el, "[data-test=break-glass-save-error]")!;
+    expect(error.getAttribute("role")).toBe("alert");
+    expect(error.textContent!.trim()).toBe(
+      "The file could not be saved. Write the key down instead.",
+    );
+    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
+    await userEvent.click(button);
+    await el.updateComplete;
+    expect(q(el, "[data-test=break-glass-save-error]")).toBeNull();
   });
 });
 
