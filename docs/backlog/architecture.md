@@ -1134,8 +1134,8 @@ answer as they did before A394, a deliberate exception to the one-status-rule in
 rule's situations (the address names it, the form names it, or a stored row does), so following
 the rule would need a new refusal for each situation; no screen reads the number, and every screen
 acts on the refusal's name. The trace is in the A394 plan, under A394-9.
-Question 14 of the A394 plan (the no-reader case, 409) yields to this decision (watcher, 2026-11-20
-18:11).
+Question 14 of the A394 plan, which recommended 409 for the till's no-reader case, yields to this
+decision (watcher, 2026-11-20 18:11).
 
 **No runtime planner statistics (A1469, watcher, 2026-11-10).** A box does not gather SQLite's
 planner statistics (`ANALYZE` or `PRAGMA optimize`). On the bench's year of trading (days

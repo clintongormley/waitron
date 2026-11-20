@@ -701,7 +701,7 @@ Status changes:
 - **A394-20 — One-off rows after the owner's answers.** Files: `units-api.ts` with
   `packages/catalogue/src/units.ts` (target unit → a second code), `location-settings-api.ts`,
   `cloud-api.ts`, `promote-api.ts`, `receipt-preview-api.ts`, `stream-api.ts`, `backup-api.ts`, the
-  till's no-reader case, `print-api.ts`'s `printer.invalid_config` 422 and two Bluetooth 409s
+  till's no-reader case (kept at 404 by A394-9; watcher, 2026-11-20 18:11), `print-api.ts`'s `printer.invalid_config` 422 and two Bluetooth 409s
   (left by A394-14), and `catalogue-api.ts`'s `menu_section.wrong_role`,
   `menu.shortcut_unreachable` and `extras.product_has_variants` 409s (left by A394-11) and its
   folder summary's query ids at 404 (question 8, left by A394-11), and `payments-api.ts`'s
@@ -711,7 +711,7 @@ Status changes:
   the swap routes' `swap.not_permitted` 403 for a `toShiftId` its `toPersonId` does not own (question
   13, left by A394-17), and `cancel-item`'s `management.request_invalid {field:"lineId"}` 400 for a
   line in its address that does not exist (`apps/server/src/line-cancel-context.ts`; left by A394-10,
-  and no question holds it up). Statuses per questions 4, 5, 8, 9, 10, 11, 13, 14. Tests listed per row
+  and no question holds it up). Statuses per questions 4, 5, 8, 9, 10, 11, 13. Tests listed per row
   in the parts. Size M; split by file if it grows. Depends on: those questions.
   **2026-11-20 (A394-20c, lane C):** the menu and print rows are done, by questions 4, 8 and 9.
   In `apps/server/src/menu-api.ts` (was `catalogue-api.ts`): `menu.shortcut_unreachable` and
@@ -725,7 +725,7 @@ Status changes:
   409 → 400. No client compares these routes' statuses (grep of `apps/dashboard`, `apps/till`,
   `apps/setup` and `packages/*/src/dashboard`, 2026-11-20); the dashboard reads the codes. The rest
   of A394-20 stays with lane B.
-  **2026-11-20 (A394-20d, lane C):** the card payment rows are done, by questions 4, 9 and 14. In
+  **2026-11-20 (A394-20d, lane C):** the card payment rows are done, by questions 4 and 9; question 14 yields to A394-9 for the till. In
   `apps/server/src/payments-api.ts`, `payment.provider_unknown` answers 409 where the provider is
   read from a stored reader or payment (reader status, unpair, delete-impact and delete,
   partial-refund retain and release, the two resolve routes; tested on all but retain and release,
