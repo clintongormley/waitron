@@ -1154,35 +1154,25 @@ the meal carries a separate date of sale. A1407 step 2 applies that to replaceme
 ruled on 2026-11-15 at 05:28 that an invoice issued on a later day (card recovery, a bill paid or
 left open for days, a takeaway collected days later) files and prints the sale date too, queued as
 LATER-SALE-DATE._
-_2026-11-15 (LATER-SALE-DATE, built): an invoice a bill's order issues on a later venue day than the
-sale now files that day as `FechaOperacion`, uses its VAT rates, prints it as the date of the sale,
-keeps it in `sales.supply_day`, counts in its period on the VAT return and in the accountant export,
-which shows it in its last column. The sale's day is when staff last marked a dish served, if every
-dish still owed was served and that fell on an earlier business day than the payment; otherwise the
-payment's (for an unpaid departure, when it was recorded); a card answered live and filed late
-takes its settle time, and a card found later takes roughly when the reader was asked (a stated
-limit: a tap after midnight still files the earlier day). Owner's
-answers, relayed by the watcher at 12:12 (lane L `questions.md`): Q1 "Monday, last dish", so a bill
-paid on Monday whose last unserved dish is removed on Wednesday files Monday, and an unpaid
-departure recorded days later follows the same rule; Q2 "sale day" for the VAT return and the
-export. The export picks such an invoice by its sale day, else its issue date, keeping both dates:
-the owner's "(a) By meal date", relayed by the watcher at 20:59 (lane L `questions.md`).
+_2026-11-20 (LATER-SALE-DATE): an invoice an order issues on a later calendar day than the moment
+its meal ended files that day as `FechaOperacion`, uses its VAT rates, prints it as the date of the
+sale, keeps it in `sales.supply_day`, and counts in that day's period on the VAT return and in the
+accountant export, which picks it by that day, else its issue date, and shows it in its last column.
+The meal ends at whichever comes first: printing the bill, taking the last payment, or the close of
+the business day (the owner's words of 18 November, in the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md));
+its day is the calendar day of that moment (the owner's D1, "Calendar day it ended", relayed by the
+watcher, lane L `questions.md`, "WATCHER 2026-11-19 17:05"). Serving marks date nothing. Card
+recovery and a bill payment the box completes later pass the moment the last payment still holding
+money was accepted. A table bill the close of day would end (`closeOfDayEnd`, `close-of-day.ts`:
+this node's, with a trusted opening time, not left by a restore, no dish the kitchen was never asked
+for), issued after the business day it was opened in ended, is dated no later than that day's end,
+whichever path issues it (the owner's D2, "Yes, leave them to close of day", same record). Every
+other invoice carries one date. A card found later carries roughly when the reader was asked
+(SumUp's time is the checkout's start), so a tap just after midnight still files the earlier day.
+The owner's answers relayed by the watcher on 2026-11-15 at 12:12 and 20:59 (lane L
+`archive/questions-to-2026-11-18.md`): "sale day" for
+the VAT return and the export, and "(a) By meal date" for how the export picks such an invoice.
 [Plan](../superpowers/plans/2026-11-15-later-sale-date.md)._
-_2026-11-19 (LATER-SALE-DATE rework): the owner's answer to D2, "Yes, leave them to close of day"
-(relayed by the watcher, lane L `questions.md`, "WATCHER 2026-11-19 17:05"), retired the note above's
-rule that the sale's day is when the last dish was served, and with it Q1's "Monday, last dish".
-Serving marks no longer date anything, and
-`working_order_lines.last_served_at` is gone. An order's invoice carries a sale date only when card
-recovery, a bill payment the box completes later, or the close of day (`close-of-day.ts`, passing the
-end of the business day the bill was opened in) issues it on a later calendar day than the moment it
-passes (`issueOrderMoment`); every other path issues it with one date. The plan's
-"Amendment 2026-11-19" has the meeting's meal-end rule this follows._
-_2026-11-20 (LATER-SALE-DATE review fix): the close of day wins when it came first, whichever path
-issues the bill. A table bill the close would end (`closeOfDayEnd`, `close-of-day.ts`: this node's,
-with a trusted opening time, not left by a restore, no dish the kitchen was never asked for), issued
-after the business day it was opened in ended, is dated no later than that day's end, so a bill paid,
-printed, recorded as a walkout or completed by a card found later files the same day as the close
-would have given it. A takeaway, and a bill whose business day has not ended, keep the rule above._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 
