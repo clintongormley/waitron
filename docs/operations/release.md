@@ -280,6 +280,8 @@ Before a fresh `install main`, check that a box without registry credentials can
 `ghcr.io/clintongormley/waitron-tunnel:main`. If GHCR refuses the pull because the package is
 private, make the companion package public and check the pull again.
 Use the full tag for a signed prerelease. Update the retained installer and verifier first.
+Before asking a production venue with an older installer to try a prerelease, publish a
+stable release that includes suffix support so the venue can update its installer.
 [Install a release](../../deploy/README.md#installing-a-release)
 
 ```sh

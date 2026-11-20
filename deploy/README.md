@@ -515,8 +515,8 @@ Before installing a prerelease, refresh both the retained installer and its veri
 version that reads prerelease suffixes. On a production box, first install a stable release
 that includes suffix support. On a test box, use the checked upgrade shown above with a
 published main image that includes suffix support. Then run the retained installer with
-the full tag. An older installer can treat it as a source reference and build the software
-locally.
+the full tag. An older installer may treat the tag as a source reference and build an
+unstamped image. A production start refuses that image with `server.unreleased_build`.
 
 ```bash
 sudo bash /opt/waitron-host/waitron.sh install v1.3.0-rc.1
