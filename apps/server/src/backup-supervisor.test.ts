@@ -35,6 +35,7 @@ import { backupAlertSource, type BackupOutcomeHolder } from "./alert-sources.js"
 import { gunzipSync } from "node:zlib";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
+import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig } from "./backup-config.js";
 import type { LatestClockStep } from "./backup-sweep.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
@@ -63,6 +64,18 @@ afterEach(() => {
 // Migrated once and COPIED per test: the sweep only reads the database and copies the file.
 let templateDir: string;
 const scratch: string[] = [];
+
+function gate<T = void>() {
+  let release!: () => void;
+  let entered!: (value: T) => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reached = new Promise<T>((resolve) => {
+    entered = resolve;
+  });
+  return { release, entered, released, reached };
+}
 
 async function makeVenueDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "waitron-bsup-venue-"));
@@ -782,18 +795,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
 });
 
 describe("BackupSupervisor — stop() landing inside a reload, and a worker that fails", () => {
-  function gate() {
-    let release!: () => void;
-    let entered!: () => void;
-    const released = new Promise<void>((r) => {
-      release = r;
-    });
-    const reached = new Promise<void>((r) => {
-      entered = r;
-    });
-    return { release, entered, released, reached };
-  }
-
   it("adopts no config and opens nothing when stop() lands while the config is being read", async () => {
     const dest = await makeDestDir();
     const reading = gate();
@@ -2156,6 +2157,126 @@ describe("scheduled backup passes", () => {
       });
       expect(await listArchives(dest)).toHaveLength(1);
     } finally {
+      await sup.stop();
+    }
+  });
+
+  it("refuses a manual backup while a scheduled backup is copying", async () => {
+    const copy = gate();
+    const archive = store.archiveInWorker;
+    vi.spyOn(store, "archiveInWorker").mockImplementation(async (...args) => {
+      copy.entered();
+      await copy.released;
+      await archive(...args);
+    });
+    const { sup, dest } = await prepared();
+    let scheduled: Promise<unknown> | undefined;
+    try {
+      await sup.reload();
+      scheduled = sup.pass(new Date("2026-11-17T12:00:00Z"), new AbortController().signal);
+      await copy.reached;
+      expect(() => sup.runNow()).toThrow(
+        expect.objectContaining({ code: "backup.run_in_progress" }),
+      );
+      copy.release();
+      await scheduled;
+      expect(await listArchives(dest)).toHaveLength(1);
+    } finally {
+      copy.release();
+      await scheduled;
+      await sup.stop();
+    }
+  });
+
+  it("retries a due backup after a manual backup without moving the scheduled deadline", async () => {
+    let now = new Date("2026-11-17T12:00:00Z");
+    const deadlines = vi.fn();
+    const bus = new LiveEvents();
+    const { sup, dest } = await prepared({ now: () => now, onScheduled: deadlines, bus });
+    const published: ReturnType<BackupSupervisor["status"]>[] = [];
+    bus.subscribe((event) => {
+      if (event.kind === "change" && event.change.resources.some((r) => r.type === "backup_status"))
+        published.push(sup.status());
+    });
+    const copy = gate();
+    const pass = () => sup.pass(now, new AbortController().signal);
+    let manual: Promise<void> | undefined;
+    try {
+      await sup.reload();
+      await pass();
+      deadlines.mockClear();
+      const archive = store.archiveInWorker;
+      vi.spyOn(store, "archiveInWorker").mockImplementationOnce(async (...args) => {
+        copy.entered();
+        await copy.released;
+        await archive(...args);
+      });
+      now = new Date("2026-11-17T12:50:00Z");
+      await Promise.all(published);
+      published.length = 0;
+      manual = sup.runNow();
+      await copy.reached;
+      expect(await published[0]).toMatchObject({
+        activeRun: { kind: "manual", startedAt: now.toISOString() },
+      });
+      now = new Date("2026-11-17T13:00:00Z");
+      expect(await pass()).toEqual({ nextDueAt: new Date("2026-11-17T13:01:00Z") });
+      expect(deadlines).not.toHaveBeenCalled();
+      copy.release();
+      await manual;
+      expect(await published.at(-1)).not.toHaveProperty("activeRun");
+      expect(await listArchives(dest)).toHaveLength(2);
+      now = new Date("2026-11-17T13:01:00Z");
+      expect(await pass()).toEqual({ nextDueAt: new Date("2026-11-17T14:01:00Z") });
+      expect(await listArchives(dest)).toHaveLength(3);
+    } finally {
+      copy.release();
+      await manual;
+      await Promise.all(published);
+      await sup.stop();
+    }
+  });
+
+  it("drains the manual copy before reload closes its destination and reports the stop", async () => {
+    const copy = gate<AbortSignal>();
+    const archive = store.archiveInWorker;
+    vi.spyOn(store, "archiveInWorker").mockImplementation(async (source, target, signal) => {
+      copy.entered(signal!);
+      await copy.released;
+      await archive(source, target, signal);
+    });
+    const backends: StorageBackend[] = [];
+    const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    const { sup, refs, dest } = await prepared({
+      outcomes,
+      buildBackend: (destination) => {
+        const backend = buildBackupBackend(destination);
+        backends.push(backend);
+        return backend;
+      },
+    });
+    let manual: Promise<void> | undefined;
+    let reloading: Promise<void> | undefined;
+    try {
+      await sup.reload();
+      const close = vi.spyOn(backends[0]!, "close");
+      manual = sup.runNow();
+      const signal = await copy.reached;
+      refs.config = localFsConfig([dest], STRONG_KEY_2);
+      reloading = sup.reload();
+      await vi.waitFor(() => expect(signal.aborted).toBe(true));
+      expect(() => sup.runNow()).toThrow(
+        expect.objectContaining({ code: "backup.reload_in_progress" }),
+      );
+      expect(close).not.toHaveBeenCalled();
+      copy.release();
+      await Promise.all([manual, reloading]);
+      expect(close).toHaveBeenCalledOnce();
+      expect(await listArchives(dest)).toEqual([]);
+      expect(await sup.status()).toHaveProperty("runStoppedCode", "backup.settings_changed");
+    } finally {
+      copy.release();
+      await Promise.all([manual, reloading]);
       await sup.stop();
     }
   });

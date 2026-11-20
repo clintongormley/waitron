@@ -782,6 +782,14 @@ describe("DashboardApi routes", () => {
     );
   });
 
+  it("starts an immediate backup with an explicit bodyless POST", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response("{}", { status: 202 }));
+    const api = new DashboardApi("", fetchImpl);
+    await api.runBackupNow();
+    expect(callsOf(fetchImpl)).toEqual([["/api/backup/run-now", "POST", undefined]]);
+    expect(new Headers(fetchImpl.mock.calls[0][1].headers).get("x-waitron-live")).toBeNull();
+  });
+
   it("switches scheduled backups off through the disable route and returns its answer", async () => {
     const answer = {
       enabled: false,

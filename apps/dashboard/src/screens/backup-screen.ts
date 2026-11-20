@@ -32,6 +32,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { alertMessage } from "../i18n/alerts.js";
 import "./stream-settings-panel.js";
 import "./recovery-pack-card.js";
 import "../widgets/backup-settings-evidence.js";
@@ -883,6 +884,33 @@ export class BackupScreen extends LitElement {
     }
   }
 
+  async #runNow(): Promise<void> {
+    const status = this.status;
+    if (
+      !this.canManage ||
+      !status?.enabled ||
+      !status.isPrimary ||
+      status.activeRun ||
+      this.submitting
+    )
+      return;
+    this.#disarmTurnOff();
+    this.errorKey = null;
+    this.refreshErrorKey = null;
+    this.submitting = true;
+    const generation = this.#generation;
+    try {
+      await this.api.runBackupNow();
+    } catch (error) {
+      if (generation === this.#generation) this.errorKey = codeOf(error);
+    } finally {
+      if (generation === this.#generation) {
+        this.submitting = false;
+        this.api.liveData.invalidate([{ type: "backup_status" }]);
+      }
+    }
+  }
+
   async #turnOff(): Promise<void> {
     if (this.submitting) return;
     if (!this.turnOffArmed) {
@@ -1383,7 +1411,18 @@ export class BackupScreen extends LitElement {
         ${writable && s.enabled && this.editSettings ? this.#renderEditSettings() : nothing}
         ${
           writable && s.enabled && !this.editSettings && !this.configureAfterApply
-            ? html`<wt-button
+            ? html` ${
+                  this.canManage
+                    ? html`<wt-button
+                        variant="secondary"
+                        data-test="run-now"
+                        ?disabled=${this.submitting || s.activeRun !== undefined}
+                        @click=${() => void this.#runNow()}
+                        >${t("backup.run_now")}</wt-button
+                      >`
+                    : nothing
+                }
+                <wt-button
                   variant="secondary"
                   data-test="edit-settings"
                   ?disabled=${this.submitting}
@@ -1425,6 +1464,30 @@ export class BackupScreen extends LitElement {
                     >${s.storedDisabled ? t("backup.status.stored_off") : t("backup.status.off")}</span
                   >`
             }
+            <span role="status" data-test="backup-run-status">
+              ${
+                s.activeRun
+                  ? html`<span class="line"
+                      >${fill(
+                        s.activeRun.kind === "manual"
+                          ? "backup.status.manual_running"
+                          : "backup.status.scheduled_running",
+                        { time: new Date(s.activeRun.startedAt).toLocaleString(currentLocale()) },
+                      )}</span
+                    >`
+                  : s.runStoppedCode
+                    ? html`<span class="line stale"
+                        >${
+                          s.runStoppedCode === "backup.staging_space_low"
+                            ? t("backup.status.stopped_space_low")
+                            : s.runStoppedCode === "backup.settings_changed"
+                              ? t("backup.status.stopped_settings_changed")
+                              : alertMessage("backup.run_stopped", { errorCode: s.runStoppedCode })
+                        }</span
+                      >`
+                    : nothing
+              }
+            </span>
             ${
               s.loadErrorCode
                 ? html`<span class="line stale" data-test="load-failed"

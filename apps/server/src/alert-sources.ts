@@ -180,8 +180,8 @@ export interface BackupOutcomeHolder {
   /** An entry means that destination's most recent backup attempt failed. In memory only: empty
    * after a restart until the next sweep tick. */
   failed: Map<string, { at: string }>;
-  /** Set while the most recent backup run stopped before any destination call; `code` is the error
-   * code it stopped on, and `sizes` the free space it needed and found when that code is
+  /** The most recent backup stopped before any destination call or was interrupted by a settings
+   * reload. `sizes` is the free space it needed and found when the code is
    * `backup.staging_space_low`. In memory only, like `failed`. */
   runStopped?: {
     code: string;
@@ -251,7 +251,7 @@ export function backupAlertSource(deps: {
         return alerts;
       }
       const stopped = deps.outcomes.runStopped;
-      if (stopped) {
+      if (stopped && stopped.code !== "backup.settings_changed") {
         alerts.push({
           key: "backup.run_stopped",
           code: "backup.run_stopped",

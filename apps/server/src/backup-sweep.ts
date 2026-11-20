@@ -573,7 +573,14 @@ export interface BackupSchedulePass {
   nextDueAt: Date | null;
 }
 
-export function createBackupSchedule(deps: Omit<BackupSweepDeps, "sleep">) {
+export interface ActiveBackupRun {
+  kind: "manual" | "scheduled";
+  startedAt: string;
+}
+
+export function createBackupSchedule(
+  deps: Omit<BackupSweepDeps, "sleep"> & { onRunChanged?: () => void },
+) {
   const clockNow = deps.now ?? (() => new Date());
   const scheduleClock = () =>
     deps.schedule.kind === "wall-clock"
@@ -582,7 +589,32 @@ export function createBackupSchedule(deps: Omit<BackupSweepDeps, "sleep">) {
   let first = true;
   let fireAt: number | undefined;
   let computedAt = 0;
+  let active: { run: ActiveBackupRun; settled: Promise<void> } | undefined;
+
+  function start(kind: ActiveBackupRun["kind"], signal: AbortSignal): Promise<void> | undefined {
+    if (active !== undefined) return;
+    const startedAt = clockNow().toISOString();
+    const settled = Promise.resolve()
+      .then(() => {
+        if (!signal.aborted) return tick({ ...deps, signal });
+      })
+      .finally(() => {
+        active = undefined;
+        deps.onRunChanged?.();
+      });
+    active = { run: { kind, startedAt }, settled };
+    deps.onRunChanged?.();
+    return settled;
+  }
+
   return {
+    start,
+    get activeRun() {
+      return active?.run;
+    },
+    get running() {
+      return active?.settled;
+    },
     async pass(now: Date, signal: AbortSignal): Promise<BackupSchedulePass> {
       if (signal.aborted) return { nextDueAt: null };
       const nowMs = now.getTime();
@@ -606,9 +638,11 @@ export function createBackupSchedule(deps: Omit<BackupSweepDeps, "sleep">) {
         if (signal.aborted) return { nextDueAt: null };
       }
       if (first || (fireAt !== undefined && nowMs >= fireAt)) {
+        const running = start("scheduled", signal);
+        if (running === undefined) return { nextDueAt: new Date(nowMs + 60_000) };
         first = false;
         deps.onScheduled?.(null);
-        await tick({ ...deps, signal });
+        await running;
         fireAt = undefined;
       }
       if (signal.aborted) return { nextDueAt: null };
