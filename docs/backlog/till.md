@@ -1176,8 +1176,8 @@ till's own sentences and notice hints). What is left is fiscal and invoice wordi
 - `apps/till/src/i18n/codes.ts`: `fiscal.fingerprint_mismatch`, `series.no_rectificative_for_node`,
   `fiscal.taxpayer_domicile_missing`, `invoice_delivery.receipt_invalid`,
   `invoice_delivery.printer_invalid`, `invoice_delivery.receipt_unavailable`,
-  `invoice_delivery.email_unavailable`, `sale.correction_unsupported`,
-  `department.operation_description_required`, `sale.charged_not_recorded`.
+  `sale.correction_unsupported`, `department.operation_description_required`,
+  `sale.charged_not_recorded`.
 - `apps/till/src/i18n/strings.ts`: `sale.refused` and `place.refused`, which word the fiscal refusals
   `fiscal.record_invalid`, `fiscal.foreign_recipient_unsupported` and `sale.number_reused`.
 - `apps/till/src/i18n/staff-notices.ts`: the `staff_notice.tell_manager` hint on
