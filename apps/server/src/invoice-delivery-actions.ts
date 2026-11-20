@@ -153,7 +153,7 @@ export async function requestEmailDelivery(
   if (replay !== undefined) return rowAttempt(replay);
   const [sale] = await tx.select({ id: sales.id }).from(sales).where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
-  if (!(await canEmailInvoice(tx, saleId, request.transport))) {
+  if (!(await canEmailInvoice(tx, { kind: "sale", saleId }, request.transport))) {
     throw new AppError("invoice_delivery.email_unavailable", {});
   }
   const row = await reserveInvoiceDelivery(tx, saleId, {
@@ -192,7 +192,7 @@ export async function retryEmailDelivery(
   if (status.current?.id !== deliveryId || status.actions.retryOriginal?.medium !== "email") {
     throw new AppError("invoice_delivery.active", {});
   }
-  if (!(await canEmailInvoice(tx, saleId, request.transport))) {
+  if (!(await canEmailInvoice(tx, { kind: "sale", saleId }, request.transport))) {
     throw new AppError("invoice_delivery.email_unavailable", {});
   }
   const row = await reserveInvoiceDelivery(tx, saleId, {

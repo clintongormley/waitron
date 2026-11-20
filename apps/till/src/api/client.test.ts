@@ -1123,6 +1123,20 @@ describe("TillApi", () => {
     });
   });
 
+  it("getInvoiceDeliveryOptions names the service zone a bill not saved yet would be saved in", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ invoicePrinter: null, emailAvailable: false }));
+    const api = new TillApi("", fetchStub);
+    api.setServiceZone("counter 1");
+
+    await api.getInvoiceDeliveryOptions("wo 1");
+
+    expect(fetchStub.mock.calls[0]![0]).toBe(
+      "/api/invoice-delivery-options?orderId=wo%201&zoneId=counter%201",
+    );
+  });
+
   it("logout DELETEs the session", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
 
@@ -2335,8 +2349,8 @@ describe("TillApi", () => {
     ],
     [
       "getInvoiceDeliveryOptions",
-      (api: TillApi) => api.getInvoiceDeliveryOptions(),
-      "/api/invoice-delivery-options",
+      (api: TillApi) => api.getInvoiceDeliveryOptions("wo 1"),
+      "/api/invoice-delivery-options?orderId=wo%201",
       "GET",
       undefined,
     ],

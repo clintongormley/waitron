@@ -26,6 +26,7 @@ describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme
     "saved-choice",
     "delivery-email",
     "email-invalid",
+    "email-needs-contact",
     "simplified-offered",
   ] as const)("%s form has no violations", async (state) => {
     setLocale("es-ES");
@@ -34,6 +35,7 @@ describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme
       state.startsWith("delivery") ||
       state === "printer-refusal" ||
       state === "saved-choice" ||
+      state === "email-needs-contact" ||
       withEmail;
     const { el, host } = await mountWidget<TillInvoiceRecipientDialog>(
       "till-invoice-recipient-dialog",
@@ -42,6 +44,7 @@ describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme
             deliveryOptions: {
               invoicePrinter: { id: "pp-1", name: "HP Oficina" },
               emailAvailable: withEmail,
+              emailNeedsReceiptContact: state === "email-needs-contact",
             },
             ...(state === "saved-choice"
               ? { savedDelivery: { medium: "email", recipient: "ana@example.com" } as const }
@@ -88,6 +91,10 @@ describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme
         ).toBe(t("invoice.email_invalid"));
       }
     }
+    if (state === "email-needs-contact")
+      expect(el.shadowRoot!.querySelector("[data-email-note]")!.textContent!.trim()).toBe(
+        t("invoice.email_needs_receipt_contact"),
+      );
     if (state === "printer-refusal") {
       el.refusal = codeMessage("invoice_delivery.printer_invalid");
       await el.updateComplete;

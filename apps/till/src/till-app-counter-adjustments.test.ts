@@ -1445,6 +1445,25 @@ describe("till-app: comping a stored counter order", () => {
     expect(store.lines[1]!.quantity.toString()).toBe(quantity);
   });
 
+  it("names the counter order in the options read behind Full invoice", async () => {
+    const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({
+      invoicePrinter: null,
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    });
+    const el = await placeCounter({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", fullInvoices: true }),
+      getInvoiceDeliveryOptions,
+    });
+    emit(counter(el), "choose-invoice");
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull();
+    expect(getInvoiceDeliveryOptions).toHaveBeenCalledWith(counter(el).store.id, expect.anything());
+  });
+
   it("replays a lost placing reply without saving the confirmed recipient again", async () => {
     const placeOrder = vi
       .fn()
@@ -1460,9 +1479,11 @@ describe("till-app: comping a stored counter order", () => {
       getTill: vi
         .fn()
         .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", fullInvoices: true }),
-      getInvoiceDeliveryOptions: vi
-        .fn()
-        .mockResolvedValue({ invoicePrinter: null, emailAvailable: false }),
+      getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({
+        invoicePrinter: null,
+        emailAvailable: false,
+        emailNeedsReceiptContact: false,
+      }),
     });
     emit(counter(el), "choose-invoice");
     await flush(el);
@@ -1729,9 +1750,11 @@ describe("till-app: comping a stored counter order", () => {
         getTill: vi
           .fn()
           .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", fullInvoices: true }),
-        getInvoiceDeliveryOptions: vi
-          .fn()
-          .mockResolvedValue({ invoicePrinter: null, emailAvailable: true }),
+        getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({
+          invoicePrinter: null,
+          emailAvailable: true,
+          emailNeedsReceiptContact: false,
+        }),
       });
       async function confirm(changed = false) {
         emit(counter(el), "choose-invoice");

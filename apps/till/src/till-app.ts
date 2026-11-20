@@ -1351,6 +1351,9 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   const overLimit = overLimitOf(error);
   if (overLimit !== undefined) return overLimit;
   const code = (error as { code?: string } | undefined)?.code;
+  // The code's own words also serve the ticket view's email form, used after the sale, where Full
+  // invoice's Delivery no longer applies.
+  if (code === "invoice_delivery.email_unavailable") return { code, printedInstead: true };
   return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? withDishes(code, error) : fallback;
 }
 
@@ -1866,6 +1869,8 @@ type CounterError =
       reason?: string;
       /** The way an `order.dining_fixed` refusal names. */
       dining?: string;
+      /** Followed by how to finish the counter's sale with a printed invoice instead. */
+      printedInstead?: true;
       setMenuName?: unknown;
       dishName?: unknown;
       dishNames?: unknown;
@@ -1997,6 +2002,7 @@ function errorText(
         : fill(t("station.no_default_named"), { dishes: error.dishes });
     const bill = error.bill;
     if (bill !== undefined) return fill(t("table.refused_on_bill"), { bill, message });
+    if (error.printedInstead === true) return `${message} ${t("sale.email_unavailable_print")}`;
     return message;
   }
   if ("billNameTakenOver" in error)
@@ -7590,6 +7596,7 @@ export class TillApp extends LitElement {
     this.invoiceRecipientOrderId = orderId;
     this.invoiceRecipientBill = undefined;
     void this.#openInvoiceRecipient(
+      orderId,
       () =>
         this.invoiceRecipientOrderId === orderId &&
         this.#store.id === orderId &&
@@ -7599,11 +7606,11 @@ export class TillApp extends LitElement {
   }
 
   /** Null when the read fails or outlasts {@link INVOICE_OPTIONS_LIMIT_MS}. */
-  async #readInvoiceDeliveryOptions(): Promise<InvoiceDeliveryOptions | null> {
+  async #readInvoiceDeliveryOptions(orderId: string): Promise<InvoiceDeliveryOptions | null> {
     const limit = limited(INVOICE_OPTIONS_LIMIT_MS);
     try {
       return await Promise.race([
-        this.api.getInvoiceDeliveryOptions({ signal: limit.signal }),
+        this.api.getInvoiceDeliveryOptions(orderId, { signal: limit.signal }),
         pause(limit.signal).then(() => null),
       ]);
     } catch {
@@ -7616,13 +7623,14 @@ export class TillApp extends LitElement {
   /** A failed or timed-out read reaches the dialog as null options, and the dialog then keeps
    * `saved` unless the person changes Delivery. */
   async #openInvoiceRecipient(
+    orderId: string,
     stillAsked: () => boolean,
     saved?: InvoiceDeliveryChoice,
   ): Promise<void> {
     const ask = {};
     this.#invoiceRecipientAsk = ask;
     this.invoiceRecipientReading = true;
-    const options = await this.#readInvoiceDeliveryOptions();
+    const options = await this.#readInvoiceDeliveryOptions(orderId);
     if (this.#invoiceRecipientAsk !== ask) return;
     this.invoiceRecipientReading = false;
     if (!this.isConnected || !stillAsked()) return;
@@ -21441,8 +21449,13 @@ export class TillApp extends LitElement {
     this.invoiceRecipientOrderId = undefined;
     this.invoiceRecipientRefusal = "";
     this.invoiceRecipientRefusalField = "";
+    const visit = this.#orderVisit;
     void this.#openInvoiceRecipient(
-      () => this.invoiceRecipientBill === target && this.#operatorSession === target.session,
+      workingOrderId,
+      () =>
+        this.invoiceRecipientBill === target &&
+        this.#operatorSession === target.session &&
+        this.#orderVisit === visit,
       bill.invoiceDelivery,
     );
   }
@@ -21516,7 +21529,7 @@ export class TillApp extends LitElement {
             ? field
             : "";
         if (code === "invoice_delivery.printer_invalid") {
-          const options = await this.#readInvoiceDeliveryOptions();
+          const options = await this.#readInvoiceDeliveryOptions(bill.orderId);
           if (options !== null && current()) this.invoiceRecipientOptions = options;
         }
       }

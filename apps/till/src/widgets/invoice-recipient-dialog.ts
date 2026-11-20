@@ -97,6 +97,12 @@ export class TillInvoiceRecipientDialog extends LitElement {
         width: var(--wt-form-max-width);
         max-width: 100%;
       }
+
+      .note {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
 
@@ -107,6 +113,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
   @property({ attribute: false }) deliveryOptions: InvoiceDeliveryOptions | null = {
     invoicePrinter: null,
     emailAvailable: false,
+    emailNeedsReceiptContact: false,
   };
   /** The delivery already staged for the order; kept unless the delivery field is changed. */
   @property({ attribute: false }) savedDelivery?: InvoiceDeliveryChoice;
@@ -477,6 +484,12 @@ export class TillInvoiceRecipientDialog extends LitElement {
     this.#scope?.changed();
   }
 
+  #renderEmailNote() {
+    return this.deliveryOptions?.emailNeedsReceiptContact === true
+      ? html`<p class="note" data-email-note>${t("invoice.email_needs_receipt_contact")}</p>`
+      : nothing;
+  }
+
   #renderDelivery() {
     const offered = this.#offered();
     if (offered.length === 0) return nothing;
@@ -690,7 +703,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
           .error=${this.#fieldError("countryCode", errors.countryCode)}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("countryCode", event)}
         ></wt-combobox>
-        ${this.#renderDelivery()}
+        ${this.#renderDelivery()} ${this.#renderEmailNote()}
       </div>
       <wt-form-actions slot="footer" .error=${bottomMessages.join(" ")}>
         <wt-button slot="cancel" variant="secondary" @click=${() => this.#cancel()}

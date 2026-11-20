@@ -600,10 +600,10 @@ it("explains a pending invoice delivery and a refused original instead of the ge
 
 it("says invoice email is unavailable and names no paper choice, which the email form lacks, in both languages", () => {
   expect(codeMessage("invoice_delivery.email_unavailable", "en")).toBe(
-    "Invoice email is unavailable. Ask a manager.",
+    "This invoice can't be emailed from this server. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones.",
   );
   expect(codeMessage("invoice_delivery.email_unavailable", "es")).toBe(
-    "No se puede enviar la factura por correo. Avisa a un responsable.",
+    "Esta factura no se puede enviar por correo desde este servidor. En el panel, revisa el servidor de correo en Sistema → Correo y el campo Correo electrónico de la pestaña Recibos del departamento en Departamentos y zonas.",
   );
 });
 

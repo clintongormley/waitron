@@ -5,13 +5,14 @@ import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  seedDeviceProfiles,
   seedNode,
   seedVenue,
   seedWorkingOrder,
   seedZone,
   seedDepartmentReceipt,
 } from "@waitron/db/testing/seed.js";
-import { departments } from "@waitron/venue-service";
+import { departments, setProfileServiceAccess } from "@waitron/venue-service";
 import { resolveInvoiceEmailContact } from "./invoice-email-contact.js";
 
 const suite = useVenueDb({
@@ -173,6 +174,54 @@ describe("contact imported-row boundaries", () => {
     expect(await read({ kind: "sale", saleId: f.saleId })).toEqual({
       email: "disabled@example.com",
     });
+  });
+});
+
+describe("a bill not saved yet", () => {
+  /** A till profile starting in a zone of `primary`, and a zone of a third department, Bar. */
+  async function newOrder(f: Awaited<ReturnType<typeof fixture>>) {
+    const start = await seedZone(suite.db, { name: "Dining counter", departmentId: f.primary });
+    const [bar] = await suite.db
+      .insert(departments)
+      .values({ name: "Bar", tradingName: "Bar" })
+      .returning();
+    const barZone = await seedZone(suite.db, { name: "Bar counter", departmentId: bar!.id });
+    const [profile] = await seedDeviceProfiles(suite.db, { name: "Till", formFactor: "till" });
+    await withTransaction(suite.db, (tx) =>
+      setProfileServiceAccess(tx, profile!.id, {
+        departmentId: f.primary,
+        allowedZoneIds: null,
+        startingZoneId: start.id,
+      }),
+    );
+    return { bar: bar!.id, barZone: barZone.id, profileId: profile!.id };
+  }
+
+  it("reads the department of the zone it would open in: the one named, else the profile's start", async () => {
+    const f = await fixture();
+    const n = await newOrder(f);
+    await authored(f.primary, { email: "dining@example.com" });
+    await authored(n.bar, { email: "bar@example.com" });
+    await authored(f.fallback, { email: "fallback@example.com" });
+    expect(await read({ kind: "new-order", zoneId: undefined, profileId: n.profileId })).toEqual({
+      email: "dining@example.com",
+    });
+    expect(await read({ kind: "new-order", zoneId: n.barZone, profileId: n.profileId })).toEqual({
+      email: "bar@example.com",
+    });
+  });
+
+  it("falls back to the default department, and finds none when neither has a contact or the default is deleted", async () => {
+    const f = await fixture();
+    const n = await newOrder(f);
+    const source = { kind: "new-order", zoneId: undefined, profileId: n.profileId } as const;
+    await authored(f.fallback, { email: "fallback@example.com" });
+    expect(await read(source)).toEqual({ email: "fallback@example.com" });
+    await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.fallback));
+    expect(await read(source)).toBeNull();
+    await suite.db.update(departments).set({ active: true }).where(eq(departments.id, f.fallback));
+    await authored(f.fallback, {});
+    expect(await read(source)).toBeNull();
   });
 });
 

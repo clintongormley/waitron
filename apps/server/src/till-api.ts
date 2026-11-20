@@ -344,7 +344,7 @@ export interface TillApiDeps {
   pinThrottle?: PinThrottle;
   /** "Check the time": mounts the till's clock check when the seat can confirm a stop. */
   boxClock?: TillBoxClockDeps;
-  invoiceEmailAvailable?: () => Promise<boolean>;
+  invoiceEmailAvailable?: (tx: Transaction) => Promise<boolean>;
   testPages?: Pick<import("./page-test-pages.js").PageTestPages, "holdOn">;
   workforceEnabled?: boolean;
   attendanceResponsesEnabled?: boolean;
@@ -2210,7 +2210,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         typeof delivery === "object" &&
         "medium" in delivery &&
         delivery.medium === "email"
-          ? (await deps.invoiceEmailAvailable?.()) === true
+          ? (await withTransaction(deps.db, async (tx) => deps.invoiceEmailAvailable?.(tx))) ===
+            true
           : false;
       const revision = await setOrderInvoiceChoice(
         deps.db,
@@ -2235,8 +2236,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   /** For a read: a failed check reads as no mail. */
-  const readEmailTransport = async (): Promise<boolean> =>
-    (await deps.invoiceEmailAvailable?.().catch((error: unknown) => {
+  const readEmailTransport = async (tx: Transaction): Promise<boolean> =>
+    (await deps.invoiceEmailAvailable?.(tx).catch((error: unknown) => {
       log("warn", "invoice_delivery.email_check_failed", { errorCode: codeOf(error) });
       return false;
     })) === true;
@@ -2244,12 +2245,42 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/invoice-delivery-options", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const printer = await deps.db.withWriteLock(() =>
-        resolveInvoicePrinter(deps.db, requestCfg(deps.cfg, session).origin),
+      const orderId = requireUuidId(
+        requireString(c.req.query("orderId"), "orderId"),
+        "working_order.not_found",
       );
-      // Only an A4 invoice printer is offered at payment; a receipt one is reached from the sale.
-      const invoicePrinter = printer?.kind === "a4" ? { id: printer.id, name: printer.name } : null;
-      return c.json({ invoicePrinter, emailAvailable: await readEmailTransport() });
+      const asked = c.req.query("zoneId");
+      const zoneId = asked === undefined ? undefined : requireUuidParam(asked, "ServiceZoneId");
+      const answer = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
+        const [saved] = await tx
+          .select({ id: workingOrders.id })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, orderId));
+        // The till sends its service zone even for a saved bill; a saved bill's own zone is checked
+        // through orderId.
+        await checkZones(
+          tx,
+          session,
+          named({ orderId }, saved === undefined && zoneId !== undefined && { zoneId }),
+        );
+        const printer = await resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin);
+        const transport = await readEmailTransport(tx);
+        const emailAvailable = await canEmailInvoice(
+          tx,
+          saved === undefined
+            ? { kind: "new-order", zoneId, profileId: session.device.deviceProfileId }
+            : { kind: "order", orderId },
+          transport,
+        );
+        return {
+          // Only an A4 invoice printer is offered at payment; a receipt one is reached from the sale.
+          invoicePrinter: printer?.kind === "a4" ? { id: printer.id, name: printer.name } : null,
+          emailAvailable,
+          emailNeedsReceiptContact: transport && !emailAvailable,
+        };
+      });
+      return c.json(answer);
     }),
   );
 
@@ -2601,15 +2632,16 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      const transport = await readEmailTransport();
       const read = async (tx: Transaction, saleId: string) => {
+        const transport = await readEmailTransport(tx);
         if (c.req.query("medium") === "email") {
           return readReceiptEmailDeliveries(tx, saleId, {
-            emailAvailable: await canEmailInvoice(tx, saleId, transport),
+            emailAvailable: await canEmailInvoice(tx, { kind: "sale", saleId }, transport),
           });
         }
         return readInvoiceDeliveries(tx, saleId, {
-          emailAvailable: (sale) => canEmailInvoice(tx, sale.id, transport),
+          emailAvailable: (sale) =>
+            canEmailInvoice(tx, { kind: "sale", saleId: sale.id }, transport),
           printers: () => tillInvoicePrinters(tx, session),
           testPages: deps.testPages,
         });
@@ -2661,14 +2693,14 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         return c.json(attempt);
       }
       const recipient = requireRecipient(body.recipient);
-      const transport = (await deps.invoiceEmailAvailable?.()) === true;
-      const attempt = await withTransaction(deps.db, async (tx) =>
-        requestEmailDelivery(tx, await zonedSale(tx, session, id), {
+      const attempt = await withTransaction(deps.db, async (tx) => {
+        const transport = (await deps.invoiceEmailAvailable?.(tx)) === true;
+        return requestEmailDelivery(tx, await zonedSale(tx, session, id), {
           ...request,
           recipient,
           transport,
-        }),
-      );
+        });
+      });
       return c.json(attempt);
     }),
   );
@@ -2719,14 +2751,14 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const deliveryId = c.req.param("deliveryId");
       const body = await readJsonBody<{ requestKey?: unknown }>(c);
       const requestKey = requireBodyUuid(body.requestKey, "requestKey");
-      const transport = (await deps.invoiceEmailAvailable?.()) === true;
-      const attempt = await withTransaction(deps.db, async (tx) =>
-        retryEmailDelivery(tx, await zonedSale(tx, session, id), deliveryId, {
+      const attempt = await withTransaction(deps.db, async (tx) => {
+        const transport = (await deps.invoiceEmailAvailable?.(tx)) === true;
+        return retryEmailDelivery(tx, await zonedSale(tx, session, id), deliveryId, {
           requestKey,
           personId: session.personId,
           transport,
-        }),
-      );
+        });
+      });
       return c.json(attempt);
     }),
   );

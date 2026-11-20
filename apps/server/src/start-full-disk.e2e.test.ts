@@ -1961,7 +1961,7 @@ describe("a start on a real full disk", () => {
         `/api/sales/${paidId}/deliveries`,
         `/api/sales/${paidId}/deliveries?medium=email`,
         `/api/transactions/${orderlessId}/deliveries`,
-        "/api/invoice-delivery-options",
+        `/api/invoice-delivery-options?orderId=${paidId}`,
       ];
       const read = async (path: string, cookie = venue.cookie) => {
         const res = await venue.app.request(path, {

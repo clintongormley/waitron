@@ -597,6 +597,8 @@ export const en = {
   "invoice.delivery_saved_a4": "Saved choice: A4",
   "invoice.delivery_saved_email": "Saved choice: email",
   "invoice.delivery_email": "Email",
+  "invoice.email_needs_receipt_contact":
+    "Email isn't offered: this bill's receipt has no contact email. Add one on the department's Receipts tab in Departments and zones, in the dashboard.",
   "invoice.email": "Customer email",
   "invoice.email_invalid": "Enter an email address such as name@example.com.",
   "invoice.delivery_printer_changed":
@@ -1638,6 +1640,8 @@ export const en = {
   "pin.throttled": "Too many wrong PINs. Wait a moment, then try again",
   "sale.error": "Could not complete the sale, try again",
   "sale.payment_in_flight": "A card payment for this order is in progress. Wait for it to finish.",
+  "sale.email_unavailable_print":
+    "To finish this sale now, open Full invoice and, under Delivery, choose Receipt printer.",
   // A PERMANENT refusal, unlike `sale.error`: retrying cannot work. It must never say nothing was
   // charged, because a settle path can reach it after a card was already charged on a terminal.
   "sale.refused":
@@ -2840,6 +2844,8 @@ export const es: Record<StringKey, string> = {
   "invoice.delivery_saved_a4": "Opción guardada: A4",
   "invoice.delivery_saved_email": "Opción guardada: correo electrónico",
   "invoice.delivery_email": "Correo electrónico",
+  "invoice.email_needs_receipt_contact":
+    "No se ofrece el correo: el recibo de esta cuenta no tiene correo de contacto. Añádelo en la pestaña Recibos del departamento en Departamentos y zonas, en el panel.",
   "invoice.email": "Correo electrónico del cliente",
   "invoice.email_invalid": "Introduce un correo electrónico como nombre@ejemplo.com.",
   "invoice.delivery_printer_changed":
@@ -3850,6 +3856,8 @@ export const es: Record<StringKey, string> = {
   "pin.throttled": "Demasiados PIN incorrectos. Espera un momento y vuelve a intentarlo",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
   "sale.payment_in_flight": "Se está cobrando este pedido con tarjeta. Espera a que termine.",
+  "sale.email_unavailable_print":
+    "Para terminar esta venta ahora, abre Factura completa y, en Entrega, elige Impresora de tickets.",
   "sale.refused":
     "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró este servidor. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.disk_full":
