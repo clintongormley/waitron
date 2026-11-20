@@ -662,6 +662,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.nothing_outstanding": 409,
   "advance.full_invoice_unsupported": 409,
   "advance.taken_off_final_invoice": 409,
+  "advance.correction_open": 409,
   "bill.unsent_dishes": 409,
   "bill.tip_not_allowed": 422,
   "bill.allocation_changed": 409,

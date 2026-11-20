@@ -137,8 +137,10 @@ import type { LateSendConfirmation } from "./late-send.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import { storePrepayMadeHere } from "./made-here.js";
 import {
+  advanceWithOpenCorrection,
   issueAdvance,
   readBillAdvances,
+  refuseWhileAdvanceCorrectionOpen,
   type AdvancePaymentMoney,
   type BillAdvances,
 } from "./bill-advances.js";
@@ -1051,6 +1053,14 @@ async function issueOrSettleWhenFullyPaid(
   if (zero && options.closeZero !== true && !advancesPaidAll) return unpaid;
   if (compareDecimal(fundsOf(workingOrderId, due, held).received, due) !== 0) return unpaid;
   if (zero && held.some(receivedHoldsMoney)) return unpaid;
+  // An advance's open correction could still file a credit note the invoice would not take off.
+  // Money already moved cannot be refused, so the invoice waits as for a pending card refund.
+  const correcting =
+    credits.length === 0 ? undefined : await advanceWithOpenCorrection(tx, workingOrderId);
+  if (correcting !== undefined) {
+    if (options.moneyMoved === true) return unpaid;
+    throw new AppError("advance.correction_open", { workingOrderId, ...correcting });
+  }
   const holding = held.filter(receivedHoldsMoney);
   const tendersOfBill: SettleSaleTender[] = [...holding]
     .sort((a, b) => a.row.receivedAt!.localeCompare(b.row.receivedAt!))
@@ -1836,12 +1846,14 @@ async function beginBillPayment(
       tip: decimal(basket === undefined ? req.tip : (addedTip ?? ZERO)),
     },
   );
-  // A reserved card may finish on recovery, so save the language once the bill is covered.
-  if (
-    req.receiptLanguage !== undefined &&
+  const coversBill =
     !payable.invoiced &&
-    compareDecimal(sumDecimals([funds.received, funds.reserved, allocation.applied]), total) === 0
-  )
+    compareDecimal(sumDecimals([funds.received, funds.reserved, allocation.applied]), total) === 0;
+  // Refused before any card is charged: the payment would issue the bill's invoice.
+  if (coversBill && advances.credits.has(workingOrderId))
+    await refuseWhileAdvanceCorrectionOpen(tx, workingOrderId);
+  // A reserved card may finish on recovery, so save the language once the bill is covered.
+  if (req.receiptLanguage !== undefined && coversBill)
     await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);
 
   await requireEconomicWrite(tx, cfg, deps.admission);

@@ -282,7 +282,12 @@ import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import type { IssueMoment } from "./issue-moment.js";
 import { issueOrderMoment } from "./sale-day.js";
-import { advancesToTakeOff, paidNoAdvance, readBillAdvances } from "./bill-advances.js";
+import {
+  advancesToTakeOff,
+  paidNoAdvance,
+  readBillAdvances,
+  refuseWhileAdvanceCorrectionOpen,
+} from "./bill-advances.js";
 import type { AdvanceCredit } from "./advance-deduction.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
@@ -7736,8 +7741,8 @@ export function filedLines(
   ];
 }
 
-/** Price an order's invoice for {@link issueUnpaidInvoice}, dated by {@link issueOrderMoment}. Writes
- * nothing but `log`'s lines. */
+/** Price an order's invoice for {@link issueUnpaidInvoice}, dated by {@link issueOrderMoment} and
+ * refused while one of its advances has a correction open. Writes nothing but `log`'s lines. */
 export async function priceForIssuance(
   tx: Transaction,
   clock: TrustedClock,
@@ -7749,6 +7754,7 @@ export async function priceForIssuance(
   const order = await priceStoredOrderForIssuance(tx, id);
   const choice = await readOrderInvoiceChoice(tx, id);
   const { credits } = await readBillAdvances(tx, [id]);
+  if (credits.has(id)) await refuseWhileAdvanceCorrectionOpen(tx, id);
   return {
     ...(await priceOrderInvoice(
       tx,

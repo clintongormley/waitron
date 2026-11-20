@@ -1065,6 +1065,19 @@ it("sends staff to Correct invoice on the table's receipt once it took the advan
   );
 });
 
+it("tells staff to finish or close the advance's open correction before the table's bill, naming the advance", () => {
+  const advance = { invoiceNumber: "A/12" };
+  expect(codeMessage("advance.correction_open", "en", advance)).toBe(
+    "A correction of the payment on account A/12 is still open. Finish or close that correction in Correct invoice, then try again.",
+  );
+  expect(codeMessage("advance.correction_open", "es", advance)).toBe(
+    "Hay una rectificación del pago a cuenta A/12 todavía abierta. Termínala o ciérrala en Rectificar factura y vuelve a intentarlo.",
+  );
+  expect(codeMessage("advance.correction_open", "en")).toMatch(
+    /^A correction of the payment on account is still open\. /,
+  );
+});
+
 it("tells staff an open correction carries on from Correct invoice", () => {
   expect(codeMessage("invoice_correction.already_open", "en")).toBe(
     "A correction of this invoice is under way. Open Correct invoice to carry on with it.",

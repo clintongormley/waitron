@@ -553,3 +553,91 @@ describe("money and cards around an advance", () => {
     ).toEqual(advanceBefore);
   });
 });
+
+describe("a card for the rest while the advance has a correction open", () => {
+  /** Opens Correct invoice on the advance `saleId` for its whole €30; the correction's id. */
+  async function openWhole(saleId: string): Promise<string> {
+    const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
+    const opened = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${saleId}/corrections`,
+      {
+        submissionId: randomUUID(),
+        gross: "30.00",
+        reasonId: reason!.id,
+        note: "Paid too much",
+        expectedSplit: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+        override: supervisor(),
+      },
+    );
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    return (opened.json as { correction: { id: string } }).correction.id;
+  }
+
+  it("is refused before the reader when it would pay the bill off", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advanceOf(
+      bill.billId,
+      await cash(bill.billId, "30.00", { ownReceipt: true }),
+    );
+    await openWhole(advanceId);
+
+    const paid = await readerCard(bill.billId, "90.00");
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(409);
+    expect(paid.json).toMatchObject({
+      code: "advance.correction_open",
+      params: { workingOrderId: bill.billId, saleId: advanceId },
+    });
+    expect(await paymentRows(venue, bill.billId)).toHaveLength(1);
+    expect(await restOf(bill.billId)).toBeUndefined();
+  });
+
+  it("a dish taken off that would leave the bill paid is refused, and the dish stays", async () => {
+    const bill = await seated("Tasting menu", "Side dish");
+    const advanceId = await advanceOf(
+      bill.billId,
+      await cash(bill.billId, "30.00", { ownReceipt: true }),
+    );
+    expect((await cash(bill.billId, "90.00")).status).toBe(200);
+    await openWhole(advanceId);
+
+    const refused = await removeDish(bill, "Side dish");
+
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json).toMatchObject({
+      code: "advance.correction_open",
+      params: { workingOrderId: bill.billId, saleId: advanceId },
+    });
+    expect(await restOf(bill.billId)).toBeUndefined();
+    const lines = await inTx(venue, (tx) =>
+      tx
+        .select({ name: workingOrderLines.name })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, bill.billId)),
+    );
+    expect(lines.map((line) => line.name).sort()).toEqual(["Side dish", "Tasting menu"]);
+  });
+
+  it("captured before the correction was opened, is kept on recovery and the rest's invoice waits", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advanceOf(
+      bill.billId,
+      await cash(bill.billId, "30.00", { ownReceipt: true }),
+    );
+    venue.card.crashNextCollect("captured");
+    expect((await readerCard(bill.billId, "90.00")).status).toBe(500);
+    await openWhole(advanceId);
+
+    await settle();
+
+    expect((await paymentRows(venue, bill.billId)).map((row) => row.state)).toEqual([
+      "received",
+      "received",
+    ]);
+    expect(await restOf(bill.billId)).toBeUndefined();
+    expect(await statusOf(bill.billId)).toBe("open");
+  });
+});

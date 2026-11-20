@@ -4,6 +4,7 @@ import {
   billAdvances,
   billPayments,
   correctivesOf,
+  invoiceCorrections,
   invoiceSeries,
   orderTableLabels,
   readLiveSeriesIdTx,
@@ -20,6 +21,7 @@ import { findPaymentByBillPayment, associatePaymentWithSale } from "@waitron/pay
 import { receiptLabelsFor } from "@waitron/country-packs";
 import {
   ADVANCE_VAT_CLASS,
+  AppError,
   addDecimal,
   centsToDecimal,
   decimal,
@@ -328,6 +330,42 @@ export async function readBillAdvances(
     });
   }
   return { credits, payments };
+}
+
+/**
+ * The first advance on the bill `workingOrderId` with a correction still open, which could yet file
+ * a credit note on it after the bill's invoice took it off by its filed figures. A correction with
+ * a refund pending stays open: Close refuses `invoice_correction.refund_pending`.
+ */
+export async function advanceWithOpenCorrection(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<{ saleId: string; invoiceNumber: string } | undefined> {
+  const [open] = await tx
+    .select({ saleId: sales.id, code: invoiceSeries.code, number: sales.invoiceNumber })
+    .from(billAdvances)
+    .innerJoin(sales, eq(sales.id, billAdvances.advanceSaleId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .innerJoin(
+      invoiceCorrections,
+      and(eq(invoiceCorrections.originalSaleId, sales.id), eq(invoiceCorrections.state, "open")),
+    )
+    .where(eq(billAdvances.workingOrderId, workingOrderId))
+    .orderBy(sales.issuedAt, sales.invoiceNumber)
+    .limit(1);
+  return open === undefined
+    ? undefined
+    : { saleId: open.saleId, invoiceNumber: formatInvoiceNumber(open.code, open.number) };
+}
+
+/** Refuses `advance.correction_open` while {@link advanceWithOpenCorrection} finds one. */
+export async function refuseWhileAdvanceCorrectionOpen(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<void> {
+  const open = await advanceWithOpenCorrection(tx, workingOrderId);
+  if (open !== undefined)
+    throw new AppError("advance.correction_open", { workingOrderId, ...open });
 }
 
 /**

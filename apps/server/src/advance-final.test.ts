@@ -17,7 +17,8 @@ import {
 } from "@waitron/db";
 import { createCategory, createProduct } from "@waitron/menu";
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { addDecimal, decimal } from "@waitron/shared";
+import { listAdjustmentReasons } from "@waitron/adjustments";
+import { addDecimal, decimal, saleId as brandSaleId } from "@waitron/shared";
 import {
   filedInvoicesOf,
   type FiledInvoice,
@@ -29,7 +30,7 @@ import { endMeal } from "./meal-end.js";
 import { owesOriginal } from "./owed-receipts.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readCancellationContext } from "./line-cancel-context.js";
-import { readOrderRevision } from "./working-order.js";
+import { readInvoiceNumber, readOrderRevision } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import { fireAll, openPartyTab } from "./testing/serve-line.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -37,6 +38,7 @@ import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import {
   deferredCloseKit,
   RECIPIENT,
+  refusal,
   type DeferredCloseKit,
 } from "./testing/deferred-close-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -601,5 +603,155 @@ describe("the rest's invoice takes the advances off", () => {
     );
     expect(ticket).toMatchObject({ total: "90.00", owed: "90.00" });
     expect(ticket).not.toHaveProperty("payments");
+  });
+});
+
+describe("a bill whose advance has a correction still open", () => {
+  const supervisor = () => ({ personId: venue.adminId, pin: "1234" });
+  const WHOLE = [{ rate: "10.00", base: "27.27", tax: "2.73" }];
+
+  /** A bill of €120 with a €30 advance on which Correct invoice was opened for the whole €30. */
+  async function correcting() {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advance(bill.billId, "30.00");
+    const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
+    const opened = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${advanceId}/corrections`,
+      {
+        submissionId: randomUUID(),
+        gross: "30.00",
+        reasonId: reason!.id,
+        note: "Sent back",
+        expectedSplit: WHOLE,
+        override: supervisor(),
+      },
+    );
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    const refused = {
+      code: "advance.correction_open",
+      params: {
+        workingOrderId: bill.billId,
+        saleId: advanceId,
+        invoiceNumber: await inTx(venue, (tx) => readInvoiceNumber(tx, brandSaleId(advanceId))),
+      },
+    };
+    const corrections = (path: string, body: Record<string, unknown>) =>
+      send(venue.app, venue.cookie, "POST", `/api/invoice-corrections/${correctionId}/${path}`, {
+        ...body,
+        override: supervisor(),
+      });
+    return { bill, advanceId, refused, corrections };
+  }
+
+  function correctivesOfAdvance(advanceId: string) {
+    return inTx(venue, (tx) => tx.select().from(sales).where(eq(sales.correctsSaleId, advanceId)));
+  }
+
+  it("refuses the payment that pays the bill off once €10 went back in cash, then the filed €10 leaves €20 to take off", async () => {
+    const { bill, advanceId, refused, corrections } = await correcting();
+    const gaveBack = await corrections("cash", { submissionId: randomUUID(), amount: "10.00" });
+    expect(gaveBack.status, JSON.stringify(gaveBack.json)).toBe(200);
+
+    const paid = await cash(bill.billId, "90.00");
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(409);
+    expect(paid.json).toEqual(refused);
+    expect(await restOf(bill.billId)).toBeUndefined();
+    expect(await correctivesOfAdvance(advanceId)).toEqual([]);
+
+    const filed = await corrections("file", {
+      expectedSplit: [{ rate: "10.00", base: "9.09", tax: "0.91" }],
+    });
+    expect(filed.status, JSON.stringify(filed.json)).toBe(200);
+    const rest = await cash(bill.billId, "100.00");
+
+    expect(rest.status, JSON.stringify(rest.json)).toBe(200);
+    const sale = await restOf(bill.billId);
+    expect(await deductionLinesOf(sale!.id)).toEqual([
+      { deductsSaleId: advanceId, lineTotal: -1818, lineGross: -2000, vatRate: 1000 },
+    ]);
+    expect(filedRecord(sale!.id).breakdown).toEqual([["10.00", "90.91", "9.09"]]);
+  });
+
+  it("refuses the payment while nothing went back, and once the correction is closed takes the whole €30 off", async () => {
+    const { bill, advanceId, refused, corrections } = await correcting();
+
+    const paid = await cash(bill.billId, "90.00");
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(409);
+    expect(paid.json).toEqual(refused);
+    expect(await restOf(bill.billId)).toBeUndefined();
+    const closed = await corrections("close", {});
+    expect(closed.status, JSON.stringify(closed.json)).toBe(200);
+    const rest = await cash(bill.billId, "90.00");
+    expect(rest.status, JSON.stringify(rest.json)).toBe(200);
+    expect(await deductionLinesOf((await restOf(bill.billId))!.id)).toEqual([
+      { deductsSaleId: advanceId, lineTotal: -2727, lineGross: -3000, vatRate: 1000 },
+    ]);
+  });
+
+  it("refuses Print the bill, the unpaid departure and deferred close the same way, issuing nothing", async () => {
+    const { bill, refused } = await correcting();
+
+    const printed = await refusal(printTheBill(bill));
+    const departed = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${bill.partyId}/unpaid-departure`,
+      {
+        billId: bill.billId,
+        expectedPartyRevision: await partyRevision(bill.partyId),
+        reason: "Left without paying",
+        override: supervisor(),
+      },
+    );
+    const deferred = await refusal(
+      kit.close(await kit.requestFor(bill.billId, "90.00", bill.partyId, { partyFinish: null })),
+    );
+
+    expect({ code: printed.code, params: printed.params }).toEqual(refused);
+    expect(departed.status, JSON.stringify(departed.json)).toBe(409);
+    expect(departed.json).toEqual(refused);
+    expect({ code: deferred.code, params: deferred.params }).toEqual(refused);
+    expect(await restOf(bill.billId)).toBeUndefined();
+  });
+
+  it("is left for later by the close of the business day, which issues it once the correction is closed", async () => {
+    const { bill, advanceId, corrections } = await correcting();
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ trustedOpenedAt: new Date(Date.now() - 60_000).toISOString() })
+        .where(eq(workingOrders.id, bill.billId)),
+    );
+    const closeTheDay = () =>
+      withTransaction(venue.db, async (tx) =>
+        issueBillAtClose(
+          tx,
+          {
+            admission: testTradingAdmission(),
+            db: venue.db,
+            backend: venue.backend,
+            clock: venue.clock,
+          },
+          closeOfDayConfig(venue.cfg),
+          bill.billId,
+          { dayStartedAt: new Date(Date.now() + 60_000), venueClock: await readVenueClock(tx) },
+        ),
+      );
+
+    expect(await closeTheDay()).toEqual({ kind: "money_moving" });
+    expect(await restOf(bill.billId)).toBeUndefined();
+    expect((await corrections("close", {})).status).toBe(200);
+
+    expect(await closeTheDay()).toMatchObject({ kind: "issued" });
+    expect(await deductionLinesOf((await restOf(bill.billId))!.id)).toEqual([
+      { deductsSaleId: advanceId, lineTotal: -2727, lineGross: -3000, vatRate: 1000 },
+    ]);
   });
 });

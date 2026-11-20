@@ -99,7 +99,13 @@ advance off, the till refuses to give the advance back on its own and names Corr
 table's invoice instead (owner, 2026-11-20 14:26: "ok. it would be very weird for the staff to do
 this, but ok"; `advance.taken_off_final_invoice`, `apps/server/src/advance-taken-off.ts`). That
 invoice can give back at most what it carries, so money beyond it, such as any of an advance that
-equals the meal, has no way back through the till.
+equals the meal, has no way back through the till. So that a correction opened before the table's
+invoice cannot file a credit note after it, the table's invoice is held back while a correction of
+one of its advances is open: the payment that pays the bill off (refused before any card reader is
+asked), Print the bill, the unpaid departure, deferred close and an edit of the bill that would leave
+it paid are refused with `advance.correction_open`; a card payment captured before the correction
+was opened keeps its money and the invoice is not issued; the close of the business day answers the
+bill as it answers a payment still moving (`money_moving`) and issues nothing.
 
 To build: an advance as a full invoice (the advances plan's piece 1b), and an advance paid before the
 day, such as a company's €1,000 for its staff dinner, where staff record the transfer against the

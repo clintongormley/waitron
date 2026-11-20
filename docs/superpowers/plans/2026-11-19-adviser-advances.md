@@ -416,6 +416,9 @@ stops and reports to you rather than editing the test.
    by Correct invoice on the advance's ticket and by a plain or bill refund of its money, and still
    refused after a whole credit of the table's invoice. The €10 beyond what the table's invoice
    carries therefore has no way back through the till.
+   A correction of an advance still open holds the table's invoice back
+   (`advance.correction_open`, `refuseWhileAdvanceCorrectionOpen` in `bill-advances.ts`), so it
+   cannot file a credit note after that invoice took the advance off.
 
 Your 21:00 answers settled the last three earlier questions: the rest's invoice lists the dishes
 and takes the advance off by its number and amount (example 1); the till's "own receipt" for an

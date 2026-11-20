@@ -884,6 +884,9 @@ declare module "@waitron/shared" {
       finalSaleId: string;
       invoiceNumber: string;
     };
+    /** The bill `workingOrderId`'s invoice was asked for while a correction of its advance
+     * `saleId`, numbered `invoiceNumber`, is still open: that correction is filed or closed first. */
+    "advance.correction_open": { workingOrderId: string; saleId: string; invoiceNumber: string };
     /**
      * A payment was asked of a bill with nothing left to pay and no card pending on it, or Print
      * the bill of a bill its payments already cover, that has no dishes, or that was cancelled.

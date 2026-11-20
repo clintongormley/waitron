@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
   captureError,
+  invoiceCorrections,
   readLiveSeriesIdTx,
   saleLines,
   sales,
@@ -499,13 +500,33 @@ describe("an advance once the rest's invoice has taken it off", () => {
     ).toEqual([]);
   });
 
-  /** Opens Correct invoice for the whole of `advanceId` while the table's bill is still open, then
-   * pays the bill's €90 rest; the correction's id and the refusal giving its money back meets. */
+  /** A correction for the whole of `advanceId`, opened while the table's bill was still open and
+   * still open once the bill's €90 rest was paid; its id and the refusal giving its money back
+   * meets. The till refuses that payment while the correction is open (`advance.correction_open`),
+   * so the correction is opened through the route, closed, and written back open in the database
+   * after the payment, as one left open before that refusal existed would be. */
   async function openedBeforeTheRest(billId: string, advanceId: string) {
     const opened = await open(advanceId, "30.00", [{ rate: "10.00", base: "27.27", tax: "2.73" }]);
     expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    const closedId = (opened.json as { correction: { id: string } }).correction.id;
+    const [row] = await inTx(venue(), (tx) =>
+      tx.select().from(invoiceCorrections).where(eq(invoiceCorrections.id, closedId)),
+    );
+    const closed = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/invoice-corrections/${closedId}/close`,
+      { override: supervisor() },
+    );
+    expect(closed.status, JSON.stringify(closed.json)).toBe(200);
     await payRest(billId, "90.00");
+    const correctionId = randomUUID();
+    await inTx(venue(), (tx) =>
+      tx
+        .insert(invoiceCorrections)
+        .values({ ...row!, id: correctionId, submissionId: randomUUID() }),
+    );
     const finalSaleId = await restId(billId);
     const refusal = {
       code: "advance.taken_off_final_invoice",

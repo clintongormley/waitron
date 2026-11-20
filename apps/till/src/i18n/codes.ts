@@ -665,6 +665,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This payment on account was already taken off the table's receipt{invoiceNumber}. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
     es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}. Para devolver dinero, usa Rectificar factura en ese ticket: descuenta el importe de los platos, cada uno con su tipo de IVA.",
   },
+  "advance.correction_open": {
+    en: "A correction of the payment on account{invoiceNumber} is still open. Finish or close that correction in Correct invoice, then try again.",
+    es: "Hay una rectificación del pago a cuenta{invoiceNumber} todavía abierta. Termínala o ciérrala en Rectificar factura y vuelve a intentarlo.",
+  },
   "tender.refund_unavailable": {
     en: "This payment cannot be refunded here. Reload the transaction and check its payments",
     es: "Este pago no se puede devolver aquí. Vuelve a cargar la transacción y revisa sus pagos",
@@ -1128,7 +1132,8 @@ export function codeMessage(
   if (
     code === "tender.refund_of_advance" ||
     code === "bill.refund_of_advance" ||
-    code === "advance.taken_off_final_invoice"
+    code === "advance.taken_off_final_invoice" ||
+    code === "advance.correction_open"
   )
     return message.replace(
       "{invoiceNumber}",

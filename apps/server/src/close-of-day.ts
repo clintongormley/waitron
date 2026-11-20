@@ -33,6 +33,7 @@ import {
   markOrderPlaced,
   ordersWithUnfiredDish,
   priceForIssuance,
+  type PricedInvoice,
 } from "./working-order.js";
 import "./errors.js";
 
@@ -51,7 +52,8 @@ const MONEY_MOVING: ReadonlySet<string> = new Set([
 export type CloseOfDayOutcome =
   | { kind: "issued"; saleId: string }
   | { kind: "not_due" }
-  /** A payment or refund is still moving: try again later. */
+  /** A payment, a refund or a correction of one of its advances is still under way: try again
+   * later. */
   | { kind: "money_moving" }
   | { kind: "left_open"; reason: "dish_not_made" | "owes_nothing" };
 
@@ -95,14 +97,20 @@ export async function issueBillAtClose(
     return { kind: "left_open", reason: "dish_not_made" };
 
   // Dated by closeOfDayEnd, as every path that issues a bill the close counts as due is.
-  const invoice = await priceForIssuance(
-    tx,
-    pinnedAt(deps.clock, reading),
-    deps.backend,
-    cfg,
-    billId,
-    deps.log,
-  );
+  let invoice: PricedInvoice;
+  try {
+    invoice = await priceForIssuance(
+      tx,
+      pinnedAt(deps.clock, reading),
+      deps.backend,
+      cfg,
+      billId,
+      deps.log,
+    );
+  } catch (error) {
+    if (codeOf(error) === "advance.correction_open") return { kind: "money_moving" };
+    throw error;
+  }
   const total = invoice.priced.total;
   const owed = await stillOwedOnIssuedBill(tx, billId, total);
   if (decimalToCents(total) !== 0 && decimalToCents(owed) <= 0)
