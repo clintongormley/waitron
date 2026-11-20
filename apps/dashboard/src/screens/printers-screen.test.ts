@@ -12683,6 +12683,76 @@ describe("office printers in discovery", () => {
     expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
   });
 
+  it("answers a checked address with the move row an agent still shows, not the hidden added one", async () => {
+    const requestedAt = Date.now();
+    const seen = { lastSeenAt: new Date(requestedAt).toISOString() };
+    const probePrinterAddress = vi.fn().mockResolvedValue({
+      host: "10.0.0.56",
+      port: 9100,
+      requestedAt,
+      expiresAt: requestedAt + 30000,
+    });
+    const api = stubApi({
+      probePrinterAddress,
+      listPagePrinters: vi.fn().mockResolvedValue([added]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=probe-host]", "10.0.0.56");
+    typeField(el, "[data-test=probe-port]", "9100");
+    (api.listDiscoveredPrinters as ReturnType<typeof vi.fn>).mockResolvedValue([
+      office(seen),
+      office({ ...seen, agentId: "a2", agentName: "Bar agent" }),
+    ]);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_page_printer"));
+    expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).not.toBeNull();
+  });
+
+  it("offers a plain Add for an office printer whose A4 registration is switched off, whichever agent it was on", async () => {
+    const { el } = await mountWith([office(), office({ host: "10.0.0.57" })], {
+      listPagePrinters: vi.fn().mockResolvedValue([
+        { ...added, active: false },
+        { ...added, id: "pp2", host: "10.0.0.57", agentId: "a2", active: false },
+      ]),
+    });
+    for (const host of ["10.0.0.56", "10.0.0.57"]) {
+      expect(q(el, `[data-test='add-page-printer-a1:${host}:9100']`)).not.toBeNull();
+      expect(q(el, `[data-test='repoint-page-printer-a1:${host}:9100']`)).toBeNull();
+      expect(text(el, `[data-test='discovered-row-a1:${host}:9100']`)).not.toContain(
+        t("printers.page_printer_other_agent"),
+      );
+    }
+  });
+
+  const notAPrinter = (): DiscoveredPrinter => ({
+    ...office(),
+    transport: "bluetooth",
+    host: undefined,
+    localKey: "AA:BB:CC:DD:EE:01",
+    name: "Headphones",
+    pagePrinter: undefined,
+    office: undefined,
+    printerLike: false,
+  });
+
+  it("says every printer found is already added when the scan found only added ones", async () => {
+    const { el } = await mountWith([office(), notAPrinter()], {
+      listPagePrinters: vi.fn().mockResolvedValue([added]),
+    });
+    const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
+    expect(table.emptyMessage).toBe(t("printers.discovered_all_added"));
+  });
+
+  it("keeps the nothing-found message when the scan found only devices that are not printers", async () => {
+    const { el } = await mountWith([notAPrinter()]);
+    const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
+    expect([t("printers.scan_empty"), t("printers.no_discovered")]).toContain(table.emptyMessage);
+  });
+
   it("leaves out an office printer already added through the agent that reports it, and keeps one to move from a gone agent", async () => {
     const { el } = await mountWith(
       [office(), office({ host: "10.0.0.57" }), office({ host: "10.0.0.58" })],
@@ -13002,6 +13072,10 @@ describe("one table for every printer", () => {
       "printers.invoice_printer_a4": ["A4", "A4"],
       "printers.invoice_printer_letter": ["Letter", "Carta"],
       "printers.page_printer_add": ["Add as A4 printer", "Añadir como impresora A4"],
+      "printers.discovered_all_added": [
+        "Every printer found is already added.",
+        "Todas las impresoras encontradas ya están añadidas.",
+      ],
     } as const;
     for (const [key, [english, spanish]] of Object.entries(words)) {
       expect(en[key as StringKey], key).toBe(english);

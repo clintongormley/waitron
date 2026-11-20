@@ -1636,13 +1636,15 @@ export class PrintersScreen extends LitElement {
     this.#findPairAgain();
     const target = this.#probeTarget;
     if (target && this.probeStatus === "pending") {
-      const match = this.discovered.find(
+      const matches = this.discovered.filter(
         (device) =>
           device.transport === "network_tcp" &&
           device.host === target.host &&
           device.port === target.port &&
           Date.parse(device.lastSeenAt) >= target.requestedAt,
       );
+      // Another agent's report at the address may still show a row to point at.
+      const match = matches.find((d) => this.#officeRow(d)?.kind !== "added") ?? matches[0];
       if (match) {
         const office = this.#officeRow(match);
         if (office?.kind === "added" || (!office && !this.#canAdd(match)))
@@ -1787,13 +1789,15 @@ export class PrintersScreen extends LitElement {
     if (report === undefined || !device.host)
       return { kind: "refused", reason: "printers.page_printer_no_answer" };
     const host = device.host.toLowerCase();
+    // A switched-off registration is added again through Add, which switches it back on.
     const match = this.pagePrinters.find(
       (p) =>
+        p.active &&
         p.host.toLowerCase() === host &&
         p.port === report.port &&
         p.resourcePath === report.resourcePath,
     );
-    if (match?.active && match.agentId === device.agentId) return { kind: "added" };
+    if (match?.agentId === device.agentId) return { kind: "added" };
     if (!report.printable) return { kind: "refused", reason: OFFICE_REFUSAL[report.reason] };
     // The server registers only from the named agent's own report.
     if (device.officeLent) return { kind: "refused", reason: "printers.page_printer_lent" };
@@ -5408,7 +5412,13 @@ export class PrintersScreen extends LitElement {
             .columns=${columns}
             .rows=${[...rows, ...lost]}
             .rowKey=${(d: DiscoveredPrinter) => this.#rowKey(d)}
-            .emptyMessage=${t(this.scanning ? "printers.scan_empty" : "printers.no_discovered")}
+            .emptyMessage=${t(
+              addable.length < this.discovered.length
+                ? "printers.discovered_all_added"
+                : this.scanning
+                  ? "printers.scan_empty"
+                  : "printers.no_discovered",
+            )}
             .errorMessage=${errorMessage}
           ></wt-data-table>`,
       )}
