@@ -111,6 +111,9 @@ const phoneCapabilities = [
   "hand-keyed-card-payment",
 ] as CapabilityFlag[];
 
+/** The phone's equipment when its drawer printer may open a drawer. */
+const drawerEquipment = { ...equipmentWith(SECOND_READER), opensDrawer: true };
+
 function onPhone(overrides: Record<string, unknown> = {}, tillOver: Record<string, unknown> = {}) {
   return {
     getTill: vi.fn().mockResolvedValue({
@@ -4130,6 +4133,7 @@ describe("the document choice on a handheld", () => {
         undefined,
         { method: "cash", tendered: "150.00", guestCount: 4 },
         { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
+        { getDeviceEquipment: vi.fn().mockResolvedValue(drawerEquipment) },
       );
       await vi.waitFor(() => expect(inChoice(el, '[data-test="open-drawer"]')).not.toBeNull());
 
@@ -4138,6 +4142,19 @@ describe("the document choice on a handheld", () => {
 
       expect(vi.mocked(api.openDrawer)).toHaveBeenCalledTimes(1);
       expect(vi.mocked(api.openDrawer)).toHaveBeenCalledWith();
+    });
+
+    it("a device whose profile allows the drawer but which has no drawer it may open is offered no Open drawer", async () => {
+      const { el } = await payPresented(
+        simplified(),
+        undefined,
+        { method: "cash", tendered: "150.00", guestCount: 4 },
+        { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
+      );
+      await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
+      await documentChoice(el)!.updateComplete;
+
+      expect(inChoice(el, '[data-test="open-drawer"]')).toBeNull();
     });
 
     it("a device whose profile does not allow the drawer is offered no Open drawer", async () => {
@@ -4167,9 +4184,11 @@ describe("the document choice on a handheld", () => {
     theme?: "light" | "dark",
     detail?: PresentedPayDetail,
     tillOver: Record<string, unknown> = {},
+    overrides: Record<string, unknown> = {},
   ) {
     const stubs = onPhone(
       {
+        ...overrides,
         getPartyBills: vi
           .fn()
           .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
@@ -4800,7 +4819,10 @@ describe("the document choice on a handheld", () => {
       const { el } = await payBillOneAfter(
         readFailed,
         () => read.answered,
-        { openDrawer: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) },
+        {
+          openDrawer: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+          getDeviceEquipment: vi.fn().mockResolvedValue(drawerEquipment),
+        },
         { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
       );
 

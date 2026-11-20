@@ -1933,6 +1933,9 @@ export interface RoleEquipment {
 /** `PUT /api/device/equipment` success, and the equipment half of the GET's: always the five roles. */
 export interface DeviceEquipment {
   roles: RoleEquipment[];
+  /** The device has a drawer it may open: its drawer printer is switched on, has a drawer, and
+   * its profile allows opening it. */
+  opensDrawer?: boolean;
 }
 
 /** One notice for staff, as `GET /api/device/equipment` sends it: worded by the till from `code`. */

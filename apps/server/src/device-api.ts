@@ -98,6 +98,7 @@ import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { KitchenScreenKind, ResolvedKitchenScreen, ScreenSlot } from "@waitron/module";
 import { stationPrintersDown } from "./station-outputs-down.js";
+import { deviceOpensDrawer } from "./receipt-print.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, requireMadeHereStations } from "./made-here.js";
@@ -450,9 +451,10 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         deps.clockWitnesses?.noteDevice(device.deviceId, requestAddress(c), deviceMs, arrived);
       // Not `withTransaction`: its closing change-log drain is a write, which a full disk refuses
       // even when this read changed nothing.
-      const equipment = await deps.db.withWriteLock(() =>
-        readDeviceEquipment(deps.db, device.deviceId),
-      );
+      const equipment = await deps.db.withWriteLock(async () => ({
+        ...(await readDeviceEquipment(deps.db, device.deviceId)),
+        opensDrawer: await deviceOpensDrawer(deps.db, device.deviceId),
+      }));
       if (deps.notices === undefined) {
         return c.json({ ...equipment, notices: [], noticesUnavailable: [] });
       }
@@ -493,7 +495,10 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           .where(and(eq(tillSessions.id, sessionId), isNull(tillSessions.endedAt)));
         if (open === undefined) throw new AppError("session.required", {});
         await selectDeviceEquipment(tx, { deviceId: device.deviceId, ...choice });
-        return readDeviceEquipment(tx, device.deviceId);
+        return {
+          ...(await readDeviceEquipment(tx, device.deviceId)),
+          opensDrawer: await deviceOpensDrawer(tx, device.deviceId),
+        };
       });
       return c.json(equipment, 200);
     }),

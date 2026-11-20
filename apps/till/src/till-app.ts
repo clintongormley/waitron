@@ -3887,6 +3887,12 @@ export class TillApp extends LitElement {
   #operatorSession = 0;
   /** The person the server session now belongs to, and so the person any draft save goes in as. It
    * moves at the start of a sign-in; {@link operatorPersonId} moves only once that sign-in loads. */
+  get #mayOpenDrawer(): boolean {
+    return (
+      this.capabilities.includes("open-cash-drawer") && this.deviceEquipment?.opensDrawer === true
+    );
+  }
+
   get #sessionPersonId(): string {
     return this.#tabPerson?.personId ?? "";
   }
@@ -23994,7 +24000,7 @@ export class TillApp extends LitElement {
           .emailOpen=${this.invoiceEmailOpen}
           .emailRefusal=${this.invoiceEmailRefusal}
           .canPrintReceipt=${this.#mayPrintReceipt}
-          .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
+          .canOpenDrawer=${this.#mayOpenDrawer}
         ></till-ticket-view>`;
       case "hours":
         return html`<till-hours-screen
@@ -24126,7 +24132,7 @@ export class TillApp extends LitElement {
         slot="notices"
         .notices=${notices}
         .checkTimeOffered=${this.checkTimeOffered}
-        .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
+        .canOpenDrawer=${this.#mayOpenDrawer}
         .drawerBusy=${this.drawerOpening}
         @till-open-drawer=${() => void this.#onOpenDrawer()}
         @till-check-time=${() => (this.boxTimeOpen = true)}
@@ -24623,7 +24629,7 @@ export class TillApp extends LitElement {
                 .simulatedCardPayment=${this.result?.simulatedCardPayment === true}
                 .result=${this.result!}
                 .cashChange=${this.settlementDocument.cashChange}
-                .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
+                .canOpenDrawer=${this.#mayOpenDrawer}
                 .invoiceLocale=${this.invoiceLocale}
                 .originalReceiptAvailable=${this.originalReceiptAvailable}
                 .originalReceiptPrint=${this.originalReceiptPrint}

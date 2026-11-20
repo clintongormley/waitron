@@ -6502,6 +6502,7 @@ describe("till-app", () => {
     };
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["open-cash-drawer"] }),
+      getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [], opensDrawer: true }),
       recordSale: vi.fn().mockResolvedValue(filed),
     });
     const c = await toCounter(el);
@@ -6543,6 +6544,7 @@ describe("till-app", () => {
       getTablesState: vi.fn().mockResolvedValue([openTable]),
       listZones: vi.fn().mockResolvedValue([floorZone]),
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+      getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [], opensDrawer: true }),
       recordSale,
       openDrawer,
     });
@@ -6574,6 +6576,20 @@ describe("till-app", () => {
     await flush(el);
     expect(openDrawer).toHaveBeenCalledTimes(1);
     expect(openDrawer).toHaveBeenCalledWith();
+  });
+
+  it("a till whose profile allows the drawer but which has no drawer it may open shows no Open drawer on the ticket", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: ["open-cash-drawer", "print-receipt", "take-cash"],
+      }),
+      getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [], opensDrawer: false }),
+    });
+    await toTicket(el);
+
+    expect(ticket(el)).not.toBeNull();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
   });
 
   it("a till whose profile does not allow the drawer shows no Open drawer on the ticket", async () => {
