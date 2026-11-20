@@ -14,6 +14,9 @@ import {
   type ProvisionBody,
   type SetupStatus,
 } from "./api/client.js";
+import type { WtFileInput } from "@waitron/ui";
+import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
+import type { SetupLiveSourceScreen } from "./screens/live-source-screen.js";
 import type { SetupCloudRestoreScreen } from "./screens/cloud-restore-screen.js";
 import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.js";
 import type { SetupRestoreScreen } from "./screens/restore-screen.js";
@@ -2699,6 +2702,32 @@ describe("setup-app", () => {
       expect(connect.shadowRoot!.querySelector("[data-test=totp-notice]")).toBeNull();
     });
 
+    it("keeps a login refusal dismissed by Check address gone when the language changes", async () => {
+      const before = currentLocale();
+      try {
+        setLocale("en-GB");
+        const adopt = vi
+          .fn()
+          .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
+        const el = await mountSetupApp(stubApi({ adopt }));
+        adoptRequest(el);
+        await flush(el);
+        const connect = await screenHost(el, "connect");
+        expect(await bottomOf(connect)).toBe(
+          "The login failed. Check the admin email and password, then try again.",
+        );
+        connect.shadowRoot!.querySelector<HTMLElement>("[data-test=check-address]")!.click();
+        await flush(el);
+        expect(await bottomOf(connect)).toBe("");
+        setLocale("es-ES");
+        await flush(el);
+        await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+        expect(await bottomOf(connect)).toBe("");
+      } finally {
+        setLocale(before);
+      }
+    });
+
     it("draws the code field, empty, when the refused request carried a code", async () => {
       const adopt = vi
         .fn()
@@ -3570,6 +3599,31 @@ describe("resetting a join that stopped partway", () => {
     );
   });
 
+  it("keeps a reset refusal pressed away with a field empty gone when the language changes", async () => {
+    const before = currentLocale();
+    try {
+      setLocale("en-GB");
+      const resetIncompleteAdopt = vi
+        .fn()
+        .mockRejectedValue({ code: "server.internal", params: {}, status: 500 });
+      const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+      await openReset(el);
+      await submitReset(el);
+      const screen = await screenHost(el, "reset");
+      expect(await bottomOf(screen)).toBe(
+        "The server could not be reset. Check the connection and try again.",
+      );
+      await submitReset(el, { ...LOGIN, email: "" });
+      expect(resetIncompleteAdopt).toHaveBeenCalledOnce();
+      expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
+      setLocale("es-ES");
+      await flush(el);
+      expect(await bottomOf(screen)).toBe("Corrige los campos marcados para continuar.");
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("shows the same general message again when a second reset fails the same way", async () => {
     const resetIncompleteAdopt = vi
       .fn()
@@ -4169,6 +4223,240 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       expect(readDraft(el).configurationImport).toBeUndefined();
     } finally {
       setLocale(before);
+    }
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "This file is not a configuration export Waitron can read. Export it again from the box you exported from, then load the new export.",
+      "Correct the highlighted fields to continue.",
+    ],
+    [
+      "es-ES",
+      "Este archivo no es una exportación de configuración que Waitron pueda leer. Vuelve a exportarla desde el servidor del que la exportaste y carga la nueva exportación.",
+      "Corrige los campos marcados para continuar.",
+    ],
+  ])(
+    "puts an unreadable configuration export under its file field (%s)",
+    async (locale, message, fixFields) => {
+      const before = currentLocale();
+      try {
+        const el = await mountSetupApp(
+          stubApi({
+            stageConfiguration: vi.fn().mockRejectedValue({
+              code: "setup.configuration_unreadable",
+              params: {},
+              status: 422,
+            }),
+          }),
+        );
+        setLocale(locale);
+        configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+        await flush(el);
+        const source = await screenHost(el, "live-source");
+        const field = source.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+          "wt-file-input",
+        )!;
+        expect(field.error).toBe(message);
+        expect(await bottomOf(source)).toBe(fixFields);
+        expect(readDraft(el).configurationImport).toBeUndefined();
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  describe("a refusal pressed away with fields incomplete stays gone when the language changes", () => {
+    const pressedAway = async (
+      el: SetupApp,
+      screen: Screen,
+      button: string,
+      english: string,
+      spanish: string,
+    ) => {
+      const before = currentLocale();
+      try {
+        const host = await screenHost(el, screen);
+        expect(await bottomOf(host)).toContain(english);
+        host.shadowRoot!.querySelector<HTMLElement>(`[data-test=${button}]`)!.click();
+        await flush(el);
+        expect(await bottomOf(host)).not.toContain(english);
+        setLocale("es-ES");
+        await flush(el);
+        await (host as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+        expect(await bottomOf(host)).not.toContain(spanish);
+        expect(await bottomOf(host)).not.toBe("");
+      } finally {
+        setLocale(before);
+      }
+    };
+
+    it("on the backup file restore screen", async () => {
+      setLocale("en-GB");
+      const restore = vi
+        .fn()
+        .mockRejectedValue({ code: "restore.mystery", params: {}, status: 400 });
+      const el = await mountSetupApp(stubApi({ restore }));
+      restoreRequest(el, {
+        artifact: new File(["backup"], "venue.waitron-backup"),
+        recoveryKey: "recovery key",
+        environment: "production",
+      });
+      await flush(el);
+      await pressedAway(
+        el,
+        "restore",
+        "restore",
+        "The backup could not be staged. Check the file, key and environment. (restore.mystery)",
+        "No se ha podido preparar la copia de seguridad. Revisa el archivo, la clave y el entorno. (restore.mystery)",
+      );
+    });
+
+    it("on the bucket restore screen", async () => {
+      setLocale("en-GB");
+      const restoreFromBucket = vi
+        .fn()
+        .mockRejectedValue({ code: "backup.stream_restore_failed", params: {}, status: 502 });
+      const el = await mountSetupApp(stubApi({ restoreFromBucket }));
+      bucketRequest(el);
+      await flush(el);
+      await pressedAway(
+        el,
+        "restore-bucket",
+        "restore",
+        "The copy could not be downloaded from the bucket.",
+        "No se ha podido descargar la copia del bucket.",
+      );
+    });
+
+    it("on the venue screen", async () => {
+      setLocale("en-GB");
+      const provision = vi
+        .fn()
+        .mockRejectedValue({ code: "provisioning.mystery", params: {}, status: 400 });
+      const el = await mountSetupApp(stubApi({ provision }));
+      provisionRequest(el);
+      await flush(el);
+      await pressedAway(
+        el,
+        "venue",
+        "next",
+        "The venue details were rejected — please review and correct them. (provisioning.mystery)",
+        "Se han rechazado los datos del local: revísalos y corrígelos. (provisioning.mystery)",
+      );
+    });
+  });
+
+  const liveSourceOf = async (el: SetupApp) => {
+    goto(el, "live-source");
+    await flush(el);
+    const source = el.shadowRoot!.querySelector<SetupLiveSourceScreen>("setup-live-source-screen")!;
+    await source.updateComplete;
+    return source;
+  };
+  const sourcePicker = (source: SetupLiveSourceScreen) =>
+    source.shadowRoot!.querySelector<WtFileInput>("wt-file-input")!;
+  const sourcePassphrase = (source: SetupLiveSourceScreen) =>
+    source.shadowRoot!.querySelector<HTMLElement & { error: string; invalid: boolean }>(
+      "wt-input",
+    )!;
+  const typeSourcePassphrase = async (source: SetupLiveSourceScreen, value: string) => {
+    sourcePassphrase(source).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await source.updateComplete;
+  };
+  const sourceImport = (source: SetupLiveSourceScreen) =>
+    source.shadowRoot!.querySelector<HTMLElement>("[data-test=import]")!;
+
+  it.each([
+    [
+      "a replacement file",
+      "setup.configuration_unreadable",
+      (source: SetupLiveSourceScreen) =>
+        chooseFiles(sourcePicker(source), new File(["other"], "other.waitron-config")),
+    ],
+    [
+      "a retyped passphrase",
+      "recovery.passphrase_invalid",
+      (source: SetupLiveSourceScreen) => typeSourcePassphrase(source, "another-passphrase"),
+    ],
+  ] as const)(
+    "does not mark %s with a refusal that answers the import sent before it",
+    async (_what, code, change) => {
+      const answer = deferred<ConfigurationPreview>();
+      const el = await mountSetupApp(stubApi({ stageConfiguration: vi.fn(() => answer.promise) }));
+      const source = await liveSourceOf(el);
+      chooseFiles(sourcePicker(source), new File(["encrypted"], "prepared.waitron-config"));
+      await typeSourcePassphrase(source, "the-first-passphrase");
+      sourceImport(source).click();
+      await flush(el);
+      await change(source);
+      await source.updateComplete;
+      answer.reject({ code, params: {}, status: 422 });
+      await flush(el);
+      await source.updateComplete;
+      expect(sourcePicker(source).invalid).toBe(false);
+      expect(sourcePicker(source).error).toBe("");
+      expect(sourcePassphrase(source).error).toBe("");
+      expect(await bottomOf(source)).toBe("");
+      expect(sourceImport(source).hasAttribute("disabled")).toBe(false);
+    },
+  );
+
+  const UNREADABLE_EN =
+    "This file is not a configuration export Waitron can read. Export it again from the box you exported from, then load the new export.";
+
+  it("keeps an unreadable export's refusal cleared by a new file when the language changes", async () => {
+    const before = currentLocale();
+    try {
+      setLocale("en-GB");
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi
+            .fn()
+            .mockRejectedValue({ code: "setup.configuration_unreadable", params: {}, status: 422 }),
+        }),
+      );
+      const source = await liveSourceOf(el);
+      chooseFiles(sourcePicker(source), new File(["encrypted"], "prepared.waitron-config"));
+      await typeSourcePassphrase(source, "the-first-passphrase");
+      sourceImport(source).click();
+      await flush(el);
+      await source.updateComplete;
+      expect(sourcePicker(source).error).toBe(UNREADABLE_EN);
+      chooseFiles(sourcePicker(source), new File(["other"], "other.waitron-config"));
+      await source.updateComplete;
+      expect(sourcePicker(source).error).toBe("");
+      setLocale("es-ES");
+      await flush(el);
+      await source.updateComplete;
+      expect(sourcePicker(source).error).toBe("");
+      expect(sourcePicker(source).invalid).toBe(false);
+      expect(await bottomOf(source)).toBe("");
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("shows the same unreadable-export refusal again when the same file is refused again", async () => {
+    const stageConfiguration = vi
+      .fn()
+      .mockRejectedValue({ code: "setup.configuration_unreadable", params: {}, status: 422 });
+    const el = await mountSetupApp(stubApi({ stageConfiguration }));
+    const source = await liveSourceOf(el);
+    chooseFiles(sourcePicker(source), new File(["encrypted"], "prepared.waitron-config"));
+    await typeSourcePassphrase(source, "the-first-passphrase");
+    for (const attempt of [1, 2]) {
+      sourceImport(source).click();
+      await flush(el);
+      await source.updateComplete;
+      expect(stageConfiguration).toHaveBeenCalledTimes(attempt);
+      expect(sourcePicker(source).error).toBe(UNREADABLE_EN);
+      expect(sourcePicker(source).invalid).toBe(true);
+      expect(await bottomOf(source)).toBe("Correct the highlighted fields to continue.");
+      expect(sourceImport(source).hasAttribute("disabled")).toBe(false);
     }
   });
 
@@ -5493,6 +5781,55 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     return (await screenHost(el, "cloud-restore")) as SetupCloudRestoreScreen;
   }
 
+  it("shows a second Cloud refusal after the first was pressed away by an incomplete Restore", async () => {
+    const unavailable =
+      "Cloud recovery is unavailable. Check the connection or request expiry, then try again.";
+    const el = await approvedCloudApp({
+      cloudRecoveryStatus: vi
+        .fn()
+        .mockResolvedValueOnce(approved())
+        .mockRejectedValue({ code: "server.internal", params: {}, status: 500 }),
+    });
+    cloudRecoveryAction(el, "status");
+    await flush(el);
+    const screen = await cloudScreen(el);
+    expect(await bottomOf(screen)).toBe(unavailable);
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
+    await flush(el);
+    expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
+    cloudRecoveryAction(el, "status");
+    await flush(el);
+    await screen.updateComplete;
+    expect(await bottomOf(screen)).toContain(unavailable);
+  });
+
+  it("keeps a Cloud refusal pressed away by an incomplete Restore gone when the language changes", async () => {
+    const before = currentLocale();
+    try {
+      setLocale("en-GB");
+      const el = await approvedCloudApp({
+        cloudRecoveryStatus: vi
+          .fn()
+          .mockResolvedValueOnce(approved())
+          .mockRejectedValue({ code: "server.internal", params: {}, status: 500 }),
+      });
+      cloudRecoveryAction(el, "status");
+      await flush(el);
+      const screen = await cloudScreen(el);
+      expect(await bottomOf(screen)).not.toBe("");
+      expect(await bottomOf(screen)).not.toBe("Correct the highlighted fields to continue.");
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
+      await flush(el);
+      expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
+      setLocale("es-ES");
+      await flush(el);
+      await screen.updateComplete;
+      expect(await bottomOf(screen)).toBe("Corrige los campos marcados para continuar.");
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("shows the provisioning screen while the restore is staged, with no earlier failure on it", async () => {
     const pending = deferred();
     const el = await mountSetupApp(
@@ -6647,6 +6984,44 @@ describe("first setup owner refusals", () => {
         } finally {
           setLocale("en-GB");
         }
+      }
+    },
+  );
+  it.each([
+    [
+      "en-GB",
+      "The box can no longer read the configuration export imported earlier. Export it again from the box you exported from, then set up this box again and import the new export.",
+      "Reload",
+    ],
+    [
+      "es-ES",
+      "El servidor ya no puede leer la exportación de configuración importada antes. Vuelve a exportarla desde el servidor del que la exportaste, configura de nuevo este servidor e importa la nueva exportación.",
+      "Recargar",
+    ],
+  ] as const)(
+    "says a staged export the provision cannot read must be exported again and the box set up again (%s)",
+    async (locale, sentence, reload) => {
+      try {
+        const provision = vi
+          .fn()
+          .mockRejectedValue({ code: "setup.configuration_unreadable", params: {}, status: 422 });
+        const el = await mountSetupApp(stubApi({ provision }));
+        setLocale(locale);
+        provisionRequest(el);
+        await flush(el);
+        expect(await screenText(el, "provisioning", "[data-test=error]")).toBe(sentence);
+        const screen = await screenHost(el, "provisioning");
+        expect(screen.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+        expect(screen.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
+          reload,
+        );
+        expect(
+          [...screen.shadowRoot!.querySelectorAll("wt-button")].map((b) =>
+            b.getAttribute("data-test"),
+          ),
+        ).toEqual(["reload"]);
+      } finally {
+        setLocale("en-GB");
       }
     },
   );

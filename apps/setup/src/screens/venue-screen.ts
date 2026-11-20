@@ -281,6 +281,8 @@ export class SetupVenueScreen extends LitElement {
   /** A server-side venue error that names no field, routed back by the shell and shown above
    * Next until the operator presses it again. */
   @property() errorMessage?: string;
+  /** A new value means a new refusal: it shows `errorMessage` again after the person pressed it away. A language change rewords `errorMessage` without changing this. */
+  @property({ attribute: false }) refusal?: unknown;
 
   /** A field path the server refused (the `params.field` of `setup.request_invalid` or
    * `venue.detail_invalid`), routed back by the shell. */
@@ -418,7 +420,7 @@ export class SetupVenueScreen extends LitElement {
         this.invalidField === undefined ? undefined : VENUE_SERVER_FIELDS[this.invalidField];
       this.serverInvalid = refusal === undefined ? undefined : { key: refusal.key, refusal };
     }
-    if (changed.has("errorMessage")) this.refusalDismissed = false;
+    if (changed.has("refusal")) this.refusalDismissed = false;
     this.#errors = this.#collectErrors();
   }
 

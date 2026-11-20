@@ -32,6 +32,7 @@ const boundary = createErrorBoundary(
   {
     "setup.not_ready": 503,
     "setup.certificate_refused": 422,
+    "setup.configuration_unreadable": 422,
     "setup.owner_required": 403,
     "setup.connection_insecure": 403,
     "password.throttled": 429,

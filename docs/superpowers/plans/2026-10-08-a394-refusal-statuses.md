@@ -231,8 +231,8 @@ pin today's number are in the part named.
   `/stations/:sid/printers` → 400; `watcher.not_found` on `/printers/:id/watcher` → 400;
   `printer.invalid_config` 422 → 400 (moved to A394-20 on 2026-11-10; done 2026-11-20 by A394-20c).
 - **Payments (A394-15)** — part 3: `payment.provider_unknown` (body, 2 routes), `reader.not_found`
-  (body, 2 routes) → 400; `reader.not_listed` on adopt 422 → 400 (moved to A394-20 on 2026-11-10; it
-  waits on question 4); `payment.not_stuck` for an unknown payment 409 → 404 (answered since
+  (body, 2 routes) → 400; `reader.not_listed` on adopt 422 → 400 (moved to A394-20 on 2026-11-10;
+  question 4 settled 2026-11-20; still open in A394-20); `payment.not_stuck` for an unknown payment 409 → 404 (answered since
   2026-11-10 by a new code, `stuck_payment.not_found`).
 - **Setup (A394-16)** — part 1: `provisioning.foreign_tenant` (provision, adopt),
   `provisioning.second_venue` (adopt), `mirror.environment_mismatch` (adopt) default 400 → 409.
@@ -655,6 +655,25 @@ Status changes:
   {field:"artifact"}` (`apps/setup/src/setup-app.ts:216`), so question 2's new code needs mapping.
   Tests: none pin the 409 rows at HTTP level; add them. Size S. Depends on: A394-5 (same file),
   questions 1 and 2. Not on PR #1399 (landed).
+  **2026-11-20 (A394-16):** done — in `apps/server/src/setup-api.ts`, `ADOPT_STATUS` answers
+  `mirror.environment_mismatch` 409 instead of the default 400, and both `ADOPT_STATUS` and
+  `PROVISION_STATUS` answer `provisioning.second_venue` and `provisioning.foreign_taxpayer` 409
+  (the plan's `provisioning.foreign_tenant` row, renamed by #3231), and `PROVISION_STATUS` also
+  answers `provisioning.taxpayer_identity_mismatch` 409;
+  `ARCHIVE_RESTORE_STATUS` answers `restore.archive_incomplete`, `restore.unexpected_entry`,
+  `restore.unsafe_entry_path` and `restore.identity_incomplete` 422, and the bucket rebuild's and
+  the recovery preparation routes' tables take them by spreading it. A configuration export that
+  decrypts but does not parse (the six `setup.request_invalid {field:"artifact"}` throws in
+  `parseConfigurationBundle` and `decodeConfigurationPlaintext`) now raises a new code,
+  `setup.configuration_unreadable {}`, which `PROVISION_STATUS` and the first fiscal setup routes'
+  shared boundary (`apps/server/src/setup-first-fiscal-api.ts`) answer 422. A refused upload shows
+  it under the export file field, with the "fix fields" line above Import, and clears it when the
+  person picks another file or presses Import; a later claim, activation or provision refusal
+  shows its own message on the page that sent the request. HTTP tests in `apps/server/src/setup-api.test.ts`
+  cover adopt, the archive, Cloud and bucket restore routes and the configuration and provision
+  routes. The setup app compares no 400, 409 or 422 status (grep of `apps/setup/src`, 2026-11-20);
+  it reads the codes. Request-shape refusals of an upload (`setup.request_invalid
+  {field:"artifact"}` for a wrong content type, an empty body or an oversized one) stay 400.
 - **A394-17 — Shift swaps: a body shift answers 400.** Files: `apps/server/src/schedule-api.ts`,
   `me-api.ts`. Changes `shift.not_found` → 400 on both swap routes (the path routes keep 404 under
   a second boundary); `swap.not_permitted` per question 13. Tests: none found at HTTP level. Size S.
@@ -811,6 +830,11 @@ that they are reachable.
   that is not the bound point throws `setup.operation_conflict` 409 (`setup-api.ts:~946`). Under
   the rule that is either a body reference to something unusable (400) or a clash with the saved
   binding (409).
+
+**2026-11-20 (A394-16):** the mismatch rows above now answer 409, and so do
+`provisioning.second_venue` and `provisioning.taxpayer_identity_mismatch` on provision. The first two judgement calls now answer 422: the four
+`restore.*` archive codes, and an export whose contents do not parse, now
+`setup.configuration_unreadable`. See A394-16 under Follow-up items.
 
 #### Out-of-rule statuses that look wrong
 

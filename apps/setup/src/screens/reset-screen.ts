@@ -62,6 +62,8 @@ export class SetupResetScreen extends LitElement {
 
   /** A refusal the operator cannot correct in the fields; it never disables the reset. */
   @property() errorMessage?: string;
+  /** A new value means a new refusal: it shows `errorMessage` again after the person pressed it away. A language change rewords `errorMessage` without changing this. */
+  @property({ attribute: false }) refusal?: unknown;
 
   /** Set once the reset is staged or cannot run; the form is replaced by it. */
   @property({ attribute: false }) outcome?: ResetScreenOutcome;
@@ -122,7 +124,7 @@ export class SetupResetScreen extends LitElement {
     }
     if (changed.has("credentialsRejected")) this.rejectionDismissed = false;
     if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
-    if (changed.has("errorMessage")) this.refusalDismissed = false;
+    if (changed.has("refusal")) this.refusalDismissed = false;
   }
 
   protected override updated(changed: PropertyValues<this>): void {

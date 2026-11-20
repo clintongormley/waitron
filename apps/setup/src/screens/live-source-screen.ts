@@ -38,11 +38,14 @@ export class SetupLiveSourceScreen extends LitElement {
 
   @property() errorMessage?: string;
   @property() errorCode?: string;
+  /** The request `errorMessage` refuses: each refusal brings a new one, a translation does not. */
+  @property({ attribute: false }) refusedRequest?: ConfigurationRequestDetail;
   @property({ attribute: false }) beforeEmpty?: (proceed: () => void, signal: AbortSignal) => void;
 
   #baseline?: { artifact?: File; passphrase: string };
   #scope?: DraftScope<{ artifact?: File; passphrase: string }>;
   #choiceAbort = new AbortController();
+  #sent?: ConfigurationRequestDetail;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -72,7 +75,6 @@ export class SetupLiveSourceScreen extends LitElement {
   @state() private passphrase = "";
   @state() private importing = false;
   @state() private attempted = false;
-  /** The operator pressed Import after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
   @state() private passphraseVisible = false;
 
@@ -82,19 +84,31 @@ export class SetupLiveSourceScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("errorMessage")) {
-      this.refusalDismissed = false;
+    if (changed.has("refusedRequest") && this.refusedRequest) {
       // The shell routes a failed import back here; the operator must be able to try again.
-      if (this.errorMessage) this.importing = false;
+      this.importing = false;
+      this.refusalDismissed = this.#changedSince(this.refusedRequest);
     }
+  }
+
+  #changedSince(sent: ConfigurationRequestDetail): boolean {
+    if (sent !== this.#sent) return false;
+    if (this.errorCode === "setup.configuration_unreadable") return this.artifact !== sent.artifact;
+    if (this.errorCode === "recovery.passphrase_invalid")
+      return this.passphrase !== sent.passphrase;
+    return false;
   }
 
   get #passphraseRefused(): boolean {
     return this.errorCode === "recovery.passphrase_invalid" && !this.refusalDismissed;
   }
 
+  get #artifactRefused(): boolean {
+    return this.errorCode === "setup.configuration_unreadable" && !this.refusalDismissed;
+  }
+
   override updated(changed: PropertyValues<this>): void {
-    if (changed.has("errorMessage") && this.#passphraseRefused)
+    if (changed.has("refusedRequest") && (this.#passphraseRefused || this.#artifactRefused))
       void focusFirstInvalid(
         this.shadowRoot!.querySelector<HTMLElement>("[data-test=import-form]")!,
       );
@@ -135,19 +149,16 @@ export class SetupLiveSourceScreen extends LitElement {
       return;
     }
     this.importing = true;
-    dispatchConfigurationRequested(this, {
-      artifact,
-      passphrase: this.passphrase,
-    });
+    this.#sent = { artifact, passphrase: this.passphrase };
+    dispatchConfigurationRequested(this, this.#sent);
   }
 
   override render(): TemplateResult {
     const fieldsInvalid = this.#artifactMissing || this.#passphraseShort;
+    const fieldRefused = this.#passphraseRefused || this.#artifactRefused;
     const bottom = [
-      ...(this.errorMessage && !this.refusalDismissed && !this.#passphraseRefused
-        ? [this.errorMessage]
-        : []),
-      ...(fieldsInvalid || this.#passphraseRefused ? [t("live_source.fix_fields")] : []),
+      ...(this.errorMessage && !this.refusalDismissed && !fieldRefused ? [this.errorMessage] : []),
+      ...(fieldsInvalid || fieldRefused ? [t("live_source.fix_fields")] : []),
     ].join(" ");
     return html`<div class="choices">
       <wt-card raised data-test="import-form">
@@ -161,12 +172,19 @@ export class SetupLiveSourceScreen extends LitElement {
           .files=${this.artifact ? [this.artifact] : []}
           .copy=${fileInputCopy()}
           .locale=${currentLocale()}
-          .error=${this.#artifactMissing ? t("live_source.export_missing") : ""}
-          ?invalid=${this.#artifactMissing}
+          .error=${
+            this.#artifactMissing
+              ? t("live_source.export_missing")
+              : this.#artifactRefused
+                ? (this.errorMessage ?? "")
+                : ""
+          }
+          ?invalid=${this.#artifactMissing || this.#artifactRefused}
           @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
             event.stopPropagation();
             if (!this.isConnected) return;
             this.artifact = event.detail.files[0];
+            if (this.#artifactRefused) this.refusalDismissed = true;
             this.#scope?.changed();
           }}
         >

@@ -38,6 +38,8 @@ export const shellEn = {
     "The box's disk is full, so Waitron cannot save anything. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
   "shell.first_setup.series_minute_taken":
     "The invoice series cannot be created: the minute this setup chose is already in this box's records. This is a fault in Waitron.",
+  "shell.first_setup.configuration_unreadable":
+    "The box can no longer read the configuration export imported earlier. Export it again from the box you exported from, then set up this box again and import the new export.",
   "shell.first_setup.clock_step_unsaved":
     "The server's time was set from this device, but the server could not save a note of that change, so setup cannot finish yet. Reconnect, then provision this server again: the server tries to save the note first.",
   "shell.clock_step_unsaved":
@@ -219,6 +221,8 @@ export const shellEn = {
     "This passphrase does not open the export. Check it and try again.",
   "shell.configuration.could_not_open":
     "The configuration export could not be opened. Check the file and passphrase.",
+  "shell.configuration.unreadable":
+    "This file is not a configuration export Waitron can read. Export it again from the box you exported from, then load the new export.",
   "shell.configuration.category_name_taken":
     "The export has two categories named “{name}” in the same place. Rename one in the restaurant you exported from, export again, then load the new export.",
   "shell.configuration.product_name_taken":
@@ -274,6 +278,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "El disco del servidor está lleno, así que Waitron no puede guardar nada. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
   "shell.first_setup.series_minute_taken":
     "No se pueden crear las series de facturas: el minuto que eligió esta configuración ya está en los registros de este servidor. Es un fallo de Waitron.",
+  "shell.first_setup.configuration_unreadable":
+    "El servidor ya no puede leer la exportación de configuración importada antes. Vuelve a exportarla desde el servidor del que la exportaste, configura de nuevo este servidor e importa la nueva exportación.",
   "shell.first_setup.clock_step_unsaved":
     "La hora del servidor se puso desde este dispositivo, pero el servidor no pudo guardar una nota de ese cambio, así que la configuración todavía no puede terminar. Pulsa Reconectar y vuelve a configurar este servidor: el servidor intenta primero guardar la nota.",
   "shell.clock_step_unsaved":
@@ -459,6 +465,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esta frase de contraseña no abre la exportación. Revísala e inténtalo de nuevo.",
   "shell.configuration.could_not_open":
     "No se ha podido abrir la exportación de configuración. Revisa el archivo y la contraseña de exportación.",
+  "shell.configuration.unreadable":
+    "Este archivo no es una exportación de configuración que Waitron pueda leer. Vuelve a exportarla desde el servidor del que la exportaste y carga la nueva exportación.",
   "shell.configuration.category_name_taken":
     "La exportación tiene dos categorías llamadas «{name}» en el mismo lugar. Cambia el nombre de una en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
   "shell.configuration.product_name_taken":

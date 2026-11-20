@@ -551,9 +551,7 @@ describe("configuration transfer archive", () => {
         encodeConfigurationBundle(missing, "a strong passphrase"),
         "a strong passphrase",
       ),
-    ).toThrowError(
-      expect.objectContaining({ code: "setup.request_invalid", params: { field: "artifact" } }),
-    );
+    ).toThrowError(expect.objectContaining({ code: "setup.configuration_unreadable", params: {} }));
   });
 
   it("accepts a bundle that still carries a tillName, as it checks only the venue fields it names", () => {

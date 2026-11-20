@@ -31,6 +31,7 @@ import { readDefaultMenuId } from "@waitron/menu";
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const passphrase = "SYNTHETIC transfer passphrase";
 const invalid = (field: string) => ({ code: "setup.request_invalid", params: { field } });
+const unreadable = { code: "setup.configuration_unreadable", params: {} };
 function moduleWith(tables: readonly ConfigurationTransferTable[]): WaitronModule {
   return {
     ...ALL_MODULES.find((module) => module.name === "fiscal-none")!,
@@ -50,26 +51,24 @@ async function scratch(run: (tx: Transaction) => Promise<void>) {
 }
 
 it.each([
-  { value: null, field: "artifact" },
-  { value: [], field: "artifact" },
-  { value: { ...configurationBundle(), createdAt: "bad-date" }, field: "artifact" },
-  { value: { ...configurationBundle(), modules: { module: -1 } }, field: "artifact" },
-  { value: { ...configurationBundle(), reconnect: [3] }, field: "artifact" },
+  { value: null },
+  { value: [] },
+  { value: { ...configurationBundle(), createdAt: "bad-date" } },
+  { value: { ...configurationBundle(), modules: { module: -1 } } },
+  { value: { ...configurationBundle(), reconnect: [3] } },
   {
     value: {
       ...configurationBundle(),
       venue: { ...configurationBundle().venue, taxpayerDomicile: 7 },
     },
-    field: "artifact",
   },
   {
     value: {
       ...configurationBundle(),
       venue: { ...configurationBundle().venue, invoiceLocales: [] },
     },
-    field: "artifact",
   },
-  { value: { ...configurationBundle(), tables: [] }, field: "artifact" },
+  { value: { ...configurationBundle(), tables: [] } },
   ...[
     undefined,
     [],
@@ -78,33 +77,30 @@ it.each([
     { adjustments: { version: 1.5, doc: {} } },
     { adjustments: { version: 1, doc: [] } },
     { adjustments: { version: 1, doc: null } },
-  ].map((settings) => ({ value: { ...configurationBundle(), settings }, field: "artifact" })),
+  ].map((settings) => ({ value: { ...configurationBundle(), settings } })),
   {
     value: Object.fromEntries(
       Object.entries(configurationBundle()).filter(([key]) => key !== "privacyContact"),
     ),
-    field: "artifact",
   },
-  { value: { ...configurationBundle(), privacyContact: "x" }, field: "artifact" },
-  { value: { ...configurationBundle(), privacyContact: [] }, field: "artifact" },
+  { value: { ...configurationBundle(), privacyContact: "x" } },
+  { value: { ...configurationBundle(), privacyContact: [] } },
   {
     value: { ...configurationBundle(), privacyContact: { privacyNoticeUrl: null } },
-    field: "artifact",
   },
   {
     value: {
       ...configurationBundle(),
       privacyContact: { privacyNoticeUrl: 5, privacyEmail: null },
     },
-    field: "artifact",
   },
-])("refuses malformed encrypted configuration: $field ($value)", ({ value, field }) => {
+])("refuses malformed encrypted configuration as unreadable ($value)", ({ value }) => {
   const artifact = encryptArtifact(
     packArchive([{ name: "configuration.json", bytes: Buffer.from(JSON.stringify(value)) }]),
     passphrase,
   );
   expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
-    expect.objectContaining(invalid(field)),
+    expect.objectContaining(unreadable),
   );
 });
 
@@ -156,10 +152,10 @@ it.each([
     { name: "configuration.json", bytes: Buffer.from("{}") },
     { name: "extra", bytes: Buffer.from("extra") },
   ],
-])("refuses a changed archive entry or malformed JSON", (...entries) => {
+])("refuses a changed archive entry or malformed JSON as unreadable", (...entries) => {
   const artifact = encryptArtifact(packArchive(entries), passphrase);
   expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
-    expect.objectContaining(invalid("artifact")),
+    expect.objectContaining(unreadable),
   );
 });
 

@@ -566,7 +566,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
-    throw new AppError("setup.request_invalid", { field: "artifact" });
+    throw new AppError("setup.configuration_unreadable", {});
   }
   if (typeof value.version === "number" && value.version > 54) {
     throw new AppError("setup.configuration_newer", {});
@@ -594,7 +594,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     !Array.isArray(value.reconnect) ||
     value.reconnect.some((name) => typeof name !== "string")
   ) {
-    throw new AppError("setup.request_invalid", { field: "artifact" });
+    throw new AppError("setup.configuration_unreadable", {});
   }
   const venueStrings = [
     "country",
@@ -616,7 +616,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
       (field) => venue[field] !== null && typeof venue[field] !== "string",
     )
   ) {
-    throw new AppError("setup.request_invalid", { field: "artifact" });
+    throw new AppError("setup.configuration_unreadable", {});
   }
   const privacyContact = value.privacyContact;
   if (
@@ -625,7 +625,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
       (field) => privacyContact[field] !== null && typeof privacyContact[field] !== "string",
     )
   ) {
-    throw new AppError("setup.request_invalid", { field: "artifact" });
+    throw new AppError("setup.configuration_unreadable", {});
   }
   const policy = value.contentLanguages;
   if (
@@ -667,12 +667,12 @@ export async function decodeConfigurationBundleAsync(
 function decodeConfigurationPlaintext(plaintext: Uint8Array): ConfigurationBundle {
   const entries = unpackArchive(plaintext);
   if (entries.length !== 1 || entries[0]?.name !== ENTRY)
-    throw new AppError("setup.request_invalid", { field: "artifact" });
+    throw new AppError("setup.configuration_unreadable", {});
   let value: unknown;
   try {
     value = JSON.parse(Buffer.from(entries[0].bytes).toString("utf8"));
   } catch {
-    throw new AppError("setup.request_invalid", { field: "artifact" });
+    throw new AppError("setup.configuration_unreadable", {});
   }
   return parseConfigurationBundle(value);
 }
