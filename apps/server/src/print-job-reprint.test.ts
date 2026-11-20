@@ -758,7 +758,7 @@ describe("a receipt queued in a language other than the sale's", () => {
       ...exhausted,
       claimedAt: new Date(now.getTime() - 11 * 60_000).toISOString(),
     });
-    const { resent } = await startFreshRounds(venue.db, layOut, now, () => {});
+    const { resent } = await startFreshRounds(venue.db, layOut, venue.cfg.nodeId, now, () => {});
     const rows = await Promise.all(resent.map(jobRow));
     const retry = rows.find((row) => row.resendOf === job.id);
     expect(retry?.pageLanguage).toBe("ca-ES");
