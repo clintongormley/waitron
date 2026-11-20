@@ -333,6 +333,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Those items have already gone to the station. Check the table before trying again",
     es: "Esos artículos ya se han enviado a la estación. Revisa la mesa antes de volver a intentarlo",
   },
+  "group.line_cancelled": {
+    en: "That item has been cancelled, so there is nothing to send. Check the table before trying again",
+    es: "Ese artículo se ha cancelado, así que no hay nada que enviar. Revisa la mesa antes de volver a intentarlo",
+  },
   "group.not_waiting": {
     en: "Only the next group to fire can be snoozed. Check the table before trying again",
     es: "Solo se puede posponer el siguiente grupo por marchar. Revisa la mesa antes de volver a intentarlo",

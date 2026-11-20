@@ -12198,6 +12198,16 @@ describe("one held dish Fire now app command", () => {
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
     expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
   });
+
+  it("says a dish cancelled in full has nothing to send", async () => {
+    const fireHeldLine = vi.fn().mockRejectedValue({ code: "group.line_cancelled" });
+    const { el } = await mountApp({ fireHeldLine });
+    const order = await openPartyTable(el);
+    emit(order, "fire-held-line", { lineId: "line-steak" });
+    await flush(el);
+    expect(fireHeldLine).toHaveBeenCalledOnce();
+    expect(banner(el)!.textContent).toContain(codeMessage("group.line_cancelled"));
+  });
 });
 
 describe("till-app: bill composition editing observations", () => {

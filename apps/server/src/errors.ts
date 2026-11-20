@@ -848,6 +848,8 @@ declare module "@waitron/shared" {
      * and this one has fired. `groupId` is the group named or the group a moved line sits in.
      */
     "group.not_held": { groupId: string };
+    /** Fire now named a held dish that has been cancelled in full: nothing is left to send. */
+    "group.line_cancelled": { lineId: string };
     /**
      * A snooze, or clearing one, named a held group that is not the one waiting: the party's first
      * held group is. `groupId` is the group named.

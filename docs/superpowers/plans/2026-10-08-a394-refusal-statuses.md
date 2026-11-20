@@ -777,16 +777,16 @@ Status changes:
   exist, is an extra rather than a dish, or is on another bill than the counter bill the address
   names (`apps/server/src/line-cancel-context.ts`); a party's refusal carries `partyId`, a counter
   bill's `tabId`. A malformed line id keeps the 400. A line of another party's bill on a party
-  address still answers `bill.other_party` 409. `fireHeldLine`'s request_invalid for a fully
-  cancelled held line (`order-groups.ts`) is a state clash on the fire-line route, not these
-  routes, and was left alone. No client compares these routes' statuses (grep of `apps/dashboard`,
+  address still answers `bill.other_party` 409. `POST /api/parties/:id/groups/fire-line` on a held
+  dish cancelled in full answers a new code, `group.line_cancelled`, 409 (was
+  `management.request_invalid {field:"lineId"}` 400; `order-groups.ts`, `fireHeldLine`), and the
+  till words it. No client compares these routes' statuses (grep of `apps/dashboard`,
   `apps/till`, `apps/setup` and `packages/*/src/dashboard` for `status === 4xx`, 2026-11-20).
-  By question 10: `GET /api/backup/recovery-key` answers `backup.recovery_key_too_short` 409, since
-  the short key there is always the one the box holds; rotate keeps 400, since there it is the key
-  the request sends. `POST /api/backup/apply` keeps 400: on that route the code can mean either the
-  held key or the request's key, and moving the held-key case would need a second code and a
-  dashboard change (`backup-screen.ts` reads the code) with no difference anyone sees, so it was
-  left. `POST /management-api/cloud/complete` answers a new code, `cloud.request_not_found`, 400
+  By question 10: `backup.recovery_key_too_short` now means the key the box holds, and answers 409
+  on `GET /api/backup/recovery-key`, `POST /api/backup/apply` (no key sent) and
+  `PUT /api/backup/stream`. A too-short key the request sends to apply or rotate answers a new code,
+  `backup.new_recovery_key_too_short`, 400; the dashboard checks a pasted key's length before
+  sending it. `POST /management-api/cloud/complete` answers a new code, `cloud.request_not_found`, 400
   when the box has no saved connection request at all (`cloud-client.ts`, `complete`); a different
   saved request still answers `cloud.binding_conflict` 409. `promotion.not_a_local_secondary` was
   not changed: no route reaches it, because `POST /management-api/promote` never calls

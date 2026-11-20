@@ -6187,7 +6187,7 @@ describe("Fire now on one held dish", () => {
       v,
       s.partyId,
       () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command)),
-      { code: "management.request_invalid", params: { field: "lineId" } },
+      { code: "group.line_cancelled", params: { lineId: steak.id } },
     );
   });
 

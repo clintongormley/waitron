@@ -20,6 +20,7 @@ import {
   devices,
   deviceProfiles,
   products,
+  lineServiceCancellations,
   serviceCommands,
   ticketItems,
   parties,
@@ -2568,6 +2569,30 @@ describe("POST one held dish's Fire now", () => {
     });
     expect(refused.status).toBe(400);
     expect(refused.json).toEqual(refusal("group.not_found", { lineId: missing }));
+    expect(await snapshot(party)).toEqual(before);
+  });
+  it("refuses 409 group.line_cancelled for a held dish cancelled in full", async () => {
+    const party = await withGroups();
+    const lineId = party.cake.lineIds[0]!;
+    const [cake] = await venue.db
+      .select({ quantity: workingOrderLines.quantity })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, lineId));
+    await venue.db.insert(lineServiceCancellations).values({
+      lineId,
+      quantity: cake!.quantity,
+      cancelledAt: "2026-10-17T10:00:00.000Z",
+      wasStarted: false,
+      actorId: venue.operatorId,
+    });
+    const before = await snapshot(party);
+    const refused = await call("POST", `/api/parties/${party.partyId}/groups/fire-line`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      lineId,
+    });
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual(refusal("group.line_cancelled", { lineId }));
     expect(await snapshot(party)).toEqual(before);
   });
   it("requires a session without touching the kitchen", async () => {
