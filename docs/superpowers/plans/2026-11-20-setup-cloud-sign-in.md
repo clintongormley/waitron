@@ -1,86 +1,40 @@
-# Cloud registration from the box
+# Cloud sign-in from Waitron — Lane D
 
-The owner set the setup flow on 20 November at 13:49 and made Cloud sign-in skippable at 13:54
-(Lane D questions.md). On test Cloud, sign in or register from the box after completing the
-administrator form and before entering the venue details. Cloud registers the box automatically.
-If you skip, enter the address and use your own mail server. You can connect later from the box.
-Lane D owns Waitron. Lane K owns Cloud and the contracts below. Watcher clearance is pending.
+Cloud sign-in is skippable, returns to Waitron in the same tab and connects automatically after sign-in. Basic services come with registration. Remote access and guest sharing require a trial or paid plan. The owner’s decisions are in Lane D questions.md on 20 November at 13:49, 13:54, 14:13 and 14:16. The watcher cleared the installed test box at 15:33 against [Lane K’s signed contract](https://github.com/waitron-io/waitron-cloud/blob/f1d2c23f013a345ad7efdf86e59e1cd8aed73f9c/docs/superpowers/plans/2026-11-20-cloud-setup-pairing.md) and requested one Claude read of this revision before build.
 
-## 1. Connect from Cloud services after setup
+## 1. Release the shared contract first
 
-Use the dashboard’s existing Cloud services entry for a test box with no Cloud venue ID. Keep
-the local primary, management permission, same-origin and fresh sign-in checks in
-`apps/server/src/cloud-api.ts:315–371`. The administrator completes Cloud sign-in or signup and
-its required checks from the box. The box registers automatically. Send the saved venue name,
-trading address, country, tax number and legal name from local settings. Cloud finds or creates the business
-within that account by tax number, then creates the venue without a matching prompt. Boxes with
-a Cloud venue ID retain it. Use this entry for new connections on eligible test boxes. Keep the
-code flow for replacement, an in-progress connection and boxes outside the test rollout.
+D adds v4 alongside unchanged v3 in `packages/contract/src/signing/{pairing-proof,pairing-proof.test}.ts` and exports it from `src/index.ts`. Sign the exact UTF-8 array `["waitron-cloud-pair-v4",cloudOrigin,action,requestId,publicKey,"test",issuedAt,args]` in the existing `{payload,signature}` envelope:
 
-K proposes shared, versioned signed start, status and complete requests (Lane K questions.md,
-14:06). Start uses the box key. Complete signs `countryCode`, `venueName`, `tradingAddress`,
-`taxNumber` and `legalName`. Status returns the same venue and installation IDs after a lost
-reply. Persist the box key and operation identity before start. Refuse an account switch while
-that registration is unresolved. Reuse `apps/server/src/{cloud-client,cloud-signed-request,cloud-installation}.ts`
-and the full registration and lease. K and D must agree the shared contract and the trusted
-sign-in handoff. K raised the sign-in window decision at 14:00.
+| POST route | Signed `args` |
+| --- | --- |
+| `/api/pairing/start` | `[redirectUri,state,codeChallenge]` |
+| `/api/pairing/redeem` | `[code,codeVerifier]` |
+| `/api/pairing/status` | `[]` |
+| `/api/pairing/complete` | `[countryCode,venueName,[addressLine1,addressLine2,postalCode,city,province],taxNumber,legalName]` |
 
-Change `apps/dashboard/src/{screens/cloud-services-screen.ts,api/client.ts}`,
-`apps/server/src/{cloud-api.ts,cloud-client.ts,boot.ts}` and the signing contracts it uses. Add
-failing cases in `cloud-services-screen.test.ts`, `cloud-api.test.ts` and `cloud-client.test.ts`
-for in-box sign-in, management refusal and retry of the same registration. Make them pass before the
-joint walkthrough. On test Cloud, connect a previously unpaired box, finish every check on the
-box and see one correctly associated Cloud venue. Estimate 300–390 code and 120–190 test lines.
+Reuse Ed25519 SPKI, canonical unpadded base64url, UUID, exact re-encoding and 60-second timestamp checks; preserve K’s body and 120-character name limits. Estimate **100–160 code, 100–170 test lines**. Pin all four wire vectors, malformed/action-specific arguments, wrong origin/key/signature, timestamp boundaries and v3 compatibility; extend `test/consumer/main.ts`.
 
-Cloud owners can remove an old venue with the existing **Remove venue** action (Cloud #1330,
-`apps/portal/src/installation-screen.ts:48`). It hides the venue and revokes its connection.
-Billing and backup history remain in Cloud.
+Use the existing automatic release on merge described in `docs/developers/shared-ui-preparation.md`; no publisher changes. Record the published `@waitron-io/contract` version, source commit and integrity before either app consumes v4. Cloud verifies the exact release with its workflow credential.
 
-## 2. Reuse registration during fresh setup
+## 2. Connect an installed test box
 
-There is no existing setup-owner proof before Venue. Admin Next writes a browser draft and
-navigates to Venue (`apps/setup/src/screens/admin-screen.ts:188–208`). The setup routes are
-unauthenticated at that point (`apps/server/src/setup-api.ts:695–711`). The server creates the
-first-fiscal owner capability only after receiving the venue and administrator together
-(`apps/setup/src/setup-app.ts:1280–1286`, `apps/server/src/setup-first-fiscal-api.ts:383–445`).
-The setup password verifier comes from that claim
-(`packages/provisioning/src/first-setup-owner.ts:191–235`). An origin check identifies the page
-(`apps/server/src/own-page.ts:12–19`). A browser on the venue network can load that page.
+Deliver the cleared **300–390 code lines**, separately from the contract, with approximately **180–280 test lines**. Limit v4 to K’s configured test key/exact HTTPS callback pair and an installed, unpaired box using an existing enrolled Cloud account. Keep v3 for pending connections, existing installations, replacement and other environments.
 
-Keep the administrator form staged. Agree with the watcher on who can start registration on
-the intended test box. Apply this to fresh Live and Prepare setup. After Admin and that proof,
-reuse PR 1's account flow and keep **Skip**. Use K's proposed bound request ID for the
-initial synthetic address test before the venue exists. Keep the pending registration with
-the box key across an edited or replaced first-fiscal claim. The setup client holds the
-connection until provision creates local venue settings.
-Start again discards the pending local registration. Cloud owners can remove the old entry.
-Supply the Venue screen’s `addressProvider` with signed `POST /api/installations/address-lookup`
-suggest and validate calls once the address grant is available. Use the signed complete call
-for the server-accepted Venue save. The first save creates the venue under the right business.
-A retry returns its ID. K must agree how a later accepted save updates that venue. Provision
-writes the ID with the local venue settings. K must supply address access and the test relay grant. Apply
-A1171's relevant lookup rules for provider attribution, selection confirmation and allowances.
+Change `apps/server/src/{cloud-client,cloud-api,boot}.ts` and dashboard `src/{screens/cloud-services-screen,api/client}.ts`. Read the committed venue/address and singleton taxpayer profile server-side. Reuse `cloud-client.ts`’s `activePaths` connection turn, saved Ed25519 key, private durable connection file, venue-ID save/recovery and `cloud-installation.ts` lease lifecycle. Persist one request and key, its saved profile, separate 32-byte random state and verifier, and the tab/session binding before start. Derive the S256 challenge from the verifier. Bind to the session row ID from the fresh sign-in check.
 
-On the Email step, offer Cloud account email with its active grant from signed
-`POST /api/installations/configuration`. Accept it without SMTP. Keep manual entry and the SMTP
-test for Skip. Reuse account email through `/v1/installations/email/{submit,status}`. Signup
-verification uses Cloud's account mail. The relay acceptance is an existing account message.
+Require local management origin, a serving primary, `system.manage` and fresh management sign-in at start and before redeem/completion, including rechecks after waits. Reject the remote staff entrance. Bind the initiating tab’s secret and original local session before either signature; a forwarded callback or another signed-in browser cannot finish it. Validate the exact configured HTTPS callback and Cloud authorization origin/path, without credentials or fragments, and match authorization request ID/state/challenge/S256 against pending state. Strictly validate replies, registration and deadlines. Never replace an unresolved attempt to switch accounts. Signed status recovers lost redeem/completion replies under the same durable request/key; completion remains idempotent.
 
-Change `apps/setup/src/{setup-app.ts,api/client.ts,screens/venue-screen.ts,screens/email-screen.ts}`
-and `apps/server/src/{boot.ts,setup-api.ts,setup-first-fiscal-api.ts,provision.ts,first-fiscal-activation.ts}`.
-Test Skip, address selection and Cloud email in the setup browser suites. Test the owner boundary,
-saved profile after a lost reply and both provision paths in the setup API and first-fiscal suites. On test
-Cloud, complete a fresh setup with an address suggestion and Cloud email, then receive a
-password-reset email from the box. Estimate 350–500 code and 170–270 test lines, assuming the
-authority agreed with the watcher can be reused.
+Use a tiny static bridge at `/cloud/pairing/callback`, mounted before the SPA catch-all, avoiding dashboard startup. GET only returns fixed, no-store HTML with restrictive CSP and `Referrer-Policy: no-referrer`. Read the callback with `URLSearchParams` and clear the query with `history.replaceState` before the same-origin POST. The cross-site GET can omit the Strict management cookie. The POST from the loaded box page requires it. Check the tab marker in `sessionStorage` and use `location.replace` to return to Cloud services. Keep code and verifier out of browser storage, retained history and logs. Cancellation/expiry offers retry; no extra pairing confirmation.
 
-## 3. Keep explicit trial consent for remote access
+## 3. Prove the installed journey locally
 
-From Cloud services, offer the trial for the current venue when remote access requires Connected.
-The existing start-trial request requires a Cloud account session. Confirm with the watcher
-whether to hand off to Cloud Billing or use a trial action agreed with K. Exercise the same venue
-before and after explicit consent in `apps/dashboard/src/screens/cloud-services-screen.billing.test.ts` and the test Cloud
-walkthrough. Estimate 60–110 code and 60–100 test lines.
+Use failing behavioral tests first in server `cloud-{client,api}.test.ts`, preserving legacy/replacement assertions. Cover wrong tab/session/origin, lost freshness/permission/primary role, hostile URLs, expiry, malformed replies, concurrent attempts and restart/lost-reply recovery. Add bridge GET/history/log checks and a Playwright round-trip fixture exercising real same-tab navigation, reload, cancellation and return to Cloud services; retain screen checks in `cloud-services-screen.test.ts`. Normal local fixtures do not wait for K. Joint integration waits for K’s implementation and a permitted environment. **Do not deploy to, lock, reset or restart either owner test box.**
 
-Update affected EN/ES strings and guides and check both themes at phone and desktop widths.
-Guest-menu tier remains with the owner. A1186, SMS, upgrades and production are separate work.
+## 4. Later slices
+
+Early setup retains the staged administrator form: Admin Next only patches the draft (`apps/setup/src/screens/admin-screen.ts:188–208`); owner claiming starts after Venue (`setup-app.ts:1280–1286`). Setup routes are unauthenticated (`apps/server/src/setup-api.ts:695–711`). There is no earlier exclusive claim: the first setup browser is installer authority, as settled at 14:16. Bind its tab registration and carry it into the later owner claim. Add reload-safe, tab-scoped draft retention and browser tests proving actual navigation preserves forms after sign-in **and Skip**, for Live and Prepare.
+
+Early setup, address access, Cloud email and new-account enrolment remain outside the installed slice. Later reuse Venue’s address provider, K’s pre-venue lookup grant and existing signed configuration/email relay; Skip keeps manual address/SMTP. Settle signup continuation and accepted profile updates with K first.
+
+Guest-menu preview must explain the trial requirement and offer a self-service trial path; K gates sharing, including already-shared ineligible test menus. Reuse Cloud Billing for explicit trial consent. Update affected EN/ES guides and check both themes/phone widths per slice. Cloud already has **Remove venue** (#1330). A1186, SMS, upgrades and production remain separate.
