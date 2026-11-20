@@ -22,9 +22,11 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
+// Imported before anything that reaches till-sale.js: entered first, close-of-day.js binds to the
+// mocked till-sale.js below rather than to the original still loading inside the mock factory.
+import { closeOfDayConfig, issueBillAtClose, type CloseOfDayRule } from "./close-of-day.js";
 import { readBillEditState } from "./bill-editing.js";
 import { endMeal } from "./meal-end.js";
-import { closeOfDayConfig, issueBillAtClose, type CloseOfDayRule } from "./close-of-day.js";
 import { seedGivenAwayLine } from "./testing/cancel-line.js";
 import { clockAt } from "./testing/deferred-close-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
