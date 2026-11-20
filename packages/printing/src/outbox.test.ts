@@ -443,7 +443,7 @@ describe("resendPrintJob", () => {
       const chosen = await enqueuePrintJob(tx, printer.id, Uint8Array.of(1), "document", {
         saleId,
         receiptCopy: true,
-        language: "es",
+        pageLanguage: "es",
       });
       const own = await enqueuePrintJob(tx, printer.id, Uint8Array.of(2), "document", {
         saleId,

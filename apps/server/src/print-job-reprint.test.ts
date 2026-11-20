@@ -96,8 +96,34 @@ const layOut = (
   saleId: string,
   duplicate: boolean,
   printer: EscSetting,
-  language: string | null = null,
+  language: string | null,
 ) => layOutSaleReceipt(venue.backend, tx, venue.cfg, saleId, duplicate, printer, language);
+
+function printApi(): Hono {
+  const app = new Hono();
+  mountPrintApi(
+    app,
+    {
+      db: venue.db,
+      cfg: venue.cfg,
+      pairingMode: createPairingMode(),
+      readMembership: async () => null,
+      readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      layOutSaleReceipt: layOut,
+      venueLocale: "es-ES",
+    },
+    () => {},
+  );
+  return app;
+}
+
+function resend(jobId: string, printerId?: string) {
+  return printApi().request(`/management-api/print-jobs/${jobId}/resend`, {
+    method: "POST",
+    headers: { cookie: venue.adminDashboard, "content-type": "application/json" },
+    body: JSON.stringify(printerId === undefined ? {} : { printerId }),
+  });
+}
 
 function reprint(jobId: string, printerId: string, ownPrinterUnseen = false) {
   return inTx(venue, (tx) =>
@@ -276,7 +302,7 @@ describe("reprintJobOn", () => {
     const target = await printerAt(at80fine);
     const { jobId } = await reprint(original.id, target);
     const job = await jobRow(jobId);
-    const expected = await inTx(venue, (tx) => layOut(tx, saleId, false, at80fine));
+    const expected = await inTx(venue, (tx) => layOut(tx, saleId, false, at80fine, null));
     expect(job).toMatchObject({
       printerId: target,
       resendOf: original.id,
@@ -305,7 +331,7 @@ describe("reprintJobOn", () => {
     const target = await printerAt(at58);
     const { jobId } = await reprint(copy, target);
     const job = await jobRow(jobId);
-    const expected = await inTx(venue, (tx) => layOut(tx, saleId, true, at58));
+    const expected = await inTx(venue, (tx) => layOut(tx, saleId, true, at58, null));
     expect(job).toMatchObject({ printerId: target, resendOf: copy, receiptCopy: true });
     expect(job.payload).toEqual(expected);
   });
@@ -474,32 +500,6 @@ describe("reprintJobOn", () => {
 });
 
 describe("the print queue's resend to another printer", () => {
-  function printApi(): Hono {
-    const app = new Hono();
-    mountPrintApi(
-      app,
-      {
-        db: venue.db,
-        cfg: venue.cfg,
-        pairingMode: createPairingMode(),
-        readMembership: async () => null,
-        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
-        layOutSaleReceipt: layOut,
-        venueLocale: "es-ES",
-      },
-      () => {},
-    );
-    return app;
-  }
-
-  function resend(jobId: string, printerId: string) {
-    return printApi().request(`/management-api/print-jobs/${jobId}/resend`, {
-      method: "POST",
-      headers: { cookie: venue.adminDashboard, "content-type": "application/json" },
-      body: JSON.stringify({ printerId }),
-    });
-  }
-
   it("queues a receipt laid out on the printer the request names", async () => {
     const { saleId, original } = await paidSale(at80);
     await setJob(original.id, exhausted);
@@ -507,7 +507,7 @@ describe("the print queue's resend to another printer", () => {
     const response = await resend(original.id, target);
     expect(response.status).toBe(202);
     const { jobId } = (await response.json()) as { jobId: string };
-    const expected = await inTx(venue, (tx) => layOut(tx, saleId, false, at58));
+    const expected = await inTx(venue, (tx) => layOut(tx, saleId, false, at58, null));
     expect(await jobRow(jobId)).toMatchObject({
       printerId: target,
       resendOf: original.id,
@@ -660,37 +660,11 @@ describe("the print queue's resend to another printer", () => {
   });
 });
 
-describe("a receipt printed at the till in a language other than the sale's", () => {
-  function printApi(): Hono {
-    const app = new Hono();
-    mountPrintApi(
-      app,
-      {
-        db: venue.db,
-        cfg: venue.cfg,
-        pairingMode: createPairingMode(),
-        readMembership: async () => null,
-        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
-        layOutSaleReceipt: layOut,
-        venueLocale: "es-ES",
-      },
-      () => {},
-    );
-    return app;
-  }
-
-  function resend(jobId: string, printerId?: string) {
-    return printApi().request(`/management-api/print-jobs/${jobId}/resend`, {
-      method: "POST",
-      headers: { cookie: venue.adminDashboard, "content-type": "application/json" },
-      body: JSON.stringify(printerId === undefined ? {} : { printerId }),
-    });
-  }
-
+describe("a receipt queued in a language other than the sale's", () => {
   const catalan = (text: string) => /Tipus +Base/u.test(text) && !/Tipo +Base/u.test(text);
   const spanish = (text: string) => /Tipo +Base/u.test(text) && !/Tipus +Base/u.test(text);
 
-  /** A paid counter bill and its receipt, original or copy, printed at the till in `language`. */
+  /** A paid bill's receipt, original or copy, queued through the receipt helpers in `language`. */
   async function printedIn(language: string | undefined, kind: "original" | "copy") {
     const billId = await placedIssuedBill(venue, "Paella");
     expect((await collect(venue, billId, "35.00")).status).toBe(200);

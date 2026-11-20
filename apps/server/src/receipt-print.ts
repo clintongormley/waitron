@@ -396,7 +396,7 @@ export async function enqueueReceiptCopy(
   const job = await enqueuePrintJob(tx, printer.id, bytes, "document", {
     saleId,
     receiptCopy: true,
-    language: language ?? null,
+    pageLanguage: language ?? null,
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId);
   return job;
@@ -742,7 +742,7 @@ export async function enqueueOriginalReceipt(
   const job = await enqueuePrintJob(tx, resolved.printer.id, resolved.receiptBytes, "document", {
     saleId,
     receiptCopy: duplicate,
-    language: language ?? null,
+    pageLanguage: language ?? null,
     whileSwitchedOff: printers.whileSwitchedOff === true,
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey);
