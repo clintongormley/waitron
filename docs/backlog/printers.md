@@ -345,11 +345,6 @@ Hardware and inbox checks to complete in the owner session.
   slip reprinted from Print Queue; and Receipt Email arriving in the intended inbox. No physical printer, reader or
   inbox qualification was performed by the software cuts. The watcher moved these remaining
   checks here on 11 November 2026 at 17:20; they add no prerequisite to A840/A842/A848.
-- **The spare file's size is measured on HFS+ and Linux tmpfs only** — not ext4, copy-on-write
-  filesystems, or a `logs` volume on another disk. Left open by A1127.
-  [Detail](setup.md#the-spare-files-size-is-measured-on-hfs-and-linux-tmpfs-only)
-- **Measure the backup room note's `venue.db` identity on the box's filesystem** (likely ext4, inside Docker),
-  including whether the birth time is reported. Left open by A1167.
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
   headings on a physical till. Keep drag only if it works reliably; Move to… and the held heading's
   Move earlier/later actions remain available. Browser gesture checks do not settle this choice.
@@ -373,10 +368,6 @@ Hardware and inbox checks to complete in the owner session.
   the HP Color LaserJet MFP M181fw with a long PDF invoice, measuring and scanning its QR, and
   check what Waitron reports with an empty tray and when power is lost mid-job. Left open by A231q.
   [Detail](printers.md#a552-invoices-on-the-owners-office-printer-are-unchecked-with-the-committed-code)
-- **A553. How long the box takes to draw one A4 raster page, and its peak memory, at 300 and
-  600 dpi, are not measured.** The server draws each page (`renderInvoicePage`,
-  `apps/server/src/page-print-api.ts`); it has not been timed on the box, in the built image. Left
-  open by A231q.
 - **A printer reported by its `.local` name may stay addable.** From a Mac, resolving the HP's
   `.local` name took 5 seconds, past the 1.5-second limit, so it was left unmarked. Not tried from
   the box's container, where the lookup may fail outright; either way the printer stays addable.
@@ -696,3 +687,12 @@ with a ruler and scanned with a phone; the same invoice as Apple Raster at 600 d
 from the Printers tab; and what Waitron reports with the tray empty and when the printer is
 switched off mid-job. The owner saw the last two once on 2026-10-12 with a local change, before
 A231q changed how a job the printer is holding is reported. Left open by A231q.
+
+How long the box takes to draw a page (A553, measured 2026-11-20 on the Lenovo M710q, i7-7700T):
+the server's `renderInvoicePage` from main `58508d7fe8`, bundled as the server is and run on the
+Node and sharp of the box's image `eca67e9dcd`, in a separate container with no network and
+nothing sent to a printer. The one-page sample invoice drew as PWG raster in 520–538 ms the first
+time and 334–350 ms after, at 300 dpi, and in 1,417–1,422 ms then 1,178–1,229 ms at 600 dpi; Apple
+Raster took the same within 30 ms. The process's peak memory rose from about 117 MiB before drawing
+to about 211 MiB after one page at 300 dpi and 279 MiB at 600 dpi, and to 251 MiB and 357 MiB
+after three pages in a row. A multi-page invoice was not drawn.

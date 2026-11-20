@@ -5965,9 +5965,12 @@ only the rejoin's wipe, through `db-wipe.ts`, is guarded.
   identity check; only the guard, which reads text, would notice.
 - A peer's fence that demotes the box at boot (`boot.ts`, `fenced && axes.singletonRole ===
   "primary"`) is not visible to the step, which checks no role.
-- `venue.db`'s device number and birth time are not measured on Linux or in Docker; a mismatch
-  skips, which is safe. The in-place-write control in `apps/server/src/backup-room-note.test.ts`, run
-  by CI on Linux, is the only receipt that ordinary writes keep them.
+- `venue.db`'s identity is measured on one box only: on the Lenovo box's ext4, inside Docker
+  (2026-11-20), Node reported its device number, file number and a birth time to the nanosecond,
+  distinct from its change time, and all three still matched the note after `venue.db` had been
+  written 14 minutes after the note. Other filesystems are not measured; a mismatch skips, which is
+  safe. The in-place-write control in `apps/server/src/backup-room-note.test.ts`, run by CI on
+  Linux, also covers ordinary writes.
 - A backup stamped by a clock that ran ahead is one of the run's own limits above.
 - A restore that crashes between placing the file and writing its new installation leaves the
   restored file holding the old installation start; the next reload writes a note with it, and a

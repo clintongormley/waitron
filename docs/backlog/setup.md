@@ -178,14 +178,18 @@ browser's preferred supported language, falling back to English when none is sup
   on real Spanish systems (left open by C42, #837).
   [Detail](#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
 
-## The spare file's size is measured on HFS+ and Linux tmpfs only
+## A start on a full ext4 disk is not tried
 
 A1127 measured the room a lock, the emptying and the Start-again flow need on a 32 MiB HFS+ image,
-and CI runs the real-disk cases on Linux tmpfs mounts of 32 MiB (48 MiB for `start-from-spare.e2e.test.ts`). Not measured: ext4 (the box's likely
-filesystem: 4 KiB blocks, its journal, root-reserved blocks), copy-on-write filesystems with
-snapshots or compression (btrfs, zfs), and whether the `logs` volume shares the state folder's disk
-on every box. Detail:
-A1127's design, "Open, not measured".
+and CI runs the real-disk cases on Linux tmpfs mounts of 32 MiB (48 MiB for `start-from-spare.e2e.test.ts`).
+On the Lenovo box (Debian 13, kernel 6.12, image `eca67e9dcd`, read on 2026-11-20 from inside the
+server's container) the state, `logs` and backups volumes are all on the root ext4 filesystem (one
+device number, 4 KiB blocks); the spare file holds 8 MiB in exactly 8 MiB of blocks; and ext4 keeps
+5% of the disk (about 11.3 GiB there) for root, which the server, running as user 10001, cannot use
+and which the free space it reads (`bavail`) already leaves out. Not tried: whether a start fits in
+the spare's 8 MiB on a full ext4 disk, with its journal (a run on a small throwaway ext4 filesystem,
+not the box's own disk), and copy-on-write filesystems with snapshots or compression (btrfs, zfs).
+Detail: A1127's design, "Open, not measured".
 
 ## A1142: a cut-off Start again beside found files the Move cannot handle gets only the explanation
 

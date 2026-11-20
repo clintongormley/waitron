@@ -445,6 +445,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **`restoreFromArtifact` has no production caller.** Only tests call it since A1131bc slice 4;
   decide whether they should place archives through `runStagedRestore`, then delete it.
   [Detail](backlog/setup.md#restorefromartifact-has-no-production-caller)
+- **A start on a full ext4 disk is not tried.** The spare file's room is measured on HFS+ and
+  Linux tmpfs; the box's ext4 is measured only for what it allocates. Left open by A1127.
+  [Detail](backlog/setup.md#a-start-on-a-full-ext4-disk-is-not-tried)
 
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?**
   Since 3b-F a test on two separate databases joins a spare that then takes over, by a handover and
@@ -876,7 +879,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **A print agent somewhere other than the box** (bundle of 4, size L, waits for another entry). Holds A1203, A1204, A1175. [Detail](backlog/printers.md#bundle-a-print-agent-somewhere-other-than-the-box)
 
-- **One session at the real box: printers, paper, tax QR, the drawer** (size M, needs the real hardware and inbox). Holds A739, A773, A552, A553. [Detail](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
+- **One session at the real box: printers, paper, tax QR, the drawer** (size M, needs the real hardware and inbox). Holds A739, A773, A552. [Detail](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 
 - **Measure one-job print pulls on the box.** Physical throughput, authentication and large retained queues remain unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
 
