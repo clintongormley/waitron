@@ -31,9 +31,25 @@ import {
   type DevicePrinter,
   type PrinterLookup,
 } from "./receipt-print.js";
+import { storedDeviceOrigin } from "./request-config.js";
 import type { OriginConfig } from "./trading-context.js";
 
 type CardSlipRequest = { printerId: string; locale: string } | null | undefined;
+
+/** Whether a reader payment's slip is Waitron's to print, decided once as its row is made. */
+export async function readerSlipWanted(
+  tx: Transaction,
+  cfg: OriginConfig,
+  requested: boolean | undefined,
+  readerId: string | undefined,
+): Promise<boolean> {
+  if (requested !== true || !(await deviceMayPrintSlips(tx, cfg))) return false;
+  if (readerId !== undefined) {
+    const [reader] = await tx.select().from(cardReaders).where(eq(cardReaders.id, readerId));
+    if (reader?.printsOwnSlipAutomatically === true) return false;
+  }
+  return true;
+}
 
 export async function freezeCardSlip(
   tx: Transaction,
@@ -42,14 +58,59 @@ export async function freezeCardSlip(
   requested: boolean | undefined,
   readerId: string | undefined,
 ): Promise<CardSlipRequest> {
-  if (requested !== true || !(await deviceMayPrintSlips(tx, cfg))) return;
-  if (readerId !== undefined) {
-    const [reader] = await tx.select().from(cardReaders).where(eq(cardReaders.id, readerId));
-    if (reader?.printsOwnSlipAutomatically === true) return;
-  }
+  const wanted = await readerSlipWanted(tx, cfg, requested, readerId);
+  return freezeWantedSlip(tx, cfg, workingOrderId, wanted);
+}
+
+export async function freezeWantedSlip(
+  tx: Transaction,
+  cfg: OriginConfig,
+  workingOrderId: string,
+  wanted: boolean,
+): Promise<CardSlipRequest> {
+  if (!wanted) return;
   const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
   if (printer === undefined) return null;
   return { printerId: printer.id, locale: await orderSlipLocale(tx, workingOrderId) };
+}
+
+/**
+ * The slip asked for on a reader payment, printed as it leaves `pending` on any path but the live
+ * one that charged while the till waited, which prints its own. A pending row leaves `pending` once
+ * (`bill_payments_guard_update`), so a caller at that move prints once. A printer problem never
+ * undoes the outcome.
+ */
+export async function printSettledPaymentSlip(
+  tx: Transaction,
+  billPaymentId: string,
+): Promise<void> {
+  const [row] = await tx.select().from(billPayments).where(eq(billPayments.id, billPaymentId));
+  if (row?.slipWanted !== true) return;
+  const settledAt = row.state === "received" ? row.receivedAt : row.failedAt;
+  if (settledAt === null) return;
+  await optionalDocument(tx, "enqueueRequestedPaymentSlip", row.workingOrderId, async () => {
+    const printer = await resolvePaymentSlipPrinter(tx, storedDeviceOrigin(row));
+    if (printer === undefined) throw new Error("No payment slip printer");
+    const [provided] = await tx.select().from(payments).where(eq(payments.billPaymentId, row.id));
+    await enqueueSlips(
+      tx,
+      printer,
+      row.workingOrderId,
+      [
+        {
+          charged: row.applied + row.tip,
+          paidAt: settledAt,
+          tip: row.tip,
+          scheme: provided?.cardScheme ?? null,
+          last4: provided?.cardLast4 ?? null,
+          entryMode: provided?.cardEntryMode ?? null,
+          authCode: provided?.cardAuthCode ?? null,
+          ...(row.state === "failed" ? { notTaken: true as const } : {}),
+        },
+      ],
+      await orderSlipLocale(tx, row.workingOrderId),
+    );
+  });
 }
 
 async function orderSlipLocale(tx: Transaction, workingOrderId: string): Promise<string> {
@@ -200,6 +261,7 @@ async function enqueueSlips(
     last4: string | null;
     entryMode: string | null;
     authCode: string | null;
+    notTaken?: true;
   }[],
   locale: string,
 ): Promise<void> {
@@ -222,6 +284,7 @@ async function enqueueSlips(
       reference: payment.reference ?? null,
       machine: payment.machine ?? null,
       card: cardDetailsOf(payment),
+      ...(payment.notTaken === true ? { notTaken: true as const } : {}),
       invoiceLocale: locale,
       printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
     });

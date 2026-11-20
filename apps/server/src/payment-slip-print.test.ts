@@ -422,7 +422,7 @@ it.each(["cash", "manual"])("accepts a slip field on %s payments", async (method
   });
 });
 
-it("does not print an unrequested, declined or unanswered attempt", async () => {
+it("does not print an unrequested or unanswered attempt, and prints a declined one as not taken", async () => {
   for (const outcome of ["off", "decline", "timeout"] as const) {
     const id = await tabWith(venue, "Red wine bottle");
     if (outcome === "decline") venue.card.failNextCollect();
@@ -437,11 +437,16 @@ it("does not print an unrequested, declined or unanswered attempt", async () => 
     expect(paid.json).toMatchObject({
       outcome: outcome === "off" ? "received" : outcome === "decline" ? "declined" : "timeout",
     });
-    expect(await venue.db.select().from(printJobs)).toHaveLength(before);
+    const jobs = (await venue.db.select().from(printJobs)).slice(before);
+    expect(jobs).toHaveLength(outcome === "decline" ? 1 : 0);
+    if (outcome === "decline")
+      expect(decodeTicket(jobs[0]!.payload)).toContain(
+        receiptLabelsFor("es-ES").paymentNotTakenHeading,
+      );
   }
 });
 
-it("recovers received money after an unclear answer without recovering the slip request", async () => {
+it("recovers received money after an unclear answer and prints the asked-for slip once", async () => {
   const id = await tabWith(venue, "Red wine bottle");
   const before = (await venue.db.select().from(printJobs)).length;
   venue.card.crashNextCollect("captured");
@@ -459,7 +464,7 @@ it("recovers received money after an unclear answer without recovering the slip 
       clock: venue.clock,
       cfg: venue.cfg,
     });
-    expect(await venue.db.select().from(printJobs)).toHaveLength(before);
+    expect(await venue.db.select().from(printJobs)).toHaveLength(before + 1);
   }
   const balance = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${id}/payments`);
   expect(balance.json).toMatchObject({ received: "10.00" });
@@ -2237,3 +2242,182 @@ describe("a payment after the ticket was issued", () => {
     }
   });
 });
+
+describe("a slip asked for on a reader payment whose answer comes later", () => {
+  const labels = receiptLabelsFor("es-ES");
+  const checkPayments = () =>
+    settlePendingBillPayments({
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: venue.backend,
+      clock: venue.clock,
+      cfg: venue.cfg,
+    });
+  const jobsSince = async (before: number) =>
+    (await venue.db.select().from(printJobs)).slice(before).map((job) => decodeTicket(job.payload));
+  const payLost = async (
+    id: string,
+    lost: () => void,
+    slip: { printCardSlip?: boolean } = { printCardSlip: true },
+  ) => {
+    lost();
+    const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      ...readerContribution,
+      ...slip,
+    });
+    expect(paid.status).toBe(500);
+    const [row] = await venue.db
+      .select()
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, id));
+    expect(row!.state).toBe("pending");
+    return row!;
+  };
+  const captured = () => venue.card.crashNextCollect("captured");
+  const neverAsked = () => {
+    vi.spyOn(venue.card, "collect").mockRejectedValueOnce(new Error("the request was lost"));
+  };
+
+  it("prints the card's slip once when the payment check finds it charged", async () => {
+    const id = await tabWith(venue, "Red wine bottle");
+    const before = (await venue.db.select().from(printJobs)).length;
+    await payLost(id, captured);
+    expect(await jobsSince(before)).toEqual([]);
+    await checkPayments();
+    await checkPayments();
+    const slips = await jobsSince(before);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]).toContain(labels.paymentHeading);
+    expect(slipRowOf(slips[0]!, labels.charged)).toContain("10,00");
+  });
+
+  it("prints a slip saying the payment was not taken once when the payment check finds no charge", async () => {
+    const id = await tabWith(venue, "Red wine bottle");
+    const before = (await venue.db.select().from(printJobs)).length;
+    await payLost(id, neverAsked);
+    await checkPayments();
+    await checkPayments();
+    const slips = await jobsSince(before);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]).toContain(labels.paymentNotTakenHeading);
+    expect(slips[0]).not.toContain(labels.paymentHeading);
+    expect(slips[0]).not.toContain(labels.charged);
+    expect(slipRowOf(slips[0]!, labels.paymentAmount)).toContain("10,00");
+  });
+
+  it.each([{ printCardSlip: false }, {}])(
+    "prints nothing when no slip was asked for (%o)",
+    async (asked) => {
+      const id = await tabWith(venue, "Red wine bottle");
+      const before = (await venue.db.select().from(printJobs)).length;
+      const row = await payLost(id, captured, asked);
+      expect(row.slipWanted).toBe(false);
+      await checkPayments();
+      expect(await jobsSince(before)).toEqual([]);
+    },
+  );
+
+  it("prints nothing for a reader that prints its own slip", async () => {
+    await withTransaction(venue.db, (tx) =>
+      tx.update(cardReaders).set({ printsOwnSlipAutomatically: true }),
+    );
+    const id = await tabWith(venue, "Red wine bottle");
+    const before = (await venue.db.select().from(printJobs)).length;
+    const row = await payLost(id, captured);
+    expect(row.slipWanted).toBe(false);
+    await checkPayments();
+    expect(await jobsSince(before)).toEqual([]);
+  });
+
+  it("keeps the payment and warns when the device has no slip printer by then", async () => {
+    const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
+    onTestFinished(async () => {
+      await withTransaction(venue.db, (tx) =>
+        tx
+          .update(devices)
+          .set({ paymentSlipPrinterId: device!.paymentSlipPrinterId })
+          .where(eq(devices.id, venue.deviceId)),
+      );
+    });
+    const id = await tabWith(venue, "Red wine bottle");
+    const before = (await venue.db.select().from(printJobs)).length;
+    const row = await payLost(id, captured);
+    await withTransaction(venue.db, (tx) =>
+      tx.update(devices).set({ paymentSlipPrinterId: null }).where(eq(devices.id, venue.deviceId)),
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    await checkPayments();
+    expect(await jobsSince(before)).toEqual([]);
+    const [settled] = await venue.db.select().from(billPayments).where(eq(billPayments.id, row.id));
+    expect(settled!.state).toBe("received");
+    expect(warn).toHaveBeenCalledWith(
+      "receipt.optional_document_failed",
+      expect.objectContaining({ workingOrderId: id }),
+    );
+  });
+
+  it("the till's retry that finds the card charged prints the slip once, and a further retry prints nothing", async () => {
+    const id = await tabWith(venue, "Red wine bottle");
+    const before = (await venue.db.select().from(printJobs)).length;
+    const whole = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      applied: "30.00",
+      tip: "0.00",
+      printCardSlip: true,
+    };
+    captured();
+    const pay = () =>
+      send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, whole);
+    const lost = await pay();
+    expect(lost.status, JSON.stringify(lost.json)).toBe(500);
+    expect(await jobsSince(before)).toEqual([]);
+    const retried = await pay();
+    expect(retried.status, JSON.stringify(retried.json)).toBe(200);
+    expect(retried.json).toMatchObject({ outcome: "received" });
+    expect((await pay()).status).toBe(200);
+    await checkPayments();
+    const slips = await jobsSince(before);
+    expect(slips.filter((slip) => slip.includes(labels.paymentHeading))).toHaveLength(1);
+  });
+
+  it("a declined card at a waiting till prints the not-taken slip once", async () => {
+    const id = await tabWith(venue, "Red wine bottle");
+    const before = (await venue.db.select().from(printJobs)).length;
+    venue.card.failNextCollect();
+    const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      ...readerContribution,
+      printCardSlip: true,
+    });
+    expect(paid.json).toMatchObject({ outcome: "declined" });
+    await checkPayments();
+    const slips = await jobsSince(before);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]).toContain(labels.paymentNotTakenHeading);
+  });
+
+  it("a card charged while the till waits prints one slip, and the payment check adds none", async () => {
+    const id = await tabWith(venue, "Red wine bottle");
+    const before = (await venue.db.select().from(printJobs)).length;
+    const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      ...readerContribution,
+      printCardSlip: true,
+    });
+    expect(paid.json).toMatchObject({ outcome: "received" });
+    await checkPayments();
+    const slips = await jobsSince(before);
+    expect(slips).toHaveLength(1);
+    expect(slips[0]).toContain(labels.paymentHeading);
+  });
+});
+
+function slipRowOf(text: string, label: string): string {
+  return text.split("\n").find((line) => line.startsWith(label)) ?? "";
+}

@@ -26,6 +26,8 @@ import {
   withFoldedPersonChanges,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
+import { receiptLabelsFor } from "@waitron/country-packs";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { listAvailableProducts } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -1856,6 +1858,7 @@ async function strandBillPayment(
   amount = "1.50",
   startedOn: string = v.cfg.origin.deviceId,
   requester?: { personId: string; at: string },
+  slipWanted = false,
 ): Promise<string> {
   const [bill] = await suite.db
     .insert(billPayments)
@@ -1871,6 +1874,7 @@ async function strandBillPayment(
       ...(requester === undefined ? {} : { createdAt: requester.at }),
       source: "device",
       deviceId: startedOn,
+      slipWanted,
     })
     .returning({ id: billPayments.id });
   const billPaymentId = bill!.id;
@@ -2981,6 +2985,7 @@ describe("provider-confirmed partial-refund release", () => {
       unidentified?: boolean;
       supported?: boolean;
       amount?: string;
+      slipWanted?: boolean;
     } = {},
   ) {
     const evidence = {
@@ -2998,7 +3003,17 @@ describe("provider-confirmed partial-refund release", () => {
     });
     const v = await setup({ extra: provider, partialRefundRelease: options.supported ?? true });
     const orderId = await openOrder(v);
-    const bill = options.bill ? await strandBillPayment(v, orderId, { kind: "captured" }) : null;
+    const bill = options.bill
+      ? await strandBillPayment(
+          v,
+          orderId,
+          { kind: "captured" },
+          undefined,
+          undefined,
+          undefined,
+          options.slipWanted,
+        )
+      : null;
     const key = { provider: provider.provider, paymentRef: randomUUID() };
     await withTransaction(suite.db, async (tx) => {
       if (bill)
@@ -3123,6 +3138,15 @@ describe("provider-confirmed partial-refund release", () => {
       expect(lookup).toHaveBeenCalledTimes(1);
     },
   );
+
+  it("retaining a pending bill payment's money prints its asked-for slip once", async () => {
+    const { v, payment, evidence } = await partial({ bill: "pending", slipWanted: true });
+    await slipPrinterFor(v.cfg.origin.deviceId);
+    evidence.refunds.pop();
+    expect((await post(v, retainPath(payment.id), allocation)).status).toBe(200);
+    expect((await post(v, retainPath(payment.id), allocation)).status).toBe(200);
+    expect(slipsPrinted()).toEqual(["taken"]);
+  });
 
   it("shows a bill-first excess as tip and issues net tenders, refusing it when tips are off", async () => {
     const { v, orderId, payment, evidence, lookup } = await partial({ amount: "2.00", mark: true });
@@ -3449,5 +3473,117 @@ describe("provider-confirmed partial-refund release", () => {
     expect(result.status).toBe(409);
     expect((await errorOf(result)).code).toBe("payment.not_stuck");
     expect(lookup).not.toHaveBeenCalled();
+  });
+});
+
+async function slipPrinterFor(deviceId: string): Promise<void> {
+  await withTransaction(suite.db, async (tx) => {
+    const printer = await createPrinter(tx, {
+      name: "Slips",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
+    await tx
+      .update(devices)
+      .set({ paymentSlipPrinterId: printer.id })
+      .where(eq(devices.id, deviceId));
+  });
+}
+
+/** Each payment slip queued so far: "taken", "not taken", or "other" for any other document. */
+function slipsPrinted(): string[] {
+  const labels = ["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"].map(receiptLabelsFor);
+  return suite.db
+    .all<{ payload: Uint8Array }>(sql`select payload from print_jobs order by rowid`)
+    .map(({ payload }) => decodeTicket(payload))
+    .map((text) =>
+      labels.some((l) => text.includes(l.paymentNotTakenHeading))
+        ? "not taken"
+        : labels.some((l) => text.includes(l.paymentHeading))
+          ? "taken"
+          : "other",
+    );
+}
+
+describe("a slip asked for on a payment a manager settles", () => {
+  it("Resolve prints the slip once for a card the provider charged", async () => {
+    const v = await setup();
+    await slipPrinterFor(v.cfg.origin.deviceId);
+    const id = await strandBillPayment(
+      v,
+      await openOrder(v),
+      { kind: "attempting", intent: { status: "succeeded", amountReceived: 150 } },
+      "1.50",
+      undefined,
+      undefined,
+      true,
+    );
+    expect((await send(v, "POST", billResolvePath(id))).status).toBe(200);
+    expect((await send(v, "POST", billResolvePath(id))).status).toBe(409);
+    expect(slipsPrinted()).toEqual(["taken"]);
+  });
+
+  it.each([
+    [
+      "the provider cancelled",
+      { kind: "attempting", intent: { status: "requires_payment_method" } },
+    ],
+    ["no provider row", { kind: "none" }],
+  ] as const)("Resolve prints a not-taken slip once when %s", async (_, provided) => {
+    const v = await setup();
+    await slipPrinterFor(v.cfg.origin.deviceId);
+    const id = await strandBillPayment(
+      v,
+      await openOrder(v),
+      provided as Provided,
+      "1.50",
+      undefined,
+      undefined,
+      true,
+    );
+    expect((await send(v, "POST", billResolvePath(id))).status).toBe(200);
+    expect((await send(v, "POST", billResolvePath(id))).status).toBe(409);
+    expect(slipsPrinted()).toEqual(["not taken"]);
+  });
+
+  it.each([
+    ["received", "taken"],
+    ["failed", "not taken"],
+  ] as const)("Record outcome %s prints the matching slip once", async (outcome, slip) => {
+    const v = await setup();
+    await slipPrinterFor(v.cfg.origin.deviceId);
+    const id = await strandBillPayment(
+      v,
+      await openOrder(v),
+      { kind: "failed" },
+      "1.50",
+      undefined,
+      undefined,
+      true,
+    );
+    const body = { outcome, note: "Checked with the provider", pin: "1234" };
+    expect((await post(v, attestPath(id), body)).status).toBe(200);
+    expect((await post(v, attestPath(id), body)).status).toBe(409);
+    expect(slipsPrinted()).toEqual([slip]);
+  });
+
+  it("prints at the slip printer of the device the payment began on", async () => {
+    const v = await setup();
+    await slipPrinterFor(v.otherDeviceId);
+    const id = await strandBillPayment(
+      v,
+      await openOrder(v),
+      { kind: "failed" },
+      "1.50",
+      v.otherDeviceId,
+      undefined,
+      true,
+    );
+    const body = { outcome: "received", note: "Checked with the provider", pin: "1234" };
+    expect((await post(v, attestPath(id), body)).status).toBe(200);
+    const [device] = await suite.db.select().from(devices).where(eq(devices.id, v.otherDeviceId));
+    expect(suite.db.all<{ printer_id: string }>(sql`select printer_id from print_jobs`)).toEqual([
+      { printer_id: device!.paymentSlipPrinterId },
+    ]);
   });
 });

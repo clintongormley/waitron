@@ -229,4 +229,17 @@ describe("payment slip printer layout", () => {
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
     expect(lines).toContain(`Cobrado${" ".repeat(columns - 13)}1,50 €`);
   });
+
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
+    "a payment not taken is headed so in %s and says nothing was charged",
+    (invoiceLocale) => {
+      const labels = receiptLabelsFor(invoiceLocale);
+      const text = decodeTicket(formatPaymentSlip({ ...input, invoiceLocale, notTaken: true }));
+      expect(text).toContain(labels.paymentNotTakenHeading);
+      expect(text).not.toContain(labels.paymentHeading);
+      expect(text).toContain(labels.paymentNotice);
+      expect(text).toContain(labels.paymentAmount);
+      expect(text).not.toContain(labels.charged);
+    },
+  );
 });

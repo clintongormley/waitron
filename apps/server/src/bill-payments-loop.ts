@@ -20,6 +20,7 @@ import { resumeCardRefund } from "./bill-refunds.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
 import { perDatabase } from "./live-in-process.js";
 import type { TradingContext } from "./trading-context.js";
+import { printSettledPaymentSlip } from "./payment-slip-print.js";
 import type { TillSaleResult } from "./till-sale.js";
 import type { GuestCountChoice } from "./receipt-guests.js";
 import "./errors.js";
@@ -103,6 +104,11 @@ export async function settleFromProviderRow(
   if (payment?.state !== "pending" || billPaymentIsLive(deps.db, billPaymentId)) {
     return { settled: "left", providerState: "pending" };
   }
+  const failed = async (): Promise<SettledFromRow> => {
+    await failBillPayment(tx, billPaymentId, now, undefined);
+    await printSettledPaymentSlip(tx, billPaymentId);
+    return { settled: "failed" };
+  };
   const provided = await findPaymentByBillPayment(tx, billPaymentId);
   if (provided === undefined) {
     // The server's reader providers commit their row before any network call (`collect` in
@@ -110,20 +116,17 @@ export async function settleFromProviderRow(
     // runs `insertAttempting` first) and the simulator charges nothing real, so no row means no
     // reader was asked to charge. The on-device provider writes its row after the money moves, and
     // nothing under `apps/` builds it (design §5.4).
-    await failBillPayment(tx, billPaymentId, now, undefined);
-    return { settled: "failed" };
+    return failed();
   }
   if (provided.state === "refunded") {
-    await failBillPayment(tx, billPaymentId, now, undefined);
-    return { settled: "failed" };
+    return failed();
   }
   if (
     provided.state === "failed" &&
     provided.resolutionOutcome === "failed" &&
     provided.resolvedBy === null
   ) {
-    await failBillPayment(tx, billPaymentId, now, undefined);
-    return { settled: "failed" };
+    return failed();
   }
   // An unaudited failure can be an uncertain charge (SumUp's not-found checkout).
   if (!CHARGED.has(provided.state)) return { settled: "left", providerState: provided.state };
@@ -136,6 +139,7 @@ export async function settleFromProviderRow(
     undefined,
     guestCount,
   );
+  await printSettledPaymentSlip(tx, billPaymentId);
   return { settled: "received", invoice: done.invoice };
 }
 

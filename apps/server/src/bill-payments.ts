@@ -138,8 +138,10 @@ import { refuseSetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
 import {
   enqueueRequestedPaymentSlip,
-  freezeCardSlip,
+  freezeWantedSlip,
   printCapturedCardSlip,
+  printSettledPaymentSlip,
+  readerSlipWanted,
 } from "./payment-slip-print.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 import { saleLanguageFor } from "./venue-locale.js";
@@ -1453,7 +1455,7 @@ async function saveCounterBasket(
  */
 async function beginBillPayment(
   tx: Transaction,
-  deps: BillPaymentDeps,
+  deps: BillPaymentDeps & { readerId?: string },
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
@@ -1606,6 +1608,8 @@ async function beginBillPayment(
 
   await requireEconomicWrite(tx, cfg, deps.admission);
   if (state === "pending") await prepareIssueClock(tx, cfg, pinnedAt(deps.clock, reading));
+  const slipWanted =
+    state === "pending" && (await readerSlipWanted(tx, cfg, req.printCardSlip, deps.readerId));
   const [payment] = await tx
     .insert(billPayments)
     .values({
@@ -1623,6 +1627,7 @@ async function beginBillPayment(
       source: cfg.origin.source,
       deviceId: cfg.origin.deviceId,
       receivedAt: state === "received" ? reading.instant.toISOString() : null,
+      slipWanted,
     })
     .returning();
   if (items !== null) {
@@ -2090,7 +2095,7 @@ export async function takeReaderBillPayment(
         return {
           kind: "collect" as const,
           payment: started.payment,
-          slip: await freezeCardSlip(tx, cfg, workingOrderId, req.printCardSlip, deps.readerId),
+          slip: await freezeWantedSlip(tx, cfg, workingOrderId, started.payment.slipWanted),
         };
       },
       deps.log,
@@ -2174,6 +2179,7 @@ export async function takeReaderBillPayment(
         return { ...answer, outcome: "timeout" };
       }
       const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
+      if (result.state !== "network_unavailable") await printSettledPaymentSlip(tx, payment.id);
       return {
         ...(await resultOf(tx, deps, cfg, failed, null)),
         outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",

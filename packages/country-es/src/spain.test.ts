@@ -327,6 +327,7 @@ describe("receipt labels", () => {
       noRealCharge: "NO REAL CHARGE",
       invoiceHeading: "INVOICE",
       paymentHeading: "PAYMENT RECEIPT",
+      paymentNotTakenHeading: "PAYMENT NOT TAKEN",
       paymentNotice: "This document is not an invoice",
       paymentEntry: "Entry",
       paymentContactless: "Contactless",

@@ -3,6 +3,7 @@ import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import {
   count,
   enumCheck,
+  flag,
   enumType,
   id,
   label,
@@ -61,6 +62,10 @@ export const billPayments = table(
      * only with the move out of `pending` (the guard trigger). */
     attestedBy: id("attested_by"),
     attestationNote: label("attestation_note"),
+    /** A reader payment whose payer asked for a slip that Waitron, not the reader, prints once its
+     * outcome is known. False for cash and a typed card, whose slip prints as the row is made. Never
+     * changes (the guard trigger). */
+    slipWanted: flag("slip_wanted").notNull().default(false),
   },
   (t) => [
     foreignKey({

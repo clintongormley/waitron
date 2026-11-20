@@ -1346,6 +1346,7 @@ CREATE TABLE `bill_payments` (
 	`failed_at` text,
 	`attested_by` text,
 	`attestation_note` text,
+	`slip_wanted` integer DEFAULT false NOT NULL,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
@@ -2934,6 +2935,7 @@ BEGIN
     AND new.source IS old.source
     AND new.device_id IS old.device_id
     AND new.created_at IS old.created_at
+    AND new.slip_wanted IS old.slip_wanted
     AND (
       (new.state IS old.state
         AND new.received_at IS old.received_at

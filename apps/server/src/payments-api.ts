@@ -111,6 +111,7 @@ import {
 import { previewAllocation, MONEY, ZERO } from "./bill-allocation.js";
 import { refuseRefundInProgress } from "./working-order.js";
 import { CHARGED, settleFromProviderRow } from "./bill-payments-loop.js";
+import { printSettledPaymentSlip } from "./payment-slip-print.js";
 import { inPinTurn, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
   attestCardRefund,
@@ -1569,6 +1570,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             undefined,
             { applied: allocation.applied, tip: allocation.tip },
           );
+          await printSettledPaymentSlip(tx, bill.id);
           if (order.paymentAttemptAt !== null)
             await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
         } else {
@@ -1976,6 +1978,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await gated(sessionId, async (tx) => {
           await requireStuckBillPayment(tx, id);
           await failBillPayment(tx, id, now, undefined);
+          await printSettledPaymentSlip(tx, id);
         });
         return c.json({ outcome: "not_charged" });
       }
@@ -2015,6 +2018,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const now = deps.clock.now().instant;
         if (outcome === "failed") {
           await failBillPayment(tx, id, now, attestation);
+          await printSettledPaymentSlip(tx, id);
           return { outcome: "not_charged" as const };
         }
         // Dated when the provider settled it, as the work loop does.
@@ -2023,6 +2027,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             ? now
             : new Date(provided.settledAt);
         const done = await completeBillPayment(tx, fiscal, deps.cfg, id, receivedAt, attestation);
+        await printSettledPaymentSlip(tx, id);
         return {
           outcome: "received" as const,
           ...(done.invoice === null ? {} : { invoiceNumber: done.invoice.invoiceNumber }),

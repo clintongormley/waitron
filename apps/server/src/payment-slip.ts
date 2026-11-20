@@ -20,6 +20,8 @@ export interface PaymentSlipInput {
   reference?: string | null;
   machine?: string | null;
   card: CardDetails | null;
+  /** A card payment that charged nothing: no amount is printed as charged. */
+  notTaken?: true;
   invoiceLocale: string;
   /** The receipt printer's settings, which set the image width and the column count. */
   printer: EscSetting;
@@ -37,7 +39,7 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
       b.line(line);
     }
   };
-  text(labels.paymentHeading);
+  text(input.notTaken === true ? labels.paymentNotTakenHeading : labels.paymentHeading);
   text(labels.paymentNotice);
   text(`${input.issuer.venueName} · ${input.issuer.nif}`);
   text(receiptDateTime(input.paidAt, input.invoiceLocale));
@@ -64,6 +66,6 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
   // A zero tip prints no line. `tip` comes from `centsToDecimal` (`payment-slip-print.ts`), which
   // always renders two places, so a zero tip is "0.00" and nothing else.
   if (input.tip !== "0.00") row(labels.tip, formatMoney(input.tip, input.invoiceLocale));
-  row(labels.charged, formatMoney(input.charged, input.invoiceLocale));
+  if (input.notTaken !== true) row(labels.charged, formatMoney(input.charged, input.invoiceLocale));
   return b.feedAndCut().bytes();
 }

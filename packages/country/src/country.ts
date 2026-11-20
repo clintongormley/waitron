@@ -107,6 +107,7 @@ export const RECEIPT_LABEL_KEYS = [
   "perUnit",
   "takeAway",
   "paymentHeading",
+  "paymentNotTakenHeading",
   "paymentNotice",
   "paymentEntry",
   "paymentContactless",
