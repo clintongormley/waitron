@@ -708,6 +708,30 @@ export async function readSettledTicket(
   };
 }
 
+/**
+ * Queues the order's sale's original receipt, on a switched-off printer too, when the sale still
+ * owes it and has no original job; says whether it queued one.
+ */
+export async function queueOwedOriginal(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: OriginConfig,
+  workingOrderId: string,
+  personId: string | null,
+): Promise<boolean> {
+  const [sale] = await tx
+    .select({ id: sales.id })
+    .from(sales)
+    .where(eq(sales.workingOrderId, workingOrderId));
+  if (sale === undefined || !(await owesOriginal(tx, sale.id))) return false;
+  const ticket = await readSettledTicket(backend, tx, cfg, workingOrderId);
+  const made = await enqueueOriginalReceipt(tx, cfg, ticket, sale.id, {
+    personId,
+    printers: printerLookup(tx, cfg.origin, { whileSwitchedOff: true }),
+  });
+  return typeof made === "object";
+}
+
 /** Every mode only enqueues paper for an existing sale. */
 export async function printSaleReceipt(
   deps: { db: Database; backend: FiscalBackend },
@@ -730,15 +754,11 @@ export async function printSaleReceipt(
     }
     // No filed sale → nothing to print. This keeps `readSettledTicket`'s "no sale" throw unreachable.
     if (existing === undefined) return;
-    if (mode === "owed" && !(await owesOriginal(tx, existing.id))) return;
-    const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
     if (mode === "owed") {
-      await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, {
-        personId,
-        printers: printerLookup(tx, cfg.origin, { whileSwitchedOff: true }),
-      });
+      await queueOwedOriginal(tx, deps.backend, cfg, workingOrderId, personId ?? null);
       return;
     }
+    const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
     if (mode === "duplicate") {
       await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);
       return;

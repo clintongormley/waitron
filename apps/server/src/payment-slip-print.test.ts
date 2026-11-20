@@ -1412,7 +1412,13 @@ describe("a payment after the ticket was issued", () => {
       ) => {
         const [sale] = await venue.db.select().from(sales).where(eq(sales.id, bill.saleId));
         const now = new Date(Date.parse(sale!.issuedAt) + 11 * 60_000);
-        const { resent } = await startFreshRounds(venue.db, layOut, now, () => {});
+        const { resent } = await startFreshRounds(
+          venue.db,
+          layOut,
+          venue.cfg.nodeId,
+          now,
+          () => {},
+        );
         const ours = await venue.db
           .select()
           .from(printJobs)

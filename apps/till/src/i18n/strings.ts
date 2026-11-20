@@ -427,9 +427,9 @@ export const en = {
   "settlement.closing_switched_off":
     "{printer} is switched off. The receipt will print when it is switched back on.",
   "settlement.closing_no_printer":
-    "This device has no receipt printer. Choose one above or email the receipt before closing.",
+    "This device has no receipt printer. Choose one above or email the receipt, or it prints if this device gets one within a day.",
   "settlement.closing_no_printer_no_email":
-    "This device has no receipt printer. Choose one above before closing.",
+    "This device has no receipt printer. Choose one above, or the receipt prints if this device gets one within a day.",
   "settlement.closing_not_allowed":
     "This device may not print or email receipts. Print it from Find a bill on a till that can.",
   "settlement.replacement_unavailable":
@@ -1056,7 +1056,8 @@ export const en = {
   "pay_equipment.choose_in_hand": "Choose the reader in your hand.",
   "pay_equipment.printer_switched_off":
     "{item} is switched off: unless you choose another, the ticket will print when it is switched back on",
-  "pay_equipment.printer_none": "No ticket printer: unless you choose one, no ticket will print",
+  "pay_equipment.printer_none":
+    "No ticket printer: unless you choose one, the ticket will not print now",
   "product_info.sold_out": "Mark sold out",
   "product_info.restore": "Back on sale",
   "product_info.all_menus": "Changes every menu in this venue.",
@@ -2652,9 +2653,9 @@ export const es: Record<StringKey, string> = {
   "settlement.closing_switched_off":
     "{printer} está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
   "settlement.closing_no_printer":
-    "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo antes de cerrar.",
+    "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo; si no, se imprimirá si este dispositivo pasa a tener una en el plazo de un día.",
   "settlement.closing_no_printer_no_email":
-    "Este dispositivo no tiene impresora de tickets. Elige una arriba antes de cerrar.",
+    "Este dispositivo no tiene impresora de tickets. Elige una arriba; si no, el recibo se imprimirá si este dispositivo pasa a tener una en el plazo de un día.",
   "settlement.closing_not_allowed":
     "Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda.",
   "settlement.replacement_unavailable":
@@ -3270,7 +3271,7 @@ export const es: Record<StringKey, string> = {
   "pay_equipment.printer_switched_off":
     "{item} está desactivada: si no eliges otra, el ticket se imprimirá cuando vuelva a activarse",
   "pay_equipment.printer_none":
-    "Sin impresora de tickets: si no eliges una, no se imprimirá el ticket",
+    "Sin impresora de tickets: si no eliges una, el ticket no se imprimirá ahora",
   "product_info.sold_out": "Marcar como agotado",
   "product_info.restore": "Volver a poner a la venta",
   "product_info.all_menus": "Cambia todas las cartas de este local.",

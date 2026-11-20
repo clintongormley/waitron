@@ -449,12 +449,12 @@ it("says what closing the documents window does with the receipt, in both langua
       "{printer} está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
     ],
     [
-      "This device has no receipt printer. Choose one above or email the receipt before closing.",
-      "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo antes de cerrar.",
+      "This device has no receipt printer. Choose one above or email the receipt, or it prints if this device gets one within a day.",
+      "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo; si no, se imprimirá si este dispositivo pasa a tener una en el plazo de un día.",
     ],
     [
-      "This device has no receipt printer. Choose one above before closing.",
-      "Este dispositivo no tiene impresora de tickets. Elige una arriba antes de cerrar.",
+      "This device has no receipt printer. Choose one above, or the receipt prints if this device gets one within a day.",
+      "Este dispositivo no tiene impresora de tickets. Elige una arriba; si no, el recibo se imprimirá si este dispositivo pasa a tener una en el plazo de un día.",
     ],
     [
       "This device may not print or email receipts. Print it from Find a bill on a till that can.",

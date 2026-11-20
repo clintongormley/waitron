@@ -3,6 +3,10 @@
 Status: plan, revised after a fresh-context read (five Important findings, all verified and taken),
 for the watcher. FISCAL item; the owner lands it. Written against main `b2948b1917`.
 
+_20 November 2026: a till sale's owed ticket now also prints by itself, which replaces this plan's
+"No receipt printer set" outcome, its sales left with no ticket and its fresh rounds over every
+node's sales; see [ADVISER-TICKET-OWED-MARK](2026-11-20-adviser-ticket-owed-mark.md#what-changes-for-3835s-choices)._
+
 **Size: larger than the "medium" estimate.** Production code is medium (about +200 lines across ten
 files, no migration); the tests are large (about +580 new and +120 changed lines), because every till
 test that closes the window today has to say what it now expects.
