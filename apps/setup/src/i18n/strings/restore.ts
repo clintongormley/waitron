@@ -30,7 +30,7 @@ export const restoreEn = {
   "restore.preview_node": "Node",
   "restore.preview_unnamed": "This backup's server key has no stored name.",
   "restore.preview_older_key": "An older backup reinstates its older server key.",
-  "restore.preview_keep_keys": "Keep older keys until no older backup remains.",
+  "restore.preview_keep_keys": "Keep older server keys until no older backup remains.",
   "restore.preview_key_separate": "The server key is separate from the recovery key.",
   "restore.preview_kit_error": "Check the recovery pack or kit file.",
   "restore.preview_key_error": "Check the recovery key.",
@@ -225,7 +225,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_unnamed": "La clave del servidor de esta copia no tiene nombre guardado.",
   "restore.preview_older_key": "Una copia antigua restablece la clave del servidor de entonces.",
   "restore.preview_keep_keys":
-    "Conserva las claves antiguas mientras queden copias que las necesiten.",
+    "Conserva las claves del servidor antiguas mientras queden copias que las necesiten.",
   "restore.preview_key_separate": "La clave del servidor es distinta de la clave de recuperación.",
   "restore.preview_kit_error": "Revisa el paquete de recuperación o el archivo del kit.",
   "restore.preview_key_error": "Revisa la clave de recuperación.",
