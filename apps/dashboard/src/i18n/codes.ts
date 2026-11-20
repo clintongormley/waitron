@@ -401,6 +401,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Reprinted on another printer, so this job will not be retried.",
     es: "Se reimprimió en otra impresora, así que este trabajo no se volverá a intentar.",
   },
+  "receipt.out_of_date": {
+    en: "A later payment could not be added to this receipt, so it was not printed. Reprint it to list every payment.",
+    es: "No se pudo añadir un pago posterior a este recibo, así que no se imprimió. Reimprímelo para que muestre todos los pagos.",
+  },
   "content.language_invalid": {
     en: "Choose a recognised language.",
     es: "Elige un idioma reconocido.",

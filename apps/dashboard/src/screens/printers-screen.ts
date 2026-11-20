@@ -247,7 +247,12 @@ interface PrinterDraft {
 }
 
 /** The `last_error` codes of a job the server ended itself, setting its attempts to the cap. */
-const ENDED_BY_SERVER = new Set(["printer.unpaired", "printer.deleted", "print_job.moved"]);
+const ENDED_BY_SERVER = new Set([
+  "printer.unpaired",
+  "printer.deleted",
+  "print_job.moved",
+  "receipt.out_of_date",
+]);
 
 const LOCALIZED_JOB_REASONS = new Set([
   ...ENDED_BY_SERVER,
