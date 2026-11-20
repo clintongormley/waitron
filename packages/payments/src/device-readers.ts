@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import { deviceProfiles, devices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { mayTakeOver } from "@waitron/shared";
@@ -64,11 +64,33 @@ export async function setProfileReaderList(
   }
   if (list.defaultReaderId !== null && !list.readerIds.includes(list.defaultReaderId))
     return { ok: false, refusal: "default_not_listed" };
+  const oldDefault =
+    list.defaultReaderId === null
+      ? null
+      : (await readProfileReaderList(tx, profileId)).defaultReaderId;
+  // Settling the profile releases the old hold and clears choices removed from the list.
+  const oldHolder = oldDefault === null ? null : await readerHeldBy(tx, oldDefault);
   await tx
     .update(deviceProfiles)
     .set({ cardReaders: { ids: list.readerIds, defaultId: list.defaultReaderId } })
     .where(eq(deviceProfiles.id, profileId));
   await settleProfileReaderDevices(tx, profileId);
+  if (list.defaultReaderId !== null) {
+    const [first, second] = await tx
+      .select({ id: devices.id })
+      .from(devices)
+      .where(
+        and(
+          eq(devices.deviceProfileId, profileId),
+          eq(devices.active, true),
+          isNull(devices.cardReaderId),
+        ),
+      )
+      .orderBy(oldHolder === null ? devices.id : desc(eq(devices.id, oldHolder)))
+      .limit(2);
+    if (first !== undefined && (first.id === oldHolder || second === undefined))
+      await settleDeviceReader(tx, first.id, { acquire: true });
+  }
   return { ok: true };
 }
 

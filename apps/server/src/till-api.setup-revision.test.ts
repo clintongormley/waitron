@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { customThemes, deviceProfiles, roles, withTransaction } from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
+import { cardReaders, setProfileReaderList } from "@waitron/payments";
 import { Hono } from "hono";
 import { readCurrentImage, renderRendition, saveImage, uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -188,6 +189,37 @@ describe("the till's setup revision", () => {
     const first = await menuStateRevision(till);
     expect(typeof first).toBe("string");
     expect(await menuStateRevision(till)).toBe(first);
+  });
+
+  it("saving a profile default offers its reader at the till and moves its setup revision", async () => {
+    const venue = await setupTill();
+    const { till, profileId } = await secondDeviceOnOwnProfile(venue);
+    const readers = await suite.db
+      .insert(cardReaders)
+      .values(
+        ["Bar reader", "Counter reader"].map((name) => ({
+          name,
+          provider: "sumup",
+          providerRef: randomUUID(),
+        })),
+      )
+      .returning({ id: cardReaders.id, name: cardReaders.name });
+    let revision = await menuStateRevision(till);
+
+    for (const { id, name } of readers) {
+      await withTransaction(suite.db, (tx) =>
+        setProfileReaderList(tx, profileId, { readerIds: [id], defaultReaderId: id }),
+      );
+      const start = await sendAsTill(till, "GET", "/api/till");
+      expect(start.status).toBe(200);
+      expect(start.body.defaultReaderId).toBe(id);
+      expect(start.body.activeReaders).toEqual([
+        { id, name, provider: "sumup_cloud", printsOwnSlipAutomatically: false },
+      ]);
+      expect(start.body.setupRevision).not.toBe(revision);
+      revision = await menuStateRevision(till);
+      expect(revision).toBe(start.body.setupRevision);
+    }
   });
 
   it("the revision moves when a course is added and when one is renamed", async () => {

@@ -24,6 +24,7 @@ import {
 import type { ProfilePrinterLists } from "@waitron/layouts";
 import {
   cardReaders,
+  releaseDeviceReader,
   resolveDeviceReaderId,
   selectDeviceReader,
   setProfileReaderList,
@@ -427,12 +428,12 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
     const listed = await seedReader("Listed");
     const unlisted = await seedReader("Unlisted");
     const a = await enrol(venue, "Caja", profile);
-    // Lists set after the join take nothing, so both defaults are free.
     await printerLists(profile, {
       receiptPrinterIds: [handheld],
       receiptPrinterDefaultId: handheld,
     });
     await readerList(profile, [listed], listed);
+    await inTx((tx) => releaseDeviceReader(tx, a));
     // Choices the profile does not list, as a device chosen before its lists named them keeps.
     await suite.db.update(devices).set({ paymentSlipPrinterId: bar }).where(eq(devices.id, a));
     await suite.db.update(devices).set({ cardReaderId: unlisted }).where(eq(devices.id, a));

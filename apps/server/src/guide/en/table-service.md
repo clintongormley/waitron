@@ -795,6 +795,9 @@ On a till, choose **More**, **Settings**, then **Equipment**. On a handheld, cho
 then **Equipment**. In each available list, choose the equipment you want this device to use,
 or **Use default** to follow its profile's choice.
 
+If the profile's card reader says **Free to choose**, select **Use default** on the device
+that will take payments with it. If another device holds it, Equipment shows which one.
+
 Where **Scan** is offered for a receipt printer, payment slip printer or card reader, use its
 Waitron label instead of the list. Choosing equipment carried by another device from a list asks
 you to confirm **Take it**; scanning takes it over without asking, so check which item you scan.

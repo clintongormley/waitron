@@ -406,6 +406,9 @@ phone last chose Lector 2 and the Barra receipt printer.
    printer the phone would use now, marked with today's "Predeterminado del perfil"
    (`strings.ts:2287`). A save that is still being sent, or is refused, follows default 22. The row
    is closed again the next time the sheet opens.
+
+   **2026-11-20:** The profile-save behavior has changed. See the dated note under question 18.
+
 5. **Tip.** Unchanged: where tips are on, the card form has "Propina con tarjeta (opcional)" and
    cash offers "Dejar de propina". Everything else about tips is A793's design (not approved; back
    to brainstorm, [2026-10-18-a793-tips-design.md](2026-10-18-a793-tips-design.md)). This design
@@ -841,6 +844,11 @@ are given.
     list hands out nothing (`device-readers.ts:410-454`; test "a profile list edit takes nothing for
     a device on Use default", `packages/payments/src/device-readers.test.ts:378`). When the phone has
     it, the form shows it marked "Predeterminado del perfil".
+
+    **2026-11-20:** Saving the profile can also assign a free default. The shared-profile case is
+    now named “a shared profile with no previous holder leaves the default free to choose” in
+    `packages/payments/src/device-readers.test.ts`. See the current
+    [device equipment defaults](../../backlog/till.md#device-equipment-defaults-w100-1332-owner-kept-every-default-2026-10-07).
 19. **Settled (owner, 2026-10-19, answers "(a)" and "(a)"): a reader or printer that has gone.**
     The owner's answers: for the reader, the row opens, reader empty, Continuar greyed out, with a
     reason line where the phone knows one; for the printer, the row opens with the printer empty

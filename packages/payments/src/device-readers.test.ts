@@ -490,7 +490,58 @@ describe("a device's card reader", () => {
     expect(await holders(s.r1)).toEqual({});
   });
 
-  it("a profile list edit takes nothing for a device on Use default", async () => {
+  it("assigns a newly saved default to the only active till following the profile", async () => {
+    const s = await seed();
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, s.deviceB));
+    const { deviceId } = await seedDevice(suite.db, { profileId: s.profileId });
+    await list(s, [s.r3]);
+    await inTx((tx) => selectDeviceReader(tx, { deviceId, selection: { id: s.r3 }, via: "list" }));
+
+    await list(s, [s.r1, s.r3], s.r1);
+
+    expect(await inTx((tx) => resolveDeviceReaderId(tx, s.deviceA))).toBe(s.r1);
+    expect(await chosen(s.deviceA)).toBeNull();
+    expect(await holders(s.r1, s.r3)).toEqual({ [s.r1]: s.deviceA, [s.r3]: deviceId });
+  });
+
+  it.each(["default", "item"] as const)(
+    "gives the replacement default to the till that held the removed reader by %s",
+    async (selection) => {
+      const s = await seed();
+      const oldHolder = s.deviceA > s.deviceB ? s.deviceA : s.deviceB;
+      await list(s, [s.r1], s.r1);
+      await inTx((tx) =>
+        selectDeviceReader(tx, {
+          deviceId: oldHolder,
+          selection: selection === "default" ? "default" : { id: s.r1 },
+          via: "list",
+        }),
+      );
+
+      await list(s, [s.r2], s.r2);
+
+      expect(await holders(s.r1, s.r2)).toEqual({ [s.r2]: oldHolder });
+      expect(await chosen(oldHolder)).toBeNull();
+    },
+  );
+
+  it.each(["held", "busy"] as const)(
+    "does not acquire a replacement %s at another till",
+    async (state) => {
+      const s = await seed();
+      await list(s, [s.r1], s.r1);
+      await inTx((tx) => settleDeviceReader(tx, s.deviceB, { acquire: true }));
+      if (state === "held") await hold(s.r2, s.deviceC);
+      else await paymentOn(s, s.r2, s.deviceC, "attempting");
+
+      await list(s, [s.r2], s.r2);
+
+      expect(await holders(s.r1, s.r2)).toEqual(state === "held" ? { [s.r2]: s.deviceC } : {});
+      expect(await inTx((tx) => resolveDeviceReaderId(tx, s.deviceB))).toBeNull();
+    },
+  );
+
+  it("a shared profile with no previous holder leaves the default free to choose", async () => {
     const s = await seed();
     await list(s, [s.r1], s.r1);
     expect(await holders(s.r1)).toEqual({});

@@ -2144,13 +2144,14 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
 Pinned by `apps/till/src/till-app-setup-refresh.test.ts` ("A768 the till follows the venue's setup
 revision"): courses reach an open table, the
 same revision reads nothing, a failed read is tried again, and an older read never undoes a newer
-one across a poll, a profile switch, a change of zones and a server switch. The default reader is
-checked only beside a profile switch. No test checks the refresh of the other values in the list
-above; they ride on the same assignment in `#applyVenueSetup`. On the server,
-`apps/server/src/till-api.setup-revision.test.ts` checks that the revision is the same on both
-reads, stays while nothing changes, and moves when a course is added or renamed, when the
-theme in use is switched or saved with new choices, and when its logo's light
-image is reframed.
+one across a poll, a profile switch, a change of zones and a server switch.
+That suite checks the default reader beside a profile switch. The other values listed above ride on
+the same assignment in `#applyVenueSetup`.
+The Equipment poll also picks up a replaced profile reader for **Pay**. Run the
+"offers the changed profile default" case in `apps/till/src/till-app.test.ts`.
+On the server, `apps/server/src/till-api.setup-revision.test.ts` checks that the revision matches on both
+reads, stays while nothing changes, and moves when a course is added or renamed, the profile's default
+reader changes, the theme in use is switched or saved with new choices, or its light logo is reframed.
 
 Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till
 only once someone adds it to `#applyVenueSetup`.

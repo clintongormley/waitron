@@ -854,6 +854,10 @@ En un TPV, elige **Más**, **Ajustes** y **Equipo**. En un dispositivo de mano, 
 y **Equipo**. En cada lista disponible, elige el equipo que quieres usar en este dispositivo,
 o **Usar el predeterminado** para seguir la elección de su perfil.
 
+Si el lector del perfil indica **Disponible para elegir**, selecciona **Usar el predeterminado**
+en el dispositivo con el que vas a cobrar. Si otro dispositivo tiene el lector, en **Equipo**
+verás cuál es.
+
 Cuando aparezca **Escanear** para una impresora de tickets, una impresora de justificantes de pago
 o un lector de tarjetas, usa su etiqueta de Waitron en lugar de la lista. Si eliges de la lista un
 equipo que lleva otro dispositivo, confirma **Quitárselo**; al escanear lo tomas sin confirmación,

@@ -22620,6 +22620,26 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     expect(tenderPay(el).cardProvider).toBe("stripe_terminal");
   });
 
+  it("offers the changed profile default at Pay after the signed-in till's next equipment poll", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentOn("held", R1));
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(bootOn(R1)),
+      getDeviceEquipment,
+    });
+    await toCounter(el);
+    await flush(el);
+    expect(readerName(el)).toBe(R1.name);
+
+    const changed = equipmentOn("held", R2);
+    const reader = changed.roles.find((role) => role.role === "card_terminal")!;
+    reader.default = reader.choices[1]!;
+    getDeviceEquipment.mockResolvedValue(changed);
+    await poll(el);
+
+    expect(readerName(el)).toBe(R2.name);
+    expect(tenderPay(el).defaultReaderId).toBe(R2.id);
+  });
+
   it("after the sign-in's equipment read fails, the next poll's reader is offered", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(bootOn(R1)),

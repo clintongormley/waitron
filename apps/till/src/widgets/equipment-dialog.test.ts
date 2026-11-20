@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -270,6 +271,34 @@ describe("till-equipment-dialog", () => {
       t("equipment.held_by").replace("{item}", "Portable printer").replace("{device}", "Bar till"),
     );
   });
+
+  it.each([
+    [{}, "Free to choose", true],
+    [{ heldBy: BAR }, "Reader one is carried by Bar till (Ana)", false],
+    [{ busy: true }, "Reader one, busy", false],
+    [{ available: false }, "Reader one is switched off", false],
+  ])(
+    "names the default reader and lets staff claim it when free (%o)",
+    async (status, message, free) => {
+      const reader = { ...R1, ...status };
+      const card_terminal = onDefault(
+        "card_terminal",
+        reader,
+        reader.available ? [reader] : [],
+        null,
+      );
+      const el = await mountDialog({ equipment: equipment({ card_terminal }) });
+      const seen = changes(el);
+
+      expect(resolvedText(el, "card_terminal")).toBe(R1.name);
+      expect(contextText(el, "card_terminal")).toBe(message);
+      await page.getByRole("combobox", { name: t("equipment.card_terminal") }).click();
+      await page.getByRole("option", { name: "Use default: Reader one" }).click();
+      expect(seen).toEqual(
+        free ? [{ role: "card_terminal", selection: "default", via: "list", takeOver: false }] : [],
+      );
+    },
+  );
 
   it("a busy reader is labelled busy", async () => {
     const busy = { ...R2, busy: true };

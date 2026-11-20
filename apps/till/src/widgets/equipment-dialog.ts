@@ -382,12 +382,26 @@ export class TillEquipmentDialog extends LitElement {
     return this.#refusedField() === null ? codeMessage(this.error.code) : t("form.fix_fields");
   }
 
+  #unheldDefaultReader(equipment: RoleEquipment): EquipmentItem | null {
+    return equipment.role === "card_terminal" &&
+      equipment.selection === "default" &&
+      equipment.resolved === null
+      ? equipment.default
+      : null;
+  }
+
   #context(equipment: RoleEquipment): string {
     const shown = equipment.selection === "item" ? equipment.chosen : equipment.default;
     if (shown?.heldBy)
       return carriedText(shown.name, shown.heldBy, "equipment.held_by", "equipment.held_by_person");
-    if (equipment.resolved !== null && !equipment.resolved.available)
-      return fill(t("equipment.switched_off"), { item: equipment.resolved.name });
+    const reader = this.#unheldDefaultReader(equipment);
+    const named = equipment.resolved ?? reader;
+    if (named !== null && !named.available)
+      return fill(t("equipment.switched_off"), { item: named.name });
+    if (reader !== null)
+      return reader.busy
+        ? fill(t("equipment.option_busy"), { item: reader.name })
+        : t("equipment.free_to_choose");
     return t(
       equipment.selection === "default" ? "equipment.from_default" : "equipment.chosen_here",
     );
@@ -395,7 +409,10 @@ export class TillEquipmentDialog extends LitElement {
 
   #onPick(equipment: RoleEquipment, value: string): void {
     const current = equipment.selection === "default" ? "" : (equipment.chosenId ?? "");
-    if (value === current) return;
+    if (value === current) {
+      const reader = this.#unheldDefaultReader(equipment);
+      if (reader === null || !reader.available || reader.busy || reader.heldBy !== null) return;
+    }
     if (value === "") {
       this.#change({ role: equipment.role, selection: "default", via: "list", takeOver: false });
       return;
@@ -435,7 +452,7 @@ export class TillEquipmentDialog extends LitElement {
     return html`<div class="row" data-equipment-row=${row.role}>
       <span class="label" data-equipment-label>${label}</span>
       <span class="resolved" data-equipment-resolved
-        >${equipment.resolved?.name ?? t("equipment.none")}</span
+        >${equipment.resolved?.name ?? this.#unheldDefaultReader(equipment)?.name ?? t("equipment.none")}</span
       >
       <span class="context" data-equipment-context>${this.#context(equipment)}</span>
       <div class="choose">
