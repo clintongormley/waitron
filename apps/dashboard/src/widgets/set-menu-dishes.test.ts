@@ -448,3 +448,114 @@ it("names the measured dish when a copy is refused and leaves the source selecte
     .toBeVisible();
   await expect.element(copy).toBeEnabled();
 });
+
+it("refuses a surcharge above the limit beside its row and sends nothing", async () => {
+  const { api } = await mountDishes();
+  const field = page.getByRole("textbox", { name: "Surcharge for Bravas" });
+  await field.fill("20000");
+  await userEvent.keyboard("{Enter}");
+  await expect.element(field).toHaveAttribute("aria-invalid", "true");
+  await expect.element(page.getByText("Enter a surcharge from 0.00 to 10,000.00.")).toBeVisible();
+  expect(api.updateMenuItem).not.toHaveBeenCalled();
+});
+
+it("sends nothing for a surcharge that matches the saved one, then saves a real change", async () => {
+  const { api } = await mountDishes({ ...wineDetails, dishes: [wine, bravas] });
+  const wineField = page.getByRole("textbox", { name: "Surcharge for Wine" });
+  await wineField.fill("2");
+  await userEvent.keyboard("{Enter}");
+  const bravasField = page.getByRole("textbox", { name: "Surcharge for Bravas" });
+  await bravasField.fill("3");
+  await bravasField.fill("");
+  await userEvent.keyboard("{Enter}");
+  await wineField.fill("2.50");
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(api.updateMenuItem).toHaveBeenCalled());
+  expect(api.updateMenuItem).toHaveBeenCalledExactlyOnceWith("daily", "wine-item", {
+    grossPrice: "2.50",
+  });
+});
+
+it("shows a surcharge refusal that names no surcharge field as an alert, not on the row", async () => {
+  const { api } = await mountDishes();
+  api.updateMenuItem.mockRejectedValueOnce({ code: "set_menu.not_found" });
+  const field = page.getByRole("textbox", { name: "Surcharge for Bravas" });
+  await field.fill("4.00");
+  await userEvent.keyboard("{Enter}");
+  await expect
+    .element(page.getByRole("alert"))
+    .toHaveTextContent("That set menu could not be found.");
+  await expect.element(field).not.toHaveAttribute("aria-invalid", "true");
+});
+
+it("sends nothing when a dish's current course is picked again", async () => {
+  const { api } = await mountDishes();
+  const moved = { ...bravas, courseId: starters.id, courseOverrideId: starters.id };
+  api.saveSetMenuDishCourse.mockResolvedValue({
+    details: { ...details, dishes: [hake, moved, soup] },
+  });
+  const course = page.getByRole("combobox", { name: /^Course for Bravas/ });
+  await course.click();
+  await page
+    .getByRole("option", { name: "Sharing plates (from the product)", exact: true })
+    .click();
+  await course.click();
+  await page.getByRole("option", { name: "Starters", exact: true }).click();
+  await vi.waitFor(() => expect(api.saveSetMenuDishCourse).toHaveBeenCalled());
+  expect(api.saveSetMenuDishCourse).toHaveBeenCalledExactlyOnceWith(
+    "daily",
+    "bravas-item",
+    "starters",
+  );
+});
+
+it("puts a refused course under its row, and any other course refusal in an alert", async () => {
+  const { api } = await mountDishes();
+  api.saveSetMenuDishCourse
+    .mockRejectedValueOnce({ code: "set_menu.invalid", params: { field: "courseId" } })
+    .mockRejectedValueOnce({ code: "set_menu.not_found" });
+  const course = page.getByRole("combobox", { name: /^Course for Bravas/ });
+  await course.click();
+  await page.getByRole("option", { name: "Starters", exact: true }).click();
+  await expect.element(course).toHaveAttribute("aria-invalid", "true");
+  await expect.element(page.getByText("Choose a course that is still available.")).toBeVisible();
+  expect(page.getByRole("alert").elements()).toHaveLength(0);
+
+  await course.click();
+  await page.getByRole("option", { name: "Starters", exact: true }).click();
+  await expect
+    .element(page.getByRole("alert"))
+    .toHaveTextContent("That set menu could not be found.");
+  await expect.element(course).not.toHaveAttribute("aria-invalid", "true");
+});
+
+it("keeps a dish whose removal is refused and says why", async () => {
+  const { api } = await mountDishes();
+  api.removeSectionMember.mockRejectedValueOnce({ code: "set_menu.not_found" });
+  const reads = api.readSetMenu.mock.calls.length;
+  await page.getByRole("button", { name: "Actions for Hake" }).click();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect
+    .element(page.getByRole("alert"))
+    .toHaveTextContent("That set menu could not be found.");
+  await expect.element(page.getByRole("region", { name: "No course" })).toBeVisible();
+  expect(api.readSetMenu).toHaveBeenCalledTimes(reads);
+});
+
+it("offers Try again when the set menu cannot be read after a removal", async () => {
+  const { api } = await mountDishes();
+  api.readSetMenu.mockRejectedValueOnce(new Error("offline"));
+  const reads = api.readSetMenu.mock.calls.length;
+  await page.getByRole("button", { name: "Actions for Hake" }).click();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect
+    .element(page.getByRole("alert"))
+    .toHaveTextContent("The set menu could not be loaded.");
+  await expect.element(page.getByRole("region", { name: "No course" })).toBeVisible();
+
+  api.readSetMenu.mockResolvedValueOnce({ ...details, dishes: [bravas, soup] });
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect.element(page.getByRole("region", { name: "No course" })).not.toBeInTheDocument();
+  expect(page.getByRole("alert").elements()).toHaveLength(0);
+  expect(api.readSetMenu).toHaveBeenCalledTimes(reads + 2);
+});
