@@ -167,8 +167,6 @@ declare module "@waitron/shared" {
     "printer.bluetooth_command_busy": { kind: "pair" | "forget"; seconds: number };
     /** Pair names an address the named print agent has not reported in a fresh Bluetooth scan. */
     "printer.bluetooth_not_discovered": { address: string };
-    /** Forget names an address the named print agent does not currently report as paired. */
-    "printer.bluetooth_not_paired": { address: string };
     /**
      * A receipt printer was asked for at an address a print agent reported as an office printer.
      * Weaker than its name: it matches only the host text (ignoring case) and port an agent

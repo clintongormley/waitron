@@ -146,16 +146,11 @@ describe("the device error codes carry their declared params", () => {
 });
 
 describe("the printer Bluetooth error codes carry their declared params", () => {
-  it("constructs the two evidence refusals naming the address, and never a PIN", () => {
-    const address = "AA:BB:CC:DD:EE:FF";
-    for (const code of [
-      "printer.bluetooth_not_discovered",
-      "printer.bluetooth_not_paired",
-    ] as const) {
-      const error = new AppError(code, { address });
-      expect(error.code).toBe(code);
-      expect(error.params).toEqual({ address });
-    }
+  it("names the address Pair could not find in discovery", () => {
+    const error = new AppError("printer.bluetooth_not_discovered", {
+      address: "AA:BB:CC:DD:EE:FF",
+    });
+    expect(error.params).toEqual({ address: "AA:BB:CC:DD:EE:FF" });
   });
 
   it("constructs printer.bluetooth_command_busy with the running action and remaining seconds", () => {

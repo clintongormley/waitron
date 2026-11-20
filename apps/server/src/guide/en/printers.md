@@ -10,8 +10,6 @@ printer** instead.
 A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it, enter its
 PIN and choose **Pair and add** again. For a new printer, the name dialog opens: choose **Add**.
 
-Wait for the current Pair or Unpair to finish before starting another on the same print agent.
-
 If a network printer is not found, open **Check a known address**, type its IP address and choose
 **Connect**.
 
@@ -19,6 +17,10 @@ To remove a receipt or station printer, choose **Delete** in its row menu or det
 confirmation lists the assignments removed and work ended. To use it again, choose **Add a
 printer**, then **Add** beside it. A recognised printer keeps its name and calibration, so you
 do not need to name or calibrate it again. Assign its devices and prep stations again.
+
+**Delete** also asks each box that reports the Bluetooth printer paired to unpair it. Put the
+printer in pairing mode and choose **Pair and add** to bring it back. If Waitron says a box
+may still be paired, switch on that box, add the printer and choose **Delete** again.
 
 To print station tickets, choose the printer on each station in **Prep stations**. A printer
 chosen on every station prints the whole send, for the pass. To add a printer to all stations at
@@ -63,8 +65,8 @@ Waitron alerts you when a device's battery is low; if its battery reading in **D
 In **Devices**, check **Invoice printer** to see where a device prints invoices. **· A4** after
 the printer's name identifies an A4 printer.
 
-A Bluetooth printer you unpaired is disabled. To use it again, put it in pairing mode, open its
-details and choose **Pair again**.
+If a Bluetooth printer still appears in Waitron but lost its pairing, put it in pairing mode.
+Open **Add a printer** and choose **Pair** beside it, or use **Pair again** if its details offer it.
 
 ## Print Queue {#print-queue}
 

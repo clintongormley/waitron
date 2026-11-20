@@ -349,15 +349,6 @@ function bluetoothApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
         expiresInMs: 120_000,
       },
     }),
-    forgetBluetoothPairing: vi.fn().mockResolvedValue({
-      command: {
-        id: "c2",
-        kind: "forget",
-        address: "22:22:22:22:22:22",
-        state: "pending",
-        expiresInMs: 120_000,
-      },
-    }),
     ...overrides,
   });
 }
@@ -992,7 +983,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("renders the form a finished pairing opens, then the paired row's Add and Unpair, accessibly", async () => {
+  it("renders the form a finished pairing opens, then the paired row's Add, accessibly", async () => {
     const paired = {
       ...bluetooth[0]!,
       paired: true as const,
@@ -1040,7 +1031,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await vi.waitFor(() => expect(q(el, "[data-test=name-printer-modal]")).toBeNull());
       await flush(el);
       expect(q(el, '[data-test="register-a1:00:11:22:33:44:55"]')).not.toBeNull();
-      expect(q(el, '[data-test="forget-device-a1:00:11:22:33:44:55"]')).not.toBeNull();
+      expect(q(el, '[data-test="forget-device-a1:00:11:22:33:44:55"]')).toBeNull();
       await expectNoA11yViolations(host);
     } finally {
       vi.useRealTimers();
@@ -1168,13 +1159,23 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("renders a switched-off Bluetooth printer's Unpair and its outcome accessibly", async () => {
+  it("renders Bluetooth Delete and its unpair warning accessibly", async () => {
+    const impact = {
+      target: { id: "p4", name: bluetoothPrinter.name },
+      ends: [],
+      removes: [],
+      refusals: [],
+    };
+    const listPrinters = vi.fn().mockResolvedValue([...printers, bluetoothPrinter]);
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
       {
         api: bluetoothApi({
-          forgetBluetoothPairing: vi.fn().mockResolvedValue({
-            command: { id: "c2", kind: "forget", address: "22:22:22:22:22:22", state: "failed" },
+          listPrinters,
+          getPrinterDeleteImpact: vi.fn().mockResolvedValue(impact),
+          deletePrinter: vi.fn().mockResolvedValue({
+            ...impact,
+            bluetoothUnpair: { commands: [], warnings: [{ agentName: "Bar box" }] },
           }),
         }),
       },
@@ -1185,14 +1186,23 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
       .click();
     await flush(el);
-    const forget = q(el, "[data-test=forget-pairing-p4]")!;
-    forget.closest("dashboard-row-actions")!.shadowRoot!.querySelector("button")!.click();
+    const remove = q(el, "[data-test=delete-printer-p4]")!;
+    remove.closest("dashboard-row-actions")!.shadowRoot!.querySelector("button")!.click();
     await flush(el);
-    expect(forget.checkVisibility()).toBe(true);
+    expect(remove.checkVisibility()).toBe(true);
+    expect(q(el, "[data-test=forget-pairing-p4]")).toBeNull();
+    remove.click();
+    await flush(el);
+    expect(q(el, "[data-test=delete-printer-dialog]")!.shadowRoot!.textContent).toContain(
+      t("printers.delete_bluetooth"),
+    );
     await expectNoA11yViolations(host);
-    forget.click();
+    listPrinters.mockResolvedValue(printers);
+    q(el, "[data-test=delete-printer-dialog]")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-confirm]")!
+      .click();
     await flush(el);
-    expect(q(el, "[data-test=printer-command-p4]")).not.toBeNull();
+    expect(q(el, "[data-test=bluetooth-delete-warning]")!.textContent).toContain("Bar box");
     await expectNoA11yViolations(host);
   });
 

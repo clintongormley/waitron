@@ -54,7 +54,7 @@ function refusalLine(refusal: DeleteImpactRefusal): string {
 }
 
 /** The printer delete dialog's words, in the language the screen shows now. */
-export function printerDeleteCopy(page = false): DeleteDialogCopy {
+export function printerDeleteCopy(page = false, bluetooth = false): DeleteDialogCopy {
   return {
     heading: t("printers.delete_heading"),
     refusals: t("printers.delete_refusals"),
@@ -63,6 +63,7 @@ export function printerDeleteCopy(page = false): DeleteDialogCopy {
     irreversible: [
       t("printers.delete_retained"),
       ...(page ? [t("printers.page_printer_readd")] : []),
+      ...(bluetooth ? [t("printers.delete_bluetooth")] : []),
     ].join(" "),
     cancel: t("action.cancel"),
     confirm: t("action.delete"),

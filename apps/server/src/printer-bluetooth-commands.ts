@@ -69,6 +69,7 @@ export function createPrinterBluetoothCommands(
     pin?: string,
   ): BluetoothCommandStatus;
   current(agentId: string): BluetoothCommand[];
+  refuseWhileForgetting(address: string): void;
   /** Issued unpairings reported succeeded, including remembered expired IDs; settles nothing. */
   unpaired(agentId: string, outcomes: BluetoothCommandOutcome[], paired?: string[]): string[];
   accept(agentId: string, outcomes: BluetoothCommandOutcome[]): void;
@@ -136,6 +137,18 @@ export function createPrinterBluetoothCommands(
     current(agentId) {
       const pending = prune(agentId).agent?.pending.values() ?? [];
       return [...pending].map(({ command }) => ({ ...command }));
+    },
+
+    refuseWhileForgetting(address) {
+      const instant = now();
+      for (const agentId of agents.keys()) {
+        const pending = prune(agentId).agent?.pending.get(address);
+        if (pending?.command.kind === "forget")
+          throw new AppError("printer.bluetooth_command_busy", {
+            kind: "forget",
+            seconds: Math.ceil(msLeft(pending.expiresAt, instant) / 1000),
+          });
+      }
     },
 
     unpaired(agentId, outcomes, paired = []) {

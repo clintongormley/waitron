@@ -2189,7 +2189,6 @@ export const en = {
   "printers.reprint_stuck":
     "{printer} has not printed this. Reprinting it elsewhere cancels it there.",
   "printers.reprint_sent": "Reprint sent to {printer}",
-  "printers.bluetooth_forget": "Unpair",
   "printers.bluetooth_show_all": "Show all devices",
   "printers.bluetooth_hide_others": "Hide other devices",
   "printers.bluetooth_pair_title": "Pair a Bluetooth device",
@@ -2207,6 +2206,13 @@ export const en = {
     "check the printer is on, close by and ready to pair, then try again",
   "printers.bluetooth_forget_failed_general":
     "try again. If it keeps failing, switch the printer off and on, then try again",
+  "printers.bluetooth_reason.pairing_refused":
+    "The printer refused to pair. It may still remember another box. Switch it off and on, put it in pairing mode and try again.",
+  "printers.delete_bluetooth": "Waitron will also unpair the printer from its paired boxes.",
+  "printers.delete_bluetooth_warning_named":
+    "{printer} was deleted from Waitron but may still be paired to {agent}. Switch that box on, add the printer and delete it again to clear the pairing.",
+  "printers.delete_bluetooth_warning":
+    "{printer} was deleted from Waitron but may still be paired to a box. Switch on the box that used the printer, add the printer and delete it again to clear the pairing.",
   "printers.bluetooth_reason.wrong_pin": "the PIN is not correct",
   "printers.bluetooth_reason.pin_needed": "this printer needs a PIN. Enter it and try again",
   "printers.bluetooth_reason.pin_too_slow":
@@ -6789,7 +6795,6 @@ export const es: Record<StringKey, string> = {
   "printers.reprint_stuck":
     "{printer} aún no la ha impreso. Si la reimprimes en otra, se cancela allí.",
   "printers.reprint_sent": "Reimpresión enviada a {printer}",
-  "printers.bluetooth_forget": "Desvincular",
   "printers.bluetooth_show_all": "Mostrar todos los dispositivos",
   "printers.bluetooth_hide_others": "Ocultar otros dispositivos",
   "printers.bluetooth_pair_title": "Emparejar un dispositivo Bluetooth",
@@ -6808,6 +6813,14 @@ export const es: Record<StringKey, string> = {
     "comprueba que la impresora esté encendida, cerca y lista para emparejar, y vuelve a intentarlo",
   "printers.bluetooth_forget_failed_general":
     "vuelve a intentarlo. Si sigue fallando, apaga y enciende la impresora y vuelve a intentarlo",
+  "printers.bluetooth_reason.pairing_refused":
+    "La impresora rechazó el emparejamiento. Puede que aún recuerde otra caja. Apágala y vuelve a encenderla, ponla en modo de emparejamiento e inténtalo de nuevo.",
+  "printers.delete_bluetooth":
+    "Waitron también desvinculará la impresora de las cajas emparejadas.",
+  "printers.delete_bluetooth_warning_named":
+    "{printer} se eliminó de Waitron, pero puede seguir vinculada a {agent}. Enciende esa caja, vuelve a añadir la impresora y elimínala de nuevo para desvincularla.",
+  "printers.delete_bluetooth_warning":
+    "{printer} se eliminó de Waitron, pero puede seguir vinculada a una caja. Enciende la caja que usaba la impresora, vuelve a añadirla y elimínala de nuevo para desvincularla.",
   "printers.bluetooth_reason.wrong_pin": "el PIN no es correcto",
   "printers.bluetooth_reason.pin_needed":
     "esta impresora necesita un PIN. Introdúcelo y vuelve a intentarlo",

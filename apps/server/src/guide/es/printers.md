@@ -11,9 +11,6 @@ Una impresora Bluetooth debe estar antes en modo de emparejamiento. Elige **Empa
 junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Si es una impresora nueva, se
 abre el diálogo del nombre: elige **Añadir**.
 
-Espera a que termine el emparejamiento o la desvinculación antes de iniciar otra solicitud
-en el mismo agente de impresión.
-
 Si no aparece una impresora de red, abre **Comprobar una dirección conocida**, escribe su dirección
 IP y elige **Conectar**.
 
@@ -22,6 +19,11 @@ La confirmación indica las asignaciones que se eliminan y el trabajo que finali
 usarla, elige **Añadir impresora** y después **Añadir** junto a ella. Si se reconoce, conserva su
 nombre y calibración, así que no necesitas repetirlos. Vuelve a asignar sus dispositivos y
 estaciones de preparación.
+
+**Eliminar** también pide a cada caja que indica que la impresora Bluetooth está emparejada que la
+desvincule. Para recuperarla, ponla en modo de emparejamiento y elige **Emparejar y añadir**. Si
+Waitron avisa de que la impresora puede seguir vinculada a una caja, enciende esa caja, añade la
+impresora y vuelve a elegir **Eliminar**.
 
 Para imprimir comandas de estación, elige la impresora en cada estación en **Estaciones de
 preparación**. Una impresora elegida en todas las estaciones imprime todo lo que se envía, para el
@@ -69,8 +71,9 @@ Waitron te avisa cuando la batería de un dispositivo está baja; si su lectura 
 En **Dispositivos**, consulta **Impresora de facturas** para ver dónde imprime las facturas cada
 dispositivo. **· A4** tras el nombre identifica una impresora A4.
 
-Una impresora Bluetooth que desvinculaste queda deshabilitada. Para volver a usarla, ponla en modo
-de emparejamiento, abre sus detalles y elige **Emparejar de nuevo**.
+Si una impresora Bluetooth sigue en Waitron pero ha perdido el emparejamiento, ponla en modo de
+emparejamiento. Abre **Añadir impresora** y elige **Emparejar** junto a ella, o usa **Emparejar de
+nuevo** si aparece en sus detalles.
 
 ## Cola de impresión {#print-queue}
 

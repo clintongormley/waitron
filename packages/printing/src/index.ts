@@ -53,7 +53,6 @@ export {
   PRINT_RETRY_MAX_WAIT_MS,
   PULL_BATCH_LIMIT,
   claimPrintJobs,
-  endUnpairedPrinterJobs,
   reportPrintJob,
   runAgentOnce,
 } from "./runtime.js";
