@@ -730,6 +730,21 @@ describe("backup-screen", () => {
     );
   });
 
+  it("explains that settings stopped the backup and offers another try", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi({}, { ...ENABLED, runStoppedCode: "backup.settings_changed" }),
+      canManage: true,
+    });
+    await flush(el);
+    await expect
+      .element(page.getByRole("status").filter({ hasText: "the backup settings changed" }))
+      .toHaveTextContent("Press Back up now again.");
+    await expect
+      .element(page.getByRole("button", { name: "Back up now", exact: true }))
+      .toBeEnabled();
+  });
+
   it("names a bucket destination by its bucket and archive folder, and leaves the folder field empty", async () => {
     const bucket: BackupStatusView = {
       ...ENABLED,

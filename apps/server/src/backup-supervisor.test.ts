@@ -2234,7 +2234,7 @@ describe("scheduled backup passes", () => {
     }
   });
 
-  it("drains the manual copy before reload closes its destination", async () => {
+  it("drains the manual copy before reload closes its destination and reports the stop", async () => {
     const copy = gate<AbortSignal>();
     const archive = store.archiveInWorker;
     vi.spyOn(store, "archiveInWorker").mockImplementation(async (source, target, signal) => {
@@ -2243,14 +2243,15 @@ describe("scheduled backup passes", () => {
       await archive(source, target, signal);
     });
     const close = vi.spyOn(LocalFsBackend.prototype, "close");
-    const { sup, refs, dest } = await prepared();
+    const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    const { sup, refs, dest } = await prepared({ outcomes });
     let manual: Promise<void> | undefined;
     let reloading: Promise<void> | undefined;
     try {
       await sup.reload();
       manual = sup.runNow();
       const signal = await copy.reached;
-      refs.config = undefined;
+      refs.config = localFsConfig([dest], STRONG_KEY_2);
       reloading = sup.reload();
       await vi.waitFor(() => expect(signal.aborted).toBe(true));
       expect(() => sup.runNow()).toThrow(
@@ -2261,6 +2262,7 @@ describe("scheduled backup passes", () => {
       await Promise.all([manual, reloading]);
       expect(close).toHaveBeenCalledOnce();
       expect(await listArchives(dest)).toEqual([]);
+      expect(await sup.status()).toHaveProperty("runStoppedCode", "backup.settings_changed");
     } finally {
       copy.release();
       await Promise.all([manual, reloading]);

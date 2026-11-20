@@ -1480,7 +1480,9 @@ export class BackupScreen extends LitElement {
                         >${
                           s.runStoppedCode === "backup.staging_space_low"
                             ? t("backup.status.stopped_space_low")
-                            : alertMessage("backup.run_stopped", { errorCode: s.runStoppedCode })
+                            : s.runStoppedCode === "backup.settings_changed"
+                              ? t("backup.status.stopped_settings_changed")
+                              : alertMessage("backup.run_stopped", { errorCode: s.runStoppedCode })
                         }</span
                       >`
                     : nothing

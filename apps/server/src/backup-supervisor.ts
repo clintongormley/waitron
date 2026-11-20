@@ -236,6 +236,11 @@ export class BackupSupervisor {
       // Every reload clears it first, so a reload that throws or leaves backups off leaves none
       // unless the deletion itself fails, which is logged.
       await this.#inNoteTurn(() => this.#deleteNote());
+      const outcomes = this.#deps.outcomes;
+      if (this.#schedule?.activeRun?.kind === "manual" && outcomes) {
+        const at = this.#now().toISOString();
+        outcomes.runStopped = { code: "backup.settings_changed", at, since: at };
+      }
       await this.#teardown();
       if (this.#stopped) return;
       const loaded = await this.#deps.buildConfig();
