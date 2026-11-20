@@ -1406,21 +1406,23 @@ describe("setup-app", () => {
   });
 
   it("shows the named Preparation key and PDF returned by provisioning", async () => {
-    const el = await mountSetupApp(
-      stubApi({
-        provision: vi.fn().mockResolvedValue({
-          provisioned: true,
-          restarting: true,
-          breakGlassSecret: "key-on-paper",
-          breakGlassKeyName: "2026-10-15 · K7QF",
-          breakGlassKeyInBackups: true,
-          recoveryPackPdf: btoa("%PDF-setup"),
-        }),
-      }),
-    );
+    const provision = vi.fn().mockResolvedValue({
+      provisioned: true,
+      restarting: true,
+      breakGlassSecret: "key-on-paper",
+      breakGlassKeyName: "2026-10-15 · K7QF",
+      breakGlassKeyInBackups: true,
+      recoveryPackPdf: btoa("%PDF-setup"),
+    });
+    const el = await mountSetupApp(stubApi({ provision }));
     patch(el, { mode: "prepare" });
     provisionRequest(el);
     await flush(el);
+    expect(provision).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "prepare" }),
+      undefined,
+      "en-GB",
+    );
     expect(await screenText(el, "done", "[data-test=download-recovery-pack]")).toBe(
       "Download recovery pack (PDF)",
     );

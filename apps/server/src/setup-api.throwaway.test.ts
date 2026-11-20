@@ -10,6 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VenueResult } from "@waitron/provisioning";
 import { readRecoveryPacks, type Database } from "@waitron/db";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack";
+import { AppError } from "@waitron/shared";
+import { PDFDocument } from "pdf-lib";
+import * as invoiceFont from "./invoice-font.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -417,6 +420,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       persistTrading = async () => {},
       operations = createSetupOperationStore(stateDir),
       requestRestart = () => {},
+      log = () => {},
       recoveryPackEvidence = (module) =>
         readRecoveryDocumentEvidence({ stateDir, venueDir: stateDir }, module),
     }: {
@@ -425,6 +429,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       persistTrading?: SetupDeps["persistTrading"];
       operations?: SetupOperationStore;
       requestRestart?: SetupDeps["requestRestart"];
+      log?: Logger;
       recoveryPackEvidence?: NonNullable<SetupDeps["recoveryPackEvidence"]>;
     } = {},
   ) {
@@ -464,14 +469,14 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
                   }),
                 ),
       },
-      () => {},
+      log,
     );
-    return (payload: unknown, { secure = true, origin = "https://box.test" } = {}) =>
+    return (payload: unknown, { secure = true, origin = "https://box.test", headers = {} } = {}) =>
       app.request(
         `${secure ? "https" : "http"}://box.test/setup-api/provision`,
         {
           method: "POST",
-          headers: { "content-type": "application/json", origin },
+          headers: { "content-type": "application/json", origin, ...headers },
           body: JSON.stringify(payload),
         },
         { incoming: { socket: secure ? secureSocket : undefined } },
@@ -559,6 +564,39 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(replayed.status).toBe(200);
     expect(await replayed.json()).toEqual(result);
     expect(await readRecoveryKeyName(venueDb.node, id)).toBe(breakGlassKeyName);
+  });
+
+  it("draws the pack in the visible setup language when the browser prefers an unsupported one", async () => {
+    const response = await realApp(PREPRODUCTION_BOX)(body("prepare"), {
+      headers: { "accept-language": "fr-FR", "x-waitron-recovery-pack-locale": "en-GB" },
+    });
+    expect(response.status).toBe(200);
+    const { recoveryPackPdf } = await response.json();
+    const pack = await PDFDocument.load(Buffer.from(recoveryPackPdf, "base64"));
+    expect(pack.getTitle()).toBe("Waitron recovery pack");
+  });
+
+  it("delivers the text key without a pack record when PDF drawing fails", async () => {
+    const fonts = vi
+      .spyOn(invoiceFont, "loadRecoveryPackFonts")
+      .mockRejectedValueOnce(new AppError("recovery.pack_invalid", { reason: "shape" }));
+    const log = vi.fn<Logger>();
+    try {
+      const response = await realApp(PREPRODUCTION_BOX, { log })(body("prepare"));
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result).not.toHaveProperty("recoveryPackPdf");
+      const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
+      expect(await readRecoveryPacks(venueDb.db, id)).toEqual([]);
+      const secret = FISCAL_SERVER_KEY_AS_TYPED(result.breakGlassSecret);
+      expect(typeof secret).toBe("string");
+      expect(await verifyBreakGlass(venueDb.node, id, secret!)).toBe(true);
+      expect(log).toHaveBeenCalledWith("warn", "setup.recovery_pack_drawing_failed", {
+        reason: "recovery.pack_invalid",
+      });
+    } finally {
+      fonts.mockRestore();
+    }
   });
 
   it("still delivers a usable key when the recovery document evidence cannot be read", async () => {

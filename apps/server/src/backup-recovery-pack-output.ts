@@ -11,7 +11,7 @@ import {
 import type { WaitronModule } from "@waitron/module";
 import { setRecoveryKeyTx, type VenueAndNodeHandles } from "@waitron/node-db";
 import { renderRecoveryPack, type PackLocale, type RenderPackInput } from "@waitron/recovery-pack";
-import type { NodeId } from "@waitron/shared";
+import { isAppError, type NodeId } from "@waitron/shared";
 import {
   buildServerKeyPart,
   notSetUp,
@@ -86,8 +86,12 @@ export async function makePreparationRecoveryPack(
             newKey: { name, secret },
           },
         );
-        if (serverKey.record.carriedKey !== true || serverKey.file.serverKey == null)
+        if (serverKey.record.carriedKey !== true || serverKey.file.serverKey == null) {
+          log("warn", "setup.recovery_pack_drawing_failed", {
+            reason: serverKey.failedWith ?? "server_key_missing",
+          });
           return undefined;
+        }
         output = await drawRecoveryPack(
           {
             locale,
@@ -104,8 +108,10 @@ export async function makePreparationRecoveryPack(
           },
           { nodeId, madeBy: null, parts: [notSetUp("bucket"), notSetUp("archives"), serverKey] },
         );
-      } catch {
-        log("warn", "setup.recovery_pack_drawing_failed", {});
+      } catch (error) {
+        log("warn", "setup.recovery_pack_drawing_failed", {
+          reason: isAppError(error) ? error.code : "unexpected",
+        });
         return undefined;
       }
       await insertRecoveryPack(tx, output.record);

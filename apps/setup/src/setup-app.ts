@@ -1729,18 +1729,22 @@ export class SetupApp extends LitElement {
     const generation = this.#rootGeneration;
     this.screen = "provisioning";
     try {
+      const request = assembleBody(submitted);
+      const locale = currentLocale();
       const result = await (this.#firstSession
         ? this.#firstSession.provision(
             {
               mode: "live",
-              aeatCert: assembleBody(submitted).aeatCert,
+              aeatCert: request.aeatCert,
               email: submitted.email as ProvisionBody["email"],
             },
-            currentLocale(),
+            locale,
           )
-        : this.#localeChosen
-          ? this.api.provision(assembleBody(submitted), currentLocale())
-          : this.api.provision(assembleBody(submitted)));
+        : request.mode === "prepare"
+          ? this.api.provision(request, this.#localeChosen ? locale : undefined, locale)
+          : this.#localeChosen
+            ? this.api.provision(request, locale)
+            : this.api.provision(request));
       if (!this.isConnected || generation !== this.#rootGeneration) return;
       this.#rootBaseline = submitted;
       this.#rootScope?.commit(submitted);

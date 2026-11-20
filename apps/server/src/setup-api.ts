@@ -1016,7 +1016,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
                   handles,
                   result.nodeId,
                   keyOutput.module,
-                  venue.admin.locale === "es-ES" ? "es" : "en",
+                  resolveLoginLocale(
+                    c.req.header("X-Waitron-Recovery-Pack-Locale"),
+                    venue.admin.locale ?? FALLBACK_LOCALE,
+                  ) === "es-ES"
+                    ? "es"
+                    : "en",
                   deps.recoveryPackEvidence,
                   log,
                 );

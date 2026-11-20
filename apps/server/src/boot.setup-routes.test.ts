@@ -1030,34 +1030,51 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     const keptStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-no-till-state-"));
     try {
       let trading: Record<string, string> = {};
-      await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
-        const response = await post("/setup-api/provision", {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            mode: "prepare",
-            venue: provisionVenueBody("60000011A"),
-            email: {
-              server: "smtp.example.test",
-              port: 587,
-              encryption: "starttls",
-              from: "venue@example.test",
+      let activeSetup: StartedServer;
+      let shuttingDown: Promise<void> | undefined;
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, stateDir }) => {
+          const response = await post("/setup-api/provision", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              mode: "prepare",
+              venue: provisionVenueBody("60000011A"),
+              email: {
+                server: "smtp.example.test",
+                port: 587,
+                encryption: "starttls",
+                from: "venue@example.test",
+              },
+            }),
+          });
+          expect(response.status, await response.clone().text()).toBe(200);
+          const provision = (await response.json()) as {
+            recoveryPackPdf: string;
+            breakGlassKeyName: string;
+          };
+          expect(typeof provision.recoveryPackPdf).toBe("string");
+          const pack = await readRecoveryPackPdf(Buffer.from(provision.recoveryPackPdf, "base64"));
+          expect(pack.serverKeyName).toBe(provision.breakGlassKeyName);
+          await poll(() => shuttingDown);
+          await shuttingDown;
+          // The setup boot's state folder holds the keys the venue was sealed with; it is removed
+          // when the setup boot closes, so the trading start runs from a copy.
+          await cp(stateDir, keptStateDir, { recursive: true });
+          trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
+        },
+        {
+          onStarted: (server) => {
+            activeSetup = server;
+          },
+          seams: {
+            restart: () => {
+              shuttingDown = activeSetup.close();
             },
-          }),
-        });
-        expect(response.status, await response.clone().text()).toBe(200);
-        const provision = (await response.json()) as {
-          recoveryPackPdf: string;
-          breakGlassKeyName: string;
-        };
-        expect(typeof provision.recoveryPackPdf).toBe("string");
-        const pack = await readRecoveryPackPdf(Buffer.from(provision.recoveryPackPdf, "base64"));
-        expect(pack.serverKeyName).toBe(provision.breakGlassKeyName);
-        await poll(() => (kills.length > 0 ? kills.length : undefined));
-        // The setup boot's state folder holds the keys the venue was sealed with; it is removed
-        // when the setup boot closes, so the trading start runs from a copy.
-        await cp(stateDir, keptStateDir, { recursive: true });
-        trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
-      });
+          },
+        },
+      );
       expect(trading).not.toHaveProperty("WAITRON_TILL_TILL_ID");
       const deviceRows = await venue.store.venue.execute<{ n: number }>(
         sql`select cast(count(*) as int) as n from devices`,

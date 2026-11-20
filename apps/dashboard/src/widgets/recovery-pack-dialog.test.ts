@@ -170,6 +170,16 @@ describe("the form", () => {
     );
   });
 
+  it("describes the setup PDF next to the replacement option", async () => {
+    setLocale("en-GB");
+    const { el } = await open({
+      at: { ...UNRECEIVED, unreceived: { ...UNRECEIVED.unreceived!, offeredAtSetup: true } },
+    });
+    expect(words(el.shadowRoot!.querySelector("[data-test=new-key-why]"))).toContain(
+      "Offered as a PDF at the end of setup on 12 October.",
+    );
+  });
+
   it("names no pack when the status names none holding the key", async () => {
     const { el } = await open({ at: status() });
     expect(words(el.shadowRoot!.querySelector("[data-test=new-key-why]"))).toBe(

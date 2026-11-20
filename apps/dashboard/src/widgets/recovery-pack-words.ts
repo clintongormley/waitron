@@ -14,16 +14,18 @@ export function packDate(iso: string, timeZone: string | undefined): string {
   );
 }
 
-/**
- * The pack the status names as holding the current server key, and whether a browser confirmed receiving it.
- * An unreceived holder comes first: its warning is the one a person must not miss.
- */
-export function keyHolder(
-  status: RecoveryPackStatus | null,
-): { number: number; madeAt: string; received: boolean } | null {
+type KeyHolder = { number: number; madeAt: string; received: boolean; offeredAtSetup?: true };
+
+/** A later pack that leaves the key in place cannot hide the unconfirmed pack that holds it. */
+export function keyHolder(status: RecoveryPackStatus | null): KeyHolder | null {
   const unreceived = status?.unreceived;
   if (unreceived?.holdsCurrentServerKey)
-    return { number: unreceived.number, madeAt: unreceived.madeAt, received: false };
+    return {
+      number: unreceived.number,
+      madeAt: unreceived.madeAt,
+      received: false,
+      ...(unreceived.offeredAtSetup ? { offeredAtSetup: true } : {}),
+    };
   const kept = status?.keep.find((pack) => pack.why === "server_key");
   if (kept) return { number: kept.number, madeAt: kept.madeAt, received: true };
   return null;
@@ -40,14 +42,15 @@ export function withStrong(
   return html`${before}<strong>${strong}</strong>${after ?? ""}`;
 }
 
-/** Decision 10's words for a pack holding the current server key no browser confirmed receiving. */
 export function unreceivedWords(
-  holder: { number: number; madeAt: string },
+  holder: Omit<KeyHolder, "received">,
   timeZone: string | undefined,
 ): TemplateResult {
+  const date = packDate(holder.madeAt, timeZone);
+  if (holder.offeredAtSetup) return html`${fill("recovery_pack.offered_at_setup", { date })}`;
   return withStrong(
     "recovery_pack_dialog.unreceived",
-    { number: String(holder.number), date: packDate(holder.madeAt, timeZone) },
+    { number: String(holder.number), date },
     "option",
     t("recovery_pack_dialog.new_key"),
   );

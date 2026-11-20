@@ -346,6 +346,7 @@ export class RecoveryPackCard extends LitElement {
     const latest = status.latest;
     const keyOn = keyHolder(status);
     const holder = keyOn !== null && !keyOn.received ? keyOn : null;
+    const offered = holder?.offeredAtSetup ? holder : null;
     const lines: (string | TemplateResult)[] = [];
     let warn = true;
     if (latest === null) {
@@ -357,7 +358,7 @@ export class RecoveryPackCard extends LitElement {
           date: date(latest.madeAt),
         }),
       );
-    } else if (latest.received) {
+    } else if (latest.received || offered?.number === latest.number) {
       const pack = { number: String(latest.number), date: date(latest.madeAt) };
       const reasons = reasonSentences(status.reasons, date);
       if (status.incomplete) {
@@ -369,7 +370,7 @@ export class RecoveryPackCard extends LitElement {
         status.reasons.every((reason) => reason.kind === "cannot_check")
       ) {
         lines.push(fill("recovery_pack.cannot_check", pack));
-      } else if (!status.upToDate || reasons.length > 0) {
+      } else if ((latest.received && !status.upToDate) || reasons.length > 0) {
         lines.push(
           html`<strong>${fill("recovery_pack.out_of_date", pack)}</strong> ${[
               ...reasons,
@@ -385,20 +386,27 @@ export class RecoveryPackCard extends LitElement {
         );
       }
     }
-    if (holder !== null) {
-      if (status.unreceived?.offeredAtSetup) {
-        warn = lines.length > 0;
-        lines.push(fill("recovery_pack.offered_at_setup", { date: date(holder.madeAt) }));
-      } else {
-        lines.push(unreceivedWords(holder, status.timeZone));
-      }
-    }
+    if (holder !== null && offered === null) lines.push(unreceivedWords(holder, status.timeZone));
+    if (offered !== null && lines.length === 0) warn = false;
     const keep = this.#keep(status, warn);
     if (keep.length > 0) lines.push(keep.join(" "));
     if (status.backupsUseOlderKey) lines.push(t("recovery_pack.older_key"));
-    return html`<div class="line ${warn ? "warn" : ""}" data-test="pack-status">
-      ${lines.map((words) => html`<p>${words}</p>`)}
-    </div>`;
+    return html`
+      ${
+        offered === null
+          ? nothing
+          : html`<div class="line" data-test="setup-pack-offered">
+              <p>${unreceivedWords(offered, status.timeZone)}</p>
+            </div>`
+      }
+      ${
+        lines.length === 0
+          ? nothing
+          : html`<div class="line ${warn ? "warn" : ""}" data-test="pack-status">
+              ${lines.map((words) => html`<p>${words}</p>`)}
+            </div>`
+      }
+    `;
   }
 
   /** The keep-until sentences, from the server's list; never one naming an unreceived pack. */
@@ -475,7 +483,7 @@ export class RecoveryPackCard extends LitElement {
     const holder = keyHolder(status);
     if (holder !== null)
       return fill(
-        holder.received || status.unreceived?.offeredAtSetup
+        holder.received || holder.offeredAtSetup
           ? "recovery_pack.server_key_on"
           : "recovery_pack.server_key_on_unreceived",
         { number: String(holder.number), date: this.#date(holder.madeAt) },
