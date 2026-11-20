@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   insertInChunks,
   lineServiceCancellations,
@@ -9,17 +9,30 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { correctionTargetFor, requireSupportedCorrection } from "@waitron/core";
-import type { Override, PinAttempts } from "@waitron/identity";
+import {
+  correctionTargetFor,
+  requireSupportedCorrection,
+  withIssuanceTransaction,
+} from "@waitron/core";
+import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { readOrderInvoice, type IssuedInvoice } from "./cancel-credit.js";
+import { creditWholeInvoice, type IssuedInvoice } from "./cancel-credit.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { orderTableLabel } from "./kitchen-print.js";
 import { unservedDishes } from "./meal-end.js";
 import { carryLineReductions } from "./order-portions.js";
-import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import { bumpPartyRevision } from "./parties.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { cancelPlaced, createOpenOrder, type TillSaleDeps } from "./working-order.js";
+import {
+  abandonPlacedOrder,
+  createOpenOrder,
+  lockPlacedOrder,
+  readInvoiceNumber,
+  recordPlacedOrderCancelled,
+  refusePlacedOrderMoney,
+  withRectifyPinAhead,
+  type TillSaleDeps,
+} from "./working-order.js";
 import "./errors.js";
 
 export interface SplitAfterPrint {
@@ -29,7 +42,9 @@ export interface SplitAfterPrint {
 
 /**
  * Credit a table's printed, unpaid ticket in full and put copies of its dishes on a new open bill
- * of the same party, so each guest's dishes can be moved to their own bill and printed.
+ * of the same party, so each guest's dishes can be moved to their own bill and printed. Refuses in
+ * the order the till offers the fix: the bill's state, then its money, then its unserved dishes,
+ * then the permission.
  */
 export async function splitAfterPrint(
   deps: TillSaleDeps,
@@ -38,27 +53,38 @@ export async function splitAfterPrint(
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
   override?: Override,
 ): Promise<SplitAfterPrint> {
-  const toCheck =
-    (await readOrderInvoice(deps.db, id)) === undefined
-      ? undefined
-      : await overrideToCheck(
-          deps.db,
-          { sessionId: operator.sessionId, permission: "sale.rectify" },
-          override,
-        );
-  const split = await withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) =>
-    cancelPlaced(deps, cfg, id, { kind: "split" }, operator, withCheck(override, checked)),
+  return withRectifyPinAhead(deps, id, operator, override, (checkedOverride) =>
+    withIssuanceTransaction(deps.db, async (tx) => {
+      const authz = { sessionId: operator.sessionId, override: checkedOverride };
+      const placed = await lockPlacedOrder(tx, deps, cfg, id);
+      const { partyId, invoice } = await refuseSplitBill(tx, id, placed.partyId, placed.invoice);
+      await refusePlacedOrderMoney(tx, deps, id);
+      await refuseUnservedDishes(tx, id);
+      await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
+      const creditNoteId = await creditWholeInvoice(tx, deps, cfg, invoice, authz);
+      await abandonPlacedOrder(tx, cfg, id);
+      const opened = await openSplitBill(tx, cfg, id, partyId);
+      await bumpPartyRevision(tx, partyId);
+      await recordPlacedOrderCancelled(
+        tx,
+        deps,
+        cfg,
+        id,
+        operator.personId,
+        `Bill split after printing to bill ${opened.billNumber}`,
+      );
+      return { billId: opened.billId, creditNoteNumber: await readInvoiceNumber(tx, creditNoteId) };
+    }),
   );
-  return split!;
 }
 
 /** The bill's own refusals, ahead of its money's: each says why this bill cannot be reopened. */
-export async function refuseSplitBill(
+async function refuseSplitBill(
   tx: Transaction,
   id: string,
   partyId: string | null,
   invoice: IssuedInvoice | undefined,
-): Promise<void> {
+): Promise<{ partyId: string; invoice: IssuedInvoice }> {
   if (partyId === null) throw new AppError("bill.not_at_table", { workingOrderId: id });
   const [departure] = await tx
     .select({ id: unpaidDepartures.workingOrderId })
@@ -73,15 +99,16 @@ export async function refuseSplitBill(
     .from(sales)
     .where(eq(sales.id, target));
   requireSupportedCorrection(credited!.counterpartyTaxId, target);
+  return { partyId, invoice };
 }
 
-export async function refuseUnservedDishes(tx: Transaction, id: string): Promise<void> {
+async function refuseUnservedDishes(tx: Transaction, id: string): Promise<void> {
   const dishes = await unservedDishes(tx, id);
   if (dishes.length > 0) throw new AppError("bill.unserved_dishes", { workingOrderId: id, dishes });
 }
 
 /** A new open bill of the party, made as Move dishes makes one, holding copies of the bill's dishes. */
-export async function openSplitBill(
+async function openSplitBill(
   tx: Transaction,
   cfg: DeviceRequestConfig,
   fromBillId: string,
@@ -92,26 +119,32 @@ export async function openSplitBill(
     .from(workingOrders)
     .where(eq(workingOrders.id, fromBillId));
   const billId = randomUUID();
-  await createOpenOrder(tx, cfg, billId, [], await orderTableLabel(tx, fromBillId), {
-    partyId,
-    existingService: true,
-    copyServiceContextFrom: fromBillId,
-    ...(from!.receiptLocale === null ? {} : { receiptLocale: from!.receiptLocale }),
-  });
+  const { billNumber } = await createOpenOrder(
+    tx,
+    cfg,
+    billId,
+    [],
+    await orderTableLabel(tx, fromBillId),
+    {
+      partyId,
+      existingService: true,
+      copyServiceContextFrom: fromBillId,
+      ...(from!.receiptLocale === null ? {} : { receiptLocale: from!.receiptLocale }),
+    },
+  );
   await copyBillDishes(tx, fromBillId, billId);
-  const [made] = await tx
-    .select({ billNumber: workingOrders.billNumber })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, billId));
-  return { billId, billNumber: made!.billNumber! };
+  return { billId, billNumber: billNumber! };
 }
 
-/** Kitchen state, print links and sale links stay with the originals. Answers original id → copy id. */
+/**
+ * Copies every line of `fromBillId` onto `toBillId`, which holds none. Kitchen state, print links and
+ * sale links stay with the originals.
+ */
 export async function copyBillDishes(
   tx: Transaction,
   fromBillId: string,
   toBillId: string,
-): Promise<Map<string, string>> {
+): Promise<void> {
   const rows = await tx
     .select()
     .from(workingOrderLines)
@@ -121,12 +154,6 @@ export async function copyBillDishes(
   // with one; their copies would also need `bill_set_menu_copies`.
   if (rows.some((row) => row.setMenuRole !== null))
     throw new Error(`copyBillDishes: bill ${fromBillId} holds set-menu lines`);
-  const [{ maxLineNo }] = (await tx
-    .select({
-      maxLineNo: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)`,
-    })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, toBillId))) as [{ maxLineNo: number }];
   const copyOf = new Map(rows.map((row) => [row.id, randomUUID()]));
   // The originals keep their cohorts, and `(cohort_id, cohort_ordinal)` is unique.
   const cohorts = new Map<string, string>();
@@ -142,7 +169,7 @@ export async function copyBillDishes(
       ...row,
       id: copyOf.get(row.id)!,
       workingOrderId: toBillId,
-      lineNo: maxLineNo + index + 1,
+      lineNo: index + 1,
       parentLineId: row.parentLineId === null ? null : copyOf.get(row.parentLineId)!,
       cohortId: row.cohortId === null ? null : cohortFor(row.cohortId),
     })),
@@ -171,5 +198,4 @@ export async function copyBillDishes(
         to: copyOf.get(row.id)!,
       })),
   );
-  return copyOf;
 }

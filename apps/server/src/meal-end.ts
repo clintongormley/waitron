@@ -211,8 +211,16 @@ function needsPaper(
   return bill.invoiceType !== "F1" || (medium !== "a4" && medium !== "email");
 }
 
+/** A dish of one bill left to serve; `released` says whether the kitchen has it. */
+export interface UnservedBillDish {
+  lineId: string;
+  dishName: string;
+  quantity: string;
+  released: boolean;
+}
+
 /** The bill's dishes neither served in full nor cancelled, as Finish table reckons them. */
-export async function unservedDishes(tx: Transaction, billId: string) {
+export async function unservedDishes(tx: Transaction, billId: string): Promise<UnservedBillDish[]> {
   const lines = await tx
     .select({
       line: workingOrderLines,

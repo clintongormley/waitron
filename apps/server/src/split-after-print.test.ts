@@ -755,6 +755,52 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       "open",
     ]);
   });
+
+  it("lists each dish once in the party's groups", async () => {
+    const party = await printed("Red wine bottle", "Tarta");
+    const groups = () =>
+      send(venue.app, venue.cookie, "GET", `/api/parties/${party.partyId}/groups`).then(
+        (answer) => answer.json.groups as { summary: string; lineIds: string[] }[],
+      );
+    const before = await groups();
+    expect(before.map((group) => group.summary)).toEqual(["1 × Red wine bottle, 1 × Tarta"]);
+
+    const answer = await split(party.tabId);
+
+    expect(answer.status).toBe(200);
+    const copies = (await dishesOf(answer.json.billId as string)).map((line) => line.id);
+    expect(
+      (await groups()).map(({ summary, lineIds }) => ({ summary, lineIds: [...lineIds].sort() })),
+    ).toEqual([{ summary: "1 × Red wine bottle, 1 × Tarta", lineIds: copies.sort() }]);
+  });
+});
+
+describe("Cancel and credit on a printed table bill", () => {
+  it("takes the bill's dishes, and a kitchen-ready one's Ready, out of the party's groups", async () => {
+    const party = await seat("Tarta");
+    venue.db.run(sql`update ticket_items set state = 'ready' where working_order_line_id in
+      (select id from working_order_lines where working_order_id = ${party.tabId})`);
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
+    const groups = () =>
+      send(venue.app, venue.cookie, "GET", `/api/parties/${party.partyId}/groups`).then((answer) =>
+        (answer.json.groups as { lineIds: string[]; ready?: true }[]).map(({ lineIds, ready }) => ({
+          lines: lineIds.length,
+          ready: ready ?? false,
+        })),
+      );
+    expect(await groups()).toEqual([{ lines: 1, ready: true }]);
+
+    const cancelled = await send(
+      venue.app,
+      venue.supervisorTill,
+      "POST",
+      `/api/working-orders/${party.tabId}/cancel`,
+      { reason: "Wrong table" },
+    );
+
+    expect(cancelled.status, JSON.stringify(cancelled.json)).toBe(200);
+    expect(await groups()).toEqual([{ lines: 0, ready: false }]);
+  });
 });
 
 describe("copyBillDishes", () => {

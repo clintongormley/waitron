@@ -1772,6 +1772,7 @@ async function readGroups(
       and(
         eq(orderGroups.partyId, partyId),
         isNull(sql`+${workingOrderLines.parentLineId}`),
+        onShownBill(),
         ...scope,
       ),
     )
@@ -1788,7 +1789,8 @@ async function readGroups(
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(and(eq(orderGroups.partyId, partyId), ...scope))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .where(and(eq(orderGroups.partyId, partyId), onShownBill(), ...scope))
     .groupBy(workingOrderLines.groupId);
   const readyGroups = new Set(
     kitchen

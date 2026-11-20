@@ -351,13 +351,11 @@ import {
 } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
 import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
-import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import {
-  openSplitBill,
-  refuseSplitBill,
-  refuseUnservedDishes,
-  type SplitAfterPrint,
-} from "./split-after-print.js";
+  creditWholeInvoice,
+  readOrderInvoice,
+  type IssuedInvoice as OrderInvoice,
+} from "./cancel-credit.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { outstandingOf } from "./bill-payment-money.js";
 import {
@@ -1548,6 +1546,8 @@ export async function createOpenOrder(
   } = {},
 ): Promise<{
   orderNumber: number;
+  /** Null without `partyId`. */
+  billNumber: number | null;
   gross: GrossLines;
   identities: OrderLineIdentity[];
   lineRows: WorkingOrderLineInsert[];
@@ -1666,7 +1666,9 @@ export async function createOpenOrder(
     receiptLocale: placement.receiptLocale ?? null,
     dining,
   });
-  if (placement.partyId) await VENUE_SERVICE.allocateBillNumber(tx, id, placement.partyId);
+  const billNumber = placement.partyId
+    ? await VENUE_SERVICE.allocateBillNumber(tx, id, placement.partyId)
+    : null;
 
   if (placement.kitchenNote !== undefined) {
     await VENUE_SERVICE.writeKitchenNote(tx, { workingOrderId: id }, 0, placement.kitchenNote);
@@ -1685,7 +1687,7 @@ export async function createOpenOrder(
   );
 
   if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
-  return { orderNumber, gross, identities, lineRows };
+  return { orderNumber, billNumber, gross, identities, lineRows };
 }
 
 export async function parkOrder(
@@ -7808,6 +7810,35 @@ export async function cancelPlacedOrder(
   if (reason.trim() === "") {
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
+  await withRectifyPinAhead(deps, id, operator, override, (checkedOverride) =>
+    withIssuanceTransaction(deps.db, async (tx) => {
+      const authz = { sessionId: operator.sessionId, override: checkedOverride };
+      const { partyId, invoice } = await lockPlacedOrder(tx, deps, cfg, id);
+      if (invoice !== undefined) {
+        await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
+      }
+      await refusePlacedOrderMoney(tx, deps, id);
+      if (invoice !== undefined) await creditWholeInvoice(tx, deps, cfg, invoice, authz);
+      await abandonPlacedOrder(tx, cfg, id);
+      if (partyId !== null && (await ensureFamilyBill(tx, cfg, partyId))) {
+        await bumpPartyRevision(tx, partyId);
+      }
+      await recordPlacedOrderCancelled(tx, deps, cfg, id, operator.personId, reason);
+    }),
+  );
+}
+
+/**
+ * Runs `transaction` with the override it should check, its PIN checked ahead when the order has an
+ * invoice to credit under `sale.rectify` ({@link withPinCheckAhead}).
+ */
+export async function withRectifyPinAhead<T>(
+  deps: Pick<TillSaleDeps, "db">,
+  id: string,
+  operator: { sessionId: string; attempts: PinAttempts },
+  override: Override | undefined,
+  transaction: (override: Override | undefined) => Promise<T>,
+): Promise<T> {
   const toCheck =
     (await readOrderInvoice(deps.db, id)) === undefined
       ? undefined
@@ -7816,127 +7847,109 @@ export async function cancelPlacedOrder(
           { sessionId: operator.sessionId, permission: "sale.rectify" },
           override,
         );
-
   return withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) =>
-    cancelPlaced(
-      deps,
-      cfg,
-      id,
-      { kind: "cancel", reason },
-      operator,
-      withCheck(override, checked),
-    ).then(() => undefined),
+    transaction(withCheck(override, checked)),
   );
 }
 
-/**
- * Cancel a placed order, or, as `split`, credit a table's printed ticket and put copies of its
- * dishes on a new open bill (`splitAfterPrint`). A split refuses in the order the till offers the
- * fix: the bill's state, then its unserved dishes, then the permission.
- */
-export async function cancelPlaced(
-  deps: TillSaleDeps,
+/** The placed order's party and invoice, else `working_order.not_placed`. */
+export async function lockPlacedOrder(
+  tx: Transaction,
+  deps: Pick<TillSaleDeps, "admission">,
   cfg: DeviceRequestConfig,
   id: string,
-  mode: { kind: "cancel"; reason: string } | { kind: "split" },
-  operator: { personId: string; sessionId: string; attempts: PinAttempts },
-  override: Override | undefined,
-): Promise<SplitAfterPrint | undefined> {
-  const authz = { sessionId: operator.sessionId, override };
-  return withIssuanceTransaction(deps.db, async (tx) => {
-    await requireEconomicWrite(tx, cfg, deps.admission);
-    const [locked] = await tx
-      .select({
-        status: workingOrders.status,
-        partyId: workingOrders.partyId,
-      })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id));
-    if (locked === undefined || locked.status !== "placed") {
-      throw new AppError("working_order.not_placed", { workingOrderId: id });
-    }
+): Promise<{ partyId: string | null; invoice: OrderInvoice | undefined }> {
+  await requireEconomicWrite(tx, cfg, deps.admission);
+  const [locked] = await tx
+    .select({
+      status: workingOrders.status,
+      partyId: workingOrders.partyId,
+    })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, id));
+  if (locked === undefined || locked.status !== "placed") {
+    throw new AppError("working_order.not_placed", { workingOrderId: id });
+  }
+  return { partyId: locked.partyId, invoice: await readOrderInvoice(tx, id) };
+}
 
-    const invoice = await readOrderInvoice(tx, id);
-    if (mode.kind === "split") await refuseSplitBill(tx, id, locked.partyId, invoice);
-    else if (invoice !== undefined) {
-      await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
-    }
-    await refusePendingPartPayment(tx, [id], "any");
-    await refuseBillHoldingMoney(tx, [id]);
-    // A placed order's card collection writes no mark, and its provider may write no payment row
-    // until the card resolves, so only this process's own record of the attempt shows it.
-    if (paymentAttemptIsLive(deps.db, id) || (await ordersWithUnfiledPayment(tx, [id])).has(id)) {
-      throw new AppError("order.payment_in_flight", { workingOrderId: id });
-    }
-    if (mode.kind === "split") {
-      await refuseUnservedDishes(tx, id);
-      await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
-    }
-    const creditNoteId =
-      invoice === undefined ? undefined : await creditWholeInvoice(tx, deps, cfg, invoice, authz);
+/** Refuses a placed order holding money, or with a payment on its way. */
+export async function refusePlacedOrderMoney(
+  tx: Transaction,
+  deps: Pick<TillSaleDeps, "db">,
+  id: string,
+): Promise<void> {
+  await refusePendingPartPayment(tx, [id], "any");
+  await refuseBillHoldingMoney(tx, [id]);
+  // A placed order's card collection writes no mark, and its provider may write no payment row
+  // until the card resolves, so only this process's own record of the attempt shows it.
+  if (paymentAttemptIsLive(deps.db, id) || (await ordersWithUnfiledPayment(tx, [id])).has(id)) {
+    throw new AppError("order.payment_in_flight", { workingOrderId: id });
+  }
+}
 
-    const toCorrect = await tx
-      .select({
-        workingOrderLineId: ticketItems.workingOrderLineId,
-        stationId: ticketItems.stationId,
-        quantity: sql<number>`${firedQuantity} - ${workingOrderLines.servedQuantity}`,
-        state: ticketItems.state,
-      })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-      .where(
-        and(
-          eq(workingOrderLines.workingOrderId, id),
-          isNotNull(ticketItems.firedAt),
-          isNull(workingOrders.collectedAt),
-          isNull(workingOrderLines.servedAt),
-          gt(firedQuantity, workingOrderLines.servedQuantity),
-        ),
-      );
-    await enqueueCorrectionSlips(
-      tx,
-      cfg,
-      id,
-      toCorrect.map(({ state, ...item }) => ({
-        ...item,
-        wasStarted: isStarted(state),
-      })),
-      "VOID",
+/** Tells each station still making the order's dishes, then marks the order abandoned. */
+export async function abandonPlacedOrder(
+  tx: Transaction,
+  cfg: DeviceRequestConfig,
+  id: string,
+): Promise<void> {
+  const toCorrect = await tx
+    .select({
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      quantity: sql<number>`${firedQuantity} - ${workingOrderLines.servedQuantity}`,
+      state: ticketItems.state,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, id),
+        isNotNull(ticketItems.firedAt),
+        isNull(workingOrders.collectedAt),
+        isNull(workingOrderLines.servedAt),
+        gt(firedQuantity, workingOrderLines.servedQuantity),
+      ),
     );
+  await enqueueCorrectionSlips(
+    tx,
+    cfg,
+    id,
+    toCorrect.map(({ state, ...item }) => ({
+      ...item,
+      wasStarted: isStarted(state),
+    })),
+    "VOID",
+  );
 
-    await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
-    let split: (SplitAfterPrint & { billNumber: number }) | undefined;
-    if (mode.kind === "split") {
-      // `refuseSplitBill` checked that a split's bill has a party and an invoice.
-      const opened = await openSplitBill(tx, cfg, id, locked.partyId!);
-      const numbers = await readInvoiceNumbers(tx, [creditNoteId!]);
-      split = { ...opened, creditNoteNumber: numbers.get(creditNoteId!)! };
-      await bumpPartyRevision(tx, locked.partyId!);
-    } else if (locked.partyId !== null && (await ensureFamilyBill(tx, cfg, locked.partyId))) {
-      await bumpPartyRevision(tx, locked.partyId);
-    }
-    await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
+  await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
+}
 
-    const now = deps.clock.now();
-    const amendment = await appendOrderAmendment(tx, {
-      workingOrderId: id,
-      kind: "order_cancelled",
-      actorId: operator.personId,
-      reason:
-        mode.kind === "cancel"
-          ? mode.reason
-          : `Bill split after printing to bill ${split!.billNumber}`,
-      origin: cfg.origin,
-      capturedByNodeId: cfg.nodeId,
-      eventAt: now.instant,
-      eventOffsetMinutes: now.offsetMinutes,
-    });
-    await captureOrderAmendment(tx, deps.attendance, amendment.id, operator.personId, now.instant);
-    return split === undefined
-      ? undefined
-      : { billId: split.billId, creditNoteNumber: split.creditNoteNumber };
+/** Withdraws the order's pending department transfers and records its cancellation. */
+export async function recordPlacedOrderCancelled(
+  tx: Transaction,
+  deps: Pick<TillSaleDeps, "clock" | "attendance">,
+  cfg: DeviceRequestConfig,
+  id: string,
+  operatorId: string,
+  reason: string,
+): Promise<void> {
+  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
+
+  const now = deps.clock.now();
+  const amendment = await appendOrderAmendment(tx, {
+    workingOrderId: id,
+    kind: "order_cancelled",
+    actorId: operatorId,
+    reason,
+    origin: cfg.origin,
+    capturedByNodeId: cfg.nodeId,
+    eventAt: now.instant,
+    eventOffsetMinutes: now.offsetMinutes,
   });
+  await captureOrderAmendment(tx, deps.attendance, amendment.id, operatorId, now.instant);
 }
 
 /**
