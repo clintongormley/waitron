@@ -163,7 +163,7 @@ type PairingV4Arguments = {
   ];
 };
 export type PairingV4Action = keyof PairingV4Arguments;
-type PairingV4Operation = {
+export type PairingV4Operation = {
   [Action in PairingV4Action]: { action: Action; args: PairingV4Arguments[Action] };
 }[PairingV4Action];
 export type PairingV4Claims = {
@@ -245,6 +245,10 @@ function validV4Operation(request: {
     default:
       return false;
   }
+}
+
+export function isPairingV4Profile(args: unknown): args is PairingV4Arguments["complete"] {
+  return validV4Operation({ action: "complete", args });
 }
 
 export function verifyPairingV4Proof(

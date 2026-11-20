@@ -266,8 +266,8 @@ After a box becomes the main box, open **Backups** and check that each backup fo
 
 On a test box set up for Cloud sign-in, open **System → Cloud services** and choose **Sign in to
 Waitron Cloud**. Sign in with your existing Cloud account. The same browser tab returns to the
-box and connects your venue. If the connection stops before it finishes, choose **Sign in to
-Waitron Cloud** again from the same tab.
+box to connect your venue. If the connection stops, choose **Sign in to Waitron Cloud** again.
+Use the same tab if you still have it.
 
 Pair your test box with Waitron Cloud and start the venue’s free trial in **Billing** to open your
 assigned staff address. **Cloud services** shows when remote access needs the trial. After

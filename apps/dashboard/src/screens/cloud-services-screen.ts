@@ -233,9 +233,13 @@ export class CloudServicesScreen extends LitElement {
       <dt>${t("cloud.recovery_account")}</dt>
       <dd>${r.email}<br />${r.accountId}</dd>
       <dt>${t("cloud.organisation")}</dt>
-      <dd>${this.status?.organisationName}<br />${r.organisationId}</dd>
+      <dd>
+        ${this.status?.organisationName ? html`${this.status.organisationName}<br />` : nothing}${r.organisationId}
+      </dd>
       <dt>${t("cloud.business")}</dt>
-      <dd>${this.status?.legalBusinessName}<br />${r.legalBusinessId}</dd>
+      <dd>
+        ${this.status?.legalBusinessName ? html`${this.status.legalBusinessName}<br />` : nothing}${r.legalBusinessId}
+      </dd>
       <dt>${t("cloud.recovery_venue")}</dt>
       <dd>${r.venueId}</dd>
       <dt>${t("cloud.recovery_expires")}</dt>

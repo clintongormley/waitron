@@ -1,14 +1,12 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { pairingV4Payload, type PairingV4Claims } from "@waitron/contract";
+import { isPairingV4Profile, type PairingV4Operation } from "@waitron/contract";
 import { AppError } from "@waitron/shared";
-import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import type { CloudRegistration } from "./cloud-client.js";
 import "./errors.js";
 
 export const CLOUD_SIGN_IN_CALLBACK = "/cloud/pairing/callback";
 
-type Operation = PairingV4Claims;
-export type CloudSignInProfile = Extract<Operation, { action: "complete" }>["args"];
+export type CloudSignInProfile = Extract<PairingV4Operation, { action: "complete" }>["args"];
 export interface CloudSignInBinding {
   tab: string;
   session: string;
@@ -63,12 +61,7 @@ export function readCloudSignInAttempt(value: unknown): Attempt | undefined {
     !token(value.verifier) ||
     !instant(value.expiresAt) ||
     !["awaiting_cloud", "redeeming", "account_bound"].includes(value.phase as string) ||
-    (value.profile !== undefined &&
-      (!Array.isArray(value.profile) ||
-        value.profile.length !== 5 ||
-        !Array.isArray(value.profile[2]) ||
-        value.profile[2].length !== 5 ||
-        !value.profile.flat().every((field) => typeof field === "string")))
+    (value.profile !== undefined && !isPairingV4Profile(value.profile))
   )
     throw new AppError("cloud.state_invalid", {});
   return value as unknown as Attempt;
@@ -89,99 +82,63 @@ type Reply =
   | { state: "awaiting_cloud" | "account_bound"; expiresAt: string }
   | { state: "complete"; expiresAt: string; registration: CloudRegistration };
 
-export async function exchangeCloudSignIn(
-  state: CloudSignInState,
+export function readCloudSignInReply(
+  result: unknown,
+  origin: string,
   attempt: Attempt,
-  operation: {
-    [Action in Operation["action"]]: Pick<
-      Extract<Operation, { action: Action }>,
-      "action" | "args"
-    >;
-  }[Operation["action"]],
-): Promise<Reply & { authorizationUrl?: string }> {
+  { action, args }: PairingV4Operation,
+): Reply & { authorizationUrl?: string } {
   const { requestId } = attempt;
-  const { action, args } = operation;
-  const bytes = pairingV4Payload({
-    ...operation,
-    origin: state.origin,
-    requestId,
-    publicKey: state.publicKey,
-    issuedAt: Date.now(),
-  });
-  const signature = signCloudPayload(bytes, state.privateKey);
-  try {
-    const response = await fetch(`${state.origin}/api/pairing/${action}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: bytes.toString("base64url"), signature }),
-      redirect: "error",
-      signal: AbortSignal.timeout(8000),
-    });
-    const result: unknown = JSON.parse((await readCloudResponseBytes(response, 16384)).toString());
-    if (!response.ok) {
-      if (record(result) && result.error === "pairing_unavailable")
-        throw new AppError("cloud.request_unavailable", {});
-      if (
-        record(result) &&
-        ["business_match_ambiguous", "binding_conflict"].includes(result.error as string)
-      )
-        throw new AppError("cloud.binding_conflict", {});
-      throw new Error();
-    }
-    if (!record(result) || result.requestId !== requestId || !instant(result.expiresAt))
-      throw new Error();
-    const { expiresAt, registration } = result;
-    if (action === "start") {
-      if (result.state !== "awaiting_cloud" || typeof result.authorizationUrl !== "string")
-        throw new Error();
-      const url = new URL(result.authorizationUrl);
-      const query = url.searchParams;
-      if (
-        url.origin !== state.origin ||
-        url.pathname !== "/login" ||
-        url.username ||
-        url.password ||
-        url.hash ||
-        query.size !== 4 ||
-        query.get("request_id") !== requestId ||
-        query.get("state") !== attempt.state ||
-        query.get("code_challenge") !== args[2] ||
-        query.get("code_challenge_method") !== "S256"
-      )
-        throw new Error();
-      return { state: "awaiting_cloud", expiresAt, authorizationUrl: url.href };
-    }
-    if (
-      (action === "status" && result.state === "awaiting_cloud") ||
-      ((action === "redeem" || action === "status") && result.state === "account_bound")
-    ) {
-      if (Object.hasOwn(result, "registration")) throw new Error();
-      return { state: result.state, expiresAt };
-    }
-    if (
-      (action === "complete" || action === "status") &&
-      result.state === "complete" &&
-      record(registration) &&
-      cloudSignInId(registration.venueId) &&
-      cloudSignInId(registration.installationId) &&
-      cloudSignInId(registration.organisationId) &&
-      cloudSignInId(registration.legalBusinessId)
-    )
-      return {
-        state: "complete",
-        expiresAt,
-        registration: {
-          venueId: registration.venueId,
-          installationId: registration.installationId,
-          organisationId: registration.organisationId,
-          legalBusinessId: registration.legalBusinessId,
-        },
-      };
+  if (!record(result) || result.requestId !== requestId || !instant(result.expiresAt))
     throw new Error();
-  } catch (error) {
-    if (error instanceof AppError) throw error;
-    throw new AppError("cloud.unavailable", {});
+  const { expiresAt, registration } = result;
+  if (action === "start") {
+    if (result.state !== "awaiting_cloud" || typeof result.authorizationUrl !== "string")
+      throw new Error();
+    const url = new URL(result.authorizationUrl);
+    const query = url.searchParams;
+    if (
+      url.origin !== origin ||
+      url.pathname !== "/login" ||
+      url.username ||
+      url.password ||
+      url.hash ||
+      query.size !== 4 ||
+      query.get("request_id") !== requestId ||
+      query.get("state") !== attempt.state ||
+      query.get("code_challenge") !== args[2] ||
+      query.get("code_challenge_method") !== "S256"
+    )
+      throw new Error();
+    return { state: "awaiting_cloud", expiresAt, authorizationUrl: url.href };
   }
+  if (
+    (action === "status" && result.state === "awaiting_cloud") ||
+    ((action === "redeem" || action === "status") && result.state === "account_bound")
+  ) {
+    if (Object.hasOwn(result, "registration")) throw new Error();
+    return { state: result.state, expiresAt };
+  }
+  if (
+    (action === "complete" || action === "status") &&
+    result.state === "complete" &&
+    record(registration) &&
+    cloudSignInId(registration.venueId) &&
+    cloudSignInId(registration.installationId) &&
+    cloudSignInId(registration.organisationId) &&
+    cloudSignInId(registration.legalBusinessId)
+  )
+    return {
+      state: "complete",
+      expiresAt,
+      registration: {
+        venueId: registration.venueId,
+        installationId: registration.installationId,
+        organisationId: registration.organisationId,
+        legalBusinessId: registration.legalBusinessId,
+      },
+    };
+  throw new Error();
 }
 
 export const cloudSignInChallenge = (verifier: string) =>

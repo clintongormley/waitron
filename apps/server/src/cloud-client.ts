@@ -2,7 +2,7 @@ import { hashSessionToken } from "@waitron/identity";
 import {
   CLOUD_SIGN_IN_CALLBACK,
   cloudSignInChallenge,
-  exchangeCloudSignIn,
+  readCloudSignInReply,
   newCloudSignInAttempt,
   readCloudSignInAttempt,
   type CloudSignInBinding,
@@ -20,7 +20,13 @@ import {
 import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
 import { CLOUD_DIR, CLOUD_CONNECTION_FILE } from "@waitron/store";
-import { pairingPayload, pairingVenueName } from "@waitron/contract";
+import {
+  isPairingV4Profile,
+  pairingPayload,
+  pairingV4Payload,
+  pairingVenueName,
+  type PairingV4Operation,
+} from "@waitron/contract";
 import {
   reserveCloudCapture,
   publishCloudCapture,
@@ -96,6 +102,7 @@ export interface CloudPairingView {
 export interface CloudConnectionStatus extends Partial<Omit<CloudPairingView, "state">> {
   remoteAccessEnabled?: boolean;
   sameTabSignIn?: true;
+  configured?: false;
   remoteAccessPlanRequired?: true;
   state: "not_connected" | "awaiting_cloud" | "awaiting_local" | "complete";
   code: string;
@@ -374,9 +381,6 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     await mkdirDurable(join(options.stateDir, CLOUD_DIR), 0o700);
     await writeFileDurable(path, JSON.stringify(state), 0o600);
   }
-  function signInConfigured() {
-    return options.environment === "test" && options.signIn !== undefined;
-  }
   async function save(state: SavedCloudState, optionalHints = false) {
     const venueId = state.view?.registration?.venueId;
     if (venueId) {
@@ -452,7 +456,36 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       issuedAt: Date.now(),
       venueName,
     });
-    const signature = signCloudPayload(bytes, state.privateKey);
+    return requestPairing(action, bytes, state.privateKey, (value) => readView(value, state));
+  }
+  function exchangeSignIn(
+    state: CloudSignInState,
+    attempt: NonNullable<CloudSignInState["attempt"]>,
+    operation: PairingV4Operation,
+  ) {
+    const bytes = pairingV4Payload({
+      ...operation,
+      origin: state.origin,
+      publicKey: state.publicKey,
+      requestId: attempt.requestId,
+      issuedAt: Date.now(),
+    });
+    return requestPairing(
+      operation.action,
+      bytes,
+      state.privateKey,
+      (value) => readCloudSignInReply(value, state.origin, attempt, operation),
+      true,
+    );
+  }
+  async function requestPairing<T>(
+    action: string,
+    bytes: Buffer,
+    privateKey: string,
+    readReply: (value: unknown) => T,
+    signIn = false,
+  ): Promise<T> {
+    const signature = signCloudPayload(bytes, privateKey);
     try {
       const response = await fetch(`${options.origin}/api/pairing/${action}`, {
         method: "POST",
@@ -464,11 +497,18 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       const replyBytes = await readCloudResponseBytes(response, 16384);
       const value: unknown = JSON.parse(replyBytes.toString());
       if (!response.ok) {
-        if (record(value) && value.error === "pairing_unavailable")
-          throw new AppError("cloud.request_unavailable", {});
+        if (record(value)) {
+          if (value.error === "pairing_unavailable")
+            throw new AppError("cloud.request_unavailable", {});
+          if (
+            signIn &&
+            (value.error === "business_match_ambiguous" || value.error === "binding_conflict")
+          )
+            throw new AppError("cloud.binding_conflict", {});
+        }
         throw new Error();
       }
-      return readView(value, state);
+      return readReply(value);
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError("cloud.unavailable", {});
@@ -511,7 +551,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     }
   }
   async function signInState() {
-    if (!signInConfigured()) throw new AppError("cloud.not_configured", {});
+    if (!options.signIn || options.environment !== "test")
+      throw new AppError("cloud.not_configured", {});
     const state = await readState();
     if (!state) throw new AppError("cloud.not_configured", {});
     if (state.version !== 4) throw new AppError("cloud.binding_conflict", {});
@@ -557,17 +598,32 @@ export function createCloudConnection(options: CloudConnectionOptions) {
   ) {
     await authorize();
     attempt.phase = "account_bound";
-    attempt.profile ??= await options.signIn!.readProfile();
-    if (attempt.profile.flat().some((field) => /\p{Cs}/u.test(field)))
-      throw new AppError("cloud.request_invalid", {});
+    const profile = attempt.profile ?? (await options.signIn!.readProfile());
+    if (!isPairingV4Profile(profile)) throw new AppError("cloud.request_invalid", {});
+    attempt.profile = profile;
     await writeState(state);
     await authorize();
-    const reply = await exchangeCloudSignIn(state, attempt, {
+    const reply = await exchangeSignIn(state, attempt, {
       action: "complete",
       args: attempt.profile,
     });
     if (reply.state !== "complete") throw new AppError("cloud.unavailable", {});
     await finishSignIn(state, attempt.requestId, reply, authorize);
+  }
+  async function recoverSignIn(
+    state: CloudSignInState,
+    attempt: NonNullable<CloudSignInState["attempt"]>,
+    authorize: () => Promise<void>,
+    ownAttempt = true,
+  ) {
+    const reply = await exchangeSignIn(state, attempt, { action: "status", args: [] });
+    if (reply.state === "complete") await finishSignIn(state, attempt.requestId, reply, authorize);
+    else {
+      if (!ownAttempt) throw new AppError("cloud.binding_conflict", {});
+      if (reply.state !== "account_bound") return false;
+      await completeSignIn(state, attempt, authorize);
+    }
+    return true;
   }
   async function captureState(signal?: AbortSignal) {
     const state = await read();
@@ -659,22 +715,15 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         await authorize();
         if (attempt && attempt.phase !== "awaiting_cloud") {
           const ownAttempt = sameBinding(attempt, binding);
-          if (!ownAttempt && Date.parse(attempt.expiresAt) > Date.now())
+          const otherActiveAttempt = !ownAttempt && Date.parse(attempt.expiresAt) > Date.now();
+          if (otherActiveAttempt && attempt.phase !== "account_bound")
             throw new AppError("cloud.binding_conflict", {});
           try {
-            const reply = await exchangeCloudSignIn(state, attempt, { action: "status", args: [] });
-            if (!ownAttempt) throw new AppError("cloud.binding_conflict", {});
-            if (reply.state === "complete") {
-              await finishSignIn(state, attempt.requestId, reply, authorize);
-              return {};
-            }
-            if (reply.state === "account_bound") {
-              await completeSignIn(state, attempt, authorize);
-              return {};
-            }
+            if (await recoverSignIn(state, attempt, authorize, ownAttempt)) return {};
           } catch (error) {
             if (!(error instanceof AppError) || error.code !== "cloud.request_unavailable")
               throw error;
+            if (otherActiveAttempt) throw new AppError("cloud.binding_conflict", {});
             attempt = undefined;
           }
         }
@@ -689,7 +738,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           state.attempt = attempt;
           await writeState(state);
         }
-        const result = await exchangeCloudSignIn(state, attempt, {
+        const result = await exchangeSignIn(state, attempt, {
           action: "start",
           args: [options.signIn!.callback, attempt.state, cloudSignInChallenge(attempt.verifier)],
         });
@@ -721,16 +770,12 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           }
           throw new AppError("cloud.request_unavailable", {});
         }
-        if (attempt.phase !== "awaiting_cloud") {
-          const reply = await exchangeCloudSignIn(state, attempt, { action: "status", args: [] });
-          if (reply.state === "complete")
-            return finishSignIn(state, attempt.requestId, reply, authorize);
-          if (reply.state === "account_bound") return completeSignIn(state, attempt, authorize);
-        }
+        if (attempt.phase !== "awaiting_cloud" && (await recoverSignIn(state, attempt, authorize)))
+          return;
         attempt.phase = "redeeming";
         await writeState(state);
         await authorize();
-        const reply = await exchangeCloudSignIn(state, attempt, {
+        const reply = await exchangeSignIn(state, attempt, {
           action: "redeem",
           args: [input.code, attempt.verifier],
         });
@@ -1143,7 +1188,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         ? {
             state: "not_connected" as const,
             code: "",
-            ...(signInConfigured() ? { sameTabSignIn: true as const } : {}),
+            ...(options.signIn ? { sameTabSignIn: true as const } : { configured: false as const }),
           }
         : project(state);
     },

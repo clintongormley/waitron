@@ -295,8 +295,8 @@ Cuando un servidor pase a ser el principal, abre **Copias de seguridad** y compr
 
 En un servidor de pruebas preparado para iniciar sesión en Cloud, abre **Sistema → Servicios
 Cloud** y elige **Iniciar sesión en Waitron Cloud**. Usa tu cuenta de Cloud. La misma pestaña
-vuelve al servidor y conecta tu local. Si la conexión se interrumpe, elige **Iniciar sesión en
-Waitron Cloud** de nuevo en esa misma pestaña.
+vuelve al servidor para conectar tu local. Si la conexión se interrumpe, elige **Iniciar sesión en
+Waitron Cloud** de nuevo. Usa la misma pestaña si sigue abierta.
 
 Vincula tu servidor de pruebas con Waitron Cloud e inicia la prueba gratuita del local en
 **Facturación** para abrir la dirección del personal que se te asigna. **Servicios Cloud** te

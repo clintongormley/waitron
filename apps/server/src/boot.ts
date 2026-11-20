@@ -2587,38 +2587,31 @@ async function bootServer(
           }),
         tunnelDir: config.tunnelControlDir,
         origin: cloudOrigin,
-        ...(cloudSignInCallback === undefined
-          ? {}
-          : {
-              signIn: {
-                callback: cloudSignInCallback,
-                readProfile: () =>
-                  withTransaction(db, async (tx) => {
-                    const owner = await readTaxpayer(tx);
-                    if (!owner) throw new AppError("cloud.request_invalid", {});
-                    const { doc } = await readVenueSettings(tx);
-                    return [
-                      owner.country.trim(),
-                      doc.name.trim(),
-                      [
-                        doc.addressLine1,
-                        doc.addressLine2,
-                        doc.postalCode,
-                        doc.city,
-                        doc.province,
-                      ].map((value) => value?.trim() ?? "") as [
-                        string,
-                        string,
-                        string,
-                        string,
-                        string,
-                      ],
-                      owner.taxId.trim(),
-                      owner.legalName.trim(),
-                    ];
-                  }),
-              },
-            }),
+        signIn: cloudSignInCallback
+          ? {
+              callback: cloudSignInCallback,
+              readProfile: () =>
+                withTransaction(db, async (tx) => {
+                  const owner = await readTaxpayer(tx);
+                  if (!owner) throw new AppError("cloud.request_invalid", {});
+                  const { doc } = await readVenueSettings(tx);
+                  const trim = (field: string | null) => field?.trim() ?? "";
+                  return [
+                    owner.country.trim(),
+                    doc.name.trim(),
+                    [
+                      trim(doc.addressLine1),
+                      trim(doc.addressLine2),
+                      trim(doc.postalCode),
+                      trim(doc.city),
+                      trim(doc.province),
+                    ],
+                    owner.taxId.trim(),
+                    owner.legalName.trim(),
+                  ];
+                }),
+            }
+          : undefined,
         readVenueId: () => readCloudVenueId(db),
         readVenueName: async () => (await readVenueSettings(db)).doc.name,
         recordVenueId: (id) => withTransaction(db, (tx) => saveCloudVenueId(tx, id)),

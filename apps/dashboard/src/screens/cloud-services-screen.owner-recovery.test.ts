@@ -12,7 +12,11 @@ afterEach(() => {
   setLocale(previousLocale);
 });
 
-async function fixture(locale: "en" | "es" = "en", theme: "light" | "dark" = "light") {
+async function fixture(
+  locale: "en" | "es" = "en",
+  theme: "light" | "dark" = "light",
+  named = true,
+) {
   setLocale(locale);
   const calls: { action: string; method: string | undefined; body: unknown }[] = [];
   const status = {
@@ -23,8 +27,7 @@ async function fixture(locale: "en" | "es" = "en", theme: "light" | "dark" = "li
     environment: "test",
     code: "",
     requestId: "pairing",
-    organisationName: "Sun Group",
-    legalBusinessName: "Sun Hospitality",
+    ...(named ? { organisationName: "Sun Group", legalBusinessName: "Sun Hospitality" } : {}),
     registration: {
       organisationId: request.organisationId,
       legalBusinessId: request.legalBusinessId,
@@ -104,6 +107,19 @@ it.each([
   await closed;
   expect(f.calls).toHaveLength(1);
   await expectNoA11yViolations(f.host);
+});
+
+it("shows recovery IDs without blank lines when Cloud supplies no names", async () => {
+  const f = await fixture("en", "light", false);
+  await expect.poll(() => f.find("recovery-load")).not.toBeNull();
+  await userEvent.click(f.find("recovery-load"));
+  await expect.poll(() => f.find("recovery-approve")).not.toBeNull();
+  const details = [...f.el.shadowRoot!.querySelectorAll("dd")];
+  for (const id of [request.organisationId, request.legalBusinessId]) {
+    const row = details.find((detail) => detail.textContent?.trim() === id);
+    expect(row).toBeDefined();
+    expect(row!.querySelector("br")).toBeNull();
+  }
 });
 
 it.each(["approve", "refuse"] as const)(

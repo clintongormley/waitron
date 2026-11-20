@@ -179,9 +179,11 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
   app.get("/management-api/cloud/status", (c) =>
     run(c, log, async () => {
       await authorize(c, true);
-      const status = deps.connection
-        ? await deps.connection.status()
-        : { state: "not_connected", code: "" };
+      const status = (await deps.connection?.status()) ?? {
+        state: "not_connected",
+        code: "",
+        configured: false,
+      };
       let replacement = null;
       let replacementPending = false;
       let replacementError: string | null = null;
@@ -202,7 +204,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         replacementApproval,
         replacementError,
         replacementEligible,
-        configured: !!deps.connection,
+        configured: status.configured ?? true,
         isPrimary: deps.isPrimary(),
         isRemote: isRemoteStaffRequest(c),
       });

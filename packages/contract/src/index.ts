@@ -1,6 +1,7 @@
 export {
   pairingPayload,
   pairingV4Payload,
+  isPairingV4Profile,
   pairingVenueName,
   PAIRING_VENUE_NAME_MAX,
   verifyPairingProof,
@@ -9,6 +10,7 @@ export {
   type PairingClaims,
   type PairingAction,
   type PairingV4Action,
+  type PairingV4Operation,
   type PairingV4Claims,
 } from "./signing/pairing-proof.js";
 export {
