@@ -1142,11 +1142,6 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   Design it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
   [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)
 
-- **A1550. Offer the server key as a download, with an explanation of what it is for (owner,
-  2026-11-18; wanted, not built).** The owner's point from the two-box test of 18 November, as
-  that session recorded it: not a key to read in the moment. Today setup's done screen shows it
-  once and says to write it down. A1323 would replace this key with one master key.
-
 - **A1187 part 3: the recovery pack's disk key page.** B3's development startup now creates and retains the key through `scripts/box/disk-key.mjs`; the protected host delivery and pack integration remain to be built. A pack
   that cannot carry the disk key is refused rather than drawn without it.
   [Design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
