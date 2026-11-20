@@ -187,8 +187,8 @@ function originalCompleted(
 
 /**
  * Moves the receipt delivery still waiting on `fromJobId` onto its resend `toJobId`, only while its
- * original-or-duplicate marking still holds as {@link reserveInvoiceDelivery} would decide it now;
- * `false` moves nothing.
+ * original-or-duplicate marking still holds as {@link reserveInvoiceDelivery} would decide it now
+ * and no email of the sale has an unknown outcome; `false` moves nothing.
  */
 export async function takeOverReceiptDelivery(
   tx: Transaction,
@@ -206,6 +206,8 @@ export async function takeOverReceiptDelivery(
   if (moved === undefined) return false;
   // `invoice_deliveries_active_uq` leaves it the sale's only queued or sending row.
   const others = rows.filter((row) => row.id !== moved.id);
+  // A late success completes an email whose outcome is unknown, and a receipt's marking is in its bytes.
+  if (others.some((row) => row.medium === "email" && row.status === "unknown")) return false;
   const completed = originalCompleted(await receiptOriginalJobs(tx, saleId), others);
   if (completed !== (moved.designation === "duplicate")) return false;
   await tx
