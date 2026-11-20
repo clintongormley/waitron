@@ -5,6 +5,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { installPressBuzz } from "../press-buzz.js";
 import { PRESS_BUZZ_STORAGE_KEY, setPressBuzz } from "../press-buzz-choice.js";
 
@@ -93,7 +94,7 @@ describe("the press buzz switch", () => {
   it("is named in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await handheld();
-    expect(switchIn(moreMenu(el))!.label).toBe("Vibrar al pulsar un botón");
+    expect(switchIn(moreMenu(el))!.label).toBe(es["press_buzz.label"]);
   });
 
   it("shows off when this device has turned the buzz off", async () => {
