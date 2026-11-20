@@ -70,7 +70,6 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
     "counter cash",
     "counter manual card",
     "collection",
-    "whole table",
     "bill cash",
     "bill manual card",
     "reader",
@@ -90,12 +89,19 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
           paidWhen: "prepay",
         }),
       );
-      path = "/api/sales";
+      path = `/api/working-orders/${id}/payments`;
       body = {
-        workingOrderId: id,
-        zoneId: offers.zoneId,
-        lines: [{ menuItemId: offers.offerFor(product!.id), quantity: "1" }],
-        tender: { method: kind.includes("card") ? "card" : "cash", amount: "100.00" },
+        submissionId: id,
+        expectedEdit: null,
+        kind: "share",
+        shareOf: 1,
+        basket: {
+          zoneId: offers.zoneId,
+          lines: [{ menuItemId: offers.offerFor(product!.id), quantity: "1" }],
+        },
+        ...(kind.includes("card")
+          ? { method: "card", entry: "manual" }
+          : { method: "cash", tendered: "100.00" }),
         dining: "eat_in",
       };
     } else if (kind === "collection") {
@@ -131,15 +137,8 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
           ...(kind.includes("card") ? { entry: "manual" } : { tendered: "100.00" }),
         };
       } else {
-        path = reader ? "/api/pay" : "/api/sales";
-        body = reader
-          ? { id, lines: [], dining: "eat_in" }
-          : {
-              workingOrderId: id,
-              lines: [],
-              tender: { method: "cash", amount: "100.00" },
-              dining: "eat_in",
-            };
+        path = "/api/pay";
+        body = { id, lines: [], dining: "eat_in" };
       }
     }
     let before = snapshot();

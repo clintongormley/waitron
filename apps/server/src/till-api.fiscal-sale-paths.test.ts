@@ -478,6 +478,34 @@ beforeAll(() => {
 });
 
 describe("POST /api/session (PIN login body handling)", () => {
+  it.each(["voucher", "deferred", "other"])(
+    "refuses the unsupported %s payment method before saving a basket",
+    async (method) => {
+      const { cfg, available, operatorId } = await setupVenue();
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+      const each = available.find((item) => item.pricingUnit === "each")!;
+      const id = randomUUID();
+      const response = await payFreshBasket(
+        app,
+        cookie,
+        id,
+        [{ menuItemId: each.menuItemId, quantity: "1" }],
+        { method },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "method" } },
+      });
+      expect(await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual(
+        [],
+      );
+      expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+    },
+  );
+
   it("an empty (unparseable) request body is a clean 401 pin.invalid, never a 500", async () => {
     const { cfg } = await setupVenue();
     const app = new Hono();

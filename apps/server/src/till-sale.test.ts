@@ -67,13 +67,7 @@ import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/share
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import {
-  payWorkingOrder,
-  receiptQr,
-  readSettledTicket,
-  recordTillSaleOrchestration as recordTillSale,
-  type TillSaleRequest,
-} from "./testing/whole-payment-fixture.js";
+import { receiptQr, readSettledTicket } from "./testing/whole-payment-fixture.js";
 import { createOpenOrder, getHeldOrder } from "./working-order.js";
 import * as venueAddressReads from "./venue-address.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
@@ -86,8 +80,16 @@ import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
-import { payFreshCounterInCash, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
+import {
+  counterFixtureOperator,
+  deviceRequestCfg,
+  openTillSession,
+} from "./testing/session-device.js";
+import {
+  payCounterBasket,
+  payFreshCounterInCash,
+  paySavedBillInCash,
+} from "./testing/bill-payment-fixture.js";
 import type { CounterPaymentBasket } from "./bill-payments.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
@@ -346,27 +348,41 @@ async function paySavedCash(cfg: DeviceRequestConfig, id: string, tendered: stri
   );
 }
 
-describe("recordTillSale", () => {
+describe("counter basket payment", () => {
   it("manual tip changes settlement only and survives replay after tips are off", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
     const id = randomUUID();
     const deps = { db: suite.db, backend, clock, admission: testTradingAdmission() };
-    const request = {
-      workingOrderId: id,
-      zoneId,
-      lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-      tender: { method: "card" as const, amount: "1.50", addedTip: "0.30", externalRef: "OP-TIP" },
-    };
-    const paid = await recordTillSale(
+    const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
+    const basket = { zoneId, lines: [{ menuItemId: waterOfferId, quantity: "1" }] };
+    const payment = {
+      method: "card",
+      entry: "manual",
+      addedTip: "0.30",
+      externalRef: "OP-TIP",
+    } as const;
+    const paid = await payCounterBasket(
       deps,
       { ...cfg, tipsEnabled: true, practiceMode: true },
-      request,
+      operator,
+      id,
+      basket,
+      payment,
+      id,
     );
     expect(paid.simulatedCardPayment).toBe(false);
     expect(paid.total).toBe("2.25");
     expect(paid.vatBreakdown).toEqual([{ rate: "21.00", base: "1.86", tax: "0.39" }]);
     expect(paid.tender).toMatchObject({ charged: "2.55", tip: "0.30", reference: "OP-TIP" });
-    const replay = await recordTillSale(deps, { ...cfg, tipsEnabled: false }, request);
+    const replay = await payCounterBasket(
+      deps,
+      { ...cfg, tipsEnabled: false },
+      operator,
+      id,
+      basket,
+      payment,
+      id,
+    );
     expect(replay.tender).toEqual(paid.tender);
     const rows = await suite.db.execute(sql`
       select t.amount, t.tip_amount, p.amount as paid, s.total
@@ -386,15 +402,17 @@ describe("recordTillSale", () => {
       await tx.execute(sql`update menu_items set gross_price = 0 where id = ${waterOfferId}`);
       await republishMenus(tx);
     });
+    const id = randomUUID();
+    const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
     await expect(
-      recordTillSale(
+      payCounterBasket(
         { db: suite.db, backend, clock, admission: testTradingAdmission() },
         { ...cfg, tipsEnabled: true },
-        {
-          zoneId,
-          lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-          tender: { method: "card", amount: "0.00", addedTip: "0.30" },
-        },
+        operator,
+        id,
+        { zoneId, lines: [{ menuItemId: waterOfferId, quantity: "1" }] },
+        { method: "card", entry: "manual", addedTip: "0.30" },
+        id,
       ),
     ).rejects.toMatchObject({ code: "bill.tip_not_allowed", params: { chargeable: "0.00" } });
     expect(await suite.db.select().from(sales)).toEqual([]);
@@ -402,12 +420,18 @@ describe("recordTillSale", () => {
 
   it("refuses a manual tip when tips are off without filing a sale", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
+    const id = randomUUID();
+    const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
     await expect(
-      recordTillSale({ db: suite.db, backend, clock, admission: testTradingAdmission() }, cfg, {
-        zoneId,
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "card", amount: "1.50", addedTip: "0.30" },
-      }),
+      payCounterBasket(
+        { db: suite.db, backend, clock, admission: testTradingAdmission() },
+        cfg,
+        operator,
+        id,
+        { zoneId, lines: [{ menuItemId: waterOfferId, quantity: "1" }] },
+        { method: "card", entry: "manual", addedTip: "0.30" },
+        id,
+      ),
     ).rejects.toMatchObject({ code: "bill.tip_not_allowed" });
     expect(await suite.db.select().from(sales)).toEqual([]);
   });
@@ -418,27 +442,28 @@ describe("recordTillSale", () => {
       .update(products)
       .set({ available: false })
       .where(eq(products.id, variantIds!.unavailable));
-    const deps = { db: suite.db, backend, clock };
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-        zoneId,
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "4.10" },
-      }),
+      payCounterCash(cfg, { zoneId, lines: [{ menuItemId: waterOfferId, quantity: "1" }] }, "4.10"),
     ).rejects.toMatchObject({ code: "product.variant_required" });
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-        zoneId,
-        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
-        tender: { method: "cash", amount: "4.80" },
-      }),
+      payCounterCash(
+        cfg,
+        {
+          zoneId,
+          lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
+        },
+        "4.80",
+      ),
     ).rejects.toMatchObject({ code: "product.variant_unavailable" });
 
-    const result = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-      zoneId,
-      lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "2" }],
-      tender: { method: "cash", amount: "8.20" },
-    });
+    const result = await payCounterCash(
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "2" }],
+      },
+      "8.20",
+    );
     expect(result.total).toBe("8.20");
     // The filed sale line carries the SAME six names as the frozen order line — filing copies the
     // snapshot rather than resolving the menu a second time.
@@ -512,19 +537,21 @@ describe("recordTillSale", () => {
       await tx.execute(sql`update products set active = 0 where parent_id = ${waterProductId}`);
       await republishMenus(tx);
     });
-    const deps = { db: suite.db, backend, clock };
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-        zoneId,
-        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" }],
-        tender: { method: "cash", amount: "4.10" },
-      }),
+      payCounterCash(
+        cfg,
+        {
+          zoneId,
+          lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" }],
+        },
+        "4.10",
+      ),
     ).rejects.toMatchObject({ code: "product.variant_unavailable" });
-    const result = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-      zoneId,
-      lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-      tender: { method: "cash", amount: "2.25" },
-    });
+    const result = await payCounterCash(
+      cfg,
+      { zoneId, lines: [{ menuItemId: waterOfferId, quantity: "1" }] },
+      "2.25",
+    );
     expect(result.total).toBe("2.25");
   });
 
@@ -614,15 +641,7 @@ describe("recordTillSale", () => {
       ]);
     });
 
-    const result = await payWorkingOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      {
-        id: workingOrderId,
-        lines: [],
-        tender: { method: "cash", amount: "8.90" },
-      },
-    );
+    const result = await paySavedCash(cfg, workingOrderId, "8.90");
     expect(result.total).toBe("8.90");
     const stored = await suite.db.execute<StoredNames>(sql`
       select name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
@@ -651,15 +670,11 @@ describe("recordTillSale", () => {
   it("refuses a missing filed record for a saved fiscal sale even with the no-fiscal backend", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
     const id = randomUUID();
-    await payWorkingOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    await payCounterCash(
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "3.00" },
-      },
+      { zoneId, lines: [{ menuItemId: waterOfferId, quantity: "1" }] },
+      "3.00",
+      id,
     );
     const config = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat");
     const none = fiscalSlot(enabledModules(ALL_MODULES, config), null).makeBackend({
@@ -730,14 +745,10 @@ describe("recordTillSale", () => {
     const { cfg, available, zoneId, offers } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 
-    const result = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    const result = await payCounterCash(
       cfg,
-      {
-        zoneId,
-        lines: [{ menuItemId: offers.offerFor(each.id), quantity: "2" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      { zoneId, lines: [{ menuItemId: offers.offerFor(each.id), quantity: "2" }] },
+      "5.00",
     );
 
     expect(result.total).toBe("3.00");
@@ -759,8 +770,7 @@ describe("recordTillSale", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
 
     // An extra `unitPrice` smuggled past the type must not change the filed total.
-    const result = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    const result = await payCounterCash(
       cfg,
       {
         zoneId,
@@ -770,58 +780,38 @@ describe("recordTillSale", () => {
             quantity: string;
           },
         ],
-        tender: { method: "cash", amount: "1.50" },
       },
+      "1.50",
     );
 
     expect(result.total).toBe("1.50"); // 1 × 1.50 gross, NOT the browser's 0.01
     expect(result.tender).toEqual({ method: "cash", change: "0.00" });
   });
 
-  it("rejects an empty basket, an unknown offer, an unsupported tender, and a shortfall", async () => {
+  it("rejects an empty basket, an unknown offer, and a shortfall", async () => {
     const { cfg, available, zoneId, offers } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
-    const deps = { db: suite.db, backend, clock };
+
+    await expect(payCounterCash(cfg, { zoneId, lines: [] }, "0")).rejects.toMatchObject({
+      code: "sale.empty_basket",
+    });
 
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-        zoneId,
-        lines: [],
-        tender: { method: "cash", amount: "0" },
-      }),
-    ).rejects.toMatchObject({ code: "sale.empty_basket" });
-
-    await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-        zoneId,
-        lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
-        tender: { method: "cash", amount: "1" },
-      }),
+      payCounterCash(cfg, { zoneId, lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }] }, "1"),
     ).rejects.toMatchObject({
       code: "service_zone.offer_not_allowed",
       params: { menuItemId: UUID_NOT_IN_CAT, zoneId },
     });
 
-    // Every tender but cash and card is refused; the cast is how an untrusted till sends one.
-    for (const method of ["voucher", "deferred", "other"] as const) {
-      await expect(
-        recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-          zoneId,
-          lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
-          tender: { method: method as unknown as "cash", amount: "1.50" },
-        }),
-      ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method } });
-    }
-
     // 1.00 tendered against a 1.50 total.
-    await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-        zoneId,
-        lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
-        tender: { method: "cash", amount: "1.00" },
-      }),
-    ).rejects.toMatchObject({ code: "sale.tender_shortfall" });
+    const lines = [{ menuItemId: offers.offerFor(each.id), quantity: "1" }];
+    await expect(payCounterCash(cfg, { zoneId, lines }, "1.00")).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "tendered" },
+    });
+    expect(await suite.db.select().from(sales)).toEqual([]);
+    expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
   });
 
   it("returns an empty qr when the fiscal backend offers no verification url", async () => {
@@ -836,14 +826,13 @@ describe("recordTillSale", () => {
       await fake.registerNode(tx, cfg.nodeId);
     });
 
-    const result = await recordTillSale(
+    const result = await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend: fake, clock },
       cfg,
-      {
-        zoneId,
-        lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      await counterFixtureOperator(suite.db, cfg.origin.deviceId),
+      randomUUID(),
+      { zoneId, lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }] },
+      "1.50",
     );
 
     expect(result.qr).toBe("");
@@ -944,15 +933,11 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
     });
     const workingOrderId = randomUUID();
 
-    const result = await payWorkingOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    const result = await payCounterCash(
       driftedCfg,
-      {
-        id: workingOrderId,
-        zoneId,
-        lines: [{ menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      { zoneId, lines: [{ menuItemId, quantity: "1" }] },
+      "1.50",
+      workingOrderId,
     );
     expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
 
@@ -985,15 +970,11 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
     });
     const workingOrderId = randomUUID();
 
-    await payWorkingOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    await payCounterCash(
       cfg,
-      {
-        id: workingOrderId,
-        zoneId,
-        lines: [{ menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      { zoneId, lines: [{ menuItemId, quantity: "1" }] },
+      "1.50",
+      workingOrderId,
     );
 
     const { lines, defaultLanguage } = await withTransaction(suite.db, async (tx) => ({
@@ -1021,15 +1002,11 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
     expect(defaultLanguage).toBe("es");
     const workingOrderId = randomUUID();
 
-    await payWorkingOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    await payCounterCash(
       cfg,
-      {
-        id: workingOrderId,
-        zoneId,
-        lines: [{ menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      { zoneId, lines: [{ menuItemId, quantity: "1" }] },
+      "1.50",
+      workingOrderId,
     );
 
     const { woLines, slLines } = await withTransaction(suite.db, async (tx) => {
@@ -1063,16 +1040,17 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
       ensureOperator(tx, "cccccccc-0000-4000-8000-00000000000a"),
     );
 
-    await payWorkingOrder(
+    const sessionId = await openTillSession(suite.db, {
+      deviceId: cfg.origin.deviceId,
+      personId: operatorId,
+    });
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id: workingOrderId,
-        zoneId,
-        lines: [{ menuItemId, quantity: "2" }],
-        tender: { method: "cash", amount: "3.00" },
-      },
-      operatorId,
+      { personId: operatorId, sessionId },
+      workingOrderId,
+      { zoneId, lines: [{ menuItemId, quantity: "2" }] },
+      "3.00",
     );
 
     const lines = await suite.db
@@ -1364,7 +1342,7 @@ describe("ordering extras and options — parent + child lines", () => {
   it("prints x3 for a sold extra whose product uses the stored Each unit", async () => {
     const v = await setupModifierVenue(true);
     const workingOrderId = randomUUID();
-    const request = {
+    const basket = {
       zoneId: v.zoneId,
       lines: [
         {
@@ -1373,14 +1351,19 @@ describe("ordering extras and options — parent + child lines", () => {
           extras: extrasPick(v, [{ productId: v.baconId, quantity: 3 }]),
         },
       ],
-      tender: { method: "cash", amount: "20.00" },
-      workingOrderId,
-    } satisfies TillSaleRequest;
-    const result = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      v.cfg,
-      request,
-    );
+    };
+    const operator = await counterFixtureOperator(suite.db, v.cfg.origin.deviceId);
+    const pay = () =>
+      payCounterBasket(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        v.cfg,
+        operator,
+        workingOrderId,
+        basket,
+        { method: "cash", tendered: "20.00" },
+        workingOrderId,
+      );
+    const result = await pay();
     const paper = printedLines(
       formatReceipt({
         result,
@@ -1400,11 +1383,7 @@ describe("ordering extras and options — parent + child lines", () => {
       await clearProductUnit(tx, v.baconId);
       await deleteUnit(tx, unit!.id);
     });
-    const replay = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      v.cfg,
-      request,
-    );
+    const replay = await pay();
     expect(replay.lines[1]).toMatchObject({ soldInEach: true, quantity: "3" });
   });
 
@@ -1962,12 +1941,7 @@ describe("ordering extras and options — parent + child lines", () => {
     await park(unedited, "2", 2);
     await park(edited, "1", 1);
     await withTransaction(suite.db, (tx) => gainActiveVariant(tx, v.baconId));
-    const pay = (id: string) =>
-      payWorkingOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, v.cfg, {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "50.00" },
-      });
+    const pay = (id: string) => paySavedCash(v.cfg, id, "50.00");
 
     // 2 × 9.00 + (2 × 2) × 0.50.
     expect((await pay(unedited)).total).toBe("20.00");
@@ -2094,9 +2068,7 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(children.map((c) => c.parentLineId)).toEqual([filedParent!.id, filedParent!.id]);
   });
 
-  it("settles a tab through recordTillSale (the /api/sales entry point) with an EMPTY basket", async () => {
-    // The till pays a tab with `lines: []` through `recordTillSale`, which must not refuse it as an
-    // empty basket.
+  it("settles a saved tab with no new basket lines", async () => {
     const v = await setupModifierVenue();
 
     const tableId = randomUUID();
@@ -2112,15 +2084,7 @@ describe("ordering extras and options — parent + child lines", () => {
       return tabId;
     });
 
-    const result = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      v.cfg,
-      {
-        lines: [],
-        tender: { method: "cash", amount: "20.00" },
-        workingOrderId: tabId,
-      },
-    );
+    const result = await paySavedCash(v.cfg, tabId, "20.00");
     // Files the tab's stored burger line (9.00 gross), never a `sale.empty_basket` refusal.
     expect(result.total).toBe("9.00");
     expect(result.lines).toHaveLength(1);
@@ -2195,45 +2159,53 @@ describe("ordering extras and options — parent + child lines", () => {
   it("rejects unoffered answers, an unanswered options list, an over-cap pick and extras on a fractional product", async () => {
     const v = await setupModifierVenue();
     const bogus = "00000000-0000-0000-0000-000000000000";
-    const deps = { db: suite.db, backend, clock };
 
     // (a) a list the dish does not attach → extras.invalid naming the offending field.
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [
-          {
-            menuItemId: v.offerFor(v.burgerId),
-            quantity: "1",
-            extras: [{ listId: bogus, picks: [] }],
-          },
-        ],
-        tender: { method: "cash", amount: "20.00" },
-      }),
+      payCounterCash(
+        v.cfg,
+        {
+          zoneId: v.zoneId,
+          lines: [
+            {
+              menuItemId: v.offerFor(v.burgerId),
+              quantity: "1",
+              extras: [{ listId: bogus, picks: [] }],
+            },
+          ],
+        },
+        "20.00",
+      ),
     ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "listId" } });
 
     // (a2) a pick naming a product the attached list does not offer → extras.invalid.
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [
-          {
-            menuItemId: v.offerFor(v.burgerId),
-            quantity: "1",
-            extras: extrasPick(v, [{ productId: bogus, quantity: 1 }]),
-          },
-        ],
-        tender: { method: "cash", amount: "20.00" },
-      }),
+      payCounterCash(
+        v.cfg,
+        {
+          zoneId: v.zoneId,
+          lines: [
+            {
+              menuItemId: v.offerFor(v.burgerId),
+              quantity: "1",
+              extras: extrasPick(v, [{ productId: bogus, quantity: 1 }]),
+            },
+          ],
+        },
+        "20.00",
+      ),
     ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "productId" } });
 
     // (b) an ACTIVE options list (Tamaño) left unanswered → options.label_required.
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [{ menuItemId: v.offerFor(v.menuProductId), quantity: "1", options: [] }],
-        tender: { method: "cash", amount: "20.00" },
-      }),
+      payCounterCash(
+        v.cfg,
+        {
+          zoneId: v.zoneId,
+          lines: [{ menuItemId: v.offerFor(v.menuProductId), quantity: "1", options: [] }],
+        },
+        "20.00",
+      ),
     ).rejects.toMatchObject({
       code: "options.label_required",
       params: { optionListId: v.sizeListId },
@@ -2242,20 +2214,23 @@ describe("ordering extras and options — parent + child lines", () => {
     // (b2) more picks than the list's own cap (Extras allows three; bacon ×3 plus queso is four) →
     // extras.limit_exceeded.
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [
-          {
-            menuItemId: v.offerFor(v.burgerId),
-            quantity: "1",
-            extras: extrasPick(v, [
-              { productId: v.baconId, quantity: 3 },
-              { productId: v.cheeseId, quantity: 1 },
-            ]),
-          },
-        ],
-        tender: { method: "cash", amount: "20.00" },
-      }),
+      payCounterCash(
+        v.cfg,
+        {
+          zoneId: v.zoneId,
+          lines: [
+            {
+              menuItemId: v.offerFor(v.burgerId),
+              quantity: "1",
+              extras: extrasPick(v, [
+                { productId: v.baconId, quantity: 3 },
+                { productId: v.cheeseId, quantity: 1 },
+              ]),
+            },
+          ],
+        },
+        "20.00",
+      ),
     ).rejects.toMatchObject({
       code: "extras.limit_exceeded",
       params: { extraListId: v.extrasListId },
@@ -2264,17 +2239,20 @@ describe("ordering extras and options — parent + child lines", () => {
     // (c) an extras pick on a WEIGHED dish is refused (`soldBy: "weight"`): a child is priced
     // dishQuantity × pickQuantity, so 0.250 kg of ham would bill a quarter of a rasher.
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [
-          {
-            menuItemId: v.offerFor(v.hamId),
-            quantity: "0.250",
-            extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
-          },
-        ],
-        tender: { method: "cash", amount: "20.00" },
-      }),
+      payCounterCash(
+        v.cfg,
+        {
+          zoneId: v.zoneId,
+          lines: [
+            {
+              menuItemId: v.offerFor(v.hamId),
+              quantity: "0.250",
+              extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
+            },
+          ],
+        },
+        "20.00",
+      ),
     ).rejects.toMatchObject({
       code: "extras.unsupported_product",
       params: { productId: v.hamId, soldBy: "weight" },
@@ -2282,19 +2260,22 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // (d) fewer picks than a list's floor (Guarnición demands two, one sent) → extras.limit_exceeded.
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [
-          {
-            menuItemId: v.offerFor(v.platedDishId),
-            quantity: "1",
-            extras: [
-              { listId: v.sideDishListId, picks: [{ productId: v.potatoesId, quantity: 1 }] },
-            ],
-          },
-        ],
-        tender: { method: "cash", amount: "20.00" },
-      }),
+      payCounterCash(
+        v.cfg,
+        {
+          zoneId: v.zoneId,
+          lines: [
+            {
+              menuItemId: v.offerFor(v.platedDishId),
+              quantity: "1",
+              extras: [
+                { listId: v.sideDishListId, picks: [{ productId: v.potatoesId, quantity: 1 }] },
+              ],
+            },
+          ],
+        },
+        "20.00",
+      ),
     ).rejects.toMatchObject({
       code: "extras.limit_exceeded",
       params: { extraListId: v.sideDishListId },
@@ -2305,7 +2286,6 @@ describe("ordering extras and options — parent + child lines", () => {
   // a whole "1" of such a dish is refused as surely as "0.5".
   it("refuses extras on a dish in a unit with decimal places and no scale, at any quantity", async () => {
     const v = await setupModifierVenue();
-    const deps = { db: suite.db, backend, clock };
     await withTransaction(suite.db, async (tx) => {
       const litre = await createUnit(
         tx,
@@ -2324,17 +2304,20 @@ describe("ordering extras and options — parent + child lines", () => {
 
     for (const quantity of ["0.5", "1"]) {
       await expect(
-        recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-          zoneId: v.zoneId,
-          lines: [
-            {
-              menuItemId: v.offerFor(v.burgerId),
-              quantity,
-              extras: extrasPick(v, [{ productId: v.cheeseId, quantity: 1 }]),
-            },
-          ],
-          tender: { method: "cash", amount: "20.00" },
-        }),
+        payCounterCash(
+          v.cfg,
+          {
+            zoneId: v.zoneId,
+            lines: [
+              {
+                menuItemId: v.offerFor(v.burgerId),
+                quantity,
+                extras: extrasPick(v, [{ productId: v.cheeseId, quantity: 1 }]),
+              },
+            ],
+          },
+          "20.00",
+        ),
       ).rejects.toMatchObject({
         code: "extras.unsupported_product",
         params: { productId: v.burgerId, soldBy: "fraction" },
@@ -2381,7 +2364,7 @@ describe("ordering extras and options — parent + child lines", () => {
     });
 
   /** A party tab on a fresh table holding one round of `line`. */
-  const tabWith = (v: ModifierVenue, line: TillSaleRequest["lines"][number]) =>
+  const tabWith = (v: ModifierVenue, line: CounterPaymentBasket["lines"][number]) =>
     withTransaction(suite.db, async (tx) => {
       const tableId = randomUUID();
       await tx.insert(diningTables).values({
@@ -2400,19 +2383,21 @@ describe("ordering extras and options — parent + child lines", () => {
   it("sells a dish in a unit with decimal places with no extras picks, whatever its extras lists require", async () => {
     const v = await setupModifierVenue();
     const breadListId = await requireBread(v, "Jarra", 2);
-    const deps = { db: suite.db, backend, clock };
     const tender = { method: "cash" as const, amount: "50.00" };
     const burger = v.offerFor(v.burgerId);
 
     // A new sale, with the extras field absent and empty: 0.5 × 9.00 + 9.00.
-    const sale = await recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-      zoneId: v.zoneId,
-      lines: [
-        { menuItemId: burger, quantity: "0.5" },
-        { menuItemId: burger, quantity: "1", extras: [] },
-      ],
-      tender,
-    });
+    const sale = await payCounterCash(
+      v.cfg,
+      {
+        zoneId: v.zoneId,
+        lines: [
+          { menuItemId: burger, quantity: "0.5" },
+          { menuItemId: burger, quantity: "1", extras: [] },
+        ],
+      },
+      tender.amount,
+    );
     expect(sale.total).toBe("13.50");
 
     // A held order, then paid.
@@ -2422,15 +2407,7 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.zoneId,
       }),
     );
-    expect(
-      (
-        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-          id: heldId,
-          lines: [],
-          tender,
-        })
-      ).total,
-    ).toBe("4.50");
+    expect((await paySavedCash(v.cfg, heldId, tender.amount)).total).toBe("4.50");
 
     // A table round, a modifier edit with no picks, and another measured portion: 1.5 × 9.00.
     const tabId = await tabWith(v, { menuItemId: burger, quantity: "0.5" });
@@ -2448,29 +2425,24 @@ describe("ordering extras and options — parent + child lines", () => {
     await withTransaction(suite.db, (tx) =>
       addTabRound(tx, v.cfg, tabId, [{ menuItemId: burger, quantity: "1", extras: [] }]),
     );
-    expect(
-      (
-        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-          id: tabId,
-          lines: [],
-          tender,
-        })
-      ).total,
-    ).toBe("13.50");
+    expect((await paySavedCash(v.cfg, tabId, tender.amount)).total).toBe("13.50");
 
     // A pick on the required list is still refused.
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [
-          {
-            menuItemId: burger,
-            quantity: "1",
-            extras: [{ listId: breadListId, picks: [{ productId: v.potatoesId, quantity: 1 }] }],
-          },
-        ],
-        tender,
-      }),
+      payCounterCash(
+        v.cfg,
+        {
+          zoneId: v.zoneId,
+          lines: [
+            {
+              menuItemId: burger,
+              quantity: "1",
+              extras: [{ listId: breadListId, picks: [{ productId: v.potatoesId, quantity: 1 }] }],
+            },
+          ],
+        },
+        tender.amount,
+      ),
     ).rejects.toMatchObject({
       code: "extras.unsupported_product",
       params: { productId: v.burgerId, soldBy: "fraction" },
@@ -2480,16 +2452,15 @@ describe("ordering extras and options — parent + child lines", () => {
   it("still refuses an empty answer to a required extras list on a dish in a counted unit", async () => {
     const v = await setupModifierVenue();
     const breadListId = await requireBread(v, "Ración", 0);
-    const deps = { db: suite.db, backend, clock };
     const burger = v.offerFor(v.burgerId);
     const refused = { code: "extras.limit_exceeded", params: { extraListId: breadListId } };
 
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [{ menuItemId: burger, quantity: "1" }],
-        tender: { method: "cash", amount: "50.00" },
-      }),
+      payCounterCash(
+        v.cfg,
+        { zoneId: v.zoneId, lines: [{ menuItemId: burger, quantity: "1" }] },
+        "50.00",
+      ),
     ).rejects.toMatchObject(refused);
 
     const tabId = await tabWith(v, {
@@ -2514,7 +2485,6 @@ describe("ordering extras and options — parent + child lines", () => {
   it("sells a dish in a measure unit with no extras picks, whatever its extras lists require", async () => {
     const v = await setupModifierVenue();
     const breadListId = await requireBread(v, "Mililitro", 0, true);
-    const deps = { db: suite.db, backend, clock };
     const burger = v.offerFor(v.burgerId);
     const tender = { method: "cash" as const, amount: "3000.00" };
     const breadExtras = [
@@ -2526,11 +2496,11 @@ describe("ordering extras and options — parent + child lines", () => {
     };
 
     // A new sale: 250 × 9.00.
-    const sale = await recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-      zoneId: v.zoneId,
-      lines: [{ menuItemId: burger, quantity: "250" }],
-      tender,
-    });
+    const sale = await payCounterCash(
+      v.cfg,
+      { zoneId: v.zoneId, lines: [{ menuItemId: burger, quantity: "250" }] },
+      tender.amount,
+    );
     expect(sale.total).toBe("2250.00");
 
     // A held order, then paid.
@@ -2540,15 +2510,7 @@ describe("ordering extras and options — parent + child lines", () => {
         zoneId: v.zoneId,
       }),
     );
-    expect(
-      (
-        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-          id: heldId,
-          lines: [],
-          tender,
-        })
-      ).total,
-    ).toBe("2250.00");
+    expect((await paySavedCash(v.cfg, heldId, tender.amount)).total).toBe("2250.00");
 
     // A table round, then a change of the sent line that answers the extras lists with nothing and
     // raises its quantity: 300 × 9.00. A change that picks from the required list is refused.
@@ -2576,15 +2538,7 @@ describe("ordering extras and options — parent + child lines", () => {
         "cccccccc-0000-4000-8000-00000000000c",
       ),
     );
-    expect(
-      (
-        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-          id: tabId,
-          lines: [],
-          tender,
-        })
-      ).total,
-    ).toBe("2700.00");
+    expect((await paySavedCash(v.cfg, tabId, tender.amount)).total).toBe("2700.00");
 
     // A new sale with a pick is refused, with no sale or fiscal record written.
     const written = async () =>
@@ -2596,11 +2550,11 @@ describe("ordering extras and options — parent + child lines", () => {
       ).rows;
     const before = await written();
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [{ menuItemId: burger, quantity: "250", extras: breadExtras }],
-        tender,
-      }),
+      payCounterCash(
+        v.cfg,
+        { zoneId: v.zoneId, lines: [{ menuItemId: burger, quantity: "250", extras: breadExtras }] },
+        tender.amount,
+      ),
     ).rejects.toMatchObject(refused);
     expect(await written()).toEqual(before);
   });
@@ -2608,20 +2562,22 @@ describe("ordering extras and options — parent + child lines", () => {
   it("a ración still takes extras", async () => {
     const v = await setupModifierVenue();
     const breadListId = await requireBread(v, "Ración", 0);
-    const deps = { db: suite.db, backend, clock };
 
     // 2 × 9.00 dish + 2 × 1.00 Pan.
-    const sale = await recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-      zoneId: v.zoneId,
-      lines: [
-        {
-          menuItemId: v.offerFor(v.burgerId),
-          quantity: "2",
-          extras: [{ listId: breadListId, picks: [{ productId: v.potatoesId, quantity: 1 }] }],
-        },
-      ],
-      tender: { method: "cash", amount: "50.00" },
-    });
+    const sale = await payCounterCash(
+      v.cfg,
+      {
+        zoneId: v.zoneId,
+        lines: [
+          {
+            menuItemId: v.offerFor(v.burgerId),
+            quantity: "2",
+            extras: [{ listId: breadListId, picks: [{ productId: v.potatoesId, quantity: 1 }] }],
+          },
+        ],
+      },
+      "50.00",
+    );
     expect(sale.total).toBe("20.00");
   });
 
@@ -2630,7 +2586,6 @@ describe("ordering extras and options — parent + child lines", () => {
   // through.
   it("refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not offer", async () => {
     const v = await setupModifierVenue();
-    const deps = { db: suite.db, backend, clock };
     const burgerWith = (productId: string) => ({
       zoneId: v.zoneId,
       lines: [
@@ -2640,25 +2595,18 @@ describe("ordering extras and options — parent + child lines", () => {
           extras: extrasPick(v, [{ productId, quantity: 1 }]),
         },
       ],
-      tender: { method: "cash" as const, amount: "20.00" },
     });
 
     await withTransaction(suite.db, (tx) => updateProduct(tx, v.baconId, { available: false }));
-    await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, burgerWith(v.baconId)),
-    ).rejects.toMatchObject({
+    await expect(payCounterCash(v.cfg, burgerWith(v.baconId), "20.00")).rejects.toMatchObject({
       code: "extras.invalid",
       params: { field: "productId" },
     });
     // The control: the same list still sells the item that is both Active and Available.
-    await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, burgerWith(v.cheeseId)),
-    ).resolves.toBeDefined();
+    await expect(payCounterCash(v.cfg, burgerWith(v.cheeseId), "20.00")).resolves.toBeDefined();
 
     await suite.db.execute(sql`update products set active = 0 where id = ${v.cheeseId}`);
-    await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, burgerWith(v.cheeseId)),
-    ).rejects.toMatchObject({
+    await expect(payCounterCash(v.cfg, burgerWith(v.cheeseId), "20.00")).rejects.toMatchObject({
       code: "extras.invalid",
       params: { field: "productId" },
     });
@@ -2666,32 +2614,37 @@ describe("ordering extras and options — parent + child lines", () => {
 
   it("refuses a dish answered with a WITHDRAWN option label, and one left unanswered", async () => {
     const v = await setupModifierVenue();
-    const deps = { db: suite.db, backend, clock };
 
     // An active list must be answered, and a withdrawn label is not an answer — so a till holding a
     // stale menu is refused rather than selling the dish with nothing chosen.
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [{ menuItemId: v.offerFor(v.comboId), quantity: "1", options: [] }],
-        tender: { method: "cash", amount: "10.00" },
-      }),
+      payCounterCash(
+        v.cfg,
+        {
+          zoneId: v.zoneId,
+          lines: [{ menuItemId: v.offerFor(v.comboId), quantity: "1", options: [] }],
+        },
+        "10.00",
+      ),
     ).rejects.toMatchObject({
       code: "options.label_required",
       params: { optionListId: v.sauceListId },
     });
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-        zoneId: v.zoneId,
-        lines: [
-          {
-            menuItemId: v.offerFor(v.comboId),
-            quantity: "1",
-            options: [{ listId: v.sauceListId, labelId: v.sauceLabelId }],
-          },
-        ],
-        tender: { method: "cash", amount: "10.00" },
-      }),
+      payCounterCash(
+        v.cfg,
+        {
+          zoneId: v.zoneId,
+          lines: [
+            {
+              menuItemId: v.offerFor(v.comboId),
+              quantity: "1",
+              options: [{ listId: v.sauceListId, labelId: v.sauceLabelId }],
+            },
+          ],
+        },
+        "10.00",
+      ),
     ).rejects.toMatchObject({
       code: "options.label_required",
       params: { optionListId: v.sauceListId },
@@ -2976,27 +2929,10 @@ describe("ordering extras and options — parent + child lines", () => {
     await republish("13.00");
     expect(await liveVersion()).not.toBe(second);
 
-    const deps = { db: suite.db, backend, clock };
     const tender = { method: "cash" as const, amount: "20.00" };
     // 9.00 + Bacon 0.50; and 9.00 + 11.00: the prices each line was added at.
-    expect(
-      (
-        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-          id: heldId,
-          lines: [],
-          tender,
-        })
-      ).total,
-    ).toBe("9.50");
-    expect(
-      (
-        await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, {
-          id: tabId,
-          lines: [],
-          tender,
-        })
-      ).total,
-    ).toBe("20.00");
+    expect((await paySavedCash(v.cfg, heldId, tender.amount)).total).toBe("9.50");
+    expect((await paySavedCash(v.cfg, tabId, tender.amount)).total).toBe("20.00");
     const filedVersions = (id: string) =>
       suite.db
         .select({ menuVersionId: saleLines.menuVersionId })
@@ -3043,14 +2979,19 @@ describe("per-answer receipt presentation", () => {
           },
         })
         .where(eq(departments.id, department!.id));
-      const req: TillSaleRequest = {
-        zoneId,
-        workingOrderId: randomUUID(),
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method, amount: "10.00" },
-      };
-      const deps = { db: suite.db, backend, clock };
-      const first = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, req);
+      const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
+      const id = randomUUID();
+      const pay = () =>
+        payCounterBasket(
+          { db: suite.db, backend, clock, admission: testTradingAdmission() },
+          cfg,
+          operator,
+          id,
+          { zoneId, lines: [{ menuItemId: waterOfferId, quantity: "1" }] },
+          method === "cash" ? { method, tendered: "10.00" } : { method, entry: "manual" },
+          id,
+        );
+      const first = await pay();
       expect(first).toMatchObject({
         receiptTrim: {
           headerSubtitle: "Department subtitle",
@@ -3075,7 +3016,7 @@ describe("per-answer receipt presentation", () => {
         .set({ receiptText: { footerMessage: { "es-ES": "New department footer" } } })
         .where(eq(departments.id, department!.id));
       await seedVenueSettings(suite.db, { addressLine1: "Current street" });
-      const replay = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, req);
+      const replay = await pay();
       expect(replay).toMatchObject({
         receiptTrim: {
           footerMessage: "New department footer",
@@ -3186,16 +3127,10 @@ describe("receipt presentation sources", () => {
           },
         })
         .where(eq(departments.id, department!.id));
-      const req: TillSaleRequest = {
-        zoneId,
-        workingOrderId: randomUUID(),
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "10.00" },
-      };
-      await recordTillSale(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      await payCounterCash(
         cfg,
-        req,
+        { zoneId, lines: [{ menuItemId: waterOfferId, quantity: "1" }] },
+        "10.00",
       );
       const [saved] = await suite.db.select({ saleId: sales.id }).from(sales);
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -3256,14 +3191,10 @@ describe("receipt presentation address failure", () => {
       .mockRejectedValue(new Error("current address read refused"));
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      const ticket = await recordTillSale(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      const ticket = await payCounterCash(
         cfg,
-        {
-          zoneId,
-          lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-          tender: { method: "cash", amount: "10.00" },
-        },
+        { zoneId, lines: [{ menuItemId: waterOfferId, quantity: "1" }] },
+        "10.00",
       );
       expect(ticket.receiptTrim).toEqual({ headerSubtitle: "Surviving subtitle" });
       expect(ticket.venueAddress).toEqual([]);
@@ -3294,16 +3225,18 @@ describe("saved-zone immediate replay", () => {
       now: () => ({ ...reading, instant: new Date("2026-10-14T23:30:00Z"), offsetMinutes: 0 }),
     };
     const id: string = randomUUID();
-    const req = {
-      id,
-      lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-      tender: { method: "cash" as const, amount: "2.25" },
-    };
-    const first = await payWorkingOrder(
-      { db: suite.db, backend, clock: source, admission },
-      cfg,
-      req,
-    );
+    const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
+    const pay = (clock: TrustedClock) =>
+      payCounterBasket(
+        { db: suite.db, backend, clock, admission },
+        cfg,
+        operator,
+        id,
+        { lines: [{ menuItemId: waterOfferId, quantity: "1" }] },
+        { method: "cash", tendered: "2.25" },
+        id,
+      );
+    const first = await pay(source);
     const before = await suite.db.select().from(registrosFacturacion);
     expect(before).toHaveLength(1);
     expect(before[0]).toMatchObject({ fechaExpedicionFactura: "2026-10-15", offsetMinutos: 120 });
@@ -3314,9 +3247,7 @@ describe("saved-zone immediate replay", () => {
         throw new Error("replay must not read a new clock");
       },
     };
-    expect(
-      await payWorkingOrder({ db: suite.db, backend, clock: unreadable, admission }, cfg, req),
-    ).toEqual(first);
+    expect(await pay(unreadable)).toEqual(first);
     expect(await suite.db.select().from(registrosFacturacion)).toEqual(before);
   });
 });

@@ -110,19 +110,38 @@ export async function payFreshCounterInCash(
   basket: CounterPaymentBasket,
   tendered: string,
 ) {
+  return payCounterBasket(
+    deps,
+    cfg,
+    operator,
+    id,
+    basket,
+    { method: "cash", tendered },
+    randomUUID(),
+  );
+}
+
+export async function payCounterBasket(
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  operator: Parameters<typeof take>[4],
+  id: string,
+  basket: CounterPaymentBasket,
+  payment: Pick<Request, "method" | "entry" | "externalRef" | "tendered" | "addedTip">,
+  submissionId: string,
+) {
   const result = await take(
     deps,
     cfg,
     id,
     {
       expectedEdit: null,
-      submissionId: randomUUID(),
+      submissionId,
       kind: "share",
       shareOf: 1,
-      method: "cash",
       applied: "0.00",
       tip: "0.00",
-      tendered,
+      ...payment,
     },
     operator,
     basket,

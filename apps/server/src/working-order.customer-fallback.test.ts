@@ -1,3 +1,5 @@
+import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
+import { openTillSession } from "./testing/session-device.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -19,15 +21,23 @@ import {
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { createOpenOrder, priceOrderLines } from "./working-order.js";
-import { readSettledTicket, recordTillSaleOrchestration, reprintSale } from "./till-sale.js";
+import { readSettledTicket, reprintSale } from "./till-sale.js";
 import { resolveTranslationCells } from "@waitron/menu/src/content-translation-cells.js";
 import { saveContentTranslations } from "@waitron/menu/src/content-translations.js";
 import { republishMenus } from "./testing/publish-menu.js";
 
 let venue: BillVenue;
+let operator: { personId: string; sessionId: string };
 const database = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 beforeEach(async () => {
   venue = await provisionBillVenue(database.db);
+  operator = {
+    personId: venue.operatorId,
+    sessionId: await openTillSession(database.db, {
+      deviceId: venue.cfg.origin.deviceId,
+      personId: venue.operatorId,
+    }),
+  };
 });
 
 async function arrange() {
@@ -104,17 +114,16 @@ describe("future order customer fallback", () => {
     const setup = await arrange();
     const id = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
-    const issued = await recordTillSaleOrchestration(
+    const issued = await payFreshCounterInCash(
       { ...deps, admission: testTradingAdmission() },
       venue.cfg,
+      operator,
+      id,
       {
-        workingOrderId: id,
-        expectedEdit: null,
         zoneId: setup.offers.zoneId,
         lines: [{ menuItemId: setup.offers.offerFor(setup.dish.id), quantity: "1" }],
-        tender: { method: "cash", amount: "12.00" },
       },
-      venue.operatorId,
+      "12.00",
     );
     const frozen = () =>
       Object.fromEntries(
@@ -296,17 +305,16 @@ it("freezes the main staff name and unit when only an enabled US override has te
     await republishMenus(tx);
   });
   const id = randomUUID();
-  await recordTillSaleOrchestration(
+  await payFreshCounterInCash(
     { db: venue.db, backend: venue.backend, clock: venue.clock, admission: testTradingAdmission() },
     venue.cfg,
+    operator,
+    id,
     {
-      workingOrderId: id,
-      expectedEdit: null,
       zoneId: setup.offers.zoneId,
       lines: [{ menuItemId: setup.offers.offerFor(setup.dish.id), quantity: "1" }],
-      tender: { method: "cash", amount: "12.00" },
     },
-    venue.operatorId,
+    "12.00",
   );
   const ticket = await withTransaction(venue.db, (tx) =>
     readSettledTicket(venue.backend, tx, venue.cfg, id),

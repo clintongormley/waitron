@@ -63,6 +63,7 @@ interface Body {
   method: "cash" | "card";
   entry?: "manual" | "reader";
   tendered?: string;
+  shareOf?: number;
   applied: string;
   tip: string;
 }
@@ -296,11 +297,13 @@ describe("a bill moved between service modes sends each dish to the kitchen once
       const firstParty = await seatedWith(venue, "Octopus");
 
       const moved = await toCounter(firstParty, prepayZone);
-      const paid = await post("/api/sales", {
-        dining: "eat_in",
-        workingOrderId: firstParty.tabId,
-        lines: [],
-        tender: { method, amount: "20.00" },
+      const paid = await pay(firstParty.tabId, {
+        kind: "share",
+        shareOf: 1,
+        method,
+        applied: "20.00",
+        tip: "0.00",
+        ...(method === "cash" ? { tendered: "20.00" } : { entry: "manual" }),
       });
 
       expect(moved.status).toBe(200);
@@ -614,7 +617,7 @@ describe("the counter's held list after a move", () => {
 });
 
 describe("paying a moved bill, by its state", () => {
-  it("refuses a partly paid bill taken to the counter by collect, which takes only a presented bill, and by the single payment, and takes the rest as a bill payment with one invoice", async () => {
+  it("refuses a partly paid bill taken to the counter by collect, which takes only a presented bill, and takes the rest as a bill payment with one invoice", async () => {
     const firstParty = await seatedWith(venue, "Octopus"); // €20.00
     expect((await cashContribution(firstParty.tabId, "5.00")).status).toBe(200);
     expect((await toCounter(firstParty, venue.zoneId)).status).toBe(200);
@@ -622,12 +625,14 @@ describe("paying a moved bill, by its state", () => {
     const collected = await post(`/api/working-orders/${firstParty.tabId}/collect`, {
       tender: { method: "cash", amount: "15.00" },
     });
-    const sold = await post("/api/sales", {
+    const sold = await post(`/api/working-orders/${firstParty.tabId}/payments`, {
       dining: "eat_in",
-      lines: [],
-      tender: { method: "cash", amount: "15.00" },
-      workingOrderId: firstParty.tabId,
-      zoneId: venue.zoneId,
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "15.00",
+      basket: { lines: [] },
     });
     const refusedPayments = await paymentRows(venue, firstParty.tabId);
     const rest = await cashContribution(firstParty.tabId, "15.00");

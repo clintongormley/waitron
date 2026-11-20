@@ -3,11 +3,12 @@ import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  billPayments,
   categories,
   drawerOpens,
   saleSettlements,
@@ -24,6 +25,7 @@ import { parkOrder } from "./working-order.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { zoneOf } from "./testing/party-venue.js";
 import {
+  cashPayment,
   inTx,
   partyRevisionOf,
   provisionBillVenue,
@@ -84,12 +86,16 @@ async function givenAwayBill(): Promise<{ partyId: string; tabId: string }> {
   return party;
 }
 
-function pay(billId: string, tender: Record<string, unknown>) {
-  return send(venue.app, venue.cookie, "POST", "/api/sales", {
-    dining: "eat_in",
-    lines: [],
-    tender,
-    workingOrderId: billId,
+function closeFreeBill(billId: string, handedOver: string | null) {
+  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+    submissionId: billId,
+    kind: "contribution",
+    amount: "0.00",
+    applied: "0.00",
+    tip: "0.00",
+    ...(handedOver === null
+      ? { method: "card", entry: "manual", externalRef: "OP-1" }
+      : { method: "cash", tendered: handedOver }),
   });
 }
 
@@ -117,8 +123,9 @@ function drawerOpensOf(billId: string) {
     tx
       .select({ reason: drawerOpens.reason })
       .from(drawerOpens)
-      .innerJoin(sales, eq(sales.id, drawerOpens.saleId))
-      .where(eq(sales.workingOrderId, billId)),
+      .leftJoin(sales, eq(sales.id, drawerOpens.saleId))
+      .leftJoin(billPayments, eq(billPayments.id, drawerOpens.billPaymentId))
+      .where(or(eq(sales.workingOrderId, billId), eq(billPayments.workingOrderId, billId))),
   );
 }
 
@@ -157,10 +164,10 @@ describe("Pay on a bill whose every line was given away", () => {
     const party = await seatedWith(venue, "Caña");
     const drawerJobs = drawerJobCount();
 
-    const answer = await pay(party.tabId, { method: "cash", amount: "3.00" });
+    const answer = await cashPayment(venue, venue.cookie, party.tabId, "3.00");
 
     expect(answer.status).toBe(200);
-    expect(await drawerOpensOf(party.tabId)).toEqual([{ reason: "cash_sale" }]);
+    expect(await drawerOpensOf(party.tabId)).toEqual([{ reason: "bill_payment" }]);
     expect(drawerJobCount()).toBe(drawerJobs + 1);
   });
 
@@ -171,10 +178,12 @@ describe("Pay on a bill whose every line was given away", () => {
       const { tabId } = await givenAwayBill();
       const drawerJobs = drawerJobCount();
 
-      const answer = await pay(tabId, { method: "cash", amount: handedOver });
+      const answer = await closeFreeBill(tabId, handedOver);
 
       expect(answer.status).toBe(200);
-      expect(answer.json).toMatchObject({ total: "0.00", tender: { method: "unpaid" } });
+      expect(answer.json).toMatchObject({
+        invoice: { total: "0.00", tender: { method: "unpaid" } },
+      });
       await expectClosedOwingNothing(tabId);
       expect(drawerJobCount()).toBe(drawerJobs);
     },
@@ -183,18 +192,18 @@ describe("Pay on a bill whose every line was given away", () => {
   it("closes the bill on a manual card Pay, with no tender and no card payment row", async () => {
     const { tabId } = await givenAwayBill();
 
-    const answer = await pay(tabId, { method: "card", amount: "0.00", externalRef: "OP-1" });
+    const answer = await closeFreeBill(tabId, null);
 
     expect(answer.status).toBe(200);
-    expect(answer.json).toMatchObject({ total: "0.00", tender: { method: "unpaid" } });
+    expect(answer.json).toMatchObject({ invoice: { total: "0.00", tender: { method: "unpaid" } } });
     await expectClosedOwingNothing(tabId);
   });
 
   it("answers a resent Pay with the first ticket and files nothing more", async () => {
     const { tabId } = await givenAwayBill();
 
-    const first = await pay(tabId, { method: "cash", amount: "0.00" });
-    const again = await pay(tabId, { method: "cash", amount: "0.00" });
+    const first = await closeFreeBill(tabId, "0.00");
+    const again = await closeFreeBill(tabId, "0.00");
 
     expect(first.status).toBe(200);
     expect(again).toEqual(first);
@@ -204,16 +213,19 @@ describe("Pay on a bill whose every line was given away", () => {
   it("refuses a malformed cash amount and leaves the bill open", async () => {
     const { tabId } = await givenAwayBill();
 
-    const answer = await pay(tabId, { method: "cash", amount: "not-money" });
+    const answer = await closeFreeBill(tabId, "not-money");
 
-    expect(answer.json).toMatchObject({ code: "shared.invalid_decimal" });
+    expect(answer).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "tendered" } },
+    });
     expect(await statusOf(venue, tabId)).toBe("open");
     expect(fiscalRecordCount(venue, tabId)).toBe(0);
   });
 
   it("lets Finish table close the party once the bill is paid and its food served", async () => {
     const { partyId, tabId } = await givenAwayBill();
-    expect((await pay(tabId, { method: "cash", amount: "0.00" })).status).toBe(200);
+    expect((await closeFreeBill(tabId, "0.00")).status).toBe(200);
     const unserved = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/finish`, {
       expectedPartyRevision: await partyRevisionOf(venue, tabId),
     });
@@ -427,10 +439,10 @@ describe("other ways a bill owing nothing is paid", () => {
     await expectClosedOwingNothing(tabId);
     expect(drawerJobCount()).toBe(drawerJobs);
 
-    const replay = await pay(tabId, { method: "cash", amount: "0" });
+    const replay = await closeFreeBill(tabId, "0");
     expect(replay).toMatchObject({
       status: 200,
-      json: { total: "0.00", tender: { method: "unpaid" } },
+      json: { invoice: { total: "0.00", tender: { method: "unpaid" } } },
     });
     await expectClosedOwingNothing(tabId);
   });
@@ -439,9 +451,12 @@ describe("other ways a bill owing nothing is paid", () => {
     const { tabId } = await seatedWith(venue, "Caña");
     await compWholeBill(venue, tabId, 5000);
 
-    const answer = await pay(tabId, { method: "cash", amount: "0" });
+    const answer = await cashPayment(venue, venue.cookie, tabId, "0");
 
-    expect([answer.status, answer.json.code]).toEqual([400, "sale.tender_shortfall"]);
+    expect(answer).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "tendered" } },
+    });
     expect(await statusOf(venue, tabId)).toBe("open");
     expect(fiscalRecordCount(venue, tabId)).toBe(0);
   });

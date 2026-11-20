@@ -358,13 +358,22 @@ describe("POST /api/pay while the full-disk stop holds", () => {
         }
       }
 
-      const cash = await send(venue.appWith({ disk }), venue.cookie, "POST", "/api/sales", {
-        dining: "eat_in",
-        workingOrderId: randomUUID(),
-        lines: lines(20),
-        zoneId: counter.zoneId,
-        tender: { method: "cash", amount: "200.00" },
-      });
+      const id = randomUUID();
+      const cash = await send(
+        venue.appWith({ disk }),
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${id}/payments`,
+        {
+          dining: "eat_in",
+          submissionId: id,
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "200.00",
+          basket: { lines: lines(20), zoneId: counter.zoneId },
+        },
+      );
       expect(cash.status).toBe(507);
       expect(disk.since()).not.toBeNull();
 
@@ -377,12 +386,12 @@ describe("POST /api/pay while the full-disk stop holds", () => {
 
       venue.db.all(sql.raw(`pragma max_page_count = 4294967294`));
       free.bytes = FULL_DISK_BYTES;
-      const id = randomUUID();
-      const answer = await walkUpPay(disk, id);
+      const retryId = randomUUID();
+      const answer = await walkUpPay(disk, retryId);
       expect(answer.status).toBe(200);
       expect(answer.json.outcome).toBe("captured");
       expect(collects()).toBe(before + 1);
-      expect(count("sales", "working_order_id", id)).toBe(1);
+      expect(count("sales", "working_order_id", retryId)).toBe(1);
     } finally {
       venue.db.all(sql.raw(`pragma max_page_count = 4294967294`));
       unwatch();

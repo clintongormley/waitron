@@ -1,6 +1,6 @@
 import { claimA4ForTest } from "./testing/a4-print-job.js";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
-import { payments, recordVoid, type PaymentResult } from "@waitron/payments";
+import { payments, recordVoid, SimulatorPaymentProvider, type PaymentResult } from "@waitron/payments";
 import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
@@ -551,7 +551,7 @@ beforeAll(() => {
 });
 
 it.each(["cash", "card"] as const)(
-  "%s sales without a client bill id stay linked and wait for explicit paper",
+  "%s counter payments link the sale to the bill and wait for explicit paper",
   async (method) => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter();
@@ -559,19 +559,10 @@ it.each(["cash", "card"] as const)(
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const response = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method, amount: "1.50" },
-      }),
-    });
-    expect(response.status).toBe(200);
+    const id = await ringSale(app, cookie, each.menuItemId, method);
     const rows = await suite.db.select().from(sales);
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.workingOrderId).toEqual(expect.any(String));
+    expect(rows[0]!.workingOrderId).toBe(id);
     expect(await suite.db.select().from(printJobs).where(eq(printJobs.kind, "document"))).toEqual(
       [],
     );
@@ -2576,18 +2567,26 @@ describe("payment slip persisted capture facts", () => {
       );
       await configureReceipt({ printerId: await makePrinter() });
       const app = new Hono();
-      mountTillApi(app, apiDeps(cfg), noopLog);
+      mountTillApi(
+        app,
+        { ...apiDeps(cfg), cardProvider: new SimulatorPaymentProvider(suite.db) },
+        noopLog,
+      );
       const cookie = await login(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg);
       const id = randomUUID();
-      const response = await app.request("/api/sales", {
+      const response = await app.request(`/api/working-orders/${id}/payments`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
           dining: "eat_in",
-          workingOrderId: id,
-          lines: linesOf(each.menuItemId, "1000"),
-          tender: { method: "card", amount: "1500.00" },
+          submissionId: id,
+          kind: "share",
+          shareOf: 1,
+          method: "card",
+          entry: "reader",
+          simulationOutcome: "captured",
+          basket: { lines: linesOf(each.menuItemId, "1000") },
         }),
       });
       expect(response.status).toBe(200);
@@ -2753,29 +2752,32 @@ describe("persisted cash receipt facts", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const deviceCookie = await enrolTillCookie(cfg);
+    const id = randomUUID();
     const request = {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
-        workingOrderId: randomUUID(),
-        zoneId: scope!.zone_id,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "1.50",
+        basket: { zoneId: scope!.zone_id, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
         dining: "eat_in",
       }),
     };
-    const first = await app.request("/api/sales", request);
+    const first = await app.request(`/api/working-orders/${id}/payments`, request);
     expect(first.status).toBe(200);
-    expect((await first.json()).receiptHeader).toMatchObject({
+    expect((await first.json()).invoice.receiptHeader).toMatchObject({
       tradingName: "Terrace Bar",
       printTradingName: true,
     });
     await suite.db.execute(sql`
       update departments set trading_name = 'Renamed' where id = ${scope!.department_id}
     `);
-    const replay = await app.request("/api/sales", request);
+    const replay = await app.request(`/api/working-orders/${id}/payments`, request);
     expect(replay.status).toBe(200);
-    expect((await replay.json()).receiptHeader).toMatchObject({
+    expect((await replay.json()).invoice.receiptHeader).toMatchObject({
       tradingName: "Terrace Bar",
       printTradingName: true,
     });
@@ -2793,20 +2795,23 @@ describe("persisted cash receipt facts", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
-        workingOrderId: id,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "20.00" },
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "20.00",
+        basket: { lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
         dining: "eat_in",
       }),
     };
-    const first = await app.request("/api/sales", request);
+    const first = await app.request(`/api/working-orders/${id}/payments`, request);
     expect(first.status).toBe(200);
-    const original = await first.json();
+    const { invoice: original } = await first.json();
     expect(original.tender).toEqual({ method: "cash", change: "18.50" });
     expect(original.issuer).toMatchObject({ venueName: "Deli Recibos SL" });
-    const replay = await app.request("/api/sales", request);
+    const replay = await app.request(`/api/working-orders/${id}/payments`, request);
     expect(replay.status).toBe(200);
-    expect((await replay.json()).tender).toEqual(original.tender);
+    expect((await replay.json()).invoice.tender).toEqual(original.tender);
     const printed = await app.request(`/api/sales/${id}/reprint`, {
       method: "POST",
       headers: { cookie },
@@ -3627,21 +3632,26 @@ describe("receipt lines' VAT rates", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const workingOrderId = randomUUID();
-    const res = await app.request("/api/sales", {
+    const res = await app.request(`/api/working-orders/${workingOrderId}/payments`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
         dining: "eat_in",
-        workingOrderId,
-        lines: [
-          { menuItemId: each.menuItemId, quantity: "1" },
-          { menuItemId: pan.id, quantity: "1" },
-        ],
-        tender: { method: "cash", amount: "3.70" },
+        submissionId: workingOrderId,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "3.70",
+        basket: {
+          lines: [
+            { menuItemId: each.menuItemId, quantity: "1" },
+            { menuItemId: pan.id, quantity: "1" },
+          ],
+        },
       }),
     });
     expect(res.status).toBe(200);
-    const sold = (await res.json()) as TillSaleResult;
+    const { invoice: sold } = (await res.json()) as { invoice: TillSaleResult };
     const [sale] = await suite.db
       .select({ id: sales.id })
       .from(sales)
@@ -3669,18 +3679,22 @@ describe("card details on the receipt", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const workingOrderId = randomUUID();
-    const res = await app.request("/api/sales", {
+    const res = await app.request(`/api/working-orders/${workingOrderId}/payments`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
         dining: "eat_in",
-        workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "card", amount: "1.50", ...(externalRef ? { externalRef } : {}) },
+        submissionId: workingOrderId,
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "manual",
+        externalRef,
+        basket: { lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
       }),
     });
     expect(res.status).toBe(200);
-    const sold = (await res.json()) as TillSaleResult;
+    const { invoice: sold } = (await res.json()) as { invoice: TillSaleResult };
     const [sale] = await suite.db
       .select({ id: sales.id })
       .from(sales)

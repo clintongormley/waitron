@@ -30,14 +30,17 @@ import {
   send,
   tabWith,
 } from "./testing/bill-venue.js";
-import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import {
+  payFreshCounterInCash,
+  paySavedBillInCash,
+  takeBillPayment,
+} from "./testing/bill-payment-fixture.js";
 import { runServiceCommand } from "./parties.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { openTillSession } from "./testing/session-device.js";
 import {
   collectOrderOrchestration as collectOrder,
-  payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
 } from "./testing/whole-payment-fixture.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
@@ -584,19 +587,19 @@ describe("paying a counter order never sent, in a mode that sends before payment
 
   it("can hand over a paid ticket_then_pay walk-up once its dish has been sent", async () => {
     const id = randomUUID();
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
+      operator,
+      id,
       {
-        id,
         zoneId: zones.ticket_then_pay,
         lines: [
           { menuItemId: venue.offerFor("Tarta"), quantity: "1" },
           { menuItemId: venue.offerFor("Caña"), quantity: "1" },
         ],
-        tender: { method: "cash", amount: "50.00" },
       },
-      venue.operatorId,
+      "50.00",
     );
 
     await markCollected({ db: venue.db }, venue.cfg, id);
@@ -606,16 +609,16 @@ describe("paying a counter order never sent, in a mode that sends before payment
 
   it("still refuses to hand over a paid walk-up whose only dish goes to no station (ticket.not_fired)", async () => {
     const id = randomUUID();
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
+      operator,
+      id,
       {
-        id,
         zoneId: zones.ticket_then_pay,
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-        tender: { method: "cash", amount: "50.00" },
       },
-      venue.operatorId,
+      "50.00",
     );
     expect(ticketItemCount(id)).toBe(0);
 
@@ -640,16 +643,13 @@ describe("payment and handover in either order end with the same facts", () => {
 
   it("pay then hand over (prepay), and hand over then pay (ticket_then_pay)", async () => {
     const paidFirst = randomUUID();
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
-      {
-        id: paidFirst,
-        zoneId: zones.prepay,
-        lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
-        tender: { method: "cash", amount: "50.00" },
-      },
-      venue.operatorId,
+      operator,
+      paidFirst,
+      { zoneId: zones.prepay, lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }] },
+      "50.00",
     );
     expect((await orderRow(paidFirst)).collectedAt).toBeNull();
     await markCollected({ db: venue.db }, venue.cfg, paidFirst);
@@ -706,11 +706,12 @@ describe("POST /api/orders/:id/collect with a submission id (retry-safe)", () =>
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({ code: "working_order.not_settled" });
 
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
-      { id, lines: [], tender: { method: "cash", amount: "50.00" } },
-      venue.operatorId,
+      operator,
+      id,
+      "50.00",
     );
     expect((await handOverRoute(id, { submissionId })).status).toBe(200);
     expect((await orderRow(id)).collectedAt).not.toBeNull();
@@ -798,16 +799,13 @@ describe("GET /api/orders/counter-waiting", () => {
 
   async function paidPrepay(): Promise<string> {
     const id = randomUUID();
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
-      {
-        id,
-        zoneId: zones.prepay,
-        lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
-        tender: { method: "cash", amount: "50.00" },
-      },
-      venue.operatorId,
+      operator,
+      id,
+      { zoneId: zones.prepay, lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }] },
+      "50.00",
     );
     return id;
   }
@@ -1026,17 +1024,16 @@ describe("GET /api/orders/counter-waiting", () => {
     const abandoned = await parked("ticket_then_pay", "Tarta");
     venue.db.run(sql`update working_orders set status = 'abandoned' where id = ${abandoned}`);
     const paidUnfired = randomUUID();
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
+      operator,
+      paidUnfired,
       {
-        id: paidUnfired,
         zoneId: zones.ticket_then_pay,
-        // Caña goes to no station, so paying sends nothing and the order has nothing fired.
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-        tender: { method: "cash", amount: "50.00" },
       },
-      venue.operatorId,
+      "50.00",
     );
     expect(ticketItemCount(paidUnfired)).toBe(0);
 

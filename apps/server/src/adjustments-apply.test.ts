@@ -1,7 +1,8 @@
+import { openTillSession } from "./testing/session-device.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
+import { observedPaymentSender, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { updateHeldOrder, updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
@@ -45,7 +46,6 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
-  payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   readSettledTicket,
   type TillSaleResult,
@@ -204,18 +204,25 @@ function portions(count: number, ...rows: (string | null)[][]) {
   return Array.from({ length: count }, () => rows).flat();
 }
 
+async function payAdjustedBill(billId: string, tendered: string) {
+  const personId = venue.staffId;
+  const sessionId = await openTillSession(venue.db, {
+    deviceId: venue.cfg.origin.deviceId,
+    personId,
+  });
+  return paySavedBillInCash(
+    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
+    venue.cfg,
+    { personId, sessionId },
+    billId,
+    tendered,
+  );
+}
+
 /** Pays the whole bill in cash, filing its invoice; answers the sale and its lines. */
 async function payAll(billId: string) {
   const due = total(await rowsOf(venue, billId));
-  await payWorkingOrder(
-    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
-    venue.cfg,
-    {
-      id: billId,
-      tender: { method: "cash", amount: due },
-      lines: [],
-    },
-  );
+  await payAdjustedBill(billId, due);
   const [sale] = await inTx(venue, (tx) =>
     tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
   );
@@ -527,16 +534,7 @@ describe("the receipt (ruling R13)", () => {
   it("prints the Burger at €12.00 with a Descuento 100% line beneath it, when the bill is paid and when it is printed again", async () => {
     const billId = await compBurgerAndDiscountBottle();
 
-    const ticket = await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      { id: billId, tender: { method: "cash", amount: "29.50" }, lines: [] },
-    );
+    const ticket = await payAdjustedBill(billId, "29.50");
 
     expect(shown(ticket)).toEqual(ADJUSTED_LINES);
     const again = await inTx(venue, (tx) =>
@@ -3373,16 +3371,7 @@ describe("part of a dish with extras (B11d)", () => {
       quantity: "1",
     });
 
-    const ticket = await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      { id: billId, tender: { method: "cash", amount: "10.50" }, lines: [] },
-    );
+    const ticket = await payAdjustedBill(billId, "10.50");
 
     expect(
       ticket.lines.map((line) => [line.gross, line.listGross, line.adjustments, line.parentLineNo]),
@@ -4192,16 +4181,25 @@ describe("a counter order (B11c)", () => {
     expect(await recordedOn(billId)).toMatchObject([{ action: "comp", reduction: 1200 }]);
   });
 
-  it("discounts a parked order, and the sale route charges the discounted price", async () => {
+  it("charges the discounted price when paying a parked order", async () => {
     const orderId = await parked(counterZone, "Bottle");
 
     await adjust(orderId, { action: "discount_percent", percentBp: 1000 });
-    const paid = await send(venue.app, venue.cookie.staff, "POST", "/api/sales", {
-      dining: "eat_in",
-      lines: [],
-      tender: { method: "cash", amount: "27.00" },
-      workingOrderId: orderId,
-    });
+    const paid = await send(
+      venue.app,
+      venue.cookie.staff,
+      "POST",
+      `/api/working-orders/${orderId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "27.00",
+        applied: "27.00",
+        tip: "0.00",
+      },
+    );
 
     expect(paid.status).toBe(200);
     const [sale] = await inTx(venue, (tx) =>

@@ -298,8 +298,8 @@ describe("a counter sale", () => {
   });
 
   it.each([
-    ["/api/sales", false],
-    ["/api/sales", true],
+    ["bill cash", false],
+    ["bill cash", true],
     ["/api/pay", false],
     ["/api/pay", true],
   ] as const)(
@@ -327,15 +327,20 @@ describe("a counter sale", () => {
       const beforeFiscal = venue.db.all(sql`select * from registros_facturacion order by id`);
       const beforeJobs = venue.db.all(sql`select * from print_jobs order by id`);
 
-      const answer = await send(limited, venue.cookie, "POST", path, {
-        ...(path === "/api/sales"
-          ? { workingOrderId: id, tender: { method: "cash", amount: "0.00" } }
-          : { id }),
+      const basket = {
         lines: stored ? [] : linesOf(counter, { Gratis: 1 }),
         zoneId: counter.zoneId,
         ...(stored ? {} : { invoiceType: "F1", recipient }),
-        dining: "eat_in",
-      });
+      };
+      const answer =
+        path === "bill cash"
+          ? await payCounter(
+              id,
+              basket.lines,
+              { method: "cash", tendered: "0.00" },
+              stored ? {} : { invoiceType: "F1", recipient },
+            )
+          : await send(limited, venue.cookie, "POST", path, { id, ...basket, dining: "eat_in" });
 
       expect(answer).toEqual({
         status: 409,
@@ -442,11 +447,14 @@ describe("a counter sale", () => {
   it("paid in cash from a stored order over the limit is refused, filing nothing", async () => {
     const id = await parked(venue.app, counter, { Lote: 1, Céntimo: 1 });
     const before = written();
-    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
       dining: "eat_in",
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "4000.00" },
+      submissionId: id,
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "4000.00",
+      basket: { lines: [] },
     });
     expect(answer.status).toBe(409);
     expect(answer.json.code).toBe(REFUSED.code);
@@ -462,11 +470,14 @@ describe("a counter sale", () => {
       where id = ${id}`);
     const before = written();
 
-    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
       dining: "eat_in",
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "1600.00" },
+      submissionId: id,
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "1600.00",
+      basket: { lines: [] },
     });
 
     expect(answer).toEqual({
@@ -949,11 +960,14 @@ describe("growing a bill with a saved full-invoice choice", () => {
     expect(savedChoice(id)).toEqual(choice);
     expect(written()).toEqual(before);
 
-    const paid = await send(limited, venue.cookie, "POST", "/api/sales", {
+    const paid = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
       dining: "eat_in",
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "3200.00" },
+      submissionId: id,
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "3200.00",
+      basket: { lines: [] },
     });
     expect(paid).toEqual({
       status: 409,

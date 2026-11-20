@@ -101,7 +101,12 @@ import {
 } from "./testing/whole-payment-fixture.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
-import { payFreshCounterInCash, takeBillPayment } from "./testing/bill-payment-fixture.js";
+import {
+  payCounterBasket,
+  payFreshCounterInCash,
+  paySavedBillInCash,
+  takeBillPayment,
+} from "./testing/bill-payment-fixture.js";
 import {
   DRAWER_KICK,
   enqueueReceiptReprint,
@@ -381,12 +386,13 @@ async function drawerOpensFor(cfg: DeviceRequestConfig): Promise<
     return tx
       .select({
         reason: drawerOpens.reason,
-        saleId: drawerOpens.saleId,
+        saleId: sql<string | null>`coalesce(${drawerOpens.saleId}, ${tenders.saleId})`,
         personId: drawerOpens.personId,
         deviceId: drawerOpens.deviceId,
         printerId: drawerOpens.printerId,
       })
-      .from(drawerOpens);
+      .from(drawerOpens)
+      .leftJoin(tenders, eq(tenders.billPaymentId, drawerOpens.billPaymentId));
   });
 }
 
@@ -612,11 +618,15 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
     lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
   });
 
-  await recordTillSale(
+  const operator = await counterOperator(cfg);
+  await payCounterBasket(
     { ...deps(), admission: testTradingAdmission() },
     cfg,
-    { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
-    OPERATOR,
+    operator,
+    id,
+    { lines: [] },
+    { method: "cash", tendered: "2.00" },
+    id,
   );
   await printSaleReceipt(deps(), cfg, id, "original");
 
@@ -628,11 +638,14 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
   expect(collection).not.toContain("FACTURA");
   expect(collection).not.toContain("TOTAL");
   expect(await fiscalRecordCount(cfg)).toBe(1);
-  await recordTillSale(
+  await payCounterBasket(
     { ...deps(), admission: testTradingAdmission() },
     cfg,
-    { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
-    OPERATOR,
+    operator,
+    id,
+    { lines: [] },
+    { method: "cash", tendered: "2.00" },
+    id,
   );
   await printSaleReceipt(deps(), cfg, id, "original");
   expect(
@@ -771,15 +784,12 @@ describe("receipt grouping after table changes", () => {
         return { tableId: table.id, orderId };
       });
       if (orderFlow === "prepay") {
-        await recordTillSale(
+        await paySavedBillInCash(
           { ...deps(), admission: testTradingAdmission() },
           cfg,
-          {
-            workingOrderId: orderId,
-            lines: [],
-            tender: { method: "cash", amount: "2.00" },
-          },
-          OPERATOR,
+          await counterOperator(cfg),
+          orderId,
+          "2.00",
         );
       } else {
         if (orderFlow === "issued")
@@ -990,15 +1000,13 @@ describe("cash payment drawer separation", () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
-    await recordTillSale(
+    await payFreshCounterInCash(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      {
-        zoneId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "2.00" },
-      },
-      OPERATOR,
+      await counterOperator(cfg),
+      randomUUID(),
+      { zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      "2.00",
     );
     const jobs = await printJobsFor(cfg);
     const drawerJobs = jobs.filter((job) => opensDrawer(new Uint8Array(job.payload)));
@@ -1208,16 +1216,14 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     await configureReceipt(cfg, { printerId });
 
     const explicitPrintOrder6 = randomUUID();
-    await recordTillSale(
+    await payCounterBasket(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      {
-        workingOrderId: explicitPrintOrder6,
-        zoneId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "card", amount: "1.50" },
-      },
-      OPERATOR,
+      await counterOperator(cfg),
+      explicitPrintOrder6,
+      { zoneId: zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      { method: "card", entry: "manual" },
+      explicitPrintOrder6,
     );
     await printSaleReceipt(deps(), cfg, explicitPrintOrder6, "original");
 
@@ -1249,16 +1255,14 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     await configureReceipt(cfg, { printerId });
 
     const explicitPrintOrder7 = randomUUID();
-    await recordTillSale(
+    await payCounterBasket(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      {
-        workingOrderId: explicitPrintOrder7,
-        zoneId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "card", amount: "1.50" },
-      },
-      OPERATOR,
+      await counterOperator(cfg),
+      explicitPrintOrder7,
+      { zoneId: zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      { method: "card", entry: "manual" },
+      explicitPrintOrder7,
     );
     await printSaleReceipt(deps(), cfg, explicitPrintOrder7, "original");
 
@@ -1274,16 +1278,14 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     await configureReceipt(cfg, { printerId });
 
     const explicitPrintOrder8 = randomUUID();
-    await recordTillSale(
+    await payCounterBasket(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      {
-        workingOrderId: explicitPrintOrder8,
-        zoneId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "card", amount: "1.50" },
-      },
-      OPERATOR,
+      await counterOperator(cfg),
+      explicitPrintOrder8,
+      { zoneId: zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      { method: "card", entry: "manual" },
+      explicitPrintOrder8,
     );
     await printSaleReceipt(deps(), cfg, explicitPrintOrder8, "original");
 
@@ -1318,15 +1320,14 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
 
-    await recordTillSale(
+    await payCounterBasket(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      {
-        zoneId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "card", amount: "1.50" },
-      },
-      OPERATOR,
+      await counterOperator(cfg),
+      randomUUID(),
+      { zoneId: zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      { method: "card", entry: "manual" },
+      randomUUID(),
     );
 
     expect(await fiscalRecordCount(cfg)).toBe(1);
@@ -1347,15 +1348,13 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
 
-    await recordTillSale(
+    await payFreshCounterInCash(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      {
-        zoneId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      },
-      OPERATOR,
+      await counterOperator(cfg),
+      randomUUID(),
+      { zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      "1.50",
     );
 
     expect(await fiscalRecordCount(cfg)).toBe(1); // sale still files
@@ -1368,15 +1367,13 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
 
-    await recordTillSale(
+    await payFreshCounterInCash(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      {
-        zoneId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      },
-      OPERATOR,
+      await counterOperator(cfg),
+      randomUUID(),
+      { zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      "1.50",
     );
 
     expect(await fiscalRecordCount(cfg)).toBe(1);
@@ -1571,16 +1568,14 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
     method: "cash" | "card" = "cash",
   ): Promise<void> {
     const workingOrderId = randomUUID();
-    await recordTillSale(
+    await payCounterBasket(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      {
-        workingOrderId,
-        zoneId: product.zoneId,
-        lines: [{ menuItemId: product.menuItemId, quantity: "1" }],
-        tender: { method, amount: "1.50" },
-      },
-      OPERATOR,
+      await counterOperator(cfg),
+      workingOrderId,
+      { zoneId: product.zoneId, lines: [{ menuItemId: product.menuItemId, quantity: "1" }] },
+      method === "cash" ? { method, tendered: "1.50" } : { method, entry: "manual" },
+      workingOrderId,
     );
     await printSaleReceipt(deps(), cfg, workingOrderId, "original");
   }
@@ -1630,8 +1625,8 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
       expect(
         (await drawerOpensFor(cfg)).map((row) => [row.reason, row.deviceId, row.printerId]),
       ).toEqual([
-        [method === "cash" ? "cash_sale" : "card_slip", cfg.origin.deviceId, printerId],
-        [method === "cash" ? "cash_sale" : "card_slip", other.origin.deviceId, printerId],
+        [method === "cash" ? "bill_payment" : "card_slip", cfg.origin.deviceId, printerId],
+        [method === "cash" ? "bill_payment" : "card_slip", other.origin.deviceId, printerId],
       ]);
     },
   );
@@ -1649,7 +1644,7 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
       expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([{ printerId, kick: true }]);
       expect(await drawerOpensFor(cfg)).toEqual([
         {
-          reason: method === "cash" ? "cash_sale" : "card_slip",
+          reason: method === "cash" ? "bill_payment" : "card_slip",
           saleId: expect.any(String),
           personId: OPERATOR,
           deviceId: cfg.origin.deviceId,
@@ -1756,16 +1751,14 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     method: "cash" | "card",
     workingOrderId: string = randomUUID(),
   ): Promise<void> {
-    await recordTillSale(
+    await payCounterBasket(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      {
-        workingOrderId,
-        zoneId: product.zoneId,
-        lines: [{ menuItemId: product.menuItemId, quantity: "1" }],
-        tender: { method, amount: "2.00" },
-      },
-      OPERATOR,
+      await counterOperator(cfg),
+      workingOrderId,
+      { zoneId: product.zoneId, lines: [{ menuItemId: product.menuItemId, quantity: "1" }] },
+      method === "cash" ? { method, tendered: "2.00" } : { method, entry: "manual" },
+      workingOrderId,
     );
     await printSaleReceipt(deps(), cfg, workingOrderId, "original");
   }
@@ -1819,7 +1812,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     );
     expect(await drawerOpensFor(cfg)).toEqual([
       {
-        reason: "cash_sale",
+        reason: "bill_payment",
         saleId,
         personId: OPERATOR,
         deviceId: cfg.origin.deviceId,
@@ -1885,7 +1878,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
       [receipt, "document"],
     ]);
     expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.printerId])).toEqual([
-      ["cash_sale", drawer],
+      ["bill_payment", drawer],
     ]);
   });
 
@@ -1961,15 +1954,14 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
     venue: Awaited<ReturnType<typeof setupVenue>>,
     method: "card" | "cash" = "card",
   ): Promise<{ saleId: string; workingOrderId: string }> {
-    await recordTillSale(
+    await payCounterBasket(
       { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
-      {
-        zoneId: venue.zoneId,
-        lines: [{ menuItemId: venue.each.menuItemId, quantity: "1" }],
-        tender: { method, amount: "1.50" },
-      },
-      OPERATOR,
+      await counterOperator(venue.cfg),
+      randomUUID(),
+      { zoneId: venue.zoneId, lines: [{ menuItemId: venue.each.menuItemId, quantity: "1" }] },
+      method === "cash" ? { method, tendered: "1.50" } : { method, entry: "manual" },
+      randomUUID(),
     );
     const [sale] = await withTransaction(suite.db, (tx) =>
       tx
@@ -2200,17 +2192,20 @@ describe("the device's invoice printer", () => {
 describe("receipt issuer", () => {
   it("keeps a department's printed trading name on reprint after its settings change", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
+    await configureReceipt(cfg, { printerId: await makePrinter({ hasCashDrawer: false }) });
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`update departments set trading_name = 'Deli Counter' `),
     );
     const explicitPrintOrder9 = randomUUID();
-    const filed = await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
-      workingOrderId: explicitPrintOrder9,
-      zoneId,
-      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      tender: { method: "card", amount: "1.50" },
-    });
+    const filed = await payCounterBasket(
+      { ...deps(), admission: testTradingAdmission() },
+      cfg,
+      await counterOperator(cfg),
+      explicitPrintOrder9,
+      { zoneId: zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      { method: "card", entry: "manual" },
+      explicitPrintOrder9,
+    );
     await printSaleReceipt(deps(), cfg, explicitPrintOrder9, "original");
     const saleId = await onlySaleId();
     const original = (await printJobsFor(cfg)).map((job) =>
@@ -2238,12 +2233,16 @@ describe("receipt issuer", () => {
 
   it("leaves a manual till reprint unqueued when its taxpayer row is missing", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
-    const filed = await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
-      zoneId,
-      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      tender: { method: "card", amount: "1.50" },
-    });
+    await configureReceipt(cfg, { printerId: await makePrinter({ hasCashDrawer: false }) });
+    const filed = await payCounterBasket(
+      { ...deps(), admission: testTradingAdmission() },
+      cfg,
+      await counterOperator(cfg),
+      randomUUID(),
+      { zoneId: zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      { method: "card", entry: "manual" },
+      randomUUID(),
+    );
     const saleId = await onlySaleId();
     await withTransaction(suite.db, (tx) => tx.delete(taxpayer));
 
@@ -2255,12 +2254,16 @@ describe("receipt issuer", () => {
 
   it("prints the taxpayer's own name and NIF when the ticket carries no filed issuer", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter() });
-    const filed = await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
-      zoneId,
-      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      tender: { method: "card", amount: "1.50" },
-    });
+    await configureReceipt(cfg, { printerId: await makePrinter({ hasCashDrawer: false }) });
+    const filed = await payCounterBasket(
+      { ...deps(), admission: testTradingAdmission() },
+      cfg,
+      await counterOperator(cfg),
+      randomUUID(),
+      { zoneId: zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      { method: "card", entry: "manual" },
+      randomUUID(),
+    );
     const withoutIssuer = { ...filed, issuer: undefined };
     const taxpayer = (await withTransaction(suite.db, (tx) => readTaxpayer(tx)))!;
     const saleId = await onlySaleId();
@@ -2613,16 +2616,14 @@ describe("the receipt's top block: logo, address, phone and email", () => {
 
   async function sellOne(cfg: DeviceRequestConfig, each: { menuItemId: string }, zoneId: string) {
     const workingOrderId = randomUUID();
-    const ticket = await recordTillSale(
+    const ticket = await payCounterBasket(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      {
-        workingOrderId,
-        zoneId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "card", amount: "1.50" },
-      },
-      OPERATOR,
+      await counterOperator(cfg),
+      workingOrderId,
+      { zoneId: zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+      { method: "card", entry: "manual" },
+      workingOrderId,
     );
     await printSaleReceipt(deps(), cfg, workingOrderId, "original");
     return ticket;
@@ -2831,7 +2832,9 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     expect(topBlock(payload!)).toEqual(["Receipt Deli Ltd", `NIF: ${taxId}`]);
     // The footer prints after the tender line.
     const lines = printedLines(payload!).map((line) => line.trim());
-    expect(lines.slice(lines.indexOf("Tarjeta") + 1).filter(Boolean)).toEqual([]);
+    const tenderAt = lines.findIndex((line) => /^Tarjeta\s+1,50 €$/.test(line));
+    expect(tenderAt).toBeGreaterThan(0);
+    expect(lines.slice(tenderAt + 1).filter(Boolean)).toEqual([]);
   });
 
   it("reprints with the trim saved since, as it does the slogan", async () => {
@@ -3563,16 +3566,19 @@ describe("department receipt presentation on thermal jobs", () => {
       .update(departments)
       .set({ printTradingName: true })
       .where(eq(departments.id, departmentId!));
-    const sell = async () => {
-      const workingOrderId = randomUUID();
-      const ticket = await payFreshCounterInCash(
+    const pay = async (workingOrderId: string) =>
+      payCounterBasket(
         { ...deps(), admission: testTradingAdmission() },
         cfg,
         await counterOperator(cfg),
         workingOrderId,
         { zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
-        "1.50",
+        { method: "cash", tendered: "1.50" },
+        workingOrderId,
       );
+    const sell = async () => {
+      const workingOrderId = randomUUID();
+      const ticket = await pay(workingOrderId);
       await printSaleReceipt(deps(), cfg, workingOrderId, "original");
       return ticket;
     };
@@ -3580,7 +3586,7 @@ describe("department receipt presentation on thermal jobs", () => {
       (await suite.db.select().from(printJobs)).filter(
         (job) => job.saleId !== null && job.kind === "document",
       );
-    return { cfg, departmentId: departmentId!, zoneId, sell, documents };
+    return { cfg, departmentId: departmentId!, zoneId, pay, sell, documents };
   }
 
   it.each(["58mm", "80mm"] as const)(
@@ -3686,7 +3692,7 @@ describe("department receipt presentation on thermal jobs", () => {
   );
 
   it("keeps one committed sale, tender, header and drawer when an explicit print fails, including replay", async () => {
-    const { cfg, sell } = await setupReceipt();
+    const { cfg, pay, sell } = await setupReceipt();
     const formatter = vi.spyOn(receiptTicket, "formatReceipt").mockImplementationOnce(() => {
       throw new Error("untrusted imported detail");
     });
@@ -3707,16 +3713,7 @@ describe("department receipt presentation on thermal jobs", () => {
       const before = await suite.db
         .select({ id: invoiceSeries.id, nextNumber: invoiceSeries.nextNumber })
         .from(invoiceSeries);
-      const replay = await recordTillSale(
-        { ...deps(), admission: testTradingAdmission() },
-        cfg,
-        {
-          workingOrderId: sold[0]!.workingOrderId!,
-          lines: [],
-          tender: { method: "cash", amount: "1.50" },
-        },
-        OPERATOR,
-      );
+      const replay = await pay(sold[0]!.workingOrderId!);
       await printSaleReceipt(deps(), cfg, sold[0]!.workingOrderId!, "original");
       expect(replay.invoiceNumber).toBe(ticket.invoiceNumber);
       expect(await fiscalRecordCount(cfg)).toBe(1);
@@ -3733,7 +3730,7 @@ describe("department receipt presentation on thermal jobs", () => {
   });
 
   it("refreshes a cash replay's text and address without another drawer or fiscal record", async () => {
-    const { cfg, departmentId, sell } = await setupReceipt();
+    const { cfg, departmentId, pay, sell } = await setupReceipt();
     await storeDepartmentReceipt(departmentId, {
       headerSubtitle: { "es-ES": "Original subtitle" },
     });
@@ -3754,16 +3751,7 @@ describe("department receipt presentation on thermal jobs", () => {
       .set({ receiptText: { headerSubtitle: { "es-ES": "Current subtitle" } } })
       .where(eq(departments.id, departmentId));
     await seedVenueSettings(suite.db, { addressLine1: "Current street" });
-    const replay = await recordTillSale(
-      { ...deps(), admission: testTradingAdmission() },
-      cfg,
-      {
-        workingOrderId: sale!.workingOrderId!,
-        lines: [],
-        tender: { method: "cash", amount: "1.50" },
-      },
-      OPERATOR,
-    );
+    const replay = await pay(sale!.workingOrderId!);
     expect(replay.receiptTrim).toEqual({ headerSubtitle: "Current subtitle" });
     expect(replay.venueAddress).toEqual(["Current street", "28013 Madrid"]);
     expect(replay.receiptSettings).toEqual({ printAddress: false });
@@ -4187,14 +4175,18 @@ describe("A964 collection language", () => {
           zoneId: v.zoneId,
           lines: [{ menuItemId: v.each.menuItemId, quantity: "1" }],
         });
+        const operator = await counterOperator(cfg);
         const submit = () =>
           mode === "ticket_then_pay"
             ? placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, id, OPERATOR)
-            : recordTillSale(
+            : payCounterBasket(
                 { ...deps(), admission: testTradingAdmission() },
                 cfg,
-                { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
-                OPERATOR,
+                operator,
+                id,
+                { lines: [] },
+                { method: "cash", tendered: "2.00" },
+                id,
               );
         await submit();
         const added = (await suite.db.select().from(printJobs)).filter(

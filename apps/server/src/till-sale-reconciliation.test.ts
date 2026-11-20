@@ -30,16 +30,21 @@ describe("cash sales while reconciliation is unknown", () => {
         now: () => ({ ...v.clock.now(), instant: AT, offsetMinutes: 60 }),
       };
       const app = v.appAt(clock);
-      const sell = (workingOrderId: string) =>
-        app.request("/api/sales", {
+      const sell = (billId: string) =>
+        app.request(`/api/working-orders/${billId}/payments`, {
           method: "POST",
           headers: { cookie: v.cookie, "content-type": "application/json" },
           body: JSON.stringify({
             dining: "eat_in",
-            workingOrderId,
-            zoneId: v.zoneId,
-            lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],
-            tender: { method: "cash", amount: "35.00" },
+            submissionId: billId,
+            kind: "share",
+            shareOf: 1,
+            method: "cash",
+            tendered: "35.00",
+            basket: {
+              zoneId: v.zoneId,
+              lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],
+            },
           }),
         });
       expect((await sell(randomUUID())).status).toBe(200);
@@ -88,7 +93,7 @@ describe("cash sales while reconciliation is unknown", () => {
         const id = randomUUID();
         const response = await sell(id);
         expect(response.status).toBe(200);
-        const ticket = await response.json();
+        const { invoice: ticket } = await response.json();
         expect(ticket).toMatchObject({
           invoiceNumber: "A/2",
           issuedAt: AT.toISOString(),
@@ -97,7 +102,7 @@ describe("cash sales while reconciliation is unknown", () => {
         });
         const replay = await sell(id);
         expect(replay.status).toBe(200);
-        expect((await replay.json()).invoiceNumber).toBe("A/2");
+        expect((await replay.json()).invoice.invoiceNumber).toBe("A/2");
         const records = (
           await suite.db.execute(sql`select * from registros_facturacion order by secuencia`)
         ).rows;

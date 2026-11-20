@@ -160,7 +160,7 @@ describe("till attendance recorder admission", () => {
   );
 
   it.each(["counter", "collection"] as const)(
-    "passes the admitted %s collector to whole-payment capture",
+    "passes the admitted %s collector to payment capture",
     async (path) => {
       const api = app();
       const opened = await login(api);
@@ -175,30 +175,36 @@ describe("till attendance recorder admission", () => {
       }
       vi.setSystemTime(new Date("2026-10-14T13:00:00.987Z"));
       const paid = await api.request(
-        path === "counter" ? "/api/sales" : `/api/working-orders/${id}/collect`,
+        `/api/working-orders/${id}/${path === "counter" ? "payments" : "collect"}`,
         {
           method: "POST",
           headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
           body: JSON.stringify({
             ...(path === "counter"
               ? {
-                  workingOrderId: id,
-                  zoneId: v.counter.zoneId,
-                  lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+                  submissionId: id,
+                  kind: "share",
+                  shareOf: 1,
+                  method: "cash",
+                  tendered: "20.00",
+                  basket: {
+                    zoneId: v.counter.zoneId,
+                    lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+                  },
                   dining: "eat_in",
                 }
-              : {}),
-            ...(path === "collection"
-              ? { expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, id)) }
-              : {}),
-            tender: { method: "cash", amount: "20.00" },
+              : {
+                  expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, id)),
+                  tender: { method: "cash", amount: "20.00" },
+                }),
             personId: "untrusted person",
             at: "2026-10-15T20:00:00Z",
           }),
         },
       );
       expect(paid.status).toBe(200);
-      expect(await paid.json()).toMatchObject({
+      const result = await paid.json();
+      expect(path === "counter" ? result.invoice : result).toMatchObject({
         total: "12.00",
         tender: { method: "cash", change: "8.00" },
       });
