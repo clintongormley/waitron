@@ -66,8 +66,10 @@ never extends your management login. Choose **Refresh status** to check immediat
 A Cloud outage keeps the last known configuration and shows that status is unavailable.
 Pending requests are saved before sending, so a restart can recover a renewal or stop
 request whose response was lost. A revoked installation, whether stopped here or removed in
-Cloud, gets a new identity only when someone chooses **Connect again**. That forgets the venue's
-Cloud venue id before saving the new key, so Cloud adds the box as a new venue.
+Cloud, gets a new identity only when someone chooses **Connect again** on the primary. That
+rechecks the person's permission, the primary role and the sign-in confirmation, sets aside a
+completed reconnection record, forgets the venue's Cloud venue id, and pairs with a new key and a
+start request naming no venue, so Cloud adds the box as a new venue.
 
 Choose **Stop Cloud access**, read the consequences, then confirm. You need a live
 local manager session. You can stop access even after this node loses its primary
@@ -484,6 +486,10 @@ name in the same folder (`replacement.json.set-aside-<time>`), leaving `cloud/re
 asks Cloud to reissue the request; the Cloud owner approves it as in step 2. After a lost reply,
 **Check reconnection** sends the reissue again with the same keys. A fresh request does not carry
 a stop recorded only in the unreadable file.
+
+**Connect again** on a revoked installation sets a completed `cloud/replacement.json` aside under
+the same kind of second name (`replacement.json.set-aside-<time>`), so the next start does not
+import the old connection. Its contents stay until a reset.
 
 Reconnecting registers the replacement with Cloud. Installing the new WireGuard tunnel remains
 an operator step. For a test installation using the separate staff entrance, the certificate

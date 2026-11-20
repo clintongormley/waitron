@@ -303,7 +303,7 @@ Desactivarlo no pide una nueva confirmación de identidad.
 
 Si restauras una copia hecha antes de conectarlo con Cloud, abre **Servicios Cloud** en **Sistema** y elige **Conectar con Cloud** de nuevo.
 
-Si el acceso a Cloud ha terminado, porque alguien eligió **Detener el acceso a Cloud** en el servidor o eliminó el local en Waitron Cloud, **Servicios Cloud** lo indica. Elige **Volver a conectar** para añadir el local a Waitron Cloud como un local nuevo.
+Si el acceso a Cloud ha terminado, porque alguien eligió **Detener el acceso a Cloud** en el servidor o eliminó el local en Waitron Cloud, **Servicios Cloud** lo indica. En el servidor principal, elige **Volver a conectar** para añadir el local a Waitron Cloud como un local nuevo.
 
 Para impedir que el personal abra el panel desde fuera del local, abre **Servicios Cloud** en **Sistema**
 en el servidor principal y elige **Desactivar el acceso remoto**. Si usas la dirección del personal,
@@ -313,7 +313,7 @@ servidor vuelva a conectarse.
 
 El estado junto al botón es la opción que has guardado. Abre la dirección del personal para
 comprobar si puedes conectarte; esta página no prueba esa conexión. Si un cambio falla, revisa la opción guardada y elige **Actualizar estado** para volver a intentar la conexión. **Detener el acceso a Cloud** es la opción aparte
-que detiene permanentemente todos los servicios de Cloud.
+que detiene todos los servicios de Cloud.
 
 ## Aprobar la recuperación del propietario de Cloud {#cloud-owner-recovery}
 

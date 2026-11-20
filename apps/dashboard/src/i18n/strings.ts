@@ -678,7 +678,7 @@ export const en = {
   "cloud.confirm_stop": "Confirm stop",
   "cloud.cancel_stop": "Keep Cloud access",
   "cloud.stop_help":
-    "This permanently stops this server’s Cloud access, including remote access and new backups. Local trading continues. Stored backups and subscriptions are kept; this does not cancel billing.",
+    "This ends this server’s current Cloud connection, including remote access and new backups. Local trading continues. Stored backups and subscriptions stay with this venue in Waitron Cloud; this does not cancel billing. Connect again later adds the server to Waitron Cloud as a new venue.",
   "cloud.state_unconfigured": "Not configured",
   "cloud.state_provisioning": "Setting up",
   "cloud.state_ready": "Configured",
@@ -5227,7 +5227,7 @@ export const es: Record<StringKey, string> = {
   "cloud.confirm_stop": "Confirmar detención",
   "cloud.cancel_stop": "Mantener el acceso a Cloud",
   "cloud.stop_help":
-    "Esto detiene permanentemente el acceso de este servidor a Cloud, incluido el acceso remoto y las nuevas copias. La venta local continúa. Se conservan las copias guardadas y suscripciones; no se cancela la facturación.",
+    "Esto termina la conexión actual de este servidor con Cloud, incluido el acceso remoto y las nuevas copias. La venta local continúa. Las copias guardadas y las suscripciones se quedan con este local en Waitron Cloud; no se cancela la facturación. Si vuelves a conectar más tarde, el servidor se añade a Waitron Cloud como un local nuevo.",
   "cloud.state_unconfigured": "Sin configurar",
   "cloud.state_provisioning": "Configurando",
   "cloud.state_ready": "Configurado",
