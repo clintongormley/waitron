@@ -190,7 +190,9 @@ export function pairingV4Payload(c: PairingV4Claims): Buffer {
 
 function singleLine(value: unknown): value is string {
   return (
-    typeof value === "string" && value === value.trim() && !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(value)
+    typeof value === "string" &&
+    value === value.trim() &&
+    !/[\p{Cc}\p{Cs}\p{Zl}\p{Zp}]/u.test(value)
   );
 }
 

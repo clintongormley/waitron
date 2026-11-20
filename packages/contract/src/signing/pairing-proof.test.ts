@@ -288,7 +288,7 @@ it("refuses a signed action outside the v4 contract", () => {
   ).toThrow(PairingError);
 });
 
-it("refuses an object in place of the signed v4 argument tuple", () => {
+it("refuses a non-list in place of the signed v4 argument tuple", () => {
   expect(() => checkV4(signed(v4Vector("status", {})), "status")).toThrow(PairingError);
   expect(() => checkV4(signed(v4Vector("status", "")), "status")).toThrow(PairingError);
 });
@@ -373,6 +373,7 @@ it.each([
   ["ES", profile[1], profile[2], "", "a".repeat(201)],
   ["ES", profile[1], profile[2], "", ""],
   ["ES", " Bar Pepe", profile[2], "", profile[4]],
+  ["ES", "Bar \ud800 Pepe", profile[2], "", profile[4]],
   ["ES", profile[1], profile[2], "A\tB", profile[4]],
   ["ES", profile[1], profile[2], "", "A\u2028B"],
   ["ES", profile[1], profile[2], "", "A\u2029B"],

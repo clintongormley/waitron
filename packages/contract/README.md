@@ -12,10 +12,11 @@ which trims it and keeps at most 120 Unicode code points; send it empty on `stat
 or when the venue has no name.
 
 Use `pairingV4Payload` and `verifyPairingV4Proof` for the test-only Cloud sign-in
-round trip. Give the encoder the tuple for the action you are signing, with the
-venue fields trimmed and missing address fields or tax number set to empty
-strings. The encoder serializes the tuple as supplied. The verifier checks its
-shape, field limits, signature and 8,192-character encoded payload limit.
+round trip. Give the encoder the tuple for the action you are signing. Supply
+trimmed, well-formed Unicode for the venue fields and use empty strings for
+missing address fields or tax number. The encoder serializes the tuple as
+supplied. The verifier checks its shape, field limits, signature and
+8,192-character encoded payload limit.
 The receiving app checks the configured callback and box key, accepts the
 one-use code and decides whether the account may register the venue.
 
