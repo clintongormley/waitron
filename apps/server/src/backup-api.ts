@@ -295,6 +295,11 @@ async function probeArchive(
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.failed");
+  // On apply and rotate a too-short key can be the body's; on this route it is always the stored one.
+  const runStoredKey = createErrorBoundary(
+    { ...STATUS, "backup.recovery_key_too_short": 409 },
+    "backup.failed",
+  );
   const buildBackend = deps.buildBackend ?? buildBackupBackend;
 
   const authorize = async (c: Context): Promise<string> => {
@@ -556,7 +561,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   // it. The body is never logged: the error boundary logs codes and params, never response bodies,
   // and this route logs nothing.
   app.get("/api/backup/recovery-key", (c) =>
-    run(c, log, async () => {
+    runStoredKey(c, log, async () => {
       await authorize(c);
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       let key: string | undefined;

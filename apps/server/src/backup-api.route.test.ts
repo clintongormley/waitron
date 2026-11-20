@@ -1052,7 +1052,7 @@ describe("backup admin routes", () => {
     expect(await st.json()).toMatchObject({ enabled: false, recoveryKeySet: true });
     // A key no archive would accept is not handed out to be recorded.
     const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-    expect(rk.status).toBe(400);
+    expect(rk.status).toBe(409);
     expect(await rk.json()).toMatchObject({ error: { code: "backup.recovery_key_too_short" } });
   }, 60_000);
 
