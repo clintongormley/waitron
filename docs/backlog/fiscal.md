@@ -1177,6 +1177,12 @@ recovery, a bill payment the box completes later, or the close of day (`close-of
 end of the business day the bill was opened in) issues it on a later calendar day than the moment it
 passes (`issueOrderMoment`); every other path issues it with one date. The plan's
 "Amendment 2026-11-19" has the meeting's meal-end rule this follows._
+_2026-11-20 (LATER-SALE-DATE review fix): the close of day wins when it came first, whichever path
+issues the bill. A table bill the close would end (`closeOfDayEnd`, `close-of-day.ts`: this node's,
+with a trusted opening time, not left by a restore, no dish the kitchen was never asked for), issued
+after the business day it was opened in ended, is dated no later than that day's end, so a bill paid,
+printed, recorded as a walkout or completed by a card found later files the same day as the close
+would have given it. A takeaway, and a bill whose business day has not ended, keep the rule above._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 

@@ -80,7 +80,7 @@ export async function issueBillAtClose(
   billId: string,
   rule: CloseOfDayRule,
 ): Promise<CloseOfDayOutcome> {
-  const bill = await readDueBill(tx, cfg, billId, rule);
+  const bill = await readDueBill(tx, cfg.nodeId, billId, rule);
   if (bill === undefined) return { kind: "not_due" };
   const reading = deps.clock.now();
   await deps.backend.refuseUntilRecordable(tx, reading);
@@ -94,13 +94,13 @@ export async function issueBillAtClose(
   if ((await ordersWithUnfiredDish(tx, [billId])).has(billId))
     return { kind: "left_open", reason: "dish_not_made" };
 
+  // Dated by closeOfDayEnd, as every path that issues a bill the close would end is.
   const invoice = await priceForIssuance(
     tx,
     pinnedAt(deps.clock, reading),
     deps.backend,
     cfg,
     billId,
-    dayEndedAt(rule.venueClock, bill.openedAt),
   );
   const total = invoice.priced.total;
   const owed = await stillOwedOnIssuedBill(tx, billId, total);
@@ -124,14 +124,9 @@ export async function issueBillAtClose(
   return { kind: "issued", saleId };
 }
 
-/** The bill when it is due under `rule`: a table bill with lines and no sale, opened by this node
- * and before the day began, that no restore left for staff (D6). */
-async function readDueBill(
-  tx: Transaction,
-  cfg: SaleOriginConfig,
-  billId: string,
-  rule: CloseOfDayRule,
-) {
+/** The bill when the close would end it once its business day is over: a table bill with lines,
+ * opened by this node with a trusted opening time, that no restore left for staff (D6). */
+async function readCloseableBill(tx: Transaction, nodeId: string, billId: string) {
   const [bill] = await tx
     .select({
       status: workingOrders.status,
@@ -152,19 +147,59 @@ async function readDueBill(
       ),
     )
     .groupBy(workingOrders.id);
-  if (bill === undefined || bill.lines === 0 || bill.nodeId !== cfg.nodeId) return undefined;
-  if ((await readIssuedSales(tx, [billId])).has(billId)) return undefined;
-  if (!openedInDueSpan(bill.openedAt, rule)) return undefined;
+  if (bill === undefined || bill.lines === 0 || bill.nodeId !== nodeId || bill.openedAt === null)
+    return undefined;
   return {
     status: bill.status,
     partyId: bill.partyId!,
     openedBy: bill.openedBy,
-    openedAt: bill.openedAt!,
+    openedAt: bill.openedAt,
   };
 }
 
-/** The end of the business day the bill was opened in: the moment its meal ended, whenever the
- * close issues it. */
+/** {@link readCloseableBill}'s bill when it is due under `rule`. */
+async function readDueBill(tx: Transaction, nodeId: string, billId: string, rule: CloseOfDayRule) {
+  const bill = await readCloseableBill(tx, nodeId, billId);
+  return bill !== undefined && (await isDue(tx, billId, bill.openedAt, rule)) ? bill : undefined;
+}
+
+/** Opened before the day began, and with no sale yet. */
+async function isDue(
+  tx: Transaction,
+  billId: string,
+  openedAt: string,
+  rule: CloseOfDayRule,
+): Promise<boolean> {
+  return openedInDueSpan(openedAt, rule) && !(await readIssuedSales(tx, [billId])).has(billId);
+}
+
+/**
+ * The end of the business day `billId` was opened in, when the close of day would end the bill and
+ * that day has ended by `issuedAt`: the latest moment its meal can have ended, whichever path issues
+ * it. Undefined otherwise. A bill holding a dish the kitchen was never asked for is left open by the
+ * close, so its meal has not ended; a payment still moving only makes the close try again.
+ */
+export async function closeOfDayEnd(
+  tx: Transaction,
+  scope: { nodeId: string },
+  billId: string,
+  issuedAt: Date,
+): Promise<string | undefined> {
+  const bill = await readCloseableBill(tx, scope.nodeId, billId);
+  if (bill === undefined) return undefined;
+  const venueClock = await readVenueClock(tx);
+  const rule = { dayStartedAt: dayStartAt(venueClock, issuedAt), venueClock };
+  if (!(await isDue(tx, billId, bill.openedAt, rule))) return undefined;
+  if ((await ordersWithUnfiredDish(tx, [billId])).has(billId)) return undefined;
+  return dayEndedAt(venueClock, bill.openedAt);
+}
+
+/** The start of the business day `at` falls in. */
+function dayStartAt(venueClock: BusinessDayClock, at: Date): Date {
+  return new Date(businessDayBounds(venueClock, businessDayAt(venueClock, at)).startAt);
+}
+
+/** The end of the business day the bill was opened in. */
 function dayEndedAt(venueClock: BusinessDayClock, openedAt: string): string {
   return businessDayBounds(venueClock, businessDayAt(venueClock, new Date(openedAt))).endAt;
 }
@@ -381,9 +416,7 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
         queryAgain = true;
       }
       const venueClock = await readVenueClock(deps.db);
-      const dayStartedAt = new Date(
-        businessDayBounds(venueClock, businessDayAt(venueClock, reading)).startAt,
-      );
+      const dayStartedAt = dayStartAt(venueClock, reading);
       if (!queryAgain && dayStartedAt.getTime() <= queriedDayStart) return { nextDueAt: null };
       queryAgain = false;
       queriedDayStart = dayStartedAt.getTime();

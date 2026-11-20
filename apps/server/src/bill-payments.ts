@@ -931,6 +931,7 @@ async function issueOrSettleWhenFullyPaid(
     tx,
     cfg,
     deps,
+    workingOrderId,
     await issuancePass(tx, workingOrderId, stored),
     options.closedAt === undefined
       ? undefined

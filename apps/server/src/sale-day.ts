@@ -1,5 +1,5 @@
 import {
-  prepareIssueClock,
+  issueClockIn,
   readIssueZone,
   type FiscalBackend,
   type IssueScope,
@@ -8,17 +8,8 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { GrossLines } from "@waitron/menu";
 import { civilDateOf } from "@waitron/reporting";
+import { closeOfDayEnd } from "./close-of-day.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
-
-/** The venue's calendar day at `instant`, in its zone at that instant: across a change of clocks
- * the issue's offset would name the wrong day. */
-export async function venueDayOf(
-  tx: Transaction,
-  scope: IssueScope,
-  instant: string,
-): Promise<string> {
-  return civilDateOf(new Date(instant), await readIssueZone(tx, scope));
-}
 
 /** The card row's columns {@link cardSaleMoment} reads. */
 export interface CardTiming {
@@ -41,18 +32,34 @@ export function cardSaleMoment(card: CardTiming): string | null {
 }
 
 /**
- * Prepare the issue clock and {@link issueMoment} an order's invoice: every till path that files an
- * order's invoice issues it here. `mealEndedAt` is when the meal ended, for an invoice issued after
- * that; without it the invoice carries its issue date alone.
+ * Prepare the issue clock and {@link issueMoment} order `orderId`'s invoice: every till path that
+ * files an order's invoice issues it here. `mealEndedAt` is when the meal ended, for an invoice
+ * issued after that; without it the invoice carries its issue date alone. A bill the close of day
+ * would end, issued after its business day ended, is dated no later than that day's end
+ * ({@link closeOfDayEnd}).
  */
 export async function issueOrderMoment(
   tx: Transaction,
   scope: IssueScope,
   issuer: { clock: TrustedClock; backend: Pick<FiscalBackend, "assertRecordableAt"> },
+  orderId: string,
   gross: GrossLines,
   mealEndedAt?: string,
 ): Promise<IssueMoment> {
-  const issueClock = await prepareIssueClock(tx, scope, issuer.clock);
-  const mealDay = mealEndedAt === undefined ? undefined : await venueDayOf(tx, scope, mealEndedAt);
+  const zone = await readIssueZone(tx, scope);
+  const issueClock = issueClockIn(zone, issuer.clock);
+  const ended = earlier(
+    mealEndedAt,
+    await closeOfDayEnd(tx, scope, orderId, issueClock.now().instant),
+  );
+  // The zone's offset at the instant itself: across a change of clocks the issue's offset would
+  // name the wrong day.
+  const mealDay = ended === undefined ? undefined : civilDateOf(new Date(ended), zone);
   return issueMoment(issueClock, gross, issuer.backend, mealDay);
+}
+
+function earlier(a: string | undefined, b: string | undefined): string | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return Date.parse(b) < Date.parse(a) ? b : a;
 }

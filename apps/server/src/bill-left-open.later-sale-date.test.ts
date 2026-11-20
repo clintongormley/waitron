@@ -55,6 +55,19 @@ async function expectOneDate(venue: BillVenue, billId: string, issueDay: string)
   expect(record).toEqual({ operationDate: null, issueDate: issueDay });
 }
 
+/** Dates a bill's trusted opening at `at`, as a bill seated then. */
+function openedAt(venue: BillVenue, billId: string, at: string): void {
+  venue.db.run(sql`update working_orders set trusted_opened_at = ${at} where id = ${billId}`);
+}
+
+/** The bill files the calendar day Monday's business day ended on, as the close of day would. */
+async function expectCloseOfDay(venue: BillVenue, billId: string, issueDay: string) {
+  const { supplyDay, ticket, record } = await filedFor(venue, billId);
+  expect(supplyDay).toBe("2026-03-17");
+  expect(ticket.saleDay).toBe("2026-03-17");
+  expect(record).toEqual({ operationDate: "2026-03-17", issueDate: issueDay });
+}
+
 function partyRevisionNow(venue: BillVenue, partyId: string): number {
   return venue.db.all<{ revision: number }>(
     sql`select revision from parties where id = ${partyId}`,
@@ -89,7 +102,7 @@ async function serveAt(venue: BillVenue, billId: string, at: string, { undo = fa
   }
 }
 
-describe("a bill's serving marks never date its invoice", () => {
+describe("a bill left open past its business day is dated by its close, never by a serving mark", () => {
   it("keeps one date for a placed takeaway collected on Thursday", async () => {
     const venue = await provisionBillVenue(suite.db);
     const id = randomUUID();
@@ -119,20 +132,23 @@ describe("a bill's serving marks never date its invoice", () => {
     await expectOneDate(venue, id, "2026-03-19");
   });
 
-  it("keeps one date for a Monday meal served on Monday and paid in cash on Thursday", async () => {
+  it("files the end of Monday's business day for a Monday meal served on Monday and paid in cash on Thursday", async () => {
     const venue = await provisionBillVenue(suite.db);
     const party = await seatedWith(venue, "Croquettes");
+    openedAt(venue, party.tabId, MON_2200);
     await serveAt(venue, party.tabId, MON_2230);
 
     const paid = await cashSale(venue, THU_1200, party.tabId, "10.00");
 
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-    await expectOneDate(venue, party.tabId, "2026-03-19");
+    expect(await statusOf(venue, party.tabId)).toBe("settled");
+    await expectCloseOfDay(venue, party.tabId, "2026-03-19");
   });
 
-  it("keeps one date for a Monday meal served on Monday whose unpaid departure is recorded on Thursday", async () => {
+  it("files the end of Monday's business day for a Monday meal served on Monday whose unpaid departure is recorded on Thursday", async () => {
     const venue = await provisionBillVenue(suite.db);
     const party = await seatedWith(venue, "Croquettes");
+    openedAt(venue, party.tabId, MON_2200);
     await serveAt(venue, party.tabId, MON_2230);
     const session = await withTransaction(venue.db, async (tx) => {
       const [person] = await seedPersons(tx, {
@@ -158,15 +174,13 @@ describe("a bill's serving marks never date its invoice", () => {
     );
 
     expect(departed.status, JSON.stringify(departed.json)).toBe(200);
-    const { supplyDay, ticket, record } = await filedFor(venue, party.tabId);
-    expect(supplyDay).toBeNull();
-    expect(ticket).not.toHaveProperty("saleDay");
-    expect(record).toEqual({ operationDate: null, issueDate: "2026-03-19" });
+    await expectCloseOfDay(venue, party.tabId, "2026-03-19");
   });
 
-  it("keeps one date for a Monday meal served on Monday whose bill is printed (Print the bill) on Thursday", async () => {
+  it("files the end of Monday's business day for a Monday meal served on Monday whose bill is printed (Print the bill) on Thursday", async () => {
     const venue = await provisionBillVenue(suite.db);
     const party = await seatedWith(venue, "Croquettes");
+    openedAt(venue, party.tabId, MON_2200);
     await serveAt(venue, party.tabId, MON_2230);
     venue.db.run(sql`
       update device_profiles
@@ -188,10 +202,7 @@ describe("a bill's serving marks never date its invoice", () => {
     );
 
     expect(printed.status, JSON.stringify(printed.json)).toBe(200);
-    const { supplyDay, ticket, record } = await filedFor(venue, party.tabId);
-    expect(supplyDay).toBeNull();
-    expect(ticket).not.toHaveProperty("saleDay");
-    expect(record).toEqual({ operationDate: null, issueDate: "2026-03-19" });
+    await expectCloseOfDay(venue, party.tabId, "2026-03-19");
   });
 
   it("keeps one date for a takeaway moved to a table, marked served on Monday and handed over on Thursday", async () => {
@@ -212,7 +223,7 @@ describe("a bill's serving marks never date its invoice", () => {
     await expectOneDate(venue, billId, "2026-03-19");
   });
 
-  it("keeps one date when a later serving mark is taken back and the rest cancelled before payment", async () => {
+  it("files the end of Monday's business day when a later serving mark is taken back and the rest cancelled before payment", async () => {
     const venue = await provisionBillVenue(suite.db);
     const billId = await withTransaction(venue.db, async (tx) => {
       const table = await createTable(tx, venue.cfg, {
@@ -226,6 +237,7 @@ describe("a bill's serving marks never date its invoice", () => {
       await fireAll(tx, venue.cfg, tabId);
       return tabId;
     });
+    openedAt(venue, billId, MON_2200);
     await serveAt(venue, billId, MON_2200);
     await serveAt(venue, billId, TUE_0910);
     await serveAt(venue, billId, TUE_0910, { undo: true });
@@ -246,6 +258,7 @@ describe("a bill's serving marks never date its invoice", () => {
     const paid = await cashSale(venue, THU_1200, billId, "10.00");
 
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-    await expectOneDate(venue, billId, "2026-03-19");
+    expect(await statusOf(venue, billId)).toBe("settled");
+    await expectCloseOfDay(venue, billId, "2026-03-19");
   });
 });

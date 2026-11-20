@@ -807,6 +807,7 @@ async function fileImmediateSale(
     tx,
     cfg,
     deps,
+    workingOrderId,
     await issuancePass(tx, workingOrderId, order),
   );
   // Before the owes-nothing check, so a malformed cash amount is refused whatever is owed.
@@ -1568,6 +1569,7 @@ async function finalizeCapture(
         tx,
         cfg,
         deps,
+        req.id,
         grossInP1,
       );
       const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
@@ -1706,6 +1708,7 @@ async function finalizeRecovery(
         tx,
         cfg,
         deps,
+        req.id,
         await issuancePass(tx, req.id, order),
         cardSaleMoment(startedOn!) ?? undefined,
       );

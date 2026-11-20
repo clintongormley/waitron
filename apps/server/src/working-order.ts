@@ -7680,6 +7680,7 @@ export async function priceForIssuance(
       tx,
       cfg,
       { clock, backend },
+      id,
       await issuancePass(tx, id, order),
       mealEndedAt,
     )),
