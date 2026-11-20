@@ -1,6 +1,14 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
-import type { WtButton, WtDialog, WtFormActions, WtInput } from "@waitron/ui";
+import type {
+  AddressLookupProvider,
+  AddressLookupResult,
+  WtAddressLookup,
+  WtButton,
+  WtDialog,
+  WtFormActions,
+  WtInput,
+} from "@waitron/ui";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -256,14 +264,14 @@ it("a refusal that arrives after the dialog was dismissed is reported through th
 });
 
 it("a saved address with surrounding spaces or another Unicode spelling keeps Save quiet, and a change still names the stored spelling", async () => {
-  const stored = "  Plaça Major 1, 08002 Barcelona  ";
+  const stored = "  Pla\u00e7a Major 1, 08002 Barcelona  ";
   const api = stubApi(stored);
   const panel = await mount(api);
   await open(panel);
   expect(input(panel).value).toBe(stored);
   expect(save(panel).variant).toBe("secondary");
   expect(save(panel).disabled).toBe(true);
-  await type(panel, "Plaça Major 1, 08002 Barcelona");
+  await type(panel, "Plac\u0327a Major 1, 08002 Barcelona");
   expect(save(panel).variant).toBe("secondary");
   expect(save(panel).disabled).toBe(true);
   await type(panel, NEW);
@@ -406,4 +414,115 @@ it("an address changed in another session, refused after the dialog was dismisse
       panel.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim(),
     )
     .toBe(STORED);
+});
+
+const MADRID: AddressLookupResult = {
+  lines: ["Calle Mayor 1", "3º B"],
+  locality: "Madrid",
+  administrativeAreaCode: "28",
+  postalCode: "28013",
+  countryCode: "ES",
+};
+
+const provider: AddressLookupProvider = {
+  suggest: async () => [{ id: "s1", label: "Calle Mayor 1" }],
+  resolve: async () => MADRID,
+};
+
+async function mountSearching(
+  api: Api,
+  addressProvider: AddressLookupProvider | null = provider,
+): Promise<Panel> {
+  const { el } = await mountWidget<Panel>("dashboard-venue-details-panel", {
+    api: api as unknown as DashboardApi,
+    addressProvider: addressProvider ?? undefined,
+  });
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=issuer]")).toBeTruthy();
+  return el;
+}
+
+const search = (panel: Panel) => dialog(panel).querySelector<WtAddressLookup>("wt-address-lookup");
+
+async function choose(panel: Panel, address: AddressLookupResult): Promise<void> {
+  search(panel)!.dispatchEvent(
+    new CustomEvent("wt-address-chosen", { detail: { address }, bubbles: true, composed: true }),
+  );
+  await dialogHost(panel).updateComplete;
+}
+
+it("puts the address search above the registered address, in the business's country", async () => {
+  const panel = await mountSearching(stubApi());
+  await open(panel);
+  const lookup = search(panel)!;
+  await lookup.updateComplete;
+  expect(lookup.hidden).toBe(false);
+  expect(lookup.countryCode).toBe("ES");
+  expect(lookup.label).toBe("Find the address");
+  const order = [...dialog(panel).querySelectorAll("wt-address-lookup, wt-input")].map(
+    (node) => node.localName,
+  );
+  expect(order).toEqual(["wt-address-lookup", "wt-input"]);
+});
+
+it("fills the registered address from a chosen address as one line, and Save sends it", async () => {
+  const api = stubApi();
+  const panel = await mountSearching(api);
+  await open(panel);
+  expect(save(panel).disabled).toBe(true);
+  await choose(panel, MADRID);
+  expect(input(panel).value).toBe("Calle Mayor 1, 3º B, 28013 Madrid, Madrid");
+  expect(save(panel).disabled).toBe(false);
+  expect(save(panel).variant).toBe("primary");
+  await press(panel);
+  expect(api.changeTaxpayerDomicile).toHaveBeenCalledWith({
+    taxpayerDomicile: "Calle Mayor 1, 3º B, 28013 Madrid, Madrid",
+    expected: OLD,
+  });
+});
+
+it("fills nothing from an address in another country, and says why on the search's line", async () => {
+  const panel = await mountSearching(stubApi());
+  await open(panel);
+  await choose(panel, { ...MADRID, countryCode: "PT", postalCode: "1100-148" });
+  expect(input(panel).value).toBe(OLD);
+  expect(search(panel)!.message).toBe(
+    "That address is not in Spain. Choose another or type it below.",
+  );
+  await choose(panel, MADRID);
+  expect(search(panel)!.message).toBe("");
+});
+
+it("stops a search still on its way when the person types the address", async () => {
+  const panel = await mountSearching(stubApi());
+  await open(panel);
+  const cancel = vi.spyOn(search(panel)!, "cancelSearch");
+  await type(panel, NEW);
+  expect(cancel).toHaveBeenCalled();
+});
+
+it("shows no address search without a provider, and none in the legal-name dialog", async () => {
+  const panel = await mountSearching(stubApi(), null);
+  await open(panel);
+  const lookup = search(panel)!;
+  await lookup.updateComplete;
+  expect(lookup.hidden).toBe(true);
+  expect(lookup.getBoundingClientRect().height).toBe(0);
+  const withProvider = await mountSearching(stubApi());
+  withProvider.shadowRoot!.querySelector<HTMLElement>("[data-test=change-legal-name]")!.click();
+  const legal = withProvider.shadowRoot!.querySelector("dashboard-legal-name-dialog")!;
+  await legal.updateComplete;
+  expect(legal.shadowRoot!.querySelector("wt-input[name=legalName]")).not.toBeNull();
+  expect(legal.shadowRoot!.querySelector("wt-address-lookup")).toBeNull();
+});
+
+it("an address chosen while a save is on its way does not replace the address being saved", async () => {
+  const api = stubApi();
+  api.changeTaxpayerDomicile.mockImplementationOnce(() => new Promise<never>(() => {}));
+  const panel = await mountSearching(api);
+  await open(panel);
+  await type(panel, NEW);
+  await press(panel);
+  expect(search(panel)!.disabled).toBe(true);
+  await choose(panel, MADRID);
+  expect(input(panel).value).toBe(NEW);
 });

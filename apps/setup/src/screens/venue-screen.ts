@@ -22,6 +22,8 @@ import {
   type ReceiptLanguageRules,
 } from "@waitron/country";
 import {
+  areaOfChosenAddress,
+  oneLineAddress,
   VENUE_SETUP_COUNTRY_PACKS,
   getVenueSetupCountryPack,
   resolveInstalledStarterLanguages,
@@ -544,22 +546,11 @@ export class SetupVenueScreen extends LitElement {
       return;
     }
     if (this.foreignAddress?.which === which) this.foreignAddress = undefined;
-    const postal = pack.postalCode?.validate(address.postalCode);
-    const area =
-      (address.administrativeAreaCode === undefined
-        ? undefined
-        : findAdministrativeArea(pack, address.administrativeAreaCode)) ??
-      (postal?.valid === true
-        ? findAdministrativeAreaByPostalCode(pack, postal.normalized)
-        : undefined);
     if (which === "domicile") {
-      const place = `${address.postalCode} ${address.locality}`.trim();
-      const taxpayerDomicile = [...address.lines, place, area?.name ?? ""]
-        .filter((part) => part.trim() !== "")
-        .join(", ");
-      this.#fill({ taxpayerDomicile });
+      this.#fill({ taxpayerDomicile: oneLineAddress(pack, address) });
       return;
     }
+    const area = areaOfChosenAddress(pack, address);
     const [addressLine1 = "", ...rest] = address.lines;
     this.#fill({
       addressLine1,

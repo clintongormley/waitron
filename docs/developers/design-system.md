@@ -3913,16 +3913,18 @@ setup venue screen takes the province from the address's area code, else its pos
 dashboard's Venue card never fills the province, which the server keeps, refuses an address whose
 area names another province (other mismatches are refused by the server's postcode check at Save),
 and offers the search only while the street, line 2, postcode and city can all
-change. A one-line address (the setup screen's registered business address) is filled as
-"lines, postcode city, province". The till's invoice recipient dialog asks in the country chosen
+change. A one-line address (the registered business address, on the setup screen and in Venue
+details' Change registered address dialog) is filled as "lines, postcode city, province", by
+`oneLineAddress` in `@waitron/country-packs`. The till's invoice recipient dialog asks in the country chosen
 below its fields, which its label names, and fills its one street line with every line of the
 address, joined by commas, so a typed floor or unit is replaced; the province is the comma-free
 name of the area Waitron knows for the address's area code, else its postcode, and is emptied when
 Waitron knows no area for the address. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its
 name: it reads text under `apps/*/src` only, so a module's screen under `packages/` is not seen; it
-finds forms by the literals `"addressLine1"` and `"streetAddress"` in a file that also draws a
-`wt-input` or `wt-textarea`; and it checks that the file holds `<wt-address-lookup`, not where,
-nor that it is handed a provider.
+finds forms by the literals `"addressLine1"`, `"streetAddress"` and `"taxpayerDomicile"` in a file
+that also draws a `wt-input` or `wt-textarea`, so a form that names its field in one file and draws
+it in another is not seen; and it checks that the file holds `<wt-address-lookup`, not where, nor
+that it is drawn for the address field, nor that it is handed a provider.
 
 #### A field that falls back to another value
 

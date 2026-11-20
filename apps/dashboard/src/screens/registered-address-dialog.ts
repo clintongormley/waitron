@@ -7,6 +7,7 @@ const SETTINGS: TaxpayerFieldSettings = {
   heading: "venue_details.change_taxpayer_domicile",
   label: "venue_details.taxpayer_domicile",
   hint: "venue_details.taxpayer_domicile_hint",
+  addressSearch: true,
   note: "venue_details.taxpayer_domicile_note",
   changedElsewhere: "venue_details.taxpayer_domicile_changed",
   notSaved: "venue_details.taxpayer_domicile_not_saved",

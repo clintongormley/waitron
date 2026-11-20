@@ -198,7 +198,7 @@ it("a successful rename closes the dialog, shows the new name and tells the page
 });
 
 it("a saved name with surrounding spaces or another Unicode spelling keeps Save quiet, and a rename still names the stored spelling", async () => {
-  const stored = "  Cafè Issuer SL  ";
+  const stored = "  Caf\u00e8 Issuer SL  ";
   const api = stubApi();
   api.getVenueDetails.mockResolvedValue(renamed(stored));
   const panel = await mount(api);
@@ -206,7 +206,7 @@ it("a saved name with surrounding spaces or another Unicode spelling keeps Save 
   expect(input(panel).value).toBe(stored);
   expect(save(panel).variant).toBe("secondary");
   expect(save(panel).disabled).toBe(true);
-  await type(panel, "Cafè Issuer SL");
+  await type(panel, "Cafe\u0300 Issuer SL");
   expect(save(panel).variant).toBe("secondary");
   expect(save(panel).disabled).toBe(true);
   await type(panel, "New SL");

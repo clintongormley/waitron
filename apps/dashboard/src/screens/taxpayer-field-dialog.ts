@@ -3,20 +3,26 @@ import { property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
+  type AddressChosenDetail,
+  type AddressLookupProvider,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
+  type WtAddressLookup,
   type WtDialog,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-address-lookup.js";
+import { getCountryPack, oneLineAddress } from "@waitron/country-packs";
 import type { DashboardApi, VenueDetailsModel } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 export interface VenueIdentityChanged {
@@ -32,6 +38,8 @@ export interface TaxpayerFieldSettings {
   heading: StringKey;
   label: StringKey;
   hint?: StringKey;
+  /** Offers the address search above the field, which a chosen address fills as one line. */
+  addressSearch?: true;
   note: StringKey;
   changedElsewhere: StringKey;
   /** Reported when a save is refused after its dialog has closed. */
@@ -49,8 +57,8 @@ function normalized(value: string): string {
 
 /** Changes one taxpayer field. On success it sends a bubbling, composed `venue-identity-changed`
  *  carrying the answered model, so the panel and the dashboard banner can show the new value.
- *  A `venue.detail_changed` refusal sends a non-bubbling `venue-identity-stale`, so the panel
- *  reads the stored value again. */
+ *  A `venue.detail_changed` refusal sends a bubbling, composed `venue-identity-stale`, so both
+ *  read the stored value again. */
 export abstract class TaxpayerFieldDialog extends LitElement {
   protected abstract readonly settings: TaxpayerFieldSettings;
 
@@ -59,6 +67,9 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     css`
       :host {
         display: contents;
+      }
+      wt-address-lookup {
+        margin-block-end: var(--wt-space-3);
       }
       .note {
         margin: var(--wt-space-3) 0 0;
@@ -69,16 +80,20 @@ export abstract class TaxpayerFieldDialog extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) lateRefusalFor?: (key: StringKey) => () => void;
+  @property({ attribute: false }) addressProvider?: AddressLookupProvider;
+  /** The business's country: the search looks there, and an address elsewhere fills nothing. */
+  @property({ attribute: false }) countryCode = "";
 
   /** The stored spelling the dialog opened with, sent as `expected`; null while it is shut. */
   @state() private opened: string | null = null;
   @state() private value = "";
   @state() private busy = false;
-  @state() private attempted = false;
   /** A refusal's sentence for the field, kept until the field changes or Save is pressed again. */
   @state() private refusal = "";
   @state() private bottom = "";
+  @state() private foreignAddress = false;
 
+  readonly #feedback = new FormFeedback(this);
   #scope?: DraftScope<string>;
   #leave?: LeaveCoordinator;
   #opening = 0;
@@ -89,9 +104,10 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     this.opened = stored;
     this.value = stored;
     this.busy = false;
-    this.attempted = false;
+    this.#feedback.reset();
     this.refusal = "";
     this.bottom = "";
+    this.foreignAddress = false;
     const { coordinator, scope } = draftScopeFor<string>(this, {
       id: {},
       current: () => this.value,
@@ -101,7 +117,8 @@ export abstract class TaxpayerFieldDialog extends LitElement {
         this.value = value;
         this.refusal = "";
         this.bottom = "";
-        this.attempted = false;
+        this.#feedback.reset();
+        this.#cancelAddressSearch();
       },
     });
     this.#leave = coordinator;
@@ -139,23 +156,65 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     (await this.#leave.request({ scopes: [this.#scope.id], reason, proceed() {} })) === "proceeded";
 
   #ownError(): string {
-    return this.attempted && this.value.trim() === "" ? t("venue_details.required") : "";
+    return this.#feedback.attempted && this.value.trim() === "" ? t("venue_details.required") : "";
   }
 
   #change(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    if (this.opened === null || this.busy) return;
-    this.value = event.detail.value;
+    if (this.#replace(event.detail.value)) this.#cancelAddressSearch();
+  }
+
+  #replace(value: string): boolean {
+    if (this.opened === null || this.busy) return false;
+    this.value = value;
     this.refusal = "";
     this.bottom = "";
     this.#scope?.changed();
+    return true;
+  }
+
+  /** So an address still on its way cannot overwrite what the person typed or restored. */
+  #cancelAddressSearch(): void {
+    this.renderRoot.querySelector<WtAddressLookup>("wt-address-lookup")?.cancelSearch();
+  }
+
+  #addressChosen(event: CustomEvent<AddressChosenDetail>): void {
+    event.stopPropagation();
+    if (this.opened === null || this.busy) return;
+    const address = event.detail.address;
+    const pack = getCountryPack(this.countryCode);
+    this.foreignAddress = pack === undefined || address.countryCode !== pack.countryCode;
+    if (pack !== undefined && !this.foreignAddress) this.#replace(oneLineAddress(pack, address));
+  }
+
+  #addressSearch(): TemplateResult {
+    return html`<wt-address-lookup
+      name="domicile-search"
+      .provider=${this.addressProvider}
+      country-code=${this.countryCode}
+      label=${t("venue_details.address_lookup.label")}
+      placeholder=${t("venue_details.address_lookup.placeholder")}
+      no-results-label=${t("venue_details.address_lookup.no_results")}
+      unavailable-label=${t("venue_details.address_lookup.unavailable")}
+      .message=${
+        this.foreignAddress
+          ? fill("venue_details.address_lookup.other_country", {
+              country: new Intl.DisplayNames([currentLocale()], { type: "region" }).of(
+                this.countryCode,
+              )!,
+            })
+          : ""
+      }
+      ?disabled=${this.busy}
+      @wt-address-chosen=${(event: CustomEvent<AddressChosenDetail>) => this.#addressChosen(event)}
+    ></wt-address-lookup>`;
   }
 
   async #save(): Promise<void> {
     const expected = this.opened;
     if (expected === null || this.busy) return;
     if (saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusal = "";
     this.bottom = "";
     if (this.#ownError()) {
@@ -184,7 +243,9 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     } catch (error) {
       const code = codeOf(error);
       if (code === "venue.detail_changed")
-        this.dispatchEvent(new CustomEvent("venue-identity-stale"));
+        this.dispatchEvent(
+          new CustomEvent("venue-identity-stale", { bubbles: true, composed: true }),
+        );
       if (opening !== this.#opening) {
         reportLateRefusal?.();
         return;
@@ -216,7 +277,11 @@ export abstract class TaxpayerFieldDialog extends LitElement {
   override render(): TemplateResult {
     const open = this.opened !== null;
     const fieldError = this.refusal || this.#ownError();
-    const bottom = [this.bottom, fieldError ? t("form.fix_fields") : ""].filter(Boolean).join(" ");
+    const bottom = this.#feedback.message(
+      { request: this.bottom, [this.settings.field]: fieldError },
+      new Set(fieldError ? [this.settings.field] : []),
+      t("form.fix_fields"),
+    );
     const action = saveActionState(this.#scope);
     const settings = this.settings;
     return html`<wt-dialog
@@ -232,7 +297,7 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     >
       ${
         open
-          ? html`<wt-input
+          ? html`${settings.addressSearch ? this.#addressSearch() : nothing}<wt-input
                 name=${settings.field}
                 required
                 label=${t(settings.label)}

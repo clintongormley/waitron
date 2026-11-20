@@ -3561,6 +3561,7 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-venue-settings-screen
           .panels=${this.#settingsPanels()}
           @venue-identity-changed=${() => void this.#rereadVenueName()}
+          @venue-identity-stale=${() => void this.#rereadVenueName()}
         ></dashboard-venue-settings-screen>`;
       case "approvals":
         return html`<dashboard-approvals-screen .api=${this.api}></dashboard-approvals-screen>`;

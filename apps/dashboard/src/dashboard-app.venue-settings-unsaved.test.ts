@@ -653,6 +653,33 @@ it("a legal-name change on Venue details re-reads the banner's name", async () =
   expect(location.pathname).toBe("/venue-settings/view/venue-details");
 });
 
+it("a legal-name change refused because the name changed elsewhere re-reads the banner's name", async () => {
+  let venueName = "Issuer SL";
+  const getMe = vi.fn(async () => ({
+    personId: "p1",
+    email: "ada@example.com",
+    roleIds: ["manager"],
+    locale: "en-GB",
+    venueLocale: "en-GB",
+    sessionDefault: "en-GB",
+    venueName,
+    permissions: ["venue.view", "venue.configure"],
+    modules: ["venue-service", "kitchen-test"],
+  }));
+  const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {
+    getMe,
+    renameTaxpayer: async () => {
+      venueName = "Elsewhere SL";
+      throw Object.assign(new Error("changed"), { code: "venue.detail_changed" });
+    },
+  } as Partial<DashboardApi>);
+  const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
+  await expect.poll(banner).toBe("Issuer SL");
+  const { dialog } = await openLegalName(app, "New SL");
+  dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
+  await expect.poll(banner).toBe("Elsewhere SL");
+});
+
 async function openLegalName(app: DashboardApp, typed?: string) {
   await select(app, "venue-details");
   await expect.poll(() => selected(app)).toBe("venue-details");

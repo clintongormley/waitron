@@ -846,6 +846,8 @@ export class VenueDetailsPanel extends LitElement {
             ></dashboard-legal-name-dialog>
             <dashboard-registered-address-dialog
               .api=${this.api}
+              .addressProvider=${this.addressProvider}
+              .countryCode=${model.issuer.country}
               .lateRefusalFor=${this.lateRefusalFor}
               @venue-identity-changed=${identityChanged("taxpayerDomicile")}
               @venue-identity-stale=${identityStale}
