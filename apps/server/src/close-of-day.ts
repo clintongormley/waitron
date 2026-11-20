@@ -97,6 +97,7 @@ export async function issueBillAtClose(
     deps.backend,
     cfg,
     billId,
+    await dayEndedAt(tx, bill.openedAt),
   );
   const total = invoice.priced.total;
   const owed = await stillOwedOnIssuedBill(tx, billId, total);
@@ -151,7 +152,19 @@ async function readDueBill(
   if (bill === undefined || bill.lines === 0 || bill.nodeId !== cfg.nodeId) return undefined;
   if ((await readIssuedSales(tx, [billId])).has(billId)) return undefined;
   if (!openedInDueSpan(bill.openedAt, rule)) return undefined;
-  return { status: bill.status, partyId: bill.partyId!, openedBy: bill.openedBy };
+  return {
+    status: bill.status,
+    partyId: bill.partyId!,
+    openedBy: bill.openedBy,
+    openedAt: bill.openedAt!,
+  };
+}
+
+/** The end of the business day the bill was opened in: the moment its meal ended, whenever the
+ * close issues it. */
+async function dayEndedAt(tx: Transaction, openedAt: string): Promise<string> {
+  const venueClock = await readVenueClock(tx);
+  return businessDayBounds(venueClock, businessDayAt(venueClock, new Date(openedAt))).endAt;
 }
 
 /** Before the day began, counted from the bill's trusted opening time; a bill with none yet is

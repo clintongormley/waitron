@@ -7662,19 +7662,27 @@ export interface PricedInvoice extends IssueMoment {
   identities: OrderLineIdentity[];
 }
 
-/** Price an order's invoice for {@link issueUnpaidInvoice}. Writes nothing. */
+/** Price an order's invoice for {@link issueUnpaidInvoice}, dated as {@link issueOrderMoment}
+ * dates it from `mealEndedAt`. Writes nothing. */
 export async function priceForIssuance(
   tx: Transaction,
   clock: TrustedClock,
   backend: FiscalBackend,
   cfg: TradingContext,
   id: string,
+  mealEndedAt?: string,
 ): Promise<PricedInvoice> {
   const order = await priceStoredOrderForIssuance(tx, id);
   return {
     id,
     identities: order.identities,
-    ...(await issueOrderMoment(tx, cfg, { clock, backend }, await issuancePass(tx, id, order))),
+    ...(await issueOrderMoment(
+      tx,
+      cfg,
+      { clock, backend },
+      await issuancePass(tx, id, order),
+      mealEndedAt,
+    )),
   };
 }
 
