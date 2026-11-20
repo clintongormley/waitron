@@ -475,7 +475,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
-  it("refuses a cash collection with a malformed amount on a bill that owes nothing, and leaves it open", async () => {
+  it("refuses malformed cash input and leaves the zero-owing bill placed", async () => {
     const { billId, saleId } = await correctedCake(wholeInvoice);
 
     expect(

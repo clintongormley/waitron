@@ -1594,7 +1594,7 @@ describe("a payment after the ticket was issued", () => {
   it.each([
     ["a reader part payment", /Tarjeta\s+10,00/u, "20,00"],
     ["a reader payment the recovery loop records", /Tarjeta\s+10,00/u, "20,00"],
-    ["a cash collection", /Efectivo\s+30,00/u, null],
+    ["a cash bill payment", /Efectivo\s+30,00/u, null],
     ["a reader Pay of the whole bill", /^Tarjeta$/mu, null],
   ] as const)("an original still waiting to print lists %s", async (path, listed, owed) => {
     const bill = await billPrintedByPrintTheBill();
@@ -1620,7 +1620,7 @@ describe("a payment after the ticket was issued", () => {
       });
     } else {
       const paid =
-        path === "a cash collection"
+        path === "a cash bill payment"
           ? await send(
               venue.app,
               venue.cookie,
@@ -1731,7 +1731,7 @@ describe("a payment after the ticket was issued", () => {
   );
 
   it.each(["cash", "card"] as const)(
-    "collecting an issued ticket by %s prints no payment slip",
+    "paying an issued ticket by %s prints no payment slip",
     async (method) => {
       const bill = await billPrintedByPrintTheBill();
       const before = await jobCount();

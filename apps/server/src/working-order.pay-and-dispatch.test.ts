@@ -2165,7 +2165,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await fiscalRecordCount(id)).toBe(1);
   });
 
-  it("Mode T: a concurrent double collect-pay files ONE sale, and a later sequential collect replays", async () => {
+  it("Mode T: two simultaneous payments file one sale and the winning submission can be retried", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -2181,28 +2181,44 @@ describe("prepare & collect — zone payment timing", () => {
     );
 
     const payment = billShare("cash", "1.50");
+    const competingPayment = billShare("cash", "1.50");
     const operator = await paymentOperator(cfg, OPERATOR);
-    const pay = () =>
+    const pay = (request: typeof payment) =>
       takeSavedBillPayment(
         { admission: testTradingAdmission(), db: suite.db, backend, clock },
         cfg,
         id,
-        payment,
+        request,
         operator,
       );
-    const [rA, rB] = await Promise.all([pay(), pay()]);
-    expect(rA.invoice!.invoiceNumber).toBe("A/1");
-    expect(rB.invoice).toEqual(rA.invoice);
+    const results = await Promise.allSettled([pay(payment), pay(competingPayment)]);
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "fulfilled",
+          value: expect.objectContaining({
+            invoice: expect.objectContaining({ invoiceNumber: "A/1" }),
+          }),
+        }),
+        expect.objectContaining({
+          status: "rejected",
+          reason: expect.objectContaining({
+            code: "working_order.not_open",
+            params: { workingOrderId: id },
+          }),
+        }),
+      ]),
+    );
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
     expect(await fiscalRecordCount(id)).toBe(1);
 
-    // A further SEQUENTIAL collect of the now-settled order deterministically hits the settled-replay
-    // branch: it returns the same ticket and files nothing. Exact cash has zero change.
-    const { invoice: replay } = await pay();
+    const winningPayment = results[0].status === "fulfilled" ? payment : competingPayment;
+    const { invoice: replay } = await pay(winningPayment);
     expect(replay!.invoiceNumber).toBe("A/1");
     expect(replay!.tender).toEqual({ method: "cash", change: "0.00" });
     expect(await saleCount(id)).toBe(1);
+    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]);
   });
 
   // A paid counter order stays on its station queue until handover.

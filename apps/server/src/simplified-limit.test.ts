@@ -9,9 +9,9 @@ import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { devices } from "@waitron/db";
+import { devices, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
@@ -644,11 +644,20 @@ describe("a bill payment", () => {
 });
 
 describe("placing and collecting a ticket-then-pay counter order", () => {
-  it("places a saved full-invoice choice without filing, then refuses its invalid address before taking money", async () => {
+  it("places a saved full-invoice choice without filing, then refuses it before taking money when the venue has no tax address", async () => {
+    const [saved] = await venue.db
+      .select({ taxpayerDomicile: taxpayer.taxpayerDomicile })
+      .from(taxpayer)
+      .where(eq(taxpayer.id, 1));
+    onTestFinished(async () => {
+      await venue.db.update(taxpayer).set(saved!).where(eq(taxpayer.id, 1));
+    });
+    await venue.db.update(taxpayer).set({ taxpayerDomicile: null }).where(eq(taxpayer.id, 1));
+
     const id = await parked(venue.app, ticketThenPay, { Mitad: 1 });
     venue.db.run(sql`update working_orders set invoice_type = 'F1',
       recipient_tax_id = 'B12345674', recipient_legal_name = 'Cliente SL',
-      recipient_address = 'Calle Mayor 2, 28013 Madrid', recipient_country_code = 'ES'
+      recipient_address = 'Calle Mayor 2, 28013 Madrid, Madrid', recipient_country_code = 'ES'
       where id = ${id}`);
     const before = written();
 
@@ -667,8 +676,8 @@ describe("placing and collecting a ticket-then-pay counter order", () => {
     });
 
     expect(answer).toEqual({
-      status: 400,
-      json: { code: "invoice.recipient_invalid", params: { field: "address" } },
+      status: 409,
+      json: { code: "fiscal.taxpayer_domicile_missing", params: {} },
     });
     expect(written()).toEqual(before);
     expect(orderRow(id)!.status).toBe("placed");
