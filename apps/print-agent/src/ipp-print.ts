@@ -44,8 +44,6 @@ const TIMEOUT: IppPrintOutcome = { status: "unknown", failureCode: "timeout" };
 /** client-error-not-found and client-error-gone: the printer no longer holds the job. */
 const JOB_ENDED = [0x0406, 0x0407];
 
-const PENDING_HELD = 4;
-const PROCESSING_STOPPED = 6;
 const CANCELED = 7;
 const ABORTED_STATE = 8;
 const COMPLETED = 9;
@@ -164,15 +162,6 @@ function finishedAs(job: JobReport): IppPrintOutcome | undefined {
   return cut ? ABORTED : SENT;
 }
 
-/** Whether the printer's own state is worth asking for: the job says it is stopped or held. */
-function mayBeHeld(job: JobReport): boolean {
-  return (
-    job.state === PENDING_HELD ||
-    job.state === PROCESSING_STOPPED ||
-    job.reasons.includes("printer-stopped")
-  );
-}
-
 /**
  * Why a stopped printer holds its jobs, `null` for a printer that is not stopped, or `undefined`
  * for an unreadable or refused reply. RFC 8011 §5.4.12: a stopped printer's unsuffixed reason is an
@@ -218,16 +207,9 @@ async function pollJob(
   const limit = options.pollLimitMs ?? IPP_POLL_LIMIT_MS;
   const interval = options.pollIntervalMs ?? POLL_INTERVAL_MS;
   let bound: ReturnType<typeof setTimeout> | undefined;
-  let nearing: ReturnType<typeof setTimeout> | undefined;
-  /** Set once the last poll before the bound may be under way: the printer is asked then too. */
-  let nearBound = false;
   const restartBound = (): void => {
     clearTimeout(bound);
-    clearTimeout(nearing);
     bound = setTimeout(end, limit);
-    const untilNear = limit - interval - IPP_POLL_REQUEST_TIMEOUT_MS;
-    nearBound = untilNear <= 0;
-    if (!nearBound) nearing = setTimeout(() => (nearBound = true), untilNear);
   };
   restartBound();
   options.signal?.addEventListener("abort", end, { once: true });
@@ -257,7 +239,8 @@ async function pollJob(
       const job = reply.kind === "reply" ? readJob(reply.body) : undefined;
       const outcome = job && finishedAs(job);
       if (outcome !== undefined) return outcome;
-      if (job !== undefined && (hold !== null || nearBound || mayBeHeld(job))) {
+      // A printer can report a stop while its job still reports processing.
+      if (job !== undefined) {
         const printer = await ask(getPrinterAttributes(target, requestId++));
         const seen = printer.kind === "reply" ? holdOf(printer.body) : undefined;
         if (seen !== undefined) {
@@ -273,7 +256,6 @@ async function pollJob(
     return TIMEOUT;
   } finally {
     clearTimeout(bound);
-    clearTimeout(nearing);
     options.signal?.removeEventListener("abort", end);
   }
 }

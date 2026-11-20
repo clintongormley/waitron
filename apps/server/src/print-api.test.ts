@@ -2746,36 +2746,33 @@ describe("mountPrintApi — management: recent jobs", () => {
     const ids = await withTransaction(suite.db, async (tx) => {
       const printerId = await insertA4Printer(tx);
       const personId = await seedPerson(tx, { displayName: "Invoice operator" });
-      const jobs = [];
-      for (const status of ["printing", "queued", "failed", "unknown"] as const) {
-        const { saleId } = await seedCashSale(tx);
-        const [job] = await tx
-          .insert(printJobs)
-          .values({
+      const { saleId } = await seedCashSale(tx);
+      const jobs = await tx
+        .insert(printJobs)
+        .values(
+          (["printing", "queued", "failed", "failed"] as const).map((status) => ({
             printerId,
             saleId,
             kind: "a4",
             pageDocument: "invoice",
-            status: status === "unknown" ? "failed" : status,
-            printerHold: status === "printing" ? "paper_out" : null,
-          })
-          .returning({ id: printJobs.id });
-        if (status === "unknown")
-          await tx.insert(invoiceDeliveries).values({
-            saleId,
-            printerId,
-            printJobId: job!.id,
-            medium: "a4",
-            designation: "original",
             status,
-            generation: 1,
-            requestKey: randomUUID(),
-            expiredAt: nowIso(),
-            personId,
-          });
-        jobs.push(job!.id);
-      }
-      return jobs;
+            printerHold: status === "printing" ? "paper_out" : null,
+          })),
+        )
+        .returning({ id: printJobs.id });
+      await tx.insert(invoiceDeliveries).values({
+        saleId,
+        printerId,
+        printJobId: jobs[3]!.id,
+        medium: "a4",
+        designation: "original",
+        status: "unknown",
+        generation: 1,
+        requestKey: randomUUID(),
+        expiredAt: nowIso(),
+        personId,
+      });
+      return jobs.map(({ id }) => id);
     });
     const response = await send(app, "GET", "/management-api/print-jobs", {
       cookie: managerCookie,

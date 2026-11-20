@@ -975,19 +975,7 @@ async function readAlerts(now = NOW) {
 }
 
 describe("printingAlertSource — agent.silent", () => {
-  it("warns when the serving spare's agent with no office assignment goes quiet", async () => {
-    await seedFixtureVenue();
-    const spare = randomUUID();
-    await holdChartNamingMainBox(
-      suite.db,
-      { nodeId: SERVING_NODE, contactUrl: "https://main.example" },
-      { nodeId: spare, contactUrl: "https://spare.example" },
-    );
-    const agent = await seedAgent({ name: "Serving spare", nodeId: spare, lastSeenAt: minsAgo(6) });
-    expect(await readAlerts()).toMatchObject([{ key: `agent.silent:${agent}` }]);
-  });
-
-  it("drops a former primary's warning once its office printer moves to the serving box", async () => {
+  it("drops a former primary warning after reassignment and keeps the serving spare warning", async () => {
     await seedFixtureVenue();
     const former = await seedAgent({
       name: "Former primary",
@@ -999,14 +987,26 @@ describe("printingAlertSource — agent.silent", () => {
       lastSeenAt: minsAgo(6),
       nodeId: SERVING_NODE,
     });
+    const spare = randomUUID();
+    await holdChartNamingMainBox(
+      suite.db,
+      { nodeId: SERVING_NODE, contactUrl: "https://main.example" },
+      { nodeId: spare, contactUrl: "https://spare.example" },
+    );
+    const standby = await seedAgent({
+      name: "Serving spare",
+      nodeId: spare,
+      lastSeenAt: minsAgo(6),
+    });
     const office = await withTransaction(suite.db, (tx) =>
       insertA4Printer(tx, { agentId: former }),
     );
     const silent = async () => (await readAlerts()).map((alert) => alert.key).sort();
-    expect(await silent()).toEqual([`agent.silent:${former}`, `agent.silent:${current}`].sort());
+    const warnings = (...ids: string[]) => ids.map((id) => `agent.silent:${id}`).sort();
+    expect(await silent()).toEqual(warnings(former, current, standby));
 
     await suite.db.update(printers).set({ agentId: current }).where(eq(printers.id, office));
-    expect(await silent()).toEqual([`agent.silent:${current}`]);
+    expect(await silent()).toEqual(warnings(current, standby));
   });
 
   it("stays quiet for an agent seen 4 minutes ago", async () => {

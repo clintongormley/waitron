@@ -6,11 +6,10 @@ quiet without raising a warning.
 
 ## 1. Detect and explain a stop
 
-- Check the HP attempt's saved delivery status, failure and job hold, plus any recorded IPP
-  replies. The Lenovo saved `paper_out` and completed the invoice in one attempt. The available log
-  has no first-hold timestamp or raw reply. Keep the agent's polling as it is. If a saved attempt
-  shows no hold or a hold first reported near the 120-second limit, reproduce the HP reply and ask
-  for its printer state on each unfinished poll. Keep the same-job claim and assert one submission.
+- The Lenovo saved `paper_out` and completed the invoice in one attempt. Its log has no first-hold
+  timestamp or raw reply. Claude reproduced a near-deadline hold when a stopped printer's job still
+  reports processing. The watcher cleared asking the printer on every unfinished job poll at 23:07
+  on 20 November. Use the HP's recorded empty-tray reply in the test and assert one submission.
 - In `apps/server/src/invoice-delivery-status.ts`, read the attempt's office printer by its saved
   id. Reuse the alert's per-printer hold lookup for jobs queued behind a hold, including a
   test page. Extend `page-print-agent-e2e.test.ts` to assert the hold and printer name.
@@ -31,9 +30,9 @@ quiet without raising a warning.
 ## 3. Stop the warning for the retired agent
 
 - Check the old agent's node id and A4 assignments. In `boot.ts` and `alert-sources.ts`, scope
-  `agent.silent` to the serving box, staff-enrolled agents and agents still assigned to active
-  office printers. Receipt printers use their existing job alerts. Keep agent identities for a
-  future swap. Test a swap and reassignment in `alert-sources.test.ts`.
+  `agent.silent` to serving boxes, staff-enrolled agents and agents still assigned to active office
+  printers. Use the existing list of boxes to keep a serving spare's warning. Keep agent identities
+  for a future swap. Test a swap, a reassignment and a serving spare in `alert-sources.test.ts`.
 
 ## 4. Keep waiting visible after the dialog closes
 

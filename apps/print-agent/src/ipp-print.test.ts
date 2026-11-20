@@ -813,33 +813,6 @@ describe("printOverIpp — a job the printer is holding", () => {
     expect(printer.printJobs()).toHaveLength(1);
   });
 
-  it("keeps asking while it holds a printing job, and reports null when the printer lets it go", async () => {
-    const holds: Array<PageHold | null> = [];
-    const started = Date.now();
-    const printer = await fakePrinter(
-      (req, res) => res.end(accepted(req)),
-      (req, res) => {
-        if (since(started) > 500) return void res.end(jobState(req, COMPLETED));
-        res.end(printer.printerQueries().length < 2 ? heldJob(req) : jobState(req, PROCESSING));
-      },
-      (req, res) =>
-        res.end(
-          printer.printerQueries().length <= 2
-            ? emptyTray(req)
-            : printerState(req, PRINTER_PROCESSING, ["none"]),
-        ),
-    );
-    const outcome = await printOverIpp(target(printer.port), DOCUMENT, {
-      ...holding,
-      pollLimitMs: IPP_POLL_REQUEST_TIMEOUT_MS + 5000,
-      onHold: (hold) => holds.push(hold),
-    });
-    expect(outcome).toEqual(sent);
-    expect(holds).toEqual(["paper_out", null]);
-    expect(printer.printerQueries()).toHaveLength(3);
-    expect(printer.printJobs()).toHaveLength(1);
-  });
-
   it("answers unknown/timeout at once when the printer forgets a job it was holding", async () => {
     const holds: Array<PageHold | null> = [];
     const printer = await fakePrinter(
@@ -944,50 +917,41 @@ describe("printOverIpp — a job the printer is holding", () => {
     },
   );
 
-  it.each([0, 60])(
-    "asks about a printing job only near the bound, and holds it when the printer is stopped (%i ms replies)",
-    async (replyDelayMs) => {
-      const realSetTimeout = setTimeout;
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], now: 0 });
-      const elapsed = () => vi.getMockedSystemTime()!.getTime();
-      const holds: Array<PageHold | null> = [];
-      const asked: number[] = [];
-      const printer = await fakePrinter(
-        (req, res) => res.end(accepted(req)),
-        (req, res) => {
-          const answer = () =>
-            res.end(jobState(req, elapsed() > 700 ? COMPLETED : PROCESSING, ["job-printing"]));
-          if (printer.polls().length <= 5 && replyDelayMs > 0)
-            realReplyTimers.push(realSetTimeout(answer, replyDelayMs));
-          else answer();
-        },
-        (req, res) => {
-          asked.push(elapsed());
-          res.end(printerState(req, PRINTER_STOPPED, ["media-jam-error"]));
-        },
-      );
-      let outcome: IppPrintOutcome | undefined;
-      const finished = startPrint(printer.port, {
-        ...holding,
-        pollLimitMs: IPP_POLL_REQUEST_TIMEOUT_MS + 300,
-        onHold: (hold) => holds.push(hold),
-      }).then((result) => (outcome = result));
-      while (outcome === undefined && elapsed() <= 700) {
-        await until(() => printer.settled());
-        await vi.advanceTimersByTimeAsync(holding.pollIntervalMs!);
-      }
-      await until(() => outcome !== undefined);
-      await finished;
-      expect(outcome).toEqual(sent);
-      expect(holds).toEqual(["paper_jam"]);
-      expect(asked[0]).toBeGreaterThanOrEqual(250);
-      expect(asked[0]).toBe(295);
-      expect(
-        printer.polls().filter((p) => p.requestId < printer.printerQueries()[0]!.requestId).length,
-      ).toBeGreaterThan(5);
-      expect(printer.printJobs()).toHaveLength(1);
-    },
-  );
+  it("checks the printer on every unfinished processing poll and reports the HP empty tray", async () => {
+    const holds: Array<PageHold | null> = [];
+    const printer = await fakePrinter(
+      (req, res) => res.end(accepted(req, 922)),
+      (req, res) =>
+        res.end(
+          jobState(req, printer.polls().length < 4 ? PROCESSING : COMPLETED, ["job-printing"]),
+        ),
+      (req, res) =>
+        res.end(
+          printer.printerQueries().length === 2
+            ? emptyTray(req)
+            : printerState(req, PRINTER_PROCESSING, ["none"]),
+        ),
+    );
+
+    const outcome = await printOverIpp(target(printer.port), DOCUMENT, {
+      ...holding,
+      pollLimitMs: IPP_POLL_LIMIT_MS,
+      onHold: (hold) => holds.push(hold),
+    });
+
+    expect(outcome).toEqual(sent);
+    expect(holds).toEqual(["paper_out", null]);
+    expect(printer.requests.map((req) => req.operation)).toEqual([
+      PRINT_JOB,
+      GET_JOB_ATTRIBUTES,
+      GET_PRINTER_ATTRIBUTES,
+      GET_JOB_ATTRIBUTES,
+      GET_PRINTER_ATTRIBUTES,
+      GET_JOB_ATTRIBUTES,
+      GET_PRINTER_ATTRIBUTES,
+      GET_JOB_ATTRIBUTES,
+    ]);
+  });
 
   const KEYWORDS: Array<[string, PageHold]> = [
     ["media-jam", "paper_jam"],

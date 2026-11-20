@@ -204,12 +204,7 @@ async function readStates(
     includePageHolds?: boolean;
   },
 ): Promise<Map<string, InvoiceDeliveryState | null>> {
-  const {
-    emailAvailable,
-    printers: offer = async () => [],
-    includeSimplifiedEmail,
-    includePageHolds,
-  } = options;
+  const { emailAvailable, printers: offer = async () => [] } = options;
   const ids = [...saleIds];
   const found = await tx
     .select({
@@ -250,13 +245,13 @@ async function readStates(
   const rowsOf = bySale(rows);
   const jobsOf = bySale(jobs);
   const sendingHolds =
-    includePageHolds && rows.some((row) => row.medium === "a4" && row.status === "queued")
+    options.includePageHolds && rows.some((row) => row.medium === "a4" && row.status === "queued")
       ? new Map((await readSendingPagePrinters(tx)).map((row) => [row.printerId, row.hold]))
       : new Map<string, A4HoldCode | null>();
   const states = new Map<string, InvoiceDeliveryState | null>();
   for (const sale of found) {
     const full = deliversAsFullInvoice(sale);
-    if (!full && !includeSimplifiedEmail) {
+    if (!full && !options.includeSimplifiedEmail) {
       states.set(sale.id, null);
       continue;
     }
