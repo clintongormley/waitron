@@ -780,6 +780,17 @@ Status changes:
   cancelled held line (`order-groups.ts`) is a state clash on the fire-line route, not these
   routes, and was left alone. No client compares these routes' statuses (grep of `apps/dashboard`,
   `apps/till`, `apps/setup` and `packages/*/src/dashboard` for `status === 4xx`, 2026-11-20).
+  By question 10: `GET /api/backup/recovery-key` answers `backup.recovery_key_too_short` 409, since
+  the short key there is always the one the box holds; rotate keeps 400, since there it is the key
+  the request sends. `POST /api/backup/apply` keeps 400: on that route the code can mean either the
+  held key or the request's key, and moving the held-key case would need a second code and a
+  dashboard change (`backup-screen.ts` reads the code) with no difference anyone sees, so it was
+  left. `POST /management-api/cloud/complete` answers a new code, `cloud.request_not_found`, 400
+  when the box has no saved connection request at all (`cloud-client.ts`, `complete`); a different
+  saved request still answers `cloud.binding_conflict` 409. `promotion.not_a_local_secondary` was
+  not changed: no route reaches it, because `POST /management-api/promote` never calls
+  `promoteLocalSecondaryToPrimary` (`boot.ts`, `promoteRun`). `backup.stream_test_failed` keeps 422
+  by question 5. A394-20 is done.
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
   `configuration-transfer.ts`, `email-settings-api.ts`, `backup-api.ts`, `location-settings-api.ts`,
   `mirror-bundle-api.ts`, catalogue's `menu.reset_required` and the two `time_zone.unreadable`
