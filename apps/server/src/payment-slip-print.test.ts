@@ -1293,7 +1293,7 @@ describe("a payment after the ticket was issued", () => {
       layOutSaleReceipt(venue.backend, tx, venue.cfg, saleId, duplicate, printer);
     let adminDashboard: string | undefined;
 
-    async function printQueueResend(jobId: string, printerId?: string) {
+    async function printQueue() {
       adminDashboard ??= `${MANAGEMENT_COOKIE}=${
         (
           await withTransaction(venue.db, (tx) =>
@@ -1315,9 +1315,14 @@ describe("a payment after the ticket was issued", () => {
         },
         () => {},
       );
+      return { app, cookie: adminDashboard };
+    }
+
+    async function printQueueResend(jobId: string, printerId?: string) {
+      const { app, cookie } = await printQueue();
       const response = await app.request(`/management-api/print-jobs/${jobId}/resend`, {
         method: "POST",
-        headers: { cookie: adminDashboard, "content-type": "application/json" },
+        headers: { cookie, "content-type": "application/json" },
         body: JSON.stringify(printerId === undefined ? {} : { printerId }),
       });
       expect(response.status, await response.clone().text()).toBe(202);
@@ -1413,6 +1418,26 @@ describe("a payment after the ticket was issued", () => {
       expect(receipts[0]).toMatch(/Efectivo\s+3,00/u);
       expect(receipts[0]).toMatch(owedLine("22,00"));
       expect(receipts[0]).not.toMatch(owedLine("25,00"));
+    });
+
+    it("the print queue previews an original given up as out of date as a resend would print it", async () => {
+      const bill = await billPrintedByPrintTheBill();
+      const stale = await originalOf(bill.saleId);
+      await payWhileLayoutFails(bill);
+      await expectOutOfDate(stale);
+
+      const { app, cookie } = await printQueue();
+      const response = await app.request(`/management-api/print-jobs/${stale.id}/preview`, {
+        headers: { cookie },
+      });
+
+      expect(response.status, await response.clone().text()).toBe(200);
+      const { text } = (await response.json()) as { text: string };
+      expect(text).toContain(bill.invoiceNumber);
+      expect(text).toMatch(/Efectivo\s+5,00/u);
+      expect(text).toMatch(owedLine("25,00"));
+      expect(text).not.toMatch(owedLine("30,00"));
+      expect(text).not.toContain(labels.duplicate);
     });
 
     it("a payment slip resent from the print queue prints the bytes it was queued with", async () => {
