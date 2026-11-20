@@ -94,10 +94,20 @@ async function refusal(deps: StagedResetDeps, raw: string): Promise<string | nul
   return null;
 }
 
+/** Whether `path` is a real folder, not a link, holding nothing; one it cannot read is not. */
+async function emptyRealFolder(path: string): Promise<boolean> {
+  try {
+    return (await lstat(path)).isDirectory() && (await readdir(path)).length === 0;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Whether a staged reset passes `refusal`'s marker, `trading.env` and operation-record checks and
- * will empty `tls/` because this box joined another; `runStagedReset` repeats those, and the rest,
- * under the venue lock.
+ * will empty `tls/` because this box joined another, or will remove the empty real `tls/` that
+ * reset leaves when cut short after its joined record and `secrets.env` went; `runStagedReset`
+ * repeats those checks, and the rest, under the venue lock.
  */
 export async function stagedResetEmptiesTls(stateDir: string): Promise<boolean> {
   const raw = await readFile(join(stateDir, MARKER), "utf8").catch(() => null);
@@ -106,7 +116,9 @@ export async function stagedResetEmptiesTls(stateDir: string): Promise<boolean> 
     operationId !== null &&
     !existsSync(join(stateDir, TRADING_ENV_FILE)) &&
     (await recordMatches(stateDir, operationId)) &&
-    (await joinedAnotherBox(stateDir))
+    ((await joinedAnotherBox(stateDir)) ||
+      (!existsSync(join(stateDir, SECRETS_ENV_FILE)) &&
+        (await emptyRealFolder(join(stateDir, TLS_DIR)))))
   );
 }
 
@@ -140,23 +152,22 @@ export async function runStagedReset(
     // The other venue's authority and key ring may be here, so the box's own go with them and the
     // next setup start mints a fresh set; `backup.env` may hold the other venue's recovery key.
     // Before the operation record, whose removal makes a re-run discard; the joined record goes
-    // last of them, so a re-run still finds this box joined. The emptied folder goes too, a link
-    // excepted: a start finding `tls/` takes it for a lost certificate and asks for repair.
+    // last of them, so a re-run still finds this box joined. An empty folder goes too, a link
+    // excepted, also on a re-run after a stop that removed the joined record but not the folder:
+    // a start finding `tls/` takes it for a lost certificate and asks for repair.
+    const tlsDir = join(deps.stateDir, TLS_DIR);
     if (await joinedAnotherBox(deps.stateDir)) {
       await rm(join(deps.stateDir, TLS_REPAIR_FLOW_DIR), { recursive: true, force: true });
       await rm(join(deps.stateDir, SECRETS_ENV_FILE), { force: true });
       await rm(join(deps.stateDir, BACKUP_ENV_FILE), { force: true });
-      const tlsDir = join(deps.stateDir, TLS_DIR);
       for (const name of await readdir(tlsDir)) {
         if (join(TLS_DIR, name) !== TLS_JOINED_FILE) {
           await rm(join(tlsDir, name), { recursive: true, force: true });
         }
       }
       await rm(join(deps.stateDir, TLS_JOINED_FILE), { force: true });
-      if ((await lstat(tlsDir)).isDirectory() && (await readdir(tlsDir)).length === 0) {
-        await rmdir(tlsDir);
-      }
     }
+    if (await emptyRealFolder(tlsDir)) await rmdir(tlsDir);
     for (const file of [PENDING_ADOPTION_FILE, SETUP_OPERATION_FILE]) {
       await rm(join(deps.stateDir, file), { force: true });
     }

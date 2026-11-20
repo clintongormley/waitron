@@ -592,7 +592,7 @@ re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue da
   certificate authority with that server's, so a plain `reset` removes `tls/` there, and the box
   mints a new authority on its next boot. Devices then have to trust it again. A linked `tls/` is
   only emptied, keeping its link, and the box then asks for connection repair instead. A plain `reset`
-  also removes a `tls/` it finds empty, since it holds no certificate.
+  also removes a `tls/` folder it finds empty, since it holds no certificate; a link is kept.
 - `records/`, the record of each Keep or Move choice made at Start again (`records/choices/`)
   and the files a Move set aside or unreadable module records that Start again kept
   (`records/set-aside/`). Each Move's folder also holds
