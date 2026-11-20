@@ -2750,14 +2750,16 @@ describe("mountPrintApi — management: recent jobs", () => {
       const jobs = await tx
         .insert(printJobs)
         .values(
-          (["printing", "queued", "failed", "failed"] as const).map((status) => ({
-            printerId,
-            saleId,
-            kind: "a4",
-            pageDocument: "invoice",
-            status,
-            printerHold: status === "printing" ? "paper_out" : null,
-          })),
+          (["printing", "queued", "failed", "failed"] as const).map(
+            (status): typeof printJobs.$inferInsert => ({
+              printerId,
+              saleId,
+              kind: "a4",
+              pageDocument: "invoice",
+              status,
+              printerHold: status === "printing" ? "paper_out" : null,
+            }),
+          ),
         )
         .returning({ id: printJobs.id });
       await tx.insert(invoiceDeliveries).values({
