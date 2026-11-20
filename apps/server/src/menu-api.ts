@@ -358,8 +358,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_section.member_cycle": 409,
   "menu_section.member_duplicate": 409,
 
-  // 409 where the address names the list or member that is the wrong kind; 400 under
-  // `runBodySection` and `runBodyRole`, where only the body names it.
+  // 400 under `runBodySection` and `runBodyRole`, whose routes can name a list, section or member
+  // of the wrong kind only in the body. 409 elsewhere: there the address can name one, and so can
+  // the body (a member's `ref`, a move-in's `listId`); one status for both, as A394-11 chose.
   "menu_section.wrong_role": 409,
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
@@ -404,9 +405,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "menu.failed");
-/** For a route where these codes can only be raised by what the request body or query string
- * names, never by its path (docs/developers/conventions-data.md, "A refusal's HTTP status says what
- * was wrong"). */
+/** For a route where these codes are raised by what the request body or query string names
+ * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). On the
+ * member add and replace routes `set_menu.not_found` also comes from an inactive set menu owning
+ * the list in the path. */
 const runBodyIds = (...codes: string[]) =>
   createErrorBoundary(
     { ...STATUS, ...Object.fromEntries(codes.map((code) => [code, 400] as const)) },

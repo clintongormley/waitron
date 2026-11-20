@@ -126,8 +126,9 @@ section (`sectionId`) or a member not held by that list (`sectionId`, `memberId`
 `sections/delete`, `section-members/remove` and the Device Home Page shortcut add, where only the
 body names the section or member, and 404 elsewhere.
 `menu_section.wrong_role` (`sectionId`, `role`; 400 on `sections/delete`, `section-members/remove`
-and the Device Home Page shortcut add and replace, where only the body names the section or member,
-and 409 elsewhere) refuses presentation edits or deletes of roots
+and the Device Home Page shortcut add and replace, where only the body can name a section or member
+of the wrong kind, and 409 elsewhere, including when a member's `ref` or a move-in's `listId` names
+it) refuses presentation edits or deletes of roots
 and Device Home Page sections, structure writes into a Device Home Page section, and a member ref to
 anything other than a menu root.
 It also refuses removing or replacing a member that references an owned section, naming that
