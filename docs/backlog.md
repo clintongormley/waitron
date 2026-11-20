@@ -939,7 +939,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   record the successful €10 Virtual A control, two virtual decline scenarios and a separate
   successful €10 Virtual B payment on 16 November. The €11 late result needed manager confirmation;
   €42.51 used generic decline wording. The daily SumUp audit matched the owner's 17 November
-  €1.40 paired-Solo charge. Backup-machine, PIN and signature qualification remain open.
+  €1.40 paired-Solo charge. The 19 November chip-and-PIN check matched by reference and amount.
+  The backup-machine audit showed the expected unmatched entry and left the same-account pair
+  unmatched because its timestamps were over five minutes apart. A live positive match and
+  signature qualification remain open.
   Idle SumUp battery refresh timing is unqualified. Check missing battery percentages on the
   reader itself. No further paid request unattended.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)

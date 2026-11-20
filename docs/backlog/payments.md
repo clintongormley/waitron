@@ -79,10 +79,11 @@ The €11 late decline needed a manager-confirmed release after the provider rep
 its own bill and matched SumUp's `SUCCESSFUL` transaction. The owner's 17 November paired-Solo
 check captured €1.40. The next daily audit checked that charge by reference and amount with no
 discrepancies. The owner saw both completed checks in SumUp comparison, with no rows in the two
-payment lists. Backup-machine, PIN and signature qualification remain open. Idle reader battery
-refresh timing remains unqualified. Waitron omits old or undated SumUp battery snapshots. Check
-charge on the reader when no percentage is shown. See the script's dated battery provenance and
-the existing alert-cache limit.
+payment lists. On 19 November the owner paid €1.40 by chip and online PIN. The Waitron capture
+and the saved SumUp transaction agree by reference and amount. A live backup-machine match and
+signature qualification remain open. Idle reader battery refresh timing remains unqualified.
+Waitron omits old or undated SumUp battery snapshots. Check charge on the reader when no percentage
+is shown. See the script's dated battery provenance and the existing alert-cache limit.
 
 **9 November continuation:** the owner's cross-account session accepted Waitron's new affiliate
 block with the restaurant's credential. A reference read changed from 404 to PENDING before the
@@ -138,7 +139,12 @@ barcode scanner only if the deli sells barcoded goods; nothing in the till reads
 The first backup-machine entry slice lets a counter use Other card machine while its normal reader
 is configured. It records optional same-SumUp-account/other source, machine and operation number,
 keeping those details on saved payment displays. The day report and accountant detail sheet carry
-source, machine and operation number, current payment state and successful refunds. No second-Solo or other-provider hardware qualification is claimed.
+source, machine and operation number, current payment state and successful refunds.
+
+The 20 November audit listed the manually recorded €1.40 payment as unmatched, as expected for
+a charge on the owner's other SumUp account. It also listed both sides of the same-account €1.50
+payment as unmatched. The standalone Solo charge was recorded in Waitron 10 minutes and 4 seconds
+later, outside the five-minute matching window. The live positive match remains open.
 
 ## The SumUp reconciler
 
