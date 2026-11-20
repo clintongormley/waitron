@@ -3392,6 +3392,8 @@ and nothing guards it across screens:
   `apps/dashboard/src/screens/floor-plan-add-joined-table.unsaved.test.ts`;
 - A494: Venue details' Change legal name dialog. Its leave cases are in
   `apps/dashboard/src/screens/legal-name-dialog.unsaved.test.ts`;
+- Venue details' Change registered address dialog. Its leave cases are in
+  `apps/dashboard/src/screens/registered-address-dialog.unsaved.test.ts`;
 - A755: Venue settings' Venue card and Defaults card, each editing in place. Their leave cases are
   in `apps/dashboard/src/screens/venue-details-panel.unsaved.test.ts` and
   `apps/dashboard/src/screens/venue-defaults-panel.unsaved.test.ts`;
@@ -4653,7 +4655,7 @@ the AEAT certificate card, comes after them from
 `packages/fiscal-verifactu/src/dashboard/certificate-card.ts`. Each card's heading is inside the card and its
 action sits in the card's header. The Venue, Defaults and Privacy cards edit in place rather than in a
 modal, each on its own while the others stay in view mode; the Business card's Change legal name
-and the Business day card's change of start open dialogs. Since 2026-10-18 (A788) the Business day
+and Change registered address and the Business day card's change of start open dialogs. Since 2026-10-18 (A788) the Business day
 card's one action is Change start, even while a change waits, and it shows one New start row per
 waiting change ("offers only Change start while a change waits, and opens the dialog from it" and
 "shows one New start row per waiting change after a Save while one already waits" in

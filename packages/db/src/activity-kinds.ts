@@ -35,7 +35,6 @@ export interface ActivityKindData {
   readonly "credentials.removed": { readonly keyVersion: number };
   /** The taxpayer-name exception in slice 2 registry rule 1. */
   readonly "taxpayer.legal_name_changed": { readonly from: string; readonly to: string };
-  /** No address values: only the legal name is excepted from the rule above. */
   readonly "taxpayer.domicile_changed": Record<string, never>;
   readonly "person.email_changed": Record<string, never>;
   /** A count only; never a guest's label or allergens. */
