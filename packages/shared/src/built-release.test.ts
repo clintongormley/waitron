@@ -42,7 +42,7 @@ describe("compareReleaseVersions", () => {
 
   it("refuses an invalid version", () => {
     expect(() => release.compareReleaseVersions("1.2.3-rc.01", "1.2.3")).toThrow(
-      "Expected a numbered release version",
+      expect.objectContaining({ name: "AppError", code: "release.version_invalid", params: {} }),
     );
   });
 });

@@ -1,3 +1,5 @@
+import { AppError } from "./errors.js";
+
 export type BuiltRelease = { bundled: false } | { bundled: true; version: string | null };
 
 declare const __WAITRON_RELEASE_VERSION__: unknown;
@@ -17,7 +19,7 @@ export function isReleaseVersion(value: string): boolean {
 
 function versionParts(version: string): bigint[] {
   const match = versionMatch(version);
-  if (match === null) throw new Error("Expected a numbered release version");
+  if (match === null) throw new AppError("release.version_invalid", {});
   return [
     ...match[1]!.split(".").map(BigInt),
     BigInt(CHANNELS.indexOf(match[2])),
