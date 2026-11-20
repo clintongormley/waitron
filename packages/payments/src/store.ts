@@ -174,8 +174,7 @@ export async function captureAttempting(
     externalRef: string;
     card?: CardDetails;
     amount?: Decimal;
-    /** When the provider says the checkout began, or, when SumUp names none, when the row was
-     * written; only a check made after the live answer was missed passes it. */
+    /** See `payments.provider_checkout_started_at`. */
     checkoutStartedAt?: Date;
   },
 ): Promise<PaymentRow> {

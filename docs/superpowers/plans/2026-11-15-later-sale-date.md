@@ -589,6 +589,11 @@ match the owner's "correct" to "a dinner that ends after midnight on 1 April tak
   `provider_checkout_started_at` and the limit above holds for SumUp too: a card found later by
   either provider carries the moment the reader was asked. Finding 3 closes only for a card answered
   live and filed late.
+
+  _2026-11-20 (review fix): the reconciler stores SumUp's time only when it lies between the row's
+  `created_at` and the check that found the card; any other time, as well as none, stores
+  `created_at`. A time just before midnight had moved a sale to the day before, and a 1970 time had
+  left a captured card unfiled (`fiscal.record_invalid`)._
 - **D4, VAT for a quarter already filed.** This branch does NOT handle a quarter already filed: the
   watcher's 13:20 note sends such an invoice to the accountant's corrections report instead of
   changing the filed quarter, and nothing here does that. Main has no record of a filed quarter (RUN:

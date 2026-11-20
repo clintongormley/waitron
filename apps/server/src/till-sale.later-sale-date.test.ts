@@ -236,57 +236,66 @@ describe("a card recovered on a later day files the day it was asked", () => {
     },
   );
 
-  it("files 31 March after SumUp's own check finds a card whose checkout began at 23:58 and Pay is pressed at 09:00", async () => {
-    const venue = await provisionBillVenue(suite.db);
-    const id = await tabWith(venue, "Croquettes");
-    const client = new FakeSumUp();
-    const sumup = new SumUpCloudProvider({
-      captureAlerts,
-      db: venue.db,
-      client,
-      incidents: () => Promise.resolve(true),
-      poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
-    });
-    const paymentRef = randomUUID();
-    await withTransaction(venue.db, (tx) =>
-      insertAttempting(tx, {
-        origin: deviceOrigin(venue.deviceId),
-        workingOrderId: brandWorkingOrderId(id),
-        nodeId: venue.cfg.nodeId,
-        provider: sumup.provider,
-        paymentRef,
+  it.each([
+    { timestamp: STARTED_31, title: "began at 23:58" },
+    { timestamp: "1970-01-01T00:00:00.000Z", title: "SumUp dates to 1970, asked at 23:58," },
+  ])(
+    "files 31 March after SumUp's own check finds a card whose checkout $title and Pay is pressed at 09:00",
+    async ({ timestamp }) => {
+      const venue = await provisionBillVenue(suite.db);
+      const id = await tabWith(venue, "Croquettes");
+      const client = new FakeSumUp();
+      const sumup = new SumUpCloudProvider({
+        captureAlerts,
+        db: venue.db,
+        client,
+        incidents: () => Promise.resolve(true),
+        poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
+      });
+      const paymentRef = randomUUID();
+      await withTransaction(venue.db, (tx) =>
+        insertAttempting(tx, {
+          origin: deviceOrigin(venue.deviceId),
+          workingOrderId: brandWorkingOrderId(id),
+          nodeId: venue.cfg.nodeId,
+          provider: sumup.provider,
+          paymentRef,
+          amount: decimal("10.00"),
+        }),
+      );
+      await askedAt(venue, paymentRef, ASKED_31);
+      client.hold({
+        foreignTransactionId: paymentRef,
+        status: "SUCCESSFUL",
         amount: decimal("10.00"),
-      }),
-    );
-    await askedAt(venue, paymentRef, ASKED_31);
-    client.hold({
-      foreignTransactionId: paymentRef,
-      status: "SUCCESSFUL",
-      amount: decimal("10.00"),
-      timestamp: STARTED_31,
-    });
+        timestamp,
+      });
 
-    await sumup.resolvePending(new Date(MORNING_1), await ownsEveryPayment(venue.db));
-    const [found] = await venue.db
-      .select({
-        startedAt: payments.providerCheckoutStartedAt,
-        settledAt: payments.settledAt,
-      })
-      .from(payments)
-      .where(eq(payments.paymentRef, paymentRef));
-    expect(found).toEqual({ startedAt: STARTED_31, settledAt: MORNING_1 });
+      await sumup.resolvePending(new Date(MORNING_1), await ownsEveryPayment(venue.db));
+      const [found] = await venue.db
+        .select({
+          startedAt: payments.providerCheckoutStartedAt,
+          settledAt: payments.settledAt,
+        })
+        .from(payments)
+        .where(eq(payments.paymentRef, paymentRef));
+      expect(found).toEqual({
+        startedAt: timestamp === STARTED_31 ? STARTED_31 : ASKED_31,
+        settledAt: MORNING_1,
+      });
 
-    const paid = await pay(
-      { ...venue, provider: sumup, clock: clockAt(MORNING_1), admission: testTradingAdmission() },
-      venue.cfg,
-      { id, lines: [] },
-      venue.operatorId,
-    );
+      const paid = await pay(
+        { ...venue, provider: sumup, clock: clockAt(MORNING_1), admission: testTradingAdmission() },
+        venue.cfg,
+        { id, lines: [] },
+        venue.operatorId,
+      );
 
-    expect(paid.outcome).toBe("captured");
-    const { supplyDay, ticket, record } = await filedFor(venue, id);
-    expect(supplyDay).toBe("2026-03-31");
-    expect(ticket.saleDay).toBe("2026-03-31");
-    expect(record).toEqual({ operationDate: "2026-03-31", issueDate: "2026-04-01" });
-  });
+      expect(paid.outcome).toBe("captured");
+      const { supplyDay, ticket, record } = await filedFor(venue, id);
+      expect(supplyDay).toBe("2026-03-31");
+      expect(ticket.saleDay).toBe("2026-03-31");
+      expect(record).toEqual({ operationDate: "2026-03-31", issueDate: "2026-04-01" });
+    },
+  );
 });
