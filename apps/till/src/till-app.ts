@@ -456,8 +456,14 @@ import type { FormFactor, CapabilityFlag, DeviceKind, NavigationScreen } from ".
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
 import { EquipmentPoll } from "./state/equipment-poll.js";
-import { checkTimeOffered, nextNotices, waitingStartNotice } from "./state/staff-notices.js";
+import {
+  checkTimeOffered,
+  nextNotices,
+  waitingStartIn,
+  waitingStartNotice,
+} from "./state/staff-notices.js";
 import "./widgets/box-time-dialog.js";
+import "./widgets/payments-paused-dialog.js";
 import { EquipmentNfc, type EquipmentCode } from "./state/equipment-nfc.js";
 import {
   type BasketRefresh,
@@ -4230,6 +4236,11 @@ export class TillApp extends LitElement {
   @state() private checkTimeOffered = false;
   @state() private drawerOpening = false;
   @state() private boxTimeOpen = false;
+  @state() private paymentsPausedOpen = false;
+  /** Only while the latest read carried the waiting notice: a notice kept for display while its
+   * source is unavailable may be out of date, and the server still refuses a payment that must
+   * wait (`apps/server/src/clock-unconfirmed-gate.test.ts`). */
+  #paymentsWait = false;
   /** Numbers each equipment read when sent, so a slower earlier read cannot replace the notices a
    * later one brought. */
   #noticeReadsSent = 0;
@@ -8153,11 +8164,33 @@ export class TillApp extends LitElement {
     }
   }
 
+  /** A payment on `id` went out and staff may still need to see what became of it. */
+  #paymentSent(id: string): boolean {
+    return (
+      this.#unansweredSales.has(id) ||
+      this.#unansweredWholePayments.has(id) ||
+      this.#billPaymentHeld(id) ||
+      this.#cardOutcomes.get(id)?.outcome.outcome === "timeout"
+    );
+  }
+
+  /** True, after opening the dialog that says why, while payments wait for the box's time. */
+  #paymentsPaused(): boolean {
+    if (!this.#paymentsWait) return false;
+    this.paymentsPausedOpen = true;
+    return true;
+  }
+
   #onCheckBeforeTender(event: Event): void {
+    const { resolve } = (event as CustomEvent<{ resolve: (proceed: boolean) => void }>).detail;
+    if (this.#paymentsPaused()) {
+      event.preventDefault();
+      resolve(false);
+      return;
+    }
     const tender = event.target as HTMLElement & { store?: WorkingOrderStore };
     if (tender.store !== this.#store || this.stage !== "order") return;
     event.preventDefault();
-    const { resolve } = (event as CustomEvent<{ resolve: (proceed: boolean) => void }>).detail;
     void this.#askCounterDeadEnds("pay").then(resolve);
   }
 
@@ -9079,6 +9112,7 @@ export class TillApp extends LitElement {
         row.orderStatus === "placed" &&
         row.partyId === null;
       if (row.collectionStatus !== null || pending !== undefined || presentedWithoutCounter) {
+        if (pending === undefined && this.#paymentsPaused()) return;
         this.#collectionObservation = {
           billId: row.workingOrderId,
           api,
@@ -9151,6 +9185,12 @@ export class TillApp extends LitElement {
         this.#showTicket(row.workingOrderId, false);
         return;
       }
+      if (
+        row.orderStatus === "placed" &&
+        !this.#paymentSent(row.workingOrderId) &&
+        this.#paymentsPaused()
+      )
+        return;
       await this.leave.coordinator.request({
         scopes: [this.#basketOwner],
         reason: "navigation",
@@ -11700,6 +11740,8 @@ export class TillApp extends LitElement {
       this.#noticeReadApplied = sent;
       this.staffNotices = nextNotices(this.staffNotices, read);
       this.checkTimeOffered = checkTimeOffered(read, this.checkTimeOffered);
+      this.#paymentsWait = waitingStartNotice(undefined, read) !== undefined;
+      if (waitingStartIn(this.staffNotices) === undefined) this.paymentsPausedOpen = false;
     }
     return read;
   }
@@ -21510,6 +21552,8 @@ export class TillApp extends LitElement {
     this.captureWarning = null;
     this.checkTimeOffered = false;
     this.boxTimeOpen = false;
+    this.paymentsPausedOpen = false;
+    this.#paymentsWait = false;
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
     this.#stopFloorPoll();
@@ -21691,7 +21735,9 @@ export class TillApp extends LitElement {
     this.#openPresented(workingOrderId);
   }
 
+  /** A whole payment already sent and unanswered reopens locked on it while payments are paused. */
   #openPresented(workingOrderId: string): void {
+    if (!this.#unansweredWholePayments.has(workingOrderId) && this.#paymentsPaused()) return;
     this.presentedPaying = {
       id: ++this.#presentedPays,
       billId: workingOrderId,
@@ -21947,7 +21993,13 @@ export class TillApp extends LitElement {
   }
 
   async #openRefund(excess: string): Promise<void> {
-    const open = await this.#openBillPaying("contribution", this.#payLinesOnScreen());
+    const open = await this.#openBillPaying(
+      "contribution",
+      this.#payLinesOnScreen(),
+      undefined,
+      undefined,
+      true,
+    );
     const now = open === null ? null : this.#billPayingNow(open.id);
     // Only on payments just read: a failed read says so above the dialog's action instead.
     if (now?.balance == null || now.refusal !== null || this.billRefunding !== null) return;
@@ -22078,7 +22130,8 @@ export class TillApp extends LitElement {
   }
 
   /** The bill payment dialog on the bill on screen, unless one is open already; the balance last
-   * read shows at once and is read again. */
+   * read shows at once and is read again. While payments wait for the box's time it opens only to
+   * show a payment already sent, or for a refund. */
   async #openBillPaying(
     way: PayWay,
     lines: PayLine[],
@@ -22086,6 +22139,7 @@ export class TillApp extends LitElement {
     order: PayingOrder | undefined = this.activeTabId === undefined
       ? undefined
       : { surface: "table", billId: this.activeTabId, visit: this.#orderVisit },
+    refunding = false,
   ): Promise<BillPaying | null> {
     if (order === undefined || this.billPaying !== null) return null;
     const { billId } = order;
@@ -22095,6 +22149,8 @@ export class TillApp extends LitElement {
     }
     const pending = this.#unansweredPayments.get(billId);
     const out = this.#paymentsOut.get(billId);
+    if (!refunding && pending?.unconfirmed !== true && out === undefined && this.#paymentsPaused())
+      return null;
     const open: BillPaying = {
       id: ++this.#billPays,
       ...order,
@@ -24015,6 +24071,20 @@ export class TillApp extends LitElement {
     });
   }
 
+  #renderPaymentsPaused() {
+    const notice = waitingStartIn(this.staffNotices);
+    if (!this.paymentsPausedOpen || notice === undefined) return nothing;
+    return html`<till-payments-paused-dialog
+      .notice=${notice}
+      .checkTimeOffered=${this.checkTimeOffered}
+      @payments-paused-close=${() => (this.paymentsPausedOpen = false)}
+      @payments-paused-check-time=${() => {
+        this.paymentsPausedOpen = false;
+        this.boxTimeOpen = true;
+      }}
+    ></till-payments-paused-dialog>`;
+  }
+
   #renderNoticeStrip(notices: readonly StaffNotice[] = this.staffNotices) {
     return html`<till-notice-strip
         slot="notices"
@@ -24058,6 +24128,7 @@ export class TillApp extends LitElement {
       ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}
       ${this.#renderWaitingKitchenNote()} ${this.#renderAttendanceEditors()}
       ${this.#renderAllergyDialog()} ${this.#renderMoveAllergyDialog()}
+      ${this.#renderPaymentsPaused()}
       <div
         class="app"
         @open-problem-report=${(event: CustomEvent<{ opener: HTMLElement }>) => {
@@ -24113,7 +24184,10 @@ export class TillApp extends LitElement {
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}
         @hand-over-order=${(event: Event) => void this.#onHandOverOrder(event)}
         @edit-waiting-kitchen-note=${(event: CustomEvent<{ id: string }>) => void this.#openWaitingKitchenNote(event)}
-        @pay-waiting-order=${(event: Event) => this.#replaceBasket(() => this.#onPayWaitingOrder(event))}
+        @pay-waiting-order=${(event: CustomEvent<PayWaitingOrderDetail>) => {
+          if (!this.#paymentSent(event.detail.id) && this.#paymentsPaused()) return;
+          this.#replaceBasket(() => this.#onPayWaitingOrder(event));
+        }}
         @move-waiting-order=${(event: Event) => void this.#onMoveWaitingOrder(event)}
         @show-station=${(event: Event) => this.#requestLeave(() => this.#onShowStation(event))}
         @enrolled=${() => void this.#onEnrolled()}

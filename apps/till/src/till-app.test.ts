@@ -12693,6 +12693,42 @@ describe("till-app", () => {
       expect(tenderPay(el).shadowRoot!.querySelector(".pay-card")).toBeNull();
     });
 
+    it("Retry after a decline shows that payments are paused, and charges nothing, once they wait for the time", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+        const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+        const { el } = await mountApp({ getTill: withReaderTill(), pay, getDeviceEquipment });
+        const c = await toCounter(el);
+        c.store.addProduct(coffee, "2");
+        await flush(el);
+        tapPayCard(el);
+        await flush(el);
+        await tenderPay(el).updateComplete;
+        expect(pay).toHaveBeenCalledOnce();
+        const waiting = {
+          owner: "box-clock",
+          key: "clock.unconfirmed",
+          code: "clock.unconfirmed",
+          severity: "error",
+          params: { agreed: 1, cause: "start" },
+        } as const;
+        getDeviceEquipment.mockResolvedValue({ roles: [], notices: [waiting] });
+        vi.advanceTimersByTime(15_000);
+        await flush(el);
+        expect((el as unknown as { staffNotices: unknown[] }).staffNotices).toContainEqual(waiting);
+
+        tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".retry")!.click();
+        await flush(el);
+
+        expect(pay).toHaveBeenCalledOnce();
+        expect(el.shadowRoot!.querySelector("till-payments-paused-dialog")).not.toBeNull();
+        expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("puts the pay card back to its choices when a basket edit is refused before the reader charges", async () => {
       const pay = vi
         .fn()
@@ -13428,6 +13464,72 @@ describe("till-app", () => {
         undefined,
         { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
       );
+    });
+    const clockWaiting = {
+      owner: "box-clock",
+      key: "clock.unconfirmed",
+      code: "clock.unconfirmed",
+      severity: "error",
+      params: { agreed: 1, cause: "start" },
+    } as const;
+    const pausedDialog = (el: TillApp) =>
+      el.shadowRoot!.querySelector("till-payments-paused-dialog");
+    it("Find a bill shows that payments are paused, not the collection, while they wait for the time", async () => {
+      const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [clockWaiting] });
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        getDeviceEquipment,
+      });
+      await toCounter(el);
+      await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalled());
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      const view = el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!;
+      emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-debt" }) });
+      await vi.waitFor(() => expect(pausedDialog(el)).not.toBeNull());
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+      expect(view.busy).toBe(false);
+      expect(currentApi.collectOrder).not.toHaveBeenCalled();
+    });
+    it("Find a bill still reopens a collection sent with no answer while payments wait for the time", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+        const { el } = await mountApp({
+          getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+          collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+          getDeviceEquipment,
+        });
+        const form = await openCollection(el);
+        const original = { method: "card", amount: "30.00", externalRef: "terminal-original" };
+        emit(form, "find-bill-pay", {
+          workingOrderId: "wo-debt",
+          tender: original,
+          invoiced: true,
+        });
+        await flush(el);
+        expect(form.error).toBe("sale.unconfirmed");
+        emit(form, "find-bill-close");
+        await flush(el);
+        expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+        getDeviceEquipment.mockResolvedValue({ roles: [], notices: [clockWaiting] });
+        vi.advanceTimersByTime(15_000);
+        await flush(el);
+        expect((el as unknown as { staffNotices: unknown[] }).staffNotices).toContainEqual(
+          clockWaiting,
+        );
+
+        const reopened = await selectDebt(el);
+
+        expect(pausedDialog(el)).toBeNull();
+        expect((reopened as unknown as { unconfirmed: boolean }).unconfirmed).toBe(true);
+        expect(reopened.error).toBe("sale.unconfirmed");
+      } finally {
+        vi.useRealTimers();
+      }
     });
     it("A773 Find a bill refuses missing table edit metadata before collection", async () => {
       const { el } = await mountApp({
@@ -19983,6 +20085,341 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
         dining: "eat_in",
         expectedEdit: null,
       });
+    },
+  );
+
+  const clockWaiting = {
+    owner: "box-clock",
+    key: "clock.unconfirmed",
+    code: "clock.unconfirmed",
+    severity: "error",
+    params: { agreed: 1, cause: "start" },
+  } as const;
+
+  it("Pay on a waiting order shows that payments are paused, keeping the basket, while they wait for the time", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [clockWaiting] });
+    const retrievePlacedOrder = vi.fn().mockResolvedValue(placedRead("wo-sent"));
+    const { el, c } = await counterWaiting({
+      listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
+      retrievePlacedOrder,
+      getDeviceEquipment,
+    });
+    await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalled());
+    await flush(el);
+    const basket = c.store.id;
+
+    pressPay(el, "wo-sent");
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-payments-paused-dialog")).not.toBeNull();
+    expect(retrievePlacedOrder).not.toHaveBeenCalled();
+    expect(c.store.id).toBe(basket);
+  });
+
+  it("Pay on a waiting order whose collection got no answer still loads it while payments wait for the time", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+      const retrievePlacedOrder = vi.fn().mockResolvedValue(placedRead("wo-sent"));
+      const { el, c } = await counterWaiting({
+        listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
+        retrievePlacedOrder,
+        collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        getDeviceEquipment,
+      });
+      pressPay(el, "wo-sent");
+      await flush(el);
+      emit(c, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(currentApi.collectOrder).toHaveBeenCalledOnce();
+      emit(c, "new-sale");
+      await flush(el);
+      expect(c.store.id).not.toBe("wo-sent");
+      getDeviceEquipment.mockResolvedValue({ roles: [], notices: [clockWaiting] });
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      expect((el as unknown as { staffNotices: unknown[] }).staffNotices).toContainEqual(
+        clockWaiting,
+      );
+      await showCounterList(el, "waiting");
+
+      pressPay(el, "wo-sent");
+      await flush(el);
+
+      expect(el.shadowRoot!.querySelector("till-payments-paused-dialog")).toBeNull();
+      expect(retrievePlacedOrder).toHaveBeenCalledTimes(2);
+      expect(c.store.id).toBe("wo-sent");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Pay on a waiting order whose collection from Find a bill got no answer still loads it while payments wait for the time", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+      const retrievePlacedOrder = vi.fn().mockResolvedValue(placedRead("wo-sent"));
+      const { el, c } = await counterWaiting({
+        listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
+        retrievePlacedOrder,
+        getFindBill: vi.fn().mockResolvedValue(
+          billRow({
+            workingOrderId: "wo-sent",
+            orderStatus: "placed",
+            collectionStatus: "waiting_for_payment",
+            stillOwed: "3.00",
+          }),
+        ),
+        collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        getDeviceEquipment,
+      });
+      shell(el)!.shadowRoot!.querySelector<HTMLElement>(".find-bill")!.click();
+      await el.updateComplete;
+      const finder = await selectDebt(el, "wo-sent");
+      emit(finder, "find-bill-pay", {
+        workingOrderId: "wo-sent",
+        tender: { method: "cash", amount: "3.00" },
+        invoiced: true,
+      });
+      await flush(el);
+      expect(currentApi.collectOrder).toHaveBeenCalledOnce();
+      expect(finder.error).toBe("sale.unconfirmed");
+      emit(finder, "find-bill-close");
+      await flush(el);
+      getDeviceEquipment.mockResolvedValue({ roles: [], notices: [clockWaiting] });
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      await showCounterList(el, "waiting");
+
+      pressPay(el, "wo-sent");
+      await flush(el);
+
+      expect(el.shadowRoot!.querySelector("till-payments-paused-dialog")).toBeNull();
+      expect(retrievePlacedOrder).toHaveBeenCalledOnce();
+      expect(c.store.id).toBe("wo-sent");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Find a bill still loads an unsent, unpaid counter order while payments wait for the time", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [clockWaiting] });
+    const { el, c } = await counterWaiting({
+      getFindBill: vi
+        .fn()
+        .mockResolvedValue(
+          billRow({ workingOrderId: "wo-held", orderStatus: "open", state: "unpaid" }),
+        ),
+      getDeviceEquipment,
+    });
+    await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalled());
+    await flush(el);
+    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".find-bill")!.click();
+    await el.updateComplete;
+    const view = el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!;
+
+    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-held" }) });
+    await flush(el);
+
+    await vi.waitFor(() => expect(c.store.id).toBe("wo-held"));
+    expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledWith("wo-held", expect.anything());
+    expect(el.shadowRoot!.querySelector("till-payments-paused-dialog")).toBeNull();
+  });
+
+  it.each(["the waiting order's Pay", "Find a bill"])(
+    "%s still loads a waiting order whose part payment is out while payments wait for the time",
+    async (route) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+        const retrievePlacedOrder = vi.fn().mockResolvedValue(placedRead("wo-sent"));
+        const balance = balanceOf({
+          workingOrderId: "wo-sent",
+          total: "3.00",
+          received: "1.00",
+          outstanding: "2.00",
+        });
+        const takeBillPayment = vi.fn(() => new Promise(() => {}));
+        const { el, c } = await counterWaiting({
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            cardProvider: "simulator",
+            capabilities: [
+              "print-receipt",
+              "integrated-card-payment",
+              "take-cash",
+            ] as CapabilityFlag[],
+          }),
+          listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
+          retrievePlacedOrder,
+          pay: vi.fn().mockResolvedValue({ outcome: "partial", balance }),
+          getBillBalance: vi.fn().mockResolvedValue(balance),
+          previewBillPayment: vi.fn().mockResolvedValue({
+            kind: "allocated",
+            choice: null,
+            applied: "2.00",
+            tip: "0.00",
+            change: "3.00",
+            charged: "2.00",
+          }),
+          takeBillPayment,
+          getFindBill: vi.fn().mockResolvedValue(
+            billRow({
+              workingOrderId: "wo-sent",
+              orderStatus: "placed",
+              state: "part-paid",
+              stillOwed: "2.00",
+            }),
+          ),
+          getDeviceEquipment,
+        });
+        pressPay(el, "wo-sent");
+        await flush(el);
+        emit(c, "collect-card", {});
+        await flush(el);
+        const window = el.shadowRoot!.querySelector("till-bill-pay-dialog")!;
+        expect(window).not.toBeNull();
+        const amount = window
+          .shadowRoot!.querySelector('wt-input[name="tendered"]')!
+          .shadowRoot!.querySelector("input")!;
+        amount.value = "5";
+        amount.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await flush(el);
+        window.shadowRoot!.querySelector<HTMLElement>("[data-pay-continue]")!.click();
+        await flush(el);
+        window.shadowRoot!.querySelector<HTMLElement>("[data-pay-confirm]")!.click();
+        await flush(el);
+        expect(takeBillPayment).toHaveBeenCalledOnce();
+        emit(window, "bill-pay-close");
+        await flush(el);
+        emit(c, "new-sale");
+        await flush(el);
+        expect(c.store.id).not.toBe("wo-sent");
+        getDeviceEquipment.mockResolvedValue({ roles: [], notices: [clockWaiting] });
+        vi.advanceTimersByTime(15_000);
+        await flush(el);
+        expect((el as unknown as { staffNotices: unknown[] }).staffNotices).toContainEqual(
+          clockWaiting,
+        );
+
+        const loadsBefore = retrievePlacedOrder.mock.calls.length;
+        if (route === "Find a bill") {
+          shell(el)!.shadowRoot!.querySelector<HTMLElement>(".find-bill")!.click();
+          await el.updateComplete;
+          const view = el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!;
+          emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-sent" }) });
+        } else {
+          await showCounterList(el, "waiting");
+          pressPay(el, "wo-sent");
+        }
+        await flush(el);
+
+        expect(el.shadowRoot!.querySelector("till-payments-paused-dialog")).toBeNull();
+        await vi.waitFor(() => expect(retrievePlacedOrder).toHaveBeenCalledTimes(loadsBefore + 1));
+        expect(c.store.id).toBe("wo-sent");
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "Find a bill on a sent, unpaid order (a collection already sent with no answer: %s) loads it while payments wait for the time only when one was sent",
+    async (sent) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+        const retrievePlacedOrder = vi.fn().mockResolvedValue(placedRead("wo-sent"));
+        const { el, c } = await counterWaiting({
+          listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
+          retrievePlacedOrder,
+          getFindBill: vi.fn().mockResolvedValue(
+            billRow({
+              workingOrderId: "wo-sent",
+              orderStatus: "placed",
+              state: "unpaid",
+              stillOwed: "3.00",
+            }),
+          ),
+          collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+          getDeviceEquipment,
+        });
+        if (sent) {
+          pressPay(el, "wo-sent");
+          await flush(el);
+          emit(c, "collect-order", { method: "cash", amount: "5" });
+          await flush(el);
+          expect(currentApi.collectOrder).toHaveBeenCalledOnce();
+          emit(c, "new-sale");
+          await flush(el);
+        }
+        const loadsBefore = retrievePlacedOrder.mock.calls.length;
+        getDeviceEquipment.mockResolvedValue({ roles: [], notices: [clockWaiting] });
+        vi.advanceTimersByTime(15_000);
+        await flush(el);
+        shell(el)!.shadowRoot!.querySelector<HTMLElement>(".find-bill")!.click();
+        await el.updateComplete;
+        const view = el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!;
+
+        emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-sent" }) });
+        await flush(el);
+
+        await vi.waitFor(() =>
+          expect(retrievePlacedOrder.mock.calls.length - loadsBefore).toBe(sent ? 1 : 0),
+        );
+        expect(el.shadowRoot!.querySelector("till-payments-paused-dialog") === null).toBe(sent);
+        if (sent) expect(c.store.id).toBe("wo-sent");
+        else expect(view.busy).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each([
+    ["timed out", { outcome: "timeout" }, true],
+    ["was declined", { outcome: "declined", failureReason: "insufficient_funds" }, false],
+  ] as const)(
+    "Pay on a waiting order whose reader card %s (%j) loads it while payments wait for the time: %s",
+    async (_, outcome, loads) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+        const retrievePlacedOrder = vi.fn().mockResolvedValue(placedRead("wo-sent"));
+        const pay = vi.fn().mockResolvedValue({ ...outcome });
+        const { el, c } = await counterWaiting({
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            cardProvider: "simulator",
+            capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+          }),
+          listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
+          retrievePlacedOrder,
+          pay,
+          getDeviceEquipment,
+        });
+        pressPay(el, "wo-sent");
+        await flush(el);
+        emit(c, "collect-card", {});
+        await flush(el);
+        expect(pay).toHaveBeenCalledOnce();
+        emit(c, "new-sale");
+        await flush(el);
+        expect(c.store.id).not.toBe("wo-sent");
+        getDeviceEquipment.mockResolvedValue({ roles: [], notices: [clockWaiting] });
+        vi.advanceTimersByTime(15_000);
+        await flush(el);
+        await showCounterList(el, "waiting");
+
+        pressPay(el, "wo-sent");
+        await flush(el);
+
+        expect(el.shadowRoot!.querySelector("till-payments-paused-dialog") === null).toBe(loads);
+        expect(retrievePlacedOrder).toHaveBeenCalledTimes(loads ? 2 : 1);
+        expect(c.store.id === "wo-sent").toBe(loads);
+      } finally {
+        vi.useRealTimers();
+      }
     },
   );
 

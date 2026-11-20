@@ -55,10 +55,13 @@ start again in the same ways.
 checks the time. · Check the time** is red. Devices agreeing with the server do not start payments
 again: use **Check the time**.
 
+While payments wait, a button that starts a payment opens **Payments are paused** instead, saying
+why; the order stays open. Use **Check the time** there when it shows, or **Close** it and pay once
+the red line has gone.
+
 **Check the time** at the end of a red clock line, instead of **See Box status in the dashboard**, means the server's
 clock is in doubt and the server could not confirm it by itself. It ends any of the red
-clock lines above. A refused payment then says to use **Check the time** at the top
-of the screen. Tap **Check the time** to open its dialog; when another notice shows first, open the
+clock lines above. Tap **Check the time** to open its dialog; when another notice shows first, open the
 list and tap it there. Anyone signed in on the till can use it.
 
 The dialog shows the server's time and this till's time. Nobody types a time: the till's own time is

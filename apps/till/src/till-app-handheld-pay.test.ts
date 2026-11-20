@@ -19,6 +19,7 @@ import type {
   EquipmentItem,
   PartyBill,
   RoleEquipment,
+  StaffNotice,
   TillApi,
   TillProduct,
   TillSaleResult,
@@ -96,6 +97,13 @@ const wholeCard: AllocationPreview = {
   charged: "120.00",
 };
 
+const CLOCK_WAITING: StaffNotice = {
+  owner: "box-clock",
+  key: "clock.unconfirmed",
+  code: "clock.unconfirmed",
+  severity: "error",
+  params: { agreed: 1, cause: "start" },
+};
 const phoneCapabilities = [
   "print-receipt",
   "integrated-card-payment",
@@ -1212,6 +1220,41 @@ describe("an unanswered presented payment on a handheld", () => {
       expect(documentChoice(el)).not.toBeNull();
     },
   );
+
+  it("Pay reopens the locked sheet on a payment sent before payments paused for the time", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const getDeviceEquipment = vi.fn().mockResolvedValue(equipmentWith(SECOND_READER));
+      const { el } = await mountApp(
+        onPhone({
+          getPartyBills: vi.fn().mockResolvedValue([placedBill]),
+          collectOrder: vi.fn().mockRejectedValue(noAnswer()),
+          getDeviceEquipment,
+        }),
+      );
+      const order = await openPhoneTable(el);
+      await pressPaySheet(el, order);
+      emit(presented(el)!, "presented-pay", asked.cash);
+      await flush(el);
+      expect(presented(el)).toBeNull();
+      getDeviceEquipment.mockResolvedValue({
+        ...equipmentWith(SECOND_READER),
+        notices: [CLOCK_WAITING],
+      });
+      vi.advanceTimersByTime(15_000);
+      await flush(el);
+      expect((el as unknown as { staffNotices: unknown[] }).staffNotices).toContainEqual(
+        CLOCK_WAITING,
+      );
+
+      await pressPaySheet(el, order);
+
+      expect(el.shadowRoot!.querySelector("till-payments-paused-dialog")).toBeNull();
+      await expectLockedOn(el, "cash");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("a resend with no answer keeps the sheet open and locked on the same payment", async () => {
     const send = vi.fn().mockRejectedValue(noAnswer());

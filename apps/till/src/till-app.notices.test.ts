@@ -17,7 +17,17 @@ import {
   till,
 } from "../test/equipment-app.js";
 import { NFC_EQUIPMENT } from "../test/equipment-nfc.js";
-import { openTable, resetBillPayDrafts, stubApi, tableOrder } from "../test/bill-pay-app.js";
+import {
+  flush as flushApp,
+  lock as billPayLock,
+  openTable,
+  resetBillPayDrafts,
+  stubApi,
+  tableOrder,
+  till as billPayTill,
+} from "../test/bill-pay-app.js";
+import type { CapabilityFlag } from "./layout.js";
+import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import {
   addDish,
   draft,
@@ -697,5 +707,315 @@ describe("a till or handheld at the PIN screen", () => {
         .shadowRoot!.querySelector("till-lock-screen")!
         .shadowRoot!.querySelector("[data-storage-notice]"),
     ).toBeNull();
+  });
+});
+
+const pausedDialog = (el: TillApp) => el.shadowRoot!.querySelector("till-payments-paused-dialog");
+const pausedWords = (el: TillApp) => {
+  const root = pausedDialog(el)?.shadowRoot;
+  const heading = root?.querySelector("wt-dialog")?.shadowRoot?.querySelector("h2");
+  return `${heading?.textContent ?? ""} ${root?.textContent ?? ""}`.replace(/\s+/g, " ").trim();
+};
+const billPayDialog = (el: TillApp) => el.shadowRoot!.querySelector("till-bill-pay-dialog");
+const lunch = {
+  id: "meal",
+  menuItemId: "offer-meal",
+  menuId: "cat-default",
+  name: "Lunch",
+  pricingUnit: "each" as const,
+  unitPrice: "30.00",
+  vatClass: "general" as const,
+  category: null,
+  allergens: null,
+};
+
+describe("a payment started while payments wait for the time", () => {
+  beforeEach(resetBillPayDrafts);
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanupWidgets();
+  });
+
+  async function atCounter(
+    notices: StaffNotice[],
+    stage: "order" | "collect" = "order",
+    overrides: Record<string, unknown> = {},
+  ) {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices(notices));
+    const api = stubApi({
+      getDeviceEquipment,
+      parkOrder: vi.fn(() => new Promise(() => {})),
+      ...overrides,
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await flushApp(el);
+    emit(billPayLock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flushApp(el);
+    await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalled());
+    await flushApp(el);
+    const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+    counter.store.addProduct(lunch, "1");
+    if (stage === "collect") Object.assign(el, { stage, collectFlow: "ticket_then_pay" });
+    await flushApp(el);
+    const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
+    const pay = async () => {
+      tender.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
+      await flushApp(el);
+    };
+    return { el, api, getDeviceEquipment, tender, pay };
+  }
+
+  it("opens the paused dialog, with the waiting sentence, and not the payment window, from the counter's Pay", async () => {
+    const { el, api, pay } = await atCounter([UNCONFIRMED]);
+    await pay();
+    expect(api.parkOrder).not.toHaveBeenCalled();
+    expect(billPayDialog(el)).toBeNull();
+    expect(pausedDialog(el)).not.toBeNull();
+    expect(pausedWords(el)).toContain(en["payments_paused.title"]);
+    expect(pausedWords(el)).toContain(
+      en["staff_notice.clock.unconfirmed"].replace("{agreed}", "1"),
+    );
+    expect(pausedWords(el)).toContain(en["payments_paused.order_open"]);
+  });
+
+  it("saves the order for the payment window from the counter's Pay without the waiting notice", async () => {
+    const { el, api, pay } = await atCounter([]);
+    await pay();
+    expect(api.parkOrder).toHaveBeenCalledOnce();
+    expect(pausedDialog(el)).toBeNull();
+  });
+
+  it("only the box's own waiting notice pauses payments", async () => {
+    const { el, api, pay } = await atCounter([{ ...UNCONFIRMED, owner: "fiscal-verifactu" }]);
+    await pay();
+    expect(api.parkOrder).toHaveBeenCalledOnce();
+    expect(pausedDialog(el)).toBeNull();
+  });
+
+  // Cash, Card and Other card start nothing until this question is answered yes: tender-pay.test.ts.
+  it.each([
+    [[UNCONFIRMED], false],
+    [[], true],
+  ] as const)(
+    "answers a collecting counter's Cash or Card question (notices %j): go ahead %s",
+    async (notices, proceed) => {
+      const { el, tender } = await atCounter([...notices], "collect");
+      const resolve = vi.fn();
+      emit(tender, "check-before-tender", { resolve });
+      await flushApp(el);
+      if (proceed) expect(resolve).not.toHaveBeenCalled();
+      else expect(resolve).toHaveBeenCalledExactlyOnceWith(false);
+      expect(pausedDialog(el) !== null).toBe(!proceed);
+    },
+  );
+
+  it.each([
+    [[UNCONFIRMED], false],
+    [[], true],
+  ] as const)(
+    "a collecting counter's Cash button (notices %j) opens amount entry: %s",
+    async (notices, proceed) => {
+      const { el, tender } = await atCounter([...notices], "collect");
+      tender.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+      await flushApp(el);
+      await tender.updateComplete;
+      expect(tender.shadowRoot!.querySelector("till-numeric-pad") !== null).toBe(proceed);
+      expect(pausedDialog(el) !== null).toBe(!proceed);
+    },
+  );
+
+  it.each([
+    [[UNCONFIRMED], false],
+    [[], true],
+  ] as const)(
+    "a collecting counter's Card button on a reader (notices %j) starts collecting: %s",
+    async (notices, proceed) => {
+      const { el, tender } = await atCounter([...notices], "collect", {
+        getTill: vi.fn().mockResolvedValue({
+          ...billPayTill,
+          cardProvider: "simulator",
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
+        pay: vi.fn(() => new Promise(() => {})),
+      });
+      const collect = vi.fn();
+      tender.addEventListener("collect-card", collect);
+      tender.shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+      await flushApp(el);
+      expect(collect).toHaveBeenCalledTimes(proceed ? 1 : 0);
+      expect(pausedDialog(el) !== null).toBe(!proceed);
+    },
+  );
+
+  it("Check the time closes the paused dialog and opens the box's time dialog", async () => {
+    const { el, pay } = await atCounter([UNCONFIRMED]);
+    await pay();
+    expect(el.shadowRoot!.querySelector("till-box-time-dialog")).toBeNull();
+    pausedDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-check-time]")!.click();
+    await flushApp(el);
+    expect(pausedDialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-box-time-dialog")).not.toBeNull();
+  });
+
+  it("Close closes it and opens nothing else", async () => {
+    const { el, pay } = await atCounter([UNCONFIRMED]);
+    await pay();
+    pausedDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-close]")!.click();
+    await vi.waitFor(() => expect(pausedDialog(el)).toBeNull());
+    await flushApp(el);
+    expect(billPayDialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-box-time-dialog")).toBeNull();
+  });
+
+  it("Close by keyboard hands focus back to the Pay that opened it", async () => {
+    const { el, tender } = await atCounter([UNCONFIRMED]);
+    const payButton = tender
+      .shadowRoot!.querySelector("[data-counter-pay]")!
+      .shadowRoot!.querySelector("button")!;
+    payButton.focus();
+    await userEvent.keyboard("{Enter}");
+    await flushApp(el);
+    expect(pausedDialog(el)).not.toBeNull();
+    const close = pausedDialog(el)!
+      .shadowRoot!.querySelector("[data-close]")!
+      .shadowRoot!.querySelector("button")!;
+    close.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(pausedDialog(el)).toBeNull());
+    await flushApp(el);
+    let focused: Element | null = document.activeElement;
+    while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+    expect(focused).toBe(payButton);
+  });
+
+  it("offers no Check the time while the box does not offer it", async () => {
+    const { el, pay } = await atCounter([UNCONFIRMED]);
+    await pay();
+    expect(pausedDialog(el)!.shadowRoot!.querySelector("[data-check-time]")).not.toBeNull();
+    Object.assign(el, { checkTimeOffered: false });
+    await flushApp(el);
+    expect(pausedDialog(el)!.shadowRoot!.querySelector("[data-check-time]")).toBeNull();
+    expect(pausedDialog(el)!.shadowRoot!.querySelector("[data-close]")).not.toBeNull();
+  });
+
+  it("closes once a later read no longer carries the waiting notice", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const { el, getDeviceEquipment, pay } = await atCounter([UNCONFIRMED]);
+    await pay();
+    expect(pausedDialog(el)).not.toBeNull();
+    getDeviceEquipment.mockResolvedValue(withNotices([]));
+    await poll(el);
+    expect(pausedDialog(el)).toBeNull();
+  });
+
+  it("lets Pay go ahead once a read names the box's clock unavailable, still showing the waiting line", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const { el, api, getDeviceEquipment, pay } = await atCounter([UNCONFIRMED]);
+    getDeviceEquipment.mockResolvedValue({
+      ...withNotices([]),
+      noticesUnavailable: ["box-clock"],
+    });
+    await poll(el);
+    expect(seen(el).staffNotices).toContainEqual(UNCONFIRMED);
+    await pay();
+    expect(api.parkOrder).toHaveBeenCalledOnce();
+    expect(pausedDialog(el)).toBeNull();
+  });
+
+  it("keeps an open paused dialog while a read names the box's clock unavailable", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const { el, getDeviceEquipment, pay } = await atCounter([UNCONFIRMED]);
+    await pay();
+    expect(pausedDialog(el)).not.toBeNull();
+    getDeviceEquipment.mockResolvedValue({
+      ...withNotices([]),
+      noticesUnavailable: ["box-clock"],
+    });
+    await poll(el);
+    expect(pausedDialog(el)).not.toBeNull();
+  });
+
+  it("opens the paused dialog, not the bill payment dialog, from a table's Pay", async () => {
+    const api = stubApi({
+      getDeviceEquipment: vi.fn().mockResolvedValue(withNotices([UNCONFIRMED])),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    await vi.waitFor(() => expect(strip(el).drawn).not.toBeNull());
+    order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+    await flushApp(el);
+    expect(billPayDialog(el)).toBeNull();
+    expect(pausedDialog(el)).not.toBeNull();
+    expect(api.getBillBalance).not.toHaveBeenCalled();
+  });
+
+  it("opens the paused dialog, not the presented bill's sheet", async () => {
+    const api = stubApi({
+      getDeviceEquipment: vi.fn().mockResolvedValue(withNotices([UNCONFIRMED])),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    await vi.waitFor(() => expect(strip(el).drawn).not.toBeNull());
+    emit(order, "pay-presented", { workingOrderId: "wo-4" });
+    await flushApp(el);
+    expect(el.shadowRoot!.querySelector("till-presented-pay-dialog")).toBeNull();
+    expect(pausedDialog(el)).not.toBeNull();
+  });
+
+  it("still opens the bill's payments to give back an overpayment", async () => {
+    const api = stubApi({
+      getDeviceEquipment: vi.fn().mockResolvedValue(withNotices([UNCONFIRMED])),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    await vi.waitFor(() => expect(strip(el).drawn).not.toBeNull());
+    emit(order, "refund-excess", { excess: "5.00" });
+    await flushApp(el);
+    expect(pausedDialog(el)).toBeNull();
+    expect(billPayDialog(el)).not.toBeNull();
+  });
+
+  it("still reopens a bill payment that is out, so its answer can be seen", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([]));
+    const takeBillPayment = vi.fn(() => new Promise(() => {}));
+    const api = stubApi({ getDeviceEquipment, takeBillPayment });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+    await flushApp(el);
+    const pay = billPayDialog(el)!;
+    pay
+      .shadowRoot!.querySelector<HTMLInputElement>('input[name="way"][value="contribution"]')!
+      .click();
+    await flushApp(el);
+    for (const [name, value] of [
+      ["amount", "40"],
+      ["tendered", "50"],
+    ] as const) {
+      const input = pay
+        .shadowRoot!.querySelector(`wt-input[name="${name}"]`)!
+        .shadowRoot!.querySelector("input")!;
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await flushApp(el);
+    }
+    pay.shadowRoot!.querySelector<HTMLElement>("[data-pay-continue]")!.click();
+    await flushApp(el);
+    pay.shadowRoot!.querySelector<HTMLElement>("[data-pay-confirm]")!.click();
+    await flushApp(el);
+    expect(takeBillPayment).toHaveBeenCalledOnce();
+    emit(pay, "bill-pay-close");
+    await flushApp(el);
+    expect(billPayDialog(el)).toBeNull();
+    getDeviceEquipment.mockResolvedValue(withNotices([UNCONFIRMED]));
+    await poll(el);
+    await vi.waitFor(() => expect(strip(el).drawn).not.toBeNull());
+
+    order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+    await flushApp(el);
+    expect(pausedDialog(el)).toBeNull();
+    expect(billPayDialog(el)).not.toBeNull();
+    expect((billPayDialog(el) as unknown as { busy: boolean }).busy).toBe(true);
   });
 });

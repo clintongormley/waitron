@@ -3,7 +3,7 @@ import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { TillTenderPay } from "./tender-pay.js";
+import { TillTenderPay, type CardOutcome } from "./tender-pay.js";
 import { sellingValuesOf, type OrderFlow, type TillProduct } from "../api/client.js";
 import { userEvent } from "vitest/browser";
 import { dialogOpenUnder } from "./track-dialog.js";
@@ -1356,6 +1356,119 @@ describe("till-tender-pay", () => {
       await el.updateComplete;
       expect(spy).toHaveBeenCalledWith({ tip: "0.50" }); // replayed, not re-read (idle field is gone)
       expect(query(el, ".collecting")).not.toBeNull(); // back to the spinner, not idle
+    });
+
+    it("Retry after a decline asks before collecting again, and collects nothing when told no", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(coffee, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      click(el, ".pay-card");
+      await el.updateComplete;
+      el.cardOutcome = { outcome: "declined", failureReason: "insufficient_funds" };
+      await el.updateComplete;
+      const asked: Array<(proceed: boolean) => void> = [];
+      el.addEventListener("check-before-tender", (event) => {
+        event.preventDefault();
+        asked.push((event as CustomEvent<{ resolve: (proceed: boolean) => void }>).detail.resolve);
+      });
+      const spy = vi.fn();
+      el.addEventListener("collect-card", spy);
+      click(el, ".retry");
+      expect(asked).toHaveLength(1);
+      asked[0]!(false);
+      await el.updateComplete;
+      expect(spy).not.toHaveBeenCalled();
+      expect(query(el, ".retry")).not.toBeNull();
+      click(el, ".retry");
+      asked[1]!(true);
+      await el.updateComplete;
+      expect(spy).toHaveBeenCalledOnce();
+      expect(query(el, ".collecting")).not.toBeNull();
+    });
+
+    it.each([
+      [{ outcome: "timeout" }, false],
+      [{ outcome: "network_unavailable" }, true],
+      [{ outcome: "declined", failureReason: "reader_unavailable" }, true],
+    ] as const)("Retry after %j asks before collecting again: %s", async (outcome, asks) => {
+      const store = new WorkingOrderStore();
+      store.addProduct(coffee, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      click(el, ".pay-card");
+      await el.updateComplete;
+      el.cardOutcome = { ...outcome } as CardOutcome;
+      await el.updateComplete;
+      const question = vi.fn((event: Event) => event.preventDefault());
+      el.addEventListener("check-before-tender", question);
+      const spy = vi.fn();
+      el.addEventListener("collect-card", spy);
+      click(el, ".retry");
+      expect(question).toHaveBeenCalledTimes(asks ? 1 : 0);
+      expect(spy).toHaveBeenCalledTimes(asks ? 0 : 1);
+    });
+
+    it("Retry collects nothing when the answer comes after the pay card moved to another declined order", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(coffee, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      click(el, ".pay-card");
+      await el.updateComplete;
+      el.cardOutcome = { outcome: "declined", failureReason: "insufficient_funds" };
+      await el.updateComplete;
+      let answer: ((proceed: boolean) => void) | undefined;
+      el.addEventListener("check-before-tender", (event) => {
+        event.preventDefault();
+        answer = (event as CustomEvent<{ resolve: (proceed: boolean) => void }>).detail.resolve;
+      });
+      const spy = vi.fn();
+      el.addEventListener("collect-card", spy);
+      click(el, ".retry");
+      const other = new WorkingOrderStore();
+      other.addProduct(coffee, "1");
+      el.store = other;
+      el.cardOutcome = { outcome: "declined", failureReason: "insufficient_funds" };
+      await el.updateComplete;
+      expect(query(el, ".retry")).not.toBeNull();
+      answer!(true);
+      await el.updateComplete;
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("Retry cancelled while its question is out collects nothing when the answer is yes", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(coffee, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      click(el, ".pay-card");
+      await el.updateComplete;
+      el.cardOutcome = { outcome: "declined", failureReason: "insufficient_funds" };
+      await el.updateComplete;
+      let answer: ((proceed: boolean) => void) | undefined;
+      el.addEventListener("check-before-tender", (event) => {
+        event.preventDefault();
+        answer = (event as CustomEvent<{ resolve: (proceed: boolean) => void }>).detail.resolve;
+      });
+      const spy = vi.fn();
+      el.addEventListener("collect-card", spy);
+      click(el, ".retry");
+      click(el, ".switch-tender");
+      await el.updateComplete;
+      expect(query(el, ".pay-card")).not.toBeNull();
+      answer!(true);
+      await el.updateComplete;
+      expect(spy).not.toHaveBeenCalled();
+      expect(query(el, ".collecting")).toBeNull();
     });
 
     it("Switch tender returns to idle, leaving cash/manual card one tap away (CLAUDE.md §5)", async () => {
