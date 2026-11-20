@@ -80,8 +80,9 @@ its own bill and matched SumUp's `SUCCESSFUL` transaction. The owner's 17 Novemb
 check captured €1.40. The next daily audit checked that charge by reference and amount with no
 discrepancies. The owner saw both completed checks in SumUp comparison, with no rows in the two
 payment lists. On 19 November the owner paid €1.40 by chip and online PIN. The Waitron capture
-and the saved SumUp transaction agree by reference and amount. A live audit with the wider
-backup matching window and signature qualification remain open. Idle reader battery refresh timing remains unqualified.
+and the saved SumUp transaction agree by reference and amount. The owner accepted the saved
+standalone backup replay and closed the hands-on checks on 20 November. Signature was not tested
+because no card was available. Idle reader battery refresh timing remains unqualified.
 Waitron omits old or undated SumUp battery snapshots. Check charge on the reader when no percentage
 is shown. See the script's dated battery provenance and the existing alert-cache limit.
 
@@ -117,10 +118,9 @@ complete detail through the real adapter matched its refund; the raw 19-row hist
 omits foreign-reference keys, while the two detail responses carry them. See the runbook's
 §10.7.
 
-Still open: physical declined-card behavior, signature-required cards, the statement/fee
-check, the SIM-only/offline/busy-reader/termination probes, and a second standalone machine's
-matching sample. The phone-app samples below do not establish the latter. No further paid
-request is authorised unattended, and a distinct authorisation void has not been measured.
+Physical declined-card behavior, the statement/fee check and the SIM-only, offline, busy-reader
+and termination probes remain open. No further paid request is authorised unattended, and a
+distinct authorisation void has not been measured.
 
 ## The deli's outage card machine
 
@@ -133,7 +133,7 @@ accountant exports; and check cash-only service without a backup machine. The 5 
 phone-app samples report `payment_type: POS`, as API payments do, and client references starting
 `urn:sumup:pos:sale:`. The owner's typed reference became product text (`Some ref`, with a
 trailing space in detail), not a verified matching key. These samples inform the design; the
-second standalone Solo and the other-provider and cash-only cases still need qualification. A
+other-provider and cash-only cases still need qualification. A
 barcode scanner only if the deli sells barcoded goods; nothing in the till reads one today.
 
 The first backup-machine entry slice lets a counter use Other card machine while its normal reader
@@ -146,8 +146,8 @@ a charge on the owner's other SumUp account. It also listed both sides of the sa
 payment as unmatched. The standalone Solo charge was recorded in Waitron 10 minutes and 4 seconds
 later, outside the original five-minute matching window. On 20 November the saved audit rows
 were replayed through the reconciler in an isolated database. The 30-minute window matched the
-€1.50 pair and left the €1.40 entry for a manager to check. The replay used the saved rows, so
-a live audit with the wider window remains open.
+€1.50 pair and left the €1.40 entry for a manager to check. The owner accepted the saved-audit
+replay as the backup-machine qualification on 20 November.
 
 ## The SumUp reconciler
 
@@ -174,8 +174,8 @@ Recovery records the gross capture and identified completed refunds together. Un
 evidence stays attempting for another check; a failed refund alone leaves the charge. A partly
 refunded unfiled charge keeps the order held until explicit confirmation. Direct-order and pending
 linked payments can retain provider-confirmed remaining money on the bill, bill-first with any excess
-as a tip; failed-linked payments keep the full-refund route. Stripe durable reversal attempts and backup-machine
-hardware qualification remain open, along with signature handling.
+as a tip; failed-linked payments keep the full-refund route. Stripe durable reversal attempts
+remain open.
 
 - Show managers the daily match result for payments taken through paired SumUp readers. The SumUp comparison lists standalone payment matches and payments that need checking.
 
@@ -241,28 +241,6 @@ working. Prices and receipts:
 This is now the payment part of [A508](till.md#a508-a-tables-qr-code-order-call-a-waiter-ask-for-the-bill-or-pay);
 the ordering surface is A508 and [A509](till.md#a509-online-ordering-for-collection-at-the-counter).
 
-## Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing built
-
-**A949, 2026-10-21:** the Cloud API documents a `WAITING_FOR_SIGNATURE` reader state, but no
-signature-required payment was observed. Capture, merchant acceptance and retention ownership
-remain open. Follow the physical-card check in the
-[experiment checkpoint](../research/2026-09-10-sumup-solo-experiments.md#8-a949-checkpoint-2026-10-21)
-before deciding whether Waitron needs a signature step. Keep this entry open.
-
-When a card or its issuer picks signature as the way it proves the person is who they say
-(the card-scheme term is the Cardholder Verification Method), the payment is only complete once a
-signature is captured, and the merchant is usually expected to keep it in case the payment is later
-disputed. Three things to settle before this is a task, none of them verified yet: (1) whether our
-readers — the SumUp Solo, and Stripe Terminal if it ever comes back — handle the signature entirely
-on the reader and hand us a finished payment, or whether they hand the signature step back to us to
-run on the waiter's screen; (2) if it lands on us, WHERE the signature is captured and kept (an
-on-screen signature pad, or a printed receipt with a signature line the waiter files) and how that
-record is stored and retrieved for a dispute; and (3) whether the fiscal receipt has to show
-anything about it — this is a card-scheme rule, separate from the Veri\*Factu invoice record, so
-confirm the two do not touch before assuming they are independent. Start by reading what the SumUp
-Solo actually does on a signature-required card (it belongs with the SumUp Solo experiments above),
-because if the reader owns the whole step there may be nothing for us to build.
-
 ## Check how real Stripe answers a malformed reader id, and one from another Stripe account
 
 The add-reader route answers `reader.reference_unknown` when Stripe's
@@ -322,6 +300,11 @@ Remaining Stripe qualification and maintenance.
   [A796 design §6](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md#6-tap-to-pay)).
 
 ## Decisions and deliberate limits
+
+- **A949 signature qualification closed** (owner, 2026-11-20 16:19). No signature-required card was
+  available, so the signature step was not tested. The existing
+  [SumUp experiment checkpoint](../research/2026-09-10-sumup-solo-experiments.md#8-a949-checkpoint-2026-10-21)
+  records what remains unknown about reader handling.
 
 - **A cancellation's refund is approved on the server, not carried by the till** (owner,
   2026-11-12, R6-5: "Approval on server"; the watcher cleared the detail below, #2983). Once a

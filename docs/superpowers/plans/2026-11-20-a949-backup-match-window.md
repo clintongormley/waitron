@@ -31,7 +31,7 @@ same-amount candidate from the connected account within 30 minutes either way.
    then the €1.50 match and the separate €1.40 unmatched entry. Save the receipt with
    the input coverage, including whether it is a full history or a projection. Update
    `docs/backlog.md` and `docs/backlog/payments.md` with that result. Preserve the live
-   test venue and key. Signature qualification remains open.
+   test venue and key during the replay.
 
 The watcher cleared one later daily check on 20 November at 15:16. Let SumUp’s first
 run for each day start at 01:00 UTC so a late entry and its rival can both be present.
@@ -40,3 +40,6 @@ and retry times. Add a server scheduler test for the one SumUp run and Stripe’
 run. Change the comparison’s expected availability in the English and Spanish copy. The planned window, readers and copy are about 30 added and 20 removed
 production lines, 50 added and 15 removed test lines, plus guide and backlog updates
 and a disposable replay. The slice uses the existing audit, storage and dashboard.
+
+On 20 November at 16:19, the owner closed the hands-on checks after the PIN pass and
+accepted the saved backup-machine replay. Signature was not tested because no card was available.

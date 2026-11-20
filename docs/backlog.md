@@ -925,18 +925,17 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   held alert comes back at midnight UTC, and smaller choices from the plan, the browser look and the review. Each stays open until the owner
   answers it. [Detail](backlog/payments.md#a846s-points-for-the-owner-at-land-held-card-payments)
 
-- **The SumUp Solo experiments.** Still open after the 9 November cross-account session: signature-required
-  cards, declined-card behavior, the statement/fee check, remaining connection
-  probes and a second standalone machine sample. The reported decimal-`0.40` probe refunded the
-  full payment, but its request bytes were not saved and the cause is unknown.
+- **The SumUp Solo experiments.** Physical decline behavior, the statement/fee check and remaining
+  connection probes are open. The reported decimal-`0.40` probe refunded the full payment, but its
+  request bytes were not saved and the cause is unknown.
   [Sandbox checks and the owner’s 15-minute settlement script](research/2026-11-15-a949-sandbox-and-settlement-check.md)
   record the successful €10 Virtual A control, two virtual decline scenarios and a separate
   successful €10 Virtual B payment on 16 November. The €11 late result needed manager confirmation;
   €42.51 used generic decline wording. The daily SumUp audit matched the owner's 17 November
   €1.40 paired-Solo charge. The 19 November chip-and-PIN check matched by reference and amount.
   A replay of the saved standalone Solo sample matched the €1.50 pair with the 30-minute
-  window and kept the separate €1.40 entry unmatched. A live audit with the wider window and
-  a signature-required card check remain open.
+  window and kept the separate €1.40 entry unmatched. The owner closed these hands-on checks on
+  20 November. Signature was not tested because no card was available.
   Idle SumUp battery refresh timing is unqualified. Check missing battery percentages on the
   reader itself. No further paid request unattended.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
@@ -948,25 +947,19 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **What #329 left open:** adding or adopting a reader does not shut out a provider disconnect at the
   same moment (an accepted race); Stripe's reader list is one page.
 
-- **The SumUp reconciler** — backup-machine hardware/signature qualification. The November
+- **The SumUp reconciler** — other-provider and cash-only qualification. The November
   results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
   and unpaid cancellation. The first recovery slice supplies Waitron's partner key and records
   identified refunds.
   Backup payment entry now records optional source, machine and operation details, including
   Other card machine on a counter with a configured reader. The day report and accountant workbook
-  carry those details, current payment state and successful-refund totals. Qualification still
-  needs a live audit with the wider window, an other-provider payment and a cash-only session.
+  carry those details, current payment state and successful-refund totals.
   [Detail](backlog/payments.md#the-sumup-reconciler)
 
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have
   caught the #312 refund-unit bug. Needs a sandbox account and a CI secret.
 
 - **Tap to pay restore** (bundle of 1, size M, needs the owner). [Detail](backlog/payments.md#bundle-tap-to-pay-restore)
-
-- **Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing
-  built.** Start by reading what the SumUp Solo actually does on a signature-required card,
-  because if the reader owns the whole step there may be nothing for us to build.
-  [Detail](backlog/payments.md#some-card-payments-ask-the-cardholder-to-sign-instead-of-enter-a-pin--open-question-nothing-built)
 
 - **A793 — tips: who a tip belongs to, how it is shared out, and what payroll gets** — NOT
   APPROVED: the owner (2026-10-18, on Q38): "Leave this for now. Back to the backlog. It needs a
