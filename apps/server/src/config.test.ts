@@ -697,6 +697,20 @@ describe("WAITRON_ONBOARDING_INTENT", () => {
     expect(config.onboardingIntent).toBe(intent);
   });
 
+  it("uses Live when a production box has no saved setup choice", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, ...productionRp, WAITRON_ENV: "production" },
+      ROOT,
+      STATE_ROOT,
+    );
+    expect(config.onboardingIntent).toBe("live");
+  });
+
+  it("leaves the setup choice absent on a preproduction box without one", () => {
+    const config = loadConfig({ ...MIN_ENV, WAITRON_ENV: "preproduction" }, ROOT, STATE_ROOT);
+    expect(config.onboardingIntent).toBeUndefined();
+  });
+
   it("accepts the live UI intent in dev while retaining preproduction external services", () => {
     const config = loadConfig(
       { ...MIN_ENV, WAITRON_ENV: "dev", WAITRON_ONBOARDING_INTENT: "live" },

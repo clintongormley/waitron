@@ -29,7 +29,7 @@ export interface ServerConfig {
   environment: DeploymentEnvironment;
   /** `WAITRON_ENV=dev` only ({@link isDevMode}); `environment` maps `dev` to `preproduction`. */
   devMode: boolean;
-  /** Why this fresh primary was created; undefined when `WAITRON_ONBOARDING_INTENT` is unset. */
+  /** Setup choice used by the running box. Production implies Live. */
   onboardingIntent: OnboardingIntent | undefined;
   /** Explicitly enables preproduction submissions on a dedicated integration-test target. */
   fiscalTestSubmissions: boolean;
@@ -475,7 +475,8 @@ export function loadConfig(
     ...(installationOrigin === "usb" ? { installationOrigin } : {}),
     environment,
     devMode: isDevMode(env),
-    onboardingIntent: onboardingIntent(env, environment),
+    onboardingIntent:
+      onboardingIntent(env, environment) ?? (environment === "production" ? "live" : undefined),
     fiscalTestSubmissions: fiscalTestSubmissions(env),
     paymentTestProviders: paymentTestProviders(env),
     httpPort,
