@@ -295,10 +295,12 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
         .set({ capabilities: [...validateCapabilities(profile.capabilities), "print-receipt"] })
         .where(eq(deviceProfiles.id, profile.id));
   });
-  const slipHeading = receiptLabelsFor("es-ES").paymentHeading;
+  // Not the venue's default receipt language, so a dropped choice prints in another.
+  const slipHeading = receiptLabelsFor("ca-ES").paymentHeading;
+  expect(receiptLabelsFor("es-ES").paymentHeading).not.toBe(slipHeading);
   for (const language of ["en", "es"] as const) {
     await inTx(v, (tx) =>
-      writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] }),
+      writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es", "ca"] }),
     );
     const before = await v.db.select().from(printJobs);
     const frozenSales = await v.db.select().from(sales);
@@ -313,7 +315,7 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
       method: "card",
       entry: "reader",
       basket: { zoneId: offers.zoneId, lines: [{ menuItemId: offers.menuItemId, quantity: "1" }] },
-      receiptLanguage: "es-ES",
+      receiptLanguage: "ca-ES",
       printCardSlip: true,
     });
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
@@ -322,14 +324,14 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
     const [payment] = await v.db.select().from(payments).where(eq(payments.workingOrderId, id));
     expect(payment!.settledAt).not.toBeNull();
     const [sale] = await v.db.select().from(sales).where(eq(sales.workingOrderId, id));
-    expect(sale!.locale).toBe("es-ES");
+    expect(sale!.locale).toBe("ca-ES");
     const next = (await v.db.select().from(printJobs)).filter(
       (j) => !before.some((o) => o.id === j.id) && text(j.payload!).includes(slipHeading),
     );
     expect(next).toHaveLength(1);
     const paper = text(next[0]!.payload!);
-    expect(paper).toContain(receiptDateTime(payment!.settledAt!, "es-ES"));
-    expect(paper).toContain(formatMoney("1234.56", "es-ES"));
+    expect(paper).toContain(receiptDateTime(payment!.settledAt!, "ca-ES"));
+    expect(paper).toContain(formatMoney("1234.56", "ca-ES"));
     expect(formatMoney("1234.56", "en-GB")).not.toBe(formatMoney("1234.56", "es-ES"));
     expect(receiptDateTime(payment!.settledAt!, "en-GB")).not.toBe(
       receiptDateTime(payment!.settledAt!, "es-ES"),
