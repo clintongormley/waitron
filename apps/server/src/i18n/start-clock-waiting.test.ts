@@ -4,17 +4,13 @@ import { START_CLOCK_WAITING_WORDS } from "./start-clock-waiting.js";
 
 describe("restore's clock-waiting page wording", () => {
   // Copied from apps/setup's `restore.allocation_node_key` and `restore.allocation_key_missing`,
-  // so the key is named as on the restore page and its paper.
+  // so the key is named as on the restore page.
   it.each([
-    [
-      "en-GB",
-      "Selected backup’s server key",
-      "Enter the server key from the selected backup’s paper.",
-    ],
+    ["en-GB", "Selected backup’s server key", "Enter the selected backup’s server key."],
     [
       "es-ES",
       "Clave del servidor de la copia elegida",
-      "Introduce la clave del servidor del papel de la copia elegida.",
+      "Introduce la clave del servidor de la copia elegida.",
     ],
   ] as const)("names the key in %s as the restore page does", (locale, label, refused) => {
     expect(START_CLOCK_WAITING_WORDS[locale].keyLabel).toBe(label);

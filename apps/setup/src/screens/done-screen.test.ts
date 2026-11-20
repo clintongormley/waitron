@@ -549,11 +549,11 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "The server did not accept the server key this page holds. Open any of the server's pages on a phone, computer or till on the venue's network and enter the server key from the selected backup's paper there.",
+      "The server did not accept the server key this page holds. Open any of the server's pages on a phone, computer or till on the venue's network and enter the selected backup's server key there.",
     ],
     [
       "es-ES",
-      "El servidor no ha aceptado la clave del servidor que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave del servidor del papel de la copia elegida.",
+      "El servidor no ha aceptado la clave del servidor que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave del servidor de la copia elegida.",
     ],
   ] as const)(
     "if the server refuses the key, says where to enter it, since this screen has no key field, in %s",
@@ -1385,6 +1385,7 @@ describe("saving the server key as a file", () => {
     const blobs: Blob[] = [];
     const urls: string[] = [];
     const names: string[] = [];
+    const hrefs: string[] = [];
     vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
       blobs.push(blob as Blob);
       const url = realURL(blob);
@@ -1396,8 +1397,9 @@ describe("saving the server key as a file", () => {
       this: HTMLAnchorElement,
     ) {
       names.push(this.download);
+      hrefs.push(this.href);
     });
-    return { blobs, urls, names, revoke };
+    return { blobs, urls, names, hrefs, revoke };
   }
 
   it("saves the key, its name and what it is for as one text file, and keeps the key on screen", async () => {
@@ -1408,6 +1410,7 @@ describe("saving the server key as a file", () => {
     });
     await userEvent.click(q(el, "[data-test=break-glass-save]")!);
     expect(saves.names).toEqual(["waitron-server-key-2026-10-15-K7QF.txt"]);
+    expect(saves.hrefs).toEqual([saves.urls[0]]);
     expect(saves.blobs).toHaveLength(1);
     expect(saves.blobs[0]!.type).toBe("text/plain;charset=utf-8");
     expect((await saves.blobs[0]!.text()).split("\n")).toEqual([
@@ -1416,7 +1419,7 @@ describe("saving the server key as a file", () => {
       "",
       "key-on-paper",
       "",
-      "You need this key to restore this venue from its backup bucket, and to make a server the primary if the primary cannot be reached.",
+      "You need it to promote this server if the primary is unreachable.",
       "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
       "",
       "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
@@ -1445,7 +1448,7 @@ describe("saving the server key as a file", () => {
       "",
       "key-on-paper",
       "",
-      "Necesitas esta clave para restaurar este local desde su bucket de copias y para que un servidor pase a ser el principal si no se puede contactar con el principal.",
+      "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
       "Para restaurar una copia de seguridad hace falta la clave del servidor que estaba en vigor cuando se hizo. Si tienes una clave del servidor anterior, consérvala mientras conserves copias de su época.",
       "",
       "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
@@ -1453,6 +1456,40 @@ describe("saving the server key as a file", () => {
     ]);
     setLocale("en-GB");
   });
+
+  it.each([
+    [
+      "a Preparation setup",
+      { onboardingIntent: "prepare" },
+      "You need it to restore this venue from its bucket.",
+    ],
+    [
+      "a spare joining the primary",
+      { onboardingIntent: "prepare", mirrorJoin: true },
+      "You will need it if this server ever has to take over from the primary.",
+    ],
+    [
+      "a Live setup",
+      { onboardingIntent: "live" },
+      "You need it to promote this server if the primary is unreachable.",
+    ],
+  ] as const)(
+    "says in the file of %s what the screen says the key is for",
+    async (_, extra, use) => {
+      const saves = captureSaves();
+      const el = await mountDone(() => new Promise(() => {}), {
+        ...extra,
+        breakGlassSecret: "key-on-paper",
+      });
+      expect(q(el, "[data-test=break-glass-warning]")!.textContent).toContain(use);
+      await userEvent.click(q(el, "[data-test=break-glass-save]")!);
+      const lines = (await saves.blobs[0]!.text()).split("\n");
+      expect(lines[4]).toBe(use);
+      expect(lines[5]).toBe(
+        "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
+      );
+    },
+  );
 
   it("falls back to a plain file name and leaves out the name line when the key has no name", async () => {
     const saves = captureSaves();

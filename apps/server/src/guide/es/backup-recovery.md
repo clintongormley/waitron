@@ -135,7 +135,7 @@ al propietario de Cloud que apruebe la nueva solicitud en Cloud.
 Al terminar de configurar un local en Preparación, elige **Guardar en un archivo** para guardar la
 clave del servidor y su nombre, y después imprime el archivo o muévelo fuera de ese ordenador; o
 anótalos en papel. Guárdalos con el paquete de recuperación del bucket. Después de revisar una copia
-del bucket, busca el nombre que se muestra entre los que anotaste y escribe la clave agrupada en
+del bucket, busca el nombre que se muestra entre los que guardaste y escribe la clave agrupada en
 **Clave del servidor**.
 
 Bajo la revisión, en «Recuperar este servidor», elige en **PDF de recuperación** tu paquete de
@@ -235,7 +235,7 @@ Si, después de elegir el botón de restaurar, el servidor necesita que vuelvas 
 la página donde lo elegiste muestra la hora del servidor y la de este dispositivo: comprueba que las
 dos son correctas y elige **Confirmar la hora**, o **Este dispositivo** si la hora del servidor está
 mal. Si esa página se cerró, abre cualquier página del servidor en un móvil, ordenador o caja de la
-red del local e introduce la clave del servidor del papel de la copia elegida para ver
+red del local e introduce la clave del servidor de la copia elegida para ver
 el mismo paso. Después la restauración sigue sola. Si en cambio el servidor muestra una página que
 dice que no pudo crear sus nuevas series de facturas, elige **Reintentar un arranque normal**, o
 **Descartar esta restauración** donde esa página lo ofrece y vuelve a restaurar.

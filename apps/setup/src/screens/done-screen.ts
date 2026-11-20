@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
-import { helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
+import { errorStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
 import type { SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -57,6 +57,7 @@ export class SetupDoneScreen extends LitElement {
     helpLinkStyles,
     baseStyles,
     statusStyles,
+    errorStyles,
     introStyles,
     modePillStyles,
     css`
@@ -122,10 +123,6 @@ export class SetupDoneScreen extends LitElement {
       }
       .break-glass-save {
         margin: var(--wt-space-2) 0 0;
-      }
-      .break-glass-save-error {
-        margin: var(--wt-space-2) 0 0;
-        color: var(--wt-color-danger);
       }
     `,
   ];
@@ -445,15 +442,21 @@ export class SetupDoneScreen extends LitElement {
 
   #saveBreakGlass(secret: string): void {
     const lines = [
-      t("done.break_glass.file.title"),
+      t("done.break_glass.file_title"),
       ...(this.breakGlassKeyName === undefined ? [] : [this.#keyName(this.breakGlassKeyName)]),
       "",
       secret,
       "",
-      t("done.break_glass.file.purpose"),
+      t(
+        this.#preparation()
+          ? "done.break_glass.file_purpose"
+          : this.mirrorJoin
+            ? "done.break_glass.take_over"
+            : "done.break_glass.promote",
+      ),
       t("done.break_glass.backups"),
       "",
-      t("done.break_glass.file.keep"),
+      t("done.break_glass.file_keep"),
     ];
     const anchor = document.createElement("a");
     let url: string | undefined;
@@ -474,10 +477,14 @@ export class SetupDoneScreen extends LitElement {
     }
   }
 
+  #preparation(): boolean {
+    return this.onboardingIntent === "prepare" && !this.mirrorJoin;
+  }
+
   #breakGlass(): TemplateResult | null {
     const secret = this.breakGlassSecret;
     if (secret === undefined) return null;
-    const preparation = this.onboardingIntent === "prepare" && !this.mirrorJoin;
+    const preparation = this.#preparation();
     return html`<div class="break-glass" data-test="break-glass">
       <h2>${t("done.break_glass.heading")}</h2>
       <p class="break-glass-warning" data-test="break-glass-warning">
@@ -499,7 +506,7 @@ export class SetupDoneScreen extends LitElement {
       >
       ${
         this.breakGlassSaveFailed
-          ? html`<p class="break-glass-save-error" role="alert" data-test="break-glass-save-error">
+          ? html`<p class="error" role="alert" data-test="break-glass-save-error">
               ${t("done.break_glass.save_failed")}
             </p>`
           : nothing

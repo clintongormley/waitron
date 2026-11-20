@@ -99,7 +99,7 @@ describe("the restore's waiting app: pages", () => {
       );
       expect(body).toContain(
         escapeHtml(
-          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the server key from the backup's paper below to confirm the time from this device.",
+          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's server key below to confirm the time from this device.",
         ),
       );
       expect(body).toContain(escapeHtml("Selected backup’s server key"));
