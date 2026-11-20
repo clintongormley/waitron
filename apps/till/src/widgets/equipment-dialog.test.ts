@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -271,29 +272,33 @@ describe("till-equipment-dialog", () => {
     );
   });
 
-  it("shows that a free default reader can be claimed and lets staff choose Use default again", async () => {
-    const el = await mountDialog({
-      equipment: equipment({ card_terminal: onDefault("card_terminal", R1, [R1], null) }),
-    });
-    const seen = changes(el);
+  it.each([
+    [{}, "Free to choose", true],
+    [{ heldBy: BAR }, "Reader one is carried by Bar till (Ana)", false],
+    [{ busy: true }, "Reader one, busy", false],
+    [{ available: false }, "Reader one is switched off", false],
+  ])(
+    "names the default reader and lets staff claim it when free (%o)",
+    async (status, message, free) => {
+      const reader = { ...R1, ...status };
+      const card_terminal = onDefault(
+        "card_terminal",
+        reader,
+        reader.available ? [reader] : [],
+        null,
+      );
+      const el = await mountDialog({ equipment: equipment({ card_terminal }) });
+      const seen = changes(el);
 
-    expect(resolvedText(el, "card_terminal")).toBe(R1.name);
-    expect(contextText(el, "card_terminal")).toBe("Free to choose");
-    await chooseOption(combobox(el, "cardReaderId")!, "");
-    expect(seen).toEqual([
-      { role: "card_terminal", selection: "default", via: "list", takeOver: false },
-    ]);
-  });
-
-  it("names the default reader and who holds it when another till carries it", async () => {
-    const held = { ...R1, heldBy: BAR };
-    const el = await mountDialog({
-      equipment: equipment({ card_terminal: onDefault("card_terminal", held, [held]) }),
-    });
-
-    expect(resolvedText(el, "card_terminal")).toBe(R1.name);
-    expect(contextText(el, "card_terminal")).toContain("Bar till");
-  });
+      expect(resolvedText(el, "card_terminal")).toBe(R1.name);
+      expect(contextText(el, "card_terminal")).toBe(message);
+      await page.getByRole("combobox", { name: t("equipment.card_terminal") }).click();
+      await page.getByRole("option", { name: "Use default: Reader one" }).click();
+      expect(seen).toEqual(
+        free ? [{ role: "card_terminal", selection: "default", via: "list", takeOver: false }] : [],
+      );
+    },
+  );
 
   it("a busy reader is labelled busy", async () => {
     const busy = { ...R2, busy: true };

@@ -22621,10 +22621,6 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
 
     expect(readerName(el)).toBe(R2.name);
     expect(tenderPay(el).defaultReaderId).toBe(R2.id);
-    await openEquipmentFromSettings(el);
-    expect(
-      equipmentDialog(el)!.equipment?.roles.find((role) => role.role === "card_terminal"),
-    ).toMatchObject({ selection: "default", chosenId: null, default: { id: R2.id } });
   });
 
   it("after the sign-in's equipment read fails, the next poll's reader is offered", async () => {

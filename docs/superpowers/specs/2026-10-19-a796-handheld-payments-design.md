@@ -406,6 +406,9 @@ phone last chose Lector 2 and the Barra receipt printer.
    printer the phone would use now, marked with today's "Predeterminado del perfil"
    (`strings.ts:2287`). A save that is still being sent, or is refused, follows default 22. The row
    is closed again the next time the sheet opens.
+
+   **2026-11-20:** The profile-save behavior has changed. See the dated note under question 18.
+
 5. **Tip.** Unchanged: where tips are on, the card form has "Propina con tarjeta (opcional)" and
    cash offers "Dejar de propina". Everything else about tips is A793's design (not approved; back
    to brainstorm, [2026-10-18-a793-tips-design.md](2026-10-18-a793-tips-design.md)). This design
