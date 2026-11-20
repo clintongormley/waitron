@@ -87,7 +87,13 @@ import {
   shownMenu,
 } from "../menu-filter.js";
 import { lineProductName, productName } from "../widgets/product-name.js";
-import { quantityText, trimQuantity } from "../widgets/dish-format.js";
+import {
+  quantityText,
+  servableDishes,
+  serveListed,
+  trimQuantity,
+  unservedDishText,
+} from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { lineNutrition } from "../widgets/line-nutrition.js";
 import {
@@ -5478,7 +5484,7 @@ export class TillTableOrderScreen extends LitElement {
     if (shown === null) return nothing;
     if ("printed" in shown)
       return html`<p class="bill-printed" role="status" data-bill-printed>${t("bill.issued")}</p>`;
-    const servable = this.canMarkServed ? shown.unserved.filter((dish) => dish.released) : [];
+    const servable = servableDishes(shown.unserved, this.canMarkServed);
     const bill = this.bills.find((row) => row.workingOrderId === shown.workingOrderId);
     // The usual "refunded with Correct invoice" would be untrue.
     const notice =
@@ -5491,16 +5497,7 @@ export class TillTableOrderScreen extends LitElement {
       <span>${notice}</span>
       <span>${t("meal_end.unserved_heading")}</span>
       <ul>
-        ${shown.unserved.map(
-          (dish) =>
-            html`<li data-unserved-dish>
-              ${
-                compareDecimal(decimal(dish.quantity), decimal("1")) === 0
-                  ? dish.dishName
-                  : `${quantityText(dish.quantity)} × ${dish.dishName}`
-              }
-            </li>`,
-        )}
+        ${shown.unserved.map((dish) => html`<li data-unserved-dish>${unservedDishText(dish)}</li>`)}
       </ul>
       <div class="finish-refusal-actions">
         ${
@@ -5637,9 +5634,7 @@ export class TillTableOrderScreen extends LitElement {
   /** Mark served in Print the bill's not-served list: the listed dishes the kitchen has, as listed. */
   #markListedServed(dishes: readonly MealEndUnservedDish[]): void {
     if (this.#serveRefused()) return;
-    this.#dispatch("serve-lines", {
-      items: dishes.map((dish) => ({ lineId: dish.lineId, quantity: trimQuantity(dish.quantity) })),
-    } satisfies ServeLinesDetail);
+    this.#dispatch("serve-lines", { items: serveListed(dishes) } satisfies ServeLinesDetail);
   }
 
   /** Remembers what the count dialog's answer may act on: this api, party, bill and visit. */
@@ -7012,6 +7007,11 @@ export class TillTableOrderScreen extends LitElement {
     printBill: TemplateResult | typeof nothing,
   ): (TemplateResult | typeof nothing)[] {
     const target = { workingOrderId: bill.workingOrderId };
+    const credits =
+      bill.status === "placed" &&
+      bill.receiptAvailable &&
+      !bill.hasPayments &&
+      !namesCustomer(bill);
     return [
       this.fullInvoices &&
       owing(bill) &&
@@ -7034,12 +7034,20 @@ export class TillTableOrderScreen extends LitElement {
             ${t("table.bill_receipt")}
           </wt-button>`
         : nothing,
-      bill.status === "placed" && bill.receiptAvailable && !bill.hasPayments && !namesCustomer(bill)
+      credits
         ? html`<wt-button
             data-cancel-credit
             @click=${() => this.#dispatch("cancel-credit-bill", target)}
           >
             ${t("cancel_credit.action")}
+          </wt-button>`
+        : nothing,
+      credits && bill.leftUnpaid !== true
+        ? html`<wt-button
+            data-split-after-print
+            @click=${() => this.#dispatch("split-after-print-bill", target)}
+          >
+            ${t("split.action")}
           </wt-button>`
         : nothing,
     ];

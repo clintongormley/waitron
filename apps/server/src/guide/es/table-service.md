@@ -576,8 +576,8 @@ Todo lo demás que haces en la mesa está en el menú **⋮**, junto al selector
 primera, con el nombre de la cuenta en pantalla como título, por ejemplo **Cuenta 2 · Clint**, actúa
 solo sobre esa cuenta: **Poner nombre a esta cuenta**, **Mover platos…**, **Juntar cuentas**,
 **Mover esta cuenta**, **Descuento en la cuenta**, **Registrar salida sin pagar**, **Factura
-completa**, **Imprimir la cuenta**, **Copia del ticket** y **Cancelar y abonar**, cada una cuando
-corresponde. La segunda, **Toda la mesa**, actúa sobre todos los de la mesa:
+completa**, **Imprimir la cuenta**, **Copia del ticket**, **Cancelar y abonar** y **Reabrir para
+dividir**, cada una cuando corresponde. La segunda, **Toda la mesa**, actúa sobre todos los de la mesa:
 **Alergias**, **Poner nombre a los clientes**, **Comensales**, **Marcar cuenta pedida para …** con
 el nombre del grupo (una vez pedida, **Anular la petición de cuenta de …**), **Separar una mesa**
 (cuando el grupo ocupa más de una mesa), **Unir una mesa**, **Mover clientes** y **Cerrar mesa**.
@@ -670,6 +670,11 @@ un cliente, así que en esas cuentas quita antes de imprimir los platos que pued
 
 Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo en **+ Cuenta
 nueva**.
+
+Si después los clientes quieren pagar por separado, abre **⋮** y elige **Reabrir para dividir**. El
+ticket se abona y sus platos pasan a una cuenta nueva, listos para [**Mover platos…**](table-service.md#move-dishes).
+Una vez pagada una parte, ya no se puede dividir así: los demás clientes pagan el resto con
+**Cobrar**.
 
 Cobra con **Cobrar** como siempre, de una vez o por partes.
 

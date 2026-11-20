@@ -41,7 +41,7 @@ export async function readOrderInvoice(
  * series, filed under the request's device, its lines the invoice's with their signs reversed and its VAT
  * breakdown the invoice's own negated (`wholeInvoice`), then settle the invoice owing nothing.
  * `recordCorrection` checks `sale.rectify` against `authz` and counts nothing, so an override in
- * `authz` must already have been checked under a wrong-PIN limit.
+ * `authz` must already have been checked under a wrong-PIN limit. Answers the corrective's id.
  */
 export async function creditWholeInvoice(
   tx: Transaction,
@@ -49,7 +49,7 @@ export async function creditWholeInvoice(
   cfg: DeviceRequestConfig,
   invoice: IssuedInvoice,
   authz: AuthzInput,
-): Promise<void> {
+): Promise<SaleId> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const clock = await prepareIssueClock(tx, cfg, deps.clock);
   const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "rectificative"));
@@ -63,7 +63,7 @@ export async function creditWholeInvoice(
     kind: "sale",
     saleId: invoice.id,
   });
-  await recordCorrection(tx, deps.backend, {
+  const credit = await recordCorrection(tx, deps.backend, {
     operationDescription,
     origin: cfg.origin,
     nodeId: cfg.nodeId,
@@ -76,6 +76,7 @@ export async function creditWholeInvoice(
     clock,
   });
   await settleSale(tx, { saleId: invoice.id, tenders: [] });
+  return credit.saleId;
 }
 
 function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSaleLine[] {

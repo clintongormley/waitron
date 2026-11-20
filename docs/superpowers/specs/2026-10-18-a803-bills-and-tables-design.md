@@ -66,6 +66,9 @@ move keeps the line's id; a split leaves the original line its id and gives the 
 one (`splitRow`, `apps/server/src/working-order.ts:4988-4995`). Everything else in this section is
 unchanged.
 
+2026-11-20 pointer: Reopen to split copies a printed bill's dishes onto a new bill under new ids, an
+exception to the paragraph above ([decision](../../backlog/fiscal.md#adviser-split-after-print-a-printed-bill-is-split-by-a-whole-credit-note-and-copies-of-its-dishes-watcher-2026-11-20)).
+
 - Every order line holds **one portion of one dish**, with that portion's own extras. "2 ×
   Hamburguesa" is two lines. "Burger with chips" and "burger with double chips" are two different
   lines, so the kitchen and the bill both know which is which.
@@ -240,6 +243,8 @@ but legitimate move that the old partial-line code needed and the new model does
   the new name; no ticket reprints.
 - With Split by item gone, "split" appears only in Split a table and the Pay window's Split
   equally, which ends the board 05 confusion.
+  2026-11-20 pointer: **Reopen to split** on a printed bill (ADVISER-SPLIT-AFTER-PRINT) is a third
+  use; its name is for the owner to confirm at landing.
 - Each recorded join, split and move-bill defect in `docs/backlog.md` (A563–A604 and their
   neighbours) is checked against this design: an entry the redesign removes is deleted, the rest
   stay.

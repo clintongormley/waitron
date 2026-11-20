@@ -213,6 +213,7 @@ const ROUTES: readonly Row[] = [
   ordering("PUT", `/api/working-orders/${id}/dining`),
   ordering("POST", `/api/working-orders/${id}/place`),
   ordering("POST", `/api/working-orders/${id}/cancel`),
+  ordering("POST", `/api/working-orders/${id}/split-after-print`),
   ordering("PUT", `/api/working-orders/${id}/make-at`),
   ordering("POST", `/api/working-orders/${id}/lines/move-station`),
   ordering("PUT", `/api/working-orders/${id}/lines/1`),

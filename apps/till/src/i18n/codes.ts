@@ -585,6 +585,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The bill would owe less than has already been paid on it. Take less off the bill, or refund the difference first",
     es: "La cuenta quedaría por debajo de lo que ya se ha pagado. Quita menos de la cuenta o devuelve antes la diferencia",
   },
+  "bill.left_unpaid": {
+    en: "This bill was recorded as left unpaid: its guests have gone",
+    es: "Esta cuenta se registró como no pagada: los clientes se han ido",
+  },
+  "bill.not_at_table": {
+    en: "This bill is not at a table",
+    es: "Esta cuenta no es de una mesa",
+  },
+  "bill.not_issued": {
+    en: "This bill has no receipt yet",
+    es: "Esta cuenta aún no tiene ticket",
+  },
+  "bill.unserved_dishes": {
+    en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served",
+    es: "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos",
+  },
   "meal_end.unserved_dishes": {
     en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Correct invoice.",
     es: "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",

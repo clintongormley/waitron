@@ -1,4 +1,9 @@
-import { resolveEnabledContentText, resolveSnapshotText } from "@waitron/shared";
+import {
+  compareDecimal,
+  decimal,
+  resolveEnabledContentText,
+  resolveSnapshotText,
+} from "@waitron/shared";
 import { currentContentLanguages, formatDecimalInput } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
 
@@ -9,6 +14,29 @@ export function trimQuantity(quantity: string): string {
 
 export function quantityText(quantity: string): string {
   return formatDecimalInput(trimQuantity(quantity), currentLocale());
+}
+
+/** A not-served dish as listed: "Steak", or "2 × Beer" for any other quantity. */
+export function unservedDishText(dish: { dishName: string; quantity: string }): string {
+  return compareDecimal(decimal(dish.quantity), decimal("1")) === 0
+    ? dish.dishName
+    : `${quantityText(dish.quantity)} × ${dish.dishName}`;
+}
+
+/** Mark served refuses a dish still held in its group (`group.line_held`), so only released
+ * dishes are offered. */
+export function servableDishes<T extends { released: boolean }>(
+  dishes: readonly T[],
+  canMarkServed: boolean,
+): T[] {
+  return canMarkServed ? dishes.filter((dish) => dish.released) : [];
+}
+
+/** Mark served for listed dishes: each one's whole listed quantity. */
+export function serveListed(
+  dishes: readonly { lineId: string; quantity: string }[],
+): { lineId: string; quantity: string }[] {
+  return dishes.map((dish) => ({ lineId: dish.lineId, quantity: trimQuantity(dish.quantity) }));
 }
 
 /** A line counted in Each shows no unit: "2× Croqueta". */

@@ -248,6 +248,7 @@ import { requestBill } from "./bill-request.js";
 import { markServiceStepDone } from "./service-step-done.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountLineCancelApi } from "./line-cancel-api.js";
+import { splitAfterPrint } from "./split-after-print.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
 import { mountFloorTodayApi, requireTargetTable, whole } from "./floor-today-api.js";
 import { mountKeepOpenApi } from "./keep-open-api.js";
@@ -666,6 +667,10 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.presented": 409,
   "bill.paid": 409,
   "bill.other_party": 409,
+  "bill.not_at_table": 409,
+  "bill.left_unpaid": 409,
+  "bill.not_issued": 409,
+  "bill.unserved_dishes": 409,
   "bill.merge_invoice_choice_required": 409,
   "bill.payment_not_found": 404,
   "bill.refund_exceeds_payment": 422,
@@ -2904,6 +2909,34 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         override,
       );
       return c.body(null, 200);
+    }),
+  );
+
+  app.post("/api/working-orders/:id/split-after-print", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const { personId, sessionId } = session;
+      const cfg = requestCfg(deps.cfg, session);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
+      await gateZones(deps, session, [{ orderId: id }]);
+      const body = await readJsonBody<{ override?: unknown }>(c);
+      const override = parseOverrideField(body.override);
+      return c.json(
+        await splitAfterPrint(
+          {
+            db: deps.db,
+            backend: deps.backend,
+            admission: deps.admission,
+            clock: deps.clock,
+            log,
+            attendance: deps.attendance,
+          },
+          cfg,
+          id,
+          { personId, sessionId, attempts: overridePinAttempts(pinThrottle, session.deviceId) },
+          override,
+        ),
+      );
     }),
   );
 

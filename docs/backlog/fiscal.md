@@ -40,7 +40,8 @@ this entry is the 4 November decision, which this one sets aside.
 **Owner, 2026-11-18** (the adviser is still to confirm the details; question 2 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)): "No pre-bill is fine, and saves us
 the hassle of having another system to track. If the bill changes after it is issued then we just
-issue a correction or cancellation." Guests who split a bill after it was printed take either.
+issue a correction or cancellation." Guests who split a bill after it was printed take the correction:
+see [Reopen to split](#adviser-split-after-print-a-printed-bill-is-split-by-a-whole-credit-note-and-copies-of-its-dishes-watcher-2026-11-20).
 
 **Owner, 2026-11-04: build it now to the strict reading, without waiting for S2.** Today a table
 cannot get a printed bill before paying: "bill requested" only marks the floor plan. If S2 says a
@@ -1059,6 +1060,21 @@ the box adds by itself, and how the record reaches the tax office.
 ## Decisions and deliberate limits
 
 **The recovery pack's paper-block check compares no venue id (owner, 2026-11-09).** The box's recovery key is what counts; the venue name printed on the sheet is for the person to check by eye, though the signed block still carries `recipientVenueId`. The owner's words: "There is only one venue so there is no point comparing the ID. We have the name on the sheet that the user can check, but the important bit for us is the recovery key."
+
+### ADVISER-SPLIT-AFTER-PRINT: a printed bill is split by a whole credit note and copies of its dishes (watcher, 2026-11-20)
+
+The owner's answer of 18 November allows either a correction or a cancellation (question 2 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)). **Reopen to split** on a table's
+printed, unpaid bill files the same whole credit note as **Cancel and credit** and puts copies of
+its dishes on a new open bill of the party; staff then use Move dishes and Print the bill. The copies
+are new dish rows, an exception to A1308's "the order line is the dish", because a printed ticket is
+drawn from its bill's lines and the credited ticket must still reprint with its dishes. The design,
+D1 (an approver's PIN, as Cancel and credit), D2 (no paper for the credit note) and D3 (a part-paid
+printed bill stays refused) are the lane watcher's choices of 2026-11-20 (lane L `questions.md`,
+09:58 and 10:11), not the owner's; D4 (a dish held in an unsent group is fired first) is the lane's
+default. `copyBillDishes` (`apps/server/src/split-after-print.ts`) lists the tables keyed to a dish
+line by hand; nothing checks it.
+[Plan](../superpowers/plans/2026-11-20-adviser-split-after-print.md).
 
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 

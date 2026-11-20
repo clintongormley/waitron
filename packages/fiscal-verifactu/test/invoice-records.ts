@@ -52,6 +52,26 @@ export async function filedKindsBySale(
   );
 }
 
+/** The kind and total each listed sale was filed with, as stored; a cancellation record is left out. */
+export async function filedSales(
+  db: Database,
+  saleIds: readonly string[],
+): Promise<Map<string, { kind: string; total: string | null }>> {
+  const rows = await db
+    .select({
+      saleId: registrosFacturacion.saleId,
+      kind: registrosFacturacion.tipoFactura,
+      total: registrosFacturacion.importeTotal,
+    })
+    .from(registrosFacturacion)
+    .where(inArray(registrosFacturacion.saleId, [...saleIds]));
+  return new Map(
+    rows.flatMap(({ saleId, kind, total }) =>
+      saleId === null || kind === null ? [] : [[saleId, { kind, total }]],
+    ),
+  );
+}
+
 /** Stores AEAT's refusal, with `code`, as the filing reply to one record. */
 export async function refuseRecord(db: Database, recordId: string, code: string): Promise<void> {
   await db

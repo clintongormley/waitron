@@ -262,6 +262,54 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(item(el, "[data-cancel-credit]")).not.toBeNull();
   });
 
+  it("a presented bill with a receipt and no payments offers Reopen to split, which asks to split that bill", async () => {
+    const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
+    const el = await mountScreen({ bills: [presented] });
+
+    expect(groups(el)[0]!.items).toContain("Reopen to split");
+    const split = capture(el, "split-after-print-bill");
+    item(el, "[data-split-after-print]")!.click();
+    expect(split).toEqual([{ workingOrderId: "wo-2" }]);
+  });
+
+  it("a presented bill its guests left unpaid offers Cancel and credit but no Reopen to split", async () => {
+    const left = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      receiptAvailable: true,
+      leftUnpaid: true,
+    });
+    const el = await mountScreen({ bills: [left] });
+
+    expect(item(el, "[data-cancel-credit]")).not.toBeNull();
+    expect(item(el, "[data-split-after-print]")).toBeNull();
+  });
+
+  it("offers no Reopen to split wherever it offers no Cancel and credit", async () => {
+    const named = partyBill("wo-2", 2, "54.00", {
+      status: "placed",
+      receiptAvailable: true,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345678",
+        legalName: "Acme SL",
+        address: "Calle 1",
+        countryCode: "ES",
+      },
+    });
+    const part = partyBill("wo-3", 3, "20.00", {
+      status: "placed",
+      total: "54.00",
+      receiptAvailable: true,
+      hasPayments: true,
+    });
+    const unprinted = partyBill("wo-4", 4, "54.00", { status: "placed", receiptAvailable: false });
+    for (const bill of [named, part, unprinted]) {
+      const el = await mountScreen({ bills: [bill], orderId: bill.workingOrderId });
+      expect(item(el, "[data-cancel-credit]")).toBeNull();
+      expect(item(el, "[data-split-after-print]")).toBeNull();
+    }
+  });
+
   it("a presented bill with an invoice number offers no Full invoice", async () => {
     const issued = partyBill("wo-2", 2, "54.00", {
       status: "placed",
@@ -630,7 +678,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       expect(groups(el)[0]!.items).toEqual(["Name this bill", "Receipt copy"]);
     });
 
-    it("a presented bill keeps Name this bill, Move this bill, Record unpaid departure, Receipt copy and Cancel and credit", async () => {
+    it("a presented bill keeps Name this bill, Move this bill, Record unpaid departure, Receipt copy, Cancel and credit and Reopen to split", async () => {
       const el = await mountScreen({ bills: [presented] });
 
       expect(groups(el)[0]!.items).toEqual([
@@ -639,6 +687,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         "Record unpaid departure",
         "Receipt copy",
         "Cancel and credit",
+        "Reopen to split",
       ]);
     });
 
@@ -657,6 +706,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         "Print the bill",
         "Receipt copy",
         "Cancel and credit",
+        "Reopen to split",
       ]);
     });
 

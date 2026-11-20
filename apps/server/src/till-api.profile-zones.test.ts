@@ -156,6 +156,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/sales/:id/reprint                             | order                  | refuses POST /api/sales/:id/reprint                  |
  * | POST /api/working-orders/:id/collect                    | order                  | refuses POST /api/working-orders/:id/collect         |
  * | POST /api/working-orders/:id/cancel                     | order                  | refuses POST /api/working-orders/:id/cancel          |
+ * | POST /api/working-orders/:id/split-after-print          | order                  | refuses POST /api/working-orders/:id/split-after-print |
  * | GET  /api/tables/state, /api/zones                      | list, by table or zone | "lists only the profile's zones, tables and orders"  |
  * | POST /api/tables/:id/seat                               | table                  | refuses POST /api/tables/:id/seat                    |
  * | POST /api/tables/:id/seat (withTableIds)                | body tables            | refuses POST /api/tables/:id/seat (other tables)     |
@@ -241,9 +242,9 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * Where the check runs: first inside the route's own transaction, except where the route's work
  * runs in a helper that opens its own transaction — `/api/pay`, POST
  * `/api/working-orders`, GET, PUT and DELETE `/api/working-orders/:id`, `/placed`,
- * `/invoice-choice`, `/receipt-language`, `/place`, `/collect`, `/cancel`, `/api/sales/:id/receipt`,
- * `/reprint` and the four bill-payment routes — where it reads just before, outside any
- * transaction.
+ * `/invoice-choice`, `/receipt-language`, `/place`, `/collect`, `/cancel`, `/split-after-print`,
+ * `/api/sales/:id/receipt`, `/reprint` and the four bill-payment routes — where it reads just
+ * before, outside any transaction.
  *
  * Not zone-gated: `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today`,
  * `PUT /api/stations/:stationId/today` and `GET /api/invoice-delivery-options` (the device's
@@ -772,6 +773,13 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/cancel`,
     () => ({ reason: "Test" }),
+    deliOrderZone,
+  ],
+  [
+    "POST /api/working-orders/:id/split-after-print",
+    "POST",
+    (x) => `/api/working-orders/${x.deliOrder}/split-after-print`,
+    () => ({}),
     deliOrderZone,
   ],
   [
