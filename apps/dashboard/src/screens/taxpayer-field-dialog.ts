@@ -23,8 +23,10 @@ export interface VenueIdentityChanged {
   model: VenueDetailsModel;
 }
 
+export type TaxpayerField = "legalName" | "taxpayerDomicile";
+
 export interface TaxpayerFieldSettings {
-  field: "legalName" | "taxpayerDomicile";
+  field: TaxpayerField;
   /** Names the dialog's `data-test` hooks: `<dataTest>-dialog`, `save-<dataTest>`, `cancel-<dataTest>`. */
   dataTest: string;
   heading: StringKey;
@@ -39,8 +41,16 @@ export interface TaxpayerFieldSettings {
   send(api: DashboardApi, value: string, expected: string): Promise<{ model: VenueDetailsModel }>;
 }
 
+/** The server's own normalisation (`normalizeVenueText`), so a stored spelling it would accept as
+ *  unchanged does not count as an edit. */
+function normalized(value: string): string {
+  return value.normalize("NFC").trim();
+}
+
 /** Changes one taxpayer field. On success it sends a bubbling, composed `venue-identity-changed`
- *  carrying the answered model, so the panel and the dashboard banner can show the new value. */
+ *  carrying the answered model, so the panel and the dashboard banner can show the new value.
+ *  A `venue.detail_changed` refusal sends a non-bubbling `venue-identity-stale`, so the panel
+ *  reads the stored value again. */
 export abstract class TaxpayerFieldDialog extends LitElement {
   protected abstract readonly settings: TaxpayerFieldSettings;
 
@@ -60,7 +70,7 @@ export abstract class TaxpayerFieldDialog extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) lateRefusalFor?: (key: StringKey) => () => void;
 
-  /** The value the dialog opened with; null while it is shut. */
+  /** The stored spelling the dialog opened with, sent as `expected`; null while it is shut. */
   @state() private opened: string | null = null;
   @state() private value = "";
   @state() private busy = false;
@@ -84,9 +94,9 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     this.bottom = "";
     const { coordinator, scope } = draftScopeFor<string>(this, {
       id: {},
-      current: () => this.value.trim(),
+      current: () => this.value,
       snapshot: (value) => value,
-      equal: (a, b) => a === b,
+      equal: (a, b) => normalized(a) === normalized(b),
       restore: (value) => {
         this.value = value;
         this.refusal = "";
@@ -152,7 +162,7 @@ export abstract class TaxpayerFieldDialog extends LitElement {
       await this.#focusField();
       return;
     }
-    const value = this.value.trim();
+    const value = normalized(this.value);
     const opening = this.#opening;
     const reportLateRefusal = this.lateRefusalFor?.(this.settings.notSaved);
     this.busy = true;
@@ -172,12 +182,14 @@ export abstract class TaxpayerFieldDialog extends LitElement {
       this.#dialog()?.closeAfter("saved");
       this.#close();
     } catch (error) {
+      const code = codeOf(error);
+      if (code === "venue.detail_changed")
+        this.dispatchEvent(new CustomEvent("venue-identity-stale"));
       if (opening !== this.#opening) {
         reportLateRefusal?.();
         return;
       }
       this.busy = false;
-      const code = codeOf(error);
       const params =
         typeof error === "object" && error !== null
           ? (error as { params?: Record<string, unknown> }).params

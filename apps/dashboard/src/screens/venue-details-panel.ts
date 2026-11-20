@@ -41,7 +41,17 @@ import {
 } from "./venue-details-form.js";
 import "./legal-name-dialog.js";
 import "./registered-address-dialog.js";
-import type { VenueIdentityChanged } from "./taxpayer-field-dialog.js";
+import type { TaxpayerField, VenueIdentityChanged } from "./taxpayer-field-dialog.js";
+
+function withTaxpayerField(
+  target: VenueDetailsModel,
+  source: VenueDetailsModel,
+  field: TaxpayerField,
+): VenueDetailsModel {
+  return field === "legalName"
+    ? { ...target, issuer: { ...target.issuer, legalName: source.issuer.legalName } }
+    : { ...target, taxpayerDomicile: source.taxpayerDomicile };
+}
 
 const LABELS: Record<VenueDetailField, StringKey> = {
   name: "venue_details.name",
@@ -182,9 +192,12 @@ export class VenueDetailsPanel extends LitElement {
   #generation = 0;
   #retries = new AbortController();
   /** Each read and each save takes the next place when it is sent, a dialog's answer when it
-   * arrives; the card shows a value only if its place is later than the one it shows. */
+   * arrives; the card shows a value only if its place is later than the one it shows. A dialog's
+   * answer is shown for its own field only, and a read or save sent before that answer arrived
+   * leaves that field as the answer set it. */
   #places = 0;
   #shownPlace = 0;
+  #answeredPlaces: Partial<Record<TaxpayerField, number>> = {};
   #scope?: DraftScope<VenueDetailValues>;
   #leave?: LeaveCoordinator;
   readonly #queries = new DashboardQueries(
@@ -263,7 +276,17 @@ export class VenueDetailsPanel extends LitElement {
   #show(place: number, model: VenueDetailsModel): void {
     if (place <= this.#shownPlace) return;
     this.#shownPlace = place;
-    this.model = model;
+    const before = this.model;
+    let shown = model;
+    for (const [field, answered] of Object.entries(this.#answeredPlaces))
+      if (before && answered > place)
+        shown = withTaxpayerField(shown, before, field as TaxpayerField);
+    this.model = shown;
+  }
+  #showAnswer(field: TaxpayerField, model: VenueDetailsModel): void {
+    if (!this.model) return;
+    this.#answeredPlaces[field] = ++this.#places;
+    this.model = withTaxpayerField(this.model, model, field);
   }
   #begin(): void {
     if (!this.model || this.readOnly) return;
@@ -735,11 +758,15 @@ export class VenueDetailsPanel extends LitElement {
     const current = () =>
       this.isConnected && expected === this.#expected && generation === this.#generation;
     const saveAction = saveActionState(this.#scope);
-    const identityChanged = (event: CustomEvent<VenueIdentityChanged>) => {
-      if (generation === this.#generation) {
-        this.#show(++this.#places, event.detail.model);
-        this.#readAfterAnswer();
-      }
+    const identityChanged =
+      (field: TaxpayerField) => (event: CustomEvent<VenueIdentityChanged>) => {
+        if (generation === this.#generation) {
+          this.#showAnswer(field, event.detail.model);
+          this.#readAfterAnswer();
+        }
+      };
+    const identityStale = () => {
+      if (generation === this.#generation) this.#readAfterAnswer();
     };
     const formError = this.#feedback.message(
       { request: this.actionError, ...this.errors },
@@ -814,12 +841,14 @@ export class VenueDetailsPanel extends LitElement {
             <dashboard-legal-name-dialog
               .api=${this.api}
               .lateRefusalFor=${this.lateRefusalFor}
-              @venue-identity-changed=${identityChanged}
+              @venue-identity-changed=${identityChanged("legalName")}
+              @venue-identity-stale=${identityStale}
             ></dashboard-legal-name-dialog>
             <dashboard-registered-address-dialog
               .api=${this.api}
               .lateRefusalFor=${this.lateRefusalFor}
-              @venue-identity-changed=${identityChanged}
+              @venue-identity-changed=${identityChanged("taxpayerDomicile")}
+              @venue-identity-stale=${identityStale}
             ></dashboard-registered-address-dialog>
             ${settingsCard({
               id: "venue-card",
