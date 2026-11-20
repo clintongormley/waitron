@@ -113,8 +113,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.archive_test_failed": 422,
   "backup.archive_settings_invalid": 500,
   "backup.rotation_metadata_failed": 500,
-  "backup.archive_settings_unreadable": 409,
-  "backup.stream_settings_unreadable": 409,
+  "backup.archive_settings_unreadable": 500,
+  "backup.stream_settings_unreadable": 500,
 };
 
 const ARCHIVE_PROBE_TIMEOUT_MS = 30 * 1000;
@@ -589,7 +589,12 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         const unreadableCode = "unreadable" in read ? read.unreadable : undefined;
         // An unreadable record is never rewritten, so its key changes the key-only way.
         if (held === null && deps.supervisor.current().destinations.length === 0) {
-          if (!(await keyPresent())) throw new AppError("backup.not_configured", {});
+          if (!(await keyPresent())) {
+            if (unreadableCode !== undefined) {
+              throw new AppError("backup.archive_settings_unreadable", { reason: unreadableCode });
+            }
+            throw new AppError("backup.not_configured", {});
+          }
           await persistKey({ recoveryKey, keyRotatedAt });
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});

@@ -1660,14 +1660,14 @@ declare module "@waitron/shared" {
     "backup.stream_test_failed": { reason: ProbeFailure };
     /** Archives in the stream's bucket were asked for while no bucket is configured. */
     "backup.stream_not_configured": Record<string, never>;
-    /** `disable` found no stored archive record, or `rotate` found no readable archive record, no
-     * destination loaded and no key held. */
+    /** `disable` or `rotate` found no stored archive record; for `rotate`, also no destination
+     * loaded and no key held. */
     "backup.not_configured": Record<string, never>;
     /** The stored archive settings (`backup.archive`) are not a record this server wrote.
      * `reason` names the part that failed, never its value, which could be a secret. */
     "backup.archive_settings_invalid": { reason: string };
     /** A stored archive record could not be read. `disable` has no settings to keep switched off,
-     * the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
+     * `rotate` with no destination loaded and no key held has no key to change, the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
      * archive's, and a recovery pack's archives page (`backup-recovery-pack-parts.ts`) fails; an
      * archive Save replaces the record. `reason` is the read's error code, never the
      * record. */

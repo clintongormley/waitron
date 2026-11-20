@@ -2371,7 +2371,7 @@ describe("backup admin routes", () => {
         await store();
         const { post } = await primaryApp();
         const res = await post("/api/backup/disable");
-        expect(res.status).toBe(409);
+        expect(res.status).toBe(500);
         expect(await res.json()).toMatchObject({
           error: { code: "backup.archive_settings_unreadable", params: { reason: code } },
         });
@@ -2439,7 +2439,7 @@ describe("backup admin routes", () => {
         await storeUnreadableStream();
         const { sc, post } = await primaryApp();
         const res = await post("/api/backup/apply", applyBody(destination));
-        expect(res.status).toBe(409);
+        expect(res.status).toBe(500);
         expect(await res.json()).toMatchObject({
           error: {
             code: "backup.stream_settings_unreadable",
@@ -2596,7 +2596,7 @@ describe("backup admin routes", () => {
           await storeUnreadableStream();
           return [{ kind: "local-fs", dir: makeDestDir() }, { kind: "stream-bucket" }];
         },
-        409,
+        500,
         {
           code: "backup.stream_settings_unreadable",
           params: { reason: "credentials.decrypt_failed" },
@@ -2767,7 +2767,7 @@ describe("backup admin routes", () => {
         await expect(readStreamSettings(suite.db, RING)).rejects.toMatchObject({ code });
         const { post } = await primaryApp();
         const res = await post("/api/backup/apply", applyBody({ kind: "stream-bucket" }));
-        expect(res.status).toBe(409);
+        expect(res.status).toBe(500);
         expect(await res.json()).toMatchObject({
           error: { code: "backup.stream_settings_unreadable", params: { reason: code } },
         });
@@ -3278,6 +3278,26 @@ describe("backup admin routes", () => {
           recoveryKeySet: true,
         });
         expect(await fileKey(sc.stateDir)).toBe(KEY_2);
+        expect(await stored()).toEqual(before);
+      }, 60_000);
+
+      it("an unreadable record with no key held is refused as unreadable, not as unset, and nothing changes", async () => {
+        const { sc, post } = await primaryApp();
+        await withTransaction(suite.db, (tx) => storeArchivePart(tx, {}));
+        const stored = () =>
+          withTransaction(suite.db, (tx) =>
+            tryGetCredential(tx, RING, { purpose: ARCHIVE_PURPOSE }),
+          );
+        const before = await stored();
+        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        expect(res.status).toBe(500);
+        expect(await res.json()).toEqual({
+          error: {
+            code: "backup.archive_settings_unreadable",
+            params: { reason: "backup.archive_settings_invalid" },
+          },
+        });
+        await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
         expect(await stored()).toEqual(before);
       }, 60_000);
 

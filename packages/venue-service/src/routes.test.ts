@@ -3443,6 +3443,17 @@ describe.each(["individual", "batch"])("%s station service-times planning route"
       );
     }
   });
+  it("answers the box's unreadable stored time zone as a server fault", async () => {
+    const f = await fixture();
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Not/AZone"}) where module = 'business_day'`,
+    );
+    const response = await send(f.app, "GET", path(f.stationId), f.managerCookie);
+    expect(await response.json()).toEqual({
+      error: { code: "business_day.clock_invalid", params: { reason: "invalid_time_zone" } },
+    });
+    expect(response.status).toBe(500);
+  });
   it.each([
     ["staff", 403, "authorization.not_permitted"],
     ["anonymous", 401, "management_session.required"],
