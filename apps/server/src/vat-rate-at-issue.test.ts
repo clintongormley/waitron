@@ -262,6 +262,11 @@ async function openTableTab(
     });
     await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, tableId));
     const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
+    // Opened at the test's clock, not the machine's: a bill's opening decides its close of day.
+    await tx
+      .update(workingOrders)
+      .set({ trustedOpenedAt: time.at.toISOString() })
+      .where(eq(workingOrders.id, tabId));
     await addTabRound(tx, v.cfg, tabId, lines);
     return tabId;
   });
