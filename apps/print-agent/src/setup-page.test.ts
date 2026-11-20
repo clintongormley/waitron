@@ -562,7 +562,7 @@ describe("createSetupApp — mutations", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain(
-      "This box is the venue's spare. Printing goes through the main box's own print agent. This agent starts printing again if this box becomes the main box.",
+      "This box is the venue's spare. This agent starts printing again if this box becomes the main box.",
     );
     expect(html).not.toContain("Can't reach");
     expect(html).not.toContain("This agent cannot reach its venue");
@@ -595,6 +595,26 @@ describe("createSetupApp — mutations", () => {
     expect(
       (await request(stale, "/network/reset", { method: "POST" }, "192.168.20.5")).status,
     ).toBe(409);
+  });
+
+  it("refuses reset on the venue's spare, which the page does not offer", async () => {
+    const beginNetworkReset = vi.fn(async () => true);
+    const app = createSetupApp(
+      deps({
+        beginNetworkReset,
+        snapshot: async () =>
+          snapshot({
+            status: { ...RUNNING, phase: "spare_box", lastError: undefined },
+            config: CONFIG,
+            joined: true,
+            outOfTouch: true,
+          }),
+      }),
+    );
+    const response = await request(app, "/network/reset", { method: "POST" }, "192.168.20.5");
+    expect(response.status).toBe(409);
+    expect(await response.text()).toBe("A network reset is not available now.");
+    expect(beginNetworkReset).not.toHaveBeenCalled();
   });
 
   it("allows cancel only during a countdown and reports a stale serialized precondition", async () => {

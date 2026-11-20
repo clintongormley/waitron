@@ -155,7 +155,7 @@ ${lastError}
     }
     case "spare_box":
       return `<h1>Waitron print agent</h1>
-<p>This box is the venue's spare. Printing goes through the main box's own print agent. This agent starts printing again if this box becomes the main box.</p>`;
+<p>This box is the venue's spare. This agent starts printing again if this box becomes the main box.</p>`;
   }
 }
 
@@ -266,7 +266,12 @@ export function createSetupApp(deps: SetupDeps): Hono {
   app.post("/network/reset", async (c) => {
     const snapshot = await deps.snapshot();
     if (networkRefused(snapshot, c)) return forbidden(c);
-    if (!snapshot.joined || !snapshot.outOfTouch || snapshot.resetAt !== undefined) {
+    if (
+      !snapshot.joined ||
+      !snapshot.outOfTouch ||
+      snapshot.resetAt !== undefined ||
+      snapshot.status.phase === "spare_box"
+    ) {
       return c.text("A network reset is not available now.", 409);
     }
     if (!(await deps.beginNetworkReset())) {
