@@ -2,8 +2,11 @@ import type { Logger } from "./logger.js";
 import { and, eq } from "drizzle-orm";
 import {
   billPayments,
+  BUSINESS_DAY_SETTINGS,
+  decodeSettingsRow,
   workingOrders,
-  readTaxpayer,
+  settings,
+  taxpayer,
   sales,
   withTransaction,
   type Database,
@@ -33,7 +36,7 @@ import {
 } from "./receipt-print.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import type { OriginConfig } from "./trading-context.js";
-import { venueTimeZoneIn } from "./venue-time-zone.js";
+import { knownZone } from "./venue-time-zone.js";
 
 type CardSlipRequest = { printerId: string; locale: string } | null | undefined;
 
@@ -324,17 +327,25 @@ async function enqueueSlips(
   }[],
   locale: string,
 ): Promise<void> {
-  const taxpayer = await readTaxpayer(tx);
+  const [header] = await tx
+    .select({
+      issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
+      businessDay: { version: settings.version, revision: settings.revision, doc: settings.doc },
+    })
+    .from(taxpayer)
+    .leftJoin(settings, eq(settings.module, BUSINESS_DAY_SETTINGS.module))
+    .where(eq(taxpayer.id, 1));
   /* v8 ignore start -- the taxpayer row is the database's one row; presentation still degrades */
-  if (taxpayer === null) return;
+  if (header === undefined) return;
   /* v8 ignore stop */
+  const { doc } = decodeSettingsRow(header.businessDay ?? undefined, BUSINESS_DAY_SETTINGS);
+  const timeZone = knownZone(doc.timeZone);
   const order = await readReceiptOrder(tx, workingOrderId);
-  const timeZone = await venueTimeZoneIn(tx);
   for (const payment of cards) {
     const charged = centsToDecimal(payment.charged);
     const tip = centsToDecimal(payment.tip);
     const payload = formatPaymentSlip({
-      issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
+      issuer: header.issuer,
       ...order,
       paidAt: payment.paidAt,
       offsetMinutes: timeZoneOffsetMinutes(timeZone, new Date(payment.paidAt)),
