@@ -15,8 +15,8 @@ export interface IssueMoment {
 }
 
 /**
- * Take ONE clock reading and rate `gross` at its local calendar date, or at `closeDay` when the sale
- * closed on an earlier venue day: the rate in force when the sale happened applies, and that day is
+ * Take ONE clock reading and rate `gross` at its local calendar date, or at `mealDay` when the meal
+ * ended on an earlier venue day: the rate in force when the sale happened applies, and that day is
  * returned as the operation date to file. Every till path that issues an invoice from an order's
  * lines rates them here and hands `recordSale` the returned clock.
  */
@@ -24,12 +24,12 @@ export function issueMoment(
   clock: TrustedClock,
   gross: GrossLines,
   fiscal: Pick<FiscalBackend, "assertRecordableAt">,
-  closeDay?: string,
+  mealDay?: string,
 ): IssueMoment {
   const reading = clock.now();
   fiscal.assertRecordableAt(reading);
   const issueDay = localCalendarDate(reading.instant, reading.offsetMinutes);
-  const earlier = closeDay !== undefined && closeDay < issueDay ? closeDay : undefined;
+  const earlier = mealDay !== undefined && mealDay < issueDay ? mealDay : undefined;
   return {
     priced: rateLines(gross, earlier ?? issueDay),
     gross,

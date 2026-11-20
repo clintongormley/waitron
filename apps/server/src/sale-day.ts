@@ -7,6 +7,7 @@ import {
 } from "@waitron/fiscal";
 import type { Transaction } from "@waitron/db";
 import type { GrossLines } from "@waitron/menu";
+import { payments } from "@waitron/payments";
 import { civilDateOf } from "@waitron/reporting";
 import { closeOfDayEnd } from "./close-of-day.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
@@ -18,6 +19,14 @@ export interface CardTiming {
   createdAt: string;
   settledAt: string | null;
 }
+
+/** The selection that reads a card row's {@link CardTiming}. */
+export const CARD_TIMING_COLUMNS = {
+  providerCheckoutStartedAt: payments.providerCheckoutStartedAt,
+  resolutionOutcome: payments.resolutionOutcome,
+  createdAt: payments.createdAt,
+  settledAt: payments.settledAt,
+};
 
 /**
  * The moment a card payment dates its sale by, or null for one that never settled: a live answer's

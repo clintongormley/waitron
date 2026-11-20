@@ -103,11 +103,11 @@ describe("issueMoment", () => {
   });
 
   it.each(["2027-01-01", "2027-01-02"])(
-    "rates at the issue day and names no operation date for a close day of %s",
-    (closeDay) => {
+    "rates at the issue day and names no operation date for a meal day of %s",
+    (mealDay) => {
       const { clock } = movingClock("2027-01-01T08:10:00.000Z", 60, 0);
 
-      const issue = issueMoment(clock, gross(), anyReading, closeDay);
+      const issue = issueMoment(clock, gross(), anyReading, mealDay);
 
       expect(issue.priced.lines[0]!.vatRate).toBe("11.00");
       expect(issue).not.toHaveProperty("operationDate");

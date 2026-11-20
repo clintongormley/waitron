@@ -109,7 +109,7 @@ import { issuancePass } from "./issuance-pass.js";
 import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
 import { pinnedAt } from "./issue-moment.js";
-import { cardSaleMoment, issueOrderMoment } from "./sale-day.js";
+import { CARD_TIMING_COLUMNS, cardSaleMoment, issueOrderMoment } from "./sale-day.js";
 import { ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import {
@@ -1697,10 +1697,7 @@ async function finalizeRecovery(
         .select({
           source: payments.source,
           deviceId: payments.deviceId,
-          providerCheckoutStartedAt: payments.providerCheckoutStartedAt,
-          resolutionOutcome: payments.resolutionOutcome,
-          createdAt: payments.createdAt,
-          settledAt: payments.settledAt,
+          ...CARD_TIMING_COLUMNS,
         })
         .from(payments)
         .where(eq(payments.id, captured.id));

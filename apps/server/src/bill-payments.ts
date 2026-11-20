@@ -79,7 +79,7 @@ import type {
 } from "./bill-allocation.js";
 import { issuancePass } from "./issuance-pass.js";
 import { pinnedAt } from "./issue-moment.js";
-import { cardSaleMoment, issueOrderMoment } from "./sale-day.js";
+import { CARD_TIMING_COLUMNS, cardSaleMoment, issueOrderMoment } from "./sale-day.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -785,10 +785,7 @@ async function latestAcceptance(
   const cards = await tx
     .select({
       billPaymentId: providerPayments.billPaymentId,
-      providerCheckoutStartedAt: providerPayments.providerCheckoutStartedAt,
-      resolutionOutcome: providerPayments.resolutionOutcome,
-      createdAt: providerPayments.createdAt,
-      settledAt: providerPayments.settledAt,
+      ...CARD_TIMING_COLUMNS,
     })
     .from(providerPayments)
     .where(
@@ -815,7 +812,7 @@ type IssueOptions = {
   alreadyRead?: IssuedAndTotal;
   printers?: PrinterLookup;
   guestCount?: GuestCountChoice;
-  closedAt?: "latest-acceptance";
+  datedByLatestAcceptance?: true;
 };
 
 /** {@link issueOrSettleWhenFullyPaid}, then an issued sale's waiting original lists the bill's payments. */
@@ -837,7 +834,7 @@ async function issueWhenFullyPaid(
  * caller's {@link issuedAndTotal} of this bill, from earlier in this transaction with no sale
  * issued or corrected since; without it the sale is read here. `total` is the bill's total when the
  * caller has priced its current lines in this transaction already.
- * `closedAt: "latest-acceptance"` is for a bill completed after its payments were taken: the
+ * `datedByLatestAcceptance` is for a bill completed after its payments were taken: the
  * moment the last of those still holding money was accepted is handed to {@link issueOrderMoment}
  * as the moment the meal ended.
  */
@@ -933,7 +930,7 @@ async function issueOrSettleWhenFullyPaid(
     deps,
     workingOrderId,
     await issuancePass(tx, workingOrderId, stored),
-    options.closedAt === undefined
+    options.datedByLatestAcceptance === undefined
       ? undefined
       : await latestAcceptance(
           tx,
@@ -1028,7 +1025,7 @@ export async function issueIfFullyPaid(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId?: string,
-  options: { moneyMoved?: boolean; closeZero?: boolean; closedAt?: "latest-acceptance" } = {},
+  options: { moneyMoved?: boolean; closeZero?: boolean; datedByLatestAcceptance?: true } = {},
 ): Promise<TillSaleResult | null> {
   return (await issueWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, options)).invoice;
 }
@@ -1939,10 +1936,10 @@ export async function completeBillPayment(
     attestation?: Attestation;
     guestCount?: GuestCountChoice;
     confirmedNet?: { applied: Decimal; tip: Decimal };
-    closedAt?: "latest-acceptance";
+    datedByLatestAcceptance?: true;
   } = {},
 ): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
-  const { attestation, guestCount, confirmedNet, closedAt } = options;
+  const { attestation, guestCount, confirmedNet, datedByLatestAcceptance } = options;
   await requireEconomicWrite(tx, cfg, deps.admission);
   const [pending] = await tx
     .select({
@@ -2020,7 +2017,7 @@ export async function completeBillPayment(
     { ...cfg, origin: storedDeviceOrigin(payment!) },
     payment!.workingOrderId,
     payment!.requestedBy,
-    { moneyMoved: true, guestCount, closedAt },
+    { moneyMoved: true, guestCount, datedByLatestAcceptance },
   );
   return { payment: payment!, ...issued };
 }

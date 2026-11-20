@@ -1566,7 +1566,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             await completeBillPayment(tx, fiscal, deps.cfg, bill.id, receivedAt, {
               attestation,
               confirmedNet: { applied: allocation.applied, tip: allocation.tip },
-              closedAt: "latest-acceptance",
+              datedByLatestAcceptance: true,
             });
             await print(tx, bill.id);
             if (order.paymentAttemptAt !== null)
@@ -1604,7 +1604,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
               { ...deps.cfg, origin: storedDeviceOrigin(payment) },
               payment.workingOrderId,
               personId,
-              { moneyMoved: true, closedAt: "latest-acceptance" },
+              { moneyMoved: true, datedByLatestAcceptance: true },
             );
           }
           return allocation;
@@ -2039,7 +2039,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             : new Date(provided.settledAt);
         const done = await completeBillPayment(tx, fiscal, deps.cfg, id, receivedAt, {
           attestation,
-          closedAt: "latest-acceptance",
+          datedByLatestAcceptance: true,
         });
         await print(tx, id);
         return {
