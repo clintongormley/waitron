@@ -1,7 +1,8 @@
 import { getCountryPack } from "@waitron/country-packs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./invoice-recipient-dialog.js";
 import type {
@@ -26,6 +27,61 @@ async function fill(el: TillInvoiceRecipientDialog, name: string, value: string)
 }
 
 describe("till-invoice-recipient-dialog", () => {
+  const innerDialog = (el: TillInvoiceRecipientDialog) =>
+    el.shadowRoot!.querySelector("wt-dialog")!.shadowRoot!.querySelector("dialog")!;
+
+  it.each([
+    { width: 390, locale: "en", theme: "light" as const },
+    { width: 1280, locale: "es", theme: "light" as const },
+    { width: 390, locale: "es", theme: "dark" as const },
+    { width: 1280, locale: "en", theme: "dark" as const },
+  ])(
+    "keeps its width when field errors appear and gives the name field room at $width px in $locale, $theme",
+    async ({ width, locale, theme }) => {
+      const previousLocale = currentLocale();
+      await page.viewport(width, 900);
+      try {
+        setLocale(locale);
+        const { el } = await mountWidget<TillInvoiceRecipientDialog>(
+          "till-invoice-recipient-dialog",
+          {},
+          theme,
+        );
+        const dialog = innerDialog(el);
+        const before = dialog.getBoundingClientRect().width;
+
+        await fill(el, "legalName", "Ana García");
+        el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+        await el.updateComplete;
+        await Promise.all(
+          [
+            ...el.shadowRoot!.querySelectorAll<HTMLElement & { updateComplete: Promise<boolean> }>(
+              "wt-input, wt-form-actions",
+            ),
+          ].map((child) => child.updateComplete),
+        );
+        expect(
+          el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=taxId]")!
+            .error,
+        ).toBe(t("invoice.identifier_required"));
+
+        const body = dialog.querySelector<HTMLElement>(".body")!;
+        const name = el
+          .shadowRoot!.querySelector("wt-input[name=legalName]")!
+          .shadowRoot!.querySelector("input")!;
+        expect(window.innerWidth).toBe(width);
+        expect(dialog.getBoundingClientRect().width).toBe(before);
+        expect(name.getBoundingClientRect().width).toBeGreaterThanOrEqual(300);
+        expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+        expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+        expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      } finally {
+        setLocale(previousLocale);
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
   it("shows Spain in the selected language", async () => {
     const el = await mountDialog();
     const country = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
