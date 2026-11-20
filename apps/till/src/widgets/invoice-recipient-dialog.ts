@@ -86,6 +86,10 @@ export class TillInvoiceRecipientDialog extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      wt-dialog {
+        --wt-field-max-width: var(--wt-form-max-width);
+      }
+
       .fields {
         display: flex;
         flex-direction: column;
