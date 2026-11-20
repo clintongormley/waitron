@@ -8,7 +8,11 @@ import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VenueResult } from "@waitron/provisioning";
-import type { Database } from "@waitron/db";
+import { readRecoveryPacks, type Database } from "@waitron/db";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack";
+import { AppError } from "@waitron/shared";
+import { PDFDocument } from "pdf-lib";
+import * as invoiceFont from "./invoice-font.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -18,6 +22,7 @@ import { FISCAL_SERVER_KEY_AS_TYPED } from "@waitron/fiscal-verifactu";
 import { readRecoveryKeyName } from "@waitron/node-db";
 import { buildManifest } from "./backup-manifest.js";
 import { verifyBreakGlass } from "./break-glass.js";
+import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
@@ -415,12 +420,17 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       persistTrading = async () => {},
       operations = createSetupOperationStore(stateDir),
       requestRestart = () => {},
+      log = () => {},
+      recoveryPackEvidence = (module) =>
+        readRecoveryDocumentEvidence({ stateDir, venueDir: stateDir }, module),
     }: {
       fiscalGate?: "box" | "passed";
       provision?: (req: ProvisionRequest) => Promise<VenueResult>;
       persistTrading?: SetupDeps["persistTrading"];
       operations?: SetupOperationStore;
       requestRestart?: SetupDeps["requestRestart"];
+      log?: Logger;
+      recoveryPackEvidence?: NonNullable<SetupDeps["recoveryPackEvidence"]>;
     } = {},
   ) {
     const app = new Hono();
@@ -432,6 +442,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
         db: venueDb.db,
         node: venueDb.node,
         ring,
+        recoveryPackEvidence,
         operations,
         provision,
         recoverProvision: (req) => recoverProvisionedVenue(venueDb.db, req),
@@ -458,14 +469,14 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
                   }),
                 ),
       },
-      () => {},
+      log,
     );
-    return (payload: unknown, { secure = true, origin = "https://box.test" } = {}) =>
+    return (payload: unknown, { secure = true, origin = "https://box.test", headers = {} } = {}) =>
       app.request(
         `${secure ? "https" : "http"}://box.test/setup-api/provision`,
         {
           method: "POST",
-          headers: { "content-type": "application/json", origin },
+          headers: { "content-type": "application/json", origin, ...headers },
           body: JSON.stringify(payload),
         },
         { incoming: { socket: secure ? secureSocket : undefined } },
@@ -482,18 +493,33 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(await readRecoveryKeyName(venueDb.node, id)).toBeNull();
   });
 
-  it("gives Preparation a named server key its backup can use, shown only on first success", async () => {
+  it("gives Preparation a recorded PDF with a usable server key only on first success", async () => {
     const request = body("prepare");
     const res = await realApp(PREPRODUCTION_BOX)(request);
     expect(res.status).toBe(200);
     expectThrowawayVenue("preproduction");
-    const { breakGlassSecret, breakGlassKeyName, ...result } = await res.json();
+    const { breakGlassSecret, breakGlassKeyName, recoveryPackPdf, ...result } = await res.json();
     const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
     expect(typeof breakGlassKeyName).toBe("string");
     const secret = FISCAL_SERVER_KEY_AS_TYPED(breakGlassSecret);
     expect(typeof secret).toBe("string");
     expect(await verifyBreakGlass(venueDb.node, id, secret!)).toBe(true);
     expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(recoveryPackPdf).toEqual(expect.any(String));
+    const pdf = await readRecoveryPackPdf(Buffer.from(recoveryPackPdf, "base64"));
+    const [pack] = await readRecoveryPacks(venueDb.db, id);
+    expect(pdf).toMatchObject({ number: 1, serverKeyName: breakGlassKeyName });
+    expect(pdf.serverKey).toMatchObject({
+      nodeKey: { nodeId: id, name: breakGlassKeyName, secret },
+    });
+    expect(pack).toMatchObject({
+      number: 1,
+      madeAt: new Date(pdf.madeAt),
+      receivedAt: null,
+      parts: expect.arrayContaining([
+        { part: "server-key", state: "included", keyName: breakGlassKeyName, carriedKey: true },
+      ]),
+    });
 
     const copyDir = join(stateDir, "selected");
     await mkdir(copyDir);
@@ -540,6 +566,60 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(await readRecoveryKeyName(venueDb.node, id)).toBe(breakGlassKeyName);
   });
 
+  it("draws the pack in the visible setup language when the browser prefers an unsupported one", async () => {
+    const response = await realApp(PREPRODUCTION_BOX)(body("prepare"), {
+      headers: { "accept-language": "fr-FR", "x-waitron-recovery-pack-locale": "en-GB" },
+    });
+    expect(response.status).toBe(200);
+    const { recoveryPackPdf } = await response.json();
+    const pack = await PDFDocument.load(Buffer.from(recoveryPackPdf, "base64"));
+    expect(pack.getTitle()).toBe("Waitron recovery pack");
+  });
+
+  it("delivers the text key without a pack record when PDF drawing fails", async () => {
+    const fonts = vi
+      .spyOn(invoiceFont, "loadRecoveryPackFonts")
+      .mockRejectedValueOnce(new AppError("recovery.pack_invalid", { reason: "shape" }));
+    const log = vi.fn<Logger>();
+    try {
+      const response = await realApp(PREPRODUCTION_BOX, { log })(body("prepare"));
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result).not.toHaveProperty("recoveryPackPdf");
+      const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
+      expect(await readRecoveryPacks(venueDb.db, id)).toEqual([]);
+      const secret = FISCAL_SERVER_KEY_AS_TYPED(result.breakGlassSecret);
+      expect(typeof secret).toBe("string");
+      expect(await verifyBreakGlass(venueDb.node, id, secret!)).toBe(true);
+      expect(log).toHaveBeenCalledWith("warn", "setup.recovery_pack_drawing_failed", {
+        reason: "recovery.pack_invalid",
+      });
+    } finally {
+      fonts.mockRestore();
+    }
+  });
+
+  it("still delivers a usable key when the recovery document evidence cannot be read", async () => {
+    const log = vi.fn<Logger>();
+    const response = await realApp(PREPRODUCTION_BOX, {
+      log,
+      recoveryPackEvidence: async () => {
+        throw new Error("evidence unreadable");
+      },
+    })(body("prepare"));
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result).not.toHaveProperty("recoveryPackPdf");
+    const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
+    expect(await readRecoveryPacks(venueDb.db, id)).toEqual([]);
+    const secret = FISCAL_SERVER_KEY_AS_TYPED(result.breakGlassSecret);
+    expect(typeof secret).toBe("string");
+    expect(await verifyBreakGlass(venueDb.node, id, secret!)).toBe(true);
+    expect(log).toHaveBeenCalledWith("warn", "setup.recovery_pack_drawing_failed", {
+      reason: "unexpected",
+    });
+  });
+
   it.each([
     [false, "http://box.test", "setup.connection_insecure"],
     [true, "https://other.test", "setup.owner_required"],
@@ -551,7 +631,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(await createSetupOperationStore(stateDir).read()).toBeNull();
   });
 
-  it("returns a usable Preparation key after retrying a failure before publication", async () => {
+  it("returns a new usable Preparation pack after retrying a failure before publication", async () => {
     const request = body("prepare");
     let keyAtFirstPublication: string | null = null;
     const post = realApp(PREPRODUCTION_BOX, {
@@ -565,13 +645,20 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     });
     const refused = await post(request);
     expect(refused.status).toBe(500);
-    expect(await refused.json()).not.toHaveProperty("breakGlassSecret");
+    const refusal = await refused.json();
+    expect(refusal).not.toHaveProperty("breakGlassSecret");
+    expect(refusal).not.toHaveProperty("recoveryPackPdf");
     expect(typeof keyAtFirstPublication).toBe("string");
 
     const retried = await post(request);
     expect(retried.status).toBe(200);
-    const { breakGlassSecret } = await retried.json();
+    const { breakGlassSecret, breakGlassKeyName, recoveryPackPdf } = await retried.json();
     expect(typeof breakGlassSecret).toBe("string");
+    expect(breakGlassKeyName).not.toBe(keyAtFirstPublication);
+    expect(await readRecoveryPackPdf(Buffer.from(recoveryPackPdf, "base64"))).toMatchObject({
+      number: 2,
+      serverKeyName: breakGlassKeyName,
+    });
     const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
     expect(
       await verifyBreakGlass(venueDb.node, id, FISCAL_SERVER_KEY_AS_TYPED(breakGlassSecret)!),

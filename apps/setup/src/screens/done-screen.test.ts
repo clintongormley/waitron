@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./done-screen.js";
-import { BACKUP_SETUP_URL, SetupDoneScreen } from "./done-screen.js";
+import { SetupDoneScreen } from "./done-screen.js";
 import "./review-screen.js";
 import type { SetupReviewScreen } from "./review-screen.js";
 import { SetupApi } from "../api/client.js";
@@ -143,30 +143,28 @@ describe("setup-done-screen", () => {
     expect(el.breakGlassKeyName).toBe("2026-10-15 · K7QF");
   });
 
-  it.each([
-    ["en-GB", "Opening hours: Monday to Friday, 09:00–17:00", "Change opening hours"],
-    [
-      "es-ES",
-      "Horario de apertura: de lunes a viernes, 09:00–17:00",
-      "Cambiar el horario de apertura",
-    ],
-  ] as const)(
-    "shows the saved first hours and a link to the Opening hours year in %s",
-    async (locale, hours, link) => {
-      setLocale(locale);
-      const el = await mountDone(() => new Promise(() => {}), {
-        openingHours: { departmentId: "first-department" },
-      } as Partial<SetupDoneScreen>);
-      expect(q(el, "[data-test=opening-hours]")?.textContent).toContain(hours);
-      const anchor = q(el, "[data-test=opening-hours] a");
-      expect(anchor?.textContent?.trim()).toBe(link);
-      expect(anchor?.getAttribute("href")).toBe("/opening-hours/view/year");
-    },
-  );
-
-  it("does not invent hours on a response without a first schedule", async () => {
-    const el = await mountDone(() => new Promise(() => {}));
-    expect(q(el, "[data-test=opening-hours]")).toBeNull();
+  it("links to the Preparation PDF while the page is open", async () => {
+    const el = await mountDone(() => new Promise(() => {}), {
+      onboardingIntent: "prepare",
+      breakGlassSecret: "key-on-paper",
+      recoveryPackPdf: btoa("%PDF-test"),
+    });
+    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(
+      "[data-test=download-recovery-pack]",
+    );
+    expect(link).not.toBeNull();
+    expect(link!.textContent?.trim()).toBe("Download recovery pack (PDF)");
+    expect(q(el, "[data-test=break-glass-warning]")?.textContent).toContain(
+      "The recovery pack contains the server key",
+    );
+    expect(link!.download).toBe("waitron-recovery-pack.pdf");
+    const response = await fetch(link!.href);
+    expect(response.headers.get("content-type")).toBe("application/pdf");
+    expect(await response.text()).toBe("%PDF-test");
+    expect(q(el, "[data-test=break-glass-save]")).toBeNull();
+    const href = link!.href;
+    el.remove();
+    await expect(fetch(href)).rejects.toThrow();
   });
 
   it("announces the restart on the provision/restore path", async () => {
@@ -1095,17 +1093,8 @@ describe("setup-done-screen", () => {
     expect(el.nodeRecoveryKey).toBeUndefined();
   });
 
-  it("shows a 'no backups yet' nudge with a link to backup setup", async () => {
+  it("leaves the no-backups warning to the dashboard", async () => {
     const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "live" });
-    const nudge = q(el, "[data-test=backup-nudge]");
-    expect(nudge).not.toBeNull();
-    const link = nudge!.querySelector("a");
-    expect(link).not.toBeNull();
-    expect(new URL(link!.href).pathname).toBe(BACKUP_SETUP_URL);
-  });
-
-  it("suppresses the nudge in demo mode", async () => {
-    const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "demo" });
     expect(q(el, "[data-test=backup-nudge]")).toBeNull();
   });
 
@@ -1281,9 +1270,6 @@ describe("setup-done-screen", () => {
       (row) => row.heading,
     );
     expect(links).toEqual(["Panel", "Caja"]);
-    expect(q(el, "[data-test=backup-nudge] a")!.textContent!.trim()).toBe(
-      "Configura ahora las copias de seguridad",
-    );
     expect(q(el, "[data-test=status]")!.textContent!.trim()).toBe(
       "El servidor se está reiniciando para terminar la configuración. Cuando vuelva, ábrelo desde aquí:",
     );
@@ -1304,7 +1290,7 @@ describe("setup-done-screen", () => {
     ["an archive restore", "archive"],
     ["a Waitron Cloud restore", "cloud"],
   ] as const)(
-    "after %s, names which devices need a person under a restore heading and shows the no-backups nudge",
+    "after %s, names which devices need a person under a restore heading",
     async (_, restored) => {
       const el = await mountDone(() => new Promise(() => {}), { restored });
       expect(q(el, "h1")!.textContent!.trim()).toBe("Restored from your backup");
@@ -1312,7 +1298,6 @@ describe("setup-done-screen", () => {
       expect(steps).toContain("opened at https://waitron.local reconnect by themselves");
       expect(steps).toContain("opened at an IP address");
       expect(steps).toContain("port 9110");
-      expect(q(el, "[data-test=backup-nudge]")).not.toBeNull();
     },
   );
 
@@ -1666,15 +1651,16 @@ describe("setup-done-screen layout", () => {
     expect(steps.querySelectorAll(":scope > ul > li")).toHaveLength(3);
   });
 
-  it("puts the backup nudge in a card, its link coloured as the wizard's help links", async () => {
+  it("puts the replacement link in a card and uses the wizard's help link colour", async () => {
     const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
       api: apiWith(() => new Promise(() => {})),
       startDelayMs: 0,
-      onboardingIntent: "live",
+      onboardingIntent: "prepare",
+      breakGlassKeyInBackups: true,
     });
     host.style.setProperty("--wt-color-primary-text", "rgb(31, 32, 33)");
     host.style.setProperty("--wt-color-primary", "rgb(91, 92, 93)");
-    const nudge = q(el, "[data-test=backup-nudge]")!;
+    const nudge = q(el, "[data-test=recovery-pack-replacement]")!;
     expect(nudge.localName).toBe("wt-card");
     expect(getComputedStyle(nudge.querySelector("a")!).color).toBe("rgb(31, 32, 33)");
   });
@@ -1723,18 +1709,10 @@ describe("setup-done-screen layout", () => {
   });
 
   it.each([
-    ["an ordinary setup", { onboardingIntent: "live" }, ["links", "break-glass", "backup-nudge"]],
+    ["an ordinary setup", { onboardingIntent: "live" }, ["links", "break-glass"]],
     ["a rebuild", { restored: "bucket" }, ["links", "device-steps", "break-glass"]],
-    [
-      "an archive restore",
-      { restored: "archive" },
-      ["links", "device-steps", "break-glass", "backup-nudge"],
-    ],
-    [
-      "a Waitron Cloud restore",
-      { restored: "cloud" },
-      ["links", "device-steps", "break-glass", "backup-nudge"],
-    ],
+    ["an archive restore", { restored: "archive" }, ["links", "device-steps", "break-glass"]],
+    ["a Waitron Cloud restore", { restored: "cloud" }, ["links", "device-steps", "break-glass"]],
   ] as const)("spaces its blocks by the same token after %s", async (_, extra, order) => {
     const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
       api: apiWith(() => new Promise(() => {})),
@@ -1881,7 +1859,6 @@ describe("setup-done-screen after a start that failed", () => {
       box.answer = GONE;
       const el = await mountDone(getStatus, {
         api: { getStatus, getRecoveryStatus } as unknown as SetupApi,
-        openingHours: { departmentId: "first-department" },
         breakGlassSecret: "key-on-paper",
         ...extra,
       });
@@ -1889,28 +1866,24 @@ describe("setup-done-screen after a start that failed", () => {
         expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN),
       );
       expect(q(el, "[data-test=backup-nudge]")).toBeNull();
-      expect(q(el, "[data-test=opening-hours]")).toBeNull();
       expect(q(el, "[data-test=device-steps]")).toBeNull();
       expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
     },
   );
 
-  it("shows those cards again once a later start trades", async () => {
+  it("shows the device steps again once a later start trades", async () => {
     const { box, getStatus, getRecoveryStatus } = failingBox();
     box.answer = GONE;
     const el = await mountDone(getStatus, {
       api: { getStatus, getRecoveryStatus } as unknown as SetupApi,
-      openingHours: { departmentId: "first-department" },
       restored: "archive",
     });
     await vi.waitFor(() =>
       expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN),
     );
-    expect(q(el, "[data-test=backup-nudge]")).toBeNull();
+    expect(q(el, "[data-test=device-steps]")).toBeNull();
     getRecoveryStatus.mockImplementation(trading);
     await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
-    expect(q(el, "[data-test=backup-nudge]")).not.toBeNull();
-    expect(q(el, "[data-test=opening-hours]")).not.toBeNull();
     expect(q(el, "[data-test=device-steps]")).not.toBeNull();
   });
 

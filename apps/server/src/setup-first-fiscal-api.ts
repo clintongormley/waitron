@@ -265,19 +265,9 @@ export function mountSetupFirstFiscalApi(
               }),
             );
           }
-          const result = await activateFirstFiscal(host, deps, owner, body, hold);
-          let openingHours: { departmentId: string } | undefined;
-          try {
-            openingHours = await deps.readOpeningHours?.(result);
-          } catch {
-            log("warn", "setup.opening_hours_read_failed", {});
-          }
+          await activateFirstFiscal(host, deps, owner, body, hold);
           setTimeout(() => deps.requestRestart?.(), 0);
-          return c.json({
-            provisioned: true,
-            restarting: true,
-            ...(openingHours === undefined ? {} : { openingHours }),
-          });
+          return c.json({ provisioned: true, restarting: true });
         });
       });
     });

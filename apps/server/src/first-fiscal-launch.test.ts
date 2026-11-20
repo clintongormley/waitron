@@ -314,7 +314,6 @@ it.each(["direct", "supervised"])(
         body: {
           provisioned: true,
           restarting: true,
-          openingHours: { departmentId: expect.any(String) },
         },
       });
       await vi.waitFor(() => expect(killed).toHaveBeenCalledWith(process.pid, "SIGTERM"));

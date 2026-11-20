@@ -382,7 +382,7 @@ export class RecoveryPackDialog extends LitElement {
     const where =
       holder === null
         ? nothing
-        : holder.received
+        : holder.received || holder.offeredAtSetup
           ? fill("recovery_pack_dialog.key_still_works", {
               number: String(holder.number),
               date: packDate(holder.madeAt, this.#zone),

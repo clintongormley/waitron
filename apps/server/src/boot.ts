@@ -382,7 +382,6 @@ import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountBuiltApps } from "./spa-api.js";
 import { mountSetup, MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
 import { createSetupClockSet, raiseSetupClockSteps } from "./setup-clock-set.js";
-import { readSetupOpeningHours } from "./setup-opening-hours.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
 import {
@@ -1206,6 +1205,8 @@ async function bootServer(
   announceWaiting: (whileWaiting: StartedServer) => void,
 ): Promise<StartedServer> {
   const now = () => new Date();
+  const documentEvidence: RecoveryDocumentEvidence = (module) =>
+    readRecoveryDocumentEvidence({ stateDir: config.stateDir, venueDir: config.venueDir }, module);
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
   refuseUnreleasedBuild(config.environment, seams.builtRelease ?? builtRelease());
   await assertOutsideScratchResolved(config.stateDir, config.venueDir, "WAITRON_VENUE_DIR");
@@ -1859,7 +1860,7 @@ async function bootServer(
           return result;
         },
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
-        readOpeningHours: () => readSetupOpeningHours(db),
+        recoveryPackEvidence: documentEvidence,
         adopt: (req, hooks) =>
           adoptFromPrimary(
             {
@@ -4141,8 +4142,6 @@ async function bootServer(
     log,
   );
 
-  const documentEvidence: RecoveryDocumentEvidence = (module) =>
-    readRecoveryDocumentEvidence({ stateDir: config.stateDir, venueDir: config.venueDir }, module);
   mountRecoveryPackApi(
     app,
     {

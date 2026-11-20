@@ -1620,6 +1620,8 @@ export const en = {
   "recovery_pack.out_of_date": "Recovery pack {number}, made on {date}, is out of date.",
   "recovery_pack.incomplete":
     "Recovery pack {number}, made on {date}, is incomplete: a page could not be drawn, and that page says why. Make a new pack once the cause is fixed.",
+  "recovery_pack.offered_at_setup":
+    "Offered as a PDF at the end of setup on {date}. If you did not keep it, make a new pack with a new server key.",
   "recovery_pack.not_received":
     "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, make a new pack.",
   "recovery_pack.reason.key_changed": "The recovery key changed on {date}.",
@@ -6194,6 +6196,8 @@ export const es: Record<StringKey, string> = {
     "El paquete de recuperación {number}, hecho el {date}, está desactualizado.",
   "recovery_pack.incomplete":
     "El paquete de recuperación {number}, hecho el {date}, está incompleto: no se pudo dibujar una página, y esa página explica por qué. Haz un paquete nuevo cuando se haya resuelto la causa.",
+  "recovery_pack.offered_at_setup":
+    "Se ofreció como PDF al terminar la configuración el {date}. Si no lo guardaste, crea un paquete nuevo con una clave del servidor nueva.",
   "recovery_pack.not_received":
     "El paquete de recuperación {number}, hecho el {date}: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, haz un paquete nuevo.",
   "recovery_pack.reason.key_changed": "La clave de recuperación cambió el {date}.",

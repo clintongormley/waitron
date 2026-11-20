@@ -949,7 +949,7 @@ export class SetupApp extends LitElement {
   @state() private bucketRequest?: KeptBucketRestoreRequest;
   /** Kept apart from the other outcomes because the done screen's copy depends on which path ran. */
   @state() private restored: "bucket" | "archive" | "cloud" | undefined;
-  @state() private openingHours?: { departmentId: string };
+  @state() private recoveryPackPdf?: string;
   @state() private cloudRecoveryView?: CloudRecoveryView;
   @state() private cloudRecoveryError?: Message;
   @state() private cloudInvalidField?: CloudField;
@@ -1729,22 +1729,26 @@ export class SetupApp extends LitElement {
     const generation = this.#rootGeneration;
     this.screen = "provisioning";
     try {
+      const request = assembleBody(submitted);
+      const locale = currentLocale();
       const result = await (this.#firstSession
         ? this.#firstSession.provision(
             {
               mode: "live",
-              aeatCert: assembleBody(submitted).aeatCert,
+              aeatCert: request.aeatCert,
               email: submitted.email as ProvisionBody["email"],
             },
-            currentLocale(),
+            locale,
           )
-        : this.#localeChosen
-          ? this.api.provision(assembleBody(submitted), currentLocale())
-          : this.api.provision(assembleBody(submitted)));
+        : request.mode === "prepare"
+          ? this.api.provision(request, this.#localeChosen ? locale : undefined, locale)
+          : this.#localeChosen
+            ? this.api.provision(request, locale)
+            : this.api.provision(request));
       if (!this.isConnected || generation !== this.#rootGeneration) return;
       this.#rootBaseline = submitted;
       this.#rootScope?.commit(submitted);
-      this.openingHours = result.openingHours;
+      this.recoveryPackPdf = result.recoveryPackPdf;
       this.breakGlassSecret = result.breakGlassSecret;
       this.breakGlassKeyName = result.breakGlassKeyName;
       this.breakGlassKeyInBackups = result.breakGlassKeyInBackups === true;
@@ -2346,7 +2350,7 @@ export class SetupApp extends LitElement {
 
   /** Every flag the provisioning screen reads, so no answer outlives the request it answered. */
   #clearProvisionOutcome(): void {
-    this.openingHours = undefined;
+    this.recoveryPackPdf = undefined;
     this.breakGlassSecret = undefined;
     this.breakGlassKeyName = undefined;
     this.breakGlassKeyInBackups = false;
@@ -2880,7 +2884,7 @@ export class SetupApp extends LitElement {
           .mirrorJoin=${this.mirrorJoin}
           .onboardingIntent=${this.draft.mode}
           .restored=${this.restored}
-          .openingHours=${this.openingHours}
+          .recoveryPackPdf=${this.recoveryPackPdf}
         ></setup-done-screen>`;
       default:
         return html`<setup-mode-screen

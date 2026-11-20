@@ -22,7 +22,7 @@ import { authorizeManager, requireFreshManagementSignIn, persons } from "@waitro
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { readRecoveryKeyName, setRecoveryKeyTx } from "@waitron/node-db";
 import { newBreakGlassKeyName } from "@waitron/provisioning";
-import { renderRecoveryPack, type PackLocale } from "@waitron/recovery-pack";
+import type { PackLocale } from "@waitron/recovery-pack";
 import {
   createErrorBoundary,
   readRawJsonBody,
@@ -47,6 +47,7 @@ import {
   type PartsContext,
   type ServerKeySeat,
 } from "./backup-recovery-pack-parts.js";
+import { drawRecoveryPack } from "./backup-recovery-pack-output.js";
 import { carriesServerKey, packStatus, type CurrentChecks } from "./backup-recovery-pack-status.js";
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { Turns } from "./backup-turns.js";
@@ -339,40 +340,23 @@ async function makePack(
     request.locale,
   );
   const carried = serverKey.record.carriedKey === true;
-  const pdf = await renderRecoveryPack({
-    locale: request.locale,
-    timeZone: venue.timeZone,
-    loadFonts: deps.loadFonts,
-    cover: {
-      legalName: taxpayer.legalName,
-      taxId: taxpayer.taxId,
-      venueName: venue.name,
-      madeAt,
-      madeBy: person?.name ?? null,
-      number,
+  const { pdf, record } = await drawRecoveryPack(
+    {
+      locale: request.locale,
+      timeZone: venue.timeZone,
+      loadFonts: deps.loadFonts,
+      cover: {
+        legalName: taxpayer.legalName,
+        taxId: taxpayer.taxId,
+        venueName: venue.name,
+        madeAt,
+        madeBy: person?.name ?? null,
+        number,
+      },
     },
-    parts: parts.map((p) => p.part),
-    file: {
-      kind: "waitron-recovery-pack",
-      version: 1,
-      number,
-      madeAt,
-      bucketCode: null,
-      archiveCode: null,
-      backupKey: null,
-      serverKey: null,
-      serverKeyName: null,
-      serverKeyHeldBy: null,
-      ...Object.assign({}, ...parts.map((p) => p.file)),
-    },
-  });
-  await insertRecoveryPack(tx, {
-    nodeId,
-    number,
-    madeAt: new Date(madeAt),
-    madeBy: input.personId,
-    parts: parts.map((p) => p.record),
-  });
+    { nodeId, madeBy: input.personId, parts },
+  );
+  await insertRecoveryPack(tx, record);
   const key = serverKey.part.state === "failed" ? "failed" : carried ? "replaced" : "unchanged";
   return {
     number,

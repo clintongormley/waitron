@@ -120,7 +120,7 @@ export interface ProvisionBody {
 export interface ProvisionResult {
   provisioned: true;
   restarting: true;
-  openingHours?: { departmentId: string };
+  recoveryPackPdf?: string;
   breakGlassSecret?: string;
   breakGlassKeyName?: string;
   breakGlassKeyInBackups?: true;
@@ -489,13 +489,17 @@ export class SetupApi {
    * The server takes the admin account's language from `Accept-Language`, so `locale` is sent there
    * only when the operator chose one; otherwise the browser's own header stands.
    */
-  provision(body: ProvisionBody, locale?: string): Promise<ProvisionResult> {
-    return this.#request<ProvisionResult>(
-      "/setup-api/provision",
-      "POST",
-      body,
-      locale === undefined ? {} : { "accept-language": locale },
-    );
+  provision(
+    body: ProvisionBody,
+    locale?: string,
+    recoveryPackLocale?: string,
+  ): Promise<ProvisionResult> {
+    return this.#request<ProvisionResult>("/setup-api/provision", "POST", body, {
+      ...(locale === undefined ? {} : { "accept-language": locale }),
+      ...(recoveryPackLocale === undefined
+        ? {}
+        : { "x-waitron-recovery-pack-locale": recoveryPackLocale }),
+    });
   }
 
   /** `null` for a plain-http address, which only this machine can answer. */

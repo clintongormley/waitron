@@ -338,6 +338,55 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     },
   );
 
+  it("calmly points back to the pack offered at the end of setup", async () => {
+    setLocale(locale);
+    const unreceived = {
+      number: 1,
+      madeAt: MADE_AT,
+      holdsCurrentServerKey: true,
+      offeredAtSetup: true as const,
+    };
+    const el = await mount(
+      stubApi(
+        status({
+          latest: latest({ number: 1, madeByName: null, received: false }),
+          unreceived,
+        }),
+      ),
+    );
+    const offered = el.shadowRoot!.querySelector("[data-test=setup-pack-offered]");
+    expect(offered?.classList.contains("warn")).toBe(false);
+    expect(offered?.textContent?.trim()).toBe(
+      locale === "en-GB"
+        ? "Offered as a PDF at the end of setup on 12 October. If you did not keep it, make a new pack with a new server key."
+        : "Se ofreció como PDF al terminar la configuración el 12 de octubre. Si no lo guardaste, crea un paquete nuevo con una clave del servidor nueva.",
+    );
+    expect(row(el, "server-key")).toContain("1");
+    expect(line(el)).toBe("");
+  });
+
+  it("explains that a newly configured bucket needs an updated setup pack", async () => {
+    setLocale(locale);
+    const el = await mount(
+      stubApi(
+        status({
+          latest: latest({ number: 1, madeByName: null, received: false }),
+          unreceived: {
+            number: 1,
+            madeAt: MADE_AT,
+            holdsCurrentServerKey: true,
+            offeredAtSetup: true,
+          },
+          reasons: [{ part: "bucket", kind: "set_up_after" }],
+        }),
+      ),
+    );
+    expect(line(el)).toContain(t("recovery_pack.reason.bucket_set_up"));
+    expect(line(el)).toContain(t("recovery_pack.make_new"));
+    const offered = el.shadowRoot!.querySelector("[data-test=setup-pack-offered]");
+    expect(offered?.classList.contains("warn")).toBe(false);
+  });
+
   it("names a pack holding the server key no browser confirmed receiving, in decision 10's words", async () => {
     setLocale(locale);
     const el = await mount(stubApi(STATES.unreceived));

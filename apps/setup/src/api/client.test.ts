@@ -107,6 +107,20 @@ describe("SetupApi", () => {
     });
   });
 
+  it("sends the visible setup language for a Preparation pack without setting the admin language", async () => {
+    const result = { provisioned: true, restarting: true, recoveryPackPdf: btoa("%PDF") };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result));
+    const api = new SetupApi("", fetchImpl);
+    const body = { ...provisionBody, mode: "prepare" as const };
+    expect(await api.provision(body, undefined, "en-GB")).toEqual(result);
+    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/provision", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json", "x-waitron-recovery-pack-locale": "en-GB" },
+      body: JSON.stringify(body),
+    });
+  });
+
   it("provision asks for the admin's language in Accept-Language when it is given one", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ provisioned: true }));
     const api = new SetupApi("", fetchImpl);

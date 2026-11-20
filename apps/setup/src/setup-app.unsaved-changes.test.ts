@@ -642,10 +642,14 @@ describe("setup root draft unsaved changes", () => {
     await expect.poll(() => (el as unknown as State).screen).toBe("provisioning");
     expect(warning(el).open).toBe(false);
     expect(unload()).toBe(true);
-    expect(api.provision).toHaveBeenCalledExactlyOnceWith({
-      mode: "prepare",
-      venue: { admin: { ...initialAdmin, email: "submitted@example.com" } },
-    });
+    expect(api.provision).toHaveBeenCalledExactlyOnceWith(
+      {
+        mode: "prepare",
+        venue: { admin: { ...initialAdmin, email: "submitted@example.com" } },
+      },
+      undefined,
+      "en-GB",
+    );
     accept();
     await expect.poll(() => (el as unknown as State).screen).toBe("done");
     expect(unload()).toBe(false);
@@ -1341,10 +1345,6 @@ it("the actual Done links leave a successfully provisioned root without another 
     const link = choice.shadowRoot!.querySelector<HTMLAnchorElement>("a")!;
     links.push([link, path]);
   }
-  links.push([
-    done.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=backup-nudge] a")!,
-    "/backup",
-  ]);
   for (const [link, path] of links) {
     expect(link.pathname).toBe(path);
     let browserDefault = false;
@@ -1364,8 +1364,12 @@ it("the actual Done links leave a successfully provisioned root without another 
     expect(warning(el).open).toBe(false);
     expect(unload()).toBe(false);
   }
-  expect(api.provision).toHaveBeenCalledExactlyOnceWith({
-    mode: "prepare",
-    venue: { admin: { ...initialAdmin, email: "submitted@example.com" } },
-  });
+  expect(api.provision).toHaveBeenCalledExactlyOnceWith(
+    {
+      mode: "prepare",
+      venue: { admin: { ...initialAdmin, email: "submitted@example.com" } },
+    },
+    undefined,
+    "en-GB",
+  );
 });

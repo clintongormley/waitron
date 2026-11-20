@@ -1388,7 +1388,7 @@ describe("setup-app", () => {
     expect(readDraft(el).venue?.invoiceLocales).toEqual(["es-ES", "en-GB"]);
   });
 
-  it("shows the saved first opening hours returned by provisioning", async () => {
+  it("leaves opening hours off the completion page", async () => {
     const el = await mountSetupApp(
       stubApi({
         provision: vi.fn().mockResolvedValue({
@@ -1402,29 +1402,30 @@ describe("setup-app", () => {
     await flush(el);
     const done = await screenHost(el, "done");
     await (done as SetupDoneScreen).updateComplete;
-    expect(done.shadowRoot!.querySelector("[data-test=opening-hours]")?.textContent).toContain(
-      "Opening hours: Monday to Friday, 09:00–17:00",
-    );
-    expect(
-      done.shadowRoot!.querySelector("[data-test=opening-hours] a")?.getAttribute("href"),
-    ).toBe("/opening-hours/view/year");
+    expect(done.shadowRoot!.querySelector("[data-test=opening-hours]")).toBeNull();
   });
 
-  it("shows the named Preparation key with instructions to use it for restore", async () => {
-    const el = await mountSetupApp(
-      stubApi({
-        provision: vi.fn().mockResolvedValue({
-          provisioned: true,
-          restarting: true,
-          breakGlassSecret: "key-on-paper",
-          breakGlassKeyName: "2026-10-15 · K7QF",
-          breakGlassKeyInBackups: true,
-        }),
-      }),
-    );
+  it("shows the named Preparation key and PDF returned by provisioning", async () => {
+    const provision = vi.fn().mockResolvedValue({
+      provisioned: true,
+      restarting: true,
+      breakGlassSecret: "key-on-paper",
+      breakGlassKeyName: "2026-10-15 · K7QF",
+      breakGlassKeyInBackups: true,
+      recoveryPackPdf: btoa("%PDF-setup"),
+    });
+    const el = await mountSetupApp(stubApi({ provision }));
     patch(el, { mode: "prepare" });
     provisionRequest(el);
     await flush(el);
+    expect(provision).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "prepare" }),
+      undefined,
+      "en-GB",
+    );
+    expect(await screenText(el, "done", "[data-test=download-recovery-pack]")).toBe(
+      "Download recovery pack (PDF)",
+    );
     expect(await screenText(el, "done", "[data-test=break-glass-key-name]")).toBe(
       "Server key 15 Oct 2026 · K7QF",
     );
@@ -1453,7 +1454,7 @@ describe("setup-app", () => {
     const done = await screenHost(el, "done");
     expect(done.shadowRoot!.querySelector("[data-test=break-glass-secret]")).toBeNull();
     expect(done.shadowRoot!.querySelectorAll('a[href="/backup"]')).toHaveLength(1);
-    const link = done.shadowRoot!.querySelector("[data-test=backup-nudge] a");
+    const link = done.shadowRoot!.querySelector("[data-test=recovery-pack-replacement] a");
     expect(link?.textContent).toBe("Open Backups");
     expect(link?.getAttribute("href")).toBe("/backup");
   });

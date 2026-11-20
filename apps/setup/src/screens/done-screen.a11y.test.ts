@@ -58,13 +58,15 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     }
   });
 
-  it("has no violations showing the first hours and their link", async () => {
+  it("has no violations showing the Preparation PDF download link", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",
       {
         api: apiWith(() => new Promise(() => {})),
         startDelayMs: 100000,
-        openingHours: { departmentId: "first-department" },
+        onboardingIntent: "prepare",
+        breakGlassSecret: "key-on-paper",
+        recoveryPackPdf: btoa("%PDF-test"),
       },
       theme,
     );
@@ -203,7 +205,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     );
     await expectNoA11yViolations(host);
   });
-  it("has no violations live, with the backup nudge and the server ready", async () => {
+  it("has no violations live with the server ready", async () => {
     const { el, host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",
       {
@@ -219,7 +221,6 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
         "The server is ready. Open it here:",
       ),
     );
-    expect(q(el, "[data-test=backup-nudge]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

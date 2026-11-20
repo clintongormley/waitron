@@ -132,11 +132,10 @@ al propietario de Cloud que apruebe la nueva solicitud en Cloud.
 
 ## Identifícate ante la copia elegida {#proof}
 
-Al terminar de configurar un local en Preparación, elige **Guardar en un archivo** para guardar la
-clave del servidor y su nombre, y después imprime el archivo o muévelo fuera de ese ordenador; o
-anótalos en papel. Guárdalos con el paquete de recuperación del bucket. Después de revisar una copia
-del bucket, busca el nombre que se muestra entre los que guardaste y escribe la clave agrupada en
-**Clave del servidor**.
+Al terminar la Preparación, elige **Descargar paquete de recuperación (PDF)**. Imprime el paquete
+o guárdalo fuera del servidor. Si la configuración ofrece **Guardar en un archivo**, guarda ese
+archivo con tus otros documentos de recuperación. Abre **Copias de seguridad** desde el aviso del
+panel para configurar tus copias.
 
 Bajo la revisión, en «Recuperar este servidor», elige en **PDF de recuperación** tu paquete de
 recuperación, o un PDF de recuperación anterior, que tenga la clave del servidor de esta copia; o
