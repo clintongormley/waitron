@@ -50,7 +50,7 @@ export const BLUETOOTH_FAILURE_REASONS = [
 export type BluetoothFailureReason = (typeof BLUETOOTH_FAILURE_REASONS)[number];
 
 /** Why the agent cannot use Bluetooth at all: the system bus refused it, BlueZ did not answer on
- * it, the host has no adapter, or the listing failed some other way. */
+ * it, bluetoothctl saw no adapter, or the listing failed some other way. */
 export const BLUETOOTH_UNAVAILABLE_REASONS = [
   "dbus_unreachable",
   "bluez_not_answering",

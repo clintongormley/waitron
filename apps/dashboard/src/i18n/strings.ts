@@ -1125,7 +1125,7 @@ export const en = {
   "printers.discovery_hint": "Searching for network, USB and Bluetooth printers.",
   "printers.bluetooth_unavailable": "Bluetooth printers can't be found through {agent}: {reason}",
   "printers.bluetooth_unavailable.no_controller":
-    "its computer has no Bluetooth adapter. Plug one in.",
+    "its computer shows no Bluetooth adapter. Check that it has one.",
   "printers.bluetooth_unavailable.service": "its computer's Bluetooth service isn't working.",
   "printers.bluetooth_unavailable.not_allowed": "its computer isn't letting Waitron use Bluetooth.",
   "printers.add_help":
@@ -5695,7 +5695,7 @@ export const es: Record<StringKey, string> = {
   "printers.bluetooth_unavailable":
     "No se pueden encontrar impresoras Bluetooth a través de {agent}: {reason}",
   "printers.bluetooth_unavailable.no_controller":
-    "su equipo no tiene adaptador Bluetooth. Conecta uno.",
+    "su equipo no muestra ningún adaptador Bluetooth. Comprueba que tenga uno.",
   "printers.bluetooth_unavailable.service": "el servicio Bluetooth de su equipo no funciona.",
   "printers.bluetooth_unavailable.not_allowed": "su equipo no permite que Waitron use Bluetooth.",
   "printers.add_help":

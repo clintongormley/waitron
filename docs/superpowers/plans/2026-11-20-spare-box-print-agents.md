@@ -3,6 +3,15 @@
 Status: approved by the owner on 2026-11-20 ("yes" to all five changes below). Branch
 `spare-box-print-agents`, worktree `~/workspace/worktrees/waitron-spare-box-print-agents`.
 
+As built (2026-11-20), where the code differs from the tasks below: a Bluetooth report expires
+after its own 60 seconds (`AGENT_BLUETOOTH_TTL_MS`, `apps/server/src/print-api.ts`), not
+`DISCOVERED_TTL_MS`; on the spare the reset card still shows while a reset is already counting
+down, so it can be cancelled, and `POST /network/reset` refuses a new one; the spare's page no
+longer says printing goes through the main box's agent; the `no_controller` line reads "its
+computer shows no Bluetooth adapter. Check that it has one."; the scan says "Every printer
+found is already added." when it found printers and all of them are already added, and an A4
+printer whose registration is switched off counts as not added.
+
 ## What the owner saw (2026-11-20, two-box test after a swap)
 
 The Lenovo (`waitron-spare`, now the main box) lists two print agents, both marked "On this box".

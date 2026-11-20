@@ -90,6 +90,8 @@ In **Printers**, open **Print Agents** and choose **Delete** in the agent's menu
 
 To use an agent you still trust, choose **Add an agent** and **Add** beside its saved name, including the agent on this box. Jobs still queued for it may print when it returns.
 
+An agent marked **On another box** belongs to another of the venue's boxes, such as the spare. If that box is still in use, keep the agent: it prints again when that box becomes the main box.
+
 To add a different agent, follow the setup steps in **Add an agent** and match its number. After pairing a new agent, find and add its A4 printers again.
 
 ## Card readers {#card-readers}

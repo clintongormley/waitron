@@ -8058,10 +8058,10 @@ describe("printers-screen Bluetooth pairing", () => {
         "No se pueden encontrar impresoras Bluetooth a través de {agent}: {reason}",
       );
       expect(en["printers.bluetooth_unavailable.no_controller"]).toBe(
-        "its computer has no Bluetooth adapter. Plug one in.",
+        "its computer shows no Bluetooth adapter. Check that it has one.",
       );
       expect(es["printers.bluetooth_unavailable.no_controller"]).toBe(
-        "su equipo no tiene adaptador Bluetooth. Conecta uno.",
+        "su equipo no muestra ningún adaptador Bluetooth. Comprueba que tenga uno.",
       );
       expect(en["printers.bluetooth_unavailable.service"]).toBe(
         "its computer's Bluetooth service isn't working.",
