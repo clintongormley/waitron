@@ -1268,7 +1268,6 @@ const ACTIONABLE_REFUSALS = new Set([
   "station.no_default",
   "order.dining_fixed",
   "order.dining_locked",
-  "invoice_delivery.email_unavailable",
 ]);
 
 /** A counter basket save refused because it would change, lower or leave out a dish already sent. */
@@ -1352,6 +1351,8 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   const overLimit = overLimitOf(error);
   if (overLimit !== undefined) return overLimit;
   const code = (error as { code?: string } | undefined)?.code;
+  // Its own words also serve the ticket view's email form, which has no printed choice.
+  if (code === "invoice_delivery.email_unavailable") return { code, printedInstead: true };
   return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? withDishes(code, error) : fallback;
 }
 
@@ -1867,6 +1868,8 @@ type CounterError =
       reason?: string;
       /** The way an `order.dining_fixed` refusal names. */
       dining?: string;
+      /** Followed by how to finish the counter's sale with a printed invoice instead. */
+      printedInstead?: true;
       setMenuName?: unknown;
       dishName?: unknown;
       dishNames?: unknown;
@@ -1998,6 +2001,7 @@ function errorText(
         : fill(t("station.no_default_named"), { dishes: error.dishes });
     const bill = error.bill;
     if (bill !== undefined) return fill(t("table.refused_on_bill"), { bill, message });
+    if (error.printedInstead === true) return `${message} ${t("sale.email_unavailable_print")}`;
     return message;
   }
   if ("billNameTakenOver" in error)
@@ -7605,7 +7609,7 @@ export class TillApp extends LitElement {
     const limit = limited(INVOICE_OPTIONS_LIMIT_MS);
     try {
       return await Promise.race([
-        this.api.getInvoiceDeliveryOptions({ orderId, signal: limit.signal }),
+        this.api.getInvoiceDeliveryOptions(orderId, { signal: limit.signal }),
         pause(limit.signal).then(() => null),
       ]);
     } catch {
@@ -21444,9 +21448,13 @@ export class TillApp extends LitElement {
     this.invoiceRecipientOrderId = undefined;
     this.invoiceRecipientRefusal = "";
     this.invoiceRecipientRefusalField = "";
+    const visit = this.#orderVisit;
     void this.#openInvoiceRecipient(
       workingOrderId,
-      () => this.invoiceRecipientBill === target && this.#operatorSession === target.session,
+      () =>
+        this.invoiceRecipientBill === target &&
+        this.#operatorSession === target.session &&
+        this.#orderVisit === visit,
       bill.invoiceDelivery,
     );
   }

@@ -181,7 +181,7 @@ export async function readDocumentOffers(
   if (full) await expireInvoiceDeliveryClaims(tx);
   const state = full
     ? await readInvoiceDeliveries(tx, saleId, {
-        emailAvailable: await canEmailInvoice(tx, saleId, emailAllowed),
+        emailAvailable: await canEmailInvoice(tx, { kind: "sale", saleId }, emailAllowed),
         printers: async () => offered,
       })
     : null;

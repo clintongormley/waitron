@@ -768,7 +768,8 @@ async function readDeliveries(
   emailTransport: boolean,
 ): Promise<OrderDeliveries | null> {
   const status = await readInvoiceDeliveries(tx, saleId, {
-    emailAvailable: (sale) => canEmailInvoice(tx, sale.id, emailTransport),
+    emailAvailable: (sale) =>
+      canEmailInvoice(tx, { kind: "sale", saleId: sale.id }, emailTransport),
     printers: orderInvoicePrinters(tx),
   });
   if (status === null) return null;

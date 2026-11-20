@@ -3,18 +3,35 @@ import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 
 export type InvoiceEmailContactSource =
-  { kind: "order"; orderId: string } | { kind: "sale"; saleId: string } | { kind: "default" };
+  | { kind: "order"; orderId: string }
+  | { kind: "sale"; saleId: string }
+  /** A bill with no row yet: the department of the zone saving it would open it in. */
+  | { kind: "new-order"; zoneId: string | undefined; profileId: string };
+
+async function departmentOf(
+  tx: Transaction,
+  source: InvoiceEmailContactSource,
+): Promise<string | null> {
+  switch (source.kind) {
+    case "sale":
+      return VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId);
+    case "order":
+      return VENUE_SERVICE.receiptDepartmentForOrder(tx, source.orderId);
+    case "new-order":
+      return (
+        await VENUE_SERVICE.resolveNewOrderZone(tx, {
+          zoneId: source.zoneId,
+          profileId: source.profileId,
+        })
+      ).departmentId;
+  }
+}
 
 export async function resolveInvoiceEmailContact(
   tx: Transaction,
   source: InvoiceEmailContactSource,
 ): Promise<{ email: string; phone?: string } | null> {
-  const departmentId =
-    source.kind === "sale"
-      ? await VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId)
-      : source.kind === "order"
-        ? await VENUE_SERVICE.receiptDepartmentForOrder(tx, source.orderId)
-        : null;
+  const departmentId = await departmentOf(tx, source);
   const contact = async (id: string | null) => {
     if (id === null) return null;
     try {
@@ -38,15 +55,15 @@ export async function resolveInvoiceEmailContact(
 }
 
 /**
- * Whether this sale's invoice can be emailed now: the caller's mail transport check, and a contact
- * for the sale's department, which staging an email choice also requires.
+ * Whether this bill's invoice can be emailed now: the caller's mail transport check, and a contact
+ * for the bill's department, which staging an email choice also requires.
  */
 export async function canEmailInvoice(
   tx: Transaction,
-  saleId: string,
+  source: InvoiceEmailContactSource,
   transport: boolean,
 ): Promise<boolean> {
   if (!transport) return false;
-  const contact = await resolveInvoiceEmailContact(tx, { kind: "sale", saleId });
+  const contact = await resolveInvoiceEmailContact(tx, source);
   return contact !== null;
 }

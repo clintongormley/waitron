@@ -127,6 +127,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET  /api/service-zones/:zoneId/keep-open               | path zone              | till-api.keep-open.test.ts: refuses the read for a zone outside the profile department |
  * | PUT  /api/service-zones/:zoneId/zone-extension          | path zone              | till-api.keep-open.test.ts: refuses a zone outside the profile department |
  * | GET  /api/menu-state?zoneId                             | query zone; or start   | refuses GET /api/menu-state?zoneId                   |
+ * | GET  /api/invoice-delivery-options                      | query order; query zone | refuses GET /api/invoice-delivery-options (order), (zone); a bill not saved yet: "reads the device's invoice printer for a bill not saved yet" |
  * | POST /api/dead-ends/sale                                | body zone; body order  | refuses POST /api/dead-ends/sale (zone), (order)     |
  * | POST /api/pay                                           | body zone; body order  | refuses POST /api/pay (zone), (order)                |
  * | POST /api/working-orders                                | body zone; body order  | refuses POST /api/working-orders (zone), (order)     |
@@ -247,8 +248,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * before, outside any transaction.
  *
  * Not zone-gated: `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today`,
- * `PUT /api/stations/:stationId/today` and `GET /api/invoice-delivery-options` (the device's
- * invoice printer; "reads the device's invoice printer, which names no zone") name no zone; the session, staff, till, locale and product
+ * `PUT /api/stations/:stationId/today` name no zone; the session, staff, till, locale and product
  * reads; the kitchen's `/api/device/station-screen`, notice, ticket-item and
  * `/api/device/working-orders/:id/lines/move-station` routes, scoped by the device's station screen
  * ("a kitchen display" below; for the move route, "refuses a dish at a station the screen does not
@@ -561,6 +561,20 @@ const ROUTES: readonly Row[] = [
     "GET /api/menu-state?zoneId",
     "GET",
     (x) => `/api/menu-state?zoneId=${x.deliCounter}`,
+    undefined,
+    deliOrderZone,
+  ],
+  [
+    "GET /api/invoice-delivery-options (order)",
+    "GET",
+    (x) => `/api/invoice-delivery-options?orderId=${x.deliOrder}`,
+    undefined,
+    deliOrderZone,
+  ],
+  [
+    "GET /api/invoice-delivery-options (zone)",
+    "GET",
+    (x) => `/api/invoice-delivery-options?orderId=${id}&zoneId=${x.deliCounter}`,
     undefined,
     deliOrderZone,
   ],
@@ -1852,7 +1866,7 @@ describe("a Restaurant profile in its own zones", () => {
     expect(orderIds).not.toContain(f.deliTab);
   });
 
-  it("reads the device's invoice printer, which names no zone", async () => {
+  it("reads the device's invoice printer for a bill not saved yet", async () => {
     const ids = { restaurant: randomUUID(), deli: randomUUID() };
     for (const [profile, id] of [
       ["restaurant", ids.restaurant],
@@ -1877,9 +1891,15 @@ describe("a Restaurant profile in its own zones", () => {
         [restaurant, "restaurant", ids.restaurant],
         [deli, "deli", ids.deli],
       ] as const) {
-        expect(await send(session, "GET", "/api/invoice-delivery-options")).toEqual({
+        expect(
+          await send(session, "GET", `/api/invoice-delivery-options?orderId=${randomUUID()}`),
+        ).toEqual({
           status: 200,
-          body: { invoicePrinter: { id, name: `Invoices ${profile}` }, emailAvailable: false },
+          body: {
+            invoicePrinter: { id, name: `Invoices ${profile}` },
+            emailAvailable: false,
+            emailNeedsReceiptContact: false,
+          },
         });
       }
     } finally {

@@ -1771,7 +1771,11 @@ describe("counter pay", () => {
           }),
           getInvoiceDeliveryOptions: vi
             .fn()
-            .mockResolvedValue({ invoicePrinter: null, emailAvailable: false }),
+            .mockResolvedValue({
+              invoicePrinter: null,
+              emailAvailable: false,
+              emailNeedsReceiptContact: false,
+            }),
         },
         { products: [] },
       );

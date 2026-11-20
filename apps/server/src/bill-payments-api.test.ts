@@ -15,7 +15,7 @@ import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { loadKeyRing, deleteCredential } from "@waitron/credentials";
-import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
+import { resolveMailDeliveryIn } from "./email-delivery.js";
 import { adjustments } from "@waitron/adjustments";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
@@ -66,7 +66,12 @@ import type { CollectParams, PaymentResult } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { createPrinter } from "@waitron/printing";
-import { createDepartment, createServiceZone, departments } from "@waitron/venue-service";
+import {
+  createDepartment,
+  createServiceZone,
+  departments,
+  setProfileServiceAccess,
+} from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import {
@@ -136,6 +141,8 @@ const unreadableMailRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "99",
 });
 const SMTP = { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" };
+/** Awaited as the till API's mail check returns. */
+let afterMailCheck: (() => Promise<void>) | undefined;
 
 interface Venue {
   cfg: OriginConfig;
@@ -154,6 +161,8 @@ interface Venue {
   handheldCookie: string;
   /** The handheld device `handheldCookie` names. */
   handheldDeviceId: string;
+  /** The profile of the handheld `handheldCookie` names. */
+  handheldProfileId: string;
   /** The operator's session on a handheld whose profile does not take cash. */
   noCashCookie: string;
   /** The operator's session on a handheld whose profile carries the seeded handheld actions. */
@@ -362,9 +371,16 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       secureCookies: false,
       venueLocale: LOCALE,
       cardProvider: new SimulatorPaymentProvider(db),
-      invoiceEmailAvailable: async () =>
-        (await resolveInvoiceEmailDelivery(db, invoiceMailRing, invoiceMailMode)).mode !==
-        "unconfigured",
+      invoiceEmailAvailable: async (tx) => {
+        const delivery = await resolveMailDeliveryIn(
+          tx,
+          invoiceMailRing,
+          invoiceMailMode,
+          "invoice",
+        );
+        await afterMailCheck?.();
+        return delivery.mode !== "unconfigured";
+      },
     },
     quiet,
   );
@@ -379,6 +395,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     profileId: seeded.profileId,
     handheldCookie: `${SESSION_COOKIE}=${await sessionOn(handheld.deviceId)}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
     handheldDeviceId: handheld.deviceId,
+    handheldProfileId: seeded.handheldProfileId,
     noCashCookie: `${SESSION_COOKIE}=${await sessionOn(noCash.deviceId)}; ${DEVICE_COOKIE}=${noCash.deviceId}.${noCash.token}`,
     seededHandheldCookie: `${SESSION_COOKIE}=${await sessionOn(seededHandheld.deviceId)}; ${DEVICE_COOKIE}=${seededHandheld.deviceId}.${seededHandheld.token}`,
     seededHandheldWithDrawerCookie: `${SESSION_COOKIE}=${await sessionOn(seededHandheldWithDrawer.deviceId)}; ${DEVICE_COOKIE}=${seededHandheldWithDrawer.deviceId}.${seededHandheldWithDrawer.token}`,
@@ -2310,25 +2327,31 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       suite.db.run(sql`update devices set invoice_printer_id = null where id = ${venue.deviceId}`);
     });
 
+    /** The options for a bill; by default one the till has not saved yet. */
+    function options(query = `orderId=${randomUUID()}`, cookie?: string) {
+      return request("GET", `/api/invoice-delivery-options?${query}`, undefined, cookie);
+    }
+    const noEmail = { emailAvailable: false, emailNeedsReceiptContact: false };
+
     it("answers no invoice printer when the device's profile lists none, or only a disabled one", async () => {
       await pagePrinter({ name: "Office" });
-      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+      expect(await options()).toEqual({
         status: 200,
-        json: { invoicePrinter: null, emailAvailable: false },
+        json: { invoicePrinter: null, ...noEmail },
       });
       await pagePrinter({ name: "Back office", active: false, onTill: true });
-      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+      expect(await options()).toEqual({
         status: 200,
-        json: { invoicePrinter: null, emailAvailable: false },
+        json: { invoicePrinter: null, ...noEmail },
       });
     });
 
     it("answers the device's active A4 invoice printer by id and name", async () => {
       await pagePrinter({ name: "Office" });
       const id = await pagePrinter({ name: "Invoices", onTill: true });
-      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+      expect(await options()).toEqual({
         status: 200,
-        json: { invoicePrinter: { id, name: "Invoices" }, emailAvailable: false },
+        json: { invoicePrinter: { id, name: "Invoices" }, ...noEmail },
       });
     });
 
@@ -2351,14 +2374,14 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       await inTx((tx) =>
         listInvoicePrinter(tx, { profileId: venue.profileId, pagePrinterId: a4, isDefault: false }),
       );
-      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+      expect(await options()).toEqual({
         status: 200,
-        json: { invoicePrinter: null, emailAvailable: false },
+        json: { invoicePrinter: null, ...noEmail },
       });
       suite.db.run(sql`update devices set invoice_printer_id = ${a4} where id = ${venue.deviceId}`);
-      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+      expect(await options()).toEqual({
         status: 200,
-        json: { invoicePrinter: { id: a4, name: "Invoices" }, emailAvailable: false },
+        json: { invoicePrinter: { id: a4, name: "Invoices" }, ...noEmail },
       });
     });
 
@@ -2373,9 +2396,9 @@ describe("the invoice at full payment (design §8 test 8)", () => {
             ["prepare", true, true],
           ] as const) {
             invoiceMailMode = { onboardingIntent, devMode };
-            expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+            expect(await options()).toEqual({
               status: 200,
-              json: { invoicePrinter: null, emailAvailable },
+              json: { invoicePrinter: null, emailAvailable, emailNeedsReceiptContact: false },
             });
           }
         });
@@ -2384,7 +2407,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       }
     });
 
-    it("answers email unavailable while mail is set up but neither the bill's department nor the default one has a receipt email", async () => {
+    it("answers that a receipt email is missing while mail is set up but neither the bill's department nor the default one has one", async () => {
       invoiceMailMode = { onboardingIntent: "demo", devMode: false };
       try {
         const billId = await tabWith("Steak");
@@ -2400,29 +2423,132 @@ describe("the invoice at full payment (design §8 test 8)", () => {
             .where(eq(workingOrders.id, billId));
           return department.id;
         });
-        const options = (query: string) => request("GET", `/api/invoice-delivery-options${query}`);
-        expect(await options(`?orderId=${billId}`)).toEqual({
+        expect(await options(`orderId=${billId}`)).toEqual({
           status: 200,
-          json: { invoicePrinter: null, emailAvailable: false },
+          json: { invoicePrinter: null, emailAvailable: false, emailNeedsReceiptContact: true },
         });
         await inTx((tx) =>
           seedDepartmentReceipt(tx, departmentId, { email: "terrace@example.test" }),
         );
-        expect(await options(`?orderId=${billId}`)).toEqual({
+        expect(await options(`orderId=${billId}`)).toEqual({
           status: 200,
-          json: { invoicePrinter: null, emailAvailable: true },
-        });
-        // With no bill named, the default department decides, and it has no receipt email.
-        expect(await options("")).toEqual({
-          status: 200,
-          json: { invoicePrinter: null, emailAvailable: false },
-        });
-        expect(await options("?orderId=not-a-bill")).toEqual({
-          status: 404,
-          json: { code: "working_order.not_found", params: { workingOrderId: "not-a-bill" } },
+          json: { invoicePrinter: null, emailAvailable: true, emailNeedsReceiptContact: false },
         });
       } finally {
         invoiceMailMode = { onboardingIntent: "live", devMode: false };
+      }
+    });
+
+    it("refuses a request that names no bill, or a malformed one", async () => {
+      expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field: "orderId" } },
+      });
+      expect(await options("orderId=not-a-bill")).toEqual({
+        status: 404,
+        json: { code: "working_order.not_found", params: { workingOrderId: "not-a-bill" } },
+      });
+    });
+
+    it("judges a bill not saved yet by the department of the zone saving it would open it in", async () => {
+      invoiceMailMode = { onboardingIntent: "demo", devMode: false };
+      const deli = await inTx(async (tx) => {
+        const department = await createDepartment(tx, {
+          name: `Deli ${randomUUID()}`,
+          tradingName: "Deli",
+          orderStart: "counter",
+        });
+        await seedDepartmentReceipt(tx, department.id, { email: "deli@example.test" });
+        const zone = await createServiceZone(tx, {
+          name: `Deli counter ${randomUUID()}`,
+          departmentId: department.id,
+        });
+        return { departmentId: department.id, zoneId: zone.id };
+      });
+      const withEmail = {
+        invoicePrinter: null,
+        emailAvailable: true,
+        emailNeedsReceiptContact: false,
+      };
+      const withoutEmail = {
+        invoicePrinter: null,
+        emailAvailable: false,
+        emailNeedsReceiptContact: true,
+      };
+      try {
+        expect(await options(`orderId=${randomUUID()}&zoneId=${deli.zoneId}`)).toEqual({
+          status: 200,
+          json: withEmail,
+        });
+        expect(await options(`orderId=${randomUUID()}`, venue.handheldCookie)).toEqual({
+          status: 200,
+          json: withoutEmail,
+        });
+        await inTx((tx) =>
+          setProfileServiceAccess(tx, venue.handheldProfileId, {
+            departmentId: deli.departmentId,
+            allowedZoneIds: null,
+            startingZoneId: deli.zoneId,
+          }),
+        );
+        expect(await options(`orderId=${randomUUID()}`, venue.handheldCookie)).toEqual({
+          status: 200,
+          json: withEmail,
+        });
+      } finally {
+        invoiceMailMode = { onboardingIntent: "live", devMode: false };
+        await inTx((tx) =>
+          setProfileServiceAccess(tx, venue.handheldProfileId, {
+            departmentId: null,
+            allowedZoneIds: null,
+            startingZoneId: null,
+          }),
+        );
+      }
+    });
+
+    it("reads mail and the receipt contact as one state, never a change committed between them", async () => {
+      const billId = await tabWith("Steak");
+      const departmentId = await inTx(async (tx) => {
+        const department = await createDepartment(tx, {
+          name: `Patio ${randomUUID()}`,
+          tradingName: "Patio",
+          orderStart: "table",
+        });
+        await tx
+          .update(workingOrders)
+          .set({ departmentId: department.id })
+          .where(eq(workingOrders.id, billId));
+        return department.id;
+      });
+      await inTx((tx) => saveSmtpForTest(tx, invoiceMailRing, SMTP));
+      let mailChecked!: () => void;
+      const checked = new Promise<void>((resolve) => (mailChecked = resolve));
+      let startedChange!: () => void;
+      const changeStarted = new Promise<void>((resolve) => (startedChange = resolve));
+      afterMailCheck = async () => {
+        mailChecked();
+        await changeStarted;
+      };
+      let change: Promise<void> | undefined;
+      try {
+        const answer = options(`orderId=${billId}`);
+        await checked;
+        // Mail is set up and the bill has no contact; the change removes mail and adds a contact.
+        change = inTx(async (tx) => {
+          await deleteCredential(tx, { personId: null, purpose: "email.smtp" });
+          await seedDepartmentReceipt(tx, departmentId, { email: "patio@example.test" });
+        });
+        startedChange();
+        expect(await answer).toEqual({
+          status: 200,
+          json: { invoicePrinter: null, emailAvailable: false, emailNeedsReceiptContact: true },
+        });
+      } finally {
+        afterMailCheck = undefined;
+        startedChange();
+        await change;
+        await inTx((tx) => deleteCredential(tx, { personId: null, purpose: "email.smtp" }));
       }
     });
 
@@ -2431,9 +2557,9 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       try {
         await inTx((tx) => saveSmtpForTest(tx, unreadableMailRing, SMTP));
         quiet.mockClear();
-        expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+        expect(await options()).toEqual({
           status: 200,
-          json: { invoicePrinter: { id, name: "Invoices" }, emailAvailable: false },
+          json: { invoicePrinter: { id, name: "Invoices" }, ...noEmail },
         });
         expect(quiet.mock.calls).toEqual([
           [
@@ -2449,7 +2575,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
 
     it("refuses a caller with no session", async () => {
       await pagePrinter({ name: "Invoices", onTill: true });
-      expect(await request("GET", "/api/invoice-delivery-options", undefined, "")).toEqual({
+      expect(await options(undefined, "")).toEqual({
         status: 401,
         json: { code: "session.required", params: {} },
       });

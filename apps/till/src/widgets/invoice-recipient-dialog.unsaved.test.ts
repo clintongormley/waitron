@@ -310,6 +310,7 @@ class DeliveryLeaveApp extends LitElement {
   options: InvoiceDeliveryOptions = {
     invoicePrinter: { id: "pp-office", name: "Office HP" },
     emailAvailable: false,
+    emailNeedsReceiptContact: false,
   };
   closes = 0;
   submitted: InvoiceRecipientDetail[] = [];
@@ -422,6 +423,7 @@ it("a saved A4 opened on the current printer instead counts as a change: Escape 
 const emailOptions = {
   invoicePrinter: { id: "pp-office", name: "Office HP" },
   emailAvailable: true,
+  emailNeedsReceiptContact: false,
 };
 
 it("a typed email address asks before discarding, and stops counting once another delivery is chosen", async () => {

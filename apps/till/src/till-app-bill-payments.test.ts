@@ -74,6 +74,7 @@ import type {
   CurrentOrders,
   Draft,
   HeldOrderSummary,
+  InvoiceDeliveryOptions,
   OrderGroup,
   PartyBill,
   TableState,
@@ -8715,7 +8716,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
   it("puts a refused email address under the dialog's email field, and unavailable email at the bottom", async () => {
     const getInvoiceDeliveryOptions = vi
       .fn()
-      .mockResolvedValue({ invoicePrinter: null, emailAvailable: true });
+      .mockResolvedValue({
+        invoicePrinter: null,
+        emailAvailable: true,
+        emailNeedsReceiptContact: false,
+      });
     const setOrderInvoiceChoice = vi
       .fn()
       .mockRejectedValueOnce({ code: "management.request_invalid", field: "delivery.recipient" })
@@ -8957,11 +8962,10 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
     });
     await flush(el);
 
-    expect(
-      getInvoiceDeliveryOptions.mock.calls.map(
-        ([options]) => (options as { orderId?: string }).orderId,
-      ),
-    ).toEqual(["wo-4", "wo-4"]);
+    expect(getInvoiceDeliveryOptions.mock.calls.map(([orderId]) => orderId)).toEqual([
+      "wo-4",
+      "wo-4",
+    ]);
   });
 
   it("re-reads the options after a refused invoice printer, so the retry names the current one", async () => {
@@ -9079,6 +9083,34 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
     expect(dialog.deliveryOptions).toBeNull();
     expect(dialog.savedDelivery).toEqual({ medium: "a4", pagePrinterId: "pp-office" });
     expect(button().disabled).toBe(false);
+  });
+
+  it("opens no Full invoice for the table left while its options were being read", async () => {
+    let answer: (options: InvoiceDeliveryOptions) => void = () => {};
+    const getInvoiceDeliveryOptions = vi.fn(
+      () => new Promise<InvoiceDeliveryOptions>((resolve) => (answer = resolve)),
+    );
+    const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
+    const order = await openTable(el);
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
+    await flush(el);
+    expect(getInvoiceDeliveryOptions).toHaveBeenCalledOnce();
+
+    emit(tableOrder(el), "back-to-floor");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBeNull();
+    answer({
+      invoicePrinter: officePrinter,
+      emailAvailable: true,
+      emailNeedsReceiptContact: false,
+    });
+    await flush(el);
+
+    expect(recipientDialog(el)).toBeNull();
   });
 });
 

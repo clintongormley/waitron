@@ -2951,6 +2951,8 @@ async function bootServer(
   const testPages = createPageTestPages(undefined, () =>
     publishState(liveEvents, "print_jobs", log),
   );
+  const invoiceEmailAvailableIn = async (tx: Transaction) =>
+    (await resolveMailDeliveryIn(tx, ring, config, "invoice")).mode !== "unconfigured";
   mountTillApi(
     app,
     {
@@ -2974,7 +2976,7 @@ async function bootServer(
       onboardingIntent: config.onboardingIntent,
       devMode: config.devMode,
       deviceChooserEnabled,
-      invoiceEmailAvailable,
+      invoiceEmailAvailable: invoiceEmailAvailableIn,
       testPages,
       workforceEnabled,
       attendanceResponsesEnabled: isSingletonPrimary,

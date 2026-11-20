@@ -278,7 +278,11 @@ const officePrinter = { id: "pp-office", name: "Office HP" };
 
 async function mountWithPrinter(props: Partial<TillInvoiceRecipientDialog> = {}) {
   const { el } = await mountWidget<TillInvoiceRecipientDialog>("till-invoice-recipient-dialog", {
-    deliveryOptions: { invoicePrinter: officePrinter, emailAvailable: false },
+    deliveryOptions: {
+      invoicePrinter: officePrinter,
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    },
     ...props,
   });
   return el;
@@ -432,7 +436,11 @@ describe("till-invoice-recipient-dialog delivery choice", () => {
 
   it("opens a saved A4 on the receipt printer when the read found no invoice printer, with Save active", async () => {
     const { el } = await mountWidget<TillInvoiceRecipientDialog>("till-invoice-recipient-dialog", {
-      deliveryOptions: { invoicePrinter: null, emailAvailable: false },
+      deliveryOptions: {
+        invoicePrinter: null,
+        emailAvailable: false,
+        emailNeedsReceiptContact: false,
+      },
       savedDelivery: { medium: "a4", pagePrinterId: "pp-retired" },
     });
     const sent = confirmations(el);
@@ -542,6 +550,7 @@ describe("till-invoice-recipient-dialog keeps a saved delivery it does not offer
     el.deliveryOptions = {
       invoicePrinter: { id: "pp-new", name: "New HP" },
       emailAvailable: false,
+      emailNeedsReceiptContact: false,
     };
     await el.updateComplete;
     expect(deliveryField(el)!.value).toBe("a4");
@@ -550,7 +559,11 @@ describe("till-invoice-recipient-dialog keeps a saved delivery it does not offer
       ["a4", "A4 on New HP"],
     ]);
     el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
-    el.deliveryOptions = { invoicePrinter: null, emailAvailable: false };
+    el.deliveryOptions = {
+      invoicePrinter: null,
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    };
     await el.updateComplete;
     expect(optionValues(el)).toEqual([["receipt", "Receipt printer"]]);
     expect(deliveryField(el)!.value).toBe("receipt");
@@ -569,14 +582,21 @@ describe("till-invoice-recipient-dialog after an unknown read", () => {
       savedDelivery: { medium: "a4", pagePrinterId: "pp-retired" },
     });
     expect(deliveryField(el)!.value).toBe("saved");
-    el.deliveryOptions = { invoicePrinter: officePrinter, emailAvailable: false };
+    el.deliveryOptions = {
+      invoicePrinter: officePrinter,
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    };
     await el.updateComplete;
     expect(deliveryField(el)!.options.map((option) => option.value)).toEqual(["receipt", "a4"]);
     expect(deliveryField(el)!.value).toBe("a4");
   });
 
   it("keeps a saved email as saved when the read failed or found email unavailable", async () => {
-    for (const deliveryOptions of [null, { invoicePrinter: null, emailAvailable: false }]) {
+    for (const deliveryOptions of [
+      null,
+      { invoicePrinter: null, emailAvailable: false, emailNeedsReceiptContact: false },
+    ]) {
       const { el } = await mountWidget<TillInvoiceRecipientDialog>(
         "till-invoice-recipient-dialog",
         { deliveryOptions, savedDelivery: { medium: "email", recipient: "ana@example.com" } },
@@ -587,7 +607,11 @@ describe("till-invoice-recipient-dialog after an unknown read", () => {
   });
 });
 
-const withEmail = { invoicePrinter: officePrinter, emailAvailable: true };
+const withEmail = {
+  invoicePrinter: officePrinter,
+  emailAvailable: true,
+  emailNeedsReceiptContact: false,
+};
 
 function emailField(el: TillInvoiceRecipientDialog) {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]");
@@ -638,14 +662,65 @@ describe("till-invoice-recipient-dialog email delivery", () => {
     expect(autocomplete).toEqual(Object.fromEntries(names.map((name) => [name, "off"])));
   });
 
+  it.each([
+    [
+      "en",
+      "Email isn't offered: this bill's receipt has no contact email. Add one on the department's Receipts tab in Departments and zones, in the dashboard.",
+    ],
+    [
+      "es-ES",
+      "No se ofrece el correo: el recibo de esta cuenta no tiene correo de contacto. Añádelo en la pestaña Recibos del departamento en Departamentos y zonas, en el panel.",
+    ],
+  ])(
+    "says why Email is missing when mail is set up but the receipt has no contact email, with or without an invoice printer (%s)",
+    async (locale, words) => {
+      setLocale(locale);
+      for (const invoicePrinter of [officePrinter, null]) {
+        const el = await mountWithPrinter({
+          deliveryOptions: {
+            invoicePrinter,
+            emailAvailable: false,
+            emailNeedsReceiptContact: true,
+          },
+        });
+        const note = el.shadowRoot!.querySelector<HTMLElement>("[data-email-note]");
+        expect(note?.textContent!.trim()).toBe(words);
+        expect(note!.checkVisibility()).toBe(true);
+        expect(deliveryField(el)?.options.map((entry) => entry.value) ?? []).not.toContain("email");
+        cleanupWidgets();
+      }
+    },
+  );
+
+  it("adds no note about email when the receipt's contact is not what is missing", async () => {
+    for (const deliveryOptions of [
+      { invoicePrinter: officePrinter, emailAvailable: false, emailNeedsReceiptContact: false },
+      { invoicePrinter: null, emailAvailable: false, emailNeedsReceiptContact: false },
+      { invoicePrinter: null, emailAvailable: true, emailNeedsReceiptContact: false },
+      null,
+    ]) {
+      const el = await mountWithPrinter({ deliveryOptions });
+      expect(el.shadowRoot!.querySelector("[data-email-note]")).toBeNull();
+      cleanupWidgets();
+    }
+  });
+
   it("offers Email without an invoice printer, and nothing but paper when email is unavailable", async () => {
     const el = await mountWithPrinter({
-      deliveryOptions: { invoicePrinter: null, emailAvailable: true },
+      deliveryOptions: {
+        invoicePrinter: null,
+        emailAvailable: true,
+        emailNeedsReceiptContact: false,
+      },
     });
     expect(deliveryField(el)!.options.map((entry) => entry.value)).toEqual(["receipt", "email"]);
     cleanupWidgets();
     const none = await mountWithPrinter({
-      deliveryOptions: { invoicePrinter: null, emailAvailable: false },
+      deliveryOptions: {
+        invoicePrinter: null,
+        emailAvailable: false,
+        emailNeedsReceiptContact: false,
+      },
     });
     expect(deliveryField(none)).toBeNull();
   });
@@ -764,7 +839,11 @@ describe("till-invoice-recipient-dialog email delivery", () => {
     await fillValid(el);
     await chooseDelivery(el, "email");
     await fill(el, "email", "ana@example.com");
-    el.deliveryOptions = { invoicePrinter: officePrinter, emailAvailable: false };
+    el.deliveryOptions = {
+      invoicePrinter: officePrinter,
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    };
     await el.updateComplete;
     expect(deliveryField(el)!.value).toBe("receipt");
     expect(emailField(el)).toBeNull();

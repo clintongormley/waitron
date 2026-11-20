@@ -153,7 +153,11 @@ async function placeCounter(overrides: Record<string, unknown> = {}) {
     getTabLines: vi.fn().mockResolvedValue(listing(4)),
     getInvoiceDeliveryOptions: vi
       .fn()
-      .mockResolvedValue({ invoicePrinter: null, emailAvailable: false }),
+      .mockResolvedValue({
+        invoicePrinter: null,
+        emailAvailable: false,
+        emailNeedsReceiptContact: false,
+      }),
     ...overrides,
   });
   const { el } = await mountWidget<TillApp>("till-app", { api });
