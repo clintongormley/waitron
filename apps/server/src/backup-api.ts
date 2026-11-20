@@ -469,7 +469,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         const recoveryKey = held.key ?? body.recoveryKey;
         if (recoveryKey === undefined) throw requestInvalid("recoveryKey");
         assertStorableKey(recoveryKey);
-        assertLongEnough(recoveryKey);
 
         // Only a bucket choice reads the bucket copy's settings, and an unreadable one refuses the
         // whole Save, a folder listed beside it included: one Save is one decision.
@@ -507,11 +506,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
             heldSettings?.destinationTimeoutMs ??
             DEFAULT_DESTINATION_TIMEOUT_MS,
         };
+        const sealed = archiveRecord(settings).stored;
+        assertLongEnough(recoveryKey);
         // Refuse exactly what boot would, before anything is written.
-        resolveBackupConfig({
-          env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey },
-          sealed: archiveRecord(settings).stored,
-        });
+        resolveBackupConfig({ env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey }, sealed });
         const bucketDestination = destinations.find((d) => d.kind === "s3");
         if (bucketDestination !== undefined) {
           await probeArchive(
@@ -588,10 +586,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       const { recoveryKey } = await readRotateBody(c);
       assertStorableKey(recoveryKey);
-      assertLongEnough(recoveryKey);
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const keyRotatedAt = new Date().toISOString();
+        assertLongEnough(recoveryKey);
         const read = await readHeldSettings();
         const held = "unreadable" in read ? null : read.settings;
         const unreadableCode = "unreadable" in read ? read.unreadable : undefined;

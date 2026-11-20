@@ -1338,6 +1338,27 @@ describe("backup admin routes", () => {
     await expect(readFile(join(stateDir, "backup.env"), "utf8")).rejects.toThrow();
   });
 
+  it("apply answers a refused backup folder before a too-short key it is sent", async () => {
+    const stateDir = await makeStateDir();
+    const sc: Scenario = { stateDir, base: {}, role: "primary" };
+    const app = buildApp(makeSupervisor(sc), stateDir);
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [{ kind: "local-fs", dir: join(stateDir, "scratch") }],
+        recoveryKey: "short",
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "backup.request_invalid", params: { field: "dir", reason: "scratch" } },
+    });
+  });
+
   it("an apply while another reload is in flight saves, and answers the reload's code", async () => {
     // The routes wait for each other, so the reload holding the latch is one started on the
     // supervisor directly. A gated `buildConfig` parks it inside its critical section, so the apply
