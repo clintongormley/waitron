@@ -1396,6 +1396,25 @@ describe("a payment after the ticket was issued", () => {
       },
     );
 
+    it("a resent original still waiting for its printer lists a payment taken after the resend", async () => {
+      const bill = await billPrintedByPrintTheBill();
+      const stale = await originalOf(bill.saleId);
+      await payWhileLayoutFails(bill);
+      const resentId = await printQueueResend(stale.id);
+      await expectResentWithTheCash(resentId, stale);
+
+      expect((await billPayment(bill.id, cash("3.00"))).status).toBe(200);
+
+      const receipts = (await claimEverythingOn(stale.printerId))
+        .map(decodeTicket)
+        .filter((ticket) => ticket.includes(bill.invoiceNumber));
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]).toMatch(/Efectivo\s+5,00/u);
+      expect(receipts[0]).toMatch(/Efectivo\s+3,00/u);
+      expect(receipts[0]).toMatch(owedLine("22,00"));
+      expect(receipts[0]).not.toMatch(owedLine("25,00"));
+    });
+
     it("a payment slip resent from the print queue prints the bytes it was queued with", async () => {
       const bill = await billPrintedByPrintTheBill();
       const before = await jobCount();
@@ -1419,35 +1438,44 @@ describe("a payment after the ticket was issued", () => {
     });
   });
 
-  it.each(["taken by its printer", "tried and failed", "resent from the print queue"] as const)(
+  it("an original resent from the print queue and still waiting lists a payment that follows", async () => {
+    const bill = await billPrintedByPrintTheBill();
+    const claimed = await claimOriginal(bill.saleId);
+    const resent = await withTransaction(venue.db, async (tx) => {
+      await tx
+        .update(printJobs)
+        .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+        .where(eq(printJobs.id, claimed.id));
+      return resendPrintJob(tx, claimed.id);
+    });
+    onTestFinished(async () => {
+      await withTransaction(venue.db, (tx) =>
+        tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, resent.jobId)),
+      );
+    });
+
+    expect((await billPayment(bill.id, cash("5.00"))).status).toBe(200);
+
+    const [given, copy] = await Promise.all(
+      [claimed.id, resent.jobId].map(async (id) => {
+        const [row] = await venue.db.select().from(printJobs).where(eq(printJobs.id, id));
+        return row!;
+      }),
+    );
+    expect(Buffer.from(given!.payload!).equals(Buffer.from(claimed.payload))).toBe(true);
+    expect(copy).toMatchObject({ status: "queued", resendOf: claimed.id, receiptCopy: false });
+    expect(Buffer.from(copy!.payload!).equals(Buffer.from(claimed.payload))).toBe(false);
+    const text = decodeTicket(copy!.payload);
+    expect(text).toMatch(/Efectivo\s+5,00/u);
+    expect(text).toMatch(owedLine("25,00"));
+    expect(text).not.toMatch(owedLine("30,00"));
+  });
+
+  it.each(["taken by its printer", "tried and failed"] as const)(
     "an original already %s keeps its bytes when a payment follows",
     async (state) => {
       const bill = await billPrintedByPrintTheBill();
       const claimed = await claimOriginal(bill.saleId);
-      if (state === "resent from the print queue") {
-        const resent = await withTransaction(venue.db, async (tx) => {
-          await tx
-            .update(printJobs)
-            .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
-            .where(eq(printJobs.id, claimed.id));
-          return resendPrintJob(tx, claimed.id);
-        });
-        onTestFinished(async () => {
-          await withTransaction(venue.db, (tx) =>
-            tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, resent.jobId)),
-          );
-        });
-
-        expect((await billPayment(bill.id, cash("5.00"))).status).toBe(200);
-
-        const [copy] = await venue.db
-          .select()
-          .from(printJobs)
-          .where(eq(printJobs.id, resent.jobId));
-        expect(copy!.status).toBe("queued");
-        expect(Buffer.from(copy!.payload!).equals(Buffer.from(claimed.payload))).toBe(true);
-        return;
-      }
       if (state === "tried and failed") {
         const reported = await withTransaction(venue.db, (tx) =>
           reportPrintJob(tx, {

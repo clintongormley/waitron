@@ -582,7 +582,6 @@ const waitingOriginal = and(
   eq(printJobs.status, "queued"),
   eq(printJobs.attempts, 0),
   isNull(printJobs.claimedAt),
-  isNull(printJobs.resendOf),
 );
 
 /** The `last_error` of a waiting original {@link refreshWaitingOriginals} could not lay out again. */
@@ -590,7 +589,7 @@ export const RECEIPT_OUT_OF_DATE = "receipt.out_of_date";
 
 /**
  * Lays out again each original receipt of the order's sale that no printer has taken or tried,
- * so it lists every payment taken before it prints. One that cannot be laid out again gives up
+ * a resend included, so it lists every payment taken before it prints. One that cannot be laid out again gives up
  * where it waits, keeping any invoice delivery waiting on it, so its bytes never print and a
  * resend lays it out again.
  */
