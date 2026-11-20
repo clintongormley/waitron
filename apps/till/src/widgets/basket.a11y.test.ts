@@ -36,12 +36,12 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
-  it("a basket waiting for the server has no violations", async () => {
+  it("a basket whose edits are paused has no violations", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(coffee, "2");
     const { el, host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
     store.lockEdits();
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".waiting")).not.toBeNull(), {
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".edits-paused")).not.toBeNull(), {
       timeout: 2000,
     });
     await expectNoA11yViolations(host);

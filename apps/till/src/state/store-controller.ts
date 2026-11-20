@@ -6,8 +6,8 @@ import type {
 } from "./working-order.js";
 
 /**
- * The store is read LAZILY through `getStore` at connect time, because a widget's `store` property is
- * assigned after construction but before the element connects.
+ * The store is read LAZILY through `getStore`, at connect time and again at each update while
+ * connected, because a widget's `store` property is assigned after construction and may be replaced.
  */
 export class StoreChangeController implements ReactiveController {
   readonly #host: ReactiveControllerHost;
@@ -15,6 +15,7 @@ export class StoreChangeController implements ReactiveController {
   readonly #event: WorkingOrderEvent;
   readonly #handler: WorkingOrderListener;
   #dispose?: () => void;
+  #store?: WorkingOrderStore;
 
   constructor(
     host: ReactiveControllerHost,
@@ -30,11 +31,22 @@ export class StoreChangeController implements ReactiveController {
   }
 
   hostConnected(): void {
-    this.#dispose = this.#getStore().on(this.#event, this.#handler);
+    this.#listen();
+  }
+
+  hostUpdate(): void {
+    if (this.#dispose !== undefined && this.#getStore() !== this.#store) this.#listen();
   }
 
   hostDisconnected(): void {
     this.#dispose?.();
     this.#dispose = undefined;
+    this.#store = undefined;
+  }
+
+  #listen(): void {
+    this.#dispose?.();
+    this.#store = this.#getStore();
+    this.#dispose = this.#store.on(this.#event, this.#handler);
   }
 }

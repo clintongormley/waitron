@@ -45,8 +45,8 @@ import type { AdjustDetail } from "../screens/till-table-order-screen.js";
 import type { Station, TabLine, TillCourse, TillProduct } from "../api/client.js";
 
 const QTY_BADGE = "×";
-/** How long an edit lock lasts before the basket says it is waiting, so a quick re-read does not flicker. */
-export const SERVER_WAIT_NOTE_DELAY_MS = 500;
+/** How long an edit lock lasts before the basket says so, so a quick lock does not flicker. */
+const EDITS_PAUSED_NOTE_DELAY_MS = 500;
 
 function pickQuantityBadge(quantity: number): string {
   return quantity > 1 ? ` ${QTY_BADGE}${quantity}` : "";
@@ -148,7 +148,7 @@ export class TillBasket extends LitElement {
         padding: var(--wt-space-1) 0 var(--wt-space-2);
       }
 
-      .waiting {
+      .edits-paused {
         margin: 0;
         padding: var(--wt-space-2) var(--wt-space-4);
         color: var(--wt-color-text-muted);
@@ -507,8 +507,8 @@ export class TillBasket extends LitElement {
   #lastStoreId?: string;
   #gestures?: Gestures;
   #pressedLine: OrderLine | null = null;
-  #waitTimer?: ReturnType<typeof setTimeout>;
-  #waitShown = false;
+  #pausedTimer?: ReturnType<typeof setTimeout>;
+  #pausedShown = false;
   readonly #clearPress = () => {
     this.#pressedLine = null;
   };
@@ -672,7 +672,7 @@ export class TillBasket extends LitElement {
     });
     // Without this the first `"changed"` would read the unchanged id as a swap and close an open editor.
     this.#lastStoreId = this.store.id;
-    this.#syncWaitNote();
+    this.#syncPausedNote();
   }
 
   override disconnectedCallback(): void {
@@ -680,7 +680,7 @@ export class TillBasket extends LitElement {
     this.#gestures?.disconnect();
     this.#gestures = undefined;
     this.#pressedLine = null;
-    this.#stopWaitNote();
+    this.#stopPausedNote();
     super.disconnectedCallback();
   }
 
@@ -696,32 +696,32 @@ export class TillBasket extends LitElement {
     }
     if (this.modifierLine !== null && !this.store.lines.includes(this.modifierLine))
       this.#closeModifierPicker();
-    this.#syncWaitNote();
+    this.#syncPausedNote();
     this.requestUpdate();
   }
 
-  #syncWaitNote(): void {
-    if (!this.store.awaitingServer) {
-      this.#stopWaitNote();
+  #syncPausedNote(): void {
+    if (!this.store.editLockHeld) {
+      this.#stopPausedNote();
       return;
     }
-    if (this.#waitShown || this.#waitTimer !== undefined) return;
-    this.#waitTimer = setTimeout(() => {
-      this.#waitTimer = undefined;
-      this.#waitShown = true;
+    if (this.#pausedShown || this.#pausedTimer !== undefined) return;
+    this.#pausedTimer = setTimeout(() => {
+      this.#pausedTimer = undefined;
+      this.#pausedShown = true;
       this.requestUpdate();
-    }, SERVER_WAIT_NOTE_DELAY_MS);
+    }, EDITS_PAUSED_NOTE_DELAY_MS);
   }
 
-  #stopWaitNote(): void {
-    clearTimeout(this.#waitTimer);
-    this.#waitTimer = undefined;
-    this.#waitShown = false;
+  #stopPausedNote(): void {
+    clearTimeout(this.#pausedTimer);
+    this.#pausedTimer = undefined;
+    this.#pausedShown = false;
   }
 
-  #waitNote() {
-    return this.#waitShown
-      ? html`<p class="waiting" role="status">${t("basket.waiting")}</p>`
+  #pausedNote() {
+    return this.#pausedShown
+      ? html`<p class="edits-paused" role="status">${t("basket.edits_paused")}</p>`
       : nothing;
   }
 
@@ -767,6 +767,16 @@ export class TillBasket extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("store") && changed.get("store") !== undefined) {
+      this.#lastStoreId = this.store.id;
+      this.editingLine = null;
+      this.#closeModifierPicker();
+    }
+    // A replaced store's lock is timed from the swap, never while the basket is off the page.
+    if (changed.has("store") && this.isConnected) {
+      this.#stopPausedNote();
+      this.#syncPausedNote();
+    }
     if (this.#modifierProduct && this.modifierLine)
       this.#modifierProduct = refreshProductDeclarations(this.#modifierProduct, [
         this.modifierLine.product,
@@ -855,7 +865,7 @@ export class TillBasket extends LitElement {
   override render() {
     const lines = this.store.lines;
     if (lines.length === 0) {
-      return html`${this.#kitchenHeading()} ${this.#waitNote()}
+      return html`${this.#kitchenHeading()} ${this.#pausedNote()}
         <p class="empty">${t("basket.empty")}</p>`;
     }
     // The owner of `lineIndexes` hears of a change after this basket does, so a place the store no
@@ -870,7 +880,7 @@ export class TillBasket extends LitElement {
       ? null
       : adjustableListing(this.store, listing, this.orderInFlight);
     return html`
-      ${this.#kitchenHeading()} ${this.#waitNote()}
+      ${this.#kitchenHeading()} ${this.#pausedNote()}
       <div class="order-lines">
         ${shown.map(([line, index]) => {
           const listed = this.#listed(line, listing);

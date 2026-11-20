@@ -447,9 +447,8 @@ export class WorkingOrderStore {
     return this.#revision;
   }
 
-  /** Staff edits are refused while the order in the basket is being read again, so the read never
-   * replaces an edit made meanwhile. The lock ends when the returned function is called (a later
-   * lock stays), or when the basket is cleared or another copy is loaded into it. */
+  /** Staff edits are refused until the returned function is called (a later lock stays), or the
+   * basket is cleared or another copy is loaded into it. */
   lockEdits(): () => void {
     const lock = {};
     this.#editLock = lock;
@@ -472,7 +471,7 @@ export class WorkingOrderStore {
   }
 
   /** Only {@link lockEdits}' lock, which a subclass's wider {@link editsLocked} does not change. */
-  get awaitingServer(): boolean {
+  get editLockHeld(): boolean {
     return this.#editLock !== null;
   }
 

@@ -974,6 +974,20 @@ describe("till-basket", () => {
     expect(noteBox(el)).toBeNull();
   });
 
+  it("closes the open editor when the basket is handed another store", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "1");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    noteButton(el, 0)!.click();
+    await el.updateComplete;
+    expect(noteBox(el)).not.toBeNull();
+    el.store = new WorkingOrderStore();
+    await el.updateComplete;
+    el.store = store;
+    await el.updateComplete;
+    expect(noteBox(el)).toBeNull();
+  });
+
   it("unsubscribes on disconnect so a later change does not re-render it", async () => {
     const store = new WorkingOrderStore();
     const { el, host } = await mountWidget<TillBasket>("till-basket", { store });
