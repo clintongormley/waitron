@@ -696,6 +696,29 @@ describe("backup-screen", () => {
     expect(q(el, "[data-test=backup-run-status]")).toHaveTextContent("Copia programada en curso");
   });
 
+  it("starting a backup cancels an armed Turn off confirmation", async () => {
+    const disableBackup = vi.fn().mockResolvedValue(OFF);
+    const api = stubApi(
+      { disableBackup, runBackupNow: vi.fn().mockResolvedValue(undefined) },
+      ENABLED,
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      canManage: true,
+    });
+    await flush(el);
+    q(el, "[data-test=turn-off]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=turn-off-cancel]")).not.toBeNull();
+
+    await page.getByRole("button", { name: "Hacer copia ahora", exact: true }).click();
+    await flush(el);
+    q(el, "[data-test=turn-off]")!.click();
+    await el.updateComplete;
+    expect(disableBackup).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=turn-off-cancel]")).not.toBeNull();
+  });
+
   it("shows the existing reason that the last backup stopped before saving a copy", async () => {
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
       api: stubApi({}, { ...ENABLED, runStoppedCode: "backup.staging_space_low" }),

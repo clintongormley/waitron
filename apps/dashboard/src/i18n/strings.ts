@@ -6913,8 +6913,8 @@ export const es: Record<StringKey, string> = {
   "backup.configuration.request_error": "No se pudo crear la exportación de configuración.",
   "backup.status.state": "Copias de seguridad",
   "backup.run_now": "Hacer copia ahora",
-  "backup.status.manual_running": "Copia manual en curso (iniciada a las {time})",
-  "backup.status.scheduled_running": "Copia programada en curso (iniciada a las {time})",
+  "backup.status.manual_running": "Copia manual en curso (iniciada el {time})",
+  "backup.status.scheduled_running": "Copia programada en curso (iniciada el {time})",
   "backup.status.stopped_space_low":
     "La última copia se detuvo porque queda poco espacio en el disco. Libera espacio en Estado del servidor y vuelve a intentarlo.",
   "backup.status.on": "Activadas",

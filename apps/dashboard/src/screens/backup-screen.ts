@@ -894,6 +894,7 @@ export class BackupScreen extends LitElement {
       this.submitting
     )
       return;
+    this.#disarmTurnOff();
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
