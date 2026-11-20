@@ -1,13 +1,14 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withNodeTransaction, writeNodeMembership } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { CORE_MIGRATIONS, settings, withNodeTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import { verifyEnvelope, type HandoverRole, type HandoverState } from "@waitron/handover";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { appendHandoverEventTx, NODE_MIGRATIONS } from "@waitron/node-db";
-import { mountHandoverStatusApi, type HandoverStatusBody } from "./handover-status-api.js";
+import { mountHandoverStatusApi, type HandoverPageStatusBody } from "./handover-status-api.js";
 import { advanceHandover, beginHandover, waitHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 
@@ -27,7 +28,7 @@ let self: string;
 let app: Hono;
 
 beforeEach(async () => {
-  await seedVenue(suite.db);
+  await seedVenue(suite.db, { timeZone: "Atlantic/Canary" });
   self = await seedNode(suite.db);
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, self);
   app = new Hono();
@@ -81,11 +82,11 @@ async function holdChart(otherBoxContactUrl: string | null): Promise<void> {
 }
 
 /** The answer's body, after checking this box's own key signed it. */
-async function signedStatus(): Promise<HandoverStatusBody> {
+async function signedStatus(): Promise<HandoverPageStatusBody> {
   const response = await app.request(`/api/node/handover/${OP}`);
   expect(response.status).toBe(200);
   const key = nodeSigningPublicKey(await readNodeIdentityKey(suite.node, RING, self));
-  const verdict = verifyEnvelope<HandoverStatusBody>(await response.json(), "status", (id) =>
+  const verdict = verifyEnvelope<HandoverPageStatusBody>(await response.json(), "status", (id) =>
     id === self ? key : undefined,
   );
   if (!verdict.valid) throw new Error(`the answer did not verify: ${verdict.reason}`);
@@ -103,7 +104,19 @@ describe("GET /api/node/handover/:operationId", () => {
       sourceNodeId: OTHER_BOX,
       destinationNodeId: self,
       waitingReason: null,
+      timeZone: "Atlantic/Canary",
     });
+  });
+
+  it("carries the time zone this box's copy of the venue holds", async () => {
+    await operation("destination");
+    expect((await signedStatus()).timeZone).toBe("Atlantic/Canary");
+  });
+
+  it("carries UTC when this box's copy holds no venue", async () => {
+    await suite.db.delete(settings).where(eq(settings.module, "venue"));
+    await operation("destination");
+    expect((await signedStatus()).timeZone).toBe("UTC");
   });
 
   it("reports a placed destination copy only after this operation records placement", async () => {
@@ -138,6 +151,7 @@ describe("GET /api/node/handover/:operationId", () => {
       sourceNodeId: self,
       destinationNodeId: OTHER_BOX,
       waitingReason: null,
+      timeZone: "Atlantic/Canary",
       handoverPage: `https://other-box.example/handover/${OP}`,
     });
   });

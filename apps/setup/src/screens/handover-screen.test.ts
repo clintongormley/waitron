@@ -13,6 +13,7 @@ const status = {
   sourceNodeId: "old",
   destinationNodeId: "new",
   waitingReason: null,
+  timeZone: "Europe/Madrid",
   copyPlaced: true,
 };
 afterEach(() => vi.restoreAllMocks());
@@ -78,6 +79,53 @@ it("does not expose clock selection until the final copy is actually placed", as
     );
     expect(el.shadowRoot!.querySelector('[name="handover-password"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("vf-recovery-hour")).toBeNull();
+  } finally {
+    cleanupWidgets();
+  }
+});
+
+it("shows the venue's saved time zone on the clock step, never this device's", async () => {
+  const { mountWidget, cleanupWidgets } = await import("../widgets/test-helpers.js");
+  // A zone the browser running this test is not in, so passing the device's zone fails.
+  const venueZone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Madrid"
+      ? "Atlantic/Canary"
+      : "Europe/Madrid";
+  const api = new SetupApi(
+    "",
+    vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ body: { ...status, timeZone: venueZone } })),
+    ),
+  );
+  const { el } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+    api,
+    operationId: "move one",
+  });
+  try {
+    const q = <T extends HTMLElement>(root: HTMLElement, selector: string) =>
+      root.shadowRoot!.querySelector<T>(selector)!;
+    await vi.waitFor(() => expect(q(el, '[name="handover-password"]')).not.toBeNull());
+    for (const [name, value] of [
+      ["handover-email", "owner@example.com"],
+      ["handover-password", "correct horse"],
+      ["handover-code", "123456"],
+    ] as const) {
+      const field = q<LitElement>(el, `[name="${name}"]`);
+      await field.updateComplete;
+      const native = field.shadowRoot!.querySelector("input")!;
+      native.value = value;
+      native.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    }
+    await el.updateComplete;
+    q(el, "[data-test=authenticate]").click();
+    await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+    const entry = q<LitElement>(el, "vf-recovery-hour");
+    await entry.updateComplete;
+    expect((entry as unknown as { context: { timeZone: string } }).context.timeZone).toBe(
+      venueZone,
+    );
+    expect(entry.shadowRoot!.textContent).toContain(venueZone);
+    expect(el.shadowRoot!.textContent).toContain("Times below are in the venue’s time zone.");
   } finally {
     cleanupWidgets();
   }

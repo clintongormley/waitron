@@ -20,6 +20,7 @@ const status = {
   sourceNodeId: "old",
   destinationNodeId: "new",
   waitingReason: null,
+  timeZone: "Europe/Madrid",
   copyPlaced: true,
 };
 const input = {

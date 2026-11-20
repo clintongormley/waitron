@@ -29,7 +29,7 @@ export const handoverEn = {
   "handover.try_again": "Try again",
   "handover.fix": "Complete the highlighted fields to continue.",
   "handover.required": "Complete this field.",
-  "handover.zone": "Times are shown in your device’s time zone.",
+  "handover.zone": "Times below are in the venue’s time zone.",
   "handover.emergency.sign_in":
     "Sign in as an administrator to check this spare and start the venue here. Enter your password and current authenticator code, if set up. You only need a new code if this one expires.",
   "handover.emergency.sign_in_with": "Sign in with",
@@ -200,7 +200,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.try_again": "Volver a intentarlo",
   "handover.fix": "Completa los campos resaltados para continuar.",
   "handover.required": "Completa este campo.",
-  "handover.zone": "Las horas se muestran en la zona horaria de tu dispositivo.",
+  "handover.zone": "Las horas de abajo están en la zona horaria del local.",
   "handover.emergency.sign_in":
     "Identifícate como administrador para comprobar esta copia e iniciar el local aquí. Introduce tu contraseña y el código actual del autenticador, si está configurado. Solo necesitas un código nuevo si este caduca.",
   "handover.emergency.sign_in_with": "Identificarse con",

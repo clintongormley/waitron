@@ -39,6 +39,7 @@ import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { copyImageMigrations } from "./testing/image-migrations.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { venueTimeZoneIn } from "./venue-time-zone.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x7).toString("base64"),
@@ -325,6 +326,15 @@ describe("POST /api/node/handover/offer", () => {
       const first = await post(envelopeOf());
       const second = await post(envelopeOf());
       expect(second).toEqual(first);
+      expect(events()).toHaveLength(1);
+    });
+
+    it("a replay answers the same signed status after the venue's zone becomes unreadable", async () => {
+      const first = await post(envelopeOf());
+      expect(first.status).toBe(200);
+      await suite.db.run(sql`update settings set version = 2 where module = 'business_day'`);
+      await expect(venueTimeZoneIn(suite.db)).rejects.toMatchObject({ code: "settings.invalid" });
+      expect(await post(envelopeOf())).toEqual(first);
       expect(events()).toHaveLength(1);
     });
 

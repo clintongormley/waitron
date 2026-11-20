@@ -425,7 +425,7 @@ export class SetupHandoverScreen extends LitElement {
       locale: currentLocale().startsWith("es") ? "es" : "en",
       scenario: this.#isEmergency ? "emergency" : "controlled",
       binding,
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timeZone: status.timeZone,
       prepare: async (proposal) => {
         if (!this.#valid()) {
           this.attempted = true;
