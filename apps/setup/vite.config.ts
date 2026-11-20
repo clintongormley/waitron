@@ -1,11 +1,16 @@
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
-import { devCrossAppLinks, devPort, devServerProxy } from "../../scripts/dev-server-proxy.js";
+import {
+  devCrossAppLinks,
+  devLoopbackTwin,
+  devPort,
+  devServerProxy,
+} from "../../scripts/dev-server-proxy.js";
 import { viteNpmNotices } from "../../scripts/npm-bundle-notices.mjs";
 
 export default defineConfig(({ command, mode }) => ({
-  plugins: [devCrossAppLinks("setup"), viteNpmNotices()],
+  plugins: [devCrossAppLinks("setup"), devLoopbackTwin(), viteNpmNotices()],
   ...(mode === "emergency"
     ? {
         build: {

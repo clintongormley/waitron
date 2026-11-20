@@ -1,6 +1,7 @@
 import { isDashboardPath } from "../packages/shared/src/app-surfaces.js";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { createServer as createNetServer, connect, type AddressInfo, type Socket } from "node:net";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin, ProxyOptions } from "vite";
@@ -46,6 +47,51 @@ export function devCrossAppLinks(app: "till" | "dashboard" | "setup"): Plugin {
             })
             .catch(next);
         } else next();
+      });
+    },
+  };
+}
+
+const LOOPBACK_TWINS: Record<string, string> = { "::1": "127.0.0.1", "127.0.0.1": "::1" };
+
+// One socket cannot listen on both loopbacks without listening on every interface, so the
+// loopback Vite did not bind gets a plain forwarder.
+export function devLoopbackTwin(): Plugin {
+  return {
+    name: "waitron-dev-loopback-twin",
+    apply: "serve",
+    configureServer(server) {
+      const httpServer = server.httpServer;
+      httpServer?.once("listening", () => {
+        const { address, port } = httpServer.address() as AddressInfo;
+        const twinHost = LOOPBACK_TWINS[address];
+        if (twinHost === undefined) return;
+        const sockets = new Set<Socket>();
+        const track = (socket: Socket) => {
+          sockets.add(socket);
+          socket.once("close", () => sockets.delete(socket));
+          return socket;
+        };
+        const twin = createNetServer((incoming) => {
+          const outgoing = track(connect({ host: address, port }));
+          track(incoming);
+          const drop = () => {
+            incoming.destroy();
+            outgoing.destroy();
+          };
+          incoming.on("error", drop).pipe(outgoing).on("error", drop).pipe(incoming);
+        });
+        twin.once("error", (error: NodeJS.ErrnoException) =>
+          server.config.logger.warn(
+            `Could not also serve on ${twinHost}:${port} (${error.code ?? error.message}); ` +
+              "connections to that address do not reach this dev server.",
+          ),
+        );
+        twin.listen(port, twinHost);
+        httpServer.once("close", () => {
+          twin.close();
+          for (const socket of sockets) socket.destroy();
+        });
       });
     },
   };

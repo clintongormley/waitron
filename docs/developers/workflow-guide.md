@@ -308,6 +308,14 @@ requests use that app's development server. For example, `curl -I http://localho
 `Location: http://localhost:5291/devices`. The `WAITRON_*_VITE_PORT` values select
 your stack's destinations. The deployed setup build keeps its relative base.
 
+**Try the till on an Android phone.** Plug the phone into the computer by USB with USB debugging
+on. In the computer's Chrome open `chrome://inspect/#devices`, choose **Port forwarding**, add port
+`5190` with address `localhost:5190`, tick **Enable port forwarding** and choose **Done**
+([Chrome's instructions](https://developer.chrome.com/docs/devtools/remote-debugging/local-server)). Then open
+`http://localhost:5190/till/` in Chrome on the phone. Keep the `/till/` path: the bare address
+redirects to the dashboard's port, which is not forwarded. On another slot, use that slot's till
+port (`wa-wt ls` shows it) in both the forwarding rule and the phone's address.
+
 **Compose holds nothing but the practice email inbox.** `docker-compose.yml` declares one service,
 `mailpit`, and no container holds any part of a venue, so there is no volume a reset could clear.
 It is started because `pnpm dev:setup` and `pnpm dev:reset` each begin
