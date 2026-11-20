@@ -71,6 +71,7 @@ const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
   ["Record", "TypeScript's own; holds what its arguments name, which the guard reads"],
   ["ThemeNameRefusal", "an enum: empty, too_long or reserved"],
   ["ThemeRefusalReason", "an enum of why a theme document is refused"],
+  ["UnservedBillDish", "a dish's line id, its name, quantity and whether the kitchen has it"],
   ["UnservedDish", "a dish's bill and line ids, its name, quantity and CancellationContext"],
   ["VerifyFailure", "an enum of why a membership document fails verification"],
 ]);
@@ -111,7 +112,6 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["image.hash_conflict.filename", "an uploaded image's file name"],
   ["invoice_correction.split_changed.vatBreakdown", "VAT rates, bases and amounts of tax"],
   ["invoice_correction.split_changed.tax", "an amount of VAT, in euros"],
-  ["meal_end.unserved_dishes.dishName", "the name of a dish on the bill"],
   ["menu_period.ended.periodName", "the name of a menu period"],
   ["menu_period.name_taken.name", "the name of a menu period"],
   ["menu_publication.time_past.activatesAt", "an instant"],
