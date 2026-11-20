@@ -772,6 +772,10 @@ inside a modal's body inherits the cap. Page forms are bounded by their screen's
 so they were left alone. At 390px wide a modal's body is narrower than the token, so a field there
 still takes the body's whole width.
 
+The dashboard's `invoice-email-dialog.ts` and the till's `invoice-recipient-dialog.ts` set
+`--wt-field-max-width` to the form width on their `wt-dialog`, so a long refusal in the footer wraps at the form width instead of widening the
+dialog.
+
 A screen that styles its own native control reads the same variable on the element wrapping it.
 A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays

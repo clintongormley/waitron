@@ -901,15 +901,6 @@ Found by the look, for the owner to decide: a held dish on the pass has no "stat
 so unless its station is closed the pass does not say which station the dish will go to.
 
 
-## A559. The till's full-invoice dialog changes width when an error appears.
-
-It takes the width
-of its content: at 1280 px in English it grew from about 274 to about 348 px when A231q looked at
-it, and at 390 px the customer's name is cut short. A fixed width for its fields, as the find-bill
-dialog has (`apps/till/src/widgets/find-bill-dialog.ts`), would widen it to about 576 px — a
-decision for the whole dialog. Left open by A231q.
-
-
 ## A857. A booking can take a table the evening's layout puts away (2026-10-18).
 
 Bookings refuse

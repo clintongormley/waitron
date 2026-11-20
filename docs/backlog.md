@@ -726,9 +726,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   menu, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-- **A559. The till's full-invoice dialog changes width when an error appears.** Left open by A231q.
-  [Detail](backlog/till.md#a559-the-tills-full-invoice-dialog-changes-width-when-an-error-appears)
-
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by the comments sweep (#613–#623).** Found while pruning comments.
