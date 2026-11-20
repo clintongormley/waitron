@@ -6931,7 +6931,7 @@ own row when the zone offers sending before payment.
 
 ### Shared bill payment window
 
-Every payment method offers Print payment slip when the device has a payment slip printer, except a card reader that prints its own slip. It starts off for each payer; a slip that could not print says the payment was received. No slip is reprinted from the till.
+Every payment method offers Print payment slip when the device has a payment slip printer, except a card reader that prints its own slip. On the Counter's pay panel the one switch stays, and that reader's card payment ignores it. It starts off for each payer; a slip that could not print says the payment was received. No slip is reprinted from the till.
 
 Table bills open one Pay window from the foot. Its amount choices are An amount, Split equally,
 Items and Whole bill, in that order; Whole bill starts selected at the right. Keep all four choices
