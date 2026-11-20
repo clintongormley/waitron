@@ -285,6 +285,7 @@ describe("the lists", () => {
       "apps/server/src/log-personal-data.ts",
       "apps/server/src/return-records.real.test.ts",
       "apps/server/src/start-again-full-disk.e2e.test.ts",
+      "apps/server/src/testing/later-sale-date-fixture.ts",
       "apps/server/src/upgrade-sale.test.ts",
       "packages/db/src/immutability.sql.md",
       "packages/identity/src/passkey-providers.ts",

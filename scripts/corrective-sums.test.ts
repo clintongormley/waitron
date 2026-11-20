@@ -73,6 +73,13 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
       "looks up a replaced sale's supply day to choose its VAT period; it totals nothing a sale owes",
   },
   {
+    file: "apps/server/src/accountant-export.ts",
+    fragment: "eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)",
+    lines: 1,
+    reason:
+      "looks up a replaced sale's supply day to list it in the VAT return's period; it totals nothing a sale owes",
+  },
+  {
     file: "packages/core/src/record-substitution.ts",
     fragment: "inArray(sales.correctsSaleId, input.substitutedSaleIds)",
     lines: 1,

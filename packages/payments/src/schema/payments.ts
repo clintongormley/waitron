@@ -81,6 +81,10 @@ export const payments = table(
     requestedAmount: money("requested_amount"),
     state: paymentState("state").notNull(),
     settledAt: tsString("settled_at"),
+    /** SumUp's time for when the checkout began, when it lies between this row's `created_at` and
+     * its `settled_at`, else `created_at`; written once, only by the check that finds a card after
+     * its live answer was missed. */
+    providerCheckoutStartedAt: tsString("provider_checkout_started_at"),
     /** Committed before reversing an orphan; the provider's reconciler owns recovery of this claim. */
     reconcileRemediatedAt: tsString("reconcile_remediated_at"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),

@@ -40,7 +40,11 @@ beforeEach(async () => {
 const CUSTOMER = { taxId: "01234567L", legalName: "Cliente SL", countryCode: "ES" };
 const CUSTOMER_ADDRESS = "2 Main Street, 28013 Madrid, Madrid";
 
-async function issue(prepared: boolean, full = false) {
+async function issue(
+  prepared: boolean,
+  full = false,
+  { at = AT, operationDate }: { at?: string; operationDate?: string } = {},
+) {
   if (full) await v.db.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid" });
   const fullSeries = full
     ? (
@@ -52,7 +56,7 @@ async function issue(prepared: boolean, full = false) {
     : undefined;
   const source: TrustedClock = {
     ...v.clock,
-    now: () => ({ ...v.clock.now(), instant: new Date(AT), offsetMinutes: 0 }),
+    now: () => ({ ...v.clock.now(), instant: new Date(at), offsetMinutes: 0 }),
   };
   return withTransaction(v.db, async (tx) =>
     recordSale(tx, v.backend, {
@@ -76,6 +80,7 @@ async function issue(prepared: boolean, full = false) {
         },
       ],
       settlement: { kind: "deferred" },
+      ...(operationDate === undefined ? {} : { operationDate }),
       clock: prepared ? await prepareIssueClock(tx, v.cfg, source) : source,
     }),
   );
@@ -295,6 +300,39 @@ describe("the invoice a corrective names", () => {
     expect(sameLocalDay.issuedOffsetMinutes).toBe(120);
     expect(sameLocalDay).not.toHaveProperty("saleDay");
     expect(sameUtcDay.saleDay).toBe("2026-10-14");
+  });
+});
+
+describe("the day of the sale on an invoice issued on a later day", () => {
+  it("prints an F2's earlier sale day, not one equal to its issue day, nor on its credit note", async () => {
+    const at = "2026-03-15T12:00:00.000Z";
+    const later = await issue(false, false, { at, operationDate: "2026-03-14" });
+    const sameDay = await issue(false, false, { at, operationDate: "2026-03-15" });
+    const [stored, laterTicket, sameDayTicket, creditNote] = await withTransaction(
+      v.db,
+      async (tx) => [
+        (
+          await tx
+            .select({ supplyDay: sales.supplyDay })
+            .from(sales)
+            .where(eq(sales.id, later.saleId))
+        )[0]!,
+        await readTransactionReceipt(v.backend, tx, v.cfg, later.saleId),
+        await readTransactionReceipt(v.backend, tx, v.cfg, sameDay.saleId),
+        await readTransactionReceipt(
+          v.backend,
+          tx,
+          v.cfg,
+          await insertCorrective(tx, later.saleId, { total: "-2.00" }),
+        ),
+      ],
+    );
+    expect(stored.supplyDay).toBe("2026-03-14");
+    expect(laterTicket.invoiceType).toBe("F2");
+    expect(laterTicket.saleDay).toBe("2026-03-14");
+    expect(sameDayTicket).not.toHaveProperty("saleDay");
+    expect(creditNote.invoiceType).toBe("R5");
+    expect(creditNote).not.toHaveProperty("saleDay");
   });
 });
 

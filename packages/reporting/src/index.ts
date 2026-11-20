@@ -23,7 +23,7 @@ export type {
   CurrentClassifier,
 } from "./category-sales.js";
 export { computeOverdueOrders } from "./overdue-orders.js";
-export { computeVatReturn } from "./vat-return.js";
+export { computeVatReturn, vatReturnDay } from "./vat-return.js";
 export { computeInputVat } from "./input-vat.js";
 export type { InputVatInput } from "./input-vat.js";
 export { parsePeriodToken } from "./period.js";

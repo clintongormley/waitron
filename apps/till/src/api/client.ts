@@ -1063,7 +1063,7 @@ export interface TillSaleResult extends ReceiptPresentation {
   invoiceEvidence?: InvoiceEvidence;
   issuedOffsetMinutes?: number;
   invoiceType?: "F1" | "F2" | "R4" | "R5";
-  /** On a replacement corrective, the day of the sale (`YYYY-MM-DD`) when it is not its issue day. */
+  /** The day of the sale (`YYYY-MM-DD`) when it is not its issue day: an F1/F2 issued on a later day, or a replacement corrective. */
   saleDay?: string;
   /** On a corrective invoice (R4, R5), the invoice it corrects; `inFull` when it replaces it whole. */
   corrects?: {

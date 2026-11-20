@@ -52,6 +52,13 @@ function storedRecipient(sale: TypedSale): Pick<InvoiceTyping, "recipient"> {
   };
 }
 
+function saleDayOf(sale: TypedSale): Pick<InvoiceTyping, "saleDay"> {
+  return sale.supplyDay !== null &&
+    sale.supplyDay !== localCalendarDate(new Date(sale.issuedAt), sale.issuedOffsetMinutes)
+    ? { saleDay: sale.supplyDay }
+    : {};
+}
+
 /**
  * An ordinary sale is F1 when it names a customer and F2 otherwise; a corrective is R4 when it
  * names a customer (only a replacement of a full invoice does) and R5 otherwise, and names the
@@ -60,7 +67,13 @@ function storedRecipient(sale: TypedSale): Pick<InvoiceTyping, "recipient"> {
 export async function readInvoiceTyping(tx: Transaction, sale: TypedSale): Promise<InvoiceTyping> {
   const recipient = storedRecipient(sale);
   const full = sale.counterpartyTaxId !== null;
-  if (sale.correctsSaleId === null) return { invoiceType: full ? "F1" : "F2", ...recipient };
+  if (sale.correctsSaleId === null) {
+    return {
+      invoiceType: full ? "F1" : "F2",
+      ...saleDayOf(sale),
+      ...recipient,
+    };
+  }
   const [corrected] = await tx
     .select({
       code: invoiceSeries.code,
@@ -79,10 +92,7 @@ export async function readInvoiceTyping(tx: Transaction, sale: TypedSale): Promi
       issuedOffsetMinutes: corrected!.issuedOffsetMinutes,
       ...(sale.replacesOriginal ? { inFull: true as const } : {}),
     },
-    ...(sale.supplyDay !== null &&
-    sale.supplyDay !== localCalendarDate(new Date(sale.issuedAt), sale.issuedOffsetMinutes)
-      ? { saleDay: sale.supplyDay }
-      : {}),
+    ...saleDayOf(sale),
     ...recipient,
   };
 }

@@ -108,7 +108,8 @@ type TillSaleDeps = BaseTillSaleDeps & {
 import { issuancePass } from "./issuance-pass.js";
 import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
-import { issueMoment, pinnedAt } from "./issue-moment.js";
+import { pinnedAt } from "./issue-moment.js";
+import { CARD_TIMING_COLUMNS, cardSaleMoment, issueOrderMoment } from "./sale-day.js";
 import { ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import {
@@ -298,7 +299,7 @@ export interface TillSaleResult extends ReceiptPresentation {
     issuedOffsetMinutes?: number;
     inFull?: true;
   };
-  /** On a replacement, the real day (`YYYY-MM-DD`) of the sale, when it is not its issue day. */
+  /** The real day (`YYYY-MM-DD`) of the sale, when it is not its issue day: an F1/F2 issued on a later day, or a replacement. */
   saleDay?: string;
   issuer?: { venueName: string; nif: string; domicile?: string };
   recipient?: {
@@ -822,10 +823,12 @@ async function fileImmediateSale(
     kind: "order",
     orderId: workingOrderId,
   });
-  const { priced, clock, gross } = issueMoment(
-    await prepareIssueClock(tx, cfg, deps.clock),
+  const { priced, clock, gross, operationDate } = await issueOrderMoment(
+    tx,
+    cfg,
+    deps,
+    workingOrderId,
     await issuancePass(tx, workingOrderId, order),
-    deps.backend,
   );
   // Before the owes-nothing check, so a malformed cash amount is refused whatever is owed.
   const settled = tender === null ? null : { ...tender, ...settlementFor(tender, priced.total) };
@@ -853,6 +856,7 @@ async function fileImmediateSale(
     lines: withReceiptListPrices(priced.lines, order.identities),
     vatBreakdown: priced.vatBreakdown,
     clock,
+    operationDate,
     operatorId,
     settlement: {
       kind: "immediate",
@@ -1187,8 +1191,7 @@ async function payIntegrated(
       await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
       return { kind: "owes-nothing" as const, ticket };
     }
-    // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
-    // issues the invoice.
+    // P3 files THESE gross lines, whatever changes while the reader runs.
     const gross = await issuancePass(tx, req.id, order);
     // An open order's lines could still change under the reader, so it is marked in flight (plan
     // D22). A placed order's priced columns are already frozen, and
@@ -1582,10 +1585,12 @@ async function finalizeCapture(
         .where(eq(workingOrders.id, req.id));
       if (locked?.status === "settled") return readSettledTicket(deps.backend, tx, cfg, req.id);
       await requireEconomicWrite(tx, cfg, deps.admission);
-      const { priced, clock, gross } = issueMoment(
-        await prepareIssueClock(tx, cfg, deps.clock),
+      const { priced, clock, gross, operationDate } = await issueOrderMoment(
+        tx,
+        cfg,
+        deps,
+        req.id,
         grossInP1,
-        deps.backend,
       );
       const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
       const language = await saleLanguageFor(tx, selected.receiptLocale, {
@@ -1608,6 +1613,7 @@ async function finalizeCapture(
         lines: withReceiptListPrices(priced.lines, identities),
         vatBreakdown: priced.vatBreakdown,
         clock,
+        operationDate,
         operatorId,
         settlement: {
           kind: "immediate",
@@ -1706,10 +1712,22 @@ async function finalizeRecovery(
       const order = await priceStoredOrderForIssuance(tx, req.id, {
         refuseUnsentUnavailable: false,
       });
-      const { priced, clock, gross } = issueMoment(
-        await prepareIssueClock(tx, cfg, deps.clock),
+      // Filed under the device that took the card, as the stuck resolve and a bill payment are.
+      const [startedOn] = await tx
+        .select({
+          source: payments.source,
+          deviceId: payments.deviceId,
+          ...CARD_TIMING_COLUMNS,
+        })
+        .from(payments)
+        .where(eq(payments.id, captured.id));
+      const { priced, clock, gross, operationDate } = await issueOrderMoment(
+        tx,
+        cfg,
+        deps,
+        req.id,
         await issuancePass(tx, req.id, order),
-        deps.backend,
+        cardSaleMoment(startedOn!) ?? undefined,
       );
       const capturedAmount = decimal(captured.amount);
 
@@ -1729,11 +1747,6 @@ async function finalizeRecovery(
       /* v8 ignore stop */
       const settledAt = new Date(captured.settledAt);
 
-      // Filed under the device that took the card, as the stuck resolve and a bill payment are.
-      const [startedOn] = await tx
-        .select({ source: payments.source, deviceId: payments.deviceId })
-        .from(payments)
-        .where(eq(payments.id, captured.id));
       const origin = storedDeviceOrigin(startedOn!);
       const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
       const language = await saleLanguageFor(tx, selected.receiptLocale, {
@@ -1756,6 +1769,7 @@ async function finalizeRecovery(
         lines: withReceiptListPrices(priced.lines, order.identities),
         vatBreakdown: priced.vatBreakdown,
         clock,
+        operationDate,
         operatorId,
         settlement: {
           kind: "immediate",

@@ -2,31 +2,39 @@ import { localCalendarDate, rateLines } from "@waitron/menu";
 import type { GrossLines, PricedLines } from "@waitron/menu";
 import type { FiscalBackend, TrustedClock, TrustedReading } from "@waitron/fiscal";
 
-/** An invoice's lines at the rates of the day it is issued, and the clock that issues it. */
+/** An invoice's rated lines, and the clock that issues it. */
 export interface IssueMoment {
   priced: PricedLines;
   /** The lines `priced` was rated from, still holding the gross unit prices they were sold at. */
   gross: GrossLines;
-  /** Answers the one reading the lines were rated at on every `now()`, so `recordSale` dates the
-   * invoice on the day whose rates it files, even when the request runs across midnight. */
+  /** Answers the reading `issueMoment` took on every `now()`, so `recordSale` dates the invoice on
+   * the issue day `priced` and `operationDate` were worked out from, even across midnight. */
   clock: TrustedClock;
+  /** The earlier venue day the sale happened on, when it closed before the issue day. */
+  operationDate?: string;
 }
 
 /**
- * Take ONE clock reading and rate `gross` at its local calendar date. Every till path that issues an
- * invoice from an order's lines rates them here and hands `recordSale` the returned clock.
+ * Take ONE clock reading and rate `gross` at its local calendar date, or at `mealDay` when the meal
+ * ended on an earlier venue day: the rate in force when the sale happened applies, and that day is
+ * returned as the operation date to file. Every till path that issues an invoice from an order's
+ * lines rates them here and hands `recordSale` the returned clock.
  */
 export function issueMoment(
   clock: TrustedClock,
   gross: GrossLines,
   fiscal: Pick<FiscalBackend, "assertRecordableAt">,
+  mealDay?: string,
 ): IssueMoment {
   const reading = clock.now();
   fiscal.assertRecordableAt(reading);
+  const issueDay = localCalendarDate(reading.instant, reading.offsetMinutes);
+  const earlier = mealDay !== undefined && mealDay < issueDay ? mealDay : undefined;
   return {
-    priced: rateLines(gross, localCalendarDate(reading.instant, reading.offsetMinutes)),
+    priced: rateLines(gross, earlier ?? issueDay),
     gross,
     clock: pinnedAt(clock, reading),
+    ...(earlier === undefined ? {} : { operationDate: earlier }),
   };
 }
 

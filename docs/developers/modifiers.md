@@ -132,7 +132,7 @@ The VAT classes are never resolved that way — an extra carries the picked PROD
 served here and taken away, because it is sold as that product, as the published menu version froze
 them for that product (a variant's blank class resolves as [products.md](products.md) says), and
 never the dish's. The class
-the order's way of selling picks is taxed at its rate on the day the invoice is issued.
+the order's way of selling picks is taxed at the rate [products.md](products.md) says.
 
 ### The dashboard
 
@@ -215,7 +215,7 @@ the basket resolved, and decides what is stored:
 - Each extras pick becomes its own CHILD line (`parent_line_id` set) carrying the picked PRODUCT,
   that product's three frozen names, the price the offer resolved and the PRODUCT's two VAT classes, served here and taken away, as the
   published menu version froze them for that product, never the dish's. The one the order's way
-  picks is taxed at its rate on the day the invoice is issued.
+  picks is taxed at the rate [products.md](products.md) says.
   The child's stored quantity is dish quantity × pick quantity × the item's frozen portion. Its
   `price_quantity` stores that portion, so its price remains per portion when the physical amount
   is fractional.

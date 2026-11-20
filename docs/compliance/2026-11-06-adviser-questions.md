@@ -546,6 +546,8 @@ A1406, A1407 and A1408.
   period in that report.
   *(2026-11-14: a simplified invoice replaced through Q37-FIX counts in its real day's period; any
   other sale still counts by its issue date.)*
+  *(2026-11-15: an invoice issued on a later day than the sale counts in the sale day's period,
+  LATER-SALE-DATE.)*
 - **Three identical refusals hold the rest of a chain**, so a clock a day ahead could stop later filings.
   *(2026-11-14: since A1420 PR 2, a run of `1112` refusals holds nothing.)*
 - **Clocks running behind are not listed** for the owner, though they need the same remedy.

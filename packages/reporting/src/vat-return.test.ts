@@ -207,6 +207,22 @@ describe("computeVatReturn", () => {
     });
   });
 
+  it("counts a sale issued on a later day in its sale day's period", async () => {
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: new Date("2026-04-01T10:00:00Z").toISOString(),
+      supplyDay: "2026-03-31",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+
+    const q1 = await runPeriod({ kind: "quarter", quarter: 1 });
+    expect(q1.byRate).toEqual([{ rate: "10.00", base: "11.00", tax: "1.10" }]);
+    const q2 = await runPeriod({ kind: "quarter", quarter: 2 });
+    expect(q2.byRate).toEqual([]);
+    expect(q2).toMatchObject({ baseTotal: "0.00", taxTotal: "0.00" });
+  });
+
   it("excludes a voided sale", async () => {
     const s = await seedSale(suite.db, venue, {
       invoiceNumber: 1,

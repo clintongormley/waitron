@@ -22,9 +22,11 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
+// Imported before anything that reaches till-sale.js: entered first, close-of-day.js binds to the
+// mocked till-sale.js below rather than to the original still loading inside the mock factory.
+import { closeOfDayConfig, issueBillAtClose, type CloseOfDayRule } from "./close-of-day.js";
 import { readBillEditState } from "./bill-editing.js";
 import { endMeal } from "./meal-end.js";
-import { closeOfDayConfig, issueBillAtClose, type CloseOfDayRule } from "./close-of-day.js";
 import { seedGivenAwayLine } from "./testing/cancel-line.js";
 import { clockAt } from "./testing/deferred-close-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -78,7 +80,7 @@ useVenueDb({
     ).zoneId;
     const dayClock = await inTx(venue, (tx) => readVenueClock(tx));
     const nextDayStart = businessDayBounds(dayClock, businessDayAt(dayClock, new Date())).endAt;
-    rule = { dayStartedAt: new Date(nextDayStart) };
+    rule = { dayStartedAt: new Date(nextDayStart), venueClock: dayClock };
     closeClock = clockAt(Date.parse(nextDayStart) + 60_000);
   },
 });
@@ -566,7 +568,7 @@ describe("issueBillAtClose", () => {
 
     it("a bill opened after the day began", async () => {
       const party = await seatedWith(venue, "Red wine bottle");
-      const startedEarlier = { dayStartedAt: new Date(Date.now() - 60_000) };
+      const startedEarlier = { ...rule, dayStartedAt: new Date(Date.now() - 60_000) };
 
       expect(await leftAlone(party, () => close(party.tabId, startedEarlier))).toEqual({
         kind: "not_due",

@@ -4,6 +4,9 @@
 > date instead: a full invoice shows only the date it was created, and Waitron no longer saves an
 > operation date. The B2B delivery research is unaffected.
 > [Decision](../../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
+>
+> **2026-11-15, LATER-SALE-DATE:** an invoice issued on a later day than the sale now carries the
+> sale's date again, saved in `sales.supply_day`; the rule is in the same decision.
 
 > **27 October, owner answers about 07:45 and 12:00 CET:** the meal-end date is approved, with
 > **no staff date choice or confirmation**. The later answer defines meal end as **when the bill

@@ -100,8 +100,9 @@ export const sales = table(
     // A corrective by replacement ("S"): it carries the invoice's full amounts in place of the
     // one it corrects, rather than a change to it.
     replacesOriginal: flag("replaces_original").notNull().default(false),
-    // On a replacement only: the day the replaced sale really happened. The VAT return
-    // counts the replaced sale in this day's period.
+    // The day the sale really happened, when earlier than the invoice's issue day: on an
+    // ordinary sale or a replacement, never on a corrective by differences. The VAT return counts
+    // the sale in this day's period.
     supplyDay: day("supply_day"),
     // The recipient of a full invoice, NULL when the sale names none. Kept here as well as in the
     // fiscal record because it is a reprint/Z-report fact. Mirrors `Counterparty`
@@ -146,7 +147,10 @@ export const sales = table(
       "sales_replaces_original_ck",
       sql`${t.replacesOriginal} = 0 or ${t.correctsSaleId} is not null`,
     ),
-    check("sales_supply_day_ck", sql`${t.supplyDay} is null or ${t.replacesOriginal} = 1`),
+    check(
+      "sales_supply_day_ck",
+      sql`${t.supplyDay} is null or ${t.replacesOriginal} = 1 or ${t.correctsSaleId} is null`,
+    ),
     foreignKey({
       columns: [t.nodeId],
       foreignColumns: [nodes.id],

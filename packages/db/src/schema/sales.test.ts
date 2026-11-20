@@ -914,13 +914,7 @@ describe("sales — a replacement corrective", () => {
     expect(row!.replacesOriginal).toBe(false);
   });
 
-  it("refuses a supply day on a sale that is not a replacement", async () => {
-    const ordinary = await captureError(() =>
-      insert({ invoiceNumber: 2, supplyDay: "2026-02-28" }),
-    );
-    expect(isRefusal(ordinary, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(ordinary)).toMatch(/sales_supply_day_ck/);
-
+  it("refuses a supply day on a corrective by differences", async () => {
     const byDifferences = await captureError(() =>
       insert({
         invoiceNumber: 3,
@@ -940,6 +934,27 @@ describe("sales — a replacement corrective", () => {
       correctsSaleId: originalSaleId,
       supplyDay: "2026-02-28",
     });
+    const [stored] = suite.db.all<{ supply_day: string | null }>(
+      sql`select supply_day from sales where id = ${row!.id}`,
+    );
+    expect(stored!.supply_day).toBe("2026-02-28");
+  });
+});
+
+describe("sales — a sale issued after its sale day", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  beforeEach(async () => {
+    await seed(suite.db);
+    await recordCompleteSale(suite.db);
+  });
+
+  function insert(overrides: Record<string, unknown>) {
+    return suite.db.insert(sales).values(saleValues(overrides)).returning({ id: sales.id });
+  }
+
+  it("stores a supply day on an ordinary sale", async () => {
+    const [row] = await insert({ invoiceNumber: 2, supplyDay: "2026-02-28" });
     const [stored] = suite.db.all<{ supply_day: string | null }>(
       sql`select supply_day from sales where id = ${row!.id}`,
     );

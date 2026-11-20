@@ -137,8 +137,7 @@ export async function settleFromProviderRow(
     deps.cfg,
     billPaymentId,
     provided.settledAt === null ? now : new Date(provided.settledAt),
-    undefined,
-    guestCount,
+    { guestCount, datedByLatestAcceptance: true },
   );
   await print(tx, billPaymentId);
   return { settled: "received", invoice: done.invoice };

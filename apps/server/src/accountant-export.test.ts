@@ -17,9 +17,17 @@ import {
   seedPurchaseInvoice,
   type SeededVenue,
 } from "@waitron/reporting/test/fixtures.js";
-import { decimal, deviceOrigin, seriesId as brandSeriesId } from "@waitron/shared";
+import { computeVatReturn } from "@waitron/reporting";
+import {
+  decimal,
+  deviceOrigin,
+  seriesId as brandSeriesId,
+  sumDecimals,
+  toScale,
+} from "@waitron/shared";
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 
 function row(xml: string, number: number): string[] {
   const body = xml.match(new RegExp(`<row r="${number}">([\\s\\S]*?)</row>`))?.[1] ?? "";
@@ -743,6 +751,159 @@ describe("accountant period selection", () => {
       [twice, "F2"],
       ...refunds.map((refund) => [refund, "corrective"]),
     ]);
+  });
+
+  it("shows the sale day of an invoice issued on a later day beside its issue date", async () => {
+    const sale = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-04-01T10:00:00.000Z",
+      supplyDay: "2026-03-31",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+
+    const exported = await list("2026-03-31", "2026-03-31");
+    expect(exported.invoices.map((row) => [row.id, row.issueDate, row.saleDate])).toEqual([
+      [sale, "2026-04-01", "2026-03-31"],
+    ]);
+    for (const language of ["en", "es"] as const) {
+      const xml = strFromU8(
+        unzipSync(await renderAccountantWorkbook(exported, language))["xl/worksheets/sheet1.xml"]!,
+      );
+      const header = row(xml, 1);
+      const cells = row(xml, 2);
+      expect(cells[header.indexOf(ACCOUNTANT_EXPORT_WORDS[language].saleDateColumn)]).toBe(
+        "2026-03-31",
+      );
+      expect(cells[4]).toBe("2026-04-01");
+    }
+  });
+
+  it("selects a sale by its sale day when it has one, else by its issue date", async () => {
+    const later = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-04-01T10:00:00.000Z",
+      supplyDay: "2026-03-31",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    const sameDay = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-04-01T11:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+
+    const ids = async (from: string, to: string) =>
+      (await list(from, to)).invoices.map((row) => row.id);
+    expect(await ids("2026-01-01", "2026-03-31")).toEqual([later]);
+    expect(await ids("2026-04-01", "2026-06-30")).toEqual([sameDay]);
+  });
+
+  it("puts every row in the period the VAT return counts its sale in", async () => {
+    const [series] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .returning({ id: invoiceSeries.id });
+    const rectificative = { ...venue, seriesId: series!.id as SeededVenue["seriesId"] };
+    const later = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-04-01T10:00:00.000Z",
+      supplyDay: "2026-03-31",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    const futureDated = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-04-02T10:00:00.000Z",
+      supplyDay: "2026-04-01",
+      total: "24.20",
+      lines: [{ vatRate: "10.00", lineTotal: "22.00" }],
+    });
+    const replacement = await seedSale(suite.db, rectificative, {
+      invoiceNumber: 1,
+      issuedAt: "2026-04-03T10:00:00.000Z",
+      total: "24.20",
+      correctsSaleId: futureDated,
+      replacesOriginal: true,
+      supplyDay: "2026-03-30",
+      lines: [{ vatRate: "10.00", lineTotal: "22.00" }],
+    });
+    const marchOriginal = await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: "2026-03-20T10:00:00.000Z",
+      total: "36.30",
+      lines: [{ vatRate: "10.00", lineTotal: "33.00" }],
+    });
+    const undatedReplacement = await seedSale(suite.db, rectificative, {
+      invoiceNumber: 3,
+      issuedAt: "2026-04-05T10:00:00.000Z",
+      total: "36.30",
+      correctsSaleId: marchOriginal,
+      replacesOriginal: true,
+      lines: [{ vatRate: "10.00", lineTotal: "33.00" }],
+    });
+    const refund = await seedSale(suite.db, rectificative, {
+      invoiceNumber: 2,
+      issuedAt: "2026-04-04T10:00:00.000Z",
+      total: "-3.30",
+      correctsSaleId: later,
+      lines: [{ vatRate: "10.00", lineTotal: "-3.00" }],
+    });
+
+    for (const [quarter, from, to, expected] of [
+      [
+        1,
+        "2026-01-01",
+        "2026-03-31",
+        [marchOriginal, undatedReplacement, futureDated, replacement, later],
+      ],
+      [2, "2026-04-01", "2026-06-30", [refund]],
+    ] as const) {
+      const exported = (await list(from, to)).invoices;
+      expect(exported.map((row) => row.id)).toEqual(expected);
+      const counted = exported.filter((row) => row.invoiceType !== "replacement");
+      const vatReturn = await withTransaction(suite.db, (tx) =>
+        computeVatReturn(tx, { year: 2026, period: { kind: "quarter", quarter } }),
+      );
+      const exportedTax = sumDecimals(
+        counted.flatMap((row) => row.vatBreakdown.map((vat) => decimal(vat.tax))),
+      );
+      expect(toScale(exportedTax, 2)).toBe(toScale(vatReturn.taxTotal, 2));
+    }
+  });
+
+  it("shows a sale date only when it is earlier than the issue date", async () => {
+    const original = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-02T10:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    const earlierOriginal = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-11-02T11:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    const sameDay = await withTransaction(suite.db, (tx) =>
+      insertCorrective(tx, original, { replaces: true, supplyDay: "2026-11-02" }),
+    );
+    const earlier = await withTransaction(suite.db, (tx) =>
+      insertCorrective(tx, earlierOriginal, { replaces: true, supplyDay: "2026-11-01" }),
+    );
+
+    const exported = (await list()).invoices;
+    const byId = new Map(exported.map((row) => [row.id, row]));
+    expect(byId.get(sameDay)).toMatchObject({ issueDate: "2026-11-02" });
+    expect(byId.get(sameDay)).not.toHaveProperty("saleDate");
+    expect(byId.get(earlier)).toMatchObject({ issueDate: "2026-11-02", saleDate: "2026-11-01" });
+    const xml = strFromU8(
+      unzipSync(
+        await renderAccountantWorkbook({ ...(await list()), invoices: [byId.get(sameDay)!] }, "en"),
+      )["xl/worksheets/sheet1.xml"]!,
+    );
+    expect(row(xml, 2)).toHaveLength(19);
   });
 
   it("uses inclusive receipt dates for purchases and retains recorded scales and discrepancies", async () => {

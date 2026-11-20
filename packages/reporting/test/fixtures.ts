@@ -167,7 +167,7 @@ export async function seedSale(
     correctsSaleId?: SaleId;
     /** A corrective by replacement: it carries the full amounts and takes `correctsSaleId`'s place. */
     replacesOriginal?: true;
-    /** On a replacement, the day the original sale really happened, `YYYY-MM-DD`. */
+    /** The day the sale really happened, when earlier than its issue day, `YYYY-MM-DD`. */
     supplyDay?: string;
     counterpartyTaxId?: string;
     counterpartyLegalName?: string;

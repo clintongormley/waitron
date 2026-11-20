@@ -408,8 +408,15 @@ export interface FiscalBackend {
    * Takes a transaction handle. This is a deliberate leak: atomicity between the sale and the
    * fiscal record is the entire point of this interface, and hiding the transaction would let a
    * backend break it silently — the sale committed, the record not, discovered at an audit.
+   *
+   * `filing.operationDate` is the venue calendar day (`YYYY-MM-DD`) the sale happened on, handed
+   * only when it is earlier than the issue day; a regime that cannot file it ignores it.
    */
-  recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef>;
+  recordSale(
+    tx: Transaction,
+    sale: SaleForFiscalRecord,
+    filing?: { operationDate?: string },
+  ): Promise<FiscalRecordRef>;
 
   /**
    * The reprint data for an already-filed sale, so a replayed receipt can carry what the regime's

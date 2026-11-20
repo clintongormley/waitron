@@ -106,6 +106,10 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
     reason: VERIFACTU_NAMES,
     findings: 2,
   },
+  "apps/server/src/testing/later-sale-date-fixture.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 7,
+  },
   "packages/venue-service/src/configuration-transfer.test.ts": {
     reason: REAL_HOLIDAY_NAMES,
     findings: 2,

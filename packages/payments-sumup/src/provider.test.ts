@@ -337,6 +337,18 @@ describe("SumUpCloudProvider.collect", () => {
     expect((await row(result.paymentRef)).state).toBe("attempting");
   });
 
+  it("a live answer leaves the provider's checkout start empty, though SumUp's answer carries one", async () => {
+    const { fake, provider, params } = await setup(suite);
+    fake.eventClock = () => new Date("2026-03-31T22:01:00Z");
+    const result = await provider.collect(params);
+    expect(result.state).toBe("captured");
+    const [stored] = await suite.db
+      .select({ checkoutStartedAt: payments.providerCheckoutStartedAt })
+      .from(payments)
+      .where(eq(payments.paymentRef, result.paymentRef));
+    expect(stored).toEqual({ checkoutStartedAt: null });
+  });
+
   it("a captured collect result carries the card block from the transaction", async () => {
     const { provider, params } = await setup(suite);
     const result = await provider.collect(params);

@@ -91,6 +91,35 @@ describe("issueMoment", () => {
     expect(issueMoment(utc.clock, gross(), anyReading).priced.lines[0]!.vatRate).toBe("10.00");
   });
 
+  it("rates at an earlier close day and names it as the sale's operation date", () => {
+    // 09:10 on 1 January 2027 in Madrid; the meal closed on 31 December.
+    const { clock } = movingClock("2027-01-01T08:10:00.000Z", 60, 0);
+
+    const issue = issueMoment(clock, gross(), anyReading, "2026-12-31");
+
+    expect(issue.priced.lines[0]!.vatRate).toBe("10.00");
+    expect(issue.operationDate).toBe("2026-12-31");
+    expect(issue.clock.now().instant.toISOString()).toBe("2027-01-01T08:10:00.000Z");
+  });
+
+  it.each(["2027-01-01", "2027-01-02"])(
+    "rates at the issue day and names no operation date for a meal day of %s",
+    (mealDay) => {
+      const { clock } = movingClock("2027-01-01T08:10:00.000Z", 60, 0);
+
+      const issue = issueMoment(clock, gross(), anyReading, mealDay);
+
+      expect(issue.priced.lines[0]!.vatRate).toBe("11.00");
+      expect(issue).not.toHaveProperty("operationDate");
+    },
+  );
+
+  it("names no operation date without a close day", () => {
+    const { clock } = movingClock("2027-01-01T08:10:00.000Z", 60, 0);
+
+    expect(issueMoment(clock, gross(), anyReading)).not.toHaveProperty("operationDate");
+  });
+
   it("passes anchoring through to the clock it was given", () => {
     const { clock, anchor, current } = movingClock("2026-12-31T12:00:00.000Z", 60, 0);
     const issue = issueMoment(clock, gross(), anyReading);

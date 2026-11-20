@@ -1,5 +1,5 @@
 export { createTrustedClock } from "./clock.js";
-export { prepareIssueClock, readIssueZone } from "./issue-clock.js";
+export { issueClockIn, prepareIssueClock, readIssueZone } from "./issue-clock.js";
 export type { IssueScope } from "./issue-clock.js";
 export type {
   ClockConfidence,

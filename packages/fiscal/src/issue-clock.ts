@@ -16,7 +16,10 @@ export async function prepareIssueClock(
   scope: IssueScope,
   source: TrustedClock,
 ): Promise<TrustedClock> {
-  const zone = await readIssueZone(tx, scope);
+  return issueClockIn(await readIssueZone(tx, scope), source);
+}
+/** {@link prepareIssueClock} for a zone the caller has already read with {@link readIssueZone}. */
+export function issueClockIn(zone: string, source: TrustedClock): TrustedClock {
   const reading = source.now();
   const instant = new Date(reading.instant.getTime());
   const frozen = { ...reading, instant, offsetMinutes: timeZoneOffsetMinutes(zone, instant) };

@@ -496,12 +496,19 @@ export class SumUpCloudProvider implements PaymentProvider {
             declined++;
             return false;
           }
+          // SumUp's `timestamp` is when the checkout began, not the tap
+          // (docs/research/2026-09-10-sumup-solo-experiments.md). A time outside the span from this
+          // row's `created_at` to its `settled_at`, or none, gives way to `created_at`.
+          const createdAt = Date.parse(row.createdAt);
+          const sumupTime = t.timestamp === undefined ? NaN : Date.parse(t.timestamp);
+          const plausible = sumupTime >= createdAt && sumupTime <= outcome.settledAt.getTime();
           await captureAttempting(tx, {
             ...key,
             settledAt: outcome.settledAt,
             externalRef: outcome.transactionId,
             card: outcome.card,
             amount: outcome.amount,
+            checkoutStartedAt: new Date(plausible ? sumupTime : createdAt),
           });
           if (await this.saveRefunds(tx, key, outcome)) incidentsRaised++;
           return true;

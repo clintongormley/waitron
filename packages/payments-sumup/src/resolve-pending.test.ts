@@ -17,6 +17,7 @@ import {
 } from "@waitron/payments";
 import type { IncidentSink } from "@waitron/payments";
 import { freshNif, ownsEveryPayment, seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { FakeSumUp } from "./testing/fake-sumup.js";
 import { NOT_FOUND_GRACE_MS, RESOLVE_RETRY_MS, SumUpCloudProvider } from "./provider.js";
 
@@ -386,6 +387,59 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(row.externalRef).toMatch(/^txn_/);
     expect(row.settledAt).not.toBeNull();
   });
+
+  // The row is written two minutes before the check at T0 finds the card.
+  const CREATED = "2026-09-11T09:58:00.000Z";
+  it.each([
+    { timestamp: "2026-09-11T09:58:01Z", source: "SumUp's time", want: "2026-09-11T09:58:01.000Z" },
+    { timestamp: "2026-09-11T10:00:00Z", source: "SumUp's time", want: "2026-09-11T10:00:00.000Z" },
+    { timestamp: undefined, source: "the row's creation", want: CREATED },
+    { timestamp: "not a time", source: "the row's creation", want: CREATED },
+    { timestamp: "2026-09-11T09:57:59Z", source: "the row's creation", want: CREATED },
+    { timestamp: "1970-01-01T00:00:00Z", source: "the row's creation", want: CREATED },
+    { timestamp: "2026-09-11T10:00:01Z", source: "the row's creation", want: CREATED },
+  ])(
+    "stores $source as when the checkout began (timestamp $timestamp)",
+    async ({ timestamp, want }) => {
+      const { fake, provider } = await setup();
+      const paymentRef = `started-${String(timestamp)}`;
+      await withTransaction(suite.db, async (tx) => {
+        const t = await seedWorkingOrder(suite.db, freshNif());
+        await insertAttempting(tx, {
+          origin: deviceOrigin(t.deviceId),
+          workingOrderId: t.workingOrderId,
+          nodeId: t.nodeId,
+          provider: "sumup",
+          paymentRef,
+          amount: decimal("7.00"),
+        });
+      });
+      await liftPaymentGuard(suite.db, () =>
+        suite.db
+          .update(payments)
+          .set({ createdAt: CREATED })
+          .where(eq(payments.paymentRef, paymentRef)),
+      );
+      fake.hold({
+        foreignTransactionId: paymentRef,
+        status: "SUCCESSFUL",
+        amount: decimal("7.00"),
+        ...(timestamp === undefined ? {} : { timestamp }),
+      });
+      expect((await provider.resolvePending(T0, await ownsEveryPayment(suite.db))).forwarded).toBe(
+        1,
+      );
+      const [row] = await suite.db
+        .select({
+          checkoutStartedAt: payments.providerCheckoutStartedAt,
+          settledAt: payments.settledAt,
+        })
+        .from(payments)
+        .where(eq(payments.paymentRef, paymentRef));
+      expect(row!.checkoutStartedAt).toBe(want);
+      expect(row!.settledAt).toBe(T0.toISOString());
+    },
+  );
 
   it("leaves an attempting row another box owns alone, and its own box captures it", async () => {
     const { t, provider, attempting, state } = await setup();

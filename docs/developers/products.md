@@ -191,8 +191,10 @@ Each class's percentage is a dated table in code (`VAT_RATE_TABLE` and `vatRateO
 `packages/shared/src/menu-document/vat-rates.ts`): a legal change ships as a new entry dated from the day it
 takes effect. Issuing the invoice takes one clock reading, prices every line's class at the rate in
 force on that reading's local calendar date, and dates the invoice with the same reading
-(`issueMoment`, `apps/server/src/issue-moment.ts`). An order open across a change therefore pays the
-new rate, and publishing a menu early cannot bring a rate forward. Invoice-first issues at placing,
+(`issueMoment`, `apps/server/src/issue-moment.ts`). When the meal ended on an earlier calendar day
+than that date (`issueOrderMoment`, `apps/server/src/sale-day.ts`), the lines take that day's rates
+instead. An order invoiced after a change therefore pays the new rate if it closed on or after
+the change's date, and publishing a menu early cannot bring a rate forward. Invoice-first issues at placing,
 so it takes the placing day's rate, or, when the order is paid before it is placed, at payment,
 taking that day's rate; an integrated card payment fixes its gross lines before the
 reader and takes the rate when its record is issued after it (`finalizeCapture`,

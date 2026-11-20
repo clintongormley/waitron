@@ -2712,6 +2712,12 @@ for (const locale of ["en", "es"] as const) {
         pk: 0,
       });
       for (const row of Object.values(paymentTable.rows)) row.requested_by = null;
+      paymentTable.columns.splice(
+        paymentTable.columns.findIndex((column) => column.name === "settled_at") + 1,
+        0,
+        { name: "provider_checkout_started_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(paymentTable.rows)) row.provider_checkout_started_at = null;
       expected[phase].tables.persons!.columns.find(
         (column) => column.name === "display_name_folded",
       )!.notnull = 1;

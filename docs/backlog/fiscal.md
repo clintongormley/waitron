@@ -1145,14 +1145,15 @@ Asked whether lane L should switch to the creation date everywhere and park what
 the adviser answers, the owner answered "yes" (11:10). This replaces the 27 October rule ("the
 meal ends when the bill closes") until the adviser answers
 [S4](../compliance/asesor-questions.md#the-shortened-list-2026-10-09). No invoice, full or
-simplified, carries a separate operation date: paper, the till, the A4/email document and the
+simplified, carries a separate operation date (exceptions in the dated notes below): paper, the till, the A4/email document and the
 accountant export show the creation date, which is the only date AEAT receives. This also answers
 "Can a simplified invoice carry an operation date different from its issue date?", left open by
-A663 Part 2: no. The work built for the bill-close date stays parked on
+A663 Part 2: no, except a replacement corrective of a refused simplified invoice and an invoice
+issued on a later day than the sale (dated notes below). The work built for the bill-close date stays parked on
 `feat/a444-fiscal-operation-day` and `feat/a444-close-day-capture`, branches in lane L's local
 worktrees that were never pushed, and its plan on `docs/a444-revised-plan`.
 [Plan](../superpowers/plans/2026-11-12-a444-creation-date-only.md).
-_2026-11-14 (owner's answer B, Q37-FIX): the one exception is a replacement corrective (R5 "S") of
+_2026-11-14 (owner's answer B, Q37-FIX): an exception is a replacement corrective (R5 "S") of
 a refused simplified invoice, which files the original sale's real day as `FechaOperacion` when it
 differs from its own date._
 _2026-11-15 (A1407): an R4 "S" replacing a refused full invoice is the same exception, filing the
@@ -1168,7 +1169,28 @@ when the table closes, which normally coincides with the invoice date; an invoic
 the meal carries a separate date of sale. A1407 step 2 applies that to replacement correctives. The owner
 ruled on 2026-11-15 at 05:28 that an invoice issued on a later day (card recovery, a bill paid or
 left open for days, a takeaway collected days later) files and prints the sale date too, queued as
-LATER-SALE-DATE; nothing about those paths has changed yet._
+LATER-SALE-DATE._
+_2026-11-20 (LATER-SALE-DATE): an invoice an order issues on a later calendar day than the moment
+its meal ended files that day as `FechaOperacion`, uses its VAT rates, prints it as the date of the
+sale, keeps it in `sales.supply_day`, and counts in that day's period on the VAT return and in the
+accountant export, which picks it by that day, else its issue date, and shows it in its last column.
+The meal ends at whichever comes first: printing the bill, taking the last payment, or the close of
+the business day (the owner's words of 18 November, in the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md));
+its day is the calendar day of that moment (the owner's D1, "Calendar day it ended", relayed by the
+watcher, lane L `questions.md`, "WATCHER 2026-11-19 17:05"). Serving marks date nothing. Card
+recovery and a bill payment the box completes later pass the moment the last payment still holding
+money was accepted. A table bill the close of day counts as due (`closeOfDayEnd`, `close-of-day.ts`:
+this node's, with a trusted opening time, not left by a restore, no dish the kitchen was never asked
+for), issued after the business day it was opened in ended, is dated no later than that day's end,
+whichever path issues it: the owner's "whichever comes first" above (the owner's D2, "Yes, leave
+them to close of day", same record, chose to build nothing for these bills on this branch; the
+watcher has not yet cleared this). A bill paid in full before that day ended but held open past it is
+dated by the day's end, not by its last payment as that rule would give: a stated limit. Every other invoice carries one date. A card
+found later carries roughly when the reader was asked (SumUp's time is the checkout's start), so a
+tap just after midnight still files the earlier day. The owner's answers relayed by the watcher on
+2026-11-15 at 12:12 and 20:59 (lane L `archive/questions-to-2026-11-18.md`): "sale day" for the
+VAT return and the export, and "(a) By meal date" for how the export picks such an invoice.
+[Plan](../superpowers/plans/2026-11-15-later-sale-date.md)._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 

@@ -422,3 +422,233 @@ doc `:24-27`) and `apps/server/src/accountant-export.ts:200-207` (a sale-day col
 Path cites were READ, not run. The huella quote was RUN (fetched); the LIVA and RD 1619/2012 quotes
 come from repo research, and AEAT's validation PDF behind `validate.js` was not re-read. The parked
 A444 branches are not reused: #3235 landed their storage and month readers.
+
+## Amendment 2026-11-19: the meeting's meal-end rule
+
+Written at main `db6a22acc9` and branch head `1a88d75706`, for a fresh Claude read, then the watcher.
+It replaces §1's "one rule", P1 to P4, the plan's own D1, and Tasks 6a and 6. **READ** = code read at
+that commit; **RUN** = a command was run and its output read. Unmarked reasoning is inference.
+
+**1. The rule now.** The owner said "yes" (2026-11-19 ~13:19, lane L `questions.md`, `WATCHER
+2026-11-19 13:20`) to: "the sale date is the trading day the meal ended (whichever comes first:
+printing the bill, taking the last payment, close of trading day …)". The owner's own words for when
+a meal ends: "Whichever comes first: printing the bill; taking the last payment; close of trading day"
+(`docs/compliance/2026-11-19-adviser-meeting.md:95`). An invoice issued at that moment carries one
+date, as today. Only when the box issues it on a later day than the meal ended does the record sent
+to AEAT also carry the meal's day in its sale-date field (`FechaOperacion`), priced at that day's VAT
+rates, with "Date of the sale: …" printed. Serving marks no longer date anything. For a meal ended
+by printing the bill or taking a payment, "day" means the venue's calendar day of that moment
+(decision D1, for the owner to confirm); the date of a meal ended by the close of the trading day is
+left to ADVISER-CLOSE-OF-DAY-TICKET (decision D2, for the owner).
+_2026-11-19 17:05: the owner answered D1 "Calendar day it ended" and D2 "Yes, leave them to close
+of day" (lane L `questions.md`); §9 covers the close's moment._
+
+**2. Paths on main that issue an invoice for a meal.** Re-sweep of every `recordSale`,
+`issueUnpaidInvoice` and `issueIfFullyPaid` caller outside tests (RUN: `git grep` at `db6a22acc9`;
+each line READ). "Later day" means the invoice can be issued on a later calendar day than the meal
+ended.
+
+| Path | Where (main) | Meal ended | Later day? | After the rework | Date from |
+| --- | --- | --- | --- | --- | --- |
+| A. Print the bill (#3704) | `meal-end-api.ts:84` calls `endMeal`, `meal-end.ts:65`, issues `:129` | at the print, which issues | no | one date | — |
+| B. Cash or hand-keyed sale; live card | `/api/sales` `till-api.ts:1868` → `fileImmediateSale` `till-sale.ts:1104`; `/api/pay` `till-api.ts:1935` → `finalizeCapture` `till-sale.ts:1834` | last payment, which issues | as row G; and a live card answered just before midnight but issued just after (limit in D5) | one date | — |
+| C. Bill payment answered live | cash `takeBillPayment` `bill-payments.ts:1348` (`:1393`); reader `takeReaderBillPayment` `:1654` (`:1740`) → `issueWhenFullyPaid` `:760` | last payment, which issues | as row B | one date | — |
+| D. Card recovery: after a restart (`boot.ts:4599` → `pending-card-recovery.ts:90`), a till's retry (`till-sale.ts:1508-1512`), a manager's stuck resolve (`payments-api.ts:1738`, `:1817`) | all → `finalizeRecovery` `till-sale.ts:1959`, `recordSale` `:2025` | when the card was taken | **yes, kept** | sale date when earlier than the issue day | the card row's confirmed moment (D3): stored |
+| E. Bill payments the box completes later: the loop (`bill-payments-loop.ts:128`, also `payments-api.ts:1669`, `:1942`), a manager's retain (`payments-api.ts:1470`, `:1562`, `:1601`), an attestation (`:1988`, `:2025`) | → `completeBillPayment` `bill-payments.ts:1521` → `issueWhenFullyPaid` | the last payment still holding money | **yes, kept** | as row D | latest confirmed moment among those payments: a card's as in D; a cash one's `bill_payments.created_at` (`schema/bill-payments.ts:56`), and so is a card one a manager confirms by hand when it has no card row or its card row never settled (main dates that `now`, `payments-api.ts:2021-2024`): stored |
+| F. Takeaway handed over | `till-api.ts:2843` → `runCollectOrder` `till-sale.ts:2328`, issues `:2435` | the handover, which issues | no | one date | — |
+| G. A bill still open after its trading day closed, then paid (B, C), printed (A), recorded as a walkout (`unpaid-departure-api.ts:54` → `unpaid-departure.ts:122`), closed as deferred (`deferred-close.ts:160`) or completed by an edit (H) | — | close of its trading day; nothing issues then on main | yes, until ADVISER-CLOSE-OF-DAY-TICKET issues it at the close; afterwards the bill already holds its ticket and a walkout issues nothing (`unpaid-departure.ts:107-114`) | D2: one date (the issue date), as main today | — |
+| H. An edit that leaves a paid bill owing nothing | `issueIfFullyPaid` `bill-payments.ts:920` from `till-api.ts:3332`, `:3880`, `:3920`, `:4059`, `:4302`, `:4435`, `adjustments-api.ts:178`, `:243`, `line-cancel-api.ts:272`, `working-order.ts:7346` | the edit makes it fully paid | later trading day: row G. Same trading day, after midnight: only a bill already fully paid but held by an open draft (`bill-payments.ts:789-790`) | one date; that held case is a stated limit | — |
+
+Row D, "when the card was taken": 2026-11-19, R3 review: see the correction under D3 — SumUp's time is the checkout's start; a card found later by either provider carries roughly when the reader was asked, and a tap after midnight still files the earlier day.
+
+Rows G and H: 2026-11-20, review fix: see the note at the end of §9.
+
+Issue nothing new: `finalizeSettleRecovery` (`till-sale.ts:2215`) only settles a bill already
+issued; `recordSubstitution` (`packages/core/src/record-substitution.ts:57`) has no caller under
+`apps/`; the readiness check's test sale (`fiscal-readiness-runner.ts:112`) is no meal; correctives
+keep their own rules. The walkout the watcher named is row G: recorded the same trading day it
+issues at once with one date (#3704); recorded later, it is a bill left open past the close, and D2
+asks the owner what it should carry until ADVISER-CLOSE-OF-DAY-TICKET lands.
+
+**3. The built tasks** (current commits on the branch).
+
+- **Kept:** Task 1, the backend files the sale date (`7cfd14f3a0`, `48553eb245`); Task 2, `sales.supply_day` on an
+  ordinary sale (`dffa16f6a3`, `bd1dc8c660`); Task 3, rates and the printed row (`39c5e9baf6`,
+  `c90c5c129d`); Task 7, the VAT return and export by sale day (`e55e0c8436`, `c985defab3`, `ba8abed734`,
+  `f8b7fa0171`, `cb7075e937`, `5209d09fd1`, `ffeb8a88bf`; see D4); the shared fixture and
+  English-only fixes (`dd9f9e37a3`, `ad4d716735`, `458c518d6d`, `8713a271f6`).
+- **Changed:** Task 4 (`b3f9732903`, `39948a8438`) and Task 5 (`54e70c4c84`, `6e02c46c2c`, `b53ca0718a`)
+  take each card's confirmed moment (D3) instead of the row's `created_at`; a fully refunded payment
+  still does not count. `issueOrderMoment` (`d0610f45ae`) stays the one place every order's invoice is
+  dated, but takes only an optional "meal ended at" moment and reads no serving marks, so rows A, B, C,
+  F, G and H pass none and carry one date; ADVISER-CLOSE-OF-DAY-TICKET can pass its close moment through it.
+- **Dropped:** Task 6a, `working_orders.last_served_at` and its trigger line (`38d2b1131f`, `d28f7826c8`,
+  `22fc9fe808`); Task 6, dating by the last served dish (`6eac5dd603`, `5213deaf63`). The plan's D1
+  example 3 goes with them: since #3704 that bill gets its ticket at the print or, once
+  ADVISER-CLOSE-OF-DAY-TICKET lands, at the close.
+
+**4. How the review findings close.** PR #3398's findings: **1** (a takeaway moved to a table dated
+by its serving mark) and **2** (an undone serving mark still dating the invoice) close because
+nothing reads serving marks; `served.test.ts:684` was the branch's own test (RUN: `git blame` →
+`38d2b1131f`) and goes with Task 6a. **3** (a card answered at 00:01 dated the day before) closes by
+D3, except for a Stripe card found later, a limit stated in D3. Held points (`finish-branch-held-points-20261118.md`): **1** (VAT period against D12) by D4;
+**2** ("D1" meaning two things) by retiring the plan's D1, leaving only the owner's D1 of 16 November
+(`docs/compliance/2026-11-15-adviser-answers.md:161`); **3** (the PR text) by a rewritten PR body at
+the fresh READY that cites the meeting rule, D1, D10, D12 and this amendment's decisions.
+
+  Correction 2026-11-19 (R3 review): SumUp's `timestamp` is the checkout's start, not the tap
+  (`docs/research/2026-09-10-sumup-solo-experiments.md:277-279`). Finding 3 closes only for a card
+  answered live and filed late; a card found later by either provider carries the moment the reader
+  was asked.
+
+**5. Tests that must fail first** (against `1a88d75706`). Finding 3, whole order: card row created
+31 March 23:58, live answer stored 1 April 00:01, filing made to fail once, recovery issues 1 April
+09:00 → no `supply_day`, no `fecha_operacion`, no `saleDay`; the same through the bill-payment loop;
+a SumUp card whose reader was asked 31 March 23:58, tapped 1 April 00:01 by SumUp's time and found by
+the reconciler at 09:00 → no sale date; D3's column is written only by SumUp's reconciler, from
+SumUp's time, and never by a live answer (payments store tests); finding 1
+(moved takeaway) and finding 2 (undone mark) → no sale date; a Monday meal with dishes marked served
+Monday, then paid in cash, printed, or recorded as a walkout on Thursday → no sale date (D2). Must
+stay green unedited: the owner's example (card row created 14 March 23:50, found by the reconciler
+15 March 09:10 → 14 March), the live 23:58/00:01 card with one date, Task 1's fingerprint control.
+
+  SumUp card tapped 1 April 00:01 above: 2026-11-19, R3 review: see the correction under D3 — SumUp's time is the checkout's start; a card found later by either provider carries roughly when the reader was asked, and a tap after midnight still files the earlier day.
+
+**6. Fiscal points.** The kept Task 1 changes the code that builds the record sent to AEAT:
+`VerifactuBackend.recordSale` now adds `FechaOperacion` to ordinary invoices (F1) and simplified
+tickets (F2) (branch head `74ecff01b1`: `packages/fiscal-verifactu/src/backend.ts:260`, `:293`); the
+record-row projection, which before let only a replacement corrective keep that field, now keeps it
+for F1 and F2 too (`registro-row.ts:143-148`); and the comment on the `registros_facturacion`
+schema's `fechaOperacion` column (`schema/registros.ts:79-80`). `FechaOperacion` is not in the
+record's fingerprint (`computeHuella`): AEAT's
+hash specification v0.1.2 §3 lists eight fields for an invoice record and it is not one (quoted and
+fetched in §3 above), and `@waitron/verifactu` 0.2.1 hashes exactly those eight (RUN: read
+`dist/huella.js:35-47` in the installed package today). RUN 2026-11-19: `computeHuella` from that
+installed package hashed one F2 record identically with and without `FechaOperacion` `31-03-2026`;
+control: changing its VAT amount (`CuotaTotal` 4.55 → 4.56) changed the hash. Golden fingerprint and immutability
+suites: RUN `git diff --stat 195acc7ec7 HEAD -- packages/fiscal-verifactu/src/write-path.e2e.test.ts
+packages/fiscal-verifactu/src/inmutabilidad.test.ts packages/fiscal-verifactu/src/chain.ts` printed
+nothing; they stay unedited, and the §"Global constraints" STOP still applies. Rates at the sale day
+match the owner's "correct" to "a dinner that ends after midnight on 1 April takes 1 April's rates"
+(adviser sheet `:145`, `:152`).
+
+**7. Decisions** (default first). D1 and D2 are the owner's; D3 to D5 the watcher's.
+
+- **D1, which day a meal ended by printing the bill or taking a payment belongs to (for the owner to
+  confirm).** Default: the venue's calendar day of that moment, filed only when earlier than the
+  calendar day the invoice is issued (§2 above). Example: a bill printed at 00:30 on 1 April, in a
+  venue whose trading day ends at 05:00, issues on 1 April and takes 1 April's VAT rates, as in your
+  "correct" to "a dinner that ends after midnight on 1 April takes 1 April's rates" (adviser sheet
+  `docs/compliance/2026-11-19-adviser-meeting.md:145`, your answer `:152`). This reads the "trading
+  day" in the rule you approved as the calendar day, for these two moments only. Read literally as
+  the trading day, that bill would carry 31 March and 31 March's rates, and a card taken at 00:01 on
+  1 April would file 31 March. The date of a meal ended by the close of the trading day is not
+  decided here: it belongs to ADVISER-CLOSE-OF-DAY-TICKET (D2).
+- **D2, a bill still open when its trading day closes (for the owner).** For example, a Monday
+  dinner whose bill is never printed or paid in full on Monday, then paid, printed or recorded as a
+  walkout on Thursday (row G). On 15 November you chose "Monday, last dish" for such a bill, and the
+  watcher's 13:20 note asked this branch to keep "a walkout recorded later". Under the meeting rule
+  you approved, the meal ends at Monday's close, and ADVISER-CLOSE-OF-DAY-TICKET will issue the ticket
+  then, so once it lands no such bill is still open on Thursday. Default: this branch builds nothing
+  for these bills. Until that item lands they are issued with Thursday's date only, as main does
+  today, which meanwhile undoes your "Monday, last dish" and drops the late walkout the watcher asked
+  to keep. That costs nothing while no venue is live (no venue trades on Waitron yet: `CLAUDE.md` §3,
+  "No backwards-compatibility or data-migration code until Waitron is in production"), so the default
+  holds only on two conditions: ADVISER-CLOSE-OF-DAY-TICKET owns the date of every bill the close
+  ends, a walkout recorded later included, and it lands before go-live. This amendment recommends the
+  runner add this line to that item's queue entry: "Owns the date of every bill ended by the close
+  of the trading day, a walkout recorded later included; lands before go-live (LATER-SALE-DATE
+  D2)." Alternative: date these bills now by the close of the trading day the bill opened in
+  (`working_orders.opened_at`, `schema/orders.ts:84`; `businessDayBounds`,
+  `packages/shared/src/business-day-clock.ts:104`), about 40 more lines, an extra read on every sale,
+  and choosing that day ahead of ADVISER-CLOSE-OF-DAY-TICKET.
+  _2026-11-20: the review fix at the end of §9 builds this alternative for the bills the close counts
+  as due; neither the watcher nor the owner has cleared it yet._
+- **D3, when a card was taken, for a card the box learns about only later.** Both adapters set
+  `settled_at` to the box's clock, and the background check that asks the provider about a missed
+  answer (the reconciler) sets it to when it asked (SumUp `packages/payments-sumup/src/provider.ts:328`,
+  written at `:499-505`; Stripe `packages/payments-stripe/src/provider.ts:506-511` in `resolveRow`,
+  which a manager's resolve also uses; READ). SumUp's answer does carry SumUp's own time: its
+  transaction lookup returns `timestamp` (`packages/payments-sumup/src/sumup-client.ts:302`, `:325`),
+  the reconciler holds that answer (`provider.ts:436-456`), and SumUp's report source already uses it
+  as the capture time (`packages/payments-sumup/src/report-source.ts:71-72`); READ. Stripe's lookup
+  returns no time at all (`retrievePaymentIntent`, `packages/payments-stripe/src/client.ts:28-34`,
+  `stripe-client.ts:62-73`; READ). Default: a new column on the card row, written only by SumUp's
+  reconciler, holding SumUp's `timestamp`, or the row's `created_at` (the time just before the reader
+  was asked) when SumUp's answer has no readable time; the live answers (SumUp `provider.ts:242`,
+  Stripe `:215`) never write it. Recovery takes, in order: that column; for a Stripe row found later
+  (its existing `resolution_outcome` is set, `provider.ts:517-523`), its `created_at`; otherwise
+  `settled_at`. A new column rather than Stripe's existing `resolution_outcome` and `resolved_at` for
+  SumUp too: writing `resolution_outcome = 'captured'` on a SumUp row would pull it into the start-up
+  sweep that files such rows automatically (`apps/server/src/pending-card-recovery.ts:49-50`), which
+  changes what that sweep files, and the schema refuses `resolved_at` without `resolution_outcome`
+  (`packages/payments/src/schema/payments.ts:174`). The payments starting migration is rebuilt.
+  Limit, stated in the PR: a Stripe card found later still takes `created_at`, so a reader asked at
+  23:58 and tapped at 00:01 carries the earlier day. Alternative, no schema: `settled_at` unless it is
+  more than a fixed reader window after `created_at`; the window (SumUp's comment says two minutes
+  covers a slow tap, `provider.ts:41-42`) is reasoned, not a guaranteed limit.
+
+  Correction 2026-11-19 (R3 review): SumUp's `timestamp` is the checkout's start, not the tap
+  (`docs/research/2026-09-10-sumup-solo-experiments.md:277-279`), so the column is named
+  `provider_checkout_started_at` and the limit above holds for SumUp too: a card found later by
+  either provider carries the moment the reader was asked. Finding 3 closes only for a card answered
+  live and filed late.
+
+  _2026-11-20 (review fix): the reconciler stores SumUp's time only when it lies between the row's
+  `created_at` and the check that found the card; any other time, as well as none, stores
+  `created_at`. A time just before midnight had moved a sale to the day before, and a 1970 time had
+  left a captured card unfiled (`fiscal.record_invalid`)._
+- **D4, VAT for a quarter already filed.** This branch does NOT handle a quarter already filed: the
+  watcher's 13:20 note sends such an invoice to the accountant's corrections report instead of
+  changing the filed quarter, and nothing here does that. Main has no record of a filed quarter (RUN:
+  `git grep` for filed-quarter markers in `packages/` and `apps/server/src/` found none), and already
+  counts a replacement corrective in its sale day's quarter (`packages/reporting/src/vat-return.ts:24-27`,
+  `:40`; backlog `docs/backlog/fiscal.md:944-946`). Default: keep Task 7 (sale-day quarter, the
+  owner's 15 November Q2) and build no correction logic here; hand it to ADVISER-CORRECTIONS-REPORT.
+  This amendment recommends the runner add this line to that item's queue entry: "Find every invoice
+  whose sale day (`sales.supply_day`) falls in a quarter whose return is already filed, and list it
+  for the accountant instead of changing that quarter's figures; a go-live condition (LATER-SALE-DATE
+  D4)." Task 2 stores that column. Until then a quarter's figures change for an invoice issued on or
+  after the day its return was filed; a quarterly return can be filed from the 1st of the following
+  month (general knowledge of the modelo 303 calendar, not a repository source), so a card for a
+  31 March meal recovered on 1 April can already be late. Alternative: count by issue date
+  meanwhile, which never changes a past quarter but misplaces the VAT of a 31 March meal recovered
+  on 1 April.
+- **D5, cases that keep one date, not built; each stated in the PR as a limit.**
+  (a) Row H's held case: paid in full before midnight, an open draft discarded after it.
+  _2026-11-20: once that bill's business day has ended, it carries that day's end (§9's note)._
+  (b) A bill paid in full but held back by a card refund still pending
+  (`apps/server/src/bill-payments.ts:786-787`): completing the refund writes the refund and issues
+  nothing (`apps/server/src/bill-refunds.ts:329-346`; RUN `git grep` for `issueIfFullyPaid`,
+  `issueWhenFullyPaid` and `completeBillPayment` callers finds none in `bill-refunds.ts` or the
+  `tender-refund-*.ts` files; READ only, not run), so the bill issues at the next event that issues
+  it, with one date. (c) A live card answered just before midnight but issued just after: the issuing
+  transaction reads the clock only after the provider answers (`till-sale.ts:1846`, `:1863-1864`;
+  `bill-payments.ts:811-812`). Chosen over passing the card's time on live paths because it builds
+  nothing; the gap is the wait between the answer and that clock reading (inference: normally under
+  a second, longer if the box is busy writing), and SumUp's live answer is itself up to its one-second
+  poll interval after the tap (`provider.ts:43-45`). (d) A Stripe card found later (D3).
+  (d): 2026-11-19, R3 review: see the correction under D3 — SumUp's time is the checkout's start; a card found later by either provider carries roughly when the reader was asked, and a tap after midnight still files the earlier day.
+
+**8. Size.** Production code: about 110 lines removed (Task 6a's column and writers, Task 6's
+serving-mark reads), about 70 added (D3's column and SumUp's reconciler writing it, and the
+recovery reads). Tests: about 850 lines of the branch's own removed, about 330 added. Then the rebase
+onto main, rebuilding core's and payments' starting migrations and resolving `working-order.ts` and
+`packages/core/src/record-sale.ts`; one fix round, a full review wave with two Codex angles, a fresh
+READY. The PR title keeps "Reset test venues:". Owner lands.
+
+Not verified here: the Codex reproductions behind findings 1 to 3 were not re-run; nothing in this
+amendment was built or run beyond the RUN items.
+
+**9. Hand-over from ADVISER-CLOSE-OF-DAY-TICKET (added 2026-11-19, that item's Task 5; the owner's
+D1 and D2 answers of 17:00–17:04).** That item lands first and issues every bill the close of the
+business day ends, from `apps/server/src/close-of-day.ts`. This rework must pass the close's moment
+(the business day's end, never the issue time) from `close-of-day.ts` into the dating step, with the
+switched-off-box test: a box switched off over the day's end and started two days later issues the
+ticket with the close's day as its sale date, and an on-time close-of-day ticket carries none.
+
+_2026-11-20 (review fix): row G no longer keeps one date. `issueOrderMoment` asks `closeOfDayEnd`
+(`close-of-day.ts`) for every order it dates: a bill the close counts as due (row G, and row H's held case), issued after the business
+day it was opened in ended, is dated by the earlier of the path's own moment and that day's end, so
+the close's day wins whichever path issues the bill first. The close itself passes no moment of its
+own and is dated by the same function._
