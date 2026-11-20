@@ -4,7 +4,7 @@ Conserva el paquete de recuperación anterior cuando cambies la clave de recuper
 
 Las copias programadas y la copia en el bucket usan cada una la carpeta que elijas, sin añadir una carpeta para el local. Elige carpetas distintas para las copias programadas y la copia en el bucket. Ninguna puede estar dentro de la otra.
 
-Con las copias programadas activadas, elige **Hacer copia ahora** en **Copias de seguridad** para hacer una copia en tus destinos guardados. Consulta el estado en esa página para ver el resultado. Las copias nuevas cuentan para los límites de conservación que hayas elegido.
+Con las copias programadas activadas, elige **Hacer copia ahora** en **Copias de seguridad** para hacer una copia en tus destinos guardados. Consulta el estado en esa página para ver el resultado. Cuenta como una de tus copias guardadas, así que, con un límite de dos, dos copias manuales sustituyen a las anteriores.
 
 Usa una carpeta para la copia del bucket que no contenga la copia de otro flujo. Cuando Waitron diga «esta carpeta del bucket contiene otra copia», elige **Cambiar de bucket** e introduce otro prefijo.
 

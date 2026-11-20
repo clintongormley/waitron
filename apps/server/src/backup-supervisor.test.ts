@@ -2190,7 +2190,13 @@ describe("scheduled backup passes", () => {
   it("retries a due backup after a manual backup without moving the scheduled deadline", async () => {
     let now = new Date("2026-11-17T12:00:00Z");
     const deadlines = vi.fn();
-    const { sup, dest } = await prepared({ now: () => now, onScheduled: deadlines });
+    const bus = new LiveEvents();
+    const { sup, dest } = await prepared({ now: () => now, onScheduled: deadlines, bus });
+    const published: ReturnType<BackupSupervisor["status"]>[] = [];
+    bus.subscribe((event) => {
+      if (event.kind === "change" && event.change.resources.some((r) => r.type === "backup_status"))
+        published.push(sup.status());
+    });
     const copy = gate();
     const pass = () => sup.pass(now, new AbortController().signal);
     let manual: Promise<void> | undefined;
@@ -2205,13 +2211,18 @@ describe("scheduled backup passes", () => {
         await archive(...args);
       });
       now = new Date("2026-11-17T12:50:00Z");
+      published.length = 0;
       manual = sup.runNow();
       await copy.reached;
+      expect(await published[0]).toMatchObject({
+        activeRun: { kind: "manual", startedAt: now.toISOString() },
+      });
       now = new Date("2026-11-17T13:00:00Z");
       expect(await pass()).toEqual({ nextDueAt: new Date("2026-11-17T13:01:00Z") });
       expect(deadlines).not.toHaveBeenCalled();
       copy.release();
       await manual;
+      expect(await published.at(-1)).not.toHaveProperty("activeRun");
       expect(await listArchives(dest)).toHaveLength(2);
       now = new Date("2026-11-17T13:01:00Z");
       expect(await pass()).toEqual({ nextDueAt: new Date("2026-11-17T14:01:00Z") });
@@ -2242,6 +2253,9 @@ describe("scheduled backup passes", () => {
       refs.config = undefined;
       reloading = sup.reload();
       await vi.waitFor(() => expect(signal.aborted).toBe(true));
+      expect(() => sup.runNow()).toThrow(
+        expect.objectContaining({ code: "backup.reload_in_progress" }),
+      );
       expect(close).not.toHaveBeenCalled();
       copy.release();
       await Promise.all([manual, reloading]);
