@@ -1053,8 +1053,12 @@ declare module "@waitron/shared" {
     "tab.cancel_context_changed": { context: CancellationContext };
     /**
      * No such line on the open bill: an adjustment names its line by id, every other caller by number.
+     * A party's cancellation address names the party, not a bill, so it answers `partyId`.
      */
-    "tab.line_not_found": { tabId: string; lineNo: number } | { tabId: string; lineId: string };
+    "tab.line_not_found":
+      | { tabId: string; lineNo: number }
+      | { tabId: string; lineId: string }
+      | { partyId: string; lineId: string };
     /**
      * A bill named as BOTH source and destination of a merge (`mergeBills`, or `moveOrderLines`).
      * Refused first: moving a bill's lines onto itself would abandon it or empty it.

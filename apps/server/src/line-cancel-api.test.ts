@@ -337,8 +337,11 @@ describe("the public cancellation read and command", () => {
       "GET",
       `/api/working-orders/${id}/lines/${table.parent.id}/cancellation`,
     );
-    expect(wrong.status).toBe(400);
-    expect(wrong.json).toMatchObject({ code: "management.request_invalid" });
+    expect(wrong.status).toBe(404);
+    expect(wrong.json).toEqual({
+      code: "tab.line_not_found",
+      params: { tabId: id, lineId: table.parent.id },
+    });
   });
 
   it.each([
@@ -1570,8 +1573,54 @@ describe("the public cancellation read and command", () => {
         path({ ...p, parent: p.extra }, method === "GET"),
         method === "GET" ? undefined : await bodyFor(p),
       );
-      expect(extra.status).toBe(400);
+      expect(extra.status).toBe(404);
       expect(extra.json).toEqual({
+        code: "tab.line_not_found",
+        params: { partyId: p.partyId, lineId: p.extra.id },
+      });
+      expect(await frozen()).toEqual(before);
+    },
+  );
+
+  it.each(["GET", "POST"])(
+    "answers 404 for a line in the %s address that no row holds, and 400 for a malformed one",
+    async (method) => {
+      const p = await fixture();
+      const before = await frozen();
+      const missing = randomUUID();
+      const absent = await send(
+        venue.app,
+        venue.cookie.staff,
+        method,
+        path({ ...p, parent: { ...p.parent, id: missing } }, method === "GET"),
+        method === "GET" ? undefined : await bodyFor(p),
+      );
+      expect(absent.status).toBe(404);
+      expect(absent.json).toEqual({
+        code: "tab.line_not_found",
+        params: { partyId: p.partyId, lineId: missing },
+      });
+      const counterAbsent = await send(
+        venue.app,
+        venue.cookie.staff,
+        method,
+        `/api/working-orders/${p.billId}/lines/${missing}/${method === "GET" ? "cancellation" : "cancel-item"}`,
+        method === "GET" ? undefined : await bodyFor(p),
+      );
+      expect(counterAbsent.status).toBe(404);
+      expect(counterAbsent.json).toEqual({
+        code: "tab.line_not_found",
+        params: { tabId: p.billId, lineId: missing },
+      });
+      const malformed = await send(
+        venue.app,
+        venue.cookie.staff,
+        method,
+        path({ ...p, parent: { ...p.parent, id: "not-a-line" } }, method === "GET"),
+        method === "GET" ? undefined : await bodyFor(p),
+      );
+      expect(malformed.status).toBe(400);
+      expect(malformed.json).toEqual({
         code: "management.request_invalid",
         params: { field: "lineId" },
       });
