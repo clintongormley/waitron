@@ -5,15 +5,17 @@ sign and verify. The package exports the `waitron-cloud-pair-v3`, `waitron-cloud
 `waitron-cloud-machine-v1` and `waitron-cloud-access-v1` formats for Node.js.
 It has no runtime dependencies on other Waitron packages.
 
-Use `pairingPayload` and `verifyPairingProof` for pairing requests. Pass an empty
+Use `pairingPayload` and `verifyPairingProof` for v3 pairing requests. Pass an empty
 `venueId` to request a new Cloud venue, or its existing Cloud UUID to pair again.
 Put the venue's display name in `venueName` on `start` through `pairingVenueName`,
 which trims it and keeps at most 120 Unicode code points; send it empty on `status` and `complete`,
 or when the venue has no name.
 
 Use `pairingV4Payload` and `verifyPairingV4Proof` for the test-only Cloud sign-in
-round trip. Give the encoder the tuple for the action you are signing. The v4
-verifier accepts up to 8,192 encoded payload characters.
+round trip. Give the encoder the tuple for the action you are signing, with the
+venue fields trimmed and missing address fields or tax number set to empty
+strings. The encoder serializes the tuple as supplied. The verifier checks its
+shape, field limits, signature and 8,192-character encoded payload limit.
 The receiving app checks the configured callback and box key, accepts the
 one-use code and decides whether the account may register the venue.
 

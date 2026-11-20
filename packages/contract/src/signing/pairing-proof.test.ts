@@ -290,6 +290,7 @@ it("refuses a signed action outside the v4 contract", () => {
 
 it("refuses an object in place of the signed v4 argument tuple", () => {
   expect(() => checkV4(signed(v4Vector("status", {})), "status")).toThrow(PairingError);
+  expect(() => checkV4(signed(v4Vector("status", "")), "status")).toThrow(PairingError);
 });
 
 it("refuses expired, noncanonical and cross-version proofs", () => {
@@ -297,6 +298,8 @@ it("refuses expired, noncanonical and cross-version proofs", () => {
   const envelope = signed(vector);
   expect(checkV4(signed(v4Vector("complete", profile, now - 60000))).issuedAt).toBe(now - 60000);
   expect(() => checkV4(signed(v4Vector("complete", profile, now - 60001)))).toThrow(PairingError);
+  expect(checkV4(signed(v4Vector("complete", profile, now + 60000))).issuedAt).toBe(now + 60000);
+  expect(() => checkV4(signed(v4Vector("complete", profile, now + 60001)))).toThrow(PairingError);
   expect(() => checkV4({ ...envelope, payload: envelope.payload + "=" })).toThrow(PairingError);
   expect(() => checkV4(proof(), "start")).toThrow(PairingError);
   expect(() => check(signed(v4Vector("start", [callback, state, challenge])))).toThrow(
@@ -311,8 +314,39 @@ it("refuses expired, noncanonical and cross-version proofs", () => {
   ).toThrow(PairingError);
 });
 
+it("refuses a non-UUID request or a timestamp sent as text", () => {
+  const malformedId = v4Vector("status", []);
+  malformedId[3] = "not-a-uuid";
+  const malformedTime = v4Vector("status", []);
+  malformedTime[6] = String(now);
+  expect(() => checkV4(signed(malformedId), "status")).toThrow(PairingError);
+  expect(() => checkV4(signed(malformedTime), "status")).toThrow(PairingError);
+});
+
+it("refuses non-Ed25519 and noncanonical keys even with valid signatures", () => {
+  const rsa = generateKeyPairSync("rsa", { modulusLength: 512 });
+  const wrongKey = v4Vector("status", []);
+  wrongKey[4] = rsa.publicKey.export({ type: "spki", format: "der" }).toString("base64url");
+  const bytes = Buffer.from(JSON.stringify(wrongKey));
+  expect(() =>
+    checkV4(
+      {
+        payload: bytes.toString("base64url"),
+        signature: sign(null, bytes, rsa.privateKey).toString("base64url"),
+      },
+      "status",
+    ),
+  ).toThrow(PairingError);
+  const trailingByte = v4Vector("status", []);
+  trailingByte[4] = Buffer.concat([Buffer.from(v4.publicKey, "base64url"), Buffer.of(0)]).toString(
+    "base64url",
+  );
+  expect(() => checkV4(signed(trailingByte), "status")).toThrow(PairingError);
+});
+
 it.each([
   ["start", ["", state, challenge]],
+  ["start", ["https://box.example.test/a\tb", state, challenge]],
   ["start", [callback, state.slice(1), challenge]],
   ["start", [callback, state, challenge + "="]],
   ["redeem", [code.slice(0, -1) + "x", verifier]],
@@ -325,18 +359,23 @@ it.each([
 
 it.each([
   ["es", profile[1], profile[2], "", profile[4]],
+  [["ES"], profile[1], profile[2], "", profile[4]],
   ["ES", "", profile[2], "", profile[4]],
   ["ES", "😀".repeat(121), profile[2], "", profile[4]],
   ["ES", profile[1], ["Only a street"], "", profile[4]],
+  ["ES", profile[1], "abcde", "", profile[4]],
   ["ES", profile[1], ["a".repeat(201), "", "", "", ""], "", profile[4]],
   ["ES", profile[1], ["", "", "a".repeat(21), "", ""], "", profile[4]],
   ["ES", profile[1], ["", "", "", "", "a".repeat(101)], "", profile[4]],
   ["ES", profile[1], profile[2], "a".repeat(33), profile[4]],
+  ["ES", profile[1], profile[2], "😀".repeat(17), profile[4]],
   ["ES", profile[1], profile[2], "", "😀".repeat(101)],
+  ["ES", profile[1], profile[2], "", "a".repeat(201)],
   ["ES", profile[1], profile[2], "", ""],
   ["ES", " Bar Pepe", profile[2], "", profile[4]],
   ["ES", profile[1], profile[2], "A\tB", profile[4]],
   ["ES", profile[1], profile[2], "", "A\u2028B"],
+  ["ES", profile[1], profile[2], "", "A\u2029B"],
 ])("refuses invalid v4 completion fields %j", (...args) =>
   expect(() => checkV4(signed(v4Vector("complete", args)))).toThrow(PairingError),
 );
@@ -352,14 +391,21 @@ it("accepts a completion at the field limits within the total cap", () => {
   expect(checkV4(signed(v4Vector("complete", args)))).toEqual({ ...complete, args });
 });
 
-it("accepts a completion with four-byte Unicode at the field limits", () => {
-  const text = "𠮷";
+it("accepts a completion with maximum UTF-8 bytes in each text field", () => {
+  const codePoint = "𠮷";
+  const codeUnit = "\u4e2d";
   const args = [
     "ES",
-    text.repeat(120),
-    [text.repeat(200), text.repeat(200), text.repeat(20), text.repeat(200), text.repeat(100)],
-    text.repeat(16),
-    text.repeat(100),
+    codePoint.repeat(120),
+    [
+      codePoint.repeat(200),
+      codePoint.repeat(200),
+      codePoint.repeat(20),
+      codePoint.repeat(200),
+      codePoint.repeat(100),
+    ],
+    codeUnit.repeat(32),
+    codeUnit.repeat(200),
   ] as const;
   const envelope = signed(v4Vector("complete", args));
   expect(envelope.payload.length).toBeGreaterThan(4096);
