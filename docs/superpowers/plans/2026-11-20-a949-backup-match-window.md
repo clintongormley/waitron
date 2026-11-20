@@ -6,32 +6,35 @@ charge and its Waitron entry, recorded 10 minutes and 4 seconds apart, while lis
 the unmatched €1.40 entry. A charge and entry qualify only when each has exactly one
 same-amount candidate from the connected account within 30 minutes either way.
 
-1. In `packages/payments-sumup/src/reconciler.test.ts`, test an unambiguous pair ten minutes
-   apart and same-amount alternatives newly inside the tolerance. Include a case where
-   a candidate just across midnight has a competitor more than 30 minutes outside the
-   audit day. Keep the existing outside-window and payment-row assertions, using a gap
-   beyond 30 minutes for the outside case. Put the inclusive boundary in the same table.
-   Run `pnpm --filter @waitron/payments-sumup exec vitest run src/reconciler.test.ts`.
-2. Give the existing matcher one 30-minute constant in `packages/payments/src/reconcile.ts`
-   and export it through `packages/payments/src/index.ts`. Use it in
-   `packages/payments-sumup/src/reconciler.ts` for the amount-and-time comparison.
-   Read candidates 60 minutes either side of the daily period so a pair straddling midnight
-   still sees its competitors. Keep the current report-day and uniqueness rules.
-3. Saved backup links also support the refund comparison. Before changing either reader,
-   extend the midnight fixtures in `reconciler.test.ts` and
-   `apps/server/src/payments-api.test.ts` so the local entry is over five minutes from
-   midnight and the saved matching charge belongs to the next audit day. The first checks
-   that a later sweep reads the linked charge, and the second checks that a manager's
-   passive read still sees the agreement. Use the same 30-minute constant for manual
-   backup links in `reconciler.ts` and `apps/server/src/payments-api.ts`. Run both focused
-   files, including `pnpm --filter @waitron/server exec vitest run src/payments-api.test.ts`.
-4. Replay the 19 November audit with the real reconciler in an isolated database using
-   the saved rows and SumUp evidence. Require the €1.50 match and the €1.40 unmatched entry.
-   Compare the old and new results and save the receipt in Lane F. Preserve the live test
-   venue and key. Update `docs/backlog.md` and `docs/backlog/payments.md` with what the replay
-   establishes and leave signature qualification open.
+1. Test first in `packages/payments-sumup/src/reconciler.test.ts`. Cover a match ten minutes
+   apart, exactly 30 minutes, and just outside. Assert `ambiguous` on both sides of a match
+   with a new rival inside 30 minutes. Cover both midnight directions: charge 23:50, entry
+   00:15, rival charge 00:44; entry 23:55, charge 00:20, rival entry 00:45. Preserve the
+   payment-row assertions. Update the query-range assertion from ±10 to ±60 minutes.
+2. Export the 30-minute tolerance from `packages/payments/src/reconcile.ts` and
+   `packages/payments/src/index.ts`. Apply it in `packages/payments-sumup/src/reconciler.ts`.
+   Read known failed attempts, manual entries and SumUp history 60 minutes either side
+   of the daily period so candidates across midnight still see their rivals. Keep reporting
+   pairs on the charge's day.
+3. Extend the existing later-refund fixtures in `reconciler.test.ts` and
+   `apps/server/src/payments-api.test.ts`: a 23:40 entry links to a 00:05 charge on the next
+   UTC day. Assert that the later sweep reads the linked charge and the manager's passive
+   read shows the refund agreement. Use the same tolerance for those day lookups in
+   `reconciler.ts` and `payments-api.ts`. Run both changed test files with
+   `pnpm --filter @waitron/payments-sumup exec vitest run src/reconciler.test.ts` and
+   `pnpm --filter @waitron/server exec vitest run src/payments-api.test.ts`.
+4. Update the English and Spanish comparison copy in `apps/dashboard/src/i18n/strings.ts`
+   and both `apps/server/src/guide/{en,es}/table-service.md` pages. Run the focused
+   `src/widgets/backup-audit.test.ts` dashboard file and the server guide checks.
+5. Replay the saved 19 November payment rows through the real reconciler in an isolated
+   database with the saved SumUp charge evidence. Require the old unmatched list first,
+   then the €1.50 match and the separate €1.40 unmatched entry. Save the receipt with
+   the input coverage, including whether it is a full history or a projection. Update
+   `docs/backlog.md` and `docs/backlog/payments.md` with that result. Preserve the live
+   test venue and key. Signature qualification remains open.
 
-Expected change is about 25 added and 15 removed production lines, 40 added and 10 removed
-test lines, plus the backlog note and a disposable replay. This uses the existing audit,
-storage and dashboard. Payment collection, refund action, and audit scheduling are outside
-the slice.
+The midnight run can finish before a matching entry exists. The watcher needs to settle
+whether to include a follow-up sweep through the existing scheduler before this plan is
+cleared. The planned window, readers and copy are about 30 added and 20 removed
+production lines, 50 added and 15 removed test lines, plus guide and backlog updates
+and a disposable replay. The slice uses the existing audit, storage and dashboard.
