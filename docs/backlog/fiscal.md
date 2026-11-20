@@ -1175,8 +1175,9 @@ _2026-11-19 (LATER-SALE-DATE rework): the owner's answer to D2, "Yes, leave them
 rule that the sale's day is when the last dish was served, and with it Q1's "Monday, last dish".
 Serving marks no longer date anything, and
 `working_order_lines.last_served_at` is gone. An order's invoice carries a sale date only when card
-recovery or a bill payment the box completes later issues it on a later calendar day than the
-moment it passes (`issueOrderMoment`); every other path issues it with one date. The plan's
+recovery, a bill payment the box completes later, or the close of day (`close-of-day.ts`, passing the
+end of the business day the bill was opened in) issues it on a later calendar day than the moment it
+passes (`issueOrderMoment`); every other path issues it with one date. The plan's
 "Amendment 2026-11-19" has the meeting's meal-end rule this follows._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
