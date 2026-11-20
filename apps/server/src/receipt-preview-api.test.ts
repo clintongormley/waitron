@@ -289,7 +289,7 @@ describe("POST /management-api/receipt-preview", () => {
       receipt: {},
       departmentId: "aa000000-0000-4000-8000-000000000001",
     });
-    expect(unknown.status).toBe(404);
+    expect(unknown.status).toBe(400);
     expect((await unknown.json()).error.code).toBe("department.not_found");
 
     const repeated = await preview({

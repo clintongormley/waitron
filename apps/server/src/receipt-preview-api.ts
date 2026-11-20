@@ -52,7 +52,7 @@ const run = createErrorBoundary(
     "management.request_invalid": 400,
     "receipt.invalid": 400,
     "shared.invalid_id": 400,
-    "department.not_found": 404,
+    "department.not_found": 400,
   },
   "management.failed",
 );
