@@ -160,7 +160,7 @@ just a green typecheck.
 ## Photographs and timings of pictures on paper
 
 The owner's photographs of a receipt, a kitchen
-ticket, the ruler page, a sample receipt and the test page (C108) on both printers are owed, and
+ticket, the ruler page, a sample receipt and the test page on both printers are owed, and
 so are the box's timings (what to time: `docs/developers/testing-guide.md`, "How long a job of
 pictures takes to print on the box is not measured"). Anything the timings or photographs show
 wrong becomes a new item.

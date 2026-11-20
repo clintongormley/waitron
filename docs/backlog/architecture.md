@@ -784,8 +784,9 @@ also qualifies the historical operation-description references in this section.
   series-code, zone and department samples, and keeps its `es-ES` locale, its Spanish addresses,
   and the operation description "Venta en establecimiento" its operation-description case reads from the fiscal package.
   Group-route and course-deletion service-step suites use English names for their own courses.
-  The printer-test-page suite uses English printer and venue samples and retains the Spanish
-  receipt's words and accented sample dishes.
+  The printer-test-page suite uses English printer and venue names; it keeps the QR caption
+  «QR tributario:», the sample invoice number «MUESTRA/1», the Spanish receipt's test marker and
+  change label, and the sample dishes of the Spanish, Catalan, Galician and Basque receipts.
   Payment-slip table labels and print-preview plain samples use English; translated receipt
   wording and accented-character samples remain.
   Native server floor-annotation and kitchen/floor read-model suites use English location,
