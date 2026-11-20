@@ -1105,13 +1105,13 @@ async function issueOrSettleWhenFullyPaid(
     deps,
     workingOrderId,
     await issuancePass(tx, workingOrderId, stored),
-    advancesToTakeOff(credits, language.invoiceLocales),
     options.datedByLatestAcceptance === undefined
       ? undefined
       : await latestAcceptance(
           tx,
           holding.map(({ row }) => row),
         ),
+    advancesToTakeOff(credits, language.invoiceLocales),
   );
   const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, meal.total);
   const operationDescription = await readSaleOperationDescription(tx, cfg, {

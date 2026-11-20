@@ -5,7 +5,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { decimal } from "@waitron/shared";
 import { clockAtIso } from "./testing/later-sale-date-fixture.js";
-import { NO_ADVANCES } from "./issue-moment.js";
 import { cardSaleMoment, issueOrderMoment } from "./sale-day.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -29,7 +28,6 @@ async function mealDayIn(
       { clock: clockAtIso(issuedAt), backend: { assertRecordableAt: () => {} } },
       randomUUID(),
       { lines: [], total: decimal("0") },
-      NO_ADVANCES,
       mealEndedAt,
     ),
   );

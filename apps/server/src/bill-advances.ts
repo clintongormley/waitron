@@ -31,7 +31,7 @@ import {
 } from "@waitron/shared";
 import type { AdvanceCredit, AdvanceGroup } from "./advance-deduction.js";
 import { money } from "./bill-allocation.js";
-import { NO_ADVANCES, pinnedAt, type IssueAdvances } from "./issue-moment.js";
+import { pinnedAt, type IssueAdvances } from "./issue-moment.js";
 import { saleReceiptFacts } from "./receipt-guests.js";
 import { enqueueOriginalReceipt, type PrinterLookup } from "./receipt-print.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
@@ -219,8 +219,8 @@ export interface AdvancePaymentMoney {
   tipGivenBack: number;
 }
 
-/** The named bills' advances: as {@link readAdvanceCredits} reads them, and by the bill payment
- * that paid each. */
+/** The named bills' advances, each with its correctives (`correctivesOf`) included, oldest first
+ * (a bill with none is absent from `credits`), and by the bill payment that paid each. */
 export interface BillAdvances {
   credits: Map<string, AdvanceCredit[]>;
   payments: Map<string, AdvancePaymentMoney>;
@@ -324,17 +324,6 @@ export async function readBillAdvances(
 }
 
 /**
- * Each named bill's advances as they stand, their correctives (`correctivesOf`) included, oldest
- * first. A bill with none is absent.
- */
-export async function readAdvanceCredits(
-  tx: Transaction,
-  workingOrderIds: readonly string[],
-): Promise<Map<string, AdvanceCredit[]>> {
-  return (await readBillAdvances(tx, workingOrderIds)).credits;
-}
-
-/**
  * What the bill's invoice takes off: its advances `credits` as they stand, worded in `languages`,
  * the invoice languages `saleLanguageFor` files the invoice in.
  */
@@ -342,7 +331,7 @@ export function advancesToTakeOff(
   credits: readonly AdvanceCredit[] | undefined,
   languages: readonly string[],
 ): IssueAdvances {
-  return credits === undefined || credits.length === 0 ? NO_ADVANCES : { credits, languages };
+  return { credits: credits ?? [], languages };
 }
 
 const ZERO = decimal("0.00");

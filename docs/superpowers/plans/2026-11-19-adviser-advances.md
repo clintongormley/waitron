@@ -1139,7 +1139,7 @@ includes it, `takeBillPayment`, `completeBillPayment`), `apps/server/src/bill-pa
   `tender-refund-reservation.ts`, `tender-refund-receipt.ts`, `transaction-receipt-api.ts` and
   `document-printer-offers.ts` (grep, RUN). The advance ticket prints its bill's order label and
   number when first printed, so a duplicate matches it.
-- `readAdvanceCredits(tx, workingOrderIds)` — each bill's advances with correctives through
+- `readBillAdvances(tx, workingOrderIds).credits` — each bill's advances with correctives through
   `correctivesOf`.
 - **Decided by amount:** a received payment whose row says `own_receipt` is an advance when the
   bill had no invoice before it and, after it, the meal less advance credit less the received money
@@ -1508,7 +1508,7 @@ core's, payments' and fiscal-verifactu's starting migrations, rebuilt.
 - `seatTable` takes `advanceSaleIds` and writes their `bill_advances` rows (no bill payment). It
   does not change the bill's invoice choice: the rest's invoice is as the bill is set.
 - Piece 4 makes `bill_advances.bill_payment_id` nullable for these rows, its unique index partial.
-- **A booking's advance counts only when the meal ends:** it enters `readAdvanceCredits`, the
+- **A booking's advance counts only when the meal ends:** it enters `readBillAdvances`, the
   rest's invoice, `issueWhenFullyPaid` and `advance.exceeds_bill`; `assertBillInvariant` leaves it
   out; **Paid so far** includes it only up to the meal so far. `holdsPayment`
   (`bill-payments.ts:546`) answers true for a bill with a `bill_advances` row; trace its callers

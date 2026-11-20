@@ -52,8 +52,8 @@ export async function issueOrderMoment(
   issuer: { clock: TrustedClock; backend: Pick<FiscalBackend, "assertRecordableAt"> },
   orderId: string,
   gross: GrossLines,
-  advances: IssueAdvances,
   mealEndedAt?: string,
+  advances?: IssueAdvances,
 ): Promise<IssueMoment> {
   const zone = await readIssueZone(tx, scope);
   const issueClock = issueClockIn(zone, issuer.clock);
@@ -64,7 +64,7 @@ export async function issueOrderMoment(
   // The zone's offset at the instant itself: across a change of clocks the issue's offset would
   // name the wrong day.
   const mealDay = ended === undefined ? undefined : civilDateOf(new Date(ended), zone);
-  return issueMoment(issueClock, gross, issuer.backend, advances, mealDay);
+  return issueMoment(issueClock, gross, issuer.backend, mealDay, advances);
 }
 
 function earlier(a: string | undefined, b: string | undefined): string | undefined {

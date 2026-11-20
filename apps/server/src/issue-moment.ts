@@ -26,8 +26,6 @@ export interface IssueAdvances {
   languages: readonly string[];
 }
 
-export const NO_ADVANCES: IssueAdvances = { credits: [], languages: [] };
-
 /**
  * Take ONE clock reading and rate `gross` at its local calendar date, or at `mealDay` when the meal
  * ended on an earlier venue day: the rate in force when the sale happened applies, and that day is
@@ -38,16 +36,16 @@ export function issueMoment(
   clock: TrustedClock,
   gross: GrossLines,
   fiscal: Pick<FiscalBackend, "assertRecordableAt">,
-  advances: IssueAdvances,
   mealDay?: string,
+  advances?: IssueAdvances,
 ): IssueMoment {
   const reading = clock.now();
   fiscal.assertRecordableAt(reading);
   const issueDay = localCalendarDate(reading.instant, reading.offsetMinutes);
   const earlier = mealDay !== undefined && mealDay < issueDay ? mealDay : undefined;
   const meal = rateLines(gross, earlier ?? issueDay);
-  const { priced, deductionLines } = deductAdvances(meal, advances.credits, {
-    languages: advances.languages,
+  const { priced, deductionLines } = deductAdvances(meal, advances?.credits ?? [], {
+    languages: advances?.languages ?? [],
   });
   return {
     priced,

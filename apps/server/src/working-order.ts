@@ -7714,6 +7714,7 @@ export async function priceForIssuance(
       { clock, backend },
       id,
       await issuancePass(tx, id, order),
+      undefined,
       advancesToTakeOff(credits.get(id), language.invoiceLocales),
     )),
   };

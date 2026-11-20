@@ -33,7 +33,7 @@ import {
 } from "@waitron/venue-service";
 import type { TrustedClock } from "@waitron/fiscal";
 import { deviceId as brandDeviceId } from "@waitron/shared";
-import { readAdvanceCredits } from "./bill-advances.js";
+import { readBillAdvances } from "./bill-advances.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { readFindTransactions, resolveTransactionScope } from "./find-bill-transactions.js";
 import { parseTransactionsQuery } from "./find-bill-query.js";
@@ -706,13 +706,15 @@ describe("an advance in Find a bill (ruling L2)", () => {
       ).rows.map((row) => row.saleId);
     expect(await seen(elsewhere)).not.toContain(correction);
     expect(await seen(venue.zoneId)).toContain(correction);
-    expect((await inTx(venue, (tx) => readAdvanceCredits(tx, [billId]))).get(billId)).toEqual([
-      expect.objectContaining({
-        saleId,
-        gross: "20.00",
-        groups: [{ rate: "10.00", base: "18.18", tax: "1.82" }],
-      }),
-    ]);
+    expect((await inTx(venue, (tx) => readBillAdvances(tx, [billId]))).credits.get(billId)).toEqual(
+      [
+        expect.objectContaining({
+          saleId,
+          gross: "20.00",
+          groups: [{ rate: "10.00", base: "18.18", tax: "1.82" }],
+        }),
+      ],
+    );
   });
 
   it("an advance's open correction is listed to a device limited to table 7's zone, and not to one limited to another", async () => {
