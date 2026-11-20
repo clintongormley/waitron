@@ -1433,7 +1433,7 @@ describe("menu-screen", () => {
       createExtraList: vi.fn().mockRejectedValue({
         code: "extras.product_has_variants",
         params: { field: "items.0.productId", productId: "p1" },
-        status: 409,
+        status: 400,
       }),
     });
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });

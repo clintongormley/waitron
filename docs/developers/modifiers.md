@@ -453,7 +453,7 @@ Six things it is worth knowing about that payload:
   `extras.product_has_variants` (`extras.ts`), and a save that would give a product an extras
   list offers an Active variant — from the parent's editor or the variant's own page — is refused
   `product.offered_as_extra`, naming every list that offers it (`assertNotOfferedAsExtra`,
-  `variants.ts`). Both answer 409. Tests: "an extras list and products with variants" in
+  `variants.ts`). The first answers 400 and the second 409. Tests: "an extras list and products with variants" in
   `packages/menu/src/extras.test.ts`, "a product an extras list offers" in
   `packages/menu/src/product-editor.test.ts`, and "mountMenuApi — extras lists and
   products with variants" in `apps/server/src/menu-api.test.ts`. Tests for the order path:

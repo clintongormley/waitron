@@ -2278,10 +2278,10 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
-  it("createPrinter rejects with { code } on a missing transport field (printer.invalid_config, 422)", async () => {
+  it("createPrinter rejects with { code } on a missing transport field (printer.invalid_config, 400)", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "printer.invalid_config" } }, false, 422));
+      .mockResolvedValue(jsonResponse({ error: { code: "printer.invalid_config" } }, false, 400));
     const api = new DashboardApi("", fetchImpl);
     await expect(api.createPrinter({ name: "Bad", transport: "usb" })).rejects.toMatchObject({
       code: "printer.invalid_config",

@@ -357,6 +357,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // 409: the body was well formed, and what the stored lists hold refused it.
   "menu_section.member_cycle": 409,
   "menu_section.member_duplicate": 409,
+
+  // 400 under `runBodySection` and `runBodyRole`, whose routes can name a list, section or member
+  // of the wrong kind only in the body. 409 elsewhere: there the address can name one, and so can
+  // the body (a member's `ref`, a move-in's `listId`); one status for both, as A394-11 chose.
   "menu_section.wrong_role": 409,
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
@@ -373,7 +377,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_patch.base_changed": 409,
   "menu_patch.unchanged": 409,
   "time_zone.unreadable": 409,
-  "menu.shortcut_unreachable": 409,
+  "menu.shortcut_unreachable": 400,
   "menu.home_display_invalid": 400,
   // The product editor refuses a course this venue does not have.
   "course.not_found": 400,
@@ -391,8 +395,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "extras.not_found": 404,
   // Raised on the till surface (a diner's picks), never by a route here.
   "extras.limit_exceeded": 400,
-  // 409: the body was well formed, and what another stored row holds refused it.
-  "extras.product_has_variants": 409,
+  "extras.product_has_variants": 400,
   "product.offered_as_extra": 409,
   "category.name_taken": 409,
   "category.contents_changed": 409,
@@ -402,8 +405,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "menu.failed");
-/** For a route where these codes can only name an id the request body sent, never its path
- * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
+/** For a route where these codes are raised by what the request body or query string names
+ * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). On the
+ * member add and replace routes `set_menu.not_found` also comes from an inactive set menu owning
+ * the list in the path. */
 const runBodyIds = (...codes: string[]) =>
   createErrorBoundary(
     { ...STATUS, ...Object.fromEntries(codes.map((code) => [code, 400] as const)) },
@@ -415,7 +420,10 @@ const runBodyMenu = runBodyIds("menu.not_found");
 const runBodyCategory = runBodyIds("category.not_found");
 // A folder move or delete names its products and folders in the body.
 const runFolder = runBodyIds("category.not_found", "product.not_found");
-const runBodySection = runBodyIds("menu_section.not_found");
+const runBodySection = runBodyIds("menu_section.not_found", "menu_section.wrong_role");
+// A shortcut replace's address (its member) and body (the section it names) can both raise
+// `menu_section.not_found`, so that code keeps its 404.
+const runBodyRole = runBodyIds("menu_section.wrong_role");
 const runBodySetMenu = runBodyIds("set_menu.not_found");
 // The single-variant route names its variant in the path, so an unknown one is a 404; the whole-list
 // PUT names variants in its body, and an unknown one there stays a 400.
@@ -782,7 +790,7 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
     }),
   );
   app.post(`${shortcut}/replace`, (c) =>
-    run(c, log, async () => {
+    runBodyRole(c, log, async () => {
       const session = requireManagementSession(c);
       const menu = menuId(c);
       const held = memberId(c);
@@ -1507,7 +1515,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
     }),
   );
   app.get("/management-api/folders/summary", (c) =>
-    run(c, log, async () => {
+    runBodyCategory(c, log, async () => {
       const session = requireManagementSession(c);
       const ids = (c.req.queries("id") ?? []).map((id) => requireUuidParam(id, "CategoryId"));
       return c.json(await gated(c, session, (tx) => summariseFolders(tx, ids)));

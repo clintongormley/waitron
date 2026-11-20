@@ -509,10 +509,10 @@ describe("folder selection routes", () => {
     ).toMatchObject({ id: real, parentId: null });
   });
 
-  it("answers 404 for a summary's unknown folder id", async () => {
+  it("answers 400 for a summary's unknown folder id", async () => {
     const unknown = crypto.randomUUID();
     const response = await send(mountApp(), "GET", `/management-api/folders/summary?id=${unknown}`);
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: { code: "category.not_found", params: { categoryId: unknown } },
     });
@@ -4292,7 +4292,7 @@ describe("mountMenuApi — extras lists and products with variants", () => {
     ]);
   });
 
-  it("answers 409 extras.product_has_variants to a list naming a product with an Active variant, on create and on update", async () => {
+  it("answers 400 extras.product_has_variants to a list naming a product with an Active variant, on create and on update", async () => {
     const app = mountApp();
     const breadId = await createNamedProductVia(app, `Bread ${crypto.randomUUID()}`);
     const wineId = await createNamedProductVia(app, `Wine ${crypto.randomUUID()}`);
@@ -4310,7 +4310,7 @@ describe("mountMenuApi — extras lists and products with variants", () => {
     const created = await send(app, "POST", "/management-api/modifiers/extras", {
       body: { name: "Sides", items: [{ productId: breadId }, { productId: wineId }] },
     });
-    expect(created.status).toBe(409);
+    expect(created.status).toBe(400);
     expect(await created.json()).toEqual(refusal);
 
     const list = await send(app, "POST", "/management-api/modifiers/extras", {
@@ -4321,7 +4321,7 @@ describe("mountMenuApi — extras lists and products with variants", () => {
     const updated = await send(app, "PATCH", `/management-api/modifiers/extras/${extraList.id}`, {
       body: { name: "Sides", items: [{ productId: breadId }, { productId: wineId }] },
     });
-    expect(updated.status).toBe(409);
+    expect(updated.status).toBe(400);
     expect(await updated.json()).toEqual(refusal);
   });
 
@@ -5676,7 +5676,7 @@ describe("mountMenuApi — sections", () => {
     const unknown = crypto.randomUUID();
     for (const [sectionIds, status, code, params] of [
       [[a, unknown], 400, "menu_section.not_found", { sectionId: unknown }],
-      [[a, root], 409, "menu_section.wrong_role", { sectionId: root, role: "menu_root" }],
+      [[a, root], 400, "menu_section.wrong_role", { sectionId: root, role: "menu_root" }],
     ] as const) {
       const response = await send(app, "POST", "/management-api/sections/delete", {
         body: { sectionIds },
@@ -5740,7 +5740,7 @@ describe("mountMenuApi — sections", () => {
       [
         remove,
         { members: [{ listId: root, memberId: aInRoot.id }] },
-        409,
+        400,
         "menu_section.wrong_role",
       ],
       [
@@ -6098,8 +6098,16 @@ describe("mountMenuApi — Device Home Page", () => {
     expect((await send(app, "POST", replace, { body, cookie: null })).status).toBe(401);
     expect((await send(app, "POST", replace, { body, cookie: staffCookie })).status).toBe(403);
     const refusal = await send(app, "POST", replace, { body: { ref: product(m.elsewhere) } });
-    expect(refusal.status).toBe(409);
+    expect(refusal.status).toBe(400);
     expect(await refusal.json()).toMatchObject({ error: { code: "menu.shortcut_unreachable" } });
+    const homeRef = await send(app, "POST", replace, { body: { ref: section(m.homeSectionId) } });
+    expect(homeRef.status).toBe(400);
+    expect(await homeRef.json()).toEqual({
+      error: {
+        code: "menu_section.wrong_role",
+        params: { sectionId: m.homeSectionId, role: "home_layout" },
+      },
+    });
     const result = await json(await send(app, "POST", replace, { body }), 200);
     expect(result).toEqual({ id: tile.id, position: 0, ref: product(m.soup) });
     expect((await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).shortcuts).toEqual([
@@ -6148,8 +6156,9 @@ describe("mountMenuApi — Device Home Page", () => {
       [drinks.id, 1],
     ]);
     for (const [ref, status, code] of [
-      [product(m.elsewhere), 409, "menu.shortcut_unreachable"],
-      [section(m.rootSectionId), 409, "menu.shortcut_unreachable"],
+      [product(m.elsewhere), 400, "menu.shortcut_unreachable"],
+      [section(m.rootSectionId), 400, "menu.shortcut_unreachable"],
+      [section(m.homeSectionId), 400, "menu_section.wrong_role"],
       [product(m.soup), 409, "menu_section.member_duplicate"],
     ] as const) {
       const response = await send(app, "POST", shortcutsOf(m.menuId), { body: { ref } });
