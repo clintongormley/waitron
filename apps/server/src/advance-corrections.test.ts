@@ -502,7 +502,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
 
   /** A correction for the whole of `advanceId`, opened while the table's bill was still open and
    * still open once the bill's €90 rest was paid; its id and the refusal giving its money back
-   * meets. No route reaches this (`advance.correction_open` refuses the payment), so the
+   * meets. No known route reaches this (`advance.correction_open` refuses the payment), so the
    * correction is opened, closed, and written back open in the database after the payment: the
    * two cases below test `reserveTenderRefund`'s guard for an issuing path nobody found. */
   async function openedBeforeTheRest(billId: string, advanceId: string) {

@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
   billPaymentRefunds,
+  invoiceCorrections,
   invoiceSeries,
   parties,
   saleLines,
@@ -25,6 +26,7 @@ import { readBillBalance } from "./bill-payments.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { endMeal } from "./meal-end.js";
 import { readCancellationContext } from "./line-cancel-context.js";
+import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { readOrderRevision } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import { fireAll, openPartyTab } from "./testing/serve-line.js";
@@ -699,6 +701,48 @@ describe("a card for the rest while the advance has a correction open", () => {
       state: "discarded",
     });
 
+    await takesOff(bill.billId, advanceId, -3000);
+  });
+
+  it("started before the correction was opened: Discard is refused while the box waits for its time, keeping the correction open, and issues the rest's invoice once the time is confirmed", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advanceOf(
+      bill.billId,
+      await cash(bill.billId, "30.00", { ownReceipt: true }),
+    );
+    const release = venue.card.holdNextCollect();
+    const calls = venue.card.collectCalls.length;
+    const paying = readerCard(bill.billId, "90.00");
+    await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
+    const correctionId = await openWhole(advanceId);
+    release();
+    expect((await paying).status).toBe(200);
+    let unconfirmed = true;
+    const gated = venue.appWith({
+      backend: gateSeatOnStartClock(venue.backend, () => unconfirmed),
+    });
+    const discard = () =>
+      send(gated, venue.cookie, "POST", `/api/invoice-corrections/${correctionId}/close`, {
+        override: supervisor(),
+      });
+
+    const refused = await discard();
+
+    expect(refused).toMatchObject({ status: 409, json: { code: "clock.unconfirmed" } });
+    const [row] = await inTx(venue, (tx) =>
+      tx
+        .select({ state: invoiceCorrections.state })
+        .from(invoiceCorrections)
+        .where(eq(invoiceCorrections.id, correctionId)),
+    );
+    expect(row).toEqual({ state: "open" });
+    expect(await restOf(bill.billId)).toBeUndefined();
+
+    unconfirmed = false;
+    const discarded = await discard();
+
+    expect(discarded.status, JSON.stringify(discarded.json)).toBe(200);
+    expect(discarded.json).toMatchObject({ state: "discarded" });
     await takesOff(bill.billId, advanceId, -3000);
   });
 
