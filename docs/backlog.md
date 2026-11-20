@@ -736,9 +736,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     Nothing tests two `openTab` calls racing on one table or concurrent rounds landing on
     consecutive line numbers (the sequential versions are in `tabs.test.ts`).
     [Detail](backlog/till.md#split-off-checks-may-reach-the-same-path-as-a-held-order-edit-that-changes-sent-lines)
-  - Should the `no-meat`/`no-fish` lenses also hide a dish whose diet is still pending review, as
-    `vegan`/`vegetarian` do? (#621)
-    [Detail](backlog/till.md#should-the-no-meatno-fish-lenses-also-hide-a-dish-whose-diet-is-still-pending-review)
   - Till widget points from #616 that were read but not run (`apps/till/src/widgets`).
     [Detail](backlog/till.md#till-widget-points-from-616-that-were-read-but-not-run)
   - The table-order screen's `#lineGross` comment was not restored (#614).
@@ -1061,7 +1058,7 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 - **Native speaker review** (bundle of 3, size S, needs a third party). [Detail](backlog/languages.md#bundle-native-speaker-review)
 
-- **Regional languages** (bundle of 3, size L, needs the owner). C125, the staff screens in every
+- **Regional languages** (bundle of 2, size L, needs the owner). C125, the staff screens in every
   official language, is off hold (owner, 2026-11-08). Extend the setup working-language choices and
   starter translations beyond English and Spanish here. [Detail](backlog/languages.md#bundle-regional-languages)
 

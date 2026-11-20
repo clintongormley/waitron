@@ -24,14 +24,6 @@ their full text.
   form" and aggregate-pair history and a "KDS-1 §3d" pointer. Stale test titles: "recordSale
   UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and "(A1)"-style plan tags.
 
-## Should the `no-meat`/`no-fish` lenses also hide a dish whose diet is still pending review?
-
-- Found by #621 (the rest of `apps/till`). A question the prune moved
-  here from a deleted `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a
-  dish whose diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes
-  known to contain the tag. Many `till-app.test.ts` titles carry plan and review labels
-  ("(Finding 2)", "(P6)", "(FP-1)").
-
 ## Till widget points from #616 that were read but not run
 
 - Found by #616 (`apps/till/src/widgets`). Read, not run: `ReaderOption.online` is never set
