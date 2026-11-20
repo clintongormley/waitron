@@ -1402,6 +1402,11 @@ for (const locale of ["en", "es"] as const) {
           null,
         ],
         [
+          "bill_payments",
+          { name: "slip_wanted", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
+          0,
+        ],
+        [
           "dashboard_sessions",
           { name: "proved_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
           null,
