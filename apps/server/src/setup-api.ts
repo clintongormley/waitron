@@ -700,8 +700,9 @@ function directError(
   log: Logger,
   code: "setup.not_ready" | "setup.already_provisioning" | "node.reset",
   httpStatus: ContentfulStatusCode,
+  level: "warn" | "debug" = "warn",
 ): Response {
-  log("warn", code, {});
+  log(level, code, {});
   return c.json({ error: { code, params: {} } }, httpStatus);
 }
 
@@ -1658,8 +1659,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     });
   });
 
-  app.all("/management-api/*", (c) => directError(c, log, "node.reset", 404));
-  app.all("/api/*", (c) => directError(c, log, "node.reset", 404));
+  app.all("/management-api/*", (c) => directError(c, log, "node.reset", 404, "debug"));
+  app.all("/api/*", (c) => directError(c, log, "node.reset", 404, "debug"));
 
   if (deps.setupAppDir !== undefined) {
     mountSetupSpa(app, deps.setupAppDir, log);

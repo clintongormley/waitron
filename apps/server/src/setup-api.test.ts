@@ -123,6 +123,24 @@ describe("mountSetup — setup-mode routes for an unprovisioned box", () => {
     expect(await res.json()).toEqual({ error: { code: "node.reset", params: {} } });
   });
 
+  it("logs the node.reset refusals that open tills and pages keep polling for at debug, never warn", async () => {
+    const { log, lines } = capturingLog();
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction" }, log);
+    for (const path of ["/api/node", "/api/node", "/management-api/session/me"]) {
+      expect((await app.request(path)).status).toBe(404);
+    }
+    expect(lines.filter((line) => line.level === "warn" || line.level === "error")).toEqual([]);
+    expect(lines.filter((line) => line.event === "node.reset")).toEqual([
+      { level: "debug", event: "node.reset", fields: {} },
+      { level: "debug", event: "node.reset", fields: {} },
+      { level: "debug", event: "node.reset", fields: {} },
+    ]);
+    expect(lines.filter((line) => line.event === "setup.mode_active")).toEqual([
+      { level: "info", event: "setup.mode_active", fields: { environment: "preproduction" } },
+    ]);
+  });
+
   it("does not shadow a route registered before it (e.g. /health)", async () => {
     const app = new Hono();
     app.get("/health", (c) => c.json({ ok: true }));
@@ -1286,7 +1304,8 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     });
     const provision = vi.fn(() => pending);
     const { deps } = makeDeps({ provision });
-    mountSetup(app, deps, noopLog);
+    const { log, lines } = capturingLog();
+    mountSetup(app, deps, log);
 
     const first = postProvision(app, demoBody());
     await tick(); // let the first request reach + set the latch (its provision is now pending)
@@ -1297,6 +1316,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       error: { code: "setup.already_provisioning", params: {} },
     });
     expect(provision).toHaveBeenCalledTimes(1); // the second never reached provision
+    expect(lines.filter((l) => l.event === "setup.already_provisioning")).toEqual([
+      { level: "warn", event: "setup.already_provisioning", fields: {} },
+    ]);
 
     release(makeVenueResult());
     expect((await first).status).toBe(200);
@@ -1445,12 +1467,16 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
 
   it("answers 503 setup.not_ready when NONE of the provision deps are wired", async () => {
     const app = new Hono();
-    mountSetup(app, { environment: "preproduction" }, noopLog);
+    const { log, lines } = capturingLog();
+    mountSetup(app, { environment: "preproduction" }, log);
 
     const res = await postProvision(app, demoBody());
 
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+    expect(lines.filter((l) => l.event === "setup.not_ready")).toEqual([
+      { level: "warn", event: "setup.not_ready", fields: {} },
+    ]);
   });
 
   it.each([
