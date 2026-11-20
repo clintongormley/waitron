@@ -126,14 +126,14 @@ The field reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pa
   rather than flatten it to a boolean, since the flag deliberately distinguishes a no-work pass from
   a pass that exercised the certificate and skipped.
 
-## A394-5, A394-16 and A394-20 to A394-22 — refusal statuses by one rule
+## A394-16 and A394-20 to A394-22 — refusal statuses by one rule
 
 OPEN,
-low priority, not queued — owner 2026-10-08: take them from here when a lane has room. (A394-1 to
+queued in lane B (2026-11-20). (A394-1 to
 A394-4 landed as #1441, #1444, #1447 and #1455.) Read, not run: of 49 boundaries, 96 status rows
 break the rule (`docs/developers/conventions-data.md`); 17 defects answered 500, or success for a
-missing id (A394-1 to -6); all but A394-5's two, which still answer 500, are fixed; 16 owner
-questions. The follow-ups and the rows:
+missing id (A394-1 to -6); all are fixed; 16 owner questions, settled by the watcher
+2026-11-20 on the owner's delegation. The follow-ups and the rows:
 `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
 
 ## A913's fix items: general code English only

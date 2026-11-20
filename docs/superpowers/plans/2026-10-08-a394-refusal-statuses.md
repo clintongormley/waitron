@@ -320,6 +320,9 @@ Not counted as defects: the adjustments report routes' `readLocationClock` throw
 
 ## Questions for the owner, each with a recommended default
 
+**Settled by the watcher 2026-11-20 on the owner's delegation:** every question below takes its
+recommended answer (the owner agreed, 2026-11-20 14:31, that the watcher settle them).
+
 1. **A restore archive that decrypts but is missing parts or holds unexpected entries**
    (`restore.archive_incomplete`, `restore.unexpected_entry`, `restore.unsafe_entry_path`,
    `restore.identity_incomplete`, default 400 today). **Recommend 422**, as the bucket restore
@@ -410,6 +413,17 @@ Defect fixes first:
   `setup-api.ts`, setup wording in `apps/setup`. Fixes: unparseable manifest → a `restore.*` code at
   422; Cloud upstream failure → a new code at 502. Clients: the setup app needs wording for the new
   codes. Tests: none found. Size S. Depends on: owner question 1.
+  **2026-11-20 (A394-5):** done. The manifest half was already fixed by #3519: a manifest that
+  cannot be read answers `restore.manifest_invalid` 422. When Cloud or its storage fails during a
+  Cloud recovery (unreachable, a refusal, or an answer that is malformed, mismatched or the wrong
+  size), the setup page's Cloud recovery routes now answer `cloud.unavailable` 503 instead of
+  `server.internal` 500. That is the code the other Cloud clients in `apps/server/src` throw when
+  Cloud fails, and `cloud-api.ts` already answers it with 503, so no new code and no new setup
+  wording: the setup page shows the same sentence for it as before. When Cloud says the request
+  expired or is waiting for the owner again, or the page asks for a snapshot other than the approved
+  one, or Start again is asked before the request expired, the routes answer
+  `setup.operation_conflict` 409 (the setup page shows the same sentence). A failure of this box's own
+  saved state, files or request signing answers 500, and a full disk 507.
 - **A394-6 — Email test inbox: an unknown message cannot be told from the inbox being down.** Files:
   `apps/server/src/mailpit-client.ts`, `email-inbox-api.ts`. First probe what Mailpit answers for an
   unknown id (not established). Fixes: 500 → 404 for an unknown id, keeping
