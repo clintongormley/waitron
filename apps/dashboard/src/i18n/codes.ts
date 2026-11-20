@@ -1432,6 +1432,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That card reader is being unpaired or deleted. Try again when that finishes.",
     es: "Ese lector de tarjetas se está desvinculando o eliminando. Vuelve a intentarlo cuando termine.",
   },
+  "reader.unpair_unsupported": {
+    en: "This card provider cannot unpair readers from Waitron. Delete the reader here; it stays registered with the provider until you remove it there.",
+    es: "Este proveedor de pagos no permite desvincular lectores desde Waitron. Elimina el lector aquí; seguirá registrado en el proveedor hasta que lo quites allí.",
+  },
+  "reader.removed_while_adding": {
+    en: "That card reader was being unpaired or deleted while it was being added. Check the list and try again.",
+    es: "Ese lector de tarjetas se estaba desvinculando o eliminando mientras se añadía. Revisa la lista e inténtalo de nuevo.",
+  },
   "payment.provider_disabled": {
     en: "Turn on this provider in Modules before adding a reader",
     es: "Activa este proveedor en Módulos antes de añadir un lector",
