@@ -152,6 +152,9 @@ export async function cloudFixture(
     recordVenueId: async (id: string) => {
       storedVenueId = id;
     },
+    forgetVenueId: async () => {
+      storedVenueId = null;
+    },
   };
   return {
     stateDir,
@@ -196,6 +199,10 @@ export async function cloudFixture(
     },
     approve: () => {
       approved = true;
+    },
+    forgetPairings: () => {
+      approved = false;
+      complete = false;
     },
     async close() {
       server.closeAllConnections();

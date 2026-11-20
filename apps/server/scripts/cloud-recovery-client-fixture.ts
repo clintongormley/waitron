@@ -19,6 +19,7 @@ import {
   readCloudVenueId,
   readVenueSettings,
   saveCloudVenueId,
+  saveVenueFields,
   withTransaction,
 } from "@waitron/db";
 import { createCloudRecoveryClient } from "../src/cloud-recovery.js";
@@ -171,6 +172,8 @@ else if (request.command === "stage") {
       readVenueId: () => readCloudVenueId(store.venue),
       readVenueName: async () => (await readVenueSettings(store.venue)).doc.name,
       recordVenueId: (id) => withTransaction(store.venue, (tx) => saveCloudVenueId(tx, id)),
+      forgetVenueId: () =>
+        withTransaction(store.venue, (tx) => saveVenueFields(tx, { cloudVenueId: null }, null)),
       environment: "test",
     });
     const replacement = createCloudReplacement({

@@ -303,6 +303,8 @@ Desactivarlo no pide una nueva confirmación de identidad.
 
 Si restauras una copia hecha antes de conectarlo con Cloud, abre **Servicios Cloud** en **Sistema** y elige **Conectar con Cloud** de nuevo.
 
+Si el acceso a Cloud ha terminado, porque alguien eligió **Detener el acceso a Cloud** en el servidor o eliminó el local en Waitron Cloud, **Servicios Cloud** lo indica. Elige **Volver a conectar** para añadir el local a Waitron Cloud como un local nuevo.
+
 Para impedir que el personal abra el panel desde fuera del local, abre **Servicios Cloud** en **Sistema**
 en el servidor principal y elige **Desactivar el acceso remoto**. Si usas la dirección del personal,
 confirma **Desactivar el acceso remoto** para desconectarte también, o elige **Detener** para mantenerlo activado. Ten a mano la dirección local del servidor. La vinculación con

@@ -65,8 +65,9 @@ never extends your management login. Choose **Refresh status** to check immediat
 
 A Cloud outage keeps the last known configuration and shows that status is unavailable.
 Pending requests are saved before sending, so a restart can recover a renewal or stop
-request whose response was lost. The server treats a revoked installation separately
-and does not silently generate another identity.
+request whose response was lost. A revoked installation, whether stopped here or removed in
+Cloud, gets a new identity only when someone chooses **Connect again**. That forgets the venue's
+Cloud venue id before saving the new key, so Cloud adds the box as a new venue.
 
 Choose **Stop Cloud access**, read the consequences, then confirm. You need a live
 local manager session. You can stop access even after this node loses its primary

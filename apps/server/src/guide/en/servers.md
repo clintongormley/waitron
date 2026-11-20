@@ -273,6 +273,8 @@ Turning it off needs no new sign-in confirmation.
 
 If you restore a backup made before connecting to Cloud, open **Cloud services** in **System** and choose **Connect to Cloud** again.
 
+If Cloud access has ended, because someone chose **Stop Cloud access** on the box or removed the venue in Waitron Cloud, **Cloud services** says so. Choose **Connect again** to add the venue to Waitron Cloud as a new venue.
+
 To stop staff reaching your dashboard from outside the venue, open **Cloud services** in **System**
 on the main box and choose **Turn off remote access**. If you are using the staff address,
 confirm **Turn off remote access** to disconnect yourself too, or choose **Stop** to keep it on. Keep the box's local address available. Your Cloud pairing and other

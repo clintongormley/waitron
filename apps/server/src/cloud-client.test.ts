@@ -183,6 +183,49 @@ it("requires explicit bound local confirmation and checks authority again after 
     await f.close();
   }
 });
+it("connects again with a new key and no Cloud venue only once the installation was revoked", async () => {
+  const f = await fixture();
+  try {
+    const forgetVenueId = vi.fn(f.options.forgetVenueId);
+    const options = { ...f.options, forgetVenueId };
+    const client = createCloudConnection(options);
+    await client.start();
+    f.approve();
+    const approved = await client.check();
+    await client.complete(
+      {
+        requestId: approved.requestId!,
+        organisationId: f.organisationId,
+        legalBusinessId: f.legalBusinessId,
+      },
+      async () => {},
+    );
+    const sent = f.requests.length;
+    expect((await client.start()).state).toBe("complete");
+    expect(f.requests).toHaveLength(sent);
+    expect(forgetVenueId).not.toHaveBeenCalled();
+    const path = join(f.stateDir, "cloud/connection.json");
+    const old = JSON.parse(await readFile(path, "utf8"));
+    await writeFile(
+      path,
+      JSON.stringify({ ...old, lifecycle: { unavailable: false, revoked: true } }),
+      { mode: 0o600 },
+    );
+    f.forgetPairings();
+    const again = await client.start();
+    expect(forgetVenueId).toHaveBeenCalledOnce();
+    expect(await options.readVenueId()).toBeNull();
+    expect(again.state).toBe("awaiting_cloud");
+    expect(again.requestId).not.toBe(old.requestId);
+    const request = f.requests.at(-1)!;
+    expect(request[2]).toBe("start");
+    expect(request[3]).not.toBe(old.requestId);
+    expect(request[4]).not.toBe(old.publicKey);
+    expect(request[5]).toBe("");
+  } finally {
+    await f.close();
+  }
+});
 it("rejects changed binding, malformed state, and mismatched replies without overwriting the recorded state", async () => {
   const f = await fixture();
   try {

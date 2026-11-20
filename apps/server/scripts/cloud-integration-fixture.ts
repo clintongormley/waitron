@@ -181,6 +181,9 @@ const cloud = createCloudConnection({
   recordVenueId: async () => {
     throw new Error("Pair through the running server's management API");
   },
+  forgetVenueId: async () => {
+    throw new Error("Pair through the running server's management API");
+  },
   environment: "test",
 });
 process.on("message", (message: unknown) => {

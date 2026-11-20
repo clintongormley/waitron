@@ -105,6 +105,7 @@ export interface CloudConnectionOptions {
   readVenueId(): Promise<string | null>;
   readVenueName(): Promise<string>;
   recordVenueId(venueId: string): Promise<void>;
+  forgetVenueId(): Promise<void>;
   environment: "test" | "production";
 }
 interface SavedEmergencyHints {
@@ -1004,7 +1005,12 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     async start(restart = false) {
       return run(async () => {
         let state = await read();
-        if (state?.view?.state === "complete") return project(state);
+        if (state?.view?.state === "complete") {
+          if (!state.lifecycle?.revoked) return project(state);
+          // Forgotten before the new file is saved: a crash between leaves a file read() ignores.
+          await options.forgetVenueId();
+          state = undefined;
+        }
         if (state && restart) {
           try {
             const latest = await exchange(state, "status");

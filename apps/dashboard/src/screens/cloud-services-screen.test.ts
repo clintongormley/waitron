@@ -540,9 +540,13 @@ for (const locale of ["en", "es"] as const)
     click(el, "confirm-stop");
     await flush(el);
     expect(el.shadowRoot!.textContent).toContain(
-      locale === "en" ? "Cloud access stopped" : "Acceso a Cloud detenido",
+      locale === "en"
+        ? "Cloud access for this server has ended."
+        : "El acceso a Cloud de este servidor ha terminado.",
     );
     expect(el.shadowRoot!.querySelector("#stop-access")).toBeNull();
+    expect(el.shadowRoot!.querySelector("#refresh")).toBeNull();
+    expect(el.shadowRoot!.querySelector("#connect-again")).not.toBeNull();
   });
 
 it("ages a displayed observation without extending the login or reading the status again", async () => {
@@ -902,6 +906,78 @@ it("asks again before stopping Cloud access after a background read saw it stopp
   await expect.poll(() => el.shadowRoot!.querySelector("#refresh")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("#confirm-stop")).toBeNull();
   expect(el.shadowRoot!.querySelector("#stop-access")).not.toBeNull();
+});
+it("says Cloud access has ended and connects again from the start on the primary", async () => {
+  setLocale("en");
+  const calls: { url: string; body: unknown }[] = [];
+  let status: Record<string, unknown> = {
+    state: "complete",
+    configured: true,
+    isPrimary: true,
+    code: "",
+    legalBusinessName: "Sun SL",
+    remoteAccessEnabled: true,
+    installation: {
+      state: "revoked",
+      revision: 2,
+      lastContactAt: null,
+      leaseExpiresAt: null,
+      services: [],
+    },
+  };
+  const api = new DashboardApi("", async (url, init) => {
+    calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
+    if (String(url).endsWith("/start"))
+      status = {
+        state: "awaiting_cloud",
+        configured: true,
+        isPrimary: true,
+        code: "87654321",
+        requestId,
+        expiresAt: "2099-01-01T12:00:00Z",
+      };
+    return Response.json(status);
+  });
+  const { el, host } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+    api,
+  });
+  await expect.poll(() => el.shadowRoot!.querySelector("#connect-again")).not.toBeNull();
+  const text = el.shadowRoot!.textContent!;
+  expect(el.shadowRoot!.querySelector('[role="status"]')?.textContent).toContain(
+    "Cloud access for this server has ended.",
+  );
+  expect(text).toContain("as a new venue");
+  expect(text).not.toContain("Connected");
+  expect(text).not.toContain("Sun SL");
+  for (const id of ["refresh", "stop-access", "remote-access", "remote-access-heading"])
+    expect(el.shadowRoot!.querySelector(`#${id}`)).toBeNull();
+  expect(el.shadowRoot!.querySelector("dl")).toBeNull();
+  await expectNoA11yViolations(host);
+  click(el, "connect-again");
+  await expect.poll(() => el.shadowRoot!.textContent).toContain("87654321");
+  expect(calls.filter((c) => c.url.endsWith("/start"))).toEqual([
+    { url: "/management-api/cloud/start", body: { restart: false } },
+  ]);
+  expect(el.shadowRoot!.textContent).not.toContain("has ended");
+});
+it("says Cloud access has ended without offering to connect again on a box that is not the primary", async () => {
+  setLocale("en");
+  const api = new DashboardApi("", async () =>
+    Response.json({
+      state: "complete",
+      configured: true,
+      isPrimary: false,
+      code: "",
+      legalBusinessName: "Sun SL",
+      installation: { state: "revoked", revision: 2, services: [] },
+    }),
+  );
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect
+    .poll(() => el.shadowRoot!.textContent)
+    .toContain("Cloud access for this server has ended.");
+  expect(el.shadowRoot!.querySelector("#connect-again")).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Connected");
 });
 for (const [locale, label] of [
   ["en", "Translate all"],

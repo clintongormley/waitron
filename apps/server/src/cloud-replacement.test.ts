@@ -108,6 +108,7 @@ async function fixture(
     readVenueId: async () => registration.venueId,
     readVenueName: async () => "",
     recordVenueId: async () => {},
+    forgetVenueId: async () => {},
     environment: "test",
   });
   return {
@@ -180,6 +181,7 @@ it("refuses a replacement for another Cloud venue without changing the held venu
     recordVenueId: async (id) => {
       stored = id;
     },
+    forgetVenueId: async () => {},
   });
   const client = createCloudReplacement({ ...f.options, connection });
   await client.prepare();
@@ -368,6 +370,7 @@ async function connectedReplacement() {
       readVenueId: async () => registration.venueId,
       readVenueName: async () => "",
       recordVenueId: async () => {},
+      forgetVenueId: async () => {},
       environment: "test",
     });
     return { connection, replacement: createCloudReplacement({ ...f.options, connection }) };
