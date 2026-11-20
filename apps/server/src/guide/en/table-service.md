@@ -80,8 +80,8 @@ again** to retry the same address, or choose another address.
 
 Press **Done** or close the window to carry on. Unless you emailed it, the receipt prints when you
 close. If the printer is switched off or not working, it prints by itself when it is back; if it has
-not printed by the next day, print it from the sale. If the device has no receipt printer, nothing
-prints: choose one or send the email before closing. You close the table separately.
+not printed by the next day, print it from the sale. If the device has no receipt printer, choose one
+or send the email before closing; otherwise it prints once the device has one. You close the table separately.
 After a bill is printed with **Print the bill**, the window after the last payment offers a copy
 instead of the original, which printed with the bill; print the copy only if the guest asks for
 another receipt.

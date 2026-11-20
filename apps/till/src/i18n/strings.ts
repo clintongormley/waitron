@@ -427,9 +427,9 @@ export const en = {
   "settlement.closing_switched_off":
     "{printer} is switched off. The receipt will print when it is switched back on.",
   "settlement.closing_no_printer":
-    "This device has no receipt printer. Choose one above or email the receipt before closing.",
+    "This device has no receipt printer. Choose one above or email the receipt, or it prints once this device has one.",
   "settlement.closing_no_printer_no_email":
-    "This device has no receipt printer. Choose one above before closing.",
+    "This device has no receipt printer. Choose one above, or the receipt prints once this device has one.",
   "settlement.closing_not_allowed":
     "This device may not print or email receipts. Print it from Find a bill on a till that can.",
   "settlement.replacement_unavailable":
@@ -2651,9 +2651,9 @@ export const es: Record<StringKey, string> = {
   "settlement.closing_switched_off":
     "{printer} está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
   "settlement.closing_no_printer":
-    "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo antes de cerrar.",
+    "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo; si no, se imprimirá cuando este dispositivo tenga una.",
   "settlement.closing_no_printer_no_email":
-    "Este dispositivo no tiene impresora de tickets. Elige una arriba antes de cerrar.",
+    "Este dispositivo no tiene impresora de tickets. Elige una arriba; si no, el recibo se imprimirá cuando este dispositivo tenga una.",
   "settlement.closing_not_allowed":
     "Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda.",
   "settlement.replacement_unavailable":

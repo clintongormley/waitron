@@ -433,7 +433,7 @@ const closingLines = {
     es: es["settlement.closing_switched_off"].replace("{printer}", "Bar"),
   },
   "no-printer": {
-    en: "This device has no receipt printer. Choose one above before closing.",
+    en: "This device has no receipt printer. Choose one above, or the receipt prints once this device has one.",
     es: es["settlement.closing_no_printer_no_email"],
   },
   "not-allowed": {
@@ -448,7 +448,7 @@ const closingLinesWithEmail: Partial<Record<ClosingState, { en: string; es: stri
     es: es["settlement.closing_prints"],
   },
   "no-printer": {
-    en: "This device has no receipt printer. Choose one above or email the receipt before closing.",
+    en: "This device has no receipt printer. Choose one above or email the receipt, or it prints once this device has one.",
     es: es["settlement.closing_no_printer"],
   },
 };
