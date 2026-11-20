@@ -533,7 +533,7 @@ export class CloudServicesScreen extends LitElement {
       if (generation === this.#generation) {
         this.error = codeOf(error);
         if (this.error === "cloud.request_unavailable") this.requestUnavailable = true;
-        if (readAfterFailure) {
+        if (readAfterFailure || this.error === "cloud.request_not_found") {
           const status = await this.api.getCloudStatus().catch(() => undefined);
           if (status && generation === this.#generation) {
             this.#actionResults++;

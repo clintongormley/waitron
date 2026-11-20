@@ -1,5 +1,6 @@
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -548,6 +549,52 @@ describe("unit management routes", () => {
     }
     const still = await send("GET", `/management-api/units/${unit.id}/products`);
     expect(((await still.json()) as { id: string }[]).map((p) => p.id)).toEqual([p1]);
+  });
+
+  it("answers a reassign to a target unit no row holds with 400, moving nothing", async () => {
+    const unit = (await (
+      await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "ea" },
+      })
+    ).json()) as { id: string };
+    const p1 = await withTransaction(suite.db, async (tx) => seedProduct(tx, "A", unit.id));
+    const missing = randomUUID();
+    const response = await send("POST", `/management-api/units/${unit.id}/products/reassign`, {
+      productIds: [p1],
+      unitId: missing,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "unit.target_not_found", params: { unitId: missing } },
+    });
+    const still = await send("GET", `/management-api/units/${unit.id}/products`);
+    expect(((await still.json()) as { id: string }[]).map((p) => p.id)).toEqual([p1]);
+  });
+
+  it("answers a reassign from a unit the address names but no row holds with 404", async () => {
+    const target = (await (
+      await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "kg" },
+      })
+    ).json()) as { id: string };
+    const p1 = await withTransaction(suite.db, async (tx) => seedProduct(tx, "A", target.id));
+    const missing = randomUUID();
+    const response = await send("POST", `/management-api/units/${missing}/products/reassign`, {
+      productIds: [p1],
+      unitId: target.id,
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: { code: "unit.not_found", params: { unitId: missing } },
+    });
   });
 
   it("rejects an update whose precision is not a number, leaving the unit unchanged", async () => {

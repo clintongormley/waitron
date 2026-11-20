@@ -3,7 +3,6 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import { ticketItems, workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import { AppError, thousandthsToDecimal } from "@waitron/shared";
 import { cancelRowMembers } from "./adjustments-apply.js";
-import { invalid } from "./bill-allocation.js";
 import { isStarted, type TicketState } from "./kitchen-print.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { partyFamily } from "./parties.js";
@@ -65,9 +64,14 @@ async function readRowContext(
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(eq(workingOrderLines.id, lineId));
-  if (subject === undefined || subject.parentLineId !== null) throw invalid("lineId");
+  const notHere = () =>
+    new AppError(
+      "tab.line_not_found",
+      typeof target === "string" ? { partyId: target, lineId } : { tabId: target.billId, lineId },
+    );
+  if (subject === undefined || subject.parentLineId !== null) throw notHere();
   if (typeof target !== "string") {
-    if (subject.bill.id !== target.billId || subject.bill.partyId !== null) throw invalid("lineId");
+    if (subject.bill.id !== target.billId || subject.bill.partyId !== null) throw notHere();
     if (subject.bill.status !== "open")
       throw new AppError("working_order.not_open", { workingOrderId: subject.bill.id });
   } else if (

@@ -202,6 +202,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the connection details and try again.",
     es: "Revisa los datos de conexión y vuelve a intentarlo.",
   },
+  "cloud.request_not_found": {
+    en: "This server has no Cloud connection request waiting to finish. Choose Connect to Cloud to start again.",
+    es: "Este servidor no tiene ninguna solicitud de conexión con Cloud pendiente de terminar. Elige Conectar con Cloud para empezar de nuevo.",
+  },
   "cloud.replacement_not_restored": {
     en: "Finish restoring and reporting the approved Cloud snapshot on this server, then request reconnection.",
     es: "Termina la restauración de la instantánea aprobada de Cloud en este servidor y comunícala antes de solicitar la reconexión.",
@@ -480,6 +484,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "unit.not_found": {
     en: "That unit could not be found.",
     es: "No se ha encontrado esa unidad.",
+  },
+  "unit.target_not_found": {
+    en: "The unit you chose no longer exists. Choose another unit.",
+    es: "La unidad que elegiste ya no existe. Elige otra unidad.",
   },
   "unit.in_use": {
     en: "That unit can't be deleted because products are still using it.",
@@ -1231,6 +1239,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "You can only offer your own shifts, and accept only swaps offered to you",
     es: "Solo puedes ofrecer tus propios turnos y aceptar los cambios que te ofrezcan",
   },
+  "swap.return_shift_not_owned": {
+    en: "The shift offered in return is not that colleague's. Choose one of their shifts",
+    es: "El turno ofrecido a cambio no es de ese compañero. Elige uno de sus turnos",
+  },
   "swap.not_acceptable": {
     en: "That swap can no longer be accepted",
     es: "Ese cambio de turno ya no se puede aceptar",
@@ -1285,6 +1297,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "backup.recovery_key_too_short": {
     en: "The recovery key is too short",
     es: "La clave de recuperación es demasiado corta",
+  },
+  "backup.new_recovery_key_too_short": {
+    en: "That recovery key is too short",
+    es: "Esa clave de recuperación es demasiado corta",
   },
   "backup.recovery_key_missing": {
     en: "This box holds no recovery key.",

@@ -298,6 +298,29 @@ it.each(["invalid", "unsupported"])("answers an %s backup manifest with 422", as
   expect(answer.body.error).toEqual({ code: "restore.manifest_invalid", params: { reason } });
 });
 
+it("answers a too-short typed backup key with 400, naming the key the request sent", async () => {
+  const restart = vi.fn();
+  const s = service("https://spare.example", {
+    backup: {
+      readRecoveryKey: async () => backupKey,
+      environment: "preproduction",
+      migrationsRoot: null,
+      restart,
+    },
+  });
+  const answer = await s.post(
+    upload({ signIn: request.signIn, recoveryKey: "short" }),
+    true,
+    "backup",
+  );
+  expect(answer.status).toBe(400);
+  expect(answer.body.error).toEqual({
+    code: "backup.new_recovery_key_too_short",
+    params: { min: 12 },
+  });
+  expect(restart).not.toHaveBeenCalled();
+});
+
 it("answers a compressed-backup capacity refusal with 507", async () => {
   const space = vi.spyOn(freeSpace, "freeBytes").mockResolvedValue(0);
   try {

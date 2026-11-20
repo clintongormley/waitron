@@ -1057,7 +1057,7 @@ describe("stream settings routes", () => {
     });
     const cookie = await login(app);
     const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
       error: { code: "backup.recovery_key_too_short", params: { min: 12 } },
     });

@@ -151,7 +151,7 @@ describe("venue details HTTP boundary", () => {
         expected: model.details,
         changes: { [field]: "private", name: "Must not write" },
       });
-      expect(response.status).toBe(409);
+      expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
         error: { code: "venue.detail_read_only", params: { field } },
       });

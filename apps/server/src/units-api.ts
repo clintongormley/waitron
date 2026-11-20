@@ -36,6 +36,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "unit.precision_invalid": 400,
   "unit.invalid": 400,
   "unit.not_found": 404,
+  "unit.target_not_found": 400,
   "unit.in_use": 409,
   "product.not_found": 404,
   "product.archived": 409,

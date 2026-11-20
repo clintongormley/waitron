@@ -62,6 +62,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       "cloud.not_primary": 409,
       "cloud.not_configured": 409,
       "cloud.request_invalid": 400,
+      "cloud.request_not_found": 400,
       "cloud.replacement_not_restored": 409,
       "cloud.replacement_state_invalid": 409,
       "cloud.replacement_refused": 409,

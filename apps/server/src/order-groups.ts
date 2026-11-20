@@ -625,8 +625,7 @@ export async function fireHeldLine(
       if (line.billStatus === "abandoned" || line.departureId !== null)
         throw new AppError("tab.not_open", { tabId: line.workingOrderId });
       const cancelled = (await readLineCancellations(tx, [lineId])).get(lineId) ?? 0;
-      if (line.quantity <= cancelled)
-        throw new AppError("management.request_invalid", { field: "lineId" });
+      if (line.quantity <= cancelled) throw new AppError("group.line_cancelled", { lineId });
       await prepareAllergyRelease(
         tx,
         cfg,

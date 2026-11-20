@@ -117,6 +117,7 @@ declare module "@waitron/shared" {
     "cloud.not_primary": Record<string, never>;
     "cloud.not_configured": Record<string, never>;
     "cloud.request_invalid": Record<string, never>;
+    "cloud.request_not_found": Record<string, never>;
     "cloud.replacement_not_restored": Record<string, never>;
     "cloud.replacement_state_invalid": Record<string, never>;
     "cloud.replacement_refused": Record<string, never>;
@@ -847,6 +848,8 @@ declare module "@waitron/shared" {
      * and this one has fired. `groupId` is the group named or the group a moved line sits in.
      */
     "group.not_held": { groupId: string };
+    /** Fire now named a held dish that has been cancelled in full: nothing is left to send. */
+    "group.line_cancelled": { lineId: string };
     /**
      * A snooze, or clearing one, named a held group that is not the one waiting: the party's first
      * held group is. `groupId` is the group named.
@@ -1051,9 +1054,13 @@ declare module "@waitron/shared" {
     "tab.not_open": { tabId: string };
     "tab.cancel_context_changed": { context: CancellationContext };
     /**
-     * No such line on the open bill: an adjustment names its line by id, every other caller by number.
+     * No such line on the bill the request names: `lineNo` or `lineId` says how it was named. A
+     * party's cancellation address names the party, not a bill, so it answers `partyId`.
      */
-    "tab.line_not_found": { tabId: string; lineNo: number } | { tabId: string; lineId: string };
+    "tab.line_not_found":
+      | { tabId: string; lineNo: number }
+      | { tabId: string; lineId: string }
+      | { partyId: string; lineId: string };
     /**
      * A bill named as BOTH source and destination of a merge (`mergeBills`, or `moveOrderLines`).
      * Refused first: moving a bill's lines onto itself would abandon it or empty it.
@@ -1577,6 +1584,8 @@ declare module "@waitron/shared" {
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
+    /** A recovery key a backup Save or key change sends is shorter than `min` characters. */
+    "backup.new_recovery_key_too_short": { min: number };
     "backup.destinations_invalid": { reason: string };
     /** A box's backup settings this box would not take: a message over 64 KiB (`size`), one that
      * is malformed or of another kind (`envelope`), a body that is not exactly

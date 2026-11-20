@@ -33,6 +33,8 @@ declare module "@waitron/shared" {
     "quantity.invalid": { reason: "format" | "positive" | "precision" | "limit" };
     /** A unit id names no unit. */
     "unit.not_found": { unitId: string };
+    /** The unit a reassignment would move products to names no unit. */
+    "unit.target_not_found": { unitId: string };
     /** A unit cannot be deleted while products are assigned to it. */
     "unit.in_use": { products: ProductUsingUnit[] };
     "unit.translation_required": { field: "name" | "abbreviation"; language: string };

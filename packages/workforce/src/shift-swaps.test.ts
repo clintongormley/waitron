@@ -126,7 +126,7 @@ describe("requestSwap", () => {
     expect(code).toBe("shift.not_found");
   });
 
-  it("throws swap.not_permitted when a supplied to_shift is not owned by the to_person", async () => {
+  it("throws swap.return_shift_not_owned when a supplied to_shift is not owned by the to_person", async () => {
     // The return shift belongs to a THIRD person, not `toPerson`.
     const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
     const thirdPerson = await seedPerson(suite.db, `third-${crypto.randomUUID()}`);
@@ -143,7 +143,7 @@ describe("requestSwap", () => {
         }),
       ),
     );
-    expect(code).toBe("swap.not_permitted");
+    expect(code).toBe("swap.return_shift_not_owned");
   });
 
   async function unknownToPersonRefusal(toShiftId: (requester: string) => Promise<string | null>) {

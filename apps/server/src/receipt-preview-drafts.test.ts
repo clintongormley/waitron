@@ -126,7 +126,7 @@ describe("POST receipt draft preview", () => {
       ...draft(),
       receipt: { headerSubtitle: { "es-ES": "Closed draft" } },
     });
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(400);
     expect((await response.json()).error).toMatchObject({
       code: "department.not_found",
       params: { departmentId },
@@ -192,7 +192,7 @@ describe("POST receipt draft preview", () => {
   it("refuses an unknown department", async () => {
     const id = randomUUID();
     const response = await ask({ ...draft(), departmentId: id });
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(400);
     expect((await response.json()).error.code).toBe("department.not_found");
   });
   it.each([

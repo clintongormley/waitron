@@ -36,7 +36,6 @@ import {
   MAX_DESTINATION_TIMEOUT_MS,
   MIN_DESTINATION_TIMEOUT_MS,
   loadKeyRotatedAt,
-  loadRecoveryKey,
   mintRecoveryKey,
   readHeldKey,
   resolveBackupConfig,
@@ -46,7 +45,7 @@ import { writeRecoveryKey } from "./backup-env-writer.js";
 import { readSettingsEvidence, recoveryKeyFacts } from "./backup-settings-evidence.js";
 import { UNREADABLE_CREDENTIAL } from "./credentials.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
-import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
+import { checkedNewRecoveryKey, MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import {
   keyFingerprint,
   type BackupRuntimeStatus,
@@ -100,7 +99,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.reload_in_progress": 409,
   "backup.recovery_key_exists": 409,
   "backup.recovery_key_unstorable": 400,
-  "backup.recovery_key_too_short": 400,
+  "backup.recovery_key_too_short": 409,
+  "backup.new_recovery_key_too_short": 400,
   "backup.destinations_invalid": 400,
   "backup.request_invalid": 400,
   "backup.cloud_needs_daily": 400,
@@ -499,11 +499,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
             heldSettings?.destinationTimeoutMs ??
             DEFAULT_DESTINATION_TIMEOUT_MS,
         };
+        const sealed = archiveRecord(settings).stored;
+        checkedNewRecoveryKey(recoveryKey);
         // Refuse exactly what boot would, before anything is written.
-        resolveBackupConfig({
-          env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey },
-          sealed: archiveRecord(settings).stored,
-        });
+        resolveBackupConfig({ env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey }, sealed });
         const bucketDestination = destinations.find((d) => d.kind === "s3");
         if (bucketDestination !== undefined) {
           await probeArchive(
@@ -583,7 +582,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const keyRotatedAt = new Date().toISOString();
-        loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: recoveryKey });
+        checkedNewRecoveryKey(recoveryKey);
         const read = await readHeldSettings();
         const held = "unreadable" in read ? null : read.settings;
         const unreadableCode = "unreadable" in read ? read.unreadable : undefined;

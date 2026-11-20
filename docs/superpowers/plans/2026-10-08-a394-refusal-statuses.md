@@ -243,7 +243,7 @@ pin today's number are in the part named.
   (body `ids`) → 400.
 - **One-off rows that wait on an owner answer (A394-20)** — `units-api` target unit (code split),
   `venue.detail_read_only`, `cloud.binding_conflict`, `promotion.not_a_local_secondary`,
-  `department.not_found` as a query value on receipt preview, `backup.stream_test_failed` 422,
+  `department.not_found` from the body on receipt preview, `backup.stream_test_failed` 422,
   `backup.recovery_key_too_short` against a stored key, the till's `reader.not_found` when the
   device has no reader (kept at 404 by A394-9; watcher, 2026-11-20 18:11).
 
@@ -278,7 +278,8 @@ pin today's number are in the part named.
   `party.not_open`, `working_order.not_open`; reported by a part 1 reader, not re-checked). Owner
   question 7.
 - `swap.not_permitted` 403 when the body's `toShiftId` belongs to someone other than its
-  `toPersonId` (`packages/workforce/src/shift-swaps.ts:40-43`): the body contradicts itself, 400.
+  `toPersonId` (`packages/workforce/src/shift-swaps.ts:40-43`): the body contradicts itself, 400
+  (done 2026-11-20 by A394-20: `swap.return_shift_not_owned` 400).
 
 ## Defects the audit found that are not status choices
 
@@ -759,6 +760,41 @@ Status changes:
   reader routes the queue named no longer exist (`git grep -nE 'readers/:id/(enable|disable)' --
   apps packages` finds nothing). No client compares these routes' statuses (same grep as A394-20c,
   2026-11-20). The rest of A394-20 stays with lane B.
+  **2026-11-20 (A394-20, lane B):** units, venue details, receipt preview, shift swaps and
+  cancel-item are done. Moving a unit's products to a target unit (the body's `unitId`) that no row
+  holds answers a new code, `unit.target_not_found`, 400 (`packages/menu/src/units.ts`); a missing
+  unit in the address keeps `unit.not_found` 404 on the same route. A second code was needed
+  because both are raised on one route; the dashboard's product-save reading of `unit.not_found`
+  is untouched. `venue.detail_read_only` answers 400 (was 409) on the details PATCH and the
+  legal-name rename, by question 11. `department.not_found` answers 400 on
+  `POST /management-api/receipt-preview`, whose department is in the body; neither route in that
+  file names a department in its address. A swap request whose return shift (`toShiftId`) is not
+  the named colleague's answers a new code, `swap.return_shift_not_owned`, 400, by question 13;
+  offering a shift that is not the requester's keeps `swap.not_permitted` 403, on the same routes,
+  hence the second code; the till and the dashboard word it in English and Spanish, though neither
+  sends a return shift today. The cancel-item and cancellation routes answer `tab.line_not_found`
+  404 (was `management.request_invalid {field:"lineId"}` 400) when the line in the address does not
+  exist, is an extra rather than a dish, or is on another bill than the counter bill the address
+  names (`apps/server/src/line-cancel-context.ts`); a party's refusal carries `partyId`, a counter
+  bill's `tabId`. A malformed line id keeps the 400. A line of another party's bill on a party
+  address still answers `bill.other_party` 409. `POST /api/parties/:id/groups/fire-line` on a held
+  dish cancelled in full answers a new code, `group.line_cancelled`, 409 (was
+  `management.request_invalid {field:"lineId"}` 400; `order-groups.ts`, `fireHeldLine`), and the
+  till words it. No client compares these routes' statuses (grep of `apps/dashboard`,
+  `apps/till`, `apps/setup` and `packages/*/src/dashboard` for `status === 4xx`, 2026-11-20).
+  By question 10: `backup.recovery_key_too_short` now means the key the box holds, and answers 409
+  on `GET /api/backup/recovery-key`, `POST /api/backup/apply` (no key sent) and
+  `PUT /api/backup/stream`. A too-short key the request sends to apply or rotate answers a new code,
+  `backup.new_recovery_key_too_short`, 400, and so does a too-short key typed on the setup page's
+  handover from a backup (`POST /api/node/handover/emergency/backup`, was
+  `backup.recovery_key_too_short` 400; the setup page now says the key is too short); the
+  dashboard checks a pasted key's length before sending it and shows the new code's sentence.
+  `POST /management-api/cloud/complete` answers a new code, `cloud.request_not_found`, 400
+  when the box has no saved connection request at all (`cloud-client.ts`, `complete`); a different
+  saved request still answers `cloud.binding_conflict` 409. `promotion.not_a_local_secondary` was
+  not changed: no route reaches it, because `POST /management-api/promote` never calls
+  `promoteLocalSecondaryToPrimary` (`boot.ts`, `promoteRun`). `backup.stream_test_failed` keeps 422
+  by question 5. A394-20 is done.
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
   `configuration-transfer.ts`, `email-settings-api.ts`, `backup-api.ts`, `location-settings-api.ts`,
   `mirror-bundle-api.ts`, catalogue's `menu.reset_required` and the two `time_zone.unreadable`
@@ -1204,7 +1240,9 @@ Clients DO branch on the code strings (listed per row) — a status-only change 
 state clashes (`backup.managed_by_environment` `:213`, `backup.not_primary` `:214`,
 `backup.reload_in_progress` `backup-supervisor.ts:100`, `backup.recovery_key_exists` `:277`) are 409.
 Borderline, left as match: `backup.recovery_key_too_short` 400 at `:268`, thrown when the body names
-no key and the STORED key is too short — arguably a clash with stored data (409).
+no key and the STORED key is too short — arguably a clash with stored data (409). (Done 2026-11-20
+by A394-20: 409 for a held key; a key the request sends answers
+`backup.new_recovery_key_too_short` 400.)
 
 ### box-retire.ts — boundary `box-retire.ts:44` (STATUS `:26-35`)
 
@@ -1649,7 +1687,8 @@ Routes: `GET/PUT/DELETE /api/backup/stream`, `POST /api/backup/stream/test`, `GE
 Codes checked 11 / match 10 / unclear 1. The 400s (`backup.request_invalid`,
 `backup.stream_config_unsafe`, `backup.recovery_key_too_short`) and the 409s (`managed_by_environment`,
 `not_primary`, `reload_in_progress`, `stream_not_configured`, `stream_signer_missing`,
-`recovery_key_missing`) fit.
+`recovery_key_missing`) fit. (Done 2026-11-20 by A394-20: `backup.recovery_key_too_short` now
+answers 409 here.)
 
 | Route | Code | Current | Rule | Why | Clients | Tests pinning it |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1697,7 +1736,8 @@ not the request; I read it as a clash and count it as fitting.
 - `swap.not_permitted` 403 on `POST /api/schedule/swaps` when the body's `toShiftId` belongs to someone
   other than its `toPersonId` (`shift-swaps.ts:40-43`). The caller is allowed to ask; the body
   contradicts itself, so 400 looks closer than 403. (The other `swap.not_permitted`, a caller who does
-  not own `fromShiftId`, `:30-33`, is a fair 403.)
+  not own `fromShiftId`, `:30-33`, is a fair 403.) (Done 2026-11-20 by A394-20:
+  `swap.return_shift_not_owned` 400.)
 - A malformed PATH id answers `shared.invalid_id` 400 through `requireUuidParam` across this share
   (for example `print-api.ts:679`, `payments-api.ts:401`, `workforce-api.ts:177`), while `orders-api.ts:140,149`
   answers a malformed path id with `working_order.not_found` 404. The rule does not say which a

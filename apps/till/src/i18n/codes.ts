@@ -333,6 +333,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Those items have already gone to the station. Check the table before trying again",
     es: "Esos artículos ya se han enviado a la estación. Revisa la mesa antes de volver a intentarlo",
   },
+  "group.line_cancelled": {
+    en: "That item has been cancelled, so there is nothing to send. Check the table before trying again",
+    es: "Ese artículo se ha cancelado, así que no hay nada que enviar. Revisa la mesa antes de volver a intentarlo",
+  },
   "group.not_waiting": {
     en: "Only the next group to fire can be snoozed. Check the table before trying again",
     es: "Solo se puede posponer el siguiente grupo por marchar. Revisa la mesa antes de volver a intentarlo",
@@ -825,6 +829,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "swap.not_permitted": {
     en: "You can only offer your own shifts and accept swaps offered to you",
     es: "Solo puedes ofrecer tus propios turnos y aceptar los cambios que te ofrezcan",
+  },
+  "swap.return_shift_not_owned": {
+    en: "The shift offered in return is not that colleague's. Choose one of their shifts",
+    es: "El turno ofrecido a cambio no es de ese compañero. Elige uno de sus turnos",
   },
   "swap.not_acceptable": {
     en: "That swap can no longer be accepted",

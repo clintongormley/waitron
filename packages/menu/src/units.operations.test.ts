@@ -442,7 +442,7 @@ describe("unit operations", () => {
       await assignProductUnit(tx, a, from.id);
       await expect(
         reassignProductsToUnit(tx, from.id, [a], "00000000-0000-4000-8000-000000000000"),
-      ).rejects.toMatchObject({ code: "unit.not_found" });
+      ).rejects.toMatchObject({ code: "unit.target_not_found" });
     });
   });
 

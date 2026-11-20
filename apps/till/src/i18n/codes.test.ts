@@ -338,6 +338,16 @@ it("explains a snooze refused because another group is the one waiting, in both 
   ]);
 });
 
+it("says a held dish cancelled in full cannot be sent, in both languages", () => {
+  expect([
+    codeMessage("group.line_cancelled", "en"),
+    codeMessage("group.line_cancelled", "es"),
+  ]).toEqual([
+    "That item has been cancelled, so there is nothing to send. Check the table before trying again",
+    "Ese artículo se ha cancelado, así que no hay nada que enviar. Revisa la mesa antes de volver a intentarlo",
+  ]);
+});
+
 it("says a service step has gone, in both languages", () => {
   expect(codeMessage("service_step.not_found", "en")).toBe("This step no longer exists");
   expect(codeMessage("service_step.not_found", "es")).toBe("Este paso ya no existe");

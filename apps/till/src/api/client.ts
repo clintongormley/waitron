@@ -5426,7 +5426,8 @@ export class TillApi {
 
   /**
    * Request a swap → `POST /api/schedule/swaps`: offer one of MY shifts to a colleague; `toShiftId`
-   * null is a one-sided give-away. A shift that is not mine rejects `swap.not_permitted`.
+   * null is a one-sided give-away. A shift that is not mine rejects `swap.not_permitted`; a
+   * `toShiftId` that is not `toPersonId`'s rejects `swap.return_shift_not_owned`.
    */
   requestSwap(req: {
     fromShiftId: string;

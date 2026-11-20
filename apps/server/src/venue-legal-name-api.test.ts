@@ -137,7 +137,7 @@ describe("changing the taxpayer's legal name", () => {
         expected: original,
         [field]: "ES",
       });
-      expect(response.status).toBe(409);
+      expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
         error: { code: "venue.detail_read_only", params: { field } },
       });

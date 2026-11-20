@@ -389,7 +389,7 @@ describe("cancellation confirmation context", () => {
       const order = await fixture();
       let partyId = order.partyId;
       let lineId = order.parent.id;
-      let code = "management.request_invalid";
+      let code = "tab.line_not_found";
       if (kind === "foreign_party") {
         partyId = (await fixture()).partyId;
         code = "bill.other_party";

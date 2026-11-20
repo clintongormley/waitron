@@ -53,9 +53,10 @@ declare module "@waitron/shared" {
     /** The absence ends before it starts. Shaped like `shift.invalid`: on create there is no id yet. */
     "absence.invalid": { reason: string };
     "swap.not_found": { swapId: string };
-    /** The requester does not own `from_shift`, the return `to_shift` is not `to_person`'s, or the
-     * acceptor is not `to_person`. */
+    /** The requester does not own `from_shift`, or the acceptor is not `to_person`. */
     "swap.not_permitted": { personId: string };
+    /** The return `to_shift` the request names is not `to_person`'s. */
+    "swap.return_shift_not_owned": { shiftId: string; personId: string };
     /** Only a `requested` swap may be accepted. */
     "swap.not_acceptable": { swapId: string };
     /** Only an `accepted` swap may be approved or rejected. */

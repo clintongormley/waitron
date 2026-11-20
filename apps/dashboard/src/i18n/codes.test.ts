@@ -88,6 +88,15 @@ it("words an unknown stuck payment in both languages", () => {
   expect(codeMessage("stuck_payment.not_found", "es")).toBe("No existe ese cobro pendiente.");
 });
 
+it("words a Cloud connection with nothing left to finish in both languages, naming Connect to Cloud", () => {
+  expect(codeMessage("cloud.request_not_found", "en")).toBe(
+    "This server has no Cloud connection request waiting to finish. Choose Connect to Cloud to start again.",
+  );
+  expect(codeMessage("cloud.request_not_found", "es")).toBe(
+    "Este servidor no tiene ninguna solicitud de conexión con Cloud pendiente de terminar. Elige Conectar con Cloud para empezar de nuevo.",
+  );
+});
+
 it("resolves a known code to its English copy", () => {
   expect(codeMessage("password.invalid", "en")).toBe("Incorrect password, try again");
 });
@@ -188,6 +197,7 @@ it("has a sentence for each staff self-service code (my-schedule portal)", () =>
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   for (const code of [
     "swap.not_permitted",
+    "swap.return_shift_not_owned",
     "swap.not_acceptable",
     "absence.overlaps",
     "absence.invalid",
@@ -294,6 +304,13 @@ it("has English and Spanish copy for a failed archive bucket test and a key chan
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
   }
+});
+
+it("has English and Spanish copy for a new recovery key that is too short", () => {
+  const code = "backup.new_recovery_key_too_short";
+  expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
 });
 
 it("has English and Spanish copy for each way one backup destination's call can fail", () => {
@@ -564,6 +581,7 @@ it("has English and Spanish copy for each unit code", () => {
     "unit.not_found",
     "unit.in_use",
     "unit.translation_required",
+    "unit.target_not_found",
   ]) {
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));

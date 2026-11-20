@@ -1228,6 +1228,7 @@ const LINE_REFUSALS = new Set([
   "group.not_waiting",
   "group.not_found",
   "group.line_held",
+  "group.line_cancelled",
   "submission.id_reused",
 ]);
 

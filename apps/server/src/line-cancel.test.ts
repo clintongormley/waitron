@@ -1159,7 +1159,10 @@ describe("Cancel item service command", () => {
           venue.staffId,
         ),
       ),
-    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineId" } });
+    ).rejects.toMatchObject({
+      code: "tab.line_not_found",
+      params: { partyId: order.partyId, lineId: order.extra!.id },
+    });
     await expect(
       inTx(venue, (tx) =>
         cancelItem(
