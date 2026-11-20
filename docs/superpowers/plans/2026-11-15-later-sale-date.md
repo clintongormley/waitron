@@ -441,7 +441,7 @@ by printing the bill or taking a payment, "day" means the venue's calendar day o
 (decision D1, for the owner to confirm); the date of a meal ended by the close of the trading day is
 left to ADVISER-CLOSE-OF-DAY-TICKET (decision D2, for the owner).
 _2026-11-19 17:05: the owner answered D1 "Calendar day it ended" and D2 "Yes, leave them to close
-of day" (lane L `questions.md`); §9 passes the close's moment._
+of day" (lane L `questions.md`); §9 covers the close's moment._
 
 **2. Paths on main that issue an invoice for a meal.** Re-sweep of every `recordSale`,
 `issueUnpaidInvoice` and `issueIfFullyPaid` caller outside tests (RUN: `git grep` at `db6a22acc9`;
@@ -460,6 +460,8 @@ ended.
 | H. An edit that leaves a paid bill owing nothing | `issueIfFullyPaid` `bill-payments.ts:920` from `till-api.ts:3332`, `:3880`, `:3920`, `:4059`, `:4302`, `:4435`, `adjustments-api.ts:178`, `:243`, `line-cancel-api.ts:272`, `working-order.ts:7346` | the edit makes it fully paid | later trading day: row G. Same trading day, after midnight: only a bill already fully paid but held by an open draft (`bill-payments.ts:789-790`) | one date; that held case is a stated limit | — |
 
 Row D, "when the card was taken": 2026-11-19, R3 review: see the correction under D3 — SumUp's time is the checkout's start; a card found later by either provider carries roughly when the reader was asked, and a tap after midnight still files the earlier day.
+
+Rows G and H: 2026-11-20, review fix: see the note at the end of §9.
 
 Issue nothing new: `finalizeSettleRecovery` (`till-sale.ts:2215`) only settles a bill already
 issued; `recordSubstitution` (`packages/core/src/record-substitution.ts:57`) has no caller under
@@ -560,6 +562,8 @@ match the owner's "correct" to "a dinner that ends after midnight on 1 April tak
   (`working_orders.opened_at`, `schema/orders.ts:84`; `businessDayBounds`,
   `packages/shared/src/business-day-clock.ts:104`), about 40 more lines, an extra read on every sale,
   and choosing that day ahead of ADVISER-CLOSE-OF-DAY-TICKET.
+  _2026-11-20: the review fix at the end of §9 builds this alternative for the bills the close counts
+  as due; neither the watcher nor the owner has cleared it yet._
 - **D3, when a card was taken, for a card the box learns about only later.** Both adapters set
   `settled_at` to the box's clock, and the background check that asks the provider about a missed
   answer (the reconciler) sets it to when it asked (SumUp `packages/payments-sumup/src/provider.ts:328`,
@@ -612,6 +616,7 @@ match the owner's "correct" to "a dinner that ends after midnight on 1 April tak
   on 1 April.
 - **D5, cases that keep one date, not built; each stated in the PR as a limit.**
   (a) Row H's held case: paid in full before midnight, an open draft discarded after it.
+  _2026-11-20: once that bill's business day has ended, it carries that day's end (§9's note)._
   (b) A bill paid in full but held back by a card refund still pending
   (`apps/server/src/bill-payments.ts:786-787`): completing the refund writes the refund and issues
   nothing (`apps/server/src/bill-refunds.ts:329-346`; RUN `git grep` for `issueIfFullyPaid`,

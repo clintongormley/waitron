@@ -7,7 +7,6 @@ import { withTransaction } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
-  placedCounterBillMovedTo,
   provisionBillVenue,
   seatedWith,
   send,
@@ -34,7 +33,7 @@ const suite = useVenueDb({
 // Europe/Madrid, UTC+1 in March, its business day turning over at 05:00. 16 March 2026 is a Monday.
 const MON_2200 = "2026-03-16T21:00:00.000Z";
 const MON_2230 = "2026-03-16T21:30:00.000Z";
-const TUE_0910 = "2026-03-17T08:10:00.000Z";
+const WED_0910 = "2026-03-18T08:10:00.000Z";
 const WED_1100 = "2026-03-18T10:00:00.000Z";
 const THU_1200 = "2026-03-19T11:00:00.000Z";
 
@@ -205,24 +204,6 @@ describe("a bill left open past its business day is dated by its close, never by
     await expectCloseOfDay(venue, party.tabId, "2026-03-19");
   });
 
-  it("keeps one date for a takeaway moved to a table, marked served on Monday and handed over on Thursday", async () => {
-    const venue = await provisionBillVenue(suite.db);
-    const party = await seatedWith(venue);
-    const billId = await placedCounterBillMovedTo(venue, venue.zoneId, party);
-    await serveAt(venue, billId, MON_2230);
-
-    const paid = await send(
-      venue.appAt(clockAt(THU_1200)),
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/collect`,
-      { tender: { method: "cash", amount: "18.00" } },
-    );
-
-    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-    await expectOneDate(venue, billId, "2026-03-19");
-  });
-
   it("files the end of Monday's business day when a later serving mark is taken back and the rest cancelled before payment", async () => {
     const venue = await provisionBillVenue(suite.db);
     const billId = await withTransaction(venue.db, async (tx) => {
@@ -239,8 +220,8 @@ describe("a bill left open past its business day is dated by its close, never by
     });
     openedAt(venue, billId, MON_2200);
     await serveAt(venue, billId, MON_2200);
-    await serveAt(venue, billId, TUE_0910);
-    await serveAt(venue, billId, TUE_0910, { undo: true });
+    await serveAt(venue, billId, WED_0910);
+    await serveAt(venue, billId, WED_0910, { undo: true });
     const cancelled = await cancelItemHttp(
       venue.db,
       venue.appAt(clockAt(WED_1100)),

@@ -497,9 +497,8 @@ export class SumUpCloudProvider implements PaymentProvider {
             return false;
           }
           // SumUp's `timestamp` is when the checkout began, not the tap
-          // (docs/research/2026-09-10-sumup-solo-experiments.md). The checkout cannot begin before
-          // the box wrote the row nor after this check found it, so a time outside that span, or
-          // none, gives way to when the row was written.
+          // (docs/research/2026-09-10-sumup-solo-experiments.md). A time outside the span from this
+          // row's `created_at` to its `settled_at`, or none, gives way to `created_at`.
           const createdAt = Date.parse(row.createdAt);
           const sumupTime = t.timestamp === undefined ? NaN : Date.parse(t.timestamp);
           const plausible = sumupTime >= createdAt && sumupTime <= outcome.settledAt.getTime();

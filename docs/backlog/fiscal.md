@@ -1163,15 +1163,17 @@ the business day (the owner's words of 18 November, in the [19 November sheet](.
 its day is the calendar day of that moment (the owner's D1, "Calendar day it ended", relayed by the
 watcher, lane L `questions.md`, "WATCHER 2026-11-19 17:05"). Serving marks date nothing. Card
 recovery and a bill payment the box completes later pass the moment the last payment still holding
-money was accepted. A table bill the close of day would end (`closeOfDayEnd`, `close-of-day.ts`:
+money was accepted. A table bill the close of day counts as due (`closeOfDayEnd`, `close-of-day.ts`:
 this node's, with a trusted opening time, not left by a restore, no dish the kitchen was never asked
 for), issued after the business day it was opened in ended, is dated no later than that day's end,
-whichever path issues it (the owner's D2, "Yes, leave them to close of day", same record). Every
-other invoice carries one date. A card found later carries roughly when the reader was asked
-(SumUp's time is the checkout's start), so a tap just after midnight still files the earlier day.
-The owner's answers relayed by the watcher on 2026-11-15 at 12:12 and 20:59 (lane L
-`archive/questions-to-2026-11-18.md`): "sale day" for
-the VAT return and the export, and "(a) By meal date" for how the export picks such an invoice.
+whichever path issues it: the owner's "whichever comes first" above (the owner's D2, "Yes, leave
+them to close of day", same record, chose to build nothing for these bills on this branch; the
+watcher has not yet cleared this). A bill paid in full before that day ended but held open past it is
+dated by the day's end too, not by its last payment. Every other invoice carries one date. A card
+found later carries roughly when the reader was asked (SumUp's time is the checkout's start), so a
+tap just after midnight still files the earlier day. The owner's answers relayed by the watcher on
+2026-11-15 at 12:12 and 20:59 (lane L `archive/questions-to-2026-11-18.md`): "sale day" for the
+VAT return and the export, and "(a) By meal date" for how the export picks such an invoice.
 [Plan](../superpowers/plans/2026-11-15-later-sale-date.md)._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
