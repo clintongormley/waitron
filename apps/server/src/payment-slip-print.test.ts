@@ -1,3 +1,4 @@
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -1620,9 +1621,13 @@ describe("a payment after the ticket was issued", () => {
     } else {
       const paid =
         path === "a cash collection"
-          ? await send(venue.app, venue.cookie, "POST", `/api/working-orders/${bill.id}/collect`, {
-              tender: { method: "cash", amount: "30.00" },
-            })
+          ? await send(
+              venue.app,
+              venue.cookie,
+              "POST",
+              `/api/working-orders/${bill.id}/payments`,
+              billShare("cash", "30.00"),
+            )
           : await send(venue.app, venue.cookie, "POST", "/api/pay", {
               dining: "eat_in",
               id: bill.id,
@@ -1735,8 +1740,8 @@ describe("a payment after the ticket was issued", () => {
         venue.app,
         venue.cookie,
         "POST",
-        `/api/working-orders/${bill.id}/collect`,
-        { tender: method === "cash" ? { method, amount: "30.00" } : { method } },
+        `/api/working-orders/${bill.id}/payments`,
+        billShare(method, "30.00"),
       );
 
       expect(collected.status, JSON.stringify(collected.json)).toBe(200);
@@ -2120,21 +2125,16 @@ describe("a payment after the ticket was issued", () => {
     expectPaymentSlip(slips[0]!, "10,00", bill.invoiceNumber);
   });
 
-  it.each(["cash bill payment", "typed card bill payment", "cash collection"] as const)(
-    "a payment on an issued ticket whose receipt never printed is listed on the original printed next: %s",
-    async (path) => {
+  it.each(["cash", "card"] as const)(
+    "a %s payment on an issued ticket whose receipt never printed is listed on the original printed next",
+    async (method) => {
       const bill = await billIssuedNeverPrinted();
       const before = await jobCount();
 
-      const paid =
-        path === "cash collection"
-          ? await send(venue.app, venue.cookie, "POST", `/api/working-orders/${bill.id}/collect`, {
-              tender: { method: "cash", amount: "30.00" },
-            })
-          : await billPayment(
-              bill.id,
-              path === "cash bill payment" ? cash("30.00") : typedCard("30.00"),
-            );
+      const paid = await billPayment(
+        bill.id,
+        method === "cash" ? cash("30.00") : typedCard("30.00"),
+      );
 
       expect(paid.status, JSON.stringify(paid.json)).toBe(200);
       expect(await slipsSince(before)).toHaveLength(0);
@@ -2153,7 +2153,7 @@ describe("a payment after the ticket was issued", () => {
         .where(and(eq(printJobs.saleId, bill.saleId), eq(printJobs.receiptCopy, false)));
       expect(originals).toHaveLength(1);
       const text = decodeTicket(originals[0]!.payload);
-      expect(text).toContain(path === "typed card bill payment" ? "Tarjeta" : "Efectivo");
+      expect(text).toContain(method === "card" ? "Tarjeta" : "Efectivo");
       expect(text).toContain("30,00");
       expect(text).not.toContain(labels.duplicate);
       expect(await slipsSince(before)).toHaveLength(0);

@@ -15,7 +15,7 @@ import { payments } from "@waitron/payments";
 import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { republishMenus } from "./testing/publish-menu.js";
-import { collectOrder, payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
+import { payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import {
   setupPartyVenue,
   seat,
@@ -116,35 +116,6 @@ describe("a human zero-owing command remains attendance evidence", () => {
     );
     expect(rows).toEqual([{ n: 0 }]);
   }
-  it.each(["cash", "card"] as const)(
-    "records a %s collection of an issued zero bill",
-    async (method) => {
-      const id = await zeroBill(true);
-      at();
-      const ticket = await collectOrder(
-        { ...deps(), admission: testTradingAdmission() },
-        v.cfg,
-        { id, lines: [], tender: tender(method) },
-        collector,
-      );
-      expect(ticket.total).toBe("0.00");
-      expect(ticket.tender).toEqual({ method: "unpaid" });
-      expect(await operations()).toMatchObject([evidence()]);
-      await noMoney();
-      vi.spyOn(v.clock, "now").mockImplementation(() => {
-        throw new Error("New clock unavailable");
-      });
-      expect(
-        await collectOrder(
-          { ...deps(), admission: testTradingAdmission() },
-          v.cfg,
-          { id, lines: [], tender: tender(method) },
-          v.operator,
-        ),
-      ).toEqual(ticket);
-      expect(await operations()).toMatchObject([evidence()]);
-    },
-  );
   it("records staff activity once when the bill route closes an issued zero bill", async () => {
     const id = await zeroBill(true);
     at();

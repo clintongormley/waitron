@@ -92,7 +92,6 @@ import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import {
-  collectOrderOrchestration as collectOrder,
   payWorkingOrderIntegratedOrchestration as readerPay,
   printSaleReceipt,
   readSettledTicket,
@@ -792,15 +791,12 @@ describe("receipt grouping after table changes", () => {
         await placeOrder({ ...deps(), admission: testTradingAdmission() }, cfg, orderId, OPERATOR);
         if (orderFlow === "issued") await printSaleReceipt(deps(), cfg, orderId, "original");
         if (orderFlow === "ticket_then_pay") {
-          await collectOrder(
+          await paySavedBillInCash(
             { ...deps(), admission: testTradingAdmission() },
             cfg,
-            {
-              id: orderId,
-              lines: [],
-              tender: { method: "cash", amount: "2.00" },
-            },
-            OPERATOR,
+            await counterOperator(cfg),
+            orderId,
+            "2.00",
           );
         }
       }
@@ -818,15 +814,12 @@ describe("receipt grouping after table changes", () => {
       });
       await reprintSale({ db: suite.db, backend }, cfg, orderId);
       if (orderFlow === "issued") {
-        const collected = await collectOrder(
+        const collected = await paySavedBillInCash(
           { ...deps(), admission: testTradingAdmission() },
           cfg,
-          {
-            id: orderId,
-            lines: [],
-            tender: { method: "cash", amount: "2.00" },
-          },
-          OPERATOR,
+          await counterOperator(cfg),
+          orderId,
+          "2.00",
         );
         expect(collected.orderLabel).toBe("Terrace 6");
       }
@@ -1469,11 +1462,12 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(opensDrawer(original)).toBe(false);
     expect(await drawerOpensFor(cfg)).toEqual([]);
 
-    await collectOrder(
+    await paySavedBillInCash(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
-      { id, lines: [], tender: { method: "cash", amount: "2.00" } },
-      OPERATOR,
+      await counterOperator(cfg),
+      id,
+      "2.00",
     );
 
     // Collection settles the same invoice and emits only the cash-drawer command.
@@ -1491,7 +1485,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(jobs.map((job) => job.payload)).toContainEqual(Buffer.from(DRAWER_KICK));
     const opens = await drawerOpensFor(cfg);
     expect(opens).toHaveLength(1);
-    expect(opens[0]).toMatchObject({ reason: "cash_sale", personId: OPERATOR });
+    expect(opens[0]).toMatchObject({ reason: "bill_payment", personId: OPERATOR });
     // The `sale_id` back-reference is PINNED to the settled invoice's sale.
     expect(opens[0]!.saleId).toBe(await onlySaleId());
   });
@@ -1656,11 +1650,12 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
             id,
             OPERATOR,
           );
-        await collectOrder(
+        await paySavedBillInCash(
           { ...deps(), admission: testTradingAdmission() },
           till,
-          { id, lines: [], tender: { method: "cash", amount: "2.00" } },
-          OPERATOR,
+          await counterOperator(till),
+          id,
+          "2.00",
         );
       };
 
@@ -1671,7 +1666,7 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
       await collectOn(cfg);
       expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([{ printerId, kick: true }]);
       expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.deviceId])).toEqual([
-        ["cash_sale", cfg.origin.deviceId],
+        ["bill_payment", cfg.origin.deviceId],
       ]);
     },
   );

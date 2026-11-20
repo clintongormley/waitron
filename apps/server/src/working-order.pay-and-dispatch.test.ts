@@ -1,6 +1,9 @@
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { takeBillPayment } from "./bill-payments.js";
 import {
+  billShare,
   payCounterBasket,
+  takeBillPayment as takeSavedBillPayment,
   payFreshCounterInCash,
   paySavedBillInCash,
 } from "./testing/bill-payment-fixture.js";
@@ -425,10 +428,6 @@ async function orderState(id: string): Promise<{ status: string; settledAtSet: b
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settledAt !== null };
 }
 
-/** Whether this order's `collected_at` (customer-handover) marker is set. The witness that the
- *  collect flow stamped the ORDER-level marker `listStationQueue` excludes on (§3e): a placed order
- *  fired to a station leaves that station's queue once `collectOrder` sets it. Kept separate from
- *  {@link orderState} (whose `toEqual` assertions pin exactly `{status, settledAtSet}`). */
 async function collectedAtSet(id: string): Promise<boolean> {
   // Through the Drizzle export, for the reason {@link orderState} gives.
   const rows = await suite.db
@@ -1743,14 +1742,12 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await orderState(collectId)).toEqual({ status: "placed", settledAtSet: false });
     expect(await saleCount(collectId)).toBe(0);
 
-    const collected = await collectOrder(
+    const collected = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id: collectId,
-        lines: [],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      await paymentOperator(cfg),
+      collectId,
+      "1.50",
     );
     expect(collected.invoiceNumber).toBe("A/2");
     expect(await orderState(collectId)).toEqual({ status: "settled", settledAtSet: true });
@@ -1836,14 +1833,12 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await fiscalRecordCount(id)).toBe(0);
     expect(await outstanding()).toEqual([]);
 
-    const collected = await collectOrder(
+    const collected = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "3.50" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "3.50",
     );
     expect(collected.invoiceType).toBe("F2");
     expect(collected.invoiceNumber).toBe("A/1");
@@ -1943,17 +1938,21 @@ describe("prepare & collect — zone payment timing", () => {
       id,
       OPERATOR,
     );
+    await issueOrderInvoice(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
     // 5.00 cash against the 1.50 invoice: the SALE settles at the invoice total (1.50) and 3.50 is
     // drawer change — settling at the tendered cash would over-report the fiscal total (§5).
-    const collected = await collectOrder(
+    const collected = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "5.00",
     );
     expect(collected.total).toBe("1.50");
     expect(collected.tender).toEqual({ method: "cash", change: "3.50" });
@@ -1964,8 +1963,7 @@ describe("prepare & collect — zone payment timing", () => {
   it("Mode I: a card tender at collect records exactly one captured payment linked to the sale; cash records none", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
 
-    // CARD collect: the invoice issued deferred at placing, then a manual-card ("datáfono") tender at
-    // collect. The card charges the EXACT invoice total on the separate terminal — no change.
+    // A hand-keyed card payment takes the exact total of the issued invoice.
     const cardId = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id: cardId,
@@ -1978,15 +1976,21 @@ describe("prepare & collect — zone payment timing", () => {
       cardId,
       OPERATOR,
     );
-    const collected = await collectOrder(
+    await issueOrderInvoice(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id: cardId,
-        lines: [],
-        tender: { method: "card", amount: "1.50", externalRef: "OP-INV-1" },
-      },
+      cardId,
+      OPERATOR,
     );
+    const collected = await (
+      await takeSavedBillPayment(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        cardId,
+        billShare("card", "1.50", { externalRef: "OP-INV-1" }),
+        await paymentOperator(cfg),
+      )
+    ).invoice!;
     expect(collected.tender.method).toBe("card");
     expect(await orderState(cardId)).toEqual({ status: "settled", settledAtSet: true });
 
@@ -2016,11 +2020,19 @@ describe("prepare & collect — zone payment timing", () => {
       cashId,
       OPERATOR,
     );
-    await collectOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
-      id: cashId,
-      lines: [],
-      tender: { method: "cash", amount: "1.50" },
-    });
+    await issueOrderInvoice(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      cashId,
+      OPERATOR,
+    );
+    await paySavedBillInCash(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      await paymentOperator(cfg),
+      cashId,
+      "1.50",
+    );
     expect(await paymentCount(cashId)).toBe(0);
   });
 
@@ -2072,26 +2084,26 @@ describe("prepare & collect — zone payment timing", () => {
       id,
       OPERATOR,
     );
+    await issueOrderInvoice(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
 
-    const req = { id, lines: [], tender: { method: "cash" as const, amount: "1.50" } };
-    // Two overlapping collects of the placed order. The write queue admits the second only once the
-    // first has committed, so it sees `settled` and REPLAYS the ticket — neither errors and there
-    // is ONE settlement. The equal invoice numbers below are what witness the replay.
-    const [rA, rB] = await Promise.all([
-      collectOrder(
+    const payment = billShare("cash", "1.50");
+    const operator = await paymentOperator(cfg, OPERATOR);
+    const pay = () =>
+      takeSavedBillPayment(
         { admission: testTradingAdmission(), db: suite.db, backend, clock },
         cfg,
-        req,
-        OPERATOR,
-      ),
-      collectOrder(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock },
-        cfg,
-        req,
-        OPERATOR,
-      ),
-    ]);
-    expect(rA.invoiceNumber).toBe(rB.invoiceNumber);
+        id,
+        payment,
+        operator,
+      );
+    const [rA, rB] = await Promise.all([pay(), pay()]);
+    expect(rA.invoice!.invoiceNumber).toBe("A/1");
+    expect(rB.invoice).toEqual(rA.invoice);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
     expect(await fiscalRecordCount(id)).toBe(1);
@@ -2124,14 +2136,12 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await outstanding()).toEqual([]); // no issued invoice → nothing outstanding
 
     // COLLECT → file `recordSale` IMMEDIATE, placed → settled.
-    const collected = await collectOrder(
+    const collected = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "1.50",
     );
     expect(collected.invoiceNumber).toBe("A/1"); // the FIRST filing is at collect
     expect(collected.total).toBe("1.50");
@@ -2170,46 +2180,33 @@ describe("prepare & collect — zone payment timing", () => {
       OPERATOR,
     );
 
-    const req = { id, lines: [], tender: { method: "cash" as const, amount: "1.50" } };
-    // Two overlapping collects, both of which would FILE. The write queue admits the second only once
-    // the first has committed, so it sees `settled` and REPLAYS — ONE sale. The equal invoice
-    // numbers below are what witness the replay.
-    const [rA, rB] = await Promise.all([
-      collectOrder(
+    const payment = billShare("cash", "1.50");
+    const operator = await paymentOperator(cfg, OPERATOR);
+    const pay = () =>
+      takeSavedBillPayment(
         { admission: testTradingAdmission(), db: suite.db, backend, clock },
         cfg,
-        req,
-        OPERATOR,
-      ),
-      collectOrder(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock },
-        cfg,
-        req,
-        OPERATOR,
-      ),
-    ]);
-    expect(rA.invoiceNumber).toBe(rB.invoiceNumber);
+        id,
+        payment,
+        operator,
+      );
+    const [rA, rB] = await Promise.all([pay(), pay()]);
+    expect(rA.invoice!.invoiceNumber).toBe("A/1");
+    expect(rB.invoice).toEqual(rA.invoice);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
     expect(await fiscalRecordCount(id)).toBe(1);
 
     // A further SEQUENTIAL collect of the now-settled order deterministically hits the settled-replay
     // branch: it returns the same ticket and files nothing. Exact cash has zero change.
-    const replay = await collectOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      req,
-      OPERATOR,
-    );
-    expect(replay.invoiceNumber).toBe("A/1");
-    expect(replay.tender).toEqual({ method: "cash", change: "0.00" });
+    const { invoice: replay } = await pay();
+    expect(replay!.invoiceNumber).toBe("A/1");
+    expect(replay!.tender).toEqual({ method: "cash", change: "0.00" });
     expect(await saleCount(id)).toBe(1);
   });
 
-  // The counter COLLECT is a payment, not a handover: a paid counter order stays on its station queue
-  // until it is handed over. Both modes are pinned: Mode T settles through `fileImmediateSale`, Mode I
-  // through the direct settle UPDATE.
-  it("Mode T: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
+  // A paid counter order stays on its station queue until handover.
+  it("Mode T: after payment the order holds one sale and no handover, and stays on its station queue", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId();
     const id = randomUUID();
@@ -2233,14 +2230,12 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await collectedAtSet(id)).toBe(false);
 
     // COLLECT → Mode T files immediate at collect.
-    const collected = await collectOrder(
+    const collected = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "1.50",
     );
 
     expect(collected.invoiceNumber).toBe("A/1");
@@ -2259,7 +2254,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await ticketStateOf(id)).toBe("queued");
   });
 
-  it("Mode I: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
+  it("Mode I: after payment the order holds one sale and no handover, and stays on its station queue", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId();
     const id = randomUUID();
@@ -2268,8 +2263,14 @@ describe("prepare & collect — zone payment timing", () => {
       zoneId,
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
-    // PLACE issues the deferred invoice AND fires the ticket item to the default station.
+    // The station queue holds the placed order before its already-issued invoice is paid.
     await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      id,
+      OPERATOR,
+    );
+    await issueOrderInvoice(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
       id,
@@ -2281,14 +2282,12 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await collectedAtSet(id)).toBe(false);
 
     // COLLECT → settle the EXISTING invoice (file NOTHING new).
-    const collected = await collectOrder(
+    const collected = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "1.50",
     );
     expect(collected.invoiceNumber).toBe("A/1"); // the SAME deferred invoice, read back
     expect(await saleCount(id)).toBe(1); // no second file at collect
