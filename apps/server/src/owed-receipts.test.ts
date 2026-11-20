@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { and, eq, sql } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 import {
+  deviceProfiles,
   devices,
   invoiceDeliveries,
   invoiceSeries,
@@ -17,14 +18,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  seedDepartmentReceipt,
-  seedDevice,
-  seedDeviceProfiles,
-  seedPerson,
-  seedVenue,
-  seedWorkingOrder,
-} from "@waitron/db/testing/seed.js";
+import { seedDevice, seedPerson, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   claimPrintJobs,
   createPrinter,
@@ -42,46 +36,28 @@ import type { LayOutSaleReceipt } from "./receipt-print.js";
 import {
   givenUpOriginals,
   owedReceiptJob,
+  owedSales,
   owesOriginal,
   printOwedTickets,
   startFreshRounds,
 } from "./owed-receipts.js";
-import { Hono } from "hono";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import {
-  assignMenuToVenue,
-  addProductToMenu,
-  createCategory,
-  createMenu,
-  createProduct,
-} from "@waitron/menu";
-import { planVenue } from "@waitron/provisioning";
-import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
-import { departments, routingCells } from "@waitron/venue-service";
-import { recordSale } from "@waitron/core";
-import {
-  deviceOrigin,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  workingOrderId as brandWorkingOrderId,
-  jobOrigin,
-} from "@waitron/shared";
+import { deviceOrigin, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
-import { deploymentEnvironment } from "./config.js";
-import { ALL_MODULES } from "./modules.js";
-import { mountTillApi } from "./till-api.js";
-import { systemClock } from "./till-backend.js";
 import { printSaleReceipt } from "./till-sale.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder, setOrderInvoiceChoice } from "./working-order.js";
+import { readBillEditState } from "./bill-editing.js";
+import {
+  cashPayment,
+  provisionBillVenue,
+  seatedWith,
+  send,
+  tabWith,
+} from "./testing/bill-venue.js";
+import { closingEditsForTest } from "./testing/party-close-fixture.js";
+import { ACME } from "./testing/bill-invoice-fixture.js";
+import { billRow } from "./testing/party-venue.js";
 import { deletePrinter } from "./printer-delete.js";
-import { DEVICE_COOKIE } from "./device-session.js";
-import { enrolDeviceForTest } from "./testing/enrol.js";
-import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { testTradingAdmission } from "./testing/trading-admission.js";
-import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import type { TradingContext } from "./trading-context.js";
 
 const suite = useVenueDb({
@@ -744,7 +720,7 @@ describe("owedReceiptJob", () => {
   });
 });
 
-it("finds candidates through the issued-time index, and checks unpaid departures per print job, not per sale", async () => {
+it("finds candidates through the issued-time index, and checks unpaid departures by the bill's key", async () => {
   const plan = await withTransaction(suite.db, async (tx) => {
     const rows = await tx.execute<{ detail: string }>(
       sql`explain query plan ${givenUpOriginals(tx, NODE, new Date(AT)).getSQL()}`,
@@ -757,20 +733,29 @@ it("finds candidates through the issued-time index, and checks unpaid departures
     "SEARCH invoice_series EXISTS USING INDEX sqlite_autoindex_invoice_series_1 (id=?)",
   );
   expect(joined).toBe(2);
-  expect(plan.filter((step) => step.startsWith("SCAN print_jobs"))).toEqual([]);
-  expect(plan.indexOf("SCAN unpaid_departures")).toBeGreaterThan(joined);
+  expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
+  expect(plan).toContain(
+    "SEARCH unpaid_departures USING INDEX unpaid_departures_working_order_key (working_order_id=?)",
+  );
+});
+
+it("finds owed sales through the issued-time index, and scans neither print jobs nor unpaid departures", async () => {
+  const plan = await withTransaction(suite.db, async (tx) => {
+    const rows = await tx.execute<{ detail: string }>(
+      sql`explain query plan ${owedSales(tx, NODE, new Date(AT)).getSQL()}`,
+    );
+    return rows.rows.map((row) => row.detail);
+  });
+  expect(plan[0]).toBe("SEARCH sales USING INDEX sales_issued_idx (issued_at>?)");
+  expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
+  expect(plan).toContain("SEARCH owed_original_job USING INDEX print_jobs_sale_id_idx (sale_id=?)");
+  expect(plan).toContain(
+    "SEARCH unpaid_departures USING INDEX unpaid_departures_working_order_key (working_order_id=?)",
+  );
 });
 
 describe("printOwedTickets", () => {
   let backend: FiscalBackend;
-  beforeAll(() => {
-    backend = new VerifactuBackend({
-      clock: systemClock(),
-      db: suite.db,
-      environment: deploymentEnvironment(process.env),
-      deploymentEnvironment: deploymentEnvironment(process.env),
-    });
-  });
   let warnings: { message: string; params: unknown }[] = [];
   const log: Logger = (level, message, params) => {
     if (level === "warn") warnings.push({ message, params });
@@ -778,97 +763,26 @@ describe("printOwedTickets", () => {
   const PRINTS = CAPABILITY_FLAGS.filter((flag) => flag !== "open-cash-drawer");
 
   /**
-   * A venue with one menu item on its counter, and a till signed in on a device whose profile allows
-   * `capabilities`, on a receipt printer unless `printer` is false. A sale is a counter cash sale
-   * rung on that till; `close` is its window's close request (Done).
+   * The bill venue's first till, its profile allowing only `capabilities`, on a receipt printer of
+   * its own unless `printer` is false. A sale is a table bill paid in cash on that till; `close` is
+   * its window's close request (Done).
    */
   async function till({
     printer = true,
     capabilities = PRINTS,
   }: { printer?: boolean; capabilities?: readonly string[] } = {}) {
-    const venue = await applyVenue(
-      planVenue(
-        {
-          country: "ES",
-          taxId: "61000003R",
-          legalName: "Recibos Debidos SL",
-          name: "Sala",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: ["es-ES"],
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-          seriesCode: "A",
-          rectificativeSeriesCode: "R",
-          admin: {
-            displayName: "Administrator",
-            pinHash: fixturePinHash("1234"),
-            passwordHash: fixturePasswordHash("dashPass123"),
-            email: "owner@example.test",
-          },
-        },
-        ALL_MODULES,
-      ),
-      { db: suite.db, modules: ALL_MODULES },
-    );
-    const cfg: TradingContext = {
-      nodeId: brandNodeId(venue.nodeId),
-      locale: "es-ES",
-      tipsEnabled: false,
-      simplifiedInvoiceLimit: null,
-    };
-    const { menuItemId, operatorId } = await withTransaction(suite.db, async (tx) => {
-      const menu = await createMenu(tx, { name: "Barra" });
-      const category = await createCategory(tx, { name: "Bebidas" });
-      const product = await createProduct(tx, {
-        categoryId: category.id,
-        name: "Agua mineral",
-        pricingUnit: "each",
-        unitPrice: "1.50",
-        vatClass: "general",
-      });
-      await assignMenuToVenue(tx, menu.id);
-      const item = await addProductToMenu(tx, {
-        menuId: menu.id,
-        productId: product.id,
-        grossPrice: "1.50",
-      });
-      const counter = await tx.execute<{ zone_id: string }>(
-        sql`select id as zone_id from floor_zones where is_counter_default`,
-      );
-      await offerMenuThroughZone(tx, counter.rows[0]!.zone_id, menu.id, { makeDefault: true });
-      await publishWorkingMenu(tx, menu.id);
-      await tx
-        .insert(routingCells)
-        .values({ categoryId: category.id, stationId: null, noPreparation: true });
-      for (const department of await tx
-        .select({ id: departments.id })
-        .from(departments)
-        .where(isNull(departments.receiptUpdatedAt)))
-        await seedDepartmentReceipt(tx, department.id, {
-          operationDescription: "Sale on the premises",
-        });
-      const [staff] = await seedPersons(tx, {
-        displayName: "Cashier",
-        pinHash: fixturePinHash("5555"),
-        role: "staff",
-      });
-      return { menuItemId: item.id, operatorId: staff!.id };
-    });
-    const [profile] = await seedDeviceProfiles(suite.db, {
-      name: "Counter till",
-      formFactor: "till",
-      capabilities: [...capabilities],
-    });
-    const device = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Counter till",
-      profileId: profile!.id,
-    });
-    const deviceId = device.deviceId;
+    const venue = await provisionBillVenue(suite.db);
+    backend = venue.backend;
+    const { cfg, deviceId, operatorId } = venue;
+    const [device] = await suite.db
+      .select({ profileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    await suite.db
+      .update(deviceProfiles)
+      .set({ capabilities: [...capabilities] })
+      .where(eq(deviceProfiles.id, device!.profileId!));
+    await suite.db.update(devices).set({ receiptPrinterId: null }).where(eq(devices.id, deviceId));
     const newPrinter = () =>
       withTransaction(suite.db, async (tx) => {
         const { id } = await createPrinter(tx, {
@@ -880,56 +794,19 @@ describe("printOwedTickets", () => {
         return id;
       });
     const printerId = printer ? await newPrinter() : null;
-    const app = new Hono();
-    mountTillApi(
-      app,
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock: systemClock(),
-        cfg,
-        secureCookies: false,
-        venueLocale: "es-ES",
-      },
-      () => {},
-    );
-    const deviceCookie = `${DEVICE_COOKIE}=${deviceId}.${device.token}`;
-    const signIn = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: deviceCookie },
-      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
-    });
-    expect(signIn.status).toBe(200);
-    const cookie = `${signIn.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
     async function ring() {
-      const orderId = randomUUID();
-      const res = await app.request(`/api/working-orders/${orderId}/payments`, {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({
-          dining: "eat_in",
-          submissionId: orderId,
-          kind: "share",
-          shareOf: 1,
-          method: "cash",
-          tendered: "1.50",
-          basket: { lines: [{ menuItemId, quantity: "1" }] },
-        }),
-      });
-      expect(res.status).toBe(200);
+      const orderId = await tabWith(venue, "Croquettes");
+      expect((await cashPayment(venue, venue.cookie, orderId, "10.00")).status).toBe(200);
       const [sale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, orderId));
       return { orderId, saleId: sale!.id, sale: sale!, issuedAt: Date.parse(sale!.issuedAt) };
     }
     const close = async (orderId: string) => {
-      const res = await app.request(`/api/sales/${orderId}/receipt`, {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ ifOwed: true }),
+      const res = await send(venue.app, venue.cookie, "POST", `/api/sales/${orderId}/receipt`, {
+        ifOwed: true,
       });
       expect(res.status).toBe(200);
     };
-    return { cfg, deviceId, printerId, operatorId, menuItemId, newPrinter, ring, close };
+    return { venue, cfg, deviceId, printerId, operatorId, newPrinter, ring, close };
   }
 
   const after = (sale: { issuedAt: number }, minutes: number) =>
@@ -945,6 +822,9 @@ describe("printOwedTickets", () => {
       at,
     );
   };
+  /** The sales the pass takes as candidates at `at`. */
+  const owedAt = async (cfg: TradingContext, at: Date) =>
+    (await owedSales(suite.db, cfg.nodeId, at)).map((row) => row.saleId);
   const jobsOf = (saleId: string) =>
     suite.db
       .select({
@@ -1033,9 +913,40 @@ describe("printOwedTickets", () => {
     await withTransaction(suite.db, (tx) => deletePrinter(tx, printerId!));
     await newPrinter();
     expect(await owes(sale.saleId)).toBe(true);
+    expect(await owedAt(cfg, after(sale, 11))).toEqual([]);
     expect((await pass(cfg, after(sale, 11))).queued).toEqual([]);
     expect(warnings).toEqual([]);
     expect(await shape(sale.saleId)).toEqual([{ printerId, receiptCopy: false, status: "failed" }]);
+  });
+
+  it("leaves a bill whose party left without paying", async () => {
+    const { venue, cfg, ring } = await till();
+    const party = await seatedWith(venue, "Croquettes");
+    const left = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/unpaid-departure`,
+      {
+        billId: party.tabId,
+        expectedEdits: await withTransaction(suite.db, (tx) =>
+          closingEditsForTest(tx, party.partyId),
+        ),
+        expectedPartyRevision: party.revision,
+        reason: "Guests left",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+    expect(left.status).toBe(200);
+    const [walkout] = await suite.db
+      .select({ id: sales.id, issuedAt: sales.issuedAt })
+      .from(sales)
+      .where(eq(sales.workingOrderId, party.tabId));
+    const paid = await ring();
+    const at = after({ issuedAt: Date.parse(walkout!.issuedAt) }, 11);
+    expect(await owedAt(cfg, at)).toEqual([paid.saleId]);
+    expect((await pass(cfg, after(paid, 11))).queued).toEqual([paid.saleId]);
+    expect(await jobsOf(walkout!.id)).toEqual([]);
   });
 
   it("leaves a device whose profile may not print receipts", async () => {
@@ -1048,64 +959,47 @@ describe("printOwedTickets", () => {
     expect(await jobsOf(sale.saleId)).toEqual([]);
   });
 
-  it("Done and the pass together leave one original", async () => {
+  it("Done between the pass's read and its write leaves one original", async () => {
     const { cfg, printerId, ring, close } = await till();
     const sale = await ring();
-    await Promise.all([close(sale.orderId), pass(cfg, after(sale, 11))]);
+    let done = false;
+    const doneFirst = new Proxy(suite.db, {
+      get(target, key) {
+        if (key === "withWriteLock")
+          return async (fn: () => Promise<unknown>) => {
+            if (!done) {
+              done = true;
+              await close(sale.orderId);
+            }
+            return target.withWriteLock(fn);
+          };
+        const value: unknown = Reflect.get(target, key, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    expect((await pass(cfg, after(sale, 11), { db: doneFirst })).queued).toEqual([]);
+    expect(done).toBe(true);
     expect(warnings).toEqual([]);
     expect(await shape(sale.saleId)).toEqual([{ printerId, receiptCopy: false, status: "queued" }]);
   });
 
   it("a full invoice whose A4 page failed prints on the receipt printer, enrolled with no person", async () => {
-    const { cfg, deviceId, printerId, operatorId, menuItemId } = await till();
-    const orderId = randomUUID();
-    const origin = deviceOrigin(deviceId);
-    const { saleId } = await withTransaction(suite.db, async (tx) => {
-      await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
-      const [series] = await tx
-        .select()
-        .from(invoiceSeries)
-        .where(eq(invoiceSeries.purpose, "full"));
-      const counter = await tx.execute<{ zone_id: string }>(
-        sql`select id as zone_id from floor_zones where is_counter_default`,
-      );
-      await createOpenOrder(
-        tx,
-        { ...cfg, origin },
-        orderId,
-        [{ menuItemId, quantity: "1" }],
-        null,
-        {
-          zoneId: counter.rows[0]!.zone_id,
-        },
-      );
-      return recordSale(tx, backend, {
-        operationDescription: "Sale on the premises",
-        origin,
-        nodeId: cfg.nodeId,
-        seriesId: brandSeriesId(series!.id),
-        workingOrderId: brandWorkingOrderId(orderId),
-        locale: "es-ES",
-        invoiceLocales: ["es-ES"],
-        counterparty: { taxId: "12345678Z", legalName: "Customer", countryCode: "ES" },
-        recipientAddress: "Calle Mayor 9, Madrid",
-        total: "1.50",
-        lines: [
-          {
-            lineNo: 1,
-            name: "Agua mineral",
-            descriptions: { "es-ES": "Agua mineral" },
-            quantity: "1",
-            unitPrice: "1.50",
-            vatRate: "21",
-            lineTotal: "1.50",
-          },
-        ],
-        clock: systemClock(),
-        settlement: { kind: "deferred" },
-        operatorId,
-      });
+    const { venue, cfg, printerId, operatorId } = await till();
+    await suite.db.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+    const orderId = await tabWith(venue, "Croquettes");
+    await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, orderId, {
+      revision: (await billRow(venue, orderId)).revision,
+      invoiceType: "F1",
+      recipient: ACME,
+      operatorId,
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, orderId)),
     });
+    expect((await cashPayment(venue, venue.cookie, orderId, "10.00")).status).toBe(200);
+    const [{ id: saleId, taxId }] = await suite.db
+      .select({ id: sales.id, taxId: sales.counterpartyTaxId })
+      .from(sales)
+      .where(eq(sales.workingOrderId, orderId));
+    expect(taxId).toBe(ACME.taxId);
     const page = await withTransaction(suite.db, async (tx) =>
       reserveInvoiceDelivery(tx, saleId, {
         medium: "a4",
@@ -1165,37 +1059,32 @@ describe("printOwedTickets", () => {
       .where(eq(printJobs.saleId, saleId));
   }
 
-  it("leaves a sale under a series a restore retired", async () => {
+  it.each([
+    [
+      "under a series a restore retired",
+      async (cfg: TradingContext, seriesId: string, at: Date) => {
+        await suite.db
+          .update(invoiceSeries)
+          .set({ retiredAt: new Date(at.getTime() - 60_000) })
+          .where(eq(invoiceSeries.id, seriesId));
+        return cfg;
+      },
+    ],
+    [
+      "another node recorded",
+      async (cfg: TradingContext) => ({ ...cfg, nodeId: brandNodeId(randomUUID()) }),
+    ],
+  ] as const)("leaves a sale %s, and its given-up original", async (_, elsewhere) => {
     const { cfg, ring, close } = await till();
     const sale = await ring();
     const other = await ring();
     await close(other.orderId);
     const at = after(other, 30);
     await givenUp(other.saleId, at);
-    await suite.db
-      .update(invoiceSeries)
-      .set({ retiredAt: new Date(at.getTime() - 60_000) })
-      .where(eq(invoiceSeries.id, sale.sale.seriesId));
-    expect((await pass(cfg, at)).queued).toEqual([]);
+    const seen = await elsewhere(cfg, sale.sale.seriesId, at);
+    expect((await pass(seen, at)).queued).toEqual([]);
     expect(await jobsOf(sale.saleId)).toEqual([]);
-    expect(await startFreshRounds(suite.db, layOut, cfg.nodeId, at, log)).toEqual({
-      resent: [],
-      nextDueAt: null,
-    });
-    expect(await jobsOf(other.saleId)).toHaveLength(1);
-  });
-
-  it("leaves a sale another node recorded", async () => {
-    const { cfg, ring, close } = await till();
-    const sale = await ring();
-    const other = await ring();
-    await close(other.orderId);
-    const at = after(other, 30);
-    await givenUp(other.saleId, at);
-    const elsewhere = brandNodeId(randomUUID());
-    expect((await pass({ ...cfg, nodeId: elsewhere }, at)).queued).toEqual([]);
-    expect(await jobsOf(sale.saleId)).toEqual([]);
-    expect(await startFreshRounds(suite.db, layOut, elsewhere, at, log)).toEqual({
+    expect(await startFreshRounds(suite.db, layOut, seen.nodeId, at, log)).toEqual({
       resent: [],
       nextDueAt: null,
     });
@@ -1218,6 +1107,7 @@ describe("printOwedTickets", () => {
     const { cfg, ring } = await till();
     const sale = await ring();
     const loose = await copyOf(sale.sale, { workingOrderId: null });
+    expect(await owedAt(cfg, after(sale, 11))).toEqual([sale.saleId]);
     expect((await pass(cfg, after(sale, 11))).queued).toEqual([sale.saleId]);
     expect(warnings).toEqual([]);
     expect(await jobsOf(loose)).toEqual([]);
@@ -1231,6 +1121,7 @@ describe("printOwedTickets", () => {
       createOpenOrder(tx, { ...cfg, origin: jobOrigin("operator_script") }, orderId, [], null),
     );
     const other = await copyOf(sale.sale, { source, deviceId: null, workingOrderId: orderId });
+    expect(await owedAt(cfg, after(sale, 11))).toEqual([sale.saleId]);
     expect((await pass(cfg, after(sale, 11))).queued).toEqual([sale.saleId]);
     expect(warnings).toEqual([]);
     expect(await jobsOf(other)).toEqual([]);
@@ -1267,6 +1158,12 @@ describe("printOwedTickets", () => {
     for (let n = 1; n < 20; n++) rung.push(await ring());
     expect(await counted(after(rung.at(-1)!, 11))).toEqual(one);
     expect(one.locks).toBe(0);
+  });
+
+  it("says when a sale issued after the pass's time falls due, as after the clock stepped back", async () => {
+    const { cfg, ring } = await till();
+    const sale = await ring();
+    expect(await pass(cfg, after(sale, -5))).toEqual({ queued: [], nextDueAt: after(sale, 10) });
   });
 
   it("says when the next sale falls due", async () => {

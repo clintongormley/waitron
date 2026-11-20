@@ -3,7 +3,6 @@ import {
   eq,
   gte,
   inArray,
-  lte,
   isNotNull,
   exists,
   isNull,
@@ -53,15 +52,23 @@ const laterOriginal = alias(printJobs, "owed_later_original");
 
 // A print that gave up, and an email that failed, still owe the ticket; a delivery that may have
 // arrived (`unknown`), on any medium, does not. `saleId` names `sales.id` or a column equal to it,
-// and the caller's query has `sales` in its FROM: the check reads its `corrects_sale_id`.
+// and the caller's query has `sales` in its FROM: the check reads its `corrects_sale_id` and
+// `working_order_id`.
 function stillOwed(q: Transaction, saleId: SQLiteColumn): SQL {
   return and(
     isNull(sales.correctsSaleId),
+    // Found through the bill's unique key, as `unpaid_departures.sale_id` has no index; its one
+    // writer, `insertDeparture`, names the bill's own sale.
     notExists(
       q
         .select({ one: sql`1` })
         .from(unpaidDepartures)
-        .where(eq(unpaidDepartures.saleId, saleId)),
+        .where(
+          and(
+            eq(unpaidDepartures.workingOrderId, sales.workingOrderId),
+            eq(unpaidDepartures.saleId, saleId),
+          ),
+        ),
     ),
     notExists(
       q
@@ -124,7 +131,6 @@ export function givenUpOriginals(q: Transaction, nodeId: string, now: Date, jobI
         and(
           gte(sales.issuedAt, new Date(now.getTime() - OWED_FOR_MS).toISOString()),
           thisInstallation(nodeId),
-          // Keyed on `sales.id`, `unpaid_departures` was scanned once per sale of the day.
           stillOwed(q, printJobs.saleId),
           jobId === undefined ? undefined : eq(printJobs.id, jobId),
           eq(printJobs.kind, "document"),
@@ -225,12 +231,11 @@ export function owedSales(q: Transaction, nodeId: string, now: Date) {
       .where(
         and(
           gte(sales.issuedAt, new Date(now.getTime() - OWED_FOR_MS).toISOString()),
-          lte(sales.issuedAt, now.toISOString()),
           eq(sales.source, "device"),
           isNotNull(sales.workingOrderId),
           thisInstallation(nodeId),
-          stillOwed(q, sales.id),
           not(hasOriginalJob(q, sales.id)),
+          stillOwed(q, sales.id),
         ),
       )
   );
@@ -279,15 +284,10 @@ export async function printOwedTickets(
       // owe every sale of the day.
       if (!printing.has(deviceId)) printing.set(deviceId, await canPrintReceipts(db, deviceId));
       if (printing.get(deviceId) !== true) continue;
-      // The candidate is read again under the write lock: Done, an email or another pass may have
-      // settled it while this pass waited.
+      // `queueOwedOriginal` checks again, under the write lock, what Done, an email or another pass
+      // may have settled while this pass waited for it.
       const made = await withTransaction(db, async (tx) => {
         if (signal?.aborted) return false;
-        const [still] = await tx
-          .select({ id: sales.id })
-          .from(sales)
-          .where(and(eq(sales.id, saleId), not(hasOriginalJob(tx, sales.id))));
-        if (still === undefined) return false;
         return queueOwedOriginal(
           tx,
           backend,
