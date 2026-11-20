@@ -1211,7 +1211,7 @@ Tab button and no side drawer.
   is on screen, lists Name this bill, then for an open bill Move dishes… and Merge bills,
   then Move this bill, Comp the bill, Record unpaid departure, Full invoice and Print the bill, in
   that order; Print the bill and Receipt copy only where this device may print what they need, and
-  Receipt copy and Cancel and credit join it where they apply. Whole table lists Allergies, Name the party, Guests,
+  Receipt copy, Cancel and credit and Reopen to split join it where they apply. Whole table lists Allergies, Name the party, Guests,
   Mark bill requested (or Cancel the bill request), Split a table (two or more tables only), Join a
   table, Move guests and Finish table. With no party it offers Merge bills under "Bill" and Join a
   table and Move guests under Whole table; Move dishes… is not offered there, because the app moves

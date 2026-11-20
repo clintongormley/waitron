@@ -291,11 +291,11 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
   const markServed = (el: TillCancelCreditDialog) =>
     root(el).querySelector<HTMLElement>("[data-split-mark-served]");
 
-  it("says the ticket is credited and its dishes go on a new bill, and asks for no reason", async () => {
+  it("says the receipt is credited and its dishes go onto a new bill, and asks for no reason", async () => {
     const el = await mount({ mode: "split" });
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `Ticket A/12 (${money("24.50")}) is credited in full with a credit note, and its dishes go back on a new open bill so each guest can have their own ticket.`,
+      `Receipt A/12 (${money("24.50")}) is credited in full with a credit note, and its dishes go onto a new open bill so each guest can have their own receipt.`,
     );
     expect(reason(el)).toBeNull();
     expect(text(confirm(el))).toBe("Reopen to split");
@@ -306,11 +306,11 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     expect(confirm(el).disabled).toBe(false);
   });
 
-  it("says the same of a ticket whose number it was not given", async () => {
+  it("says the same of a receipt whose number it was not given", async () => {
     const el = await mount({ mode: "split", invoiceNumber: null });
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `This bill's ticket (${money("24.50")}) is credited in full with a credit note, and its dishes go back on a new open bill so each guest can have their own ticket.`,
+      `This bill's receipt (${money("24.50")}) is credited in full with a credit note, and its dishes go onto a new open bill so each guest can have their own receipt.`,
     );
   });
 
@@ -329,14 +329,13 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
   it("lists the dishes not marked served, and Mark served asks to serve those the kitchen has", async () => {
     const el = await mount({
       mode: "split",
-      refusal: { code: "bill.unserved_dishes" },
-      unserved: [served, two],
+      refusal: { code: "bill.unserved_dishes", dishes: [served, two] },
       canMarkServed: true,
     });
     const asked = capture(el, "split-mark-served");
 
     expect(text(unservedBox(el))).toContain(
-      "These dishes are not marked served, so the bill cannot be reopened yet. Mark served records that the guests have had them; the bill then reopens to split.",
+      "Some dishes on this bill are not marked served, so it cannot be split yet. If the guests have had them, choose Mark served: the receipt is then credited and the dishes go onto a new bill.",
     );
     expect([...root(el).querySelectorAll("[data-unserved-dish]")].map(text)).toEqual([
       "Steak",
@@ -357,14 +356,13 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
   it("marks a held dish, tells staff to fire its group first, and offers Mark served only for the others", async () => {
     const el = await mount({
       mode: "split",
-      refusal: { code: "bill.unserved_dishes" },
-      unserved: [served, held],
+      refusal: { code: "bill.unserved_dishes", dishes: [served, held] },
       canMarkServed: true,
     });
     const asked = capture(el, "split-mark-served");
 
     expect(text(unservedBox(el))).toContain(
-      "These dishes are not marked served, so the bill cannot be reopened yet. Choose Fire on each held group first, then mark its dishes served and choose Reopen to split again.",
+      "Some dishes on this bill are not marked served, so it cannot be split yet. Choose Fire on each held group first, then mark its dishes served and choose Reopen to split again.",
     );
     expect([...root(el).querySelectorAll("[data-unserved-dish]")].map(text)).toEqual([
       "Steak",
@@ -377,8 +375,7 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
   it("offers no Mark served when every dish is held", async () => {
     const el = await mount({
       mode: "split",
-      refusal: { code: "bill.unserved_dishes" },
-      unserved: [held],
+      refusal: { code: "bill.unserved_dishes", dishes: [held] },
       canMarkServed: true,
     });
 
@@ -386,16 +383,15 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     expect(markServed(el)).toBeNull();
   });
 
-  it("on a device that cannot mark dishes served, says so and where to do it, with no Mark served", async () => {
+  it("on a device that cannot mark dishes served, says so and what to do, with no Mark served", async () => {
     const el = await mount({
       mode: "split",
-      refusal: { code: "bill.unserved_dishes" },
-      unserved: [served, held],
+      refusal: { code: "bill.unserved_dishes", dishes: [served, held] },
       canMarkServed: false,
     });
 
     expect(text(unservedBox(el))).toContain(
-      "These dishes are not marked served, so the bill cannot be reopened yet. This device cannot mark dishes served: mark them served on a device whose profile hands orders over, then choose Reopen to split again.",
+      "Some dishes on this bill are not marked served, so it cannot be split yet. This device cannot mark dishes served: mark them served on a device that can, then choose Reopen to split again.",
     );
     expect(text(unservedBox(el))).not.toContain(t("split.unserved_held"));
     expect([...root(el).querySelectorAll("[data-unserved-dish]")].map(text)).toEqual([
@@ -405,25 +401,35 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     expect(markServed(el)).toBeNull();
   });
 
-  it.each([
-    "bill.left_unpaid",
-    "bill.not_at_table",
-    "bill.not_issued",
-    "sale.correction_unsupported",
-    "working_order.not_placed",
-  ])("says %s in its own sentence above the action", async (code) => {
-    const el = await mount({ mode: "split", refusal: { code } });
+  it.each(["sale.correction_unsupported", "working_order.not_placed"])(
+    "says %s in its own sentence above the action",
+    async (code) => {
+      const el = await mount({ mode: "split", refusal: { code } });
 
-    expect(actions(el).error).toBe(codeMessage(code));
-    expect(actions(el).error).not.toBe(codeMessage("some.unmapped_code"));
+      expect(actions(el).error).toBe(codeMessage(code));
+      expect(actions(el).error).not.toBe(codeMessage("some.unmapped_code"));
+      expect(unservedBox(el)).toBeNull();
+    },
+  );
+
+  it("says the dishes are not served even when the refusal lists none", async () => {
+    const el = await mount({ mode: "split", refusal: { code: "bill.unserved_dishes" } });
+
+    expect(actions(el).error).toBe(t("split.unserved"));
     expect(unservedBox(el)).toBeNull();
   });
 
   it.each([
     [
       "bill.payments_received",
-      "Part of this bill is paid, so it cannot be reopened. The other guests pay the rest on this ticket with Pay.",
+      "Part of this bill is paid, so it cannot be split this way. The other guests pay the rest of this receipt with Pay.",
     ],
+    [
+      "bill.left_unpaid",
+      "This bill was recorded as left unpaid, so its guests have gone and there is nothing to split. Cancel and credit still credits its receipt.",
+    ],
+    ["bill.not_at_table", "Only a table's bill can be split this way. Nothing was credited."],
+    ["bill.not_issued", "This bill has no receipt yet, so nothing was credited."],
     [
       "order.payment_in_flight",
       "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen to split again.",
@@ -452,33 +458,45 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     );
   });
 
+  it("says a bill found already credited opened no new bill", async () => {
+    const el = await mount({ mode: "split", done: { creditNote: "R/3", creditedElsewhere: true } });
+
+    expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
+      "Credit note R/3 was already issued for this bill, perhaps on another device, and no new bill was opened. Nothing more was credited.",
+    );
+
+    el.done = { creditNote: null, creditedElsewhere: true };
+    await el.updateComplete;
+    expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
+      "This bill was already credited, perhaps on another device, and no new bill was opened. Nothing more was credited.",
+    );
+  });
+
   it("speaks Spanish", async () => {
     setLocale("es");
     const el = await mount({
       mode: "split",
-      refusal: { code: "bill.unserved_dishes" },
-      unserved: [served],
+      refusal: { code: "bill.unserved_dishes", dishes: [served] },
       canMarkServed: true,
     });
 
     expect(text(unservedBox(el))).toContain(
-      "Estos platos no están marcados como servidos, así que la cuenta aún no se puede reabrir. Marcar como servidos registra que los clientes ya los han tomado; después la cuenta se reabre para dividirla.",
+      "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede dividir. Si los clientes ya los han tomado, pulsa Marcar como servidos: después el ticket se abona y los platos pasan a una cuenta nueva.",
     );
     expect(text(confirm(el))).toBe(t("split.confirm"));
     expect(t("split.confirm")).not.toBe("Reopen to split");
   });
 
-  it("speaks Spanish for a held dish, a device that cannot mark served, and a part-paid bill", async () => {
+  it("speaks Spanish for a held dish, a device that cannot mark served, a part-paid bill and a bill already credited", async () => {
     setLocale("es");
     const el = await mount({
       mode: "split",
-      refusal: { code: "bill.unserved_dishes" },
-      unserved: [served, held],
+      refusal: { code: "bill.unserved_dishes", dishes: [served, held] },
       canMarkServed: true,
     });
 
     expect(text(unservedBox(el))).toContain(
-      "Estos platos no están marcados como servidos, así que la cuenta aún no se puede reabrir. Pulsa antes Marchar en cada grupo en espera, marca sus platos como servidos y vuelve a elegir Reabrir para dividir.",
+      "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede dividir. Pulsa antes Marchar en cada grupo en espera, marca sus platos como servidos y vuelve a elegir Reabrir para dividir.",
     );
     expect([...root(el).querySelectorAll("[data-unserved-dish]")].map(text)).toEqual([
       "Steak",
@@ -488,14 +506,19 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     el.canMarkServed = false;
     await el.updateComplete;
     expect(text(unservedBox(el))).toContain(
-      "Estos platos no están marcados como servidos, así que la cuenta aún no se puede reabrir. Este dispositivo no puede marcarlos como servidos: márcalos en un dispositivo cuyo perfil entrega pedidos y vuelve a elegir Reabrir para dividir.",
+      "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede dividir. Este dispositivo no puede marcar platos como servidos: márcalos en un dispositivo que pueda y vuelve a elegir Reabrir para dividir.",
     );
 
-    el.unserved = null;
     el.refusal = { code: "bill.payments_received" };
     await el.updateComplete;
     expect(actions(el).error).toBe(
-      "Parte de esta cuenta ya está pagada, así que no se puede reabrir. Los demás clientes pagan el resto en este ticket con Cobrar.",
+      "Parte de esta cuenta ya está pagada, así que no se puede dividir así. Los demás clientes pagan el resto de este ticket con Cobrar.",
+    );
+
+    el.done = { creditNote: "R/3", creditedElsewhere: true };
+    await el.updateComplete;
+    expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
+      "Ya se había emitido la factura rectificativa R/3 para esta cuenta, quizá en otro dispositivo, y no se abrió ninguna cuenta nueva. No se ha abonado nada más.",
     );
   });
 });

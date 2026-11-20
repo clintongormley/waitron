@@ -2,7 +2,7 @@ import { recoveryLink, recoveryRefusalText } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
+import { formatMoney } from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -13,14 +13,21 @@ import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, type DialogRefusal } from "../state/bill-payment.js";
 import type { MealEndUnservedDish } from "../api/client.js";
-import { quantityText, trimQuantity } from "./dish-format.js";
+import { servableDishes, serveListed, unservedDishText } from "./dish-format.js";
 
-/** `cancel` credits the ticket and cancels the bill; `split` also puts its dishes on a new bill. */
+/** `cancel` credits the receipt and cancels the bill; `split` also puts its dishes on a new bill. */
 export type CancelCreditMode = "cancel" | "split";
 
-/** A cancelled bill: the number of the credit note issued, or null when no number was read. */
+/** A cancelled bill: the number of the credit note issued, or null when no number was read.
+ * `creditedElsewhere` is a split that found the bill already credited and no new bill. */
 export interface CancelCreditDone {
   creditNote: string | null;
+  creditedElsewhere?: boolean;
+}
+
+/** A refusal; `bill.unserved_dishes` carries the dishes it lists. */
+export interface CancelCreditRefusal extends DialogRefusal {
+  dishes?: readonly MealEndUnservedDish[];
 }
 
 const REFUSALS: Record<string, StringKey> = {
@@ -31,12 +38,41 @@ const REFUSALS: Record<string, StringKey> = {
   "authorization.not_permitted": "cancel_credit.refused_not_permitted",
 };
 
-const SPLIT_REFUSALS: Record<string, StringKey> = {
-  ...REFUSALS,
-  network: "split.unconfirmed",
-  "bill.payments_received": "split.refused_payments",
-  "order.payment_in_flight": "split.refused_payment_in_flight",
-};
+const TEXT = {
+  cancel: {
+    title: "cancel_credit.title",
+    scope: "cancel_credit.scope",
+    scopeUnnumbered: "cancel_credit.scope_unnumbered",
+    confirm: "cancel_credit.confirm",
+    done: "cancel_credit.done",
+    doneUnnumbered: "cancel_credit.done_unnumbered",
+    refusals: REFUSALS,
+  },
+  split: {
+    title: "split.title",
+    scope: "split.scope",
+    scopeUnnumbered: "split.scope_unnumbered",
+    confirm: "split.confirm",
+    done: "split.done",
+    doneUnnumbered: "split.done_unnumbered",
+    refusals: {
+      ...REFUSALS,
+      network: "split.unconfirmed",
+      "bill.payments_received": "split.refused_payments",
+      "order.payment_in_flight": "split.refused_payment_in_flight",
+      "bill.left_unpaid": "split.refused_left_unpaid",
+      "bill.not_at_table": "split.refused_not_at_table",
+      "bill.not_issued": "split.refused_not_issued",
+      "bill.unserved_dishes": "split.unserved",
+    },
+  },
+} satisfies Record<
+  CancelCreditMode,
+  Record<
+    "title" | "scope" | "scopeUnnumbered" | "confirm" | "done" | "doneUnnumbered",
+    StringKey
+  > & { refusals: Record<string, StringKey> }
+>;
 
 @customElement("till-cancel-credit-dialog")
 export class TillCancelCreditDialog extends LitElement {
@@ -78,18 +114,16 @@ export class TillCancelCreditDialog extends LitElement {
   ];
 
   @property({ attribute: false }) mode: CancelCreditMode = "cancel";
-  /** The dishes a split's `bill.unserved_dishes` refusal listed. */
-  @property({ attribute: false }) unserved: MealEndUnservedDish[] | null = null;
   @property({ attribute: false }) canMarkServed = false;
   @property({ attribute: false }) invoiceNumber: string | null = null;
   @property({ attribute: false }) amount = "0.00";
-  @property({ attribute: false }) refusal: DialogRefusal | null = null;
+  @property({ attribute: false }) refusal: CancelCreditRefusal | null = null;
   @property({ attribute: false }) done: CancelCreditDone | null = null;
   @property({ type: Boolean }) busy = false;
 
   @state() private reason = "";
   @state() private attempted = false;
-  @state() private shownRefusal: DialogRefusal | null = null;
+  @state() private shownRefusal: CancelCreditRefusal | null = null;
 
   @state() private active = true;
   #scope?: DraftScope<string>;
@@ -155,7 +189,7 @@ export class TillCancelCreditDialog extends LitElement {
   #refusalText(refusal: DialogRefusal): string {
     const recovery = recoveryRefusalText(refusal);
     if (recovery !== null) return recovery;
-    const refusals = this.mode === "split" ? SPLIT_REFUSALS : REFUSALS;
+    const refusals: Record<string, StringKey> = TEXT[this.mode].refusals;
     return Object.hasOwn(refusals, refusal.code)
       ? t(refusals[refusal.code]!)
       : codeMessage(refusal.code);
@@ -214,29 +248,26 @@ export class TillCancelCreditDialog extends LitElement {
 
   #scopeText(): string {
     const amount = formatMoney(this.amount, currentLocale());
-    const split = this.mode === "split";
+    const text = TEXT[this.mode];
     return this.invoiceNumber === null
-      ? t(split ? "split.scope_unnumbered" : "cancel_credit.scope_unnumbered").replace(
-          "{amount}",
-          () => amount,
-        )
-      : t(split ? "split.scope" : "cancel_credit.scope")
+      ? t(text.scopeUnnumbered).replace("{amount}", () => amount)
+      : t(text.scope)
           .replace("{invoice}", () => this.invoiceNumber!)
           .replace("{amount}", () => amount);
   }
 
+  #doneText(done: CancelCreditDone): string {
+    const [numbered, unnumbered]: [StringKey, StringKey] = done.creditedElsewhere
+      ? ["split.credited_elsewhere", "split.credited_elsewhere_unnumbered"]
+      : [TEXT[this.mode].done, TEXT[this.mode].doneUnnumbered];
+    return done.creditNote === null
+      ? t(unnumbered)
+      : t(numbered).replace("{number}", () => done.creditNote!);
+  }
+
   #doneBody(done: CancelCreditDone) {
     return html`<div class="body">
-      <p role="status" data-cancel-credit-done>
-        ${
-          done.creditNote === null
-            ? t(this.mode === "split" ? "split.done_unnumbered" : "cancel_credit.done_unnumbered")
-            : t(this.mode === "split" ? "split.done" : "cancel_credit.done").replace(
-                "{number}",
-                () => done.creditNote!,
-              )
-        }
-      </p>
+      <p role="status" data-cancel-credit-done>${this.#doneText(done)}</p>
       <wt-form-actions
         >${recoveryLink(this.shownRefusal)}
         <wt-button variant="primary" data-cancel-credit-finished @click=${() => this.#cancel()}>
@@ -246,27 +277,24 @@ export class TillCancelCreditDialog extends LitElement {
     </div>`;
   }
 
-  #unservedShown(): MealEndUnservedDish[] | null {
-    return this.shownRefusal?.code === "bill.unserved_dishes" ? this.unserved : null;
+  #unservedShown(): readonly MealEndUnservedDish[] | null {
+    const refusal = this.shownRefusal;
+    return refusal?.code === "bill.unserved_dishes" ? (refusal.dishes ?? null) : null;
   }
 
-  /** Mark served refuses a dish still held in its group (`group.line_held`), so it is not offered. */
-  #unservedBody(dishes: MealEndUnservedDish[]) {
-    const servable = this.canMarkServed ? dishes.filter((dish) => dish.released) : [];
+  #unservedBody(dishes: readonly MealEndUnservedDish[]) {
+    const servable = servableDishes(dishes, this.canMarkServed);
     const notice = !this.canMarkServed
       ? t("split.unserved_no_mark")
       : servable.length === dishes.length
-        ? codeMessage("bill.unserved_dishes")
+        ? t("split.unserved")
         : t("split.unserved_held");
     return html`<div class="unserved" role="alert" data-split-unserved>
       <span>${notice}</span>
       <span>${t("meal_end.unserved_heading")}</span>
       <ul>
         ${dishes.map((dish) => {
-          const name =
-            compareDecimal(decimal(dish.quantity), decimal("1")) === 0
-              ? dish.dishName
-              : `${quantityText(dish.quantity)} × ${dish.dishName}`;
+          const name = unservedDishText(dish);
           return html`<li data-unserved-dish>
             ${dish.released ? name : t("split.unserved_dish_held").replace("{dish}", () => name)}
           </li>`;
@@ -287,11 +315,9 @@ export class TillCancelCreditDialog extends LitElement {
     </div>`;
   }
 
-  #markServed(dishes: MealEndUnservedDish[]): void {
+  #markServed(dishes: readonly MealEndUnservedDish[]): void {
     if (!this.isConnected || !this.active || this.busy || this.done !== null) return;
-    this.#emit("split-mark-served", {
-      items: dishes.map((dish) => ({ lineId: dish.lineId, quantity: trimQuantity(dish.quantity) })),
-    });
+    this.#emit("split-mark-served", { items: serveListed(dishes) });
   }
 
   #reasonField(fieldError: string | null) {
@@ -315,11 +341,10 @@ export class TillCancelCreditDialog extends LitElement {
   #formBody() {
     const own = this.attempted ? this.#ownError() : null;
     const fieldError = this.#reasonError(own);
-    const split = this.mode === "split";
     const unserved = this.#unservedShown();
     return html`<div class="body">
       <p data-cancel-credit-scope>${this.#scopeText()}</p>
-      ${split ? nothing : this.#reasonField(fieldError)}
+      ${this.mode === "split" ? nothing : this.#reasonField(fieldError)}
       ${unserved === null ? nothing : this.#unservedBody(unserved)}
       <p class="muted" data-cancel-credit-next>${t("cancel_credit.approval_next")}</p>
       <wt-form-actions .error=${this.#bottomMessage(fieldError)}
@@ -340,7 +365,7 @@ export class TillCancelCreditDialog extends LitElement {
           .disabled=${this.busy || own !== null}
           @click=${() => void this.#continue()}
         >
-          ${t(split ? "split.confirm" : "cancel_credit.confirm")}
+          ${t(TEXT[this.mode].confirm)}
         </wt-button>
       </wt-form-actions>
     </div>`;
@@ -351,7 +376,7 @@ export class TillCancelCreditDialog extends LitElement {
       ${trackDialog()}
       .open=${this.active}
       .beforeClose=${this.#scope ? this.#beforeClose : undefined}
-      .heading=${t(this.mode === "split" ? "split.title" : "cancel_credit.title")}
+      .heading=${t(TEXT[this.mode].title)}
       .dismissible=${!this.busy}
       @wt-close=${(event: Event) => this.#closed(event)}
     >

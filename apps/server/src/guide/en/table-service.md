@@ -533,8 +533,8 @@ Enter to show it. Home and End reach the first and last choices. Escape closes t
 Everything else you do at the table is in the **⋮** menu beside the switcher, in two parts. The
 first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
 this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Record
-unpaid departure**, **Full invoice**, **Print the bill**, **Receipt copy** and **Cancel and
-credit**, each when it applies. The second, **Whole table**, acts on everyone at the
+unpaid departure**, **Full invoice**, **Print the bill**, **Receipt copy**, **Cancel and
+credit** and **Reopen to split**, each when it applies. The second, **Whole table**, acts on everyone at the
 table: **Allergies**, **Name the party**, **Guests**, **Mark bill requested for …** with the party's
 name (once requested, **Cancel the bill request for …**), **Split a table** (when the party sits at
 more than one table), **Join a table**, **Move guests** and **Finish table**. An action that needs a
@@ -624,10 +624,10 @@ a customer, so on one of those take off any dish that may not come before you pr
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 
-If the guests then want to pay separately, open **⋮** and choose **Reopen to split**. The ticket is
-credited and its dishes return on a new bill, ready for [**Move dishes…**](table-service.md#move-dishes).
-Once part of the bill is paid it cannot be reopened: the other guests pay the rest on this ticket
-with **Pay**.
+If the guests then want to pay separately, open **⋮** and choose **Reopen to split**. The receipt
+is credited and its dishes go onto a new bill, ready for [**Move dishes…**](table-service.md#move-dishes).
+Once part of the bill is paid it cannot be split this way: the other guests pay the rest with
+**Pay**.
 
 Take payment with **Pay** as usual, in one go or in parts.
 

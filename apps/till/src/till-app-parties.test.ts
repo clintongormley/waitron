@@ -11914,6 +11914,13 @@ describe("till-app: reopening a printed bill to split it", () => {
         bills = [tabBill, cancelled, reopened];
         return { billId: "wo-split", creditNoteNumber: "R/3" };
       }),
+      splitBehindTheScenes: () => {
+        bills = [tabBill, cancelled, reopened];
+      },
+      /** Cancel and credit made on another till: the bill is credited and no new bill opens. */
+      cancelledElsewhere: () => {
+        bills = [tabBill, cancelled];
+      },
     };
   }
 
@@ -11963,6 +11970,52 @@ describe("till-app: reopening a printed bill to split it", () => {
     expect(cancelOrder).not.toHaveBeenCalled();
   });
 
+  it("when the split got no answer and the bills read again show a new bill, says it split", async () => {
+    const server = billServer();
+    server.splitAfterPrint.mockImplementationOnce(async () => {
+      server.splitBehindTheScenes();
+      throw new TypeError("Failed to fetch");
+    });
+    const { el } = await openSplit(server);
+
+    await confirmSplit(el);
+
+    expect(server.splitAfterPrint).toHaveBeenCalledOnce();
+    expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
+  });
+
+  it("a second press refused as no longer waiting, once the first split that got no answer has landed, says it split", async () => {
+    const server = billServer();
+    server.splitAfterPrint.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    server.splitAfterPrint.mockImplementationOnce(async () => {
+      throw { code: "working_order.not_placed", status: 409 };
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+    expect(bottom(el)).toBe(t("split.unconfirmed"));
+
+    server.splitBehindTheScenes();
+    await confirmSplit(el);
+
+    expect(server.splitAfterPrint).toHaveBeenCalledTimes(2);
+    expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
+  });
+
+  it("a split refused as no longer waiting, because the bill was cancelled and credited elsewhere, does not say it split", async () => {
+    const server = billServer();
+    server.splitAfterPrint.mockImplementationOnce(async () => {
+      server.cancelledElsewhere();
+      throw { code: "working_order.not_placed", status: 409 };
+    });
+    const { el } = await openSplit(server);
+
+    await confirmSplit(el);
+
+    expect(doneText(el)).not.toContain("Move each guest");
+    expect(doneText(el)).toBe(t("split.credited_elsewhere").replace("{number}", "R/3"));
+    expect(tableOrder(el)!.orderId).not.toBe("wo-split");
+  });
+
   it("without the permission, asks for an approver's PIN and sends it with the split", async () => {
     let refused = false;
     const server = billServer(async () => {
@@ -12002,7 +12055,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     const { el } = await openSplit(server);
     await confirmSplit(el);
 
-    expect(dialog(el)!.unserved).toEqual(unserved);
+    expect(dialog(el)!.refusal?.dishes).toEqual(unserved);
     expect(dialog(el)!.canMarkServed).toBe(true);
     emit(dialog(el)!, "split-mark-served", { items: [{ lineId: "l-1", quantity: "1" }] });
     await flush(el, 8);
@@ -12027,7 +12080,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     const { el } = await openSplit(server, false);
     await confirmSplit(el);
 
-    expect(dialog(el)!.unserved).toEqual(unserved);
+    expect(dialog(el)!.refusal?.dishes).toEqual(unserved);
     expect(dialog(el)!.canMarkServed).toBe(false);
     const box = dialog(el)!.shadowRoot!.querySelector("[data-split-unserved]")!;
     expect(box.textContent).toContain(t("split.unserved_no_mark"));
@@ -12056,20 +12109,21 @@ describe("till-app: reopening a printed bill to split it", () => {
     expect(bottom(el)).toBe(codeMessage("group.line_held"));
   });
 
-  it.each(["bill.left_unpaid", "bill.not_at_table", "bill.not_issued"])(
-    "keeps the dialog open with %s's sentence",
-    async (code) => {
-      const server = billServer(async () => {
-        throw { code, status: 409, workingOrderId: "wo-check" };
-      });
-      const { el } = await openSplit(server);
-      await confirmSplit(el);
+  it.each([
+    ["bill.left_unpaid", "split.refused_left_unpaid"],
+    ["bill.not_at_table", "split.refused_not_at_table"],
+    ["bill.not_issued", "split.refused_not_issued"],
+  ] as const)("keeps the dialog open with %s's sentence", async (code, key) => {
+    const server = billServer(async () => {
+      throw { code, status: 409, workingOrderId: "wo-check" };
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
 
-      expect(bottom(el)).toBe(codeMessage(code));
-      expect(doneText(el)).toBeNull();
-      expect(tableOrder(el)!.orderId).toBe("wo-check");
-    },
-  );
+    expect(bottom(el)).toBe(t(key));
+    expect(doneText(el)).toBeNull();
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+  });
 });
 
 describe("till-app: a box update while a bill request still waits for the server", () => {

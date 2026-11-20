@@ -292,6 +292,7 @@ import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import type {
   CancelCreditDone,
   CancelCreditMode,
+  CancelCreditRefusal,
   TillCancelCreditDialog,
 } from "./widgets/cancel-credit-dialog.js";
 import {
@@ -780,6 +781,11 @@ const MEAL_END_REFUSED_BEFORE_LOOKUP: ReadonlySet<string> = new Set([
   "authorization.not_permitted",
   "service_zone.not_allowed",
 ]);
+
+/** The latest credit note a read of the party's bills shows on bill `billId`. */
+function creditNoteOf(bills: readonly PartyBill[] | null, billId: string): string | null {
+  return bills?.find((row) => row.workingOrderId === billId)?.creditNotes?.at(-1) ?? null;
+}
 
 function refusedBeforeLookup(error: unknown): boolean {
   const { code, action } = (error ?? {}) as { code?: unknown; action?: unknown };
@@ -1698,9 +1704,10 @@ interface CancelCrediting {
   amount: string;
   /** The reason last pressed, which an approver's PIN is sent with. */
   reason: string;
-  refusal: DialogRefusal | null;
-  /** The dishes a split's `bill.unserved_dishes` refusal listed. */
-  unserved: MealEndUnservedDish[] | null;
+  /** The party's bills when the dialog opened. A split whose answer was lost shows itself as an
+   * open bill not among them; without one, the bill was credited some other way. */
+  billsBefore: readonly string[];
+  refusal: CancelCreditRefusal | null;
   busy: boolean;
   done: CancelCreditDone | null;
 }
@@ -20929,8 +20936,8 @@ export class TillApp extends LitElement {
       invoiceNumber: bill.invoiceNumber ?? null,
       amount: bill.total,
       reason: "",
+      billsBefore: this.partyBills.map((row) => row.workingOrderId),
       refusal: null,
-      unserved: null,
       busy: false,
       done: null,
     };
@@ -20978,7 +20985,7 @@ export class TillApp extends LitElement {
       this.#closeCancelCrediting();
       return;
     }
-    const sending: CancelCrediting = { ...open, refusal: null, unserved: null, busy: true };
+    const sending: CancelCrediting = { ...open, refusal: null, busy: true };
     this.cancelCrediting = sending;
     const sent = this.#sentNow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
@@ -21012,11 +21019,7 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     const open = this.#cancelCreditingNow(id);
     if (open === null) return;
-    const done = { creditNote: answer.creditNoteNumber };
-    this.shadowRoot
-      ?.querySelector<TillCancelCreditDialog>("till-cancel-credit-dialog")
-      ?.showResult(done);
-    this.cancelCrediting = { ...open, refusal: null, unserved: null, busy: false, done };
+    this.#showCancelCredited(id, { creditNote: answer.creditNoteNumber });
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const shown =
       this.activeTabId === open.workingOrderId && (await this.#switchToBill(answer.billId));
@@ -21040,8 +21043,7 @@ export class TillApp extends LitElement {
       );
     } catch (error) {
       const now = this.#cancelCreditingNow(open.id);
-      if (now !== null)
-        this.cancelCrediting = { ...now, refusal: refusalOf(error), unserved: null, busy: false };
+      if (now !== null) this.cancelCrediting = { ...now, refusal: refusalOf(error), busy: false };
       return;
     }
     const now = this.#cancelCreditingNow(open.id);
@@ -21054,29 +21056,22 @@ export class TillApp extends LitElement {
   async #onCancelCredited(id: number, sent: Sent): Promise<void> {
     const open = this.#cancelCreditingNow(id);
     if (open === null) return;
-    this.#showCancelCredited(id, null);
+    this.#showCancelCredited(id, { creditNote: null });
     const shown = this.cancelCrediting;
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const { bills } = await this.#loadPartyBills();
     if (this.cancelCrediting === shown && !this.#hasLeftParty(open.partyId, sent)) {
-      this.#showCancelCredited(id, bills);
+      this.#showCancelCredited(id, { creditNote: creditNoteOf(bills, open.workingOrderId) });
     }
   }
 
-  #showCancelCredited(id: number, bills: PartyBill[] | null): void {
+  #showCancelCredited(id: number, done: CancelCreditDone): void {
     const now = this.#cancelCreditingNow(id);
     if (now === null) return;
-    const bill = bills?.find((row) => row.workingOrderId === now.workingOrderId);
-    const done = { creditNote: bill?.creditNotes?.at(-1) ?? null };
     this.shadowRoot
       ?.querySelector<TillCancelCreditDialog>("till-cancel-credit-dialog")
       ?.showResult(done);
-    this.cancelCrediting = {
-      ...now,
-      refusal: null,
-      busy: false,
-      done,
-    };
+    this.cancelCrediting = { ...now, refusal: null, busy: false, done };
   }
 
   /** The people who can approve the cancel in dialog `id` are read, and their PIN prompt opens. */
@@ -21119,11 +21114,10 @@ export class TillApp extends LitElement {
     const dishes = (error as { dishes?: unknown } | null)?.dishes;
     this.cancelCrediting = {
       ...open,
-      refusal,
-      unserved:
+      refusal:
         refusal.code === "bill.unserved_dishes" && Array.isArray(dishes)
-          ? (dishes as MealEndUnservedDish[])
-          : null,
+          ? { ...refusal, dishes: dishes as MealEndUnservedDish[] }
+          : refusal,
       busy: false,
     };
     const shown = this.cancelCrediting;
@@ -21131,9 +21125,16 @@ export class TillApp extends LitElement {
     const { bills } = await this.#loadPartyBills();
     if (this.cancelCrediting !== shown || this.#hasLeftParty(open.partyId, sent)) return;
     const bill = bills?.find((row) => row.workingOrderId === open.workingOrderId);
-    if (CANCEL_MAY_HAVE_LANDED.has(refusal.code) && bill?.status === "abandoned") {
-      this.#showCancelCredited(open.id, bills);
-    }
+    if (!CANCEL_MAY_HAVE_LANDED.has(refusal.code) || bill?.status !== "abandoned") return;
+    const creditedElsewhere =
+      open.mode === "split" &&
+      !bills!.some(
+        (row) => row.status === "open" && !open.billsBefore.includes(row.workingOrderId),
+      );
+    this.#showCancelCredited(open.id, {
+      creditNote: creditNoteOf(bills, open.workingOrderId),
+      creditedElsewhere,
+    });
   }
 
   /** The cancel dialog and, over it, its approver's PIN prompt, whose events stop here so the
@@ -21143,7 +21144,6 @@ export class TillApp extends LitElement {
     if (open === null) return nothing;
     return html`<till-cancel-credit-dialog
         .mode=${open.mode}
-        .unserved=${open.unserved}
         .canMarkServed=${this.capabilities.includes("hand-over-orders")}
         .invoiceNumber=${open.invoiceNumber}
         .amount=${open.amount}

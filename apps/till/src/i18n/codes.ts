@@ -586,20 +586,20 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La cuenta quedaría por debajo de lo que ya se ha pagado. Quita menos de la cuenta o devuelve antes la diferencia",
   },
   "bill.left_unpaid": {
-    en: "This bill was recorded as left unpaid, so its guests have gone and it cannot be reopened to split. Cancel and credit still undoes its ticket.",
-    es: "Esta cuenta se registró como no pagada: los clientes se han ido y no se puede reabrir para dividir. Cancelar y abonar sigue anulando su ticket.",
+    en: "This bill was recorded as left unpaid: its guests have gone",
+    es: "Esta cuenta se registró como no pagada: los clientes se han ido",
   },
   "bill.not_at_table": {
-    en: "This bill is not at a table, so it cannot be reopened to split. Nothing was credited.",
-    es: "Esta cuenta no es de una mesa, así que no se puede reabrir para dividir. No se ha abonado nada.",
+    en: "This bill is not at a table",
+    es: "Esta cuenta no es de una mesa",
   },
   "bill.not_issued": {
-    en: "This bill has no ticket yet, so there is nothing to reopen. Nothing was credited.",
-    es: "Esta cuenta aún no tiene ticket, así que no hay nada que reabrir. No se ha abonado nada.",
+    en: "This bill has no receipt yet",
+    es: "Esta cuenta aún no tiene ticket",
   },
   "bill.unserved_dishes": {
-    en: "These dishes are not marked served, so the bill cannot be reopened yet. Mark served records that the guests have had them; the bill then reopens to split.",
-    es: "Estos platos no están marcados como servidos, así que la cuenta aún no se puede reabrir. Marcar como servidos registra que los clientes ya los han tomado; después la cuenta se reabre para dividirla.",
+    en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served",
+    es: "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos",
   },
   "meal_end.unserved_dishes": {
     en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Correct invoice.",
