@@ -2323,7 +2323,7 @@ export const en = {
   "backup.status.stopped_space_low":
     "The last backup stopped because the box is low on disk space. Free space on Box status and try again.",
   "backup.status.stopped_settings_changed":
-    "Stopped before finishing because the backup settings changed. Press Back up now again.",
+    "The backup settings changed while the backup was running. Check the latest backup at each destination before trying again.",
   "backup.status.on": "On",
   "backup.status.off": "Off",
   "backup.status.last": "Last backup",
@@ -6920,7 +6920,7 @@ export const es: Record<StringKey, string> = {
   "backup.status.stopped_space_low":
     "La última copia se detuvo porque queda poco espacio en el disco. Libera espacio en Estado del servidor y vuelve a intentarlo.",
   "backup.status.stopped_settings_changed":
-    "La copia se detuvo antes de terminar porque cambió su configuración. Pulsa Hacer copia ahora de nuevo.",
+    "La configuración de las copias de seguridad cambió mientras se hacía la copia. Revisa la última copia de cada destino antes de volver a intentarlo.",
   "backup.status.on": "Activadas",
   "backup.status.off": "Desactivadas",
   "backup.status.last": "Última copia",
