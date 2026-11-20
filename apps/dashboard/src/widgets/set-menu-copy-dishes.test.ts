@@ -98,7 +98,7 @@ it("copies from the chosen set menu, closes and hands back the saved dishes", as
   await copyButton().click();
   await expect.element(dialog()).not.toBeInTheDocument();
   expect(api.copySetMenuDishes).toHaveBeenCalledExactlyOnceWith("daily", "special");
-  expect(events).toEqual(["saved", "closed"]);
+  await vi.waitFor(() => expect(events).toEqual(["saved", "closed"]));
   expect(saved).toEqual([result]);
 });
 
@@ -149,7 +149,7 @@ it("refuses to close while the copy is being saved", async () => {
   expect(events).toEqual([]);
   finish({ details, addedLines: [] });
   await expect.element(dialog()).not.toBeInTheDocument();
-  expect(events).toEqual(["saved", "closed"]);
+  await vi.waitFor(() => expect(events).toEqual(["saved", "closed"]));
 });
 
 it("closes on Cancel straight away when nothing was chosen and no leave check is present", async () => {
